@@ -51,7 +51,7 @@ class TestModeVariesOnlyTheTask:
     def _stage(self, run_dir: Path, mode_name: str) -> Path:
         return stage_job_dir(
             run_dir, load_benchmark("smoke"), get_mode(mode_name),
-            run_id="run-1", budget_seconds=1800,
+            run_id="run-1", budget_seconds=1800, adapter="claude",
         )
 
     def test_manifest_is_identical_across_modes(self, tmp_path: Path) -> None:

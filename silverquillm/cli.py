@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -651,38 +652,106 @@ main.add_command(_replay_validate)
 
 
 @main.command()
-@click.option("--image", required=True, help="Docker image name")
+@click.option(
+    "--candidate", "candidate_path", default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help=(
+        "A Candidate Bundle directory (exported by `theozolith candidate export`), "
+        "or a candidates/<slug>--<hash8>/ directory wrapping one under bundle/. "
+        "The only input of a Contract Run: identity is recomputed and verified "
+        "from the bundle, its derived image is built through the verified build."
+    ),
+)
+@click.option(
+    "--image", default=None,
+    help="Legacy entrypoint lineage only (retired by #66): the Docker image to run.",
+)
+@click.option("--benchmark", "benchmark_id", default=None, help="Benchmark id (e.g. smoke); required with --candidate")
+@click.option("--mode", "mode_name", default=None, help="Benchmark Mode (basic|planned; default basic) — --candidate only")
 @click.option(
     "--timeout",
     default=3600,
     type=int,
-    help="Timeout in seconds for Docker container (default: 3600)",
+    help="Agent budget in seconds (the harness's hard agent timeout; default: 3600)",
 )
 @click.option(
     "--results-dir",
     default=None,
     type=click.Path(file_okay=False, path_type=Path),
-    help="Results output directory (default: docker/<image_dir>/results/)",
+    help="Run-artifacts directory (default: runs/<candidate-dir>/ with --candidate, docker/<image_dir>/results/ with --image)",
+)
+@click.option(
+    "--results-repo", default=None, type=click.Path(file_okay=False, path_type=Path),
+    help="Results repo to write the RunRecord and vendored candidate into (or $SILVERQUILLM_RESULTS_REPO) — --candidate only",
+)
+@click.option(
+    "--container-user", default=None,
+    help="uid:gid to run the container as (default: the image's user) — --candidate only",
 )
 @click.option(
     "--cards",
     default=None,
-    help="Comma-separated SOS collector numbers to stage (default: all)",
+    help="Legacy lineage only: comma-separated SOS collector numbers to stage (default: all)",
 )
 @click.option(
     "--hang-timeout",
-    default=900,
+    default=None,
     type=int,
-    help="Hang timeout in seconds (default: 900)",
+    help="Legacy lineage only: hang timeout in seconds (default: 900)",
 )
 def run(
-    image: str,
+    candidate_path: Path | None,
+    image: str | None,
+    benchmark_id: str | None,
+    mode_name: str | None,
     timeout: int,
     results_dir: Path | None,
+    results_repo: Path | None,
+    container_user: str | None,
     cards: str | None,
-    hang_timeout: int = 900,
+    hang_timeout: int | None,
 ) -> None:
-    """Run the full benchmark workload in a Docker container."""
+    """Run a benchmark: a Candidate Bundle through TheOzolith's Run Contract
+    (--candidate), or a legacy image through the entrypoint lineage (--image).
+
+    With --candidate: the bundle is verified and its identity recomputed
+    (never trusted from a recorded value), its derived image is built through
+    the verified standalone build and launched by image ID with the in-image
+    harness as PID 1, the production gate runs over the jobs channel, the
+    Output Proposal is applied post-exit, the checkout is graded by the
+    Audited Eval, and the run is recorded under the verified identity. Exits 1
+    when the run carries a classified failure; the evidence is in the run
+    dir's contract_run.json either way.
+    """
+    if (candidate_path is None) == (image is None):
+        raise click.UsageError(
+            "pass exactly one of --candidate <bundle> (a Contract Run) or --image "
+            "<name> (the legacy entrypoint lineage)"
+        )
+    if candidate_path is not None:
+        for flag, value in (("--cards", cards), ("--hang-timeout", hang_timeout)):
+            if value is not None:
+                raise click.UsageError(f"{flag} belongs to the legacy --image lineage, not --candidate")
+        _run_candidate(
+            candidate_path,
+            benchmark_id=benchmark_id,
+            mode_name=mode_name or "basic",
+            timeout=timeout,
+            results_dir=results_dir,
+            results_repo=results_repo,
+            container_user=container_user,
+        )
+        return
+    for flag, value in (
+        ("--benchmark", benchmark_id),
+        ("--mode", mode_name),
+        ("--results-repo", results_repo),
+        ("--container-user", container_user),
+    ):
+        if value is not None:
+            raise click.UsageError(f"{flag} belongs to --candidate (the Contract Run), not the legacy --image lineage")
+    if hang_timeout is None:
+        hang_timeout = 900
     # Parse --cards into a list of collector numbers
     card_filter: list[str] | None = None
     if cards is not None:
@@ -861,24 +930,33 @@ def smoke(image: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# run-contract command (Contract Run driver)
+# `run --candidate` (Contract Run driver)
 # ---------------------------------------------------------------------------
 
 
-def _agent_env() -> dict[str, str]:
-    """The model credential(s) for the run container, by name.
-
-    Handed to the production ``DockerEngine`` as ``ContainerSpec.env``: it
-    passes each as a bare ``--env NAME`` and supplies the value through its own
-    process environment, so no secret ever appears in argv.
-    """
-    return {key: os.environ[key] for key in _API_KEY_ENV_VARS if os.environ.get(key)}
+def _candidate_label(candidate_path: Path) -> str:
+    """The run-dir / run-id label for a candidate path: its directory name
+    (``<slug>--<hash8>`` for a checked-in candidate), as one safe segment."""
+    name = Path(candidate_path).resolve().name or "candidate"
+    return re.sub(r"[^A-Za-z0-9._-]", "-", name).lstrip(".") or "candidate"
 
 
 def _report_contract_run(result) -> None:
     """Echo a Contract Run's outcome (every classified failure included)."""
     for warning in result.warnings:
         _runner_log(warning, err=True)
+    if result.bundle is not None:
+        bundle = result.bundle
+        _runner_log(
+            f"Candidate: {bundle.worker_type} ({bundle.adapter}) hash {bundle.candidate_hash}"
+            f" [{bundle.hash8}]  base {bundle.base_digest[:19]}…"
+            f"  instruction {bundle.instruction_hash[:12]}…"
+        )
+        if result.vendored is not None:
+            state = "written" if result.vendored.written else "already present, re-verified"
+            _runner_log(f"Vendored candidate copy: {result.vendored.path} ({state})")
+    if result.image is not None:
+        _runner_log(f"Image: {result.image.tag} = {result.image.image_id}")
     agent = result.agent_outcome.describe() if result.agent_outcome is not None else "n/a"
     harness = (result.harness_status or {}).get("phase", "n/a")
     gate = " -> ".join(result.gate.steps_run) or "not run"
@@ -907,64 +985,36 @@ def _report_contract_run(result) -> None:
     _runner_log(f"Contract run {'complete' if result.ok else 'FAILED'}: {result.run_id}")
 
 
-@main.command("run-contract")
-@click.option(
-    "--image", required=True,
-    help=(
-        "A TheOzolith run image: its entrypoint is the in-image agent harness "
-        "(theozolith-harness). Candidate-Bundle identity lands with #65."
-    ),
-)
-@click.option("--benchmark", "benchmark_id", required=True, help="Benchmark id (e.g. smoke)")
-@click.option("--mode", "mode_name", default="basic", show_default=True, help="Benchmark Mode (basic|planned)")
-@click.option(
-    "--timeout", default=3600, type=int, show_default=True,
-    help="Agent budget in seconds (the harness's hard agent timeout)",
-)
-@click.option(
-    "--container-user", default=None,
-    help="uid:gid to run the container as (default: the image's user)",
-)
-@click.option(
-    "--results-dir", default=None, type=click.Path(file_okay=False, path_type=Path),
-    help="Run-artifacts directory (default: docker/<image_dir>/results/)",
-)
-@click.option(
-    "--results-repo", default=None, type=click.Path(file_okay=False, path_type=Path),
-    help="Results repo to write the RunRecord into (or $SILVERQUILLM_RESULTS_REPO)",
-)
-def run_contract(
-    image: str,
-    benchmark_id: str,
+def _run_candidate(
+    candidate_path: Path,
+    *,
+    benchmark_id: str | None,
     mode_name: str,
     timeout: int,
-    container_user: str | None,
     results_dir: Path | None,
     results_repo: Path | None,
+    container_user: str | None,
 ) -> None:
-    """Drive a candidate through TheOzolith's implementer Run Contract.
-
-    Stages the production job dir, launches the image through the production
-    session protocol (the in-image harness runs the agent and serves the gate
-    over the jobs channel), applies the Output Proposal post-exit, grades the
-    checkout, and records the run. Exits 1 when the run carries a classified
-    failure; the evidence is in the run dir's contract_run.json either way.
-    """
+    """Drive a Candidate Bundle through TheOzolith's implementer Run Contract
+    (the body of ``silverquillm run --candidate``)."""
     from silverquillm.contract import drive_contract_run
     from silverquillm.jobdir import BenchmarkNotRunnableError, load_benchmark
     from silverquillm.modes import UnknownModeError, get_mode
     from silverquillm.results_repo import resolve_results_repo
 
     global _runner_log_dir
+    if benchmark_id is None:
+        raise click.UsageError("--benchmark is required with --candidate (e.g. --benchmark smoke)")
     try:
         benchmark = load_benchmark(benchmark_id)
         mode = get_mode(mode_name)
     except (BenchmarkNotRunnableError, UnknownModeError) as exc:
         raise click.ClickException(str(exc)) from exc
 
+    label = _candidate_label(candidate_path)
     if results_dir is None:
-        results_dir = _image_results_dir(image)
-    run_name = _make_run_name(set_code=benchmark.id, image=image, results_dir=results_dir)
+        results_dir = _REPO_ROOT / "runs" / label
+    run_name = _make_run_name(set_code=benchmark.id, image=label, results_dir=results_dir)
     run_dir = results_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
     _runner_log_dir = run_dir
@@ -972,7 +1022,10 @@ def run_contract(
     repo = resolve_results_repo(results_repo)
 
     _runner_log(f"Starting contract run: {run_name}")
-    _runner_log(f"Image: {image}  Benchmark: {benchmark.id}  Mode: {mode.name}  Timeout: {timeout}s")
+    _runner_log(
+        f"Candidate: {candidate_path}  Benchmark: {benchmark.id}  Mode: {mode.name}"
+        f"  Timeout: {timeout}s"
+    )
     try:
         result = drive_contract_run(
             run_dir=run_dir,
@@ -980,10 +1033,9 @@ def run_contract(
             benchmark=benchmark,
             mode=mode,
             budget_seconds=timeout,
-            image=image,
+            candidate=candidate_path,
             session_factory=api.container_session_factory(api.DockerEngine()),
             results_repo=repo,
-            agent_env=_agent_env(),
             container_user=container_user,
         )
         _report_contract_run(result)

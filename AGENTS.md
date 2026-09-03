@@ -73,12 +73,16 @@ Architectural decisions are documented under the ADRs page:
 
 ```javascript
 silverquillm/
-  cli.py              # arg parsing + docker run + harvest
+  cli.py              # arg parsing + docker run + harvest; `run --candidate` (Contract Run) / `run --image` (legacy)
+  candidate.py        # Candidate Bundle ingestion: TheOzolith's verifier, recomputed identity, secret-value refusal, vendored copy, verified image build (#65)
+  contract.py         # Contract Run driver over theozolith_worker.api (#64/#65)
+  contract_version.py # the pinned the-ozolith revision + the three contract version keys; fail-closed preflight
   card_loader.py      # card spec loading
   evaluator.py        # post-harvest test runner (3 dimensions)
   results.py          # run_summary.json generation
-  results_repo.py     # private results repo: run-record schema + writer, leaderboard_valid rule, derived index (#39 §3)
+  results_repo.py     # private results repo: run-record schema + writer, candidate hash, leaderboard_valid rule, derived index (#39 §3)
   workspace.py        # stage_workspace()
+candidates/           # public reference candidates: <slug>--<hash8>/{README.md, source/, bundle/}
 docker/
   pi-blind/
     Dockerfile

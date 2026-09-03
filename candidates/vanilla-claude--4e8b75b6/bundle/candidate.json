@@ -1,0 +1,24 @@
+{
+  "adapter": "claude",
+  "base": "ghcr.io/snowfoxbuilds/theozolith-run-claude:sha-3c0a5df9609a6c9e1f517bd28a2083d11480c31d@sha256:a162d1d32dfc43b0f238b19dc063defc0934beabec8dc8685eb231c64e62ddd1",
+  "base_digest": "sha256:a162d1d32dfc43b0f238b19dc063defc0934beabec8dc8685eb231c64e62ddd1",
+  "bundle_format_version": 2,
+  "driver": "builtin:implementer",
+  "effort": "",
+  "exported_at": "2026-09-03T03:20:04Z",
+  "identity_spec_version": 2,
+  "instruction_hash": "bd5b272bc8ca355b1c2cf25b7d6ad63b123bec7e9391ad2c2606ce140ce7ee7b",
+  "knowledge": "",
+  "knowledge_pin": "",
+  "knowledge_target": "",
+  "model": "claude-sonnet-5",
+  "policy": "",
+  "policy_pin": "",
+  "product_version": "0.3.0",
+  "secret_slots": [
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_CODE_OAUTH_TOKEN"
+  ],
+  "setup": [],
+  "worker_type": "vanilla-claude"
+}

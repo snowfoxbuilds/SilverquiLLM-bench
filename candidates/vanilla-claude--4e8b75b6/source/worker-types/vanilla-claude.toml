@@ -1,0 +1,27 @@
+# vanilla-claude — the Claude Code reference candidate (SilverquiLLM-bench #65).
+#
+# Varies nothing: TheOzolith's stock Claude run image (pinned by digest), no
+# setup instructions, no knowledge tree, no Agent Policy, the default model
+# spelled as its most-pinned provider ID (#39: dated IDs over floating
+# aliases; the current generation ships no dated variant), the model's own
+# default effort. driver/workspace/secrets are not identity-bearing
+# (BENCH-CONTRACT.md); the driver is the pipeline Implementer so the derived
+# image is exactly what a deployed implementer runs (managed-scope bake).
+driver = "builtin:implementer"
+adapter = "claude"
+model = "claude-sonnet-5"
+
+# ghcr.io/snowfoxbuilds/theozolith-run-claude at the-ozolith commit
+# 3c0a5df9609a6c9e1f517bd28a2083d11480c31d — the merge that carries the pinned worker revision
+# (19118cae; the worker tree is byte-identical between the two) — pinned by
+# the digest the publish job's push receipt reported (the image is private,
+# so re-exporting needs a DOCKER_CONFIG with read:packages to re-resolve it).
+base = "ghcr.io/snowfoxbuilds/theozolith-run-claude:sha-3c0a5df9609a6c9e1f517bd28a2083d11480c31d@sha256:a162d1d32dfc43b0f238b19dc063defc0934beabec8dc8685eb231c64e62ddd1"
+setup = []
+
+# Secret SLOT names only — the bench binds whichever of these is set in its
+# environment; Claude Code accepts either a workspace API key or a
+# `claude setup-token` OAuth token.
+[secrets]
+ANTHROPIC_API_KEY = ""
+CLAUDE_CODE_OAUTH_TOKEN = ""

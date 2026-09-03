@@ -95,8 +95,20 @@ Smoke runs validate that a container starts and produces output — they use a t
 ### Run a benchmark
 
 ```bash
+# A Candidate Bundle through TheOzolith's Run Contract (the current contract):
+silverquillm run --candidate candidates/vanilla-claude--4e8b75b6 --benchmark smoke --timeout 3600
+# The legacy entrypoint lineage (retired by #66):
 silverquillm run --image my-agent:latest --timeout 7200
 ```
+
+A **Candidate Bundle** (`candidates/README.md`) is the only input of a
+Contract Run: the bench verifies it through TheOzolith's verifier, recomputes
+its identity (never trusted from a recorded value), builds its derived image
+through the verified standalone build, launches it by image ID with the
+in-image harness as PID 1, and records the run under the recomputed identity.
+The bundle's `secret_slots` name the environment variables the bench binds
+(`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` for claude, `OPENAI_API_KEY`
+for codex). Two vanilla reference candidates ship under `candidates/`.
 
 ---
 
@@ -104,8 +116,8 @@ silverquillm run --image my-agent:latest --timeout 7200
 
 | Command | Purpose |
 | --- | --- |
-| `silverquillm run --image … --timeout …` | Launch a benchmark run. |
-| `silverquillm run-contract --image … --benchmark … [--mode basic\|planned]` | Drive a TheOzolith run image (in-image agent harness as its entrypoint) through the implementer Run Contract: production job dir, gate over the jobs channel, post-exit proposal application, Audited Eval, RunRecord. |
+| `silverquillm run --candidate <bundle> --benchmark … [--mode basic\|planned] [--results-repo …]` | Drive a Candidate Bundle through TheOzolith's implementer Run Contract: bundle verification + identity recomputation, vendored results-repo copy, verified image build, production job dir, gate over the jobs channel, post-exit proposal application, Audited Eval, RunRecord under the verified identity. |
+| `silverquillm run --image … --timeout …` | Launch a legacy entrypoint-lineage run (retired by #66). |
 | `silverquillm smoke --image …` | Validate that an image starts and produces output. |
 | `silverquillm resume <run_id> --timeout …` | Continue from a prior run's final state as an independent leg. |
 | `silverquillm chain <run_id>` | Print the chain of resume legs leading to a run. |

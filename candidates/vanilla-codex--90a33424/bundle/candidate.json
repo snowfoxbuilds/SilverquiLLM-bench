@@ -1,0 +1,23 @@
+{
+  "adapter": "codex",
+  "base": "ghcr.io/snowfoxbuilds/theozolith-run-codex:sha-3c0a5df9609a6c9e1f517bd28a2083d11480c31d@sha256:8071882367362695ecc44919b748835f53d7d2e637c37213ab35ab43d5958162",
+  "base_digest": "sha256:8071882367362695ecc44919b748835f53d7d2e637c37213ab35ab43d5958162",
+  "bundle_format_version": 2,
+  "driver": "builtin:implementer",
+  "effort": "",
+  "exported_at": "2026-09-03T03:21:25Z",
+  "identity_spec_version": 2,
+  "instruction_hash": "dd959a6bf1060457a6166d318536d1776bb473aa323506e6d7c66204205452f7",
+  "knowledge": "",
+  "knowledge_pin": "",
+  "knowledge_target": "",
+  "model": "gpt-5.2-codex",
+  "policy": "",
+  "policy_pin": "",
+  "product_version": "0.3.0",
+  "secret_slots": [
+    "OPENAI_API_KEY"
+  ],
+  "setup": [],
+  "worker_type": "vanilla-codex"
+}

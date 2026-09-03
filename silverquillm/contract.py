@@ -2,40 +2,59 @@
 
 One entry point — :func:`drive_contract_run` — replays TheOzolith's implementer
 Run Contract (``docs/specs/BENCH-CONTRACT.md``) exactly as the production driver
-does, by *consuming* ``theozolith_worker.api`` rather than re-implementing it:
+does, by *consuming* ``theozolith_worker.api`` rather than re-implementing it,
+over a **Candidate Bundle** whose identity the bench recomputes and never
+trusts (``silverquillm.candidate``):
 
-1. **Preflight** — refuse unless the installed worker is the pinned contract
-   (:func:`silverquillm.contract_version.check_contract_support`).
-2. **Staging** — :func:`silverquillm.jobdir.stage_job_dir` (production
-   manifest, prompt renderer, Context Tree, git-seeded checkout), then a
-   trusted pre-launch snapshot of ``input/`` for evidence (the job dir is
-   agent-writable from launch onward).
-3. **Launch / agent** — the container is commissioned through the production
+1. **Preflight** — refuse unless every installed the-ozolith package is the
+   pinned contract (:func:`silverquillm.contract_version.check_contract_support`):
+   the worker whose harness runs the agent *and* the control/nodedaemon
+   packages whose verifier authenticates the candidate.
+2. **Candidate** — :func:`silverquillm.candidate.load_candidate_bundle`: the
+   bundle is verified through TheOzolith's verifier, its identity triple is
+   recomputed, secret values are refused, and the recomputed identity must
+   equal every identity the bundle records.  The bundle's secret slot *names*
+   select which environment variables reach the container (values never
+   appear in argv or evidence).  With a results repo configured, the vendored
+   copy at ``results/<candidate-hash>/candidate/`` is written once, verified
+   at write time.
+3. **Image** — :func:`silverquillm.candidate.build_candidate_image`: the
+   verified standalone build (private snapshot → full verification →
+   ``docker build`` → deterministic tag), then the tag is resolved to the
+   image ID the run launches by, after its identity labels are checked
+   against the bundle.
+4. **Staging** — :func:`silverquillm.jobdir.stage_job_dir` (production
+   manifest with the bundle's adapter, prompt renderer, Context Tree,
+   git-seeded checkout), then a trusted pre-launch snapshot of ``input/`` for
+   evidence (the job dir is agent-writable from launch onward).
+5. **Launch / agent** — the container is commissioned through the production
    session protocol (:func:`~theozolith_worker.api.container_session_factory`
    over :class:`~theozolith_worker.api.DockerEngine`): the image's entrypoint
    is the in-image agent harness, which launches the headless agent with the
    pointer prompt, records how it ended in ``output/status.json``, and captures
    the structured stream as ``output/transcript.txt``.  The driver waits on
    that harness-authored status — never on the outer container exit alone.
-4. **Gate** — the production ``test → docs → lint`` sequence
+6. **Gate** — the production ``test → docs → lint`` sequence
    (:func:`~theozolith_worker.api.run_gate`) with every step submitted as a job
    over ``input/jobs/`` ↔ ``output/jobs/`` and executed by the harness *inside*
    the container.  The benchmark process never runs a candidate-authored
    command: there is no host step runner.
-5. **Proposal** — ``output/proposal.json`` validated by the production
+7. **Proposal** — ``output/proposal.json`` validated by the production
    validator; the checkout committed post-exit through the driver-owned
    repository (``run_dir/driver.git``, never the candidate's ``.git``) with the
    production commit trailer; the PR body composed via
    :func:`~theozolith_worker.api.compose_pr_body` and recorded.
-6. **Harvest / evaluation** — ``workspace_final/`` from the checkout's files;
+8. **Harvest / evaluation** — ``workspace_final/`` from the checkout's files;
    the three-dimension Audited Eval.
-7. **Record** — the lifecycle is finalized first (final phase, timing, and
+9. **Record** — the lifecycle is finalized first (final phase, timing, and
    failures), ``run_dir/contract_run.json`` is written from that finalized
    evidence, and the RunRecord (when a results repo is configured) embeds *the
-   same* final evidence dict — file and record agree key for key.  The
-   record-write status itself lives only in the evidence file's separate
-   ``record`` block, never inside the embedded snapshot, where it could only
-   ever be stale.
+   same* final evidence dict under the recomputed, verified candidate identity
+   — file and record agree key for key.  A run that never reached a verified
+   identity (a refused preflight or candidate) has nothing to be attributed
+   to: it leaves the evidence file and no record.  The record-write status
+   itself lives only in the evidence file's separate ``record`` block, never
+   inside the embedded snapshot, where it could only ever be stale.
 
 Every phase runs inside one durable failure lifecycle: an exception or
 non-completion anywhere is classified (:data:`FAILURE_CLASSES`), recorded with
@@ -62,11 +81,26 @@ from typing import Any
 
 from theozolith_worker import api
 
+from silverquillm.candidate import (
+    BuiltImage,
+    CandidateBundle,
+    CandidateRefusedError,
+    CandidateVendorError,
+    ImageBuildError,
+    VendoredCandidate,
+    build_candidate_image,
+    load_candidate_bundle,
+    vendor_candidate,
+)
 from silverquillm.contract_version import (
+    CONTRACT_BUNDLE_FORMAT_VERSION,
+    CONTRACT_IDENTITY_SPEC_VERSION,
     CONTRACT_SCHEMA_VERSION,
+    InstalledDistribution,
     InstalledWorker,
     UnsupportedContractError,
     check_contract_support,
+    installed_contract,
 )
 from silverquillm.evaluator import FullEvalResult, evaluate_run
 from silverquillm.jobdir import (
@@ -105,6 +139,8 @@ __all__ = [
 # tracks in its separate ``record`` block) — the constant only tags where a
 # failed record write happened.
 PHASE_PREFLIGHT = "preflight"
+PHASE_CANDIDATE = "candidate"
+PHASE_IMAGE = "image"
 PHASE_STAGING = "staging"
 PHASE_LAUNCH = "launch"
 PHASE_AGENT = "agent"
@@ -119,6 +155,9 @@ PHASE_DONE = "done"
 # identity) and the schema refusal mirror the production driver's uniform
 # budget classes (ADR-0016/0045/0046); the rest are bench-side phases.
 FAILURE_CONTRACT_UNSUPPORTED = "contract-unsupported"
+FAILURE_CANDIDATE = "candidate"
+FAILURE_CANDIDATE_VENDOR = "candidate-vendor"
+FAILURE_IMAGE_BUILD = "image-build"
 FAILURE_STAGING = "staging"
 FAILURE_LAUNCH = "launch"
 FAILURE_HARNESS = "harness"
@@ -133,6 +172,9 @@ FAILURE_RECORD = "record"
 FAILURE_DRIVER = "driver"
 FAILURE_CLASSES = (
     FAILURE_CONTRACT_UNSUPPORTED,
+    FAILURE_CANDIDATE,
+    FAILURE_CANDIDATE_VENDOR,
+    FAILURE_IMAGE_BUILD,
     FAILURE_STAGING,
     FAILURE_LAUNCH,
     FAILURE_HARNESS,
@@ -148,7 +190,7 @@ FAILURE_CLASSES = (
 )
 
 EVIDENCE_FILE = "contract_run.json"
-EVIDENCE_SCHEMA = "silverquillm.contract-run/1"
+EVIDENCE_SCHEMA = "silverquillm.contract-run/2"
 TRUSTED_INPUT_DIRNAME = "trusted_input"
 WORKSPACE_FINAL_DIRNAME = "workspace_final"
 PR_BODY_FILE = "pr_body.md"
@@ -172,6 +214,9 @@ _TRUSTED_INPUT_TREES = ("input/issue", "input/pr", "input/deps")
 _HARVEST_IGNORE_NAMES = frozenset({".git", "__pycache__", ".pytest_cache"})
 
 RecordWriter = Callable[..., Path]
+BundleLoader = Callable[[Path], CandidateBundle]
+ImageBuilder = Callable[[CandidateBundle], BuiltImage]
+CandidateVendor = Callable[[Path, CandidateBundle], VendoredCandidate]
 
 
 def _now() -> str:
@@ -209,13 +254,19 @@ class ContractRunResult:
     run_id: str
     benchmark_id: str
     mode_name: str
-    image: str
+    candidate_path: Path
     budget_seconds: int
     phase: str = PHASE_PREFLIGHT
     phases_run: list[str] = field(default_factory=list)
     failures: list[RunFailure] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     worker: InstalledWorker | None = None
+    contract_packages: dict[str, InstalledDistribution] = field(default_factory=dict)
+    bundle: CandidateBundle | None = None
+    vendored: VendoredCandidate | None = None
+    image: BuiltImage | None = None
+    bound_slots: list[str] = field(default_factory=list)
+    unbound_slots: list[str] = field(default_factory=list)
     job_dir: Path | None = None
     container: str = ""
     agent_outcome: api.AgentOutcome | None = None
@@ -266,7 +317,11 @@ class ContractRunResult:
             "run_id": self.run_id,
             "benchmark": self.benchmark_id,
             "mode": self.mode_name,
-            "image": self.image,
+            "candidate_path": str(self.candidate_path),
+            "candidate": self.bundle.summary_dict() if self.bundle is not None else None,
+            "vendored_candidate": self.vendored.to_dict() if self.vendored is not None else None,
+            "image": self.image.to_dict() if self.image is not None else None,
+            "secret_slots": {"bound": list(self.bound_slots), "unbound": list(self.unbound_slots)},
             "budget_seconds": self.budget_seconds,
             "container": self.container,
             "phase": self.phase,
@@ -275,7 +330,12 @@ class ContractRunResult:
             "failures": [f.to_dict() for f in self.failures],
             "warnings": list(self.warnings),
             "contract_schema_version": CONTRACT_SCHEMA_VERSION,
+            "contract_bundle_format_version": CONTRACT_BUNDLE_FORMAT_VERSION,
+            "contract_identity_spec_version": CONTRACT_IDENTITY_SPEC_VERSION,
             "worker": self.worker.to_dict() if self.worker else None,
+            "contract_packages": {
+                name: dist.to_dict() for name, dist in sorted(self.contract_packages.items())
+            },
             "run_dir": str(self.run_dir),
             "job_dir": str(self.job_dir) if self.job_dir else None,
             "agent_outcome": (
@@ -374,8 +434,9 @@ def container_spec(
     """The :class:`~theozolith_worker.api.ContainerSpec` for one Contract Run.
 
     The job dir is the only mount (at ``/job``), the image's entrypoint is the
-    harness, and ``env`` values (the model credential) reach ``docker run`` as
-    bare ``--env NAME`` read from the engine's process environment — never argv.
+    harness, and ``env`` values (the candidate's bound secret slots) reach
+    ``docker run`` as bare ``--env NAME`` read from the engine's process
+    environment — never argv.  *image* is the built image's ID.
     """
     return api.ContainerSpec(
         name=container_name(run_id),
@@ -508,6 +569,27 @@ def harvest_workspace_final(
 # ---------------------------------------------------------------------------
 # The driver
 # ---------------------------------------------------------------------------
+
+
+def _bind_secret_slots(
+    result: ContractRunResult, bundle: CandidateBundle, environ: Mapping[str, str]
+) -> dict[str, str]:
+    """The container environment: exactly the bundle's declared secret slots
+    that are set in *environ*.  Slot names are evidence; values never are."""
+    env: dict[str, str] = {}
+    for slot in bundle.secret_slots:
+        value = environ.get(slot)
+        if value:
+            env[slot] = value
+            result.bound_slots.append(slot)
+        else:
+            result.unbound_slots.append(slot)
+    if result.unbound_slots:
+        result.warnings.append(
+            "secret slots not set in the environment (the candidate declares them): "
+            + ", ".join(result.unbound_slots)
+        )
+    return env
 
 
 def _run_session(
@@ -655,12 +737,22 @@ def _record(
     status goes only into the file's separate ``record`` block — an embedded
     write-status snapshot could never be anything but stale.  A write failure
     is itself classified and left in the evidence; no record exists then, so
-    nothing diverges.
+    nothing diverges.  A run without a verified candidate identity is never
+    recorded: there is no identity to attribute it to, and a recorded value
+    is never trusted in its place.
     """
     _finalize(result)
     evidence = result.evidence()
     _write_evidence(result, evidence)  # before the attempt: a failed write is diagnosable
     if results_repo is None:
+        return
+    if result.bundle is None:
+        result.record_error = (
+            "no RunRecord: the run never reached a verified candidate identity, so"
+            " there is nothing to attribute it to (the evidence file stands alone)"
+        )
+        result.warnings.append(result.record_error)
+        _write_evidence(result, evidence)
         return
     if record_writer is None:
         from silverquillm.contract_record import write_contract_run_record
@@ -671,7 +763,7 @@ def _record(
         result.record_dir = record_writer(
             results_repo=results_repo,
             run_id=result.run_id,
-            image=result.image,
+            candidate=result.bundle.identity,
             benchmark=benchmark,
             mode=mode,
             budget_seconds=result.budget_seconds,
@@ -694,30 +786,40 @@ def drive_contract_run(
     benchmark: BenchmarkRef,
     mode: BenchmarkMode,
     budget_seconds: int,
-    image: str,
+    candidate: Path,
     session_factory: api.SessionFactory,
     results_repo: Path | None = None,
     eval_timeout: int = 60,
-    agent_env: Mapping[str, str] | None = None,
+    environ: Mapping[str, str] | None = None,
     container_user: str | None = None,
     record_writer: RecordWriter | None = None,
+    bundle_loader: BundleLoader | None = None,
+    image_builder: ImageBuilder | None = None,
+    candidate_vendor: CandidateVendor | None = None,
 ) -> ContractRunResult:
-    """Drive one Contract Run end to end; never raises.
+    """Drive one Contract Run of the Candidate Bundle at *candidate* end to
+    end; never raises.
 
     *session_factory* is the production seam
     (:func:`~theozolith_worker.api.container_session_factory` over a
     :class:`~theozolith_worker.api.DockerEngine` in the CLI; a harness-backed
-    test double in the conformance tests).  The result's ``failures`` classify
-    everything that went wrong; ``run_dir/contract_run.json`` carries the same
-    evidence on disk.
+    test double in the conformance tests).  *bundle_loader*, *image_builder*
+    and *candidate_vendor* default to the real ingestion, verified build and
+    vendoring (tests inject doubles for the Docker-bound build only).  The
+    result's ``failures`` classify everything that went wrong;
+    ``run_dir/contract_run.json`` carries the same evidence on disk.
     """
     run_dir = Path(run_dir)
+    environ = os.environ if environ is None else environ
+    load = bundle_loader if bundle_loader is not None else load_candidate_bundle
+    build = image_builder if image_builder is not None else build_candidate_image
+    vendor = candidate_vendor if candidate_vendor is not None else vendor_candidate
     result = ContractRunResult(
         run_dir=run_dir,
         run_id=run_id,
         benchmark_id=benchmark.id,
         mode_name=mode.name,
-        image=image,
+        candidate_path=Path(candidate),
         budget_seconds=budget_seconds,
         started_at=_now(),
     )
@@ -726,6 +828,7 @@ def drive_contract_run(
         _enter(result, PHASE_PREFLIGHT)
         try:
             result.worker = check_contract_support()
+            result.contract_packages = installed_contract()
         except UnsupportedContractError as exc:
             _fail(result, FAILURE_CONTRACT_UNSUPPORTED, PHASE_PREFLIGHT, str(exc), exc)
         else:
@@ -735,27 +838,21 @@ def drive_contract_run(
                     " against the pinned revision by its tree digest"
                     f" (source {result.worker.source})"
                 )
-            _enter(result, PHASE_STAGING)
-            try:
-                job_dir = stage_job_dir(
-                    run_dir, benchmark, mode, run_id=run_id, budget_seconds=budget_seconds
-                )
-                result.job_dir = job_dir
-                snapshot_trusted_input(job_dir, run_dir)
-            except Exception as exc:
-                _fail(result, FAILURE_STAGING, PHASE_STAGING, f"{type(exc).__name__}: {exc}", exc)
-            else:
-                _run_session(
-                    result,
-                    job_dir=job_dir,
-                    session_factory=session_factory,
-                    image=image,
-                    agent_env=agent_env,
-                    container_user=container_user,
-                )
-                _post_session(
-                    result, job_dir=job_dir, benchmark=benchmark, eval_timeout=eval_timeout
-                )
+            _drive_candidate(
+                result,
+                benchmark=benchmark,
+                budget_seconds=budget_seconds,
+                candidate=Path(candidate),
+                session_factory=session_factory,
+                results_repo=results_repo,
+                eval_timeout=eval_timeout,
+                environ=environ,
+                container_user=container_user,
+                load=load,
+                build=build,
+                vendor=vendor,
+                mode=mode,
+            )
     except Exception as exc:  # a driver bug is evidence too, never an escape
         _fail(result, FAILURE_DRIVER, result.phase, f"{type(exc).__name__}: {exc}", exc)
 
@@ -772,6 +869,73 @@ def drive_contract_run(
         _finalize(result)
         _write_evidence(result)
     return result
+
+
+def _drive_candidate(
+    result: ContractRunResult,
+    *,
+    benchmark: BenchmarkRef,
+    mode: BenchmarkMode,
+    budget_seconds: int,
+    candidate: Path,
+    session_factory: api.SessionFactory,
+    results_repo: Path | None,
+    eval_timeout: int,
+    environ: Mapping[str, str],
+    container_user: str | None,
+    load: BundleLoader,
+    build: ImageBuilder,
+    vendor: CandidateVendor,
+) -> None:
+    """The phases after a successful preflight: candidate, image, staging,
+    session, post-session — each stopping the run on its classified failure."""
+    _enter(result, PHASE_CANDIDATE)
+    try:
+        result.bundle = load(candidate)
+    except CandidateRefusedError as exc:
+        _fail(result, FAILURE_CANDIDATE, PHASE_CANDIDATE, str(exc), exc)
+        return
+    bundle = result.bundle
+    agent_env = _bind_secret_slots(result, bundle, environ)
+    if results_repo is not None:
+        try:
+            result.vendored = vendor(results_repo, bundle)
+        except CandidateVendorError as exc:
+            _fail(result, FAILURE_CANDIDATE_VENDOR, PHASE_CANDIDATE, str(exc), exc)
+            return
+
+    _enter(result, PHASE_IMAGE)
+    try:
+        result.image = build(bundle)
+    except ImageBuildError as exc:
+        _fail(result, FAILURE_IMAGE_BUILD, PHASE_IMAGE, str(exc), exc)
+        return
+
+    _enter(result, PHASE_STAGING)
+    try:
+        job_dir = stage_job_dir(
+            result.run_dir,
+            benchmark,
+            mode,
+            run_id=result.run_id,
+            budget_seconds=budget_seconds,
+            adapter=bundle.adapter,
+        )
+        result.job_dir = job_dir
+        snapshot_trusted_input(job_dir, result.run_dir)
+    except Exception as exc:
+        _fail(result, FAILURE_STAGING, PHASE_STAGING, f"{type(exc).__name__}: {exc}", exc)
+        return
+
+    _run_session(
+        result,
+        job_dir=job_dir,
+        session_factory=session_factory,
+        image=result.image.image_id,
+        agent_env=agent_env,
+        container_user=container_user,
+    )
+    _post_session(result, job_dir=job_dir, benchmark=benchmark, eval_timeout=eval_timeout)
 
 
 def evidence_path(run_dir: Path) -> Path:

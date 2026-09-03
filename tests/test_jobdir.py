@@ -69,14 +69,34 @@ class TestLoadBenchmark:
 # ---------------------------------------------------------------------------
 
 
-def _stage(run_dir: Path, mode_name: str = "basic", run_id: str = "run-1") -> Path:
+def _stage(
+    run_dir: Path, mode_name: str = "basic", run_id: str = "run-1", adapter: str = "claude"
+) -> Path:
     return stage_job_dir(
         run_dir, load_benchmark("smoke"), get_mode(mode_name),
-        run_id=run_id, budget_seconds=3600,
+        run_id=run_id, budget_seconds=3600, adapter=adapter,
     )
 
 
 class TestStageJobDir:
+    def test_adapter_is_the_candidates_stamped_verbatim(self, tmp_path: Path) -> None:
+        """The manifest's adapter is the Candidate Bundle's, opaque to the
+        bench: an adapter the bench has never heard of stages exactly like
+        claude does — no allowlist anywhere on the bench side."""
+        job = _stage(tmp_path / "codex", adapter="codex")
+        assert api.read_manifest(job).adapter == "codex"
+        job = _stage(tmp_path / "pi", adapter="pi")
+        assert api.read_manifest(job).adapter == "pi"
+
+    def test_adapter_is_required(self, tmp_path: Path) -> None:
+        with pytest.raises(TypeError):
+            stage_job_dir(
+                tmp_path, load_benchmark("smoke"), get_mode("basic"),
+                run_id="r", budget_seconds=1,
+            )
+        with pytest.raises(ValueError, match="adapter"):
+            _stage(tmp_path, adapter="")
+
     def test_tree_shape(self, tmp_path: Path) -> None:
         job = _stage(tmp_path)
         assert (job / "input" / "manifest.json").is_file()
@@ -174,7 +194,10 @@ class TestStageJobDir:
             config={"cards": ["1"], "draft_set": {"primary_set_code": "fdn"}},
         )
         with pytest.raises(FileNotFoundError):
-            stage_job_dir(tmp_path / "run", fake, get_mode("basic"), run_id="r", budget_seconds=60)
+            stage_job_dir(
+                tmp_path / "run", fake, get_mode("basic"), run_id="r", budget_seconds=60,
+                adapter="claude",
+            )
         assert not (tmp_path / "run" / "job").exists()
         assert not driver_git_dir(tmp_path / "run").exists()
 
