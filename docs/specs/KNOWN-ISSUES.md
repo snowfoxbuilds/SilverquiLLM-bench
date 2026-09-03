@@ -1,3 +1,9 @@
+Status: SETTLED
+
+Last updated: 2026-05-23
+
+# Known Issues
+
 Known issues encountered during benchmark runner development, with fixes applied.
 
 ---
@@ -6,7 +12,7 @@ Known issues encountered during benchmark runner development, with fixes applied
 
 `Status:` ✅ Fixed
 
-`Root cause:` The `setup_questions.json` pre-flight quiz parsed free-text LLM responses for keyword matches. Thinking tokens leaked into responses (e.g., `"Thinking: The user is asking..."`) causing keyword matching to fail. Additionally, the quiz-style validation was a spec-vs-implementation mismatch — the [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) spec intended agent-emitted diagnostic questions, not runner-quizzes-agent.
+`Root cause:` The `setup_questions.json` pre-flight quiz parsed free-text LLM responses for keyword matches. Thinking tokens leaked into responses (e.g., `"Thinking: The user is asking..."`) causing keyword matching to fail. Additionally, the quiz-style validation was a spec-vs-implementation mismatch — the [BENCHMARK-RUNNER.md](BENCHMARK-RUNNER.md) spec intended agent-emitted diagnostic questions, not runner-quizzes-agent.
 
 `Symptoms:`
 
@@ -324,7 +330,7 @@ All three caused pytest collection errors, reported as `0/1` (1 collection error
 
 `Symptoms:`
 
-- Self-eval errors: "Missing blind_[impl.py](http://impl.py/)", "Missing [tests.py](http://tests.py/)", "Missing tested_[impl.py](http://impl.py/)"
+- Self-eval errors: "Missing blind_impl.py", "Missing tests.py", "Missing tested_impl.py"
 - Self-eval reports 0/0 tests (can't evaluate at all)
 - The agent's implementation and tests are completely lost — can't be scored or inspected
 - Only `engine_diff.patch` survives (if the agent modified engine files)

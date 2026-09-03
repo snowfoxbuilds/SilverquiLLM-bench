@@ -8,7 +8,7 @@ Date: 2026-05-23
 
 The 2026-05-23 run exposed a confidence-loop gap: agents extending the engine had no local way to verify they had not regressed core mechanics. Their only feedback was the Engine Regression score, computed post-run from host-side tests. The agent in that run made unverified engine assumptions (a non-existent `cast_zone` attribute, reuse of the `_omniscience_active` flag for a one-shot effect, manual stack bypass in fdn_194) that a local regression run would have caught.
 
-Existing policy ([BENCHMARK-RUNNER.md](http://benchmark-runner.md/) Contamination Controls #1, the "Audited tests are evaluation-only" decision, the [CONTEXT.md](http://context.md/) relationship line) said audited test suites do not exist in the agent's workspace. This is correct for SOS audited tests (the SOS Card Correctness target — must stay hidden) and FDN audited tests (FDN Card Regression grades reference implementations the agent should not be modifying). It is over-broad for Engine Tests, which exercise generic engine APIs rather than benchmark-target cards.
+Existing policy ([BENCHMARK-RUNNER.md](../specs/BENCHMARK-RUNNER.md) Contamination Controls #1, the "Audited tests are evaluation-only" decision, the [CONTEXT.md](../../CONTEXT.md) relationship line) said audited test suites do not exist in the agent's workspace. This is correct for SOS audited tests (the SOS Card Correctness target — must stay hidden) and FDN audited tests (FDN Card Regression grades reference implementations the agent should not be modifying). It is over-broad for Engine Tests, which exercise generic engine APIs rather than benchmark-target cards.
 
 ## Decision
 

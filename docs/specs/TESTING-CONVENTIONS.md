@@ -1,8 +1,14 @@
+Status: SETTLED
+
+Last updated: 2026-09-03
+
+# Testing Conventions
+
 Testing conventions for **bench-authored tests** in the SilverquiLLM-bench repository — i.e. Platform tests, Audited tests, Engine tests, and FDN Reference Tests (everything maintainers write), but not Agent tests.
 
 Scope: tests we write — host-side suites under `tests/`, FDN reference tests staged into the workspace at `benchmarks/sos/workspace/cards/fdn/{collector_number}/tests.py`, and audited SOS grader tests at `benchmarks/sos/data/tests/audited/sos/{collector_number}/tests.py`.
 
-Out of scope: **Agent tests** inside the workspace (e.g., `engine_tests/test_*.py` authored during a run). The grader is the source of truth for scoring, not agent test hygiene, so we deliberately do not bind the agent to these rules and we do not stage this document into the workspace. The workspace `pytest.ini` carries the `timeout = 30` safety net regardless (see [WORKSPACE-CONTRACT.md](http://workspace-contract.md/)).
+Out of scope: **Agent tests** inside the workspace (e.g., `engine_tests/test_*.py` authored during a run). The grader is the source of truth for scoring, not agent test hygiene, so we deliberately do not bind the agent to these rules and we do not stage this document into the workspace. The workspace `pytest.ini` carries the `timeout = 300` safety net regardless (see [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md)).
 
 These rules exist to prevent tests from hanging, killing processes, or otherwise disrupting the development environment.
 
@@ -16,14 +22,14 @@ These conventions prevent that class of bug and others like it.
 
 ## Hard Safety Net: `pytest-timeout`
 
-The repo uses `pytest-timeout` with a global default in `pyproject.toml`:
+The repo uses `pytest-timeout` with a global default for the **host-side** suite in `pyproject.toml`:
 
 ```javascript
 [tool.pytest.ini_options]
-timeout = 30
+timeout = 300
 ```
 
-Any single test that exceeds 30 seconds is killed automatically. This is the last line of defense — tests should be designed to complete well under this limit even when the code under test is broken.
+Any single test that exceeds 300 seconds is killed automatically. This is the last line of defense — tests should be designed to complete well under this limit even when the code under test is broken. The **workspace** suite carries the same `timeout = 300` value in its own `benchmarks/*/workspace/pytest.ini` (pytest does not inherit config across rootdir boundaries — see [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md)).
 
 For tests that intentionally exercise slow paths, use a per-test marker:
 
@@ -199,6 +205,6 @@ Before committing any bench-authored test file (host-side or staged reference), 
 
 ## Enforcing These Conventions
 
-1. **`pytest-timeout = 30s`** — global hard limit in `pyproject.toml`
+1. **`pytest-timeout = 300s`** — global hard limit for the host-side suite in `pyproject.toml`
 2. **CI gate** — `pytest` runs on every PR; any timeout or hang fails the build
-3. **Author scope** — These rules govern bench-authored tests only. Agent tests inside the workspace are not bound by this doc and are not graded; only the Audited tests (host-side grader) determine the score. The workspace `pytest.ini` `timeout = 30` setting is the only safety net that follows tests into the container.
+3. **Author scope** — These rules govern bench-authored tests only. Agent tests inside the workspace are not bound by this doc and are not graded; only the Audited tests (host-side grader) determine the score. The workspace `pytest.ini` `timeout = 300` setting is the only safety net that follows tests into the container.

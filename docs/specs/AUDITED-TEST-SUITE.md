@@ -2,11 +2,11 @@ Status: SETTLED
 
 Last updated: 2026-06-10
 
-Scope: SOS (V1). The `DeterministicPlayer` scripting, two-channel host-side driver, and test-API conventions below are the frozen SOS paradigm. HOB-generation audited tests use the Player Query / Player Decision intent protocol instead — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0).
+Scope: SOS (V1). The `DeterministicPlayer` scripting, two-channel host-side driver, and test-API conventions below are the frozen SOS paradigm. HOB-generation audited tests use the Player Query / Player Decision intent protocol instead — see [DECISION-MODEL.md](DECISION-MODEL.md).
 
 # Audited Test Suite
 
-**Audited tests** are the maintainer-curated grading suite used to score agent output; this spec defines their conventions. It also documents **Agent tests** — the `tests.py` agents write during a Tested Mode run — which are harvested as artifacts but never used for v1 scoring (test-quality scoring and cross-evaluation are v2 features; see Test Harvester). Two further test populations are out of scope here and defined in [CONTEXT.md](http://context.md/): **Engine tests** (the Engine Regression dimension) and **Platform tests** (the repo-tooling suite).
+**Audited tests** are the maintainer-curated grading suite used to score agent output; this spec defines their conventions. It also documents **Agent tests** — the `tests.py` agents write during a Tested Mode run — which are harvested as artifacts but never used for v1 scoring (test-quality scoring and cross-evaluation are v2 features; see Test Harvester). Two further test populations are out of scope here and defined in [CONTEXT.md](../../CONTEXT.md): **Engine tests** (the Engine Regression dimension) and **Platform tests** (the repo-tooling suite).
 
 ## Context
 
@@ -16,7 +16,7 @@ Unlike traditional benchmarks with pre-built test suites, SilverquiLLM-bench has
 
 ### Testing Philosophy: Implementation-Agnostic Testing
 
-Audited tests follow **Implementation-Agnostic Testing** (see [CONTEXT.md](http://context.md/)): a test asserts *what a card does* — observable game-state outcomes — and must pass against *any* correct implementation, never coupling to one implementation's naming, internal structure, method names, or conventions. Operationally, audited tests are behavioral/outcome-based, canonical-engine-API-only, and `DeterministicPlayer`-scripted. This principle governs every Audited Test Category and Decision below.
+Audited tests follow **Implementation-Agnostic Testing** (see [CONTEXT.md](../../CONTEXT.md)): a test asserts *what a card does* — observable game-state outcomes — and must pass against *any* correct implementation, never coupling to one implementation's naming, internal structure, method names, or conventions. Operationally, audited tests are behavioral/outcome-based, canonical-engine-API-only, and `DeterministicPlayer`-scripted. This principle governs every Audited Test Category and Decision below.
 
 ### Tests as envelope (HOB-generation)
 
@@ -36,9 +36,9 @@ Both modes produce `card_impl.py` per card. Tested mode also produces `tests.py`
 
 **Evaluation Phase** (after all agents finish):
 
-1. **SOS Card Correctness** — Audited SOS tests against each agent's `card_impl.py` + agent's `engine_work/`
-2. **FDN Card Regression** — Audited FDN tests against pre-filled FDN impls + agent's `engine_work/`
-3. **Engine Regression** — Core engine tests against agent's `engine_work/`
+1. **SOS Card Correctness** — Audited SOS tests against each agent's `card_impl.py` + harvested `/workspace/engine/` (materialized in `workspace_final/`)
+2. **FDN Card Regression** — Audited FDN tests against pre-filled FDN impls + harvested `/workspace/engine/` (materialized in `workspace_final/`)
+3. **Engine Regression** — Core engine tests against harvested `/workspace/engine/` (materialized in `workspace_final/`)
 Self-eval and cross-eval deferred to v2 (requires test harvester). Agent-written `tests.py` files are harvested as artifacts but not used for v1 scoring.
 
 ### Test Harvester (v2)
@@ -50,7 +50,7 @@ Agent-written `tests.py` files are harvested as artifacts from each run but not 
 3. **Deduplicate** — Identify redundant tests across agents (same behavior, different code)
 4. **Score** — Measure test quality: discrimination (do tests differentiate good from bad impls?), difficulty calibration (passed by some but not all agents), coverage (behaviors tested)
 5. **Promote** — Move validated, high-quality agent tests into `tests/audited/sos/` to strengthen the audited suite
-This enables cross-eval (N×N matrix), self-eval, and test quality scoring as future evaluation dimensions. See [SCORING.md](http://scoring.md/) → Future Work.
+This enables cross-eval (N×N matrix), self-eval, and test quality scoring as future evaluation dimensions. See [SCORING.md](SCORING.md) → Future Work.
 
 ### Agent test constraints
 
@@ -110,7 +110,7 @@ def declare_blockers(game, blocks) -> None: ...
 
 ### Artifacts Per Card
 
-Artifacts are scoped per run (one run = one agent/model). Layout matches [BENCHMARK-RUNNER.md](http://benchmark-runner.md/):
+Artifacts are scoped per run (one run = one agent/model). Layout matches [BENCHMARK-RUNNER.md](BENCHMARK-RUNNER.md):
 
 ```javascript
 results/{run_name}/cards/{card_id}/
@@ -123,7 +123,7 @@ results/{run_name}/cards/{card_id}/
 
 Engine correctness is validated by replaying recorded MTGA game data (sourced from 17lands) through the Python engine and verifying game-state checkpoints match recorded outcomes. This replaces the originally planned XMage differential testing — Replay Validation is more valuable because MTGA is WotC's own rules implementation, and cross-language Java↔Python comparison adds complexity without confidence.
 
-The Replay Validation pipeline is live (built after FDN 001–291 completed; the first benchmark runs preceded it as Pipeline Validation Runs). For the HOB-generation benchmarks, the same pipeline is adapted to drive the V2 engine through the intent-based DeterministicPlayer via a benchmark-parameterized engine target — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0) and [HOB-BENCHMARKS.md](docs/specs/HOB-BENCHMARKS.md).
+The Replay Validation pipeline is live (built after FDN 001–291 completed; the first benchmark runs preceded it as Pipeline Validation Runs). For the HOB-generation benchmarks, the same pipeline is adapted to drive the V2 engine through the intent-based DeterministicPlayer via a benchmark-parameterized engine target — see [DECISION-MODEL.md](DECISION-MODEL.md) and [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md).
 
 ## Decisions
 
@@ -151,7 +151,7 @@ The Replay Validation pipeline is live (built after FDN 001–291 completed; the
 - **Discovery promotion bar — never verbatim**: Candidate tests mined from agent-written `tests.py` in Validated Results are never promoted as-is. They are rewritten to the audited standard (integration-style, behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted), must pass the matching Test Oracle Impl gate (ADR-010) plus the canonical-API-only check, then clear human review. Promotion is legal only in Beta/Benchmarking — Released locks audited tests, so promotion stops at Release and scores don't drift afterward. [SETTLED — Grilling 2026-05-28]
 - **Test-improvement tooling lives repo-side**: The harvest script is repo code at `scripts/harvest_validated_results.py`, output to `benchmarks/<bench>/analysis/harvested_results.jsonl`. The combined investigation/discovery skill is a Claude Code skill under `.claude/skills/` in the bench repo (e.g. `.claude/skills/test-investigation/SKILL.md`), version-controlled alongside the audited tests it edits. Not in `docker/<image>/skills/` (those mount into benchmark-subject agents — wrong audience). [SETTLED — Grilling 2026-05-28]
 - **Workflow documented as a spec, not an ADR**: The harvest pipeline + investigation/discovery skill are captured in a new AUDITED-TEST-IMPROVEMENT-WORKFLOW spec plus these Decisions bullets; no dedicated ADR. ADR-011 stays scoped to locking and its CI enforcement. Rationale: ADRs record *why* we lock; specs record *how* the workflow operates. [SETTLED — Grilling 2026-05-28]
-- **Implementation-Agnostic Testing (core philosophy term)**: The founding principle — a test asserts what a card *does* and must pass against *any* correct implementation, never coupling to naming, structure, or conventions — is named **Implementation-Agnostic Testing** (see [CONTEXT.md](http://context.md/) glossary). It is the formalized, strengthened restatement of the Phase 18 behavioral-testing direction and the principle every decision above serves. [SETTLED — Grilling 2026-05-28]
+- **Implementation-Agnostic Testing (core philosophy term)**: The founding principle — a test asserts what a card *does* and must pass against *any* correct implementation, never coupling to naming, structure, or conventions — is named **Implementation-Agnostic Testing** (see [CONTEXT.md](../../CONTEXT.md) glossary). It is the formalized, strengthened restatement of the Phase 18 behavioral-testing direction and the principle every decision above serves. [SETTLED — Grilling 2026-05-28]
 - **Workflow cadence — on-demand, gated before Release**: The harvest + investigation/discovery workflow runs on-demand (it is the manual v1), but a pass is **required before any Benchmarking→Released transition** — the last chance to fix tests before they are frozen. Not automated per-run in CI. See AUDITED-TEST-IMPROVEMENT-WORKFLOW. [SETTLED — Grilling 2026-05-28]
 - **Oracle harness: stub detection via AST**: the validation harness `tests/test_audited_against_reference.py` distinguishes real Test Oracle Impls from empty stubs with `_is_stub_impl()`, which AST-parses `card_impl.py` and treats a class as real only when it defines a non-dunder method (e.g. `on_resolve`, `can_cast`, `get_targets`). Classes with only an `__init__` of attribute assignments stay stubs. AST parsing is robust where text/regex matching could be fooled. [Drained from KEY_DECISIONS 2026-05-30]
 - **Oracle ****`test_utils`**** stack-resolution helpers**: in the oracle workspace's `test_utils.py`, `resolve_top()` resolves exactly one stack object (pop + resolve + state-based-action check) for fine-grained tests, while `_resolve_top_of_stack()` drains the entire stack in a loop; `cast_spell()` uses the latter to auto-drain triggers. [Drained from KEY_DECISIONS 2026-05-30]
@@ -190,7 +190,7 @@ The Replay Validation pipeline is live (built after FDN 001–291 completed; the
 - **`priority_loop`**** never observes mid-stack state**: the driver terminates only when the stack is empty and queues are exhausted (dry queue + non-empty stack = `ScriptExhaustedError`), so stack assertions are exercised as ordered-emptiness / absence checks; doubled casualty resolution is asserted via the doubled observable result. [Drained from KEY_DECISIONS 2026-06-10]
 ## Audited Test Categories
 
-Test patterns audited SOS tests may use, post Phase 18 audit. Tests target observable game-state outcomes; structural assertions are limited to identity sanity checks. The test shape is **simulation-only**, per [AUDITED-TEST-API.md](https://app.notion.com/p/8f73aba9c12e49449feef275f8470e96): `create_game` → `set_board_state` → script `DeterministicPlayer` directives → advance via `priority_loop` (or `advance_to_phase`) → assert observable state. Every category below assumes this shape; direct `on_resolve` / internal-probe shortcuts are no longer permitted (they were the old integration-style exception, now removed).
+Test patterns audited SOS tests may use, post Phase 18 audit. Tests target observable game-state outcomes; structural assertions are limited to identity sanity checks. The test shape is **simulation-only**, per [AUDITED-TEST-API.md](AUDITED-TEST-API.md): `create_game` → `set_board_state` → script `DeterministicPlayer` directives → advance via `priority_loop` (or `advance_to_phase`) → assert observable state. Every category below assumes this shape; direct `on_resolve` / internal-probe shortcuts are no longer permitted (they were the old integration-style exception, now removed).
 
 **Keep, slimmed**
 
@@ -213,3 +213,10 @@ Test patterns audited SOS tests may use, post Phase 18 audit. Tests target obser
 ## Historical discussion captures (archived)
 
 The raw discussion notes behind these decisions — **Proposed Audited Test Improvements (2026-05-28)** and **Proposed Philosophy Changes (2026-06-03)** — have been moved to [Historical Context](https://app.notion.com/p/3706a7adc8ed80baafd3e93e28bb6d33). All of their proposals remain in force and are captured as SETTLED entries in the Decisions log above.
+
+## Relevant ADRs
+
+| ADR | Decision |
+| --- | --- |
+| [ADR-010](../adr/ADR-010-test-oracle-workspace-uses-independent-engine.md) | Test Oracle Workspace Uses Independent Engine |
+| [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |

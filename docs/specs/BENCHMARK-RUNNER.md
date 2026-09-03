@@ -10,12 +10,12 @@ Orchestration harness for the end-to-end benchmark. The runner stages a workspac
 
 ## Context
 
-The runner is the host-side orchestrator. It prepares everything the agent needs, launches a Docker container, waits for it to finish, and evaluates the results. All agent-internal orchestration (prompt handling, mode selection, iteration strategy) lives inside the container's entrypoint. See [AGENT-CONTAINERS.md](https://app.notion.com/p/07182a53c93641b7831fe9d240403de3) for the container architecture.
+The runner is the host-side orchestrator. It prepares everything the agent needs, launches a Docker container, waits for it to finish, and evaluates the results. All agent-internal orchestration (prompt handling, mode selection, iteration strategy) lives inside the container's entrypoint. See [AGENT-CONTAINERS.md](AGENT-CONTAINERS.md) for the container architecture.
 
 Detailed contracts are split into focused specs:
 
-- [WORKSPACE-CONTRACT.md](https://app.notion.com/p/ad4d407fda954387adf7eb4ba8674371) defines the Workspace layout, Run Manifest, card directory invariant, and in-place engine editing model.
-- [RUN-ARTIFACTS-AND-TELEMETRY.md](https://app.notion.com/p/1ffe911b65564fa6860b2a91dcc94fb5) defines `workspace_final/`, snapshot fallback, telemetry, Docker logs, and smoke runs (the `silverquillm smoke` command vs. the smoke benchmark).
+- [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) defines the Workspace layout, Run Manifest, card directory invariant, and in-place engine editing model.
+- [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) defines `workspace_final/`, snapshot fallback, telemetry, Docker logs, and smoke runs (the `silverquillm smoke` command vs. the smoke benchmark).
 ## Architecture
 
 ```mermaid
@@ -85,7 +85,7 @@ Not in config: workspace/test paths (resolved from the `_REPO_ROOT` / `_BENCHMAR
 
 ## Workspace Staging
 
-The runner builds a workspace directory that the container sees as `/workspace/`. See [AGENT-CONTAINERS.md](https://app.notion.com/p/07182a53c93641b7831fe9d240403de3) for the full workspace layout.
+The runner builds a workspace directory that the container sees as `/workspace/`. See [AGENT-CONTAINERS.md](AGENT-CONTAINERS.md) for the full workspace layout.
 
 Staging steps:
 
@@ -93,7 +93,7 @@ Staging steps:
 2. Write `workspace/prompt.md` (User Prompt) and `workspace/run_manifest.json` (`timeout_seconds` + `deadline_utc`) into the copy. The manifest write happens immediately before container launch.
 3. Run `git init && git add -A && git commit -m "initial workspace"` inside the copy so the agent has clean version-control state and Output Snapshots have a base commit.
 4. Mount the copy at `/workspace/` when launching the agent container.
-The source-of-truth layout lives in the bench repo at `benchmarks/sos/workspace/`. To change what agents see, edit that directory — there is no per-file staging logic. FDN and SOS card directories share the same structure (`card_spec.json` + `card_impl.py`). FDN implementations are filled reference code; SOS implementations are SOS Card Stubs (`class CardName(CardImpl): pass`) for the agent to extend. Illustrative FDN card tests are staged at `tests/cards/fdn/` for agent reference; `tests/cards/sos/` is intentionally empty (audited SOS grader tests live host-side only). See [WORKSPACE-CONTRACT.md](https://app.notion.com/p/ad4d407fda954387adf7eb4ba8674371) for the full layout.
+The source-of-truth layout lives in the bench repo at `benchmarks/sos/workspace/`. To change what agents see, edit that directory — there is no per-file staging logic. FDN and SOS card directories share the same structure (`card_spec.json` + `card_impl.py`). FDN implementations are filled reference code; SOS implementations are SOS Card Stubs (`class CardName(CardImpl): pass`) for the agent to extend. Illustrative FDN card tests are staged at `tests/cards/fdn/` for agent reference; `tests/cards/sos/` is intentionally empty (audited SOS grader tests live host-side only). See [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) for the full layout.
 
 ## Resume
 
@@ -109,12 +109,12 @@ python -m silverquillm resume sos-2026-05-16T19-49 \
 
 Differences from `run`:
 
-- Staging copies the prior run's `workspace_final/` wholesale; no `git init`. Prior `.git` history is preserved. See [WORKSPACE-CONTRACT.md](https://app.notion.com/p/ad4d407fda954387adf7eb4ba8674371) → Resume staging variant.
+- Staging copies the prior run's `workspace_final/` wholesale; no `git init`. Prior `.git` history is preserved. See [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) → Resume staging variant.
 - `--image` defaults to the prior run's `docker_image`; explicit override allowed (recorded as `resumed_image_changed: true`).
 - Runner appends a Resume Preamble to the User Prompt informing the agent that this is a resume. Conditional additional lines disclose snapshot fallback (if used) and image change (if applicable).
 - Refuses resumes when prior `run_status` is `no_viable_output_produced` or when `workspace_final/` is missing. A future `--from-snapshots` flag may be added for borderline cases.
 - Accepts resumes from runs that used snapshot fallback; the Resume Preamble discloses the rollback so the agent knows its inherited state is not where the prior agent stopped.
-Resume Legs are never leaderboard-valid — any run with `resumed_from` set has `leaderboard_valid = false`. See [RUN-ARTIFACTS-AND-TELEMETRY.md](https://app.notion.com/p/1ffe911b65564fa6860b2a91dcc94fb5) → Run summary.
+Resume Legs are never leaderboard-valid — any run with `resumed_from` set has `leaderboard_valid = false`. See [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) → Run summary.
 
 ### Locating the prior run
 
@@ -334,7 +334,7 @@ Cross-agent aggregates (multi-model leaderboard, combined cross-eval) are a futu
 2. **New set cards** — SOS released 2026-04-24; too new for LLM training data.
 3. **No cross-agent leakage** — Each run gets a fresh container with a clean workspace. Agents never see other agents' work.
 4. **FDN as examples, not contamination** — FDN implementations are intentionally provided as reference examples. SOS implementations (the benchmark target) are empty templates.
-See [AGENT-CONTAINERS.md](https://app.notion.com/p/07182a53c93641b7831fe9d240403de3) → Isolation Guarantees for the full threat model.
+See [AGENT-CONTAINERS.md](AGENT-CONTAINERS.md) → Isolation Guarantees for the full threat model.
 
 ## Error Handling
 
@@ -383,7 +383,7 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **Docker logs stream live and save**: The runner streams Docker stdout/stderr live to the terminal while also saving them as `docker_stdout.log` and `docker_stderr.log` in run results. This supports long-run monitoring and post-run debugging without container cooperation. [SETTLED]
 - **Live logs are labeled and colorized**: The runner prefixes live Docker stdout/stderr lines with stream labels and colors different output types for readability. Saved log files remain split by stream and do not require ANSI color codes. [SETTLED]
 - **Color defaults to auto**: Live log colorization uses `--color auto` by default: enabled for interactive TTY output, disabled for pipes/CI. Support `--color always` and `--color never` overrides. [SETTLED]
-- **v1 includes a tabbed post-run log viewer**: v1 ships `silverquillm logs --run` with tabs over per-channel files (see [RUN-ARTIFACTS-AND-TELEMETRY.md](http://run-artifacts-and-telemetry.md/) → Terminal channels). Live labeled streaming remains the default for users who don't want to launch the viewer. The originally deferred viewer is lifted now that the runner is stable and the 2026-05-23 run surfaced concrete triage pain. [UPDATED]
+- **v1 includes a tabbed post-run log viewer**: v1 ships `silverquillm logs --run` with tabs over per-channel files (see [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) → Terminal channels). Live labeled streaming remains the default for users who don't want to launch the viewer. The originally deferred viewer is lifted now that the runner is stable and the 2026-05-23 run surfaced concrete triage pain. [UPDATED]
 - **Runner uses pipe-readers + poll-loop architecture**: Two dedicated threads drain Docker stdout/stderr pipes to host files. The main thread polls all files (Docker log dumps, `/output/` files) on a ~1s interval for colorized terminal output, checks timeouts, and runs snapshots. This avoids pipe buffer deadlock while keeping the main loop single-threaded and simple. [SETTLED]
 - **Timeout is clock-based, not proc.wait-based**: The main thread checks `time.monotonic()` against the deadline each poll iteration, rather than using `proc.wait(timeout)`. This decouples timeout from the Popen API and enables future pause/resume via `docker pause`/`docker unpause`. [SETTLED]
 - **Two timeout types: Hard Timeout + Hang Timeout**: Hard Timeout (`--timeout`) is the overall run time limit. Hang Timeout (`--hang-timeout`, default 900s) triggers when no monitored file has been modified for the configured period. Either timeout causes `docker stop -t 10`. `run_summary.json` records `timeout_reason`. [SETTLED]
@@ -400,4 +400,13 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 - **`_REPO_ROOT`**** constant for repo-relative paths**: Host-side modules that need to resolve repo-relative paths (`cli.py`, `workspace.py`) define `_REPO_ROOT = Path(__file__).resolve().parent.parent` as a module-level constant; all repo-relative path resolution flows through it. No `--cards-dir` / `--engine-dir` style flags. [NEW]
 - **`_BENCHMARK_SET_ROOT`**** derives from a module-level set name**: `silverquillm/workspace.py` defines `_BENCHMARK_SET_NAME = "sos"` and `_BENCHMARK_SET_ROOT = _REPO_ROOT / "benchmarks" / _BENCHMARK_SET_NAME` as module-level constants. All bench-side, set-scoped paths flow through `_BENCHMARK_SET_ROOT` (workspace source = `_BENCHMARK_SET_ROOT / "workspace"`, audited tests = `_BENCHMARK_SET_ROOT / "data" / "tests" / "audited"`). When a second target set ships (Foundations 2 etc.), promote `_BENCHMARK_SET_NAME` to a CLI flag (`--set`) with `sos` as default; no other path call sites need to change. The runner stays benchmark-agnostic by funneling all set-scoped paths through one constant. [NEW]
 - **Collector number normalization**: `--cards` accepts zero-padded collector numbers (e.g., `001`, `042`). CLI parsing normalizes via `str(int(x))` and preserves non-numeric values as-is. Card directory names use the normalized form.
-- **Resume design decisions live in ADR-008/009**: The detailed Resume Leg, Resume Chain, and resume read-source decisions were consolidated into [ADR-008: Resume Legs Are Independent Benchmark Runs](https://app.notion.com/p/753f2250932244438470dac675fa4439) (resume design) and [ADR-009: Resume Reads Prefer Run-Time Artifacts Over Harvest-Time Artifacts](https://app.notion.com/p/e38eba155d824deb876cdee9717e96d4) (read-source preference) on 2026-05-30. The resume behavior contract remains in the Resume section above. [UPDATED]
+- **Resume design decisions live in ADR-008/009**: The detailed Resume Leg, Resume Chain, and resume read-source decisions were consolidated into [ADR-008: Resume Legs Are Independent Benchmark Runs](../adr/ADR-008-resume-legs-are-independent-benchmark-runs.md) (resume design) and [ADR-009: Resume Reads Prefer Run-Time Artifacts Over Harvest-Time Artifacts](../adr/ADR-009-resume-reads-prefer-run-time-artifacts-over-harvest-time-artifacts.md) (read-source preference) on 2026-05-30. The resume behavior contract remains in the Resume section above. [UPDATED]
+
+## Relevant ADRs
+
+| ADR | Decision |
+| --- | --- |
+| [ADR-006](../adr/ADR-006-engine-tests-staged-into-workspace.md) | Engine Tests Staged Into Workspace |
+| [ADR-007](../adr/ADR-007-workspace-as-pre-built-directory.md) | Workspace As Pre-Built Directory |
+| [ADR-008](../adr/ADR-008-resume-legs-are-independent-benchmark-runs.md) | Resume Legs Are Independent Benchmark Runs |
+| [ADR-009](../adr/ADR-009-resume-reads-prefer-run-time-artifacts-over-harvest-time-artifacts.md) | Resume Reads Prefer Run-Time Artifacts Over Harvest-Time Artifacts |

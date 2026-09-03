@@ -4,9 +4,12 @@ BENCH-CONTRACT.md's versioning promise is visibility, not immutability: a
 consumer pins one revision and re-syncs deliberately.  Several things
 therefore have to agree, and this module is where the bench states them:
 
-- ``docs/specs/BENCH-CONTRACT.md`` (and ``bench-identity-vectors.json``) are
-  vendored from the-ozolith at :data:`PINNED_REVISION` (the contract's
-  provenance banner records the commit);
+- ``docs/specs/BENCH-CONTRACT.md`` (and the ``bench-identity-vectors.json`` it
+  links to) are vendored from the-ozolith at :data:`PINNED_REVISION` (the
+  contract's provenance banner records the commit); the vectors file carries no
+  provenance banner of its own, so it is content-authenticated against
+  :data:`PINNED_IDENTITY_VECTORS_BLOB_SHA` (its git blob hash at that commit) —
+  the contract and its vectors re-sync together or the pin fails;
 - ``pyproject.toml`` pins every the-ozolith distribution the bench imports to
   that same immutable revision (git direct references — the packages are not
   published on PyPI, and the-ozolith publishes no release tags):
@@ -52,6 +55,7 @@ __all__ = [
     "CONTRACT_IDENTITY_SPEC_VERSION",
     "CONTRACT_SCHEMA_VERSION",
     "PINNED_DISTRIBUTIONS",
+    "PINNED_IDENTITY_VECTORS_BLOB_SHA",
     "PINNED_REVISION",
     "PINNED_VERSION",
     "PINNED_WORKER_REVISION",
@@ -65,6 +69,7 @@ __all__ = [
     "PinnedDistribution",
     "UnsupportedContractError",
     "check_contract_support",
+    "git_blob_sha",
     "installed_contract",
     "installed_distribution",
     "installed_worker",
@@ -156,6 +161,16 @@ PINNED_WORKER_REVISION = PINNED_REVISION
 PINNED_WORKER_VERSION = PINNED_VERSION
 PINNED_WORKER_TREE_DIGEST = _WORKER.tree_digest
 
+#: Git blob hash of ``docs/specs/bench-identity-vectors.json`` at
+#: :data:`PINNED_REVISION` — the golden identity vectors the vendored
+#: BENCH-CONTRACT.md links to, vendored read-only from that same commit.  Unlike
+#: the distribution trees, the vectors ship as a doc with no provenance banner,
+#: so the file on disk is authenticated by content: it must hash to this
+#: (:func:`git_blob_sha` over its bytes).  The contract and its vectors are one
+#: surface, re-synced together on a version bump; a drifted or hand-edited
+#: vectors file is refused here.
+PINNED_IDENTITY_VECTORS_BLOB_SHA = "5eea426f7cd922b65f13a8db20742964628d7ed7"
+
 
 class UnsupportedContractError(RuntimeError):
     """The installed the-ozolith packages do not speak the pinned Bench Contract."""
@@ -193,6 +208,18 @@ def pinned_distribution(name: str) -> PinnedDistribution:
 def pinned_requirement(name: str = WORKER_DISTRIBUTION) -> str:
     """The exact PEP 508 requirement ``pyproject.toml`` must carry for *name*."""
     return pinned_distribution(name).requirement
+
+
+def git_blob_sha(data: bytes) -> str:
+    """The git blob hash of *data* — ``sha1("blob <len>\\0" + data)``.
+
+    This is the object id git and GitHub address a file by, so it authenticates
+    a vendored artifact against the exact blob at the pinned revision without a
+    network fetch: :data:`PINNED_IDENTITY_VECTORS_BLOB_SHA` is that id for
+    ``bench-identity-vectors.json`` at :data:`PINNED_REVISION`.
+    """
+    header = f"blob {len(data)}\x00".encode("ascii")
+    return hashlib.sha1(header + data).hexdigest()
 
 
 def package_tree_digest(root: Path) -> str | None:

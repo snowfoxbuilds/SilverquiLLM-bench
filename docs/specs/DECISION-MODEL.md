@@ -12,7 +12,7 @@ In V1 choices were answered positionally (a flat FIFO script), so one audited te
 
 ## Design
 
-### Vocabulary (canonical terms — see [CONTEXT.md](http://context.md/))
+### Vocabulary (canonical terms — see [CONTEXT.md](../../CONTEXT.md))
 
 | Term | Meaning |
 | --- | --- |
@@ -153,7 +153,7 @@ For "T, Pay 1 life: Add one mana of any color. Spend this mana only to cast an i
 - **must/may-achieve is suite design guidance**: one test per option; separate decline test; `min=0` carries declinability. [SETTLED — 2026-06-10]
 - **Sequencing: the intent layer is task #1 in the msh workspace** — Player Query / Player Decision / Intent land before any MSH oracle test is authored; the dup'd V1 two-channel `test_utils` / `DeterministicPlayer` are deleted, not deprecated (zero MSH tests depend on them yet, so the migration is free). [SETTLED — Grilling 2026-06-10]
 - **Player Query is a native engine protocol — no V1 adapter**: the MSH engine mints instance ids, owns the Game Refs registry, and routes every player interaction through structured queries (boundary validation requires engine-side option structure an adapter cannot provide). `engine_tests/` are updated in the same change series; any V1 regression coverage that cannot be re-expressed is explicitly logged, never silently dropped. [SETTLED — Grilling 2026-06-10]
-- **The MSH player keeps the name ****`DeterministicPlayer`**: benchmark-scoped glossary entries in [CONTEXT.md](http://context.md/) (`DeterministicPlayer (SOS)` vs `DeterministicPlayer (MSH)`) disambiguate it from the frozen V1 two-channel player; the classes live in per-benchmark workspaces that never import each other. [SETTLED — Grilling 2026-06-10]
+- **The MSH player keeps the name ****`DeterministicPlayer`**: benchmark-scoped glossary entries in [CONTEXT.md](../../CONTEXT.md) (`DeterministicPlayer (SOS)` vs `DeterministicPlayer (MSH)`) disambiguate it from the frozen V1 two-channel player; the classes live in per-benchmark workspaces that never import each other. [SETTLED — Grilling 2026-06-10]
 - **Concrete protocol surface locked**: module layout (`decisions.py` / `queries.py` / `refs_registry.py` / `player.py` / `intent_player.py`); `ProtocolError` vs `IntentError` exception split; `Answer(selected=...)` with empty-tuple decline; ordering queries as `min == max == len(options)` with answer order = assignment order; frozen `Intent(pattern, preferences, postcondition)`; single baseline-intent slot. Locked with the Task #1 implementation prompt so the implementing agent has no open micro-decisions; see Concrete protocol surface above. [SETTLED — 2026-06-10]
 - **Instance ids are stint-based, hooked at ****`move_to_zone`**: the engine notifies the Game Refs registry on every zone change so id continuity breaks even for unobserved stints; minting stays lazy. Observation-only tracking rejected. [SETTLED — PR #25 review, 2026-06-10]
 - **`preference_miss`**** is a transcript flag, not an exception**: a matched intent with zero preferred hits still answers (first valid option) and marks the transcript record; the locked exception hierarchy is unchanged. [SETTLED — PR #25 review, 2026-06-10]

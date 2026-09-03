@@ -86,7 +86,7 @@ When an LLM has seen target card implementations in its training data, invalidat
 
 **Test Harvester** *(manual v1 / automated v2)*
 
-The mechanism for improving audited tests from harvested run results. **Manual v1**: the on-demand harvest script + combined investigation/discovery skill in [AUDITED-TEST-IMPROVEMENT-WORKFLOW.md](http://audited-test-improvement-workflow.md/) — a human reviews suspect tests (ranked by cross-impl failure breadth) and promotion candidates. **Automated v2** *(future)*: a pass that harvests Validated Results and scores audited test quality (cross-impl breadth, discrimination, convention-coupling) to surface suspect tests and promotion candidates with less human triage. Replaces the retired self-eval / N×N cross-eval framing; not run after Release.
+The mechanism for improving audited tests from harvested run results. **Manual v1**: the on-demand harvest script + combined investigation/discovery skill in [AUDITED-TEST-IMPROVEMENT-WORKFLOW.md](docs/specs/AUDITED-TEST-IMPROVEMENT-WORKFLOW.md) — a human reviews suspect tests (ranked by cross-impl failure breadth) and promotion candidates. **Automated v2** *(future)*: a pass that harvests Validated Results and scores audited test quality (cross-impl breadth, discrimination, convention-coupling) to surface suspect tests and promotion candidates with less human triage. Replaces the retired self-eval / N×N cross-eval framing; not run after Release.
 
 *Avoid*: "cross-eval" / "self-eval" (retired N×N framing), "cross-validation" (overloaded ML term)
 
@@ -158,7 +158,7 @@ A question an engine raises to a player: source (set of Player Decisions identif
 
 **Replay Validation**
 
-Engine correctness check that replays 17lands GRE (Game Rules Engine) state streams through the Python engine and verifies full game state at every GRE message boundary. Data source: 17lands pre-parsed GRE JSON — clean JSON files containing `GameStateType_Full` and `GameStateType_Diff` messages with object-level fidelity (zones, gameObjects by `grpId`/`instanceId`, life totals, annotations). Execution model: **observer mode** with state-diff comparison — seat 1 (17lands user) fully validated, seat 2 (opponent) actions oracle-injected from public game objects. Single parser, single format. See [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) and [ADR-003](https://www.notion.so/37a8b903f91b4309a15b91d149a90f7c).
+Engine correctness check that replays 17lands GRE (Game Rules Engine) state streams through the Python engine and verifies full game state at every GRE message boundary. Data source: 17lands pre-parsed GRE JSON — clean JSON files containing `GameStateType_Full` and `GameStateType_Diff` messages with object-level fidelity (zones, gameObjects by `grpId`/`instanceId`, life totals, annotations). Execution model: **observer mode** with state-diff comparison — seat 1 (17lands user) fully validated, seat 2 (opponent) actions oracle-injected from public game objects. Single parser, single format. See [17lands Replay Data Schema](docs/specs/17LANDS-REPLAY-SCHEMA.md) and [ADR-003](docs/adr/ADR-003-replay-validation-over-differential-testing.md).
 
 *Avoid*: "differential testing" (deprecated XMage approach), "checkpoint validation" (we do full state comparison, not just EOT checkpoints), "aggregate CSV" (that's a different 17lands dataset)
 
@@ -314,7 +314,7 @@ One Benchmark Run's immutable entry in the Results Repo: `manifest.json` (candid
 
 **Implementation-Agnostic Testing**
 
-The core audited-test philosophy: a test asserts *what a card does* (observable game-state behavior) and must pass against *any* correct implementation — never coupling to one implementation's naming, internal structure, method names, or conventions. It discriminates correctness, not style: independent correct impls all pass, only genuinely wrong behavior fails. Operationalized by the behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted audited tests (see [AUDITED-TEST-SUITE.md](http://audited-test-suite.md/)), and is the principle every test-improvement decision serves. The formalized, strengthened restatement of the Phase 18 behavioral-testing direction.
+The core audited-test philosophy: a test asserts *what a card does* (observable game-state behavior) and must pass against *any* correct implementation — never coupling to one implementation's naming, internal structure, method names, or conventions. It discriminates correctness, not style: independent correct impls all pass, only genuinely wrong behavior fails. Operationalized by the behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted audited tests (see [AUDITED-TEST-SUITE.md](docs/specs/AUDITED-TEST-SUITE.md)), and is the principle every test-improvement decision serves. The formalized, strengthened restatement of the Phase 18 behavioral-testing direction.
 
 *Avoid*: "black-box testing" (narrower — only says don't read internals), "convention testing" / "naming-coupled tests" (the anti-pattern this rejects)
 
@@ -344,7 +344,7 @@ The `tests.py` files a coding agent writes during a Tested Mode run — one per 
 
 **Audited Test API**
 
-The single sanctioned interface audited tests use to touch the engine, specified in [AUDITED-TEST-API.md](http://audited-test-api.md/). Four parts: set up (`set_board_state` / `PermanentSpec`), advance (Host-Side Driver `priority_loop` + sparing `advance_to_phase`), `DeterministicPlayer` directives (`CastSpell` / `CastSpellFree` / `ActivateAbility` / `PlayLand`), and `assert_*` observations. References only canonical-engine primitives and *composes or duplicates* canonical behavior (e.g. `cast_spell_from_exile` for alt-zone casts); building and using it requires no change to any workspace engine. The tests it drives still run against the oracle and each candidate engine, which may diverge — only the test *result* depends on the engine.
+The single sanctioned interface audited tests use to touch the engine, specified in [AUDITED-TEST-API.md](docs/specs/AUDITED-TEST-API.md). Four parts: set up (`set_board_state` / `PermanentSpec`), advance (Host-Side Driver `priority_loop` + sparing `advance_to_phase`), `DeterministicPlayer` directives (`CastSpell` / `CastSpellFree` / `ActivateAbility` / `PlayLand`), and `assert_*` observations. References only canonical-engine primitives and *composes or duplicates* canonical behavior (e.g. `cast_spell_from_exile` for alt-zone casts); building and using it requires no change to any workspace engine. The tests it drives still run against the oracle and each candidate engine, which may diverge — only the test *result* depends on the engine.
 
 *Avoid*: "test harness" (collides with the validation harness `tests/test_audited_against_reference.py`), "test_utils" alone (that is one module within the API)
 

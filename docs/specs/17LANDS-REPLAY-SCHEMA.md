@@ -1,3 +1,9 @@
+Status: SETTLED
+
+Last updated: 2026-05-09
+
+# 17lands Replay Data Schema
+
 Schema documentation for the 17lands replay data format. This is **action-level GRE (Game Rules Engine) message data**, not the aggregate CSV. Each file contains the full game state stream for one game.
 
 > Source: [17lands.com](http://17lands.com/) replay data export. Pre-parsed from MTGA GRE messages into clean JSON.
@@ -358,3 +364,9 @@ The raw JSON below shows the first ~5 turns of a Foundations limited game (Bo3).
 **Turn 4 (User):** User draws a Mountain (75024). Plays a Mountain. No attacks.
 
 **Turn 5 (Opp):** Opponent draws, plays a Mountain (102738).
+
+## Relevant ADRs
+
+| ADR | Decision |
+| --- | --- |
+| [ADR-003](../adr/ADR-003-replay-validation-over-differential-testing.md) | Replay Validation Over Differential Testing |

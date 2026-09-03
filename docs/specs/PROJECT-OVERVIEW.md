@@ -56,7 +56,7 @@ Evaluation runs human-curated **audited tests** against every agent's implementa
 1. **SOS Card Correctness** — audited SOS tests vs. each agent's `card_impl.py`
 2. **FDN Card Regression** — audited FDN tests vs. the agent's engine
 3. **Engine Regression** — core engine tests vs. the agent's engine
-The audited SOS suite is continuously improved by cherry-picking — see [AUDITED-TEST-IMPROVEMENT-WORKFLOW.md](https://app.notion.com/p/b99a10aff98e4794856ce259e4916163) and [AUDITED-TEST-SUITE.md](https://app.notion.com/p/a50ff4a1782e4badbc4419b6cbaface9).
+The audited SOS suite is continuously improved by cherry-picking — see [AUDITED-TEST-IMPROVEMENT-WORKFLOW.md](AUDITED-TEST-IMPROVEMENT-WORKFLOW.md) and [AUDITED-TEST-SUITE.md](AUDITED-TEST-SUITE.md).
 
 ### Related Work
 

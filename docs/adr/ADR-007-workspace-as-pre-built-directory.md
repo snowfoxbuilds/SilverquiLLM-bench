@@ -29,13 +29,13 @@ ADRs are not staged into the Workspace. They live host-side under the Notion ADR
 - **Positive**: Workspace contents are inspectable, dev-testable, and version-controlled in the bench repo without running the harness.
 - **Positive**: Staging code collapses from N per-file copies to one `cp -r` + per-run writes + `git init`. No drift between staging logic and the spec contract.
 - **Positive**: Evaluation and agent share the engine by construction (single Python import path), eliminating engine-version mismatch as a class of bugs.
-- **Positive**: Spec docs ([WORKSPACE-CONTRACT.md](http://workspace-contract.md/)) collapse to "see the directory" — no need to enumerate file lists in two places.
+- **Positive**: Spec docs ([WORKSPACE-CONTRACT.md](../specs/WORKSPACE-CONTRACT.md)) collapse to "see the directory" — no need to enumerate file lists in two places.
 - **Negative**: The bench's Python package layout becomes unusual: the canonical engine lives under `benchmarks/sos/workspace/engine/` rather than top-level `engine/`. Bench tooling imports via the longer path.
 - **Negative**: Reversing this decision means rewriting `stage_workspace()` for per-file assembly again — half-day of work, not weeks, but non-trivial.
 - **Neutral**: SOS Card Stubs (`class CardName(CardImpl): pass`) live in the workspace as version-controlled files; the agent's task is to extend them. This is consistent with how FDN reference implementations live in the same Workspace directory.
 ## Alternatives Considered
 
-- **Per-file staging (status quo before this ADR)**: Rejected. Every new agent-visible artifact requires a staging code change and creates spec/code drift. The drift between [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) and the actual `stage_workspace()` observed on 2026-05-24 is a concrete example.
+- **Per-file staging (status quo before this ADR)**: Rejected. Every new agent-visible artifact requires a staging code change and creates spec/code drift. The drift between [BENCHMARK-RUNNER.md](../specs/BENCHMARK-RUNNER.md) and the actual `stage_workspace()` observed on 2026-05-24 is a concrete example.
 - **Top-level engine with build-time copy to workspace**: Rejected. Two copies create drift between eval-engine and agent-engine; subtle bugs become possible where they diverge.
 - **Symlink ****`workspace/engine`**** → top-level ****`engine`**: Rejected. Breaks under `cp -r` without `-L`, and breaks on Windows dev environments.
 - **`NotImplementedError`**** SOS card stubs**: Rejected separately during the same grilling session. Too strict — failing tests get in the way of harness flexibility (e.g., the harness wanting to do things in a different order). SOS Card Stubs use `pass` bodies, relying on `CardImpl`'s no-op-by-default hooks for runnable starting state.

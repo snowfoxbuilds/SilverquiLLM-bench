@@ -127,7 +127,7 @@ During benchmark runs, the engine is **writable** — agents may add new mechani
 
 - The engine's architecture (hooks, events, layers) should be expressive enough that most mechanics can be implemented by adding new code rather than modifying core systems
 - Agents see `engine_api.md` and can browse the full `engine/` source in their workspace
-- Engine changes persist throughout a single benchmark run — the agent manages a writable engine copy inside the container (see [AGENT-CONTAINERS.md](http://agent-containers.md/))
+- Engine changes persist throughout a single benchmark run — the agent manages a writable engine copy inside the container (see [AGENT-CONTAINERS.md](AGENT-CONTAINERS.md))
 - All evaluation is post-run: after the agent finishes, the evaluator runs all cards' tests against the final engine state
 - The base engine (from the repo) is the starting point for every run — different agents start from the same baseline
 **What agents typically extend:**

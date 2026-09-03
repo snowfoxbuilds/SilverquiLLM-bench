@@ -8,10 +8,18 @@ revision's tree digest, so a directory or editable install is authenticated by
 its contents and a locally modified install is refused — version and schema
 numbers never admit a worker on their own.  A skew in any of them is refused
 by the driver's preflight before a job dir is staged.
+
+The vendored contract does not travel alone: ``docs/specs/bench-identity-
+vectors.json`` — the golden identity vectors the contract links to — is
+vendored read-only from the same pinned revision, and is authenticated the
+same content-addressed way (its git blob hash must equal the pinned one).  A
+version bump re-syncs both artifacts together; a drifted vectors file is
+refused, and both artifacts must publish the same ``identity_spec_version``.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -26,6 +34,7 @@ from silverquillm import contract_version as cv
 
 REPO = Path(__file__).resolve().parents[1]
 CONTRACT_DOC = REPO / "docs" / "specs" / "BENCH-CONTRACT.md"
+IDENTITY_VECTORS = REPO / "docs" / "specs" / "bench-identity-vectors.json"
 
 
 def _pyproject_requirement(name: str = cv.WORKER_DISTRIBUTION) -> str:
@@ -80,10 +89,37 @@ class TestThreeSourcesAgree:
         assert verifier.IDENTITY_SPEC_VERSION == cv.CONTRACT_IDENTITY_SPEC_VERSION
 
     def test_vendored_identity_vectors_are_the_pinned_spec_version(self) -> None:
-        import json
-
-        vectors = json.loads((REPO / "docs" / "specs" / "bench-identity-vectors.json").read_text())
+        vectors = json.loads(IDENTITY_VECTORS.read_text(encoding="utf-8"))
         assert vectors["identity_spec_version"] == cv.CONTRACT_IDENTITY_SPEC_VERSION
+
+
+class TestVendoredIdentityVectorsShareTheRevision:
+    """The golden identity vectors are vendored from the same pinned revision
+    as the contract that links to them, and cannot silently drift from it."""
+
+    def test_the_contract_links_to_a_present_vectors_file(self) -> None:
+        # The contract links to the vectors relative to itself; the target of
+        # that link must exist next to it (the link must resolve, not dangle).
+        text = CONTRACT_DOC.read_text(encoding="utf-8")
+        assert "(bench-identity-vectors.json)" in text, (
+            "BENCH-CONTRACT.md no longer links to bench-identity-vectors.json"
+        )
+        assert IDENTITY_VECTORS.is_file(), (
+            f"{IDENTITY_VECTORS} is missing — re-sync it from the pinned revision"
+        )
+
+    def test_vectors_are_the_pinned_revisions_bytes(self) -> None:
+        # Content-addressed authentication: the vendored file must be, byte for
+        # byte, the blob at PINNED_REVISION.  A version bump that re-syncs the
+        # contract must re-sync these vectors too, or this fails.
+        blob = cv.git_blob_sha(IDENTITY_VECTORS.read_bytes())
+        assert blob == cv.PINNED_IDENTITY_VECTORS_BLOB_SHA, (
+            f"bench-identity-vectors.json blob {blob} != pinned "
+            f"{cv.PINNED_IDENTITY_VECTORS_BLOB_SHA} — the vectors have drifted "
+            f"from the-ozolith @ {cv.PINNED_REVISION}; re-sync the vectors "
+            "and BENCH-CONTRACT.md together and update the pin"
+        )
+        assert re.fullmatch(r"[0-9a-f]{40}", cv.PINNED_IDENTITY_VECTORS_BLOB_SHA)
 
 
 class TestInstalledWorkerIsThePinnedOne:
