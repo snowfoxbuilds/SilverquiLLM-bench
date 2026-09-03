@@ -29,8 +29,13 @@ does, by *consuming* ``theozolith_worker.api`` rather than re-implementing it:
    :func:`~theozolith_worker.api.compose_pr_body` and recorded.
 6. **Harvest / evaluation** — ``workspace_final/`` from the checkout's files;
    the three-dimension Audited Eval.
-7. **Record** — a RunRecord in the results repo (when configured), plus
-   ``run_dir/contract_run.json`` always.
+7. **Record** — the lifecycle is finalized first (final phase, timing, and
+   failures), ``run_dir/contract_run.json`` is written from that finalized
+   evidence, and the RunRecord (when a results repo is configured) embeds *the
+   same* final evidence dict — file and record agree key for key.  The
+   record-write status itself lives only in the evidence file's separate
+   ``record`` block, never inside the embedded snapshot, where it could only
+   ever be stale.
 
 Every phase runs inside one durable failure lifecycle: an exception or
 non-completion anywhere is classified (:data:`FAILURE_CLASSES`), recorded with
@@ -95,7 +100,10 @@ __all__ = [
     "snapshot_trusted_input",
 ]
 
-# Phases, in lifecycle order.
+# Phases, in lifecycle order.  PHASE_RECORD never enters ``phases_run``: the
+# lifecycle is finalized before the record attempt (which the evidence file
+# tracks in its separate ``record`` block) — the constant only tags where a
+# failed record write happened.
 PHASE_PREFLIGHT = "preflight"
 PHASE_STAGING = "staging"
 PHASE_LAUNCH = "launch"
@@ -218,6 +226,7 @@ class ContractRunResult:
     proposal_errors: list[str] = field(default_factory=list)
     commit_sha: str | None = None
     eval_result: FullEvalResult | None = None
+    record_attempted: bool = False
     record_dir: Path | None = None
     record_error: str | None = None
     started_at: str = ""
@@ -237,8 +246,20 @@ class ContractRunResult:
     def ok(self) -> bool:
         return not self.failures
 
+    def record_status(self) -> dict[str, Any]:
+        """The record-write status — the evidence file's separate ``record``
+        block, deliberately outside :meth:`evidence`: the RunRecord embeds the
+        evidence, and a record cannot truthfully describe its own write."""
+        return {
+            "attempted": self.record_attempted,
+            "record_dir": str(self.record_dir) if self.record_dir else None,
+            "error": self.record_error,
+        }
+
     def evidence(self) -> dict[str, Any]:
-        """The ``contract_run.json`` payload (also the RunRecord's metadata source)."""
+        """The finalized lifecycle evidence — the ``contract_run.json`` payload
+        (minus the ``record`` block) and, verbatim, the RunRecord's metadata
+        source."""
         outcome = self.agent_outcome
         return {
             "schema": EVIDENCE_SCHEMA,
@@ -288,8 +309,6 @@ class ContractRunResult:
             "proposal_errors": list(self.proposal_errors),
             "commit_sha": self.commit_sha,
             "evaluated": self.eval_result is not None,
-            "record_dir": str(self.record_dir) if self.record_dir else None,
-            "record_error": self.record_error,
             "timing": {
                 "started_at": self.started_at,
                 "finished_at": self.finished_at,
@@ -314,8 +333,20 @@ def _enter(result: ContractRunResult, phase: str) -> None:
     result.phases_run.append(phase)
 
 
-def _write_evidence(result: ContractRunResult) -> None:
-    payload = json.dumps(result.evidence(), indent=2, sort_keys=True) + "\n"
+def _finalize(result: ContractRunResult) -> None:
+    """Stamp the final phase and timing — before the immutable record is
+    built, so the record never embeds an in-flight snapshot."""
+    result.finished_at = _now()
+    result.phase = PHASE_DONE if result.ok else result.failure.phase
+
+
+def _write_evidence(result: ContractRunResult, evidence: dict[str, Any] | None = None) -> None:
+    """Write ``contract_run.json``: the lifecycle evidence (the exact dict a
+    RunRecord embeds, when *evidence* is passed) plus the separate ``record``
+    write-status block."""
+    payload_dict = dict(result.evidence() if evidence is None else evidence)
+    payload_dict["record"] = result.record_status()
+    payload = json.dumps(payload_dict, indent=2, sort_keys=True) + "\n"
     try:
         api.atomic_write(result.run_dir / EVIDENCE_FILE, payload)
     except OSError as exc:  # the last resort has nowhere left to record
@@ -616,16 +647,26 @@ def _record(
     mode: BenchmarkMode,
     record_writer: RecordWriter | None,
 ) -> None:
-    """Attempt the RunRecord for every run that reached this point, however it
-    ended; a write failure is itself classified and left in the evidence."""
-    _enter(result, PHASE_RECORD)
-    _write_evidence(result)  # before the record: a failed write is diagnosable
+    """Finalize the lifecycle, persist its evidence, then attempt the RunRecord.
+
+    Ordering is the coherence guarantee: phase, timing, and failures are final
+    *before* the record is built, one evidence dict is both written to
+    ``contract_run.json`` and embedded in the record, and the record-write
+    status goes only into the file's separate ``record`` block — an embedded
+    write-status snapshot could never be anything but stale.  A write failure
+    is itself classified and left in the evidence; no record exists then, so
+    nothing diverges.
+    """
+    _finalize(result)
+    evidence = result.evidence()
+    _write_evidence(result, evidence)  # before the attempt: a failed write is diagnosable
     if results_repo is None:
         return
     if record_writer is None:
         from silverquillm.contract_record import write_contract_run_record
 
         record_writer = write_contract_run_record
+    result.record_attempted = True
     try:
         result.record_dir = record_writer(
             results_repo=results_repo,
@@ -636,11 +677,14 @@ def _record(
             budget_seconds=result.budget_seconds,
             proposal_status=result.proposal_status,
             eval_result=result.eval_result,
-            evidence=result.evidence(),
+            evidence=evidence,
         )
     except Exception as exc:
         result.record_error = f"{type(exc).__name__}: {exc}"
         _fail(result, FAILURE_RECORD, PHASE_RECORD, result.record_error, exc)
+        _finalize(result)  # re-classify: the failed write is now the evidence
+        evidence = result.evidence()
+    _write_evidence(result, evidence)
 
 
 def drive_contract_run(
@@ -687,8 +731,9 @@ def drive_contract_run(
         else:
             if result.worker.revision is None:
                 result.warnings.append(
-                    "theozolith-worker was installed from a directory; its git revision"
-                    f" cannot be verified against the pin (source {result.worker.source})"
+                    "theozolith-worker records no git revision; it was authenticated"
+                    " against the pinned revision by its tree digest"
+                    f" (source {result.worker.source})"
                 )
             _enter(result, PHASE_STAGING)
             try:
@@ -724,9 +769,8 @@ def drive_contract_run(
         )
     except Exception as exc:  # pragma: no cover - _record classifies its own failures
         _fail(result, FAILURE_DRIVER, PHASE_RECORD, f"{type(exc).__name__}: {exc}", exc)
-    result.finished_at = _now()
-    result.phase = PHASE_DONE if result.ok else result.failure.phase
-    _write_evidence(result)
+        _finalize(result)
+        _write_evidence(result)
     return result
 
 

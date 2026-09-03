@@ -12,8 +12,9 @@ production-rendered task), the harness-authored ``output/status.json`` and
 driver-owned repository), harvest, the three-dimension Audited Eval, and the
 RunRecord.  The failure-lifecycle cases prove every classified outcome —
 timeout, crash, pre-work schema refusal, a harness-less container, an
-unpinned worker, an evaluation crash, a record-write failure — still yields
-``contract_run.json`` evidence and an attempted RunRecord.
+unpinned or locally modified worker, an evaluation crash, a record-write
+failure — still yields ``contract_run.json`` evidence and an attempted
+RunRecord, with the lifecycle finalized before the record embeds it.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from click.testing import CliRunner
 from theozolith_worker import api
 
 from silverquillm import contract as contract_mod
+from silverquillm import contract_version as cv
 from silverquillm.contract import (
     EVIDENCE_FILE,
     FAILURE_CONTRACT_UNSUPPORTED,
@@ -43,7 +45,11 @@ from silverquillm.contract import (
     RunFailure,
     drive_contract_run,
 )
-from silverquillm.contract_version import CONTRACT_SCHEMA_VERSION, PINNED_WORKER_VERSION
+from silverquillm.contract_version import (
+    CONTRACT_SCHEMA_VERSION,
+    PINNED_WORKER_TREE_DIGEST,
+    PINNED_WORKER_VERSION,
+)
 from silverquillm.evaluator import FullEvalResult
 from silverquillm.jobdir import driver_git_dir, load_benchmark
 from silverquillm.modes import get_mode
@@ -218,8 +224,14 @@ class TestHarnessConformance:
         assert evidence["gate"]["steps_run"] == ["test", "lint"]
         assert evidence["phases_run"] == [
             "preflight", "staging", "launch", "agent", "gate", "proposal",
-            "harvest", "evaluation", "record",
+            "harvest", "evaluation",
         ]
+        # The record-write status lives only in the file's separate block —
+        # the lifecycle evidence itself never mentions its own record.
+        assert evidence["record"] == {
+            "attempted": True, "record_dir": str(result.record_dir), "error": None,
+        }
+        assert "record_dir" not in evidence and "record_error" not in evidence
         record = read_run_record(result.record_dir)
         assert record.benchmark == "smoke" and record.mode == "basic"
         assert record.proposal_status == PROPOSAL_APPLIED
@@ -246,6 +258,41 @@ class TestHarnessConformance:
         task = Path(json.loads(invocation.read_text())["task_path"]).read_text()
         assert "## Approach" in task  # the mode varied the task the agent read
         assert json.loads((result.job_dir / "input" / "manifest.json").read_text())["mode"] == "run"
+
+    def test_record_metadata_matches_the_final_evidence_file(
+        self, tmp_path: Path, monkeypatch, results_repo: Path, fast_eval
+    ) -> None:
+        """Coherence regression: on a successful run, the immutable RunRecord
+        and the final ``contract_run.json`` agree key for key — the lifecycle
+        (phase, timing, failures) is finalized *before* the record is built,
+        and the record embeds that exact final evidence, never an in-flight
+        snapshot."""
+        rig = make_rig(tmp_path, monkeypatch, playbook={"implement": ["129"], "proposal": PROPOSAL})
+        result = _drive(tmp_path, rig.session_factory, run_id="smoke-coherent",
+                        results_repo=results_repo)
+        assert result.ok
+        evidence = _evidence(result.run_dir)
+        record = read_run_record(result.record_dir)
+        meta = record.run_metadata
+
+        assert meta["phase"] == evidence["phase"] == PHASE_DONE
+        assert meta["phases_run"] == evidence["phases_run"]
+        assert meta["failure"] is None and evidence["failure"] is None
+        assert meta["failures"] == evidence["failures"] == []
+        assert meta["timing"] == evidence["timing"]
+        assert evidence["timing"]["started_at"] and evidence["timing"]["finished_at"]
+        assert evidence["timing"]["finished_at"] >= evidence["timing"]["started_at"]
+        assert meta["timing"]["agent_seconds"] == result.agent_seconds
+        assert meta["evaluated"] is True and evidence["evaluated"] is True
+        assert record.proposal_status == evidence["proposal_status"] == PROPOSAL_APPLIED
+        assert meta["commit_sha"] == evidence["commit_sha"] == result.commit_sha
+        assert result.commit_sha
+        assert meta["worker"] == evidence["worker"]
+        assert evidence["worker"]["tree_digest"] == PINNED_WORKER_TREE_DIGEST
+        # The write status is the file's separate block, never embedded where
+        # it could only be stale.
+        assert evidence["record"]["record_dir"] == str(result.record_dir)
+        assert "record" not in meta
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +396,7 @@ class TestFailureLifecycle:
                         results_repo=results_repo)
         assert result.failure_class == FAILURE_CONTRACT_UNSUPPORTED
         assert "schema_version" in result.failure.reason
-        assert result.phases_run == ["preflight", "record"]
+        assert result.phases_run == ["preflight"]
         assert result.job_dir is None and not (tmp_path / "run" / "job").exists()
         assert engine.launched == []
         # An attempted RunRecord, marked unevaluated, and the evidence file.
@@ -360,6 +407,32 @@ class TestFailureLifecycle:
             "pass_rate": 0.0, "tests_passed": 0, "tests_total": 0, "cards": 0, "evaluated": False,
         }
         assert _evidence(result.run_dir)["failure"]["class"] == FAILURE_CONTRACT_UNSUPPORTED
+
+    def test_locally_modified_worker_never_launches(
+        self, tmp_path: Path, monkeypatch, results_repo: Path
+    ) -> None:
+        """Fail closed: a worker whose installed tree does not hash to the
+        pinned revision — a local edit, or an unpinned directory install — is
+        refused by the real ``support_errors`` path before any staging or
+        launch, version and schema numbers notwithstanding."""
+        tampered = cv.InstalledWorker(
+            version=cv.PINNED_WORKER_VERSION,
+            revision=None,
+            source="file:///opt/somewhere/worker",
+            tree_digest="0" * 64,
+        )
+        monkeypatch.setattr(cv, "installed_worker", lambda: tampered)
+        engine = DeadEngine()
+        result = _drive(tmp_path, api.container_session_factory(engine), run_id="smoke-tampered",
+                        results_repo=results_repo)
+        assert result.failure_class == FAILURE_CONTRACT_UNSUPPORTED
+        assert "tree digest" in result.failure.reason
+        assert result.phases_run == ["preflight"] and result.phase == "preflight"
+        assert result.job_dir is None and not (tmp_path / "run" / "job").exists()
+        assert engine.launched == [] and engine.removed == []
+        record = read_run_record(result.record_dir)
+        assert record.run_metadata["failure"]["class"] == FAILURE_CONTRACT_UNSUPPORTED
+        assert record.run_metadata["evaluated"] is False
 
     def test_staging_conflict_is_classified(self, tmp_path: Path, monkeypatch, results_repo: Path) -> None:
         (tmp_path / "run" / "job").mkdir(parents=True)  # a prior attempt's job dir
@@ -400,7 +473,13 @@ class TestFailureLifecycle:
         assert result.failure_class == FAILURE_RECORD and result.record_dir is None
         assert result.record_error
         evidence = _evidence(result.run_dir)
-        assert evidence["record_error"] == result.record_error
+        assert evidence["record"] == {
+            "attempted": True, "record_dir": None, "error": result.record_error,
+        }
+        # No record exists, so the failed write may (and does) re-classify the
+        # file's own lifecycle evidence without anything diverging.
+        assert evidence["failure"]["class"] == FAILURE_RECORD
+        assert evidence["phase"] == "record"
         assert evidence["proposal_status"] == PROPOSAL_APPLIED  # the run itself was fine
 
 

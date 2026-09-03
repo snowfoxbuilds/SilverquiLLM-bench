@@ -46,7 +46,9 @@ def _result(tmp_path: Path, run_id: str, mode: str, **overrides) -> ContractRunR
         "image": "cc-test:latest",
         "budget_seconds": 600,
         "phase": PHASE_DONE,
-        "worker": InstalledWorker(version="0.3.0", revision="a" * 40, source="git+x"),
+        "worker": InstalledWorker(
+            version="0.3.0", revision="a" * 40, source="git+x", tree_digest="b" * 64
+        ),
         "job_dir": tmp_path / "artifacts" / run_id / "job",
         "agent_outcome": api.AgentOutcome(completed=True, exit_code=0),
         "harness_status": {"phase": "done", "error": "", "agent": {"completed": True}},
@@ -97,7 +99,9 @@ class TestWriteContractRunRecord:
         record = read_run_record(rec_dir)
         meta = record.run_metadata
         assert meta["contract_schema_version"] == CONTRACT_SCHEMA_VERSION
-        assert meta["worker"] == {"version": "0.3.0", "revision": "a" * 40, "source": "git+x"}
+        assert meta["worker"] == {
+            "version": "0.3.0", "revision": "a" * 40, "source": "git+x", "tree_digest": "b" * 64,
+        }
         assert meta["adapter"] == "claude"
         assert meta["run_date"] == "2026-09-02T10:00:00+00:00"
         assert meta["agent_outcome"]["session_died"] is True
