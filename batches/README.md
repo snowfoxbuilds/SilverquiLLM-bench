@@ -4,10 +4,23 @@ The file-backed queue the bench-side scheduler executes (#39 §5, #66;
 `docs/specs/BENCHMARK-CANDIDATES.md`). The substrate learns nothing about it.
 
 - **`<id>.toml`** — one Batch: desired state, authored and edited in your
-  editor, never written by the scheduler. Scanned in name order.
-- **`state/<id>.json`** — the scheduler's observed state for that Batch
-  (gitignored): one entry per started run with its state, run id, and the
-  candidate identity resolved at run start.
+  editor, never written by the scheduler. Scanned in name order. **Batch ids
+  are permanent, one-shot identifiers**: the committed state file is the
+  record of what ran under that id, so never reuse an id for an unrelated
+  batch — write a new file.
+- **`state/<id>.json`** — the scheduler's observed state for that Batch,
+  **committed to git**: one entry per started run with its state, run id,
+  the candidate identity resolved at run start, timestamps and a sanitized
+  outcome. Portable by construction — no absolute path, home directory,
+  pid, hostname, container name, environment value or traceback ever enters
+  it. The scheduler writes it atomically after every transition and never
+  runs git; **you commit the checkpoints** (after each run, or each completed
+  batch — replacement safety reaches exactly as far as the latest committed
+  checkpoint).
+- **`runtime/<id>.json`** — host-local runtime metadata (gitignored), present
+  only while a run of that Batch is active: the run's container name, the
+  scheduler pid and hostname. A replacement scheduler on the same host uses
+  it to reconcile an abandoned container.
 - **`.scheduler.lock`** — held with `flock` by the one running scheduler
   (gitignored); a second instance refuses to start.
 
@@ -36,7 +49,8 @@ and `silverquillm queue ls` shows why.
 ## Commands
 
 ```bash
-silverquillm scheduler [--once] [--poll-seconds 30] [--results-repo <clone>]
+silverquillm scheduler [--once] [--poll-seconds 30] [--results-repo <clone>] \
+    [--replay-without-state <id>]... [--acknowledge-cleanup <id>]...
 silverquillm queue ls
 silverquillm top [--interval 2]
 ```
@@ -46,3 +60,51 @@ order; `not_before` respected; the file re-read before every not-yet-started
 run (edits to a running Batch affect only runs not yet started); candidate
 identity resolved and recorded at run start; a failed run recorded and the
 Batch continued. `queue ls` and `top` are read-only.
+
+## Starting a batch: the replay warning
+
+A batch file with **no committed state** is blocked — nothing from it runs.
+The scheduler warns that starting it from entry 0 may replay runs already
+completed elsewhere (a lost checkout, a state file not yet committed) and
+incur model and runtime costs, and `queue ls` / `top` show the same block.
+Either restore the committed `state/<id>.json`, or acknowledge the replay
+for **that one batch**:
+
+```bash
+silverquillm scheduler --once --replay-without-state 2026-09-04-hob
+```
+
+This creates the empty `state/2026-09-04-hob.json` and starts the batch from
+run zero; commit the state file together with the batch file. There is no
+global acknowledgement, and the flag refuses a batch that does not exist or
+already has state. Malformed or newer-version state blocks a batch the same
+way — nothing is repaired or replayed silently.
+
+## Abandoned runs: what a replacement scheduler does first
+
+Before any new work, under the lock, the scheduler reconciles every run the
+previous scheduler left `running`:
+
+- **Same host** (`runtime/<id>.json` names this host): the run's container
+  `silverquillm-<run-id>` is force-removed and confirmed gone, then the run
+  is marked `failed`. If removal fails or cannot be confirmed, the scheduler
+  stops with a diagnostic and executes nothing — one scheduler and one run
+  container per queue, always. Fix the container by hand and start again.
+- **Another host** (no local runtime metadata — the state was committed
+  elsewhere): the run cannot be reconciled here. The scheduler stops until
+  you confirm the container is gone on the host that ran it:
+
+  ```bash
+  silverquillm scheduler --acknowledge-cleanup 2026-09-04-hob
+  ```
+
+SIGINT / SIGTERM interrupt the run in flight the same way (container
+removed, run marked `failed`, scheduler unwinds); SIGKILL leaves the
+`running` entry and its runtime file for the next startup to reconcile.
+
+## Restore on a replacement host
+
+Check out the repo with the committed `state/` and start the scheduler: every
+batch resumes at its recorded cursor. What ran between the last committed
+checkpoint and the failure is not known to the new host — commit after each
+run if that window matters.

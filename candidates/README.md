@@ -92,10 +92,26 @@ byte for byte. **Vendor-at-promote is strict**: a knowledge tree the
 definition references must exist in the Config Repo and carry a regular file
 named `PUBLISHABLE` at its root (your explicit declaration; the marker never
 enters the compiled tree or the identity). Without it the candidate cannot be
-promoted and its results cannot be published. The same identity already
-promoted is a no-op; an existing directory whose bundle does not recompute to
-its name, or the same identity under another slug, is a refusal. The script
-never runs git.
+promoted and its results cannot be published.
+
+**The whole directory is public.** Before the final rename the complete
+staged tree — bundle, vendored definition, knowledge and policy source (the
+`PUBLISHABLE` marker included), README — is scanned with the bench's
+credential detector (API keys, GitHub / AWS / Slack tokens, private-key
+blocks, JWTs, bearer credentials, a value assigned to a declared secret
+slot); a hit refuses naming the file and the shape, never the value. The
+generated README and definition name no host-local path (the source is "the
+operator's Config Repo"; a `TODO(promote)` lets you add a safe repository
+label and revision).
+
+**Dedup is by identity and source.** The same identity already promoted
+under the same name is a no-op only when the existing copy is whole and
+equivalent — its bundle verifies, its `source/` re-exports to its bundle byte
+for byte, and its `source/` equals what you are promoting byte for byte. Your
+completed README is never compared. A tampered, missing or differing vendored
+source, a bundle that does not recompute to its name, or the same identity
+under another slug is a refusal that leaves the existing directory untouched.
+The script never runs git.
 
 Then:
 
@@ -103,9 +119,10 @@ Then:
    where the base digest came from). The platform test refuses a checked-in
    README that still carries the placeholder.
 2. `pytest tests/test_reference_candidates.py -q` — every checked-in candidate
-   must ingest, carry its recomputed hash in its name, hold no secret value,
-   re-export byte-identically from its source, and vendor a `PUBLISHABLE`
-   knowledge tree when it bakes one.
+   must ingest, carry its recomputed hash in its name, hold no secret value
+   anywhere in its directory (the same scanner promotion uses), re-export
+   byte-identically from its source, and vendor a `PUBLISHABLE` knowledge
+   tree when it bakes one.
 3. Review the diff and commit — the commit is the approval stamp.
 
 A bundle exported by hand (`theozolith candidate export --source <src>

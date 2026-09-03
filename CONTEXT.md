@@ -48,7 +48,7 @@ _Avoid_: "foundation cards" (use "Foundations cards" or "base set")
 
 **Batch**
 
-One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (candidate ref + mode + benchmark + budget). Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/`. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
+One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (candidate ref + mode + benchmark + budget). Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
 
 _Avoid_: "job" (the substrate's job dir is a different concept), "queue entry" for the file (a Batch holds several runs)
 
@@ -252,7 +252,7 @@ _Avoid_: "imported candidate", "registered candidate" (nothing is registered —
 
 **Published Result**
 
-A Run Record (`manifest.json` + `scores.json`, byte for byte) ported from the private Results Repo into the bench repo's public `published/` tree by the publish script and committed by the operator — the commit is the approval stamp. Publishable only when traceable: its candidate identity is a Promoted Candidate that verifies by recomputation (hard refusal otherwise). A record with `leaderboard_valid: false` may be published at the operator's discretion (warning, `--allow-invalid`) and can never enter a leaderboard, because tooling filters on the flag. Discovered by manifest, never by path convention; the organization of `published/` is manual.
+A Run Record (`manifest.json` + `scores.json`, byte for byte) ported from the private Results Repo into the bench repo's public `published/` tree by the publish script — as one transaction: all requested records appear or none — and committed by the operator — the commit is the approval stamp. Publishable only when traceable: its candidate identity is a Promoted Candidate that verifies by recomputation (hard refusal otherwise). A record with `leaderboard_valid: false` may be published at the operator's discretion (warning, `--allow-invalid`) and can never enter a leaderboard, because tooling filters on the flag. Discovered by manifest, never by path convention; the organization of `published/` is manual.
 
 _Avoid_: "leaderboard entry" (a leaderboard is a derivation over Published Results, future work), "exported result"
 

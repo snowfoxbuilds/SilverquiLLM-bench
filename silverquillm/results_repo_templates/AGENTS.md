@@ -150,12 +150,14 @@ Rebuild it after any change to `results/`.
 Records leave this repo only through the bench repo's publish script
 (`scripts/publish_results.py`, which never commits): `manifest.json` and
 `scores.json` are copied byte for byte into the bench repo's public
-`published/` tree after the run's candidate identity is traced to a checked-in
-`candidates/<slug>--<hash8>/` that verifies by recomputation (a hard refusal
-otherwise) and its `leaderboard_valid` flag is reported (`false` publishes
-only on explicit override, and leaderboard tooling filters on the flag). The
-vendored copy under `results/<candidate-hash>/candidate/`, when present, is
-re-verified at publish time.
+`published/` tree — transactionally, so the requested set appears whole or
+not at all, and a published record is never overwritten — after the run's
+candidate identity is traced to a checked-in `candidates/<slug>--<hash8>/`
+that verifies by recomputation (a hard refusal otherwise) and its
+`leaderboard_valid` flag is reported (`false` publishes only on explicit
+override, and leaderboard tooling filters on the flag). The vendored copy
+under `results/<candidate-hash>/candidate/`, when present, is re-verified at
+publish time. Nothing here is ever edited by publication.
 
 ## Vocabulary
 
