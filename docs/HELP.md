@@ -9,9 +9,9 @@ pip install -e ".[dev]"
 # Repository validation (platform/tooling tests) — from repo root, same as CI:
 python -m pytest tests/ -q
 
-# Workspace validation (engine_tests + colocated FDN card tests) — from the workspace dir:
-cd benchmarks/sos/workspace
-pytest
+# Workspace validation (engine_tests + colocated FDN card tests) — from the workspace dir.
+# Subshell keeps the cd local so later sections still run from repo root:
+(cd benchmarks/sos/workspace && pytest)
 
 # Audited SOS/FDN grading is not a direct pytest target — it runs through the
 # evaluator/validation harness. See the Validation and Test Validation sections
