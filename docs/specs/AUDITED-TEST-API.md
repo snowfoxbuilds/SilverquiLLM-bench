@@ -3,7 +3,7 @@
 > 
 > **Purpose:** Define the *only* sanctioned API audited tests may use to interact with the engine. If a behavior cannot be set up, driven, or observed through this API, the API is missing something — fix the API, do not reach around it.
 > 
-> **Scope:** **SOS (V1) only.** This two-channel API is the frozen SOS paradigm. The HOB-generation benchmarks replace it with the native Player Query / Player Decision intent protocol — see [DECISION-MODEL.md](https://app.notion.com/p/bea4c558a1d2493a82a7a841d85a8fb0). Nothing in this spec applies to the HOB-generation benchmarks (`benchmarks/hob-*/`).
+> **Scope:** **SOS (V1) only.** This two-channel API is the frozen SOS paradigm. The HOB-generation benchmarks replace it with the native Player Query / Player Decision intent protocol — see [DECISION-MODEL.md](DECISION-MODEL.md). Nothing in this spec applies to the HOB-generation benchmarks (`benchmarks/hob-*/`).
 
 ## Philosophy
 
@@ -234,7 +234,7 @@ Audited tests may use **only** the following to touch the engine. Anything else 
 
 ## Relationship to existing conventions
 
-- **Revises **[**TESTING-CONVENTIONS.md**](https://app.notion.com/p/c6553b4b515e4a7abdda59586e01d779)** Rule 5.** Entering the priority loop is now *required*, not forbidden — but only via `priority_loop` / `advance_to_phase`. `game.run()` / `run_game()` / `run_turn()` stay banned.
+- **Revises **[**TESTING-CONVENTIONS.md**](TESTING-CONVENTIONS.md)** Rule 5.** Entering the priority loop is now *required*, not forbidden — but only via `priority_loop` / `advance_to_phase`. `game.run()` / `run_game()` / `run_turn()` stay banned.
 - **Replaces the free-function step helpers for audited tests.** The old `cast_spell(game, ...)` and `resolve_top(game)` shortcuts bypass priority and are no longer permitted in audited tests; casting and resolution now happen through `DeterministicPlayer` directives inside `priority_loop`. (Those helpers may still exist for the engine's own internal unit tests — they are simply outside the audited allow-list.)
 - **Keep the ****`pytest-timeout`**** 30s backstop** so a misused loop fails fast.
 ## Open questions

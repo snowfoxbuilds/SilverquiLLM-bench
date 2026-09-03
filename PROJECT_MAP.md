@@ -40,9 +40,9 @@ Agent Container
 
 ├── edits /workspace/engine/ in place
 
-├── edits cards/sos/{card_id}/card_[impl.py](http://impl.py)
+├── edits cards/sos/{card_id}/card_impl.py
 
-├── may write cards/sos/{card_id}/[tests.py](http://tests.py) in Tested Mode
+├── may write cards/sos/{card_id}/tests.py in Tested Mode
 
 └── may write optional telemetry to /output/
 
@@ -58,7 +58,7 @@ Agent Container
 
 │                                                                      │
 
-│  silverquillm/[cli.py](http://cli.py)                                                 │
+│  silverquillm/cli.py                                                 │
 
 │    ├── run                                                           │
 
@@ -66,7 +66,7 @@ Agent Container
 
 │                                                                      │
 
-│  silverquillm/[workspace.py](http://workspace.py)                                           │
+│  silverquillm/workspace.py                                           │
 │    └── stage_workspace() — copytree of benchmarks/sos/workspace/     │
 
 │                                                                      │
@@ -127,7 +127,7 @@ Agent Container
 
 │  /workspace/                                                         │
 
-│    ├── [prompt.md](http://prompt.md)                                                     │
+│    ├── prompt.md                                                     │
 
 │    ├── run_manifest.json                                             │
 
@@ -186,7 +186,7 @@ Agent Container
 | `PROJECT-OVERVIEW.md` | Project goals, scope, phases, benchmark motivation |
 | `GAME-ENGINE.md` | Engine architecture, XMage porting strategy, core rules systems |
 | `CARD-INTERFACE.md` | Card class contract, hooks, modes, replacement effects |
-| `TEST-SUITE.md` | Audited tests, test harvester, FDN/SOS test structure |
+| `AUDITED-TEST-SUITE.md` | Audited tests, test harvester, FDN/SOS test structure |
 | `BENCHMARK-RUNNER.md` | Host-side runner overview |
 | `AGENT-CONTAINERS.md` | Docker Agent Container architecture |
 | `WORKSPACE-CONTRACT.md` | Canonical Workspace layout and card/engine edit contract |

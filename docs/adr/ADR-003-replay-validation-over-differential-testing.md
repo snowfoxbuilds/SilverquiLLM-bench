@@ -2,9 +2,11 @@ Status: ACCEPTED
 
 Date: 2026-05-08
 
+# ADR-003: Replay Validation Over Differential Testing
+
 ## Context
 
-The engine is a Python port of XMage (Java). The original [AUDITED-TEST-SUITE.md](http://audited-test-suite.md/) spec planned **Differential Testing** as the primary engine correctness check: convert tests to engine-agnostic JSON, execute in both Python and XMage via a Java adapter, and compare final states.
+The engine is a Python port of XMage (Java). The original [AUDITED-TEST-SUITE.md](../specs/AUDITED-TEST-SUITE.md) spec planned **Differential Testing** as the primary engine correctness check: convert tests to engine-agnostic JSON, execute in both Python and XMage via a Java adapter, and compare final states.
 
 ## Decision
 
@@ -26,7 +28,7 @@ Replace XMage differential testing with **Replay Validation**: replay recorded M
 - Diffs are incremental: merge zones by `zoneId`, upsert `gameObjects` by `instanceId`, purge `diffDeletedInstanceIds`
 - Card identity tracked via `grpId` → card name mapping (from 17lands card list)
 - Object identity tracked via `instanceId`, with `AnnotationType_ObjectIdChanged` recording zone-transfer ID changes
-See [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8) for the full schema documentation.
+See [17lands Replay Data Schema](../specs/17LANDS-REPLAY-SCHEMA.md) for the full schema documentation.
 
 ## Execution Model: Observer Mode
 
@@ -64,9 +66,9 @@ This validates the engine's **rules processing** (state transitions, triggered a
 - **MTGA API integration**: Query MTGA directly for rule adjudication. Not feasible — MTGA has no public rules API.
 ## Consequences
 
-- Differential Testing section in [AUDITED-TEST-SUITE.md](http://audited-test-suite.md/) replaced with Replay Validation section
+- Differential Testing section in [AUDITED-TEST-SUITE.md](../specs/AUDITED-TEST-SUITE.md) replaced with Replay Validation section
 - Replay Validation pipeline is a Future Work item, blocked on FDN 001–291 + SPG 74–83 completion
-- 17lands GRE JSON data provided — schema documented in [17lands Replay Data Schema](https://www.notion.so/35b6a7adc8ed80978dccdf724213b6f8)
+- 17lands GRE JSON data provided — schema documented in [17lands Replay Data Schema](../specs/17LANDS-REPLAY-SCHEMA.md)
 - First benchmark runs proceed as Pipeline Validation Runs (no Replay Validation yet)
 - XMage remains the porting reference for engine structure, but not the correctness oracle
 - Only one parser needed (17lands GRE JSON) — no CSV or raw MTGA log parsing

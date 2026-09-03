@@ -25,7 +25,7 @@ Enforcement is a **CI check** that reads the **base branch's** `tier`, expands i
 
 ## Tier Transition Log
 
-Tier transitions are recorded here — there is no separate log file. Each entry notes the date, benchmark identity, direction, and triggering reason; for any →Released transition it also records the result of the required pre-Release harvest + investigation pass (see [AUDITED-TEST-IMPROVEMENT-WORKFLOW.md](https://app.notion.com/p/b99a10aff98e4794856ce259e4916163) → Cadence). Downgrades additionally note the invalidation (Benchmarking→Beta) or score retraction (Released→Benchmarking) they trigger.
+Tier transitions are recorded here — there is no separate log file. Each entry notes the date, benchmark identity, direction, and triggering reason; for any →Released transition it also records the result of the required pre-Release harvest + investigation pass (see [AUDITED-TEST-IMPROVEMENT-WORKFLOW.md](../specs/AUDITED-TEST-IMPROVEMENT-WORKFLOW.md) → Cadence). Downgrades additionally note the invalidation (Benchmarking→Beta) or score retraction (Released→Benchmarking) they trigger.
 
 - 2026-05-28 — `sos` set to **Benchmarking** (initial tiering; `workspace/` locked).
 ## Consequences

@@ -21,7 +21,7 @@ The file-based contract is:
 - API credentials passed as environment variables
 - Agent implementations harvested from `/workspace/cards/sos/*/card_impl.py`
 - Agent tests harvested from `/workspace/cards/sos/*/tests.py`
-- Agent engine modifications harvested from `/workspace/engine_work/`
+- Agent engine modifications harvested from `/workspace/engine/` (amended 2026-09-03, ADR-005 — engine is edited in place; there is no separate `engine_work/`)
 - Progress and logs harvested from `/output/`
 Python adapters, per-card workspaces, strategy classes, harness-managed rounds, and application-level contamination checking are legacy implementation details to remove or migrate away from. Agent-internal iteration belongs inside the container entrypoint or the agent itself, not the host runner.
 

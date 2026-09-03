@@ -22,7 +22,7 @@ CLI:
 silverquillm resume <prior-run-id> [--timeout ...] [--image ...] [--card-filter ...]
 ```
 
-Staging variant: copy prior `workspace_final/` wholesale, overwrite only `prompt.md` and `run_manifest.json`, skip `git init` (prior `.git` history is preserved). See [WORKSPACE-CONTRACT.md](http://workspace-contract.md/) → Resume staging variant.
+Staging variant: copy prior `workspace_final/` wholesale, overwrite only `prompt.md` and `run_manifest.json`, skip `git init` (prior `.git` history is preserved). See [WORKSPACE-CONTRACT.md](../specs/WORKSPACE-CONTRACT.md) → Resume staging variant.
 
 Image: `--image` defaults to the prior run's `docker_image`; explicit override allowed and recorded as `resumed_image_changed: true` in the new leg's `run_summary.json`.
 
@@ -46,7 +46,7 @@ The Workspace Contract is unchanged. Tracking files like `KEY_DECISIONS.md`, `FI
 - **Negative — hard to reverse**: Once Resume Chains are in production, switching to mutate-in-place would break all archived chain links and conflate prior-run audit artifacts with subsequent legs.
 ## Implementation Decisions (consolidated from BENCHMARK-RUNNER, 2026-05-30)
 
-These detailed resume decisions were moved here from [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) → Decisions to keep the runner spec lean. They refine this ADR and ADR-009; the resume *behavior* contract still lives in [BENCHMARK-RUNNER.md](http://benchmark-runner.md/) → Resume.
+These detailed resume decisions were moved here from [BENCHMARK-RUNNER.md](../specs/BENCHMARK-RUNNER.md) → Decisions to keep the runner spec lean. They refine this ADR and ADR-009; the resume *behavior* contract still lives in [BENCHMARK-RUNNER.md](../specs/BENCHMARK-RUNNER.md) → Resume.
 
 - **Resume is a CLI subcommand**: `silverquillm resume <prior-run-id>` creates a fresh Benchmark Run that stages from the prior run's `workspace_final/`. Each Resume Leg is an independent Benchmark Run — own `run_name`, results directory, Hard Timeout, snapshots, and evaluation. Legs are linked via `resumed_from`; the sequence is a Resume Chain. Mutating the prior run dir in place was considered and rejected for audit-trail integrity.
 - **Resume staging skips ****`git init`**: Resume staging copies the prior `workspace_final/` wholesale into the per-run tmp directory and overwrites only `prompt.md` and `run_manifest.json`. No `git init`, no initial commit — the prior `.git` history (host snapshots and any agent commits) is preserved as-is so the resumed agent can inspect prior work.

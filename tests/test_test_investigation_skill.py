@@ -272,8 +272,12 @@ class TestOutputsHumanReviewable:
 
 
 # ---------------------------------------------------------------------------
-# Test 10: References audited tests path and/or TEST-SUITE.md
+# Test 10: References audited tests path and the canonical AUDITED-TEST-SUITE.md
 # ---------------------------------------------------------------------------
+
+# Matches a Markdown inline link and captures its target: [text](target)
+_MD_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+
 
 class TestAuditedTestsReference:
     def test_audited_path_referenced(self, body: str) -> None:
@@ -282,8 +286,26 @@ class TestAuditedTestsReference:
             "Body must reference benchmarks/sos/data/tests/audited/ path"
         )
 
-    def test_test_suite_md_referenced(self, body: str) -> None:
-        """Body must reference TEST-SUITE.md."""
-        assert "TEST-SUITE.md" in body, (
-            "Body must reference TEST-SUITE.md"
+    def test_audited_test_suite_md_link_resolves(self, body: str) -> None:
+        """Body must link to the canonical AUDITED-TEST-SUITE.md spec, and that
+        link target must resolve to a file that exists on disk.
+
+        Exact-target assertion (not a substring check): it fails if the link is
+        missing, or malformed / pointing at a nonexistent file.
+        """
+        targets = [t.strip() for t in _MD_LINK_RE.findall(body)]
+        suite_links = [
+            t for t in targets
+            if Path(t.split("#", 1)[0]).name == "AUDITED-TEST-SUITE.md"
+        ]
+        assert suite_links, (
+            "Body must contain a Markdown link to AUDITED-TEST-SUITE.md "
+            "(the canonical audited-test spec)"
         )
+        for target in suite_links:
+            rel = target.split("#", 1)[0]
+            resolved = (SKILL_PATH.parent / rel).resolve()
+            assert resolved.is_file(), (
+                f"AUDITED-TEST-SUITE.md link target {target!r} does not resolve "
+                f"to an existing file (resolved to {resolved})"
+            )

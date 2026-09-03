@@ -4,7 +4,7 @@ Last updated: 2026-09-02
 
 # Audited Test-Improvement Workflow
 
-How audited tests are improved over time using harvested run results and a combined investigation/discovery skill. This is the manual v1 of the planned v2 Test Harvester, and the operational counterpart to the locking lifecycle in ADR-011. Everything here serves **Implementation-Agnostic Testing** (see [CONTEXT.md](http://context.md/)): tests assert what a card does and must pass against any correct implementation.
+How audited tests are improved over time using harvested run results and a combined investigation/discovery skill. This is the manual v1 of the planned v2 Test Harvester, and the operational counterpart to the locking lifecycle in ADR-011. Everything here serves **Implementation-Agnostic Testing** (see [CONTEXT.md](../../CONTEXT.md)): tests assert what a card does and must pass against any correct implementation.
 
 ## Overview
 
@@ -55,7 +55,7 @@ The skill lives at `.claude/skills/test-investigation/SKILL.md` (Claude Code nat
 ## 3. Discovery → promotion bar
 
 - Candidate tests mined from agent-written `tests.py` are **never** promoted verbatim.
-- Rewrite to the audited standard: integration-style, behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted (see [AUDITED-TEST-SUITE.md](http://audited-test-suite.md/)).
+- Rewrite to the audited standard: integration-style, behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted (see [AUDITED-TEST-SUITE.md](AUDITED-TEST-SUITE.md)).
 - Must pass the matching Test Oracle Impl gate (ADR-010) and the canonical-API-only check, then clear human review.
 - Legal only in Beta/Benchmarking. Released locks audited tests, so promotion stops at Release and published scores do not drift afterward.
 ## Cadence
@@ -64,8 +64,14 @@ The workflow is **on-demand** (it is the manual v1), but a harvest + investigati
 
 ## Relation to the v2 Test Harvester
 
-This workflow is the manual v1 of the planned v2 Test Harvester: an automated pass that harvests validated results and **scores audited test quality** — cross-impl failure breadth, discrimination between strong and weak implementations, and convention-coupling — to surface suspect tests and promotion candidates with less human triage. The self-eval / N×N cross-eval framing is retired (see [PROJECT-OVERVIEW.md](http://project-overview.md/) → Evaluation Architecture); v2 automates the harvest + triage described above, not a per-agent eval matrix. By design the harvester is not run after Release.
+This workflow is the manual v1 of the planned v2 Test Harvester: an automated pass that harvests validated results and **scores audited test quality** — cross-impl failure breadth, discrimination between strong and weak implementations, and convention-coupling — to surface suspect tests and promotion candidates with less human triage. The self-eval / N×N cross-eval framing is retired (see [PROJECT-OVERVIEW.md](PROJECT-OVERVIEW.md) → Evaluation Architecture); v2 automates the harvest + triage described above, not a per-agent eval matrix. By design the harvester is not run after Release.
 
 ## Tier gating
 
 All test edits and promotions obey Benchmark Tier locks (ADR-011): `workspace/` locked at Benchmarking; oracle impls/engine and audited tests additionally locked at Released. The CI check enforces the base branch's tier.
+
+## Relevant ADRs
+
+| ADR | Decision |
+| --- | --- |
+| [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |

@@ -1,3 +1,7 @@
+Status: SETTLED
+
+Last updated: 2026-08-27
+
 # Agent Container System
 
 Replaces the Python adapter layer (`silverquillm/adapters/`) with Docker-based black-box agent containers. Each agent (Pi, OpenCode, Claude Code, Aider, etc.) ships as a self-contained Docker image. The benchmark runner stages a workspace, launches the container, waits for it to exit, and harvests results. The runner has zero knowledge of agent internals.
@@ -6,8 +10,8 @@ The container receives the full benchmark problem set — all cards, the engine,
 
 See also:
 
-- [WORKSPACE-CONTRACT.md](https://app.notion.com/p/ad4d407fda954387adf7eb4ba8674371) for the canonical Workspace layout and card/engine edit contract.
-- [RUN-ARTIFACTS-AND-TELEMETRY.md](https://app.notion.com/p/1ffe911b65564fa6860b2a91dcc94fb5) for snapshots, telemetry, fallback, and log artifacts.
+- [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) for the canonical Workspace layout and card/engine edit contract.
+- [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) for snapshots, telemetry, fallback, and log artifacts.
 ## Architecture
 
 ```mermaid
@@ -33,7 +37,7 @@ flowchart TB
 
 ## Workspace Layout
 
-> **Canonical layout lives in **[WORKSPACE-CONTRACT.md](https://app.notion.com/p/ad4d407fda954387adf7eb4ba8674371)** → Workspace layout.** The `/workspace/` tree shown below is a superseded pre-contract draft — it predates `rulebook.txt`, `AGENTS.md`/`PROJECT_MAP.md`, `engine_tests/`, and the `fdn_`/`sos_`-prefixed card directories — kept only for narrative context and archived in Historical Context.
+> **Canonical layout lives in **[WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md)** → Workspace layout.** The `/workspace/` tree shown below is a superseded pre-contract draft — it predates `rulebook.txt`, `AGENTS.md`/`PROJECT_MAP.md`, `engine_tests/`, and the `fdn_`/`sos_`-prefixed card directories — kept only for narrative context and archived in Historical Context.
 
 The runner stages a workspace that resembles a real codebase. Every card directory — FDN (examples) and SOS (targets) — has the same structure: `card_spec.json` and `card_impl.py`. The only difference is that FDN implementations are filled in and SOS implementations are empty templates.
 
@@ -406,3 +410,9 @@ By giving the agent the full problem set in a single session, the benchmark addi
 - **Long-context endurance** — Does quality degrade over a multi-hour session?
 - **Engine understanding** — Can the agent extend the engine when needed, and do those extensions compose across cards?
 - **Test design** — Without example tests to copy from, does the agent write meaningful tests that exercise the card's actual mechanics?
+
+## Relevant ADRs
+
+| ADR | Decision |
+| --- | --- |
+| [ADR-004](../adr/ADR-004-docker-agent-containers-replace-python-adapters.md) | Docker Agent Containers Replace Python Adapters |

@@ -12,8 +12,8 @@ Documentation and specification files for the SilverquiLLM-bench project. Contai
 | `specs/GAME-ENGINE.md` | Game engine architecture and rules coverage spec. |
 | `specs/CARD-INTERFACE.md` | Card implementation interface and hook method spec. |
 | `specs/BENCHMARK-RUNNER.md` | Benchmark runner design for LLM evaluation. |
-| `specs/SCORING.md` | Scoring criteria and evaluation methodology (4 categories). |
-| `specs/TEST-SUITE.md` | Test suite design and coverage requirements. |
+| `specs/SCORING.md` | Scoring criteria and evaluation methodology (three evaluation dimensions: target-set card correctness, FDN card regression, engine regression). |
+| `specs/AUDITED-TEST-SUITE.md` | Audited test suite design, test utilities API, and test harvester. |
 | `specs/TESTING-CONVENTIONS.md` | **Testing conventions** — Standards for test organization, naming, fixtures, and deterministic testing patterns. |
 | `specs/KNOWN-ISSUES.md` | Known issues tracker. |
 | `specs/17LANDS-REPLAY-SCHEMA.md` | 17lands replay data schema spec. |
