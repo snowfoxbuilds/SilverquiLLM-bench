@@ -77,17 +77,38 @@ exactly the contract the bench consumes.
 
 ## Add one
 
-1. Author a config-repo-shaped source (`worker-types/<slug>.toml`, plus
-   `knowledge/` / `policy/` trees when the candidate bakes them). Pin the base
-   by digest, or let export resolve the tag.
-2. Export: `theozolith candidate export --source <src> --type <slug> --out /tmp/<slug>/bundle`
-   (`python -m theozolith_control.cli candidate export …` when the console
-   script is not on PATH).
-3. Name the directory:
-   `python -c "from silverquillm.candidate import load_candidate_bundle as l; print(l(__import__('pathlib').Path('/tmp/<slug>/bundle')).hash8)"`
-   → `candidates/<slug>--<hash8>/`; move the bundle to `bundle/`, the source
-   to `source/`, and write the README (identity triple, candidate hash, what
-   the candidate varies, provenance of the base digest).
-4. `pytest tests/test_reference_candidates.py -q` — every checked-in candidate
+Promote it from your Config Repo (`docs/specs/BENCHMARK-CANDIDATES.md`):
+
+```bash
+python scripts/promote_candidate.py <config-repo> <worker-type> [--slug NAME] [--docker-config DIR] [--dry-run]
+```
+
+The script exports the bundle with TheOzolith's tooling, ingests it through
+the bench's own path (identity recomputed, secret values refused), writes
+`candidates/<slug>--<hash8>/` with the definition (base pinned by digest), the
+referenced knowledge and policy source trees, the bundle, and a README stub —
+proving first that re-exporting the vendored source reproduces the bundle
+byte for byte. **Vendor-at-promote is strict**: a knowledge tree the
+definition references must exist in the Config Repo and carry a regular file
+named `PUBLISHABLE` at its root (your explicit declaration; the marker never
+enters the compiled tree or the identity). Without it the candidate cannot be
+promoted and its results cannot be published. The same identity already
+promoted is a no-op; an existing directory whose bundle does not recompute to
+its name, or the same identity under another slug, is a refusal. The script
+never runs git.
+
+Then:
+
+1. Complete the README — every `TODO(promote)` (what the candidate varies,
+   where the base digest came from). The platform test refuses a checked-in
+   README that still carries the placeholder.
+2. `pytest tests/test_reference_candidates.py -q` — every checked-in candidate
    must ingest, carry its recomputed hash in its name, hold no secret value,
-   and re-export byte-identically from its source.
+   re-export byte-identically from its source, and vendor a `PUBLISHABLE`
+   knowledge tree when it bakes one.
+3. Review the diff and commit — the commit is the approval stamp.
+
+A bundle exported by hand (`theozolith candidate export --source <src>
+--type <slug> --out <dir>`) can be run directly with
+`silverquillm run --candidate <dir>`; only a promoted candidate can have its
+results published.
