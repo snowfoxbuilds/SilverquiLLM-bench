@@ -36,6 +36,13 @@ bench) allowlists adapter names — claude and codex today, Pi later; which
 adapters a bundle *can* name is TheOzolith's parse gate, consumed through the
 verifier, never restated.
 
+The credential-shape detector behind step 2 is exported as
+:func:`scan_tree_for_credentials` so the promote gate can hold the *whole*
+promoted candidate — vendored knowledge and policy source, the ``PUBLISHABLE``
+marker, the README — to the same rule, and :func:`redact_credentials` lets a
+log line or a state file carry an error message with any credential shape
+blanked out.
+
 Two more responsibilities live here because they are the same trust boundary:
 
 - :func:`vendor_candidate` writes the vendored copy a results repo keeps at
@@ -59,7 +66,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -81,11 +88,15 @@ __all__ = [
     "CandidateBundle",
     "CandidateRefusedError",
     "CandidateVendorError",
+    "CredentialFinding",
     "ImageBuildError",
     "VendoredCandidate",
     "build_candidate_image",
+    "credential_shapes",
     "load_candidate_bundle",
+    "redact_credentials",
     "resolve_candidate_path",
+    "scan_tree_for_credentials",
     "vendor_candidate",
 ]
 
@@ -119,6 +130,96 @@ _CREDENTIAL_PATTERNS: tuple[tuple[str, re.Pattern[bytes]], ...] = (
     ("bearer credential", re.compile(rb"(?i)\bbearer\s+[A-Za-z0-9_\-.=]{20,}")),
 )
 _SLOT_ASSIGNMENT_VALUE = rb"\s*[=:]\s*[\"']?[A-Za-z0-9_\-.]{20,}"
+
+
+def _slot_patterns(secret_slots: Iterable[str]) -> list[tuple[str, re.Pattern[bytes]]]:
+    return [
+        (
+            f"a value assigned to secret slot {slot}",
+            re.compile(rb"\b" + slot.encode("ascii") + _SLOT_ASSIGNMENT_VALUE),
+        )
+        for slot in secret_slots
+        if isinstance(slot, str) and _SLOT_NAME_RE.fullmatch(slot)
+    ]
+
+
+def credential_shapes() -> tuple[str, ...]:
+    """The names of every credential shape the detector recognizes (the
+    declared-slot assignment shape is per slot and reads ``a value assigned
+    to secret slot <NAME>``)."""
+    return tuple(label for label, _ in _CREDENTIAL_PATTERNS) + ("a value assigned to a declared secret slot",)
+
+
+@dataclass(frozen=True)
+class CredentialFinding:
+    """One file that carries a credential shape: *where* (relative to the
+    scanned root) and *what shape* — never the bytes."""
+
+    path: Path
+    shape: str
+
+    def __str__(self) -> str:
+        return f"{self.path}: {self.shape}"
+
+
+def scan_tree_for_credentials(
+    root: Path, *, secret_slots: Iterable[str] = (), what: str = "entry"
+) -> list[CredentialFinding]:
+    """Scan every regular file under *root* for a credential shape — the
+    complete pattern set (API keys, GitHub / AWS / Slack tokens, private-key
+    blocks, JWTs, bearer credentials) plus a value assigned to any of
+    *secret_slots* — and return one finding per hit, by path and shape only.
+
+    Strict on the tree: symlinks (to files or directories) and special files
+    are a :class:`CandidateRefusedError`, never followed; an unreadable file
+    is a refusal naming the file.  Bytes are matched as bytes, so a binary
+    file is scanned like any other and nothing is ever decoded or echoed.
+    """
+    root = Path(root)
+    patterns = (*_CREDENTIAL_PATTERNS, *_slot_patterns(secret_slots))
+    findings: list[CredentialFinding] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        rel_dir = Path(dirpath).relative_to(root)
+        for name in sorted(dirnames):
+            entry = Path(dirpath) / name
+            if os.path.islink(entry) or not stat.S_ISDIR(os.lstat(entry).st_mode):
+                raise CandidateRefusedError(
+                    f"{what} {rel_dir / name} is not a regular directory — symlinks and"
+                    " special files are refused"
+                )
+        for name in sorted(filenames):
+            file = Path(dirpath) / name
+            rel = rel_dir / name
+            try:
+                mode = os.lstat(file).st_mode
+            except OSError as exc:
+                raise CandidateRefusedError(f"cannot inspect {what} {rel}: {exc}") from exc
+            if os.path.islink(file) or not stat.S_ISREG(mode):
+                raise CandidateRefusedError(
+                    f"{what} {rel} is not a regular file — symlinks and special files are refused"
+                )
+            try:
+                data = file.read_bytes()
+            except OSError as exc:
+                raise CandidateRefusedError(
+                    f"cannot read {what} {rel} ({exc.strerror or type(exc).__name__}) — an"
+                    " unreadable file cannot be cleared of secret values"
+                ) from exc
+            for label, pattern in patterns:
+                if pattern.search(data):
+                    findings.append(CredentialFinding(path=rel, shape=label))
+                    break
+    return findings
+
+
+def redact_credentials(text: str, *, secret_slots: Iterable[str] = ()) -> str:
+    """*text* with every credential shape replaced by ``[redacted: <shape>]``
+    — for log lines, state files and error summaries that must never carry
+    a value even when an exception message does."""
+    data = text.encode("utf-8", errors="surrogateescape")
+    for label, pattern in (*_CREDENTIAL_PATTERNS, *_slot_patterns(secret_slots)):
+        data = pattern.sub(f"[redacted: {label}]".encode(), data)
+    return data.decode("utf-8", errors="replace")
 
 
 class CandidateRefusedError(Exception):
@@ -303,31 +404,13 @@ def _refuse_secret_values(bundle_dir: Path, manifest: Mapping[str, Any]) -> None
                 " name — a slot entry carries the NAME a consumer binds, never a value"
                 " (refused without echoing the entry)"
             )
-    slot_patterns = [
-        (f"a value assigned to secret slot {slot}", re.compile(rb"\b" + slot.encode("ascii") + _SLOT_ASSIGNMENT_VALUE))
-        for slot in slots
-    ]
-    for dirpath, _dirnames, filenames in os.walk(bundle_dir, followlinks=False):
-        for name in sorted(filenames):
-            file = Path(dirpath) / name
-            try:
-                mode = os.lstat(file).st_mode
-            except OSError as exc:
-                raise CandidateRefusedError(f"cannot inspect bundle entry {file}: {exc}") from exc
-            if not stat.S_ISREG(mode):
-                continue  # the verifier refuses symlinks and special files by shape
-            try:
-                data = file.read_bytes()
-            except OSError as exc:
-                raise CandidateRefusedError(f"cannot read bundle entry {file}: {exc}") from exc
-            rel = file.relative_to(bundle_dir)
-            for label, pattern in (*_CREDENTIAL_PATTERNS, *slot_patterns):
-                if pattern.search(data):
-                    raise CandidateRefusedError(
-                        f"bundle entry {rel} contains what looks like {label} — a Candidate"
-                        " Bundle carries secret slot NAMES only; a secret value anywhere"
-                        " in the bundle is a hard refusal (the value is not echoed)"
-                    )
+    findings = scan_tree_for_credentials(bundle_dir, secret_slots=slots, what="bundle entry")
+    if findings:
+        raise CandidateRefusedError(
+            f"bundle entry {findings[0].path} contains what looks like {findings[0].shape}"
+            " — a Candidate Bundle carries secret slot NAMES only; a secret value anywhere"
+            " in the bundle is a hard refusal (the value is not echoed)"
+        )
 
 
 def _string(manifest: Mapping[str, Any], key: str) -> str:

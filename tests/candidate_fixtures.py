@@ -28,6 +28,23 @@ CODEX_BASE = "ghcr.io/acme/theozolith-run-codex:1.2.3"
 #: A credential-shaped string no real service issued (tests plant it to prove
 #: the secret-value refusal).
 FAKE_ANTHROPIC_KEY = "sk-ant-api03-" + "x" * 40
+#: One fabricated sample per credential family the production detector
+#: recognizes (``silverquillm.candidate.credential_shapes``), keyed by the
+#: shape name the detector reports.  None of these was ever issued.
+FAKE_CREDENTIALS: dict[str, str] = {
+    "Anthropic API key": FAKE_ANTHROPIC_KEY,
+    "OpenAI API key": "sk-proj-" + "y" * 40,
+    "GitHub token": "ghp_" + "A" * 36,
+    "GitHub fine-grained token": "github_pat_" + "B" * 30,
+    "AWS access key id": "AKIA" + "ABCDEFGHIJKLMNOP",
+    # Shaped for the bench's detector, deliberately not for GitHub's push
+    # protection (which wants digit runs after the prefix).
+    "Slack token": "xoxb-not-a-real-slack-token-sample",
+    "private key block": "-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----",
+    "JSON Web Token": "eyJ" + "a" * 12 + "." + "b" * 12 + "." + "c" * 12,
+    "bearer credential": "Bearer " + "z" * 24,
+    "a value assigned to a declared secret slot": 'ANTHROPIC_API_KEY = "' + "k" * 30 + '"',
+}
 
 
 def make_source(

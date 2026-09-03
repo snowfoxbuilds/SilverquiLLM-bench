@@ -24,12 +24,25 @@ The two checks, per run:
   discretion, and never able to enter a leaderboard because tooling filters
   on the flag mechanically.
 
-Idempotent and side-effect-free on refusal: every run is checked before the
-first file is staged; an already-staged byte-identical record is skipped;
-a differing record under the same destination is a conflict that refuses
-the publication.  Discovery of published results
-(:func:`iter_published_records`) goes through manifests only — never a path
-convention — so the operator organizes ``published/`` freely.
+**Publication is a transaction.**  Every run is checked before the first
+byte is written; an already-published byte-identical record is skipped; a
+differing record under the same destination is a conflict that refuses.  The
+new records are then copied into a private staging directory beside the
+destination (``<dest>/.publish-staging-<nonce>/``), re-read and proven byte
+identical to their sources, and only then committed — one atomic rename per
+record directory — under an on-disk journal (``<dest>/.publish-journal.json``)
+that names exactly the directories this invocation creates.  Any failure
+rolls back every directory the transaction created and leaves pre-existing
+records untouched; an interrupted transaction is finished (rolled back, or
+completed when every record had already been committed) at the start of the
+next invocation, from its journal.  A rollback that itself fails is reported
+prominently, the journal stays, and no further publication into that
+destination proceeds until recovery succeeds.  The success summary prints
+only after the transaction commits.
+
+Discovery of published results (:func:`iter_published_records`) goes through
+manifests only — never a path convention — so the operator organizes
+``published/`` freely.
 
 Usage::
 
@@ -41,11 +54,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import secrets
 import shutil
 import sys
+import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -73,10 +90,21 @@ from silverquillm.results_repo import (
 DEFAULT_CANDIDATES_DIR = REPO_ROOT / "candidates"
 DEFAULT_PUBLISHED_DIR = REPO_ROOT / "published"
 RECORD_FILES = (MANIFEST_FILENAME, SCORES_FILENAME)
+#: The transaction journal, beside the records under the destination.
+JOURNAL_FILENAME = ".publish-journal.json"
+JOURNAL_SCHEMA_VERSION = 1
+STAGING_PREFIX = ".publish-staging-"
 
 
 class PublicationRefused(Exception):
-    """The publication cannot proceed; nothing was staged."""
+    """The publication cannot proceed; nothing new is published."""
+
+
+class PublicationRecoveryError(Exception):
+    """A rollback (or the recovery of an interrupted transaction) failed:
+    the destination may hold a partial publication.  The journal stays in
+    place and no further publication into that destination proceeds until
+    recovery succeeds."""
 
 
 @dataclass(frozen=True)
@@ -246,7 +274,7 @@ def validity_warnings(record: RunRecord) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Planning and staging
+# Planning
 # ---------------------------------------------------------------------------
 
 
@@ -269,7 +297,14 @@ def plan_publication(
         raise PublicationRefused("no run ids given")
     if len(set(run_ids)) != len(run_ids):
         raise PublicationRefused("run ids repeat: " + ", ".join(sorted({r for r in run_ids if run_ids.count(r) > 1})))
-    plan = PublicationPlan(dest=Path(dest), runs=[])
+    dest = Path(dest)
+    if journal_path(dest).exists():
+        raise PublicationRefused(
+            f"{journal_path(dest)} exists: an earlier publication into {dest} was"
+            " interrupted or is still running — run the script again to finish its"
+            " recovery before planning new work"
+        )
+    plan = PublicationPlan(dest=dest, runs=[])
     for run_id in run_ids:
         source_dir, record = find_run_record(results_repo, run_id)
         planned = PlannedRun(run_id=run_id, source_dir=source_dir, record=record, dest_dir=plan.dest / run_id)
@@ -293,32 +328,332 @@ def plan_publication(
             else:
                 planned.refusals.append(
                     f"{planned.dest_dir} already exists with different content — a"
-                    " staged record is never overwritten; resolve by hand"
+                    " published record is never overwritten; resolve by hand"
                 )
     return plan
 
 
+# ---------------------------------------------------------------------------
+# The transaction: private staging, byte-proven copies, journaled commit
+# ---------------------------------------------------------------------------
+
+
+def journal_path(dest: Path) -> Path:
+    return Path(dest) / JOURNAL_FILENAME
+
+
+@dataclass
+class Journal:
+    """What one publication transaction created under its destination — and
+    nothing else: only names listed here are ever removed by a rollback.
+
+    ``planned`` are the record directories the transaction will create (none
+    existed when it began); ``committing`` is the one whose rename may be in
+    flight; ``committed`` are the ones renamed into place.  ``staging`` is
+    the private sibling directory holding the not-yet-committed copies.
+    """
+
+    staging: str
+    planned: list[str]
+    committing: str | None = None
+    committed: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": JOURNAL_SCHEMA_VERSION,
+            "staging": self.staging,
+            "planned": list(self.planned),
+            "committing": self.committing,
+            "committed": list(self.committed),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Any) -> Journal:
+        if not isinstance(data, dict) or data.get("schema_version") != JOURNAL_SCHEMA_VERSION:
+            raise PublicationRecoveryError(
+                f"unrecognized journal (schema_version {data.get('schema_version') if isinstance(data, dict) else '?'!r})"
+            )
+        staging = data.get("staging")
+        planned = data.get("planned")
+        committing = data.get("committing")
+        committed = data.get("committed", [])
+        if (
+            not isinstance(staging, str)
+            or not staging.startswith(STAGING_PREFIX)
+            or not isinstance(planned, list)
+            or not all(isinstance(name, str) and _safe_record_name(name) for name in planned)
+            or not isinstance(committed, list)
+            or not all(isinstance(name, str) and name in planned for name in committed)
+            or not (committing is None or (isinstance(committing, str) and committing in planned))
+        ):
+            raise PublicationRecoveryError("malformed journal")
+        return cls(staging=staging, planned=list(planned), committing=committing, committed=list(committed))
+
+    @property
+    def complete(self) -> bool:
+        return self.committing is None and sorted(self.committed) == sorted(self.planned)
+
+
+def _safe_record_name(name: str) -> bool:
+    return bool(name) and not name.startswith(".") and "/" not in name and name not in (".", "..")
+
+
+def _write_journal(path: Path, journal: Journal) -> None:
+    """Atomic replace, so the journal always parses."""
+    payload = json.dumps(journal.to_dict(), indent=2, sort_keys=True) + "\n"
+    fd, tmp = tempfile.mkstemp(prefix=".publish-journal-", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _read_journal(path: Path) -> Journal:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise PublicationRecoveryError(f"cannot read {path}: {exc}") from exc
+    return Journal.from_dict(data)
+
+
+def _rmtree_record(path: Path) -> None:
+    """Remove one record directory the transaction created (never followed
+    through a symlink)."""
+    if path.is_symlink():
+        os.unlink(path)
+    elif path.is_dir():
+        shutil.rmtree(path)
+    elif path.exists():
+        os.unlink(path)
+
+
+class PublicationTransaction:
+    """One publication: ``begin`` → ``stage`` → ``commit`` → ``finish``, or
+    ``rollback``.  Tests drive the steps one at a time; :func:`stage_publication`
+    drives them in order."""
+
+    def __init__(self, plan: PublicationPlan) -> None:
+        self.dest = Path(plan.dest)
+        self.runs = list(plan.to_stage)
+        self.journal_path = journal_path(self.dest)
+        self.journal: Journal | None = None
+        self.staging: Path | None = None
+        self.written: list[Path] = []
+
+    # -- steps ---------------------------------------------------------------
+
+    def begin(self) -> None:
+        """Create the journal (exclusively — a second transaction into the
+        same destination refuses) and the private staging directory."""
+        self.dest.mkdir(parents=True, exist_ok=True)
+        for run in self.runs:
+            if not _safe_record_name(run.run_id):
+                raise PublicationRefused(f"run id {run.run_id!r} is not a safe directory name")
+        staging_name = f"{STAGING_PREFIX}{secrets.token_hex(4)}"
+        journal = Journal(staging=staging_name, planned=[run.run_id for run in self.runs])
+        try:
+            fd = os.open(self.journal_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            raise PublicationRefused(
+                f"{self.journal_path} exists: another publication into {self.dest} is in"
+                " flight or was interrupted — finish its recovery first"
+            ) from None
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(journal.to_dict(), indent=2, sort_keys=True) + "\n")
+        self.journal = journal
+        self.staging = self.dest / staging_name
+        self.staging.mkdir()
+
+    def stage(self) -> None:
+        """Copy every record into staging, then re-read the copies: each must
+        be byte identical to its source and re-prove as the same Run Record."""
+        assert self.staging is not None
+        for run in self.runs:
+            target_dir = self.staging / run.run_id
+            target_dir.mkdir()
+            for name in RECORD_FILES:
+                shutil.copyfile(run.source_dir / name, target_dir / name)
+        for run in self.runs:
+            target_dir = self.staging / run.run_id
+            for name in RECORD_FILES:
+                if not _same_bytes(run.source_dir / name, target_dir / name):
+                    raise PublicationRefused(
+                        f"{run.run_id}: the staged copy of {name} does not match its source"
+                        " byte for byte"
+                    )
+            try:
+                staged = RunRecord.from_dicts(
+                    json.loads((target_dir / MANIFEST_FILENAME).read_text(encoding="utf-8")),
+                    json.loads((target_dir / SCORES_FILENAME).read_text(encoding="utf-8")),
+                )
+            except (OSError, ValueError, ResultsRepoError) as exc:
+                raise PublicationRefused(f"{run.run_id}: the staged copy does not re-prove: {exc}") from exc
+            if staged.run_id != run.run_id or staged.candidate.to_dict() != run.record.candidate.to_dict():
+                raise PublicationRefused(f"{run.run_id}: the staged copy re-proves as a different record")
+
+    def commit(self) -> None:
+        for run in self.runs:
+            self.commit_one(run)
+
+    def commit_one(self, run: PlannedRun) -> None:
+        """Rename one staged record into place, journaling the step before
+        and after so an interruption anywhere is recoverable."""
+        assert self.journal is not None and self.staging is not None
+        if run.dest_dir.exists() or run.dest_dir.is_symlink():
+            raise PublicationRefused(
+                f"{run.dest_dir} appeared while publishing — a published record is never"
+                " overwritten"
+            )
+        self.journal.committing = run.run_id
+        _write_journal(self.journal_path, self.journal)
+        os.rename(self.staging / run.run_id, run.dest_dir)
+        self.journal.committed.append(run.run_id)
+        self.journal.committing = None
+        _write_journal(self.journal_path, self.journal)
+        self.written.extend(run.dest_dir / name for name in RECORD_FILES)
+
+    def finish(self) -> None:
+        """Every record is in place: drop the (empty) staging directory and
+        the journal."""
+        assert self.journal is not None and self.staging is not None
+        if not self.journal.complete:
+            raise PublicationRecoveryError("finish called on an incomplete transaction")
+        shutil.rmtree(self.staging)
+        os.unlink(self.journal_path)
+
+    def rollback(self) -> list[str]:
+        """Remove every final directory this transaction created (and only
+        those), the staging directory, and the journal.  Returns the record
+        names removed."""
+        assert self.journal is not None
+        return rollback_journal(self.dest, self.journal)
+
+
+def rollback_journal(dest: Path, journal: Journal) -> list[str]:
+    """Undo a journaled transaction: remove the committed record directories
+    (plus the one whose rename completed before the journal could say so),
+    the staging directory, then the journal.  Only names the journal lists
+    are ever touched."""
+    dest = Path(dest)
+    staging = dest / journal.staging
+    removed: list[str] = []
+    to_remove = list(journal.committed)
+    if journal.committing is not None and journal.committing not in to_remove:
+        in_flight = journal.committing
+        if (dest / in_flight).exists() and not (staging / in_flight).exists():
+            to_remove.append(in_flight)  # the rename landed; the journal did not catch up
+    for name in to_remove:
+        _rmtree_record(dest / name)
+        removed.append(name)
+    if staging.is_dir() and not staging.is_symlink():
+        shutil.rmtree(staging)
+    os.unlink(journal_path(dest))
+    return removed
+
+
+@dataclass(frozen=True)
+class RecoveryReport:
+    """What :func:`recover_publication` did about an interrupted transaction."""
+
+    action: str  # "rolled-back" | "completed"
+    records: tuple[str, ...]
+
+    def describe(self) -> str:
+        if self.action == "completed":
+            return (
+                "RECOVERED an interrupted publication that had already committed every record"
+                f" ({', '.join(self.records)}); cleaned up its staging directory and journal"
+            )
+        return (
+            "RECOVERED an interrupted publication by rolling it back: removed"
+            f" {', '.join(self.records) or 'no record directory'} (only directories that"
+            " transaction created; pre-existing records untouched)"
+        )
+
+
+def recover_publication(dest: Path) -> RecoveryReport | None:
+    """Finish an interrupted transaction under *dest* from its journal:
+    roll it back, or complete it when every planned record was already
+    committed.  ``None`` when there is nothing to recover.  Raises
+    :class:`PublicationRecoveryError` when the journal is unreadable or the
+    rollback fails (the journal then stays for the operator)."""
+    path = journal_path(dest)
+    if not path.exists():
+        return None
+    journal = _read_journal(path)
+    dest = Path(dest)
+    try:
+        if journal.complete:
+            staging = dest / journal.staging
+            if staging.is_dir() and not staging.is_symlink():
+                shutil.rmtree(staging)
+            os.unlink(path)
+            return RecoveryReport(action="completed", records=tuple(journal.committed))
+        removed = rollback_journal(dest, journal)
+    except OSError as exc:
+        raise PublicationRecoveryError(
+            f"recovery of the interrupted publication under {dest} FAILED: {exc} — the"
+            f" journal {path} is kept; inspect the directories it names, fix the"
+            " problem, and run again; no publication proceeds until recovery succeeds"
+        ) from exc
+    return RecoveryReport(action="rolled-back", records=tuple(removed))
+
+
 def stage_publication(plan: PublicationPlan) -> list[Path]:
-    """Copy the records of a refusal-free plan byte for byte; return the files
-    written.  Raises :class:`PublicationRefused` (writing nothing) otherwise."""
+    """Publish the records of a refusal-free plan transactionally; return the
+    files now in place.  Raises :class:`PublicationRefused` (nothing new
+    published) on a refusal or a rolled-back failure, and
+    :class:`PublicationRecoveryError` when a rollback itself fails."""
     if plan.refusals:
         raise PublicationRefused("refusals:\n  " + "\n  ".join(plan.refusals))
-    written: list[Path] = []
-    for run in plan.to_stage:
-        run.dest_dir.mkdir(parents=True, exist_ok=False)
-        for name in RECORD_FILES:
-            target = run.dest_dir / name
-            shutil.copyfile(run.source_dir / name, target)
-            written.append(target)
-    return written
+    if not plan.to_stage:
+        return []
+    tx = PublicationTransaction(plan)
+    tx.begin()
+    try:
+        tx.stage()
+        tx.commit()
+    except BaseException as exc:
+        try:
+            removed = tx.rollback()
+        except OSError as rollback_exc:
+            raise PublicationRecoveryError(
+                f"publication failed ({type(exc).__name__}: {exc}) AND its rollback failed"
+                f" ({rollback_exc}) — {tx.journal_path} is kept; inspect the directories it"
+                " names, fix the problem, and run again; no publication proceeds until"
+                " recovery succeeds"
+            ) from exc
+        if isinstance(exc, Exception):
+            raise PublicationRefused(
+                f"publication failed and was rolled back (removed"
+                f" {', '.join(removed) or 'nothing'}; pre-existing records untouched):"
+                f" {type(exc).__name__}: {exc}"
+            ) from exc
+        raise
+    tx.finish()
+    return tx.written
+
+
+# ---------------------------------------------------------------------------
+# Reporting
+# ---------------------------------------------------------------------------
 
 
 def format_plan(plan: PublicationPlan, *, dry_run: bool) -> str:
+    """The per-run verdicts (and, for a dry run, the files that would be
+    written).  The files actually written are reported by
+    :func:`format_committed` after the transaction commits."""
     lines = [f"destination: {plan.dest}"]
     for run in plan.runs:
         trace = run.traceability
         where = trace.candidate_dir.name if trace else "UNTRACEABLE"
-        status = "already staged (identical)" if run.already_staged else ("would stage" if dry_run else "stage")
+        status = "already published (identical)" if run.already_staged else ("would publish" if dry_run else "publish")
         lines.append(
             f"  {run.run_id}: candidate {where}, benchmark {run.record.benchmark}, mode"
             f" {run.record.mode}, leaderboard_valid={str(run.record.leaderboard_valid).lower()}"
@@ -329,15 +664,23 @@ def format_plan(plan: PublicationPlan, *, dry_run: bool) -> str:
         for reason in run.refusals:
             lines.append(f"    REFUSED: {reason}")
     if plan.refusals:
-        lines.append("nothing staged: resolve every REFUSED line above")
-    else:
+        lines.append("nothing published: resolve every REFUSED line above")
+    elif dry_run:
         for run in plan.to_stage:
             for name in RECORD_FILES:
-                lines.append(f"  {'A' if not dry_run else '+'} {run.dest_dir / name}")
-        lines.append(
-            "this script ran no git command: review the staged files and commit them —"
-            " the commit is the approval stamp"
-        )
+                lines.append(f"  + {run.dest_dir / name}")
+        lines.append("dry run: nothing written")
+    return "\n".join(lines)
+
+
+def format_committed(written: list[Path]) -> str:
+    lines = [f"  A {path}" for path in written]
+    lines.append(
+        "this script ran no git command: review the published files and commit them —"
+        " the commit is the approval stamp"
+        if written
+        else "nothing to publish: every record was already published (identical)"
+    )
     return "\n".join(lines)
 
 
@@ -351,7 +694,8 @@ def iter_published_records(root: Path = DEFAULT_PUBLISHED_DIR) -> Iterator[tuple
     a directory is a published run iff it holds ``manifest.json`` beside
     ``scores.json`` and the pair re-proves as a record whose ``run_id`` is
     the directory's name.  Malformed pairs raise; directory layout above the
-    record carries no meaning."""
+    record carries no meaning.  Dot-prefixed directories (a transaction's
+    staging) are never records."""
     root = Path(root)
     if not root.is_dir():
         return
@@ -379,7 +723,10 @@ def iter_published_records(root: Path = DEFAULT_PUBLISHED_DIR) -> Iterator[tuple
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Stage run records into published/ (traceability = hard refusal, validity = warning; never commits)."
+        description=(
+            "Publish run records into published/ transactionally (traceability = hard"
+            " refusal, validity = warning; never commits)."
+        )
     )
     parser.add_argument("run_ids", nargs="+", metavar="RUN_ID")
     parser.add_argument(
@@ -388,8 +735,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--dest", type=Path, required=True, help="destination, e.g. published/<subdir>")
     parser.add_argument("--candidates-dir", type=Path, default=DEFAULT_CANDIDATES_DIR)
-    parser.add_argument("--allow-invalid", action="store_true", help="stage runs with leaderboard_valid: false")
-    parser.add_argument("--dry-run", action="store_true", help="check everything, stage nothing")
+    parser.add_argument("--allow-invalid", action="store_true", help="publish runs with leaderboard_valid: false")
+    parser.add_argument("--dry-run", action="store_true", help="check everything, write nothing")
     return parser
 
 
@@ -400,6 +747,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"REFUSED: pass --results-repo or set ${RESULTS_REPO_ENV}", file=sys.stderr)
         return 1
     try:
+        recovered = recover_publication(args.dest)
+        if recovered is not None:
+            print(recovered.describe())
         plan = plan_publication(
             args.run_ids,
             results_repo=results_repo,
@@ -410,8 +760,13 @@ def main(argv: list[str] | None = None) -> int:
         print(format_plan(plan, dry_run=args.dry_run))
         if plan.refusals:
             return 1
-        if not args.dry_run:
-            stage_publication(plan)
+        if args.dry_run:
+            return 0
+        written = stage_publication(plan)
+        print(format_committed(written))
+    except PublicationRecoveryError as exc:
+        print(f"RECOVERY FAILED: {exc}", file=sys.stderr)
+        return 2
     except PublicationRefused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 1

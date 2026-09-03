@@ -4,9 +4,13 @@ A temporary Results Repo holds records under fixture candidates; a temporary
 ``candidates/`` tree holds the promoted copies.  The tests prove:
 traceability is a hard refusal (absent candidate, tampered candidate,
 identity mismatch, legacy identity), validity is a warning (publishable with
-``--allow-invalid``), staging is byte-exact, idempotent, side-effect-free on
-refusal and never commits, and discovery of published results goes through
-manifests only.
+``--allow-invalid``), publication is byte-exact, idempotent, side-effect-free
+on refusal and never commits, discovery of published results goes through
+manifests only — and publication is a transaction: a failure at any copy,
+validation, rename or rollback step leaves none of the requested records
+(pre-existing identical ones untouched), an interruption after one rename is
+rolled back from the journal on the next invocation, and the success summary
+prints only after the commit.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -97,6 +102,7 @@ def world(tmp_path: Path) -> dict[str, Any]:
     init_results_repo(repo)
     vendor_candidate(repo, bundle)
     write_run_record(repo, _record("smoke-fixture-2026-09-03T00-00", bundle.identity))
+    write_run_record(repo, _record("smoke-fixture-2026-09-03T03-00", bundle.identity))
     write_run_record(
         repo,
         _record("smoke-fixture-2026-09-03T01-00", bundle.identity, valid=False, validity_note="Resume Leg (resumed_from=prior)", resumed_from="prior"),
@@ -110,6 +116,7 @@ def world(tmp_path: Path) -> dict[str, Any]:
         "repo": repo,
         "dest": tmp_path / "bench" / "published" / "blog-2026-09",
         "valid": "smoke-fixture-2026-09-03T00-00",
+        "valid2": "smoke-fixture-2026-09-03T03-00",
         "invalid": "smoke-fixture-2026-09-03T01-00",
         "untraceable": "smoke-other-2026-09-03T02-00",
         "legacy": "sos-legacy-2026-05-30T04-02",
@@ -255,6 +262,202 @@ class TestStaging:
         ]) == 1
         assert "REFUSED" in capsys.readouterr().out
         assert _tree(world["dest"]) == {}
+
+
+def _tree_with_mtimes(root: Path) -> dict[str, tuple[bytes, int]]:
+    return {
+        str(p.relative_to(root)): (p.read_bytes(), p.stat().st_mtime_ns)
+        for p in sorted(root.rglob("*"))
+        if p.is_file()
+    } if root.exists() else {}
+
+
+def _entries(root: Path) -> list[str]:
+    return sorted(p.name for p in root.iterdir()) if root.is_dir() else []
+
+
+class TestTransaction:
+    """Publication is all-or-nothing on disk, not only in the plan."""
+
+    @pytest.fixture
+    def prior(self, world, no_git) -> dict[str, Any]:
+        """A destination already holding one identical record (must survive
+        every rollback byte for byte, mtime included)."""
+        publish_mod.stage_publication(_plan(world, [world["invalid"]], allow_invalid=True))
+        return {"snapshot": _tree_with_mtimes(world["dest"] / world["invalid"])}
+
+    def _assert_clean(self, world, prior) -> None:
+        dest = world["dest"]
+        assert _entries(dest) == [world["invalid"]], _entries(dest)
+        assert _tree_with_mtimes(dest / world["invalid"]) == prior["snapshot"]
+        assert not publish_mod.journal_path(dest).exists()
+
+    @pytest.mark.parametrize("fail_on", ["first", "second"])
+    def test_a_copy_failure_leaves_no_new_final_record(self, world, prior, monkeypatch: pytest.MonkeyPatch, fail_on: str) -> None:
+        real = shutil.copyfile
+        target_run = world["valid"] if fail_on == "first" else world["valid2"]
+
+        def failing(src, dst, *a, **kw):
+            if Path(dst).parent.name == target_run and Path(dst).name == "scores.json":
+                raise OSError(28, "No space left on device")
+            return real(src, dst, *a, **kw)
+
+        monkeypatch.setattr(shutil, "copyfile", failing)
+        plan = _plan(world, [world["valid"], world["valid2"]], allow_invalid=True)
+        with pytest.raises(publish_mod.PublicationRefused, match="rolled back"):
+            publish_mod.stage_publication(plan)
+        self._assert_clean(world, prior)
+
+    def test_a_validation_failure_of_a_staged_copy_leaves_no_new_final_record(self, world, prior, monkeypatch: pytest.MonkeyPatch) -> None:
+        real = shutil.copyfile
+
+        def corrupting(src, dst, *a, **kw):
+            real(src, dst, *a, **kw)
+            if Path(dst).parent.name == world["valid2"] and Path(dst).name == "manifest.json":
+                Path(dst).write_text(Path(dst).read_text() + "\n")  # one byte off
+
+        monkeypatch.setattr(shutil, "copyfile", corrupting)
+        with pytest.raises(publish_mod.PublicationRefused, match="byte for byte"):
+            publish_mod.stage_publication(_plan(world, [world["valid"], world["valid2"]], allow_invalid=True))
+        self._assert_clean(world, prior)
+
+    def test_a_rename_failure_rolls_back_the_records_already_committed(self, world, prior, monkeypatch: pytest.MonkeyPatch) -> None:
+        real = os.rename
+        renames: list[str] = []
+
+        def failing(src, dst, *a, **kw):
+            renames.append(Path(dst).name)
+            if Path(dst).name == world["valid2"]:
+                raise OSError(5, "Input/output error")
+            return real(src, dst, *a, **kw)
+
+        monkeypatch.setattr(os, "rename", failing)
+        with pytest.raises(publish_mod.PublicationRefused) as info:
+            publish_mod.stage_publication(_plan(world, [world["valid"], world["valid2"]], allow_invalid=True))
+        assert renames == [world["valid"], world["valid2"]], "the first record had been committed"
+        assert f"removed {world['valid']}" in str(info.value)
+        self._assert_clean(world, prior)
+
+    def test_an_interruption_after_one_rename_is_recovered_from_the_journal(self, world, prior, capsys) -> None:
+        plan = _plan(world, [world["valid"], world["valid2"]], allow_invalid=True)
+        tx = publish_mod.PublicationTransaction(plan)
+        tx.begin()
+        tx.stage()
+        tx.commit_one(tx.runs[0])
+        # ... and the process dies here: one record in place, one in staging, journal present.
+        dest = world["dest"]
+        assert (dest / world["valid"] / "manifest.json").is_file()
+        assert publish_mod.journal_path(dest).exists()
+        journal = json.loads(publish_mod.journal_path(dest).read_text())
+        assert journal["committed"] == [world["valid"]] and journal["planned"] == [world["valid"], world["valid2"]]
+        # A new plan refuses until recovery ran.
+        with pytest.raises(publish_mod.PublicationRefused, match="interrupted"):
+            _plan(world, [world["valid2"]])
+        report = publish_mod.recover_publication(dest)
+        assert report is not None and report.action == "rolled-back" and report.records == (world["valid"],)
+        self._assert_clean(world, prior)
+        assert publish_mod.recover_publication(dest) is None
+        # The next invocation publishes the whole set cleanly.
+        code = publish_mod.main([
+            "--results-repo", str(world["repo"]), "--dest", str(dest), "--candidates-dir", str(world["candidates"]),
+            "--allow-invalid", world["valid"], world["valid2"],
+        ])
+        assert code == 0
+        assert sorted(_entries(dest)) == sorted([world["invalid"], world["valid"], world["valid2"]])
+
+    def test_main_recovers_an_interrupted_transaction_before_planning(self, world, prior, capsys) -> None:
+        plan = _plan(world, [world["valid"], world["valid2"]])
+        tx = publish_mod.PublicationTransaction(plan)
+        tx.begin()
+        tx.stage()
+        tx.commit_one(tx.runs[0])  # valid is in place, valid2 still in staging: the process dies here
+        code = publish_mod.main([
+            "--results-repo", str(world["repo"]), "--dest", str(world["dest"]), "--candidates-dir", str(world["candidates"]),
+            world["valid2"],
+        ])
+        out = capsys.readouterr().out
+        assert code == 0 and out.startswith("RECOVERED") and "rolling it back" in out and world["valid"] in out
+        assert _entries(world["dest"]) == sorted([world["invalid"], world["valid2"]])
+
+    def test_a_fully_committed_transaction_whose_journal_survived_is_completed(self, world, prior) -> None:
+        plan = _plan(world, [world["valid"]])
+        tx = publish_mod.PublicationTransaction(plan)
+        tx.begin()
+        tx.stage()
+        tx.commit()
+        # ... dies before finish(): every record is in place.
+        report = publish_mod.recover_publication(world["dest"])
+        assert report is not None and report.action == "completed"
+        assert _entries(world["dest"]) == sorted([world["invalid"], world["valid"]])
+        assert not publish_mod.journal_path(world["dest"]).exists()
+
+    def test_an_interrupted_rename_whose_journal_did_not_catch_up_is_rolled_back(self, world, prior) -> None:
+        plan = _plan(world, [world["valid"]])
+        tx = publish_mod.PublicationTransaction(plan)
+        tx.begin()
+        tx.stage()
+        # Journal says "committing", the rename landed, the journal was never updated.
+        tx.journal.committing = world["valid"]
+        publish_mod._write_journal(tx.journal_path, tx.journal)
+        os.rename(tx.staging / world["valid"], world["dest"] / world["valid"])
+        report = publish_mod.recover_publication(world["dest"])
+        assert report is not None and report.records == (world["valid"],)
+        self._assert_clean(world, prior)
+
+    def test_a_failed_rollback_is_reported_and_blocks_further_publication(self, world, prior, monkeypatch: pytest.MonkeyPatch) -> None:
+        real_rename = os.rename
+        real_rmtree = shutil.rmtree
+
+        def failing_rename(src, dst, *a, **kw):
+            if Path(dst).name == world["valid2"]:
+                raise OSError(5, "Input/output error")
+            return real_rename(src, dst, *a, **kw)
+
+        def failing_rmtree(path, *a, **kw):
+            if Path(path).name == world["valid"]:
+                raise OSError(1, "Operation not permitted")
+            return real_rmtree(path, *a, **kw)
+
+        monkeypatch.setattr(os, "rename", failing_rename)
+        monkeypatch.setattr(shutil, "rmtree", failing_rmtree)
+        with pytest.raises(publish_mod.PublicationRecoveryError, match="rollback failed"):
+            publish_mod.stage_publication(_plan(world, [world["valid"], world["valid2"]], allow_invalid=True))
+        assert publish_mod.journal_path(world["dest"]).exists(), "the journal stays for the operator"
+        monkeypatch.undo()
+        with pytest.raises(publish_mod.PublicationRefused, match="interrupted"):
+            _plan(world, [world["valid2"]])
+        assert publish_mod.main([
+            "--results-repo", str(world["repo"]), "--dest", str(world["dest"]), "--candidates-dir", str(world["candidates"]),
+            world["valid2"],
+        ]) == 0  # recovery now succeeds; the journal is gone and publication proceeds
+        assert not publish_mod.journal_path(world["dest"]).exists()
+
+    def test_the_success_summary_prints_only_after_the_commit(self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+        real = shutil.copyfile
+
+        def failing(src, dst, *a, **kw):
+            if Path(dst).parent.name == world["valid2"]:
+                raise OSError(28, "No space left on device")
+            return real(src, dst, *a, **kw)
+
+        monkeypatch.setattr(shutil, "copyfile", failing)
+        code = publish_mod.main([
+            "--results-repo", str(world["repo"]), "--dest", str(world["dest"]), "--candidates-dir", str(world["candidates"]),
+            world["valid"], world["valid2"],
+        ])
+        captured = capsys.readouterr()
+        assert code == 1 and "rolled back" in captured.err
+        assert "  A " not in captured.out and "approval stamp" not in captured.out
+        self._assert_clean(world, prior)
+
+    def test_mixed_identical_and_new_records_publish_together(self, world, prior) -> None:
+        plan = _plan(world, [world["invalid"], world["valid"], world["valid2"]], allow_invalid=True)
+        assert [run.already_staged for run in plan.runs] == [True, False, False]
+        written = publish_mod.stage_publication(plan)
+        assert sorted(p.parent.name for p in written) == sorted([world["valid"], world["valid"], world["valid2"], world["valid2"]])
+        assert _tree_with_mtimes(world["dest"] / world["invalid"]) == prior["snapshot"]
+        assert not publish_mod.journal_path(world["dest"]).exists()
+        assert not any(name.startswith(".publish") for name in _entries(world["dest"]))
 
 
 class TestDiscovery:

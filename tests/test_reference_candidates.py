@@ -27,9 +27,16 @@ from typing import Any
 import pytest
 from theozolith_control import candidate as ozcandidate
 
-from silverquillm.candidate import BUNDLE_SUBDIR, load_candidate_bundle
+from silverquillm.candidate import BUNDLE_SUBDIR, load_candidate_bundle, scan_tree_for_credentials
 from silverquillm.results_repo import OZOLITH_SCHEME, candidate_dirname
-from tests.candidate_fixtures import CODEX_BASE, DIGEST_A, NOW, make_candidate_dir, make_source
+from tests.candidate_fixtures import (
+    CODEX_BASE,
+    DIGEST_A,
+    FAKE_CREDENTIALS,
+    NOW,
+    make_candidate_dir,
+    make_source,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 CANDIDATES = REPO / "candidates"
@@ -94,12 +101,17 @@ def check_ingests_and_carries_its_hash(candidate_dir: Path) -> None:
 
 
 def check_secret_slot_names_only(candidate_dir: Path) -> None:
-    bundle = load_candidate_bundle(candidate_dir)  # the loader's scan already refused any value
+    """The bundle's scan refused any value inside ``bundle/``; the *whole*
+    candidate directory — README, vendored definition, knowledge and policy
+    source, the ``PUBLISHABLE`` marker — is held to the same production
+    detector, so a source-only credential fails here too."""
+    bundle = load_candidate_bundle(candidate_dir)
     assert bundle.secret_slots and all(re.fullmatch(r"[A-Z][A-Z0-9_]*", s) for s in bundle.secret_slots)
-    for path in candidate_dir.rglob("*"):
-        if path.is_file():
-            text = path.read_text(encoding="utf-8")
-            assert "sk-ant-" not in text and "ghp_" not in text and "sk-proj-" not in text
+    findings = scan_tree_for_credentials(candidate_dir, secret_slots=bundle.secret_slots, what="candidate entry")
+    assert findings == [], (
+        f"{candidate_dir.name} carries what looks like a credential (file: shape, value not"
+        f" echoed): {'; '.join(str(f) for f in findings)}"
+    )
 
 
 def check_readme_is_complete(candidate_dir: Path) -> None:
@@ -244,6 +256,18 @@ class TestAPromotedCandidateMeetsTheSameBar:
     def test_the_stub_readme_is_refused_until_completed(self, promoted: Path) -> None:
         with pytest.raises(AssertionError, match="placeholder"):
             check_readme_is_complete(promoted)
+
+    def test_the_platform_check_catches_a_source_only_credential(self, promoted: Path) -> None:
+        """A credential that never reaches the compiled bundle — here in the
+        ``PUBLISHABLE`` marker — is caught by the same scanner promotion uses."""
+        sample = FAKE_CREDENTIALS["AWS access key id"]
+        marker = promoted / "source" / "knowledge" / "gold" / "PUBLISHABLE"
+        marker.write_text(marker.read_text(encoding="utf-8") + f"{sample}\n", encoding="utf-8")
+        load_candidate_bundle(promoted)  # the bundle alone is still clean
+        with pytest.raises(AssertionError) as info:
+            check_secret_slot_names_only(promoted)
+        assert "PUBLISHABLE" in str(info.value) and "AWS access key id" in str(info.value)
+        assert sample not in str(info.value)
 
     def test_a_completed_promotion_passes_every_check(self, promoted: Path, tmp_path: Path) -> None:
         readme = promoted / "README.md"

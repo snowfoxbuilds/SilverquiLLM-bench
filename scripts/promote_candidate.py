@@ -31,14 +31,32 @@ missing tree or a missing marker is a hard refusal: knowledge that cannot be
 published means the candidate cannot be promoted and its results cannot be
 published.
 
+**The whole promoted tree is public.**  After every file is staged — the
+bundle, the vendored definition, the knowledge and policy source (the
+``PUBLISHABLE`` marker included), the README — the complete staging
+directory is scanned with the bench's own credential detector
+(:func:`silverquillm.candidate.scan_tree_for_credentials`: API keys, GitHub /
+AWS / Slack tokens, private-key blocks, JWTs, bearer credentials, a value
+assigned to a declared secret slot); any hit refuses, naming the file and the
+shape only.  The files promotion itself generates (the README stub and the
+vendored definition) may name no host-local path: not the Config Repo's
+absolute path, not the home directory, not the Docker config directory.
+
+**Dedup by identity is source-aware.**  An existing directory for the same
+identity under the same name is a no-op only when the existing copy is whole
+and equivalent: its bundle verifies, re-exporting its ``source/`` with its
+recorded ``exported_at`` reproduces its bundle byte for byte, and its
+``source/`` equals the source being promoted byte for byte (the README is the
+operator's to edit and is never compared).  Anything else — a missing,
+tampered or irreproducible source, a source that differs, a bundle that does
+not recompute to this identity, the same identity under another slug — is a
+refusal that leaves the existing directory untouched.
+
 Idempotent and side-effect-free on refusal: every check runs against a
 private staging directory beside the destination, and the candidate
-directory appears through one atomic rename at the very end.  An existing
-directory for the same identity is a no-op (dedup by identity); an existing
-directory under this name whose bundle does not recompute to it, or the
-same identity already promoted under another slug, is a refusal.  This
-script never runs git: the operator reviews the new directory and commits
-it — the commit is the approval stamp.
+directory appears through one atomic rename at the very end.  This script
+never runs git: the operator reviews the new directory and commits it — the
+commit is the approval stamp.
 
 Usage::
 
@@ -58,7 +76,7 @@ import sys
 import tempfile
 import time
 import tomllib
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -74,6 +92,7 @@ from silverquillm.candidate import (
     CandidateBundle,
     CandidateRefusedError,
     load_candidate_bundle,
+    scan_tree_for_credentials,
 )
 from silverquillm.results_repo import (
     InvalidRunRecordError,
@@ -86,6 +105,7 @@ PUBLISHABLE_MARKER = "PUBLISHABLE"
 #: The token the README stub carries until the operator completes it; the
 #: platform test refuses a checked-in candidate whose README still has it.
 README_TODO_MARKER = "TODO(promote)"
+README_NAME = "README.md"
 SOURCE_SUBDIR = "source"
 WORKER_TYPES_SUBDIR = "worker-types"
 KNOWLEDGE_SUBDIR = "knowledge"
@@ -229,7 +249,14 @@ def _copy_tree_strict(src: Path, dest: Path) -> None:
                     " symlinks and special files cannot be vendored"
                 )
             target = dest / rel / name
-            shutil.copyfile(entry, target)
+            try:
+                shutil.copyfile(entry, target)
+            except OSError as exc:
+                raise PromotionRefused(
+                    f"cannot read source entry {src.name}/{rel / name}"
+                    f" ({exc.strerror or type(exc).__name__}) — an unreadable file cannot be"
+                    " vendored or cleared of secret values"
+                ) from exc
             target.chmod(0o755 if mode & 0o111 else 0o644)
 
 
@@ -288,6 +315,28 @@ def pin_base_in_definition(text: str, data: dict[str, Any], pinned_base: str) ->
     return rewritten, True
 
 
+def _vendor_source(
+    staging: Path,
+    *,
+    type_name: str,
+    vendored_text: str,
+    knowledge_src: Path | None,
+    knowledge_tree: str,
+    policy_src: Path | None,
+    policy_tree: str,
+) -> Path:
+    """Write ``staging/source/``: the pinned definition plus the referenced
+    knowledge and policy trees copied strictly."""
+    source_copy = staging / SOURCE_SUBDIR
+    (source_copy / WORKER_TYPES_SUBDIR).mkdir(parents=True)
+    (source_copy / WORKER_TYPES_SUBDIR / type_name).write_text(vendored_text, encoding="utf-8")
+    if knowledge_src is not None:
+        _copy_tree_strict(knowledge_src, source_copy / KNOWLEDGE_SUBDIR / knowledge_tree)
+    if policy_src is not None:
+        _copy_tree_strict(policy_src, source_copy / POLICY_SUBDIR / policy_tree)
+    return source_copy
+
+
 # ---------------------------------------------------------------------------
 # README stub
 # ---------------------------------------------------------------------------
@@ -297,12 +346,14 @@ def render_readme_stub(
     slug: str,
     bundle: CandidateBundle,
     *,
-    source: Path,
     knowledge_tree: str,
     policy_tree: str,
     base_pinned: bool,
     promoted_at: str,
 ) -> str:
+    """The README stub.  It names no host-local path: the Config Repo is
+    "the operator's Config Repo", and a safe repository label / revision is
+    a ``TODO(promote)`` the operator may fill in."""
     knowledge = (
         f"`{bundle.knowledge}` pinned `{bundle.knowledge_pin}` — compiled tree vendored"
         f" under `bundle/knowledge/`; source under `source/knowledge/{knowledge_tree}/`,"
@@ -362,10 +413,13 @@ test run — never trusted from this file or the directory name.
 ## Provenance
 
 - **Definition**: `source/worker-types/{bundle.worker_type}.toml`, promoted from
-  the Config Repo at `{source}` by `scripts/promote_candidate.py` on
+  the operator's Config Repo by `scripts/promote_candidate.py` on
   {promoted_at}.{pin_note} Re-exporting `source/` with the recorded
   `exported_at` reproduces `bundle/` byte for byte
   (`tests/test_reference_candidates.py` proves it).
+- **Config Repo revision**: {README_TODO_MARKER}: optionally, a safe repository
+  label and revision for the definition this was promoted from (never a local
+  path; delete this line if you would rather not say).
 - **Base digest**: {README_TODO_MARKER}: record where the digest came from (the
   registry resolution at promote time, or the source's own pin) and how to
   re-resolve it.
@@ -379,7 +433,150 @@ silverquillm run --candidate candidates/{slug}--{bundle.hash8} --benchmark smoke
 
 
 # ---------------------------------------------------------------------------
-# Promotion
+# Checks on the staged tree
+# ---------------------------------------------------------------------------
+
+
+def _tree_snapshot(root: Path, *, what: str) -> dict[str, tuple[bytes, bool]]:
+    """``relative path -> (bytes, executable)`` for every regular file under
+    *root*; a symlink or special file anywhere is a refusal."""
+    snapshot: dict[str, tuple[bytes, bool]] = {}
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        rel = Path(dirpath).relative_to(root)
+        for name in sorted(dirnames):
+            entry = Path(dirpath) / name
+            if os.path.islink(entry) or not stat.S_ISDIR(os.lstat(entry).st_mode):
+                raise PromotionRefused(f"{what} {rel / name} is not a regular directory")
+        for name in sorted(filenames):
+            entry = Path(dirpath) / name
+            mode = os.lstat(entry).st_mode
+            if os.path.islink(entry) or not stat.S_ISREG(mode):
+                raise PromotionRefused(f"{what} {rel / name} is not a regular file")
+            snapshot[str(rel / name)] = (entry.read_bytes(), bool(mode & 0o111))
+    return snapshot
+
+
+def _tree_differences(a: dict[str, tuple[bytes, bool]], b: dict[str, tuple[bytes, bool]]) -> list[str]:
+    return sorted(path for path in set(a) | set(b) if a.get(path) != b.get(path))
+
+
+def _reexport_differences(
+    source_dir: Path, worker_type: str, bundle_dir: Path, *, exported_at: str, scratch: Path
+) -> list[str]:
+    """Re-export *source_dir* with *exported_at* into *scratch* and return the
+    paths (relative to the bundle) that differ from *bundle_dir* — empty means
+    byte-identical reproduction."""
+    try:
+        ozcandidate.export_candidate(source_dir, worker_type, scratch, now=lambda: exported_at)
+    except ozcandidate.CandidateError as exc:
+        raise PromotionRefused(f"the vendored source does not re-export: {exc}") from exc
+    try:
+        return _tree_differences(
+            _tree_snapshot(bundle_dir, what="bundle entry"),
+            _tree_snapshot(scratch, what="re-exported entry"),
+        )
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _prove_reproducible(staging: Path, bundle: CandidateBundle) -> None:
+    """Re-export the staged source with the recorded ``exported_at`` and
+    require the staged bundle byte for byte."""
+    differing = _reexport_differences(
+        staging / SOURCE_SUBDIR,
+        bundle.worker_type,
+        staging / BUNDLE_SUBDIR,
+        exported_at=bundle.exported_at,
+        scratch=staging / ".reexport",
+    )
+    if differing:
+        raise PromotionRefused(
+            "re-exporting the vendored source does not reproduce the bundle byte for"
+            f" byte (differs: {', '.join(differing)}) — refusing to promote an"
+            " irreproducible copy"
+        )
+
+
+def _host_path_needles(source: Path, docker_config: Path | None) -> list[tuple[str, str]]:
+    """``(label, absolute path)`` pairs no generated file may contain.  A path
+    with fewer than two segments below the root (``/``, ``/tmp``, ``/root``)
+    is too short to be a meaningful needle and is skipped."""
+    candidates = [("the Config Repo path", source)]
+    try:
+        candidates.append(("the home directory", Path.home()))
+    except (OSError, RuntimeError):
+        pass
+    if docker_config is not None:
+        candidates.append(("the Docker config directory", Path(docker_config)))
+    needles: list[tuple[str, str]] = []
+    for label, path in candidates:
+        try:
+            resolved = path.resolve()
+        except OSError:
+            resolved = path
+        for variant in {str(path), str(resolved)}:
+            if len(Path(variant).parts) >= 3 and (label, variant) not in needles:
+                needles.append((label, variant))
+    return needles
+
+
+def refuse_host_paths(staging: Path, *, needles: Iterable[tuple[str, str]]) -> None:
+    """The files promotion generates (the README stub, the vendored
+    definition) may carry none of *needles*; the vendored trees may not carry
+    the Config Repo path.  A hit names the file and the kind of path, never
+    the path itself."""
+    needles = list(needles)
+    generated = [
+        staging / README_NAME,
+        *sorted((staging / SOURCE_SUBDIR / WORKER_TYPES_SUBDIR).glob("*.toml")),
+    ]
+    for file in generated:
+        if not file.is_file():
+            continue
+        text = file.read_bytes()
+        for label, needle in needles:
+            if needle.encode("utf-8") in text:
+                raise PromotionRefused(
+                    f"generated file {file.relative_to(staging)} names {label} — a"
+                    " promoted candidate is public and carries no host-local path"
+                )
+    repo_needles = [needle for label, needle in needles if label == "the Config Repo path"]
+    for dirpath, _dirnames, filenames in os.walk(staging / SOURCE_SUBDIR, followlinks=False):
+        for name in sorted(filenames):
+            file = Path(dirpath) / name
+            if not file.is_file() or file.is_symlink():
+                continue
+            text = file.read_bytes()
+            for needle in repo_needles:
+                if needle.encode("utf-8") in text:
+                    raise PromotionRefused(
+                        f"vendored file {file.relative_to(staging)} names the Config Repo's"
+                        " absolute path — a promoted candidate is public and carries no"
+                        " host-local path; fix the source and promote again"
+                    )
+
+
+def refuse_credentials(staging: Path, bundle: CandidateBundle) -> None:
+    """The complete staged candidate — bundle, vendored definition, knowledge
+    and policy source (``PUBLISHABLE`` included), README — holds no credential
+    shape.  A hit names the file and the shape, never the value."""
+    try:
+        findings = scan_tree_for_credentials(
+            staging, secret_slots=bundle.secret_slots, what="promoted-tree entry"
+        )
+    except CandidateRefusedError as exc:
+        raise PromotionRefused(f"the staged candidate cannot be scanned for secret values: {exc}") from exc
+    if findings:
+        listed = "; ".join(str(finding) for finding in findings)
+        raise PromotionRefused(
+            "the promoted tree would carry what looks like a credential — a promoted"
+            " candidate is public and carries secret slot NAMES only; refusing"
+            f" (file: shape, values not echoed): {listed}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Dedup by identity — source-aware
 # ---------------------------------------------------------------------------
 
 
@@ -392,9 +589,56 @@ def _existing_identity(path: Path) -> CandidateBundle | None:
         return None
 
 
-def _check_destination(candidates_dir: Path, dirname: str, bundle: CandidateBundle) -> Path | None:
+def _validate_existing_source(
+    existing_dir: Path, existing: CandidateBundle, staged_source: Path, *, scratch: Path
+) -> None:
+    """The existing candidate's ``source/`` must be whole, reproduce the
+    existing bundle byte for byte, and equal *staged_source* byte for byte.
+    The README is never compared."""
+    existing_source = existing_dir / SOURCE_SUBDIR
+    untouched = f" — refusing; {existing_dir} is left untouched (inspect it by hand)"
+    if existing_source.is_symlink() or not existing_source.is_dir():
+        raise PromotionRefused(
+            f"{existing_dir} carries this identity but has no vendored {SOURCE_SUBDIR}/"
+            f" tree{untouched}"
+        )
+    try:
+        differing = _reexport_differences(
+            existing_source,
+            existing.worker_type,
+            existing_dir / BUNDLE_SUBDIR,
+            exported_at=existing.exported_at,
+            scratch=scratch,
+        )
+    except PromotionRefused as exc:
+        raise PromotionRefused(f"{existing_dir}: the existing vendored source is unusable: {exc}{untouched}") from exc
+    if differing:
+        raise PromotionRefused(
+            f"{existing_dir}: re-exporting the existing vendored source does not reproduce"
+            f" the existing bundle byte for byte (differs: {', '.join(differing)}) — the"
+            f" existing copy is tampered or irreproducible{untouched}"
+        )
+    try:
+        theirs = _tree_snapshot(existing_source, what="existing vendored source entry")
+    except PromotionRefused as exc:
+        raise PromotionRefused(f"{existing_dir}: {exc}{untouched}") from exc
+    ours = _tree_snapshot(staged_source, what="staged source entry")
+    differing = _tree_differences(theirs, ours)
+    if differing:
+        raise PromotionRefused(
+            f"{existing_dir} carries this identity, but its vendored {SOURCE_SUBDIR}/"
+            f" differs from the source being promoted (differs: {', '.join(differing)})"
+            " — same identity, different source is a conflict, not a no-op; the README"
+            f" alone is yours to edit and is never compared{untouched}"
+        )
+
+
+def _check_destination(
+    candidates_dir: Path, dirname: str, bundle: CandidateBundle, *, staged_source: Path, scratch: Path
+) -> Path | None:
     """Dedup by identity.  Returns the existing directory when this identity
-    is already promoted under *dirname*; raises on any conflict."""
+    is already promoted under *dirname* with an equivalent, whole source;
+    raises on any conflict; never touches an existing directory."""
     target = candidates_dir / dirname
     if target.exists():
         existing = _existing_identity(target)
@@ -405,6 +649,7 @@ def _check_destination(candidates_dir: Path, dirname: str, bundle: CandidateBund
                 f" ({bundle.candidate_hash}) — refusing to touch it; inspect or remove"
                 " the directory by hand"
             )
+        _validate_existing_source(target, existing, staged_source, scratch=scratch)
         return target
     suffix = f"--{bundle.hash8}"
     for entry in sorted(candidates_dir.iterdir()) if candidates_dir.is_dir() else []:
@@ -420,39 +665,9 @@ def _check_destination(candidates_dir: Path, dirname: str, bundle: CandidateBund
     return None
 
 
-def _prove_reproducible(staging: Path, bundle: CandidateBundle) -> None:
-    """Re-export the vendored source with the recorded ``exported_at`` and
-    require the checked-in bundle byte for byte."""
-    reexport = staging / ".reexport"
-    try:
-        ozcandidate.export_candidate(
-            staging / SOURCE_SUBDIR,
-            bundle.worker_type,
-            reexport,
-            now=lambda: bundle.exported_at,
-        )
-    except ozcandidate.CandidateError as exc:
-        raise PromotionRefused(
-            f"the vendored source does not re-export: {exc} — the promoted copy must"
-            " be self-contained"
-        ) from exc
-    original = staging / BUNDLE_SUBDIR
-    checked = sorted(p.relative_to(original) for p in original.rglob("*") if p.is_file())
-    fresh = sorted(p.relative_to(reexport) for p in reexport.rglob("*") if p.is_file())
-    differing = [
-        str(rel)
-        for rel in sorted(set(checked) | set(fresh))
-        if rel not in checked
-        or rel not in fresh
-        or (original / rel).read_bytes() != (reexport / rel).read_bytes()
-    ]
-    shutil.rmtree(reexport)
-    if differing:
-        raise PromotionRefused(
-            "re-exporting the vendored source does not reproduce the bundle byte for"
-            f" byte (differs: {', '.join(differing)}) — refusing to promote an"
-            " irreproducible copy"
-        )
+# ---------------------------------------------------------------------------
+# Promotion
+# ---------------------------------------------------------------------------
 
 
 def promote(
@@ -501,32 +716,42 @@ def promote(
         except InvalidRunRecordError as exc:
             raise PromotionRefused(str(exc)) from exc
 
-        existing = _check_destination(candidates_dir, dirname, bundle)
+        vendored_text, base_pinned = pin_base_in_definition(text, data, bundle.base)
+        staged_source = _vendor_source(
+            staging,
+            type_name=type_path.name,
+            vendored_text=vendored_text,
+            knowledge_src=knowledge_src,
+            knowledge_tree=knowledge_tree,
+            policy_src=policy_src,
+            policy_tree=policy_tree,
+        )
+
+        existing = _check_destination(
+            candidates_dir, dirname, bundle, staged_source=staged_source, scratch=staging / ".reexport-existing"
+        )
         if existing is not None:
             return PromotionResult(
                 candidate_dir=existing,
                 written=False,
                 bundle=bundle,
                 base_pinned_at_promote=False,
-                notes=(f"already promoted: {existing} carries identity {bundle.candidate_hash}",),
+                notes=(
+                    (
+                        f"already promoted: {existing} carries identity {bundle.candidate_hash}"
+                        " with an equivalent vendored source (bundle verified, source"
+                        " re-exports byte for byte; README not compared)"
+                    ),
+                ),
             )
 
-        vendored_text, base_pinned = pin_base_in_definition(text, data, bundle.base)
-        source_copy = staging / SOURCE_SUBDIR
-        (source_copy / WORKER_TYPES_SUBDIR).mkdir(parents=True)
-        (source_copy / WORKER_TYPES_SUBDIR / type_path.name).write_text(vendored_text, encoding="utf-8")
-        if knowledge_src is not None:
-            _copy_tree_strict(knowledge_src, source_copy / KNOWLEDGE_SUBDIR / knowledge_tree)
-        if policy_src is not None:
-            _copy_tree_strict(policy_src, source_copy / POLICY_SUBDIR / policy_tree)
         _prove_reproducible(staging, bundle)
 
         promoted_at = time.strftime("%Y-%m-%d", time.gmtime())
-        (staging / "README.md").write_text(
+        (staging / README_NAME).write_text(
             render_readme_stub(
                 slug,
                 bundle,
-                source=source,
                 knowledge_tree=knowledge_tree,
                 policy_tree=policy_tree,
                 base_pinned=base_pinned,
@@ -534,6 +759,11 @@ def promote(
             ),
             encoding="utf-8",
         )
+        # The complete staged tree is what becomes public: last, hold all of
+        # it to the secret-value and host-path rules.
+        refuse_host_paths(staging, needles=_host_path_needles(source, docker_config))
+        refuse_credentials(staging, bundle)
+
         target = candidates_dir / dirname
         if dry_run:
             return PromotionResult(
@@ -567,7 +797,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Promote a worker-type definition from a Config Repo into candidates/"
-            " (vendor-at-promote is strict; never runs git)."
+            " (vendor-at-promote is strict; the whole tree is scanned for secret"
+            " values; never runs git)."
         )
     )
     parser.add_argument("config_repo", type=Path, help="local Config Repo (worker-types/ + knowledge/ + policy/)")
@@ -583,7 +814,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--docker-config",
         type=Path,
         default=None,
-        help="DOCKER_CONFIG directory for resolving a private base tag (the digest never enters the bundle)",
+        help="DOCKER_CONFIG directory for resolving a private base tag (the credential never enters the bundle)",
     )
     parser.add_argument("--dry-run", action="store_true", help="run every check and write nothing")
     return parser
@@ -610,7 +841,7 @@ def main(argv: list[str] | None = None) -> int:
     if result.written:
         print(f"promoted {result.candidate_dir}")
         print(
-            f"next: complete {result.candidate_dir / 'README.md'} (every {README_TODO_MARKER!r}),"
+            f"next: complete {result.candidate_dir / README_NAME} (every {README_TODO_MARKER!r}),"
             " run `pytest tests/test_reference_candidates.py -q`, review the diff, and"
             " commit — the commit is the approval stamp; this script ran no git command"
         )
