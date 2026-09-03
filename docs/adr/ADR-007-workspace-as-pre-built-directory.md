@@ -22,7 +22,7 @@ The canonical engine lives at `benchmarks/sos/workspace/engine/` as a single sou
 
 Workspace tests must be runnable locally from the workspace directory in dev: `cd benchmarks/sos/workspace && pytest cards/fdn/ && pytest engine_tests/` must pass as a meta-check that the workspace itself is valid before staging.
 
-ADRs are not staged into the Workspace. They live host-side under the Notion ADRs container and sync to the SilverquiLLM repo as needed; the agent never sees them.
+ADRs are not staged into the Workspace. They are maintained host-side in this repository under `docs/adr/`; the agent never sees them.
 
 ## Consequences
 
