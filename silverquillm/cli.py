@@ -11,14 +11,13 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import secrets
 import shutil
 import subprocess
 import tempfile
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 # Load .env from repo root into os.environ (values already in the environment take precedence)
@@ -934,13 +933,6 @@ def smoke(image: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _candidate_label(candidate_path: Path) -> str:
-    """The run-dir / run-id label for a candidate path: its directory name
-    (``<slug>--<hash8>`` for a checked-in candidate), as one safe segment."""
-    name = Path(candidate_path).resolve().name or "candidate"
-    return re.sub(r"[^A-Za-z0-9._-]", "-", name).lstrip(".") or "candidate"
-
-
 def _report_contract_run(result) -> None:
     """Echo a Contract Run's outcome (every classified failure included)."""
     for warning in result.warnings:
@@ -997,7 +989,12 @@ def _run_candidate(
 ) -> None:
     """Drive a Candidate Bundle through TheOzolith's implementer Run Contract
     (the body of ``silverquillm run --candidate``)."""
-    from silverquillm.contract import drive_contract_run
+    from silverquillm.contract import (
+        RUNS_DIRNAME,
+        candidate_label,
+        drive_contract_run,
+        new_run_name,
+    )
     from silverquillm.jobdir import BenchmarkNotRunnableError, load_benchmark
     from silverquillm.modes import UnknownModeError, get_mode
     from silverquillm.results_repo import resolve_results_repo
@@ -1011,10 +1008,10 @@ def _run_candidate(
     except (BenchmarkNotRunnableError, UnknownModeError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    label = _candidate_label(candidate_path)
+    label = candidate_label(candidate_path)
     if results_dir is None:
-        results_dir = _REPO_ROOT / "runs" / label
-    run_name = _make_run_name(set_code=benchmark.id, image=label, results_dir=results_dir)
+        results_dir = _REPO_ROOT / RUNS_DIRNAME / label
+    run_name = new_run_name(benchmark.id, label, results_dir)
     run_dir = results_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
     _runner_log_dir = run_dir
@@ -1726,6 +1723,104 @@ def rescore(run_id: str, cards: str | None) -> None:
         run_status=run_status,
         wall_clock_seconds=wall_clock_seconds,
     )
+
+
+# ---------------------------------------------------------------------------
+# Batch queue: scheduler / queue ls / top (#39 §5, #66)
+# ---------------------------------------------------------------------------
+
+_BATCHES_DIR_OPTION = click.option(
+    "--batches-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="The batch queue directory (default: batches/ in this repo)",
+)
+
+
+def _batches_dir(value: Path | None) -> Path:
+    from silverquillm.scheduler import BATCHES_DIRNAME
+
+    return value if value is not None else _REPO_ROOT / BATCHES_DIRNAME
+
+
+@main.command()
+@_BATCHES_DIR_OPTION
+@click.option("--once", is_flag=True, default=False, help="Run every due batch entry, then exit (instead of polling forever)")
+@click.option("--poll-seconds", type=float, default=None, help="Idle poll interval (default: 30)")
+@click.option(
+    "--results-repo", default=None, type=click.Path(file_okay=False, path_type=Path),
+    help="Results repo every run records into (or $SILVERQUILLM_RESULTS_REPO)",
+)
+@click.option("--container-user", default=None, help="uid:gid to run every container as (default: the image's user)")
+def scheduler(
+    batches_dir: Path | None,
+    once: bool,
+    poll_seconds: float | None,
+    results_repo: Path | None,
+    container_user: str | None,
+) -> None:
+    """Run the single-writer batch scheduler over batches/*.toml.
+
+    Scans batch files in name order, respects not_before, consumes run specs
+    in file order (re-reading the file before every not-yet-started run),
+    resolves and records each candidate's identity at run start, executes
+    each run through the bundle run path (`silverquillm run --candidate`),
+    and writes per-run outcomes to batches/state/<batch>.json — never to a
+    batch file. A failed run is recorded and the batch continues. A second
+    scheduler on the same directory refuses to start.
+    """
+    from silverquillm.results_repo import resolve_results_repo
+    from silverquillm.scheduler import (
+        DEFAULT_POLL_SECONDS,
+        Scheduler,
+        SchedulerLockedError,
+        contract_run_executor,
+    )
+
+    runner = Scheduler(
+        _batches_dir(batches_dir),
+        executor=contract_run_executor(container_user=container_user),
+        repo_root=_REPO_ROOT,
+        results_repo=resolve_results_repo(results_repo),
+        poll_seconds=DEFAULT_POLL_SECONDS if poll_seconds is None else poll_seconds,
+        log=lambda message: click.echo(f"{datetime.now(tz=UTC).isoformat(timespec='seconds')} {message}"),
+    )
+    try:
+        if once:
+            count = runner.run_until_idle()
+            click.echo(f"scheduler idle: {count} run(s) executed")
+        else:
+            runner.serve()
+    except SchedulerLockedError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except KeyboardInterrupt:
+        click.echo("scheduler stopped", err=True)
+        raise SystemExit(130) from None
+
+
+@main.group()
+def queue() -> None:
+    """Inspect the batch queue (read-only)."""
+
+
+@queue.command("ls")
+@_BATCHES_DIR_OPTION
+def queue_ls(batches_dir: Path | None) -> None:
+    """One-shot table: every batch, its not_before, per-run specs and states."""
+    from silverquillm.queue_view import build_queue_view, render_queue
+
+    for line in render_queue(build_queue_view(_batches_dir(batches_dir))):
+        click.echo(line)
+
+
+@main.command()
+@_BATCHES_DIR_OPTION
+@click.option("--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds")
+def top(batches_dir: Path | None, interval: float) -> None:
+    """Live, read-only view of the queue: order, not_before, running progress. q quits."""
+    from silverquillm.queue_view import run_top
+
+    run_top(_batches_dir(batches_dir), interval=interval)
 
 
 @main.command("results-init")

@@ -38,3 +38,8 @@ validation.json
 
 benchmarks/*/analysis/*.json
 benchmarks/*/analysis/*.md
+
+# Batch queue: batch files are the operator's desired state (commit them or not,
+# your call); the scheduler's observed state and its lock are local.
+batches/state/
+batches/.scheduler.lock
