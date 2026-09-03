@@ -41,7 +41,6 @@ from theozolith_worker import api
 
 from silverquillm.card_loader import load_all_card_specs
 from silverquillm.card_names import build_card_name_map
-from silverquillm.jobdir import pointer_prompt
 from silverquillm.replay.cli import validate as _replay_validate
 from silverquillm.runner import ContainerLifecycle
 from silverquillm.token_report import render as render_token_report
@@ -866,55 +865,66 @@ def smoke(image: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _container_agent_runner(
-    *, image: str, run_id: str, run_dir: Path, timeout: int, hang_timeout: int,
-    card_name_map: dict[str, str] | None = None,
-):
-    """Return an ``agent_runner`` that launches the container for a Contract Run.
+def _agent_env() -> dict[str, str]:
+    """The model credential(s) for the run container, by name.
 
-    The job dir is bind-mounted at ``/job``; the checkout (``/job/checkout``) and
-    the Output Proposal slot (``/job/output``) live inside it, and
-    ``format-output`` is pointed at ``/job`` via ``THEOZOLITH_JOB``.  The interim
-    ``--image`` path also mounts the checkout at ``/workspace`` and forwards the
-    constant pointer prompt for candidate images predating the harness; genuine
-    harness-as-PID-1 delivery lands with the Candidate-Bundle derived images (#65).
+    Handed to the production ``DockerEngine`` as ``ContainerSpec.env``: it
+    passes each as a bare ``--env NAME`` and supplies the value through its own
+    process environment, so no secret ever appears in argv.
     """
-    def _run(*, job_dir: Path) -> api.AgentOutcome:
-        checkout = job_dir / "checkout"
-        output = job_dir / "output"
-        lifecycle = ContainerLifecycle(
-            image=image,
-            container_name=f"sqm-{run_id}",
-            workspace=checkout,
-            output=output,
-            hard_timeout=timeout,
-            hang_timeout=hang_timeout,
-            env_args=[
-                *_api_key_env_args(),
-                "-e", "THEOZOLITH_JOB=/job",
-                "-e", f"SILVERQUILLM_POINTER_PROMPT={pointer_prompt()}",
-            ],
-            run_dir=run_dir,
-            card_name_map=card_name_map or {},
-            job_dir=job_dir,
-        )
-        result = lifecycle.run()
-        return api.AgentOutcome(
-            completed=(not result.timed_out and result.exit_code == 0),
-            timed_out=result.timed_out,
-            session_died=(not result.timed_out and (result.exit_code or 0) != 0),
-            exit_code=result.exit_code,
-        )
+    return {key: os.environ[key] for key in _API_KEY_ENV_VARS if os.environ.get(key)}
 
-    return _run
+
+def _report_contract_run(result) -> None:
+    """Echo a Contract Run's outcome (every classified failure included)."""
+    for warning in result.warnings:
+        _runner_log(warning, err=True)
+    agent = result.agent_outcome.describe() if result.agent_outcome is not None else "n/a"
+    harness = (result.harness_status or {}).get("phase", "n/a")
+    gate = " -> ".join(result.gate.steps_run) or "not run"
+    if not result.gate.clean:
+        gate += " (findings)"
+    _runner_log(f"Agent: {agent}  Harness: {harness}  Gate: {gate}")
+    _runner_log(f"Proposal status: {result.proposal_status}")
+    if result.eval_result is not None:
+        _runner_log(
+            "Scores — "
+            f"card_correctness={result.eval_result.sos_pass_rate:.3f} "
+            f"fdn_regression={result.eval_result.fdn_pass_rate:.3f} "
+            f"engine_regression={result.eval_result.engine_pass_rate:.3f}"
+        )
+    else:
+        _runner_log("Scores — not evaluated", err=True)
+    if result.record_dir is not None:
+        _runner_log(f"RunRecord written: {result.record_dir}")
+    elif result.record_error:
+        _runner_log(f"RunRecord NOT written: {result.record_error}", err=True)
+    _runner_log(f"Evidence: {result.run_dir / 'contract_run.json'}")
+    for failure in result.failures:
+        _runner_log(
+            f"FAILED [{failure.failure_class}] at {failure.phase}: {failure.reason}", err=True
+        )
+    _runner_log(f"Contract run {'complete' if result.ok else 'FAILED'}: {result.run_id}")
 
 
 @main.command("run-contract")
-@click.option("--image", required=True, help="Docker image name (interim; #65 adds --candidate)")
+@click.option(
+    "--image", required=True,
+    help=(
+        "A TheOzolith run image: its entrypoint is the in-image agent harness "
+        "(theozolith-harness). Candidate-Bundle identity lands with #65."
+    ),
+)
 @click.option("--benchmark", "benchmark_id", required=True, help="Benchmark id (e.g. smoke)")
 @click.option("--mode", "mode_name", default="basic", show_default=True, help="Benchmark Mode (basic|planned)")
-@click.option("--timeout", default=3600, type=int, show_default=True, help="Agent budget in seconds")
-@click.option("--hang-timeout", default=900, type=int, show_default=True, help="Hang timeout in seconds")
+@click.option(
+    "--timeout", default=3600, type=int, show_default=True,
+    help="Agent budget in seconds (the harness's hard agent timeout)",
+)
+@click.option(
+    "--container-user", default=None,
+    help="uid:gid to run the container as (default: the image's user)",
+)
 @click.option(
     "--results-dir", default=None, type=click.Path(file_okay=False, path_type=Path),
     help="Run-artifacts directory (default: docker/<image_dir>/results/)",
@@ -928,11 +938,18 @@ def run_contract(
     benchmark_id: str,
     mode_name: str,
     timeout: int,
-    hang_timeout: int,
+    container_user: str | None,
     results_dir: Path | None,
     results_repo: Path | None,
 ) -> None:
-    """Drive a candidate through the full job-dir contract against a benchmark."""
+    """Drive a candidate through TheOzolith's implementer Run Contract.
+
+    Stages the production job dir, launches the image through the production
+    session protocol (the in-image harness runs the agent and serves the gate
+    over the jobs channel), applies the Output Proposal post-exit, grades the
+    checkout, and records the run. Exits 1 when the run carries a classified
+    failure; the evidence is in the run dir's contract_run.json either way.
+    """
     from silverquillm.contract import drive_contract_run
     from silverquillm.jobdir import BenchmarkNotRunnableError, load_benchmark
     from silverquillm.modes import UnknownModeError, get_mode
@@ -956,11 +973,6 @@ def run_contract(
 
     _runner_log(f"Starting contract run: {run_name}")
     _runner_log(f"Image: {image}  Benchmark: {benchmark.id}  Mode: {mode.name}  Timeout: {timeout}s")
-
-    agent_runner = _container_agent_runner(
-        image=image, run_id=run_name, run_dir=run_dir,
-        timeout=timeout, hang_timeout=hang_timeout,
-    )
     try:
         result = drive_contract_run(
             run_dir=run_dir,
@@ -968,25 +980,17 @@ def run_contract(
             benchmark=benchmark,
             mode=mode,
             budget_seconds=timeout,
-            agent_runner=agent_runner,
-            results_repo=repo,
             image=image,
+            session_factory=api.container_session_factory(api.DockerEngine()),
+            results_repo=repo,
+            agent_env=_agent_env(),
+            container_user=container_user,
         )
+        _report_contract_run(result)
     finally:
         _runner_log_dir = None
-
-    for warning in result.warnings:
-        _runner_log(warning, err=True)
-    _runner_log(f"Proposal status: {result.proposal_status}")
-    _runner_log(
-        "Scores — "
-        f"card_correctness={result.eval_result.sos_pass_rate:.3f} "
-        f"fdn_regression={result.eval_result.fdn_pass_rate:.3f} "
-        f"engine_regression={result.eval_result.engine_pass_rate:.3f}"
-    )
-    if result.record_dir is not None:
-        _runner_log(f"RunRecord written: {result.record_dir}")
-    _runner_log(f"Contract run complete: {run_name}")
+    if not result.ok:
+        raise SystemExit(1)
 
 
 # ---------------------------------------------------------------------------

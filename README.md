@@ -105,6 +105,7 @@ silverquillm run --image my-agent:latest --timeout 7200
 | Command | Purpose |
 | --- | --- |
 | `silverquillm run --image … --timeout …` | Launch a benchmark run. |
+| `silverquillm run-contract --image … --benchmark … [--mode basic\|planned]` | Drive a TheOzolith run image (in-image agent harness as its entrypoint) through the implementer Run Contract: production job dir, gate over the jobs channel, post-exit proposal application, Audited Eval, RunRecord. |
 | `silverquillm smoke --image …` | Validate that an image starts and produces output. |
 | `silverquillm resume <run_id> --timeout …` | Continue from a prior run's final state as an independent leg. |
 | `silverquillm chain <run_id>` | Print the chain of resume legs leading to a run. |
