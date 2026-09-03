@@ -21,8 +21,8 @@ test run — never trusted from this file or the directory name.
 | Instruction hash | `dd959a6bf1060457a6166d318536d1776bb473aa323506e6d7c66204205452f7` |
 | Model / effort | `gpt-5.2-codex` / none (no codex effort is provably enforceable yet — the-ozolith#88, spike #76) |
 | Deterministic image tag | `theozolith/vanilla-codex:sha-3c0a5df9609a6c9e1f517bd28a2083d11480c31d-dd959a6bf106` |
-| Secret slots (names only) | `OPENAI_API_KEY` |
-| Exported | `2026-09-03T03:21:25Z` by theozolith-control 0.3.0 @ `19118cae` (bundle_format_version 2, identity_spec_version 2) |
+| Secret slots (names only) | `CODEX_AUTH_JSON` — the full ChatGPT-plan `auth.json` document (ADR-0052 §5) |
+| Exported | `2026-09-03T05:24:16Z` by theozolith-control 0.3.0 @ `19118cae` (bundle_format_version 2, identity_spec_version 2) |
 
 ## Provenance
 
@@ -41,6 +41,17 @@ test run — never trusted from this file or the directory name.
 - **driver / secrets** are not identity-bearing (BENCH-CONTRACT.md). The
   driver is `builtin:implementer` so the derived image is exactly what a
   deployed implementer runs (managed-scope model bake).
+- **Credential**: the pinned codex adapter registers exactly one secret
+  slot, `CODEX_AUTH_JSON` (`theozolith_worker.config._ADAPTER_CREDENTIAL_ENV`;
+  ADR-0052 §5): the *full* `auth.json` document a one-time
+  `codex login --device-auth` writes, which the harness materializes 0600 into
+  the run's throwaway `CODEX_HOME`. `OPENAI_API_KEY` is **not** a slot — it
+  sits on the adapter's steering blocklist (it would flip the auth mode away
+  from the delivered plan credential), so a bundle declaring it can never
+  authenticate: the harness refuses at agent prepare with
+  `CODEX_AUTH_JSON is not set`. The first Docker-backed run of this candidate
+  (2026-09-03) found exactly that; the slot was corrected and the bundle
+  re-exported (identity unchanged — secrets are not identity-bearing).
 
 ## Run
 

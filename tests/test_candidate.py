@@ -140,7 +140,7 @@ class TestLoadCandidateBundle:
 
         bundle_dir, summary = export_bundle(
             tmp_path, name="fixture-codex", adapter="codex", model="gpt-5.2-codex",
-            base=CODEX_BASE, secrets=("OPENAI_API_KEY",),
+            base=CODEX_BASE, secrets=("CODEX_AUTH_JSON",),
         )
         bundle = load_candidate_bundle(bundle_dir)
         assert bundle.adapter == "codex" and bundle.identity.adapter_identity == "codex"

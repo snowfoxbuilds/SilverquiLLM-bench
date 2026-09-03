@@ -67,7 +67,7 @@ def test_discovery_admits_a_further_candidate_with_nothing_to_register(tmp_path:
         shutil.copytree(path, tree / path.name)
     newcomer = make_candidate_dir(
         tree, slug="future-codex", name="future-codex", adapter="codex",
-        model="gpt-5.3-codex", base=CODEX_BASE, secrets=("OPENAI_API_KEY",),
+        model="gpt-5.3-codex", base=CODEX_BASE, secrets=("CODEX_AUTH_JSON",),
     )
     assert newcomer.parent == tree and newcomer.name.startswith("future-codex--")
     discovered = _candidate_dirs(tree)

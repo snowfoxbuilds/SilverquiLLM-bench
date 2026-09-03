@@ -107,7 +107,7 @@ its identity (never trusted from a recorded value), builds its derived image
 through the verified standalone build, launches it by image ID with the
 in-image harness as PID 1, and records the run under the recomputed identity.
 The bundle's `secret_slots` name the environment variables the bench binds
-(`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` for claude, `OPENAI_API_KEY`
+(`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` for claude, `CODEX_AUTH_JSON`
 for codex). The current vanilla reference candidates ship under `candidates/`;
 they are examples, not a closed set — a further candidate is one more exported
 directory, with no adapter or model registry to update.

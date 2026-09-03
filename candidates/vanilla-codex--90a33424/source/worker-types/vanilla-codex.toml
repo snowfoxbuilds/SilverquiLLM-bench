@@ -21,6 +21,10 @@ model = "gpt-5.2-codex"
 base = "ghcr.io/snowfoxbuilds/theozolith-run-codex:sha-3c0a5df9609a6c9e1f517bd28a2083d11480c31d@sha256:8071882367362695ecc44919b748835f53d7d2e637c37213ab35ab43d5958162"
 setup = []
 
-# Secret SLOT name only — the bench binds it from its environment.
+# Secret SLOT name only — the bench binds it from its environment. The codex
+# adapter's single registered credential (ADR-0052 §5) is the FULL ChatGPT-plan
+# auth.json document captured by a one-time `codex login --device-auth`;
+# `OPENAI_API_KEY` is on the adapter's steering blocklist (it would flip the
+# auth mode away from the delivered plan credential) and is not a slot.
 [secrets]
-OPENAI_API_KEY = ""
+CODEX_AUTH_JSON = ""

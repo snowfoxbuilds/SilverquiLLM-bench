@@ -47,7 +47,9 @@ standalone build (`theozolith candidate build` semantics: private snapshot,
 full verification, `docker build`, deterministic tag), launches it by image ID
 with the in-image harness as PID 1, and records the run under the recomputed
 identity. The bundle's `secret_slots` name the environment variables the bench
-binds from its own environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …).
+binds from its own environment (`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`
+for claude, `CODEX_AUTH_JSON` for codex — the slot names TheOzolith's adapters
+register, `theozolith_worker.config._ADAPTER_CREDENTIAL_ENV`, …).
 
 ## The reference candidates
 

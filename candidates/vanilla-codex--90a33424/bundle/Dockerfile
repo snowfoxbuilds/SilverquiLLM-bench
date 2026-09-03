@@ -5,5 +5,5 @@ RUN theozolith-adapter materialize --adapter codex --model gpt-5.2-codex --scope
 RUN chmod -R a+rwX /home/ozolith
 LABEL theozolith.base-digest="sha256:8071882367362695ecc44919b748835f53d7d2e637c37213ab35ab43d5958162"
 LABEL theozolith.instruction-hash="dd959a6bf1060457a6166d318536d1776bb473aa323506e6d7c66204205452f7"
-LABEL theozolith.built-at="2026-09-03T03:21:25Z"
+LABEL theozolith.built-at="2026-09-03T05:24:16Z"
 USER ozolith

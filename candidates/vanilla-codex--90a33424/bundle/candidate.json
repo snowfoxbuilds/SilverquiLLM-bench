@@ -5,7 +5,7 @@
   "bundle_format_version": 2,
   "driver": "builtin:implementer",
   "effort": "",
-  "exported_at": "2026-09-03T03:21:25Z",
+  "exported_at": "2026-09-03T05:24:16Z",
   "identity_spec_version": 2,
   "instruction_hash": "dd959a6bf1060457a6166d318536d1776bb473aa323506e6d7c66204205452f7",
   "knowledge": "",
@@ -16,7 +16,7 @@
   "policy_pin": "",
   "product_version": "0.3.0",
   "secret_slots": [
-    "OPENAI_API_KEY"
+    "CODEX_AUTH_JSON"
   ],
   "setup": [],
   "worker_type": "vanilla-codex"
