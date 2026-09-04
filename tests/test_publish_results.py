@@ -477,6 +477,31 @@ def _snapshot(root: Path) -> dict[str, tuple[Any, ...]]:
     return out
 
 
+def _replace_with_directory(path: Path) -> Path:
+    """*path* becomes a directory holding one foreign file — what a corrupted
+    or hostile record file could hide.  Returns the nested file."""
+    path.unlink()
+    path.mkdir()
+    nested = path / "nested.txt"
+    nested.write_text("foreign\n")
+    return nested
+
+
+def _replace_with_symlink(path: Path, target: Path) -> None:
+    path.unlink()
+    path.symlink_to(target)
+
+
+def _replace_with_file(path: Path) -> None:
+    shutil.rmtree(path)
+    path.write_text("not a directory\n")
+
+
+def _replace_with_directory_symlink(path: Path, target: Path) -> None:
+    shutil.rmtree(path)
+    path.symlink_to(target)
+
+
 def _journal_payload(**overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "schema_version": 1, "staging": ".publish-staging-0123abcd", "planned": ["r1", "r2"],
@@ -522,7 +547,7 @@ class TestJournalContainment:
         self._assert_refused_without_mutation(arena, match="staging")
         # The containment guard refuses the same name even when asked directly.
         with pytest.raises(publish_mod.PublicationRecoveryError, match="plain directory name"):
-            publish_mod._removable_child(arena["dest"], "../sentinel", allowed_entries=())
+            publish_mod._removable_directory(arena["dest"], "../sentinel")
         assert arena["sentinel"].is_dir()
 
     @pytest.mark.parametrize(
@@ -593,6 +618,96 @@ class TestJournalContainment:
         (dest / "r1").write_text("not a directory\n")
         self._write_journal(dest, _journal_payload(planned=["r1", "r2"], committed=["r1"]))
         self._assert_refused_without_mutation(arena, match="not a directory")
+
+    def _committed(self, world, arena, name: str) -> Path:
+        """A complete committed record copied from the pre-existing one, beside
+        an empty staging directory."""
+        dest = arena["dest"]
+        (dest / ".publish-staging-0123abcd").mkdir(exist_ok=True)
+        shutil.copytree(dest / world["invalid"], dest / name)
+        return dest / name
+
+    def test_a_record_file_that_is_a_directory_is_refused_and_what_it_holds_survives(self, world, arena) -> None:
+        record = self._committed(world, arena, "r1")
+        nested = _replace_with_directory(record / "manifest.json")
+        self._write_journal(arena["dest"], _journal_payload(planned=["r1", "r2"], committed=["r1"]))
+        self._assert_refused_without_mutation(arena, match="manifest.json is a directory, not the regular file")
+        assert nested.read_text() == "foreign\n"
+
+    def test_a_record_file_that_is_a_special_file_is_refused(self, world, arena) -> None:
+        if not hasattr(os, "mkfifo"):
+            pytest.skip("FIFOs are not supported on this platform")
+        record = self._committed(world, arena, "r1")
+        (record / "scores.json").unlink()
+        os.mkfifo(record / "scores.json")
+        self._write_journal(arena["dest"], _journal_payload(planned=["r1", "r2"], committed=["r1"]))
+        self._assert_refused_without_mutation(arena, match="scores.json is a FIFO, not the regular file")
+
+    def test_a_record_file_that_is_a_symlink_is_refused_not_followed(self, world, arena) -> None:
+        record = self._committed(world, arena, "r1")
+        _replace_with_symlink(record / "scores.json", arena["sentinel"] / "keep.txt")
+        self._write_journal(arena["dest"], _journal_payload(planned=["r1", "r2"], committed=["r1"]))
+        self._assert_refused_without_mutation(arena, match="scores.json is a symlink, not the regular file")
+
+    def test_a_committed_or_landed_record_must_hold_every_record_file(self, world, arena) -> None:
+        record = self._committed(world, arena, "r1")
+        (record / "scores.json").unlink()
+        self._write_journal(arena["dest"], _journal_payload(planned=["r1", "r2"], committed=["r1"]))
+        self._assert_refused_without_mutation(arena, match="lacks scores.json")
+        # The rename that landed before the journal caught up is held to the same bar.
+        self._write_journal(arena["dest"], _journal_payload(planned=["r1", "r2"], committing="r1", committed=[]))
+        self._assert_refused_without_mutation(arena, match="lacks scores.json")
+
+    @pytest.mark.parametrize(
+        "malform, match",
+        [
+            (lambda staged, arena: (staged / "notes.txt").write_text("foreign\n"), "did not create"),
+            (lambda staged, arena: _replace_with_directory(staged / "manifest.json"), "manifest.json is a directory"),
+            (lambda staged, arena: _replace_with_symlink(staged / "scores.json", arena["sentinel"] / "keep.txt"), "scores.json is a symlink"),
+            (lambda staged, arena: _replace_with_file(staged), "not a directory"),
+            (lambda staged, arena: _replace_with_directory_symlink(staged, arena["sentinel"]), "is a symlink"),
+        ],
+        ids=["foreign-file", "manifest-directory", "scores-symlink", "record-plain-file", "record-symlink"],
+    )
+    def test_malformed_staged_content_is_refused(self, world, arena, malform, match: str) -> None:
+        dest = arena["dest"]
+        staging = dest / ".publish-staging-0123abcd"
+        staging.mkdir()
+        shutil.copytree(dest / world["invalid"], staging / "r2")
+        malform(staging / "r2", arena)
+        self._write_journal(dest, _journal_payload(planned=["r1", "r2"], committed=[]))
+        self._assert_refused_without_mutation(arena, match=match)
+
+    def test_one_target_failing_the_proof_leaves_every_target_in_place(self, world, arena) -> None:
+        """The whole target set is validated before the first removal: a valid
+        committed record, a valid partially staged record and the staging
+        directory all survive when one committed record fails."""
+        dest = arena["dest"]
+        staging = dest / ".publish-staging-0123abcd"
+        first = self._committed(world, arena, "r1")
+        nested = _replace_with_directory(self._committed(world, arena, "r2") / "manifest.json")
+        shutil.copytree(dest / world["invalid"], staging / "r3")
+        (staging / "r3" / "scores.json").unlink()
+        self._write_journal(dest, _journal_payload(planned=["r1", "r2", "r3"], committed=["r1", "r2"]))
+        self._assert_refused_without_mutation(arena, match="manifest.json is a directory")
+        assert first.is_dir() and nested.is_file() and (staging / "r3" / "manifest.json").is_file()
+
+    def test_a_record_whose_copy_was_interrupted_is_rolled_back(self, world, prior) -> None:
+        """The process can die between the two copies: a staged record holding
+        only manifest.json is what the transaction created, and it goes."""
+        dest = world["dest"]
+        tx = publish_mod.PublicationTransaction(_plan(world, [world["valid"]]))
+        tx.begin()
+        assert tx.staging is not None
+        staged = tx.staging / world["valid"]
+        staged.mkdir()
+        shutil.copyfile(tx.runs[0].source_dir / "manifest.json", staged / "manifest.json")
+        report = publish_mod.inspect_publication(dest)
+        assert report is not None and report.action == "rolled-back" and not report.performed
+        report = publish_mod.recover_publication(dest)
+        assert report is not None and report.action == "rolled-back" and report.records == () and report.performed
+        assert _entries(dest) == [world["invalid"]] and _tree_with_mtimes(dest / world["invalid"]) == prior["snapshot"]
+        assert not publish_mod.journal_path(dest).exists()
 
     def test_valid_interrupted_and_completed_transactions_still_recover(self, world, prior) -> None:
         dest = world["dest"]

@@ -46,10 +46,16 @@ destination (the staging name in the exact format ``begin`` generates; no
 separator, ``.``/``..`` or absolute path; no unexpected field, repeated name
 or committing/committed inconsistency), and every derived cleanup target is
 proven — before anything is removed — to be a real directory that resolves
-to an immediate child of the destination and holds nothing the transaction
-did not create; a symlink is refused, never followed.  A journal that fails
-any of this raises :class:`PublicationRecoveryError` and leaves the
-destination unchanged.
+to an immediate child of the destination and holds only what the
+transaction copies: ``manifest.json`` and ``scores.json`` as regular files
+(by ``lstat``, so a directory, symlink, FIFO, socket or device under either
+name is refused — a directory could hold anything).  A record still in
+staging may hold a subset of the two, because the process can die between
+the copies; a committed record, or one whose rename landed while
+``committing`` named it, must hold both.  A symlink anywhere is refused,
+never followed.  A journal that fails any of this raises
+:class:`PublicationRecoveryError`, keeps the journal, and leaves every
+byte, name and mtime under the destination unchanged.
 
 **``--dry-run`` is read-only.**  It never recovers: a pending journal is
 inspected, the recovery that would occur is reported, and the exit status is
@@ -470,19 +476,33 @@ def _read_journal(path: Path) -> Journal:
     return Journal.from_dict(data)
 
 
-def _removable_child(dest: Path, name: str, *, allowed_entries: Iterable[str]) -> Path | None:
-    """``dest/name`` as the one entry a recovery step may remove, or ``None``
-    when nothing is there.  Proves what a rollback needs before it deletes
-    anything: *name* is one validated component, the entry is an immediate
-    child of *dest* after resolution, it is a real directory (the
-    transaction creates nothing else) and holds only *allowed_entries* as
-    regular files or directories — never a symlink, anywhere.  Anything
-    else is a :class:`PublicationRecoveryError`."""
+def _file_kind(mode: int) -> str:
+    if stat.S_ISDIR(mode):
+        return "a directory"
+    if stat.S_ISLNK(mode):
+        return "a symlink"
+    if stat.S_ISFIFO(mode):
+        return "a FIFO"
+    if stat.S_ISSOCK(mode):
+        return "a socket"
+    if stat.S_ISCHR(mode) or stat.S_ISBLK(mode):
+        return "a device"
+    return "a special file"
+
+
+def _removable_directory(parent: Path, name: str) -> Path | None:
+    """``parent/name`` as a directory a recovery step may remove, or ``None``
+    when nothing is there.  Proves the containment half of what a rollback
+    needs: *name* is one validated component, and the entry is a real
+    directory — never a symlink, which is refused rather than followed —
+    that resolves to an immediate child of *parent*.  What the directory may
+    hold is the other half: :func:`_validate_record` for a record,
+    :func:`_validate_staging` for the staging tree."""
     if not (_safe_record_name(name) or _STAGING_NAME_RE.fullmatch(name)):
         raise PublicationRecoveryError(f"refusing to remove {name!r}: not a plain directory name")
-    target = dest / name
-    if target.parent != dest or target.name != name:
-        raise PublicationRecoveryError(f"refusing to remove {name!r}: not an immediate child of {dest}")
+    target = parent / name
+    if target.parent != parent or target.name != name:
+        raise PublicationRecoveryError(f"refusing to remove {name!r}: not an immediate child of {parent}")
     try:
         mode = os.lstat(target).st_mode
     except FileNotFoundError:
@@ -494,16 +514,60 @@ def _removable_child(dest: Path, name: str, *, allowed_entries: Iterable[str]) -
         )
     if not stat.S_ISDIR(mode):
         raise PublicationRecoveryError(f"{target} is not a directory; the transaction did not create it")
-    if Path(os.path.realpath(target)).parent != Path(os.path.realpath(dest)):
-        raise PublicationRecoveryError(f"{target} does not resolve to an immediate child of {dest}")
-    allowed = set(allowed_entries)
-    for entry in target.iterdir():
-        if entry.name not in allowed or entry.is_symlink():
+    if Path(os.path.realpath(target)).parent != Path(os.path.realpath(parent)):
+        raise PublicationRecoveryError(f"{target} does not resolve to an immediate child of {parent}")
+    return target
+
+
+def _entry_modes(directory: Path) -> dict[str, int]:
+    """Each entry of *directory* with its ``lstat`` mode: the type of the
+    entry itself, never of what a link points at."""
+    try:
+        return {entry.name: os.lstat(entry).st_mode for entry in directory.iterdir()}
+    except OSError as exc:
+        raise PublicationRecoveryError(f"cannot inspect {directory}: {exc}") from exc
+
+
+def _validate_record(target: Path, *, complete: bool) -> None:
+    """*target* holds record files only, each a regular file — never a
+    directory (which could hold anything), a symlink, a FIFO, a socket or a
+    device: the transaction copies regular files and nothing else.  A record
+    still in staging may hold a subset (the process can die between the two
+    copies); a *complete* one — committed, or renamed into place while
+    ``committing`` named it — holds every record file."""
+    modes = _entry_modes(target)
+    for name, mode in sorted(modes.items()):
+        if name not in RECORD_FILES:
             raise PublicationRecoveryError(
-                f"{target} holds {entry.name!r}, which the transaction did not create; refusing to"
+                f"{target} holds {name!r}, which the transaction did not create; refusing to"
                 " remove the directory"
             )
-    return target
+        if not stat.S_ISREG(mode):
+            raise PublicationRecoveryError(
+                f"{target / name} is {_file_kind(mode)}, not the regular file the transaction"
+                f" copies; refusing to remove {target}"
+            )
+    missing = [name for name in RECORD_FILES if name not in modes]
+    if complete and missing:
+        raise PublicationRecoveryError(
+            f"{target} lacks {', '.join(missing)}; a committed record holds every record file, so"
+            " the transaction did not create this directory — refusing to remove it"
+        )
+
+
+def _validate_staging(staging: Path, planned: Iterable[str]) -> None:
+    """*staging* holds only planned record directories, each a real directory
+    holding a subset of the record files as regular files."""
+    allowed = set(planned)
+    for name in sorted(_entry_modes(staging)):
+        if name not in allowed:
+            raise PublicationRecoveryError(
+                f"{staging} holds {name!r}, which the transaction did not create; refusing to"
+                " remove the directory"
+            )
+        record = _removable_directory(staging, name)
+        if record is not None:
+            _validate_record(record, complete=False)
 
 
 def _committed_targets(dest: Path, journal: Journal) -> list[str]:
@@ -518,26 +582,41 @@ def _committed_targets(dest: Path, journal: Journal) -> list[str]:
 
 
 def _validate_rollback(dest: Path, journal: Journal) -> tuple[list[tuple[str, Path | None]], Path | None]:
-    """Every path a rollback will remove, proven removable — before any
+    """Every path a rollback will remove — the staging tree and each
+    committed record, contents included — proven removable before any
     deletion, so a journal that fails the proof leaves the destination
     exactly as it was."""
-    staging = _removable_child(dest, journal.staging, allowed_entries=journal.planned)
+    staging = _removable_directory(dest, journal.staging)
     if staging is not None:
-        for entry in staging.iterdir():
-            _removable_child(staging, entry.name, allowed_entries=RECORD_FILES)
-    records = [
-        (name, _removable_child(dest, name, allowed_entries=RECORD_FILES))
-        for name in _committed_targets(dest, journal)
-    ]
+        _validate_staging(staging, journal.planned)
+    records: list[tuple[str, Path | None]] = []
+    for name in _committed_targets(dest, journal):
+        target = _removable_directory(dest, name)
+        if target is not None:
+            _validate_record(target, complete=True)
+        records.append((name, target))
     return records, staging
+
+
+def _validate_completion(dest: Path, journal: Journal) -> Path | None:
+    """The one path a completion removes — the staging directory, empty once
+    every record was renamed out of it — proven removable."""
+    staging = _removable_directory(dest, journal.staging)
+    if staging is not None and (left := sorted(_entry_modes(staging))):
+        raise PublicationRecoveryError(
+            f"{staging} still holds {', '.join(map(repr, left))} though the journal records every"
+            " record as committed; refusing to remove it"
+        )
+    return staging
 
 
 def rollback_journal(dest: Path, journal: Journal) -> list[str]:
     """Undo a journaled transaction: remove the committed record directories
     (plus the one whose rename completed before the journal could say so),
     the staging directory, then the journal.  Only names the journal lists
-    are ever touched, each proven an immediate real child of *dest* first;
-    a name that fails the proof aborts before anything is removed."""
+    are ever touched, each proven an immediate real child of *dest* holding
+    only what the transaction copies; a target that fails the proof aborts
+    before anything is removed."""
     dest = Path(dest)
     records, staging = _validate_rollback(dest, journal)
     removed: list[str] = []
@@ -554,7 +633,7 @@ def rollback_journal(dest: Path, journal: Journal) -> list[str]:
 def _complete_journal(dest: Path, journal: Journal) -> None:
     """Every record is in place: drop the (empty) staging directory and the
     journal — the staging directory proven removable first."""
-    staging = _removable_child(dest, journal.staging, allowed_entries=())
+    staging = _validate_completion(dest, journal)
     if staging is not None:
         shutil.rmtree(staging)
     os.unlink(journal_path(dest))
@@ -736,7 +815,7 @@ def inspect_publication(dest: Path) -> RecoveryReport | None:
     journal = _read_journal(path)
     dest = Path(dest)
     if journal.complete:
-        _removable_child(dest, journal.staging, allowed_entries=())
+        _validate_completion(dest, journal)
         return RecoveryReport(action="completed", records=tuple(journal.committed), performed=False)
     records, _staging = _validate_rollback(dest, journal)
     return RecoveryReport(action="rolled-back", records=tuple(name for name, _ in records), performed=False)
