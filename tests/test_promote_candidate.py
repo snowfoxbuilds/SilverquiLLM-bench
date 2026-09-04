@@ -19,6 +19,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -560,3 +561,164 @@ class TestCli:
         assert code == 1
         assert "REFUSED" in capsys.readouterr().err
         assert _entries(candidates) == []
+
+
+def _tree_snapshot(root: Path) -> dict[str, tuple[Any, ...]]:
+    """Every entry under *root* — mode, mtime and bytes or link target.  The
+    root's own stat is left out: staging is created and removed beside the
+    candidates, which necessarily touches the root directory's mtime, while
+    nothing inside it may change."""
+    out: dict[str, tuple[Any, ...]] = {}
+    for p in sorted(root.rglob("*")):
+        st = p.lstat()
+        payload = os.readlink(p) if p.is_symlink() else (p.read_bytes() if p.is_file() else None)
+        out[str(p.relative_to(root))] = (st.st_mode, st.st_mtime_ns, payload)
+    return out
+
+
+class TestCleanup:
+    """A refusal or a dry run leaves the destination tree exactly as it was —
+    existence, entries, bytes and mtimes — and never leaves staging behind;
+    when staging *cannot* be removed the failure is loud, names the retained
+    path, and echoes no byte of what it holds."""
+
+    def _existing(self, tmp_path: Path) -> tuple[Path, Path]:
+        """A candidates tree already holding one promoted candidate of another identity."""
+        source = _source(tmp_path)
+        candidates = tmp_path / "candidates"
+        _promote(source, candidates, resolve_digest=lambda ref: DIGEST_B)
+        return source, candidates
+
+    def test_a_dry_run_preserves_the_destination_tree(self, tmp_path: Path, no_git) -> None:
+        source, candidates = self._existing(tmp_path)
+        before = _tree_snapshot(candidates)
+        result = _promote(source, candidates, dry_run=True)
+        assert result.written is False
+        assert _tree_snapshot(candidates) == before and not any(n.startswith(".") for n in _entries(candidates))
+
+    @pytest.mark.parametrize(
+        "refuse",
+        [
+            lambda source, candidates: shutil.rmtree(source / "knowledge" / "gold" / promote_mod.PUBLISHABLE_MARKER, ignore_errors=True)
+            or (source / "knowledge" / "gold" / promote_mod.PUBLISHABLE_MARKER).unlink(),
+            lambda source, candidates: (source / "knowledge" / "gold" / "NOTES.md").write_text(f"{FAKE_ANTHROPIC_KEY}\n", encoding="utf-8"),
+            lambda source, candidates: (source / "knowledge" / "gold" / "escape").symlink_to(candidates),
+            lambda source, candidates: (source / "worker-types" / f"{TYPE}.toml").write_text(
+                (source / "worker-types" / f"{TYPE}.toml").read_text(encoding="utf-8") + f"# exported from {source.resolve()}\n",
+                encoding="utf-8",
+            ),
+        ],
+        ids=["missing-marker", "credential", "symlink-in-source", "host-path-in-definition"],
+    )
+    def test_every_ordinary_refusal_preserves_the_destination_tree(self, tmp_path: Path, no_git, refuse) -> None:
+        source, candidates = self._existing(tmp_path)
+        refuse(source, candidates)
+        before = _tree_snapshot(candidates)
+        with pytest.raises(promote_mod.PromotionRefused):
+            _promote(source, candidates)
+        assert _tree_snapshot(candidates) == before and not any(n.startswith(".") for n in _entries(candidates))
+
+    def test_conflicts_with_an_existing_candidate_preserve_the_destination_tree(self, tmp_path: Path, no_git) -> None:
+        source = _source(tmp_path)
+        candidates = tmp_path / "candidates"
+        first = _promote(source, candidates, slug="alpha")
+        before = _tree_snapshot(candidates)
+        with pytest.raises(promote_mod.PromotionRefused, match="deduplicating"):
+            _promote(source, candidates, slug="beta")
+        assert _tree_snapshot(candidates) == before
+        dockerfile = first.candidate_dir / "bundle" / "Dockerfile"
+        dockerfile.write_text(dockerfile.read_text(encoding="utf-8") + "RUN echo tampered\n", encoding="utf-8")
+        before = _tree_snapshot(candidates)
+        with pytest.raises(promote_mod.PromotionRefused, match="not this candidate"):
+            _promote(source, candidates, slug="alpha")
+        assert _tree_snapshot(candidates) == before and _entries(candidates) == [first.candidate_dir.name]
+
+    def test_a_candidates_dir_this_invocation_created_is_removed_when_nothing_was_written(self, tmp_path: Path, no_git) -> None:
+        source = _source(tmp_path)
+        candidates = tmp_path / "fresh" / "candidates"
+        assert _promote(source, candidates, dry_run=True).written is False
+        assert not candidates.exists(), "a dry run leaves no empty candidates directory behind"
+        (source / "knowledge" / "gold" / "NOTES.md").write_text(f"{FAKE_ANTHROPIC_KEY}\n", encoding="utf-8")
+        with pytest.raises(promote_mod.PromotionRefused):
+            _promote(source, candidates)
+        assert not candidates.exists(), "a refusal leaves no empty candidates directory behind"
+        (source / "knowledge" / "gold" / "NOTES.md").unlink()
+        result = _promote(source, candidates)
+        assert result.written and _entries(candidates) == [result.candidate_dir.name]
+
+    def test_a_pre_existing_empty_candidates_dir_is_kept(self, tmp_path: Path, no_git) -> None:
+        source = _source(tmp_path)
+        candidates = tmp_path / "candidates"
+        candidates.mkdir()
+        os.utime(candidates, (1_600_000_000, 1_600_000_000))
+        assert _promote(source, candidates, dry_run=True).written is False
+        assert candidates.is_dir() and _entries(candidates) == []
+
+    @pytest.mark.parametrize("slug", ["bad/slug", "a--b", ".hidden", "with space", ""])
+    def test_an_invalid_slug_is_refused_before_anything_is_staged(self, tmp_path: Path, no_git, slug: str) -> None:
+        source = _source(tmp_path)
+        candidates = tmp_path / "candidates"
+        with pytest.raises(promote_mod.PromotionRefused, match="invalid candidate slug|must match") as info:
+            _promote(source, candidates, slug=slug or "x/y")
+        assert "nothing was staged" in str(info.value) or slug == ""
+        assert not candidates.exists()
+
+    def _deny_staging_removal(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        real = shutil.rmtree
+
+        def denied(path, *a, **kw):
+            if Path(path).name.startswith(".promote-"):
+                raise PermissionError(1, "Operation not permitted")
+            return real(path, *a, **kw)
+
+        monkeypatch.setattr(shutil, "rmtree", denied)
+
+    def test_a_staging_cleanup_failure_after_a_credential_refusal_is_loud_and_echoes_nothing(
+        self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        source = _source(tmp_path, base=PINNED_BASE)
+        sample = FAKE_CREDENTIALS["OpenAI API key"]
+        (source / "knowledge" / "gold" / "NOTES.md").write_text(f"# notes\n\n{sample}\n", encoding="utf-8")
+        candidates = tmp_path / "candidates"
+        self._deny_staging_removal(monkeypatch)
+        with pytest.raises(promote_mod.PromotionCleanupError) as info:
+            _promote(source, candidates)
+        exc = info.value
+        assert exc.staging.parent == candidates and exc.staging.is_dir(), "the retained path is real and named"
+        assert (exc.staging / "source" / "knowledge" / "gold" / "NOTES.md").read_text(encoding="utf-8").strip().endswith(sample)
+        message = str(exc)
+        assert str(exc.staging) in message and "KEPT" in message and "'nothing written' guarantee was NOT met" in message
+        assert isinstance(exc.refusal, promote_mod.PromotionRefused) and "OpenAI API key" in str(exc.refusal)
+        assert isinstance(exc.__cause__, PermissionError)
+        for text in (message, str(exc.refusal), str(exc.__cause__), str(exc.__context__)):
+            assert sample not in text
+        # The CLI reports the refusal and the failed cleanup, exit 2, no traceback, no value.
+        code = promote_mod.main([str(source), TYPE, "--candidates-dir", str(candidates)])
+        out, err = capsys.readouterr()
+        assert code == 2 and "REFUSED" in err and "CLEANUP FAILED" in err and ".promote-" in err and "KEPT" in err
+        assert sample not in out + err and "Traceback" not in out + err
+        assert len([n for n in _entries(candidates) if n.startswith(".promote-")]) == 2, "both retained trees are there to inspect"
+        monkeypatch.undo()
+        for name in _entries(candidates):
+            shutil.rmtree(candidates / name)
+
+    def test_a_staging_cleanup_failure_after_a_dry_run_is_loud_too(self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+        source = _source(tmp_path, base=PINNED_BASE)
+        candidates = tmp_path / "candidates"
+        self._deny_staging_removal(monkeypatch)
+        with pytest.raises(promote_mod.PromotionCleanupError) as info:
+            _promote(source, candidates, dry_run=True)
+        assert info.value.refusal is None and "wrote no candidate" in str(info.value)
+        code = promote_mod.main([str(source), TYPE, "--candidates-dir", str(candidates), "--dry-run"])
+        out, err = capsys.readouterr()
+        assert code == 2 and "REFUSED" not in err and "CLEANUP FAILED" in err and "Traceback" not in out + err
+        monkeypatch.undo()
+        for name in _entries(candidates):
+            shutil.rmtree(candidates / name)
+
+    def test_a_successful_promotion_leaves_only_the_candidate(self, tmp_path: Path, no_git) -> None:
+        source = _source(tmp_path)
+        candidates = tmp_path / "candidates"
+        result = _promote(source, candidates)
+        assert _entries(candidates) == [result.candidate_dir.name]
+        assert _entries(result.candidate_dir) == ["README.md", "bundle", "source"]

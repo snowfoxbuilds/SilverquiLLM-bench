@@ -58,10 +58,20 @@ candidate name in ``candidates/`` is refused, never followed: a curated
 candidate is what the repository holds.
 
 Idempotent and side-effect-free on refusal: every check runs against a
-private staging directory beside the destination, and the candidate
-directory appears through one atomic rename at the very end.  This script
-never runs git: the operator reviews the new directory and commits it — the
-commit is the approval stamp.
+private staging directory beside the destination (same filesystem, so the
+final rename is atomic), and the candidate directory appears through one
+atomic rename at the very end.  The slug is validated before staging is
+created; a ``candidates/`` directory this invocation created is removed
+again when a refusal or a dry run leaves it empty; and the staging directory
+is removed strictly — never with errors ignored — because it may hold the
+very content promotion refused, a rejected credential value included.  When
+that removal fails, promotion raises :class:`PromotionCleanupError` instead
+of pretending: it names the retained staging path (never its bytes), says
+the "nothing written" guarantee was not met, and the CLI exits 2.  The
+retained tree must be inspected and removed by hand and is never committed
+(``candidates/.promote-*`` is ignored by the repository).  This script never
+runs git: the operator reviews the new directory and commits it — the commit
+is the approval stamp.
 
 Usage::
 
@@ -128,6 +138,21 @@ Clock = Callable[[], str]
 
 class PromotionRefused(Exception):
     """The candidate cannot be promoted; nothing was written."""
+
+
+class PromotionCleanupError(Exception):
+    """Promotion wrote no candidate, but its private staging directory could
+    not be removed: the "nothing written" guarantee was NOT met.  *staging*
+    is the retained path — inspect it and remove it by hand; it may hold the
+    very content promotion refused (a rejected credential value included), so
+    its bytes are never echoed and it must never be committed.  *refusal* is
+    the refusal that preceded the failed cleanup, if any (a dry run has
+    none)."""
+
+    def __init__(self, message: str, *, staging: Path, refusal: PromotionRefused | None) -> None:
+        super().__init__(message)
+        self.staging = staging
+        self.refusal = refusal
 
 
 @dataclass(frozen=True)
@@ -704,14 +729,30 @@ def promote(
     source = Path(source).resolve()
     candidates_dir = Path(candidates_dir)
     slug = slug or worker_type
+    if not _TREE_NAME.fullmatch(slug) or "--" in slug:
+        raise PromotionRefused(
+            f"invalid candidate slug {slug!r}: one safe path segment ([A-Za-z0-9][A-Za-z0-9._-]*)"
+            " without '--' — nothing was staged"
+        )
     type_path, text, data = _read_definition(source, worker_type)
     knowledge_tree = _referenced_tree(data, "knowledge", f"{KNOWLEDGE_SUBDIR}/")
     policy_tree = _referenced_tree(data, "policy", f"{POLICY_SUBDIR}/")
     knowledge_src = check_knowledge_publishable(source, knowledge_tree) if knowledge_tree else None
     policy_src = _check_policy_present(source, policy_tree) if policy_tree else None
 
-    candidates_dir.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f".promote-{slug}-", dir=candidates_dir))
+    created_candidates_dir = not os.path.lexists(candidates_dir)
+    try:
+        candidates_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise PromotionRefused(f"cannot create {candidates_dir}: {exc.strerror or exc}") from exc
+    try:
+        # Beside the destination: the same filesystem, so the final rename is
+        # atomic; dot-prefixed, so it is never a candidate to any reader.
+        staging = Path(tempfile.mkdtemp(prefix=f".promote-{slug}-", dir=candidates_dir))
+    except OSError as exc:
+        _remove_if_created_and_empty(candidates_dir, created=created_candidates_dir)
+        raise PromotionRefused(f"cannot create a staging directory under {candidates_dir}: {exc.strerror or exc}") from exc
+    failure: BaseException | None = None
     try:
         try:
             ozcandidate.export_candidate(
@@ -801,8 +842,57 @@ def promote(
             bundle=bundle,
             base_pinned_at_promote=base_pinned,
         )
+    except BaseException as exc:
+        failure = exc
+        raise
     finally:
-        shutil.rmtree(staging, ignore_errors=True)
+        _discard_staging(
+            staging,
+            candidates_dir,
+            created=created_candidates_dir,
+            refusal=failure if isinstance(failure, PromotionRefused) else None,
+        )
+
+
+def _remove_if_created_and_empty(candidates_dir: Path, *, created: bool) -> None:
+    """A ``candidates/`` directory this invocation created is not left behind
+    when nothing was written into it."""
+    if not created:
+        return
+    try:
+        os.rmdir(candidates_dir)
+    except OSError:
+        pass  # not empty (a candidate was written), or already gone
+
+
+def _discard_staging(staging: Path, candidates_dir: Path, *, created: bool, refusal: PromotionRefused | None) -> None:
+    """Remove the private staging directory — strictly, never with errors
+    ignored: it may hold the very content promotion refused.  After a
+    successful promotion the directory has been renamed into place and there
+    is nothing to remove.  A removal that fails raises
+    :class:`PromotionCleanupError` naming the retained path, with the cleanup
+    error as its cause and *refusal* attached, so the failure is loud in
+    exactly the case where silence would be dangerous."""
+    try:
+        shutil.rmtree(staging)
+    except FileNotFoundError:
+        pass  # renamed into place: the promotion was written
+    except OSError as exc:
+        _remove_if_created_and_empty(candidates_dir, created=created)
+        raise PromotionCleanupError(
+            "promotion "
+            + ("was refused" if refusal is not None else "wrote no candidate")
+            + f", but its staging directory could not be removed ({exc.strerror or exc}):"
+            f" {staging} is KEPT, so the 'nothing written' guarantee was NOT met. It holds the"
+            " staged copy of the candidate — possibly the very content promotion refused, a"
+            " rejected credential value included (its bytes are not echoed here) — so inspect"
+            f" it, remove it by hand (rm -rf {staging}), and never commit it"
+            " (candidates/.promote-* is ignored by the repository)"
+            + ("; the refusal is attached and was reported separately" if refusal is not None else ""),
+            staging=staging,
+            refusal=refusal,
+        ) from exc
+    _remove_if_created_and_empty(candidates_dir, created=created)
 
 
 # ---------------------------------------------------------------------------
@@ -848,6 +938,11 @@ def main(argv: list[str] | None = None) -> int:
             docker_config=args.docker_config,
             dry_run=args.dry_run,
         )
+    except PromotionCleanupError as exc:
+        if exc.refusal is not None:
+            print(f"REFUSED: {exc.refusal}", file=sys.stderr)
+        print(f"CLEANUP FAILED: {exc}", file=sys.stderr)
+        return 2
     except PromotionRefused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 1

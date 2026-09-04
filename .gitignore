@@ -47,3 +47,9 @@ benchmarks/*/analysis/*.md
 batches/.scheduler.lock
 batches/runtime/
 batches/state/.*
+
+# Promotion staging (candidates/.promote-<slug>-<nonce>/) is removed before
+# promote exits; when that removal fails, the loud error keeps the tree for
+# inspection — it may hold the very content promotion refused (a rejected
+# credential value included), so it is never committed.
+candidates/.promote-*
