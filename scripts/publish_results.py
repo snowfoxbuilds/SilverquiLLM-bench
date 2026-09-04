@@ -40,6 +40,22 @@ prominently, the journal stays, and no further publication into that
 destination proceeds until recovery succeeds.  The success summary prints
 only after the transaction commits.
 
+**Recovery removes only what the journal proves the transaction created.**
+Every name in the journal must be one plain child-name component of the
+destination (the staging name in the exact format ``begin`` generates; no
+separator, ``.``/``..`` or absolute path; no unexpected field, repeated name
+or committing/committed inconsistency), and every derived cleanup target is
+proven — before anything is removed — to be a real directory that resolves
+to an immediate child of the destination and holds nothing the transaction
+did not create; a symlink is refused, never followed.  A journal that fails
+any of this raises :class:`PublicationRecoveryError` and leaves the
+destination unchanged.
+
+**``--dry-run`` is read-only.**  It never recovers: a pending journal is
+inspected, the recovery that would occur is reported, and the exit status is
+nonzero — the journal, staging tree, records, bytes and mtimes stay exactly
+as they were.
+
 Discovery of published results (:func:`iter_published_records`) goes through
 manifests only — never a path convention — so the operator organizes
 ``published/`` freely.
@@ -55,11 +71,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import secrets
 import shutil
+import stat
 import sys
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -342,6 +360,20 @@ def journal_path(dest: Path) -> Path:
     return Path(dest) / JOURNAL_FILENAME
 
 
+#: The staging directory's exact name: the prefix and the 4-byte hex nonce
+#: ``begin`` draws — a journal naming anything else was not written by this
+#: script.
+_STAGING_NAME_RE = re.compile(re.escape(STAGING_PREFIX) + r"[0-9a-f]{8}")
+#: One plain directory-name component: never dot-prefixed, so never ``.`` or
+#: ``..``; no separator of any kind.
+_RECORD_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_JOURNAL_KEYS = frozenset({"schema_version", "staging", "planned", "committing", "committed"})
+
+
+def _safe_record_name(name: object) -> bool:
+    return isinstance(name, str) and _RECORD_NAME_RE.fullmatch(name) is not None
+
+
 @dataclass
 class Journal:
     """What one publication transaction created under its destination — and
@@ -351,6 +383,10 @@ class Journal:
     existed when it began); ``committing`` is the one whose rename may be in
     flight; ``committed`` are the ones renamed into place.  ``staging`` is
     the private sibling directory holding the not-yet-committed copies.
+    Every name is one plain child-name component of the destination: a
+    journal that says otherwise was not written by this script and is
+    refused whole (:class:`PublicationRecoveryError`) before anything is
+    touched.
     """
 
     staging: str
@@ -369,33 +405,45 @@ class Journal:
 
     @classmethod
     def from_dict(cls, data: Any) -> Journal:
-        if not isinstance(data, dict) or data.get("schema_version") != JOURNAL_SCHEMA_VERSION:
+        if not isinstance(data, dict):
+            raise PublicationRecoveryError("malformed journal: not a JSON object")
+        if data.get("schema_version") != JOURNAL_SCHEMA_VERSION:
             raise PublicationRecoveryError(
-                f"unrecognized journal (schema_version {data.get('schema_version') if isinstance(data, dict) else '?'!r})"
+                f"unrecognized journal (schema_version {data.get('schema_version')!r})"
             )
-        staging = data.get("staging")
-        planned = data.get("planned")
-        committing = data.get("committing")
-        committed = data.get("committed", [])
-        if (
-            not isinstance(staging, str)
-            or not staging.startswith(STAGING_PREFIX)
-            or not isinstance(planned, list)
-            or not all(isinstance(name, str) and _safe_record_name(name) for name in planned)
-            or not isinstance(committed, list)
-            or not all(isinstance(name, str) and name in planned for name in committed)
-            or not (committing is None or (isinstance(committing, str) and committing in planned))
-        ):
-            raise PublicationRecoveryError("malformed journal")
+        if set(data) != _JOURNAL_KEYS:
+            raise PublicationRecoveryError(
+                "malformed journal: unexpected or missing fields"
+                f" ({', '.join(sorted(set(data) ^ _JOURNAL_KEYS))})"
+            )
+        staging = data["staging"]
+        planned = data["planned"]
+        committing = data["committing"]
+        committed = data["committed"]
+        if not isinstance(staging, str) or _STAGING_NAME_RE.fullmatch(staging) is None:
+            raise PublicationRecoveryError(
+                "malformed journal: staging is not a staging directory name"
+                f" ({STAGING_PREFIX}<8 hex digits>)"
+            )
+        if not isinstance(planned, list) or not planned or not all(_safe_record_name(name) for name in planned):
+            raise PublicationRecoveryError(
+                "malformed journal: planned must be a non-empty list of plain record directory names"
+            )
+        if len(set(planned)) != len(planned):
+            raise PublicationRecoveryError("malformed journal: planned names repeat")
+        if not isinstance(committed, list) or not all(name in planned for name in committed):
+            raise PublicationRecoveryError("malformed journal: committed names a directory that was never planned")
+        if len(set(committed)) != len(committed):
+            raise PublicationRecoveryError("malformed journal: committed names repeat")
+        if committing is not None and (committing not in planned or committing in committed):
+            raise PublicationRecoveryError(
+                "malformed journal: committing must name one planned, not yet committed record"
+            )
         return cls(staging=staging, planned=list(planned), committing=committing, committed=list(committed))
 
     @property
     def complete(self) -> bool:
-        return self.committing is None and sorted(self.committed) == sorted(self.planned)
-
-
-def _safe_record_name(name: str) -> bool:
-    return bool(name) and not name.startswith(".") and "/" not in name and name not in (".", "..")
+        return self.committing is None and set(self.committed) == set(self.planned)
 
 
 def _write_journal(path: Path, journal: Journal) -> None:
@@ -422,15 +470,94 @@ def _read_journal(path: Path) -> Journal:
     return Journal.from_dict(data)
 
 
-def _rmtree_record(path: Path) -> None:
-    """Remove one record directory the transaction created (never followed
-    through a symlink)."""
-    if path.is_symlink():
-        os.unlink(path)
-    elif path.is_dir():
-        shutil.rmtree(path)
-    elif path.exists():
-        os.unlink(path)
+def _removable_child(dest: Path, name: str, *, allowed_entries: Iterable[str]) -> Path | None:
+    """``dest/name`` as the one entry a recovery step may remove, or ``None``
+    when nothing is there.  Proves what a rollback needs before it deletes
+    anything: *name* is one validated component, the entry is an immediate
+    child of *dest* after resolution, it is a real directory (the
+    transaction creates nothing else) and holds only *allowed_entries* as
+    regular files or directories — never a symlink, anywhere.  Anything
+    else is a :class:`PublicationRecoveryError`."""
+    if not (_safe_record_name(name) or _STAGING_NAME_RE.fullmatch(name)):
+        raise PublicationRecoveryError(f"refusing to remove {name!r}: not a plain directory name")
+    target = dest / name
+    if target.parent != dest or target.name != name:
+        raise PublicationRecoveryError(f"refusing to remove {name!r}: not an immediate child of {dest}")
+    try:
+        mode = os.lstat(target).st_mode
+    except FileNotFoundError:
+        return None
+    if stat.S_ISLNK(mode):
+        raise PublicationRecoveryError(
+            f"{target} is a symlink — the transaction created only real directories; refusing to"
+            " follow it"
+        )
+    if not stat.S_ISDIR(mode):
+        raise PublicationRecoveryError(f"{target} is not a directory; the transaction did not create it")
+    if Path(os.path.realpath(target)).parent != Path(os.path.realpath(dest)):
+        raise PublicationRecoveryError(f"{target} does not resolve to an immediate child of {dest}")
+    allowed = set(allowed_entries)
+    for entry in target.iterdir():
+        if entry.name not in allowed or entry.is_symlink():
+            raise PublicationRecoveryError(
+                f"{target} holds {entry.name!r}, which the transaction did not create; refusing to"
+                " remove the directory"
+            )
+    return target
+
+
+def _committed_targets(dest: Path, journal: Journal) -> list[str]:
+    """The record names a rollback removes: the committed ones, plus the one
+    whose rename landed before the journal could say so.  Reads only."""
+    names = list(journal.committed)
+    if journal.committing is not None:
+        in_flight = journal.committing
+        if os.path.lexists(dest / in_flight) and not os.path.lexists(dest / journal.staging / in_flight):
+            names.append(in_flight)
+    return names
+
+
+def _validate_rollback(dest: Path, journal: Journal) -> tuple[list[tuple[str, Path | None]], Path | None]:
+    """Every path a rollback will remove, proven removable — before any
+    deletion, so a journal that fails the proof leaves the destination
+    exactly as it was."""
+    staging = _removable_child(dest, journal.staging, allowed_entries=journal.planned)
+    if staging is not None:
+        for entry in staging.iterdir():
+            _removable_child(staging, entry.name, allowed_entries=RECORD_FILES)
+    records = [
+        (name, _removable_child(dest, name, allowed_entries=RECORD_FILES))
+        for name in _committed_targets(dest, journal)
+    ]
+    return records, staging
+
+
+def rollback_journal(dest: Path, journal: Journal) -> list[str]:
+    """Undo a journaled transaction: remove the committed record directories
+    (plus the one whose rename completed before the journal could say so),
+    the staging directory, then the journal.  Only names the journal lists
+    are ever touched, each proven an immediate real child of *dest* first;
+    a name that fails the proof aborts before anything is removed."""
+    dest = Path(dest)
+    records, staging = _validate_rollback(dest, journal)
+    removed: list[str] = []
+    for name, target in records:
+        if target is not None:
+            shutil.rmtree(target)
+        removed.append(name)
+    if staging is not None:
+        shutil.rmtree(staging)
+    os.unlink(journal_path(dest))
+    return removed
+
+
+def _complete_journal(dest: Path, journal: Journal) -> None:
+    """Every record is in place: drop the (empty) staging directory and the
+    journal — the staging directory proven removable first."""
+    staging = _removable_child(dest, journal.staging, allowed_entries=())
+    if staging is not None:
+        shutil.rmtree(staging)
+    os.unlink(journal_path(dest))
 
 
 class PublicationTransaction:
@@ -524,8 +651,7 @@ class PublicationTransaction:
         assert self.journal is not None and self.staging is not None
         if not self.journal.complete:
             raise PublicationRecoveryError("finish called on an incomplete transaction")
-        shutil.rmtree(self.staging)
-        os.unlink(self.journal_path)
+        _complete_journal(self.dest, self.journal)
 
     def rollback(self) -> list[str]:
         """Remove every final directory this transaction created (and only
@@ -535,45 +661,40 @@ class PublicationTransaction:
         return rollback_journal(self.dest, self.journal)
 
 
-def rollback_journal(dest: Path, journal: Journal) -> list[str]:
-    """Undo a journaled transaction: remove the committed record directories
-    (plus the one whose rename completed before the journal could say so),
-    the staging directory, then the journal.  Only names the journal lists
-    are ever touched."""
-    dest = Path(dest)
-    staging = dest / journal.staging
-    removed: list[str] = []
-    to_remove = list(journal.committed)
-    if journal.committing is not None and journal.committing not in to_remove:
-        in_flight = journal.committing
-        if (dest / in_flight).exists() and not (staging / in_flight).exists():
-            to_remove.append(in_flight)  # the rename landed; the journal did not catch up
-    for name in to_remove:
-        _rmtree_record(dest / name)
-        removed.append(name)
-    if staging.is_dir() and not staging.is_symlink():
-        shutil.rmtree(staging)
-    os.unlink(journal_path(dest))
-    return removed
-
-
 @dataclass(frozen=True)
 class RecoveryReport:
-    """What :func:`recover_publication` did about an interrupted transaction."""
+    """What :func:`recover_publication` did — or, from the read-only
+    :func:`inspect_publication`, what it would do — about an interrupted
+    transaction."""
 
     action: str  # "rolled-back" | "completed"
     records: tuple[str, ...]
+    performed: bool = True
 
     def describe(self) -> str:
+        names = ", ".join(self.records)
+        if self.performed:
+            if self.action == "completed":
+                return (
+                    "RECOVERED an interrupted publication that had already committed every record"
+                    f" ({names}); cleaned up its staging directory and journal"
+                )
+            return (
+                "RECOVERED an interrupted publication by rolling it back: removed"
+                f" {names or 'no record directory'} (only directories that transaction created;"
+                " pre-existing records untouched)"
+            )
         if self.action == "completed":
             return (
-                "RECOVERED an interrupted publication that had already committed every record"
-                f" ({', '.join(self.records)}); cleaned up its staging directory and journal"
+                "RECOVERY REQUIRED: an interrupted publication had already committed every record"
+                f" ({names}); running without --dry-run would remove only its staging directory"
+                " and journal"
             )
         return (
-            "RECOVERED an interrupted publication by rolling it back: removed"
-            f" {', '.join(self.records) or 'no record directory'} (only directories that"
-            " transaction created; pre-existing records untouched)"
+            "RECOVERY REQUIRED: an interrupted publication would be rolled back; running without"
+            f" --dry-run would remove {names or 'no record directory'} (only directories that"
+            " transaction created; pre-existing records untouched), its staging directory and"
+            " its journal"
         )
 
 
@@ -581,8 +702,10 @@ def recover_publication(dest: Path) -> RecoveryReport | None:
     """Finish an interrupted transaction under *dest* from its journal:
     roll it back, or complete it when every planned record was already
     committed.  ``None`` when there is nothing to recover.  Raises
-    :class:`PublicationRecoveryError` when the journal is unreadable or the
-    rollback fails (the journal then stays for the operator)."""
+    :class:`PublicationRecoveryError` — with the destination unchanged —
+    when the journal is unreadable, malformed or names anything that is not
+    a plain immediate child of *dest*, and when the rollback itself fails
+    (the journal then stays for the operator)."""
     path = journal_path(dest)
     if not path.exists():
         return None
@@ -590,10 +713,7 @@ def recover_publication(dest: Path) -> RecoveryReport | None:
     dest = Path(dest)
     try:
         if journal.complete:
-            staging = dest / journal.staging
-            if staging.is_dir() and not staging.is_symlink():
-                shutil.rmtree(staging)
-            os.unlink(path)
+            _complete_journal(dest, journal)
             return RecoveryReport(action="completed", records=tuple(journal.committed))
         removed = rollback_journal(dest, journal)
     except OSError as exc:
@@ -603,6 +723,23 @@ def recover_publication(dest: Path) -> RecoveryReport | None:
             " problem, and run again; no publication proceeds until recovery succeeds"
         ) from exc
     return RecoveryReport(action="rolled-back", records=tuple(removed))
+
+
+def inspect_publication(dest: Path) -> RecoveryReport | None:
+    """What :func:`recover_publication` would do under *dest*, without
+    changing anything on disk: ``None`` when no journal exists, otherwise a
+    report with ``performed=False``.  A journal that recovery would refuse
+    raises :class:`PublicationRecoveryError` here too."""
+    path = journal_path(dest)
+    if not path.exists():
+        return None
+    journal = _read_journal(path)
+    dest = Path(dest)
+    if journal.complete:
+        _removable_child(dest, journal.staging, allowed_entries=())
+        return RecoveryReport(action="completed", records=tuple(journal.committed), performed=False)
+    records, _staging = _validate_rollback(dest, journal)
+    return RecoveryReport(action="rolled-back", records=tuple(name for name, _ in records), performed=False)
 
 
 def stage_publication(plan: PublicationPlan) -> list[Path]:
@@ -622,7 +759,7 @@ def stage_publication(plan: PublicationPlan) -> list[Path]:
     except BaseException as exc:
         try:
             removed = tx.rollback()
-        except OSError as rollback_exc:
+        except (OSError, PublicationRecoveryError) as rollback_exc:
             raise PublicationRecoveryError(
                 f"publication failed ({type(exc).__name__}: {exc}) AND its rollback failed"
                 f" ({rollback_exc}) — {tx.journal_path} is kept; inspect the directories it"
@@ -736,7 +873,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dest", type=Path, required=True, help="destination, e.g. published/<subdir>")
     parser.add_argument("--candidates-dir", type=Path, default=DEFAULT_CANDIDATES_DIR)
     parser.add_argument("--allow-invalid", action="store_true", help="publish runs with leaderboard_valid: false")
-    parser.add_argument("--dry-run", action="store_true", help="check everything, write nothing")
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="check everything, write nothing (a pending journal is reported, never recovered)",
+    )
     return parser
 
 
@@ -747,9 +887,27 @@ def main(argv: list[str] | None = None) -> int:
         print(f"REFUSED: pass --results-repo or set ${RESULTS_REPO_ENV}", file=sys.stderr)
         return 1
     try:
-        recovered = recover_publication(args.dest)
-        if recovered is not None:
-            print(recovered.describe())
+        if args.dry_run:
+            # Strictly read-only: a pending journal is inspected and reported,
+            # never acted on.
+            try:
+                pending = inspect_publication(args.dest)
+            except PublicationRecoveryError as exc:
+                print(f"RECOVERY REQUIRED but would FAIL: {exc} — the dry run changed nothing", file=sys.stderr)
+                return 2
+            if pending is not None:
+                print(pending.describe())
+                print(
+                    f"REFUSED: recovery is required under {args.dest} before new work can be"
+                    " planned; the dry run changed nothing — run again without --dry-run to"
+                    " perform it",
+                    file=sys.stderr,
+                )
+                return 1
+        else:
+            recovered = recover_publication(args.dest)
+            if recovered is not None:
+                print(recovered.describe())
         plan = plan_publication(
             args.run_ids,
             results_repo=results_repo,

@@ -10,7 +10,11 @@ manifests only — and publication is a transaction: a failure at any copy,
 validation, rename or rollback step leaves none of the requested records
 (pre-existing identical ones untouched), an interruption after one rename is
 rolled back from the journal on the next invocation, and the success summary
-prints only after the commit.
+prints only after the commit.  Recovery is contained: a journal naming
+anything that is not a plain immediate child of the destination, or a
+cleanup target that is a symlink or holds what the transaction did not
+create, is refused with the tree unchanged; ``--dry-run`` is strictly
+read-only, reporting a pending recovery without performing it.
 """
 
 from __future__ import annotations
@@ -276,15 +280,16 @@ def _entries(root: Path) -> list[str]:
     return sorted(p.name for p in root.iterdir()) if root.is_dir() else []
 
 
+@pytest.fixture
+def prior(world, no_git) -> dict[str, Any]:
+    """A destination already holding one identical record (must survive
+    every rollback byte for byte, mtime included)."""
+    publish_mod.stage_publication(_plan(world, [world["invalid"]], allow_invalid=True))
+    return {"snapshot": _tree_with_mtimes(world["dest"] / world["invalid"])}
+
+
 class TestTransaction:
     """Publication is all-or-nothing on disk, not only in the plan."""
-
-    @pytest.fixture
-    def prior(self, world, no_git) -> dict[str, Any]:
-        """A destination already holding one identical record (must survive
-        every rollback byte for byte, mtime included)."""
-        publish_mod.stage_publication(_plan(world, [world["invalid"]], allow_invalid=True))
-        return {"snapshot": _tree_with_mtimes(world["dest"] / world["invalid"])}
 
     def _assert_clean(self, world, prior) -> None:
         dest = world["dest"]
@@ -458,6 +463,212 @@ class TestTransaction:
         assert _tree_with_mtimes(world["dest"] / world["invalid"]) == prior["snapshot"]
         assert not publish_mod.journal_path(world["dest"]).exists()
         assert not any(name.startswith(".publish") for name in _entries(world["dest"]))
+
+
+def _snapshot(root: Path) -> dict[str, tuple[Any, ...]]:
+    """Every entry under *root* — files, directories, symlinks — with mode,
+    mtime and content or link target: what a read-only step must leave
+    exactly as it found it."""
+    out: dict[str, tuple[Any, ...]] = {}
+    for p in [root, *sorted(root.rglob("*"))]:
+        st = p.lstat()
+        payload = os.readlink(p) if p.is_symlink() else (p.read_bytes() if p.is_file() else None)
+        out["." if p == root else str(p.relative_to(root))] = (st.st_mode, st.st_mtime_ns, payload)
+    return out
+
+
+def _journal_payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema_version": 1, "staging": ".publish-staging-0123abcd", "planned": ["r1", "r2"],
+        "committing": None, "committed": ["r1"],
+    }
+    payload.update(overrides)
+    return payload
+
+
+class TestJournalContainment:
+    """Recovery removes only what the journal proves the transaction created —
+    never anything outside the destination, never through a symlink — and a
+    journal that fails the proof leaves the destination exactly as it was."""
+
+    @pytest.fixture
+    def arena(self, world, prior) -> dict[str, Any]:
+        dest = world["dest"]
+        sentinel = dest.parent / "sentinel"
+        sentinel.mkdir()
+        (sentinel / "keep.txt").write_text("keep\n")
+        return {"dest": dest, "sentinel": sentinel, "root": dest.parent}
+
+    @staticmethod
+    def _write_journal(dest: Path, payload: dict[str, Any] | str) -> Path:
+        path = publish_mod.journal_path(dest)
+        path.write_text(payload if isinstance(payload, str) else json.dumps(payload), encoding="utf-8")
+        return path
+
+    def _assert_refused_without_mutation(self, arena: dict[str, Any], *, match: str) -> None:
+        before = _snapshot(arena["root"])
+        with pytest.raises(publish_mod.PublicationRecoveryError, match=match):
+            publish_mod.recover_publication(arena["dest"])
+        assert _snapshot(arena["root"]) == before, "recovery changed the tree"
+        with pytest.raises(publish_mod.PublicationRecoveryError, match=match):
+            publish_mod.inspect_publication(arena["dest"])
+        assert _snapshot(arena["root"]) == before, "inspection changed the tree"
+        assert (arena["sentinel"] / "keep.txt").read_text() == "keep\n"
+        assert publish_mod.journal_path(arena["dest"]).exists(), "the journal stays for the operator"
+
+    def test_a_traversal_in_staging_cannot_delete_a_sibling_directory(self, world, arena) -> None:
+        # A "complete" journal: recovery would remove exactly the staging directory it names.
+        self._write_journal(arena["dest"], _journal_payload(staging="../sentinel", planned=[world["invalid"]], committed=[world["invalid"]]))
+        self._assert_refused_without_mutation(arena, match="staging")
+        # The containment guard refuses the same name even when asked directly.
+        with pytest.raises(publish_mod.PublicationRecoveryError, match="plain directory name"):
+            publish_mod._removable_child(arena["dest"], "../sentinel", allowed_entries=())
+        assert arena["sentinel"].is_dir()
+
+    @pytest.mark.parametrize(
+        "payload, match",
+        [
+            (_journal_payload(staging="/tmp/.publish-staging-0123abcd"), "staging"),
+            (_journal_payload(staging=".publish-staging-0123abcd/inner"), "staging"),
+            (_journal_payload(staging="."), "staging"),
+            (_journal_payload(staging=".."), "staging"),
+            (_journal_payload(staging=".publish-staging-XYZ"), "staging"),
+            (_journal_payload(staging="../.publish-staging-0123abcd"), "staging"),
+            (_journal_payload(planned=["r1", "r1"]), "repeat"),
+            (_journal_payload(committed=["r1", "r1"]), "repeat"),
+            (_journal_payload(committed=["r9"]), "never planned"),
+            (_journal_payload(committing="r9"), "committing"),
+            (_journal_payload(committing="r1"), "committing"),
+            (_journal_payload(planned=["../r1", "r2"], committed=[]), "plain record"),
+            (_journal_payload(planned=["/r1"], committed=[]), "plain record"),
+            (_journal_payload(planned=[".r1"], committed=[]), "plain record"),
+            (_journal_payload(planned=["a/b"], committed=[]), "plain record"),
+            (_journal_payload(planned=["a\\b"], committed=[]), "plain record"),
+            (_journal_payload(planned=[], committed=[]), "non-empty"),
+            (_journal_payload(extra=1), "unexpected or missing"),
+            ({k: v for k, v in _journal_payload().items() if k != "committed"}, "unexpected or missing"),
+            (_journal_payload(schema_version=2), "unrecognized"),
+            ("[]", "not a JSON object"),
+            ("{not json", "cannot read"),
+        ],
+        ids=[
+            "absolute-staging", "staging-separator", "staging-dot", "staging-dotdot", "staging-format",
+            "staging-traversal", "planned-dup", "committed-dup", "committed-unplanned", "committing-unplanned",
+            "committing-committed", "planned-traversal", "planned-absolute", "planned-dotfile",
+            "planned-separator", "planned-backslash", "planned-empty", "extra-field", "missing-field",
+            "version", "not-object", "not-json",
+        ],
+    )
+    def test_malformed_journals_are_refused_without_mutation(self, arena, payload, match: str) -> None:
+        self._write_journal(arena["dest"], payload)
+        self._assert_refused_without_mutation(arena, match=match)
+
+    def test_a_symlinked_staging_directory_is_refused_not_followed(self, world, arena) -> None:
+        (arena["dest"] / ".publish-staging-0123abcd").symlink_to(arena["sentinel"])
+        self._write_journal(arena["dest"], _journal_payload(planned=[world["invalid"]], committed=[world["invalid"]]))
+        self._assert_refused_without_mutation(arena, match="symlink")
+
+    def test_a_symlinked_record_directory_is_refused_not_followed(self, world, arena) -> None:
+        dest = arena["dest"]
+        (dest / "linked").symlink_to(arena["sentinel"])
+        (dest / ".publish-staging-0123abcd").mkdir()
+        self._write_journal(dest, _journal_payload(planned=["linked", "r2"], committed=["linked"]))
+        self._assert_refused_without_mutation(arena, match="symlink")
+
+    def test_a_record_holding_what_the_transaction_did_not_create_is_refused(self, world, arena) -> None:
+        dest = arena["dest"]
+        (dest / ".publish-staging-0123abcd").mkdir()
+        shutil.copytree(dest / world["invalid"], dest / "r1")
+        (dest / "r1" / "notes.txt").write_text("not a record file\n")
+        self._write_journal(dest, _journal_payload(planned=["r1", "r2"], committed=["r1"]))
+        self._assert_refused_without_mutation(arena, match="did not create")
+        # ... and so is a staging tree holding one.
+        (dest / "r1" / "notes.txt").unlink()
+        (dest / ".publish-staging-0123abcd" / "stray").mkdir()
+        self._assert_refused_without_mutation(arena, match="did not create")
+
+    def test_a_record_that_is_a_plain_file_is_refused(self, world, arena) -> None:
+        dest = arena["dest"]
+        (dest / ".publish-staging-0123abcd").mkdir()
+        (dest / "r1").write_text("not a directory\n")
+        self._write_journal(dest, _journal_payload(planned=["r1", "r2"], committed=["r1"]))
+        self._assert_refused_without_mutation(arena, match="not a directory")
+
+    def test_valid_interrupted_and_completed_transactions_still_recover(self, world, prior) -> None:
+        dest = world["dest"]
+        plan = _plan(world, [world["valid"], world["valid2"]], allow_invalid=True)
+        tx = publish_mod.PublicationTransaction(plan)
+        tx.begin()
+        tx.stage()
+        tx.commit_one(tx.runs[0])
+        report = publish_mod.recover_publication(dest)
+        assert report is not None and report.action == "rolled-back" and report.records == (world["valid"],) and report.performed
+        assert _entries(dest) == [world["invalid"]] and _tree_with_mtimes(dest / world["invalid"]) == prior["snapshot"]
+        tx = publish_mod.PublicationTransaction(_plan(world, [world["valid"]]))
+        tx.begin()
+        tx.stage()
+        tx.commit()
+        report = publish_mod.recover_publication(dest)
+        assert report is not None and report.action == "completed" and report.performed
+        assert _entries(dest) == sorted([world["invalid"], world["valid"]])
+        assert not publish_mod.journal_path(dest).exists()
+
+
+class TestDryRunIsReadOnly:
+    """``--dry-run`` never recovers: it reports the recovery that would occur,
+    returns nonzero, and leaves bytes and mtimes exactly as they were."""
+
+    def _main(self, world, *run_ids: str, dry_run: bool = True) -> int:
+        return publish_mod.main([
+            "--results-repo", str(world["repo"]), "--dest", str(world["dest"]), "--candidates-dir", str(world["candidates"]),
+            "--allow-invalid", *(["--dry-run"] if dry_run else []), *run_ids,
+        ])
+
+    def test_over_a_partial_transaction(self, world, prior, capsys) -> None:
+        dest = world["dest"]
+        tx = publish_mod.PublicationTransaction(_plan(world, [world["valid"], world["valid2"]], allow_invalid=True))
+        tx.begin()
+        tx.stage()
+        tx.commit_one(tx.runs[0])
+        before = _snapshot(dest)
+        code = self._main(world, world["valid2"])
+        out, err = capsys.readouterr()
+        assert code == 1
+        assert out.startswith("RECOVERY REQUIRED") and "rolled back" in out and f"would remove {world['valid']}" in out
+        assert "REFUSED" in err and "changed nothing" in err and "would publish" not in out
+        assert _snapshot(dest) == before, "the dry run changed the tree"
+        assert self._main(world, world["valid2"]) == 1 and _snapshot(dest) == before
+        # The real invocation recovers and publishes.
+        assert self._main(world, world["valid2"], dry_run=False) == 0
+        assert _entries(dest) == sorted([world["invalid"], world["valid2"]])
+
+    def test_over_a_complete_transaction(self, world, prior, capsys) -> None:
+        dest = world["dest"]
+        tx = publish_mod.PublicationTransaction(_plan(world, [world["valid"]]))
+        tx.begin()
+        tx.stage()
+        tx.commit()
+        before = _snapshot(dest)
+        code = self._main(world, world["valid"])
+        out, err = capsys.readouterr()
+        assert code == 1 and "had already committed every record" in out and world["valid"] in out
+        assert "REFUSED" in err
+        assert _snapshot(dest) == before
+        report = publish_mod.recover_publication(dest)
+        assert report is not None and report.action == "completed"
+
+    def test_a_journal_recovery_would_refuse_is_reported_and_nothing_changes(self, world, prior, capsys) -> None:
+        dest = world["dest"]
+        publish_mod.journal_path(dest).write_text("{not json", encoding="utf-8")
+        before = _snapshot(dest)
+        assert self._main(world, world["valid"]) == 2
+        assert "would FAIL" in capsys.readouterr().err
+        assert _snapshot(dest) == before
+
+    def test_without_a_journal_the_dry_run_writes_nothing_and_plans(self, world, no_git, capsys) -> None:
+        assert self._main(world, world["valid"]) == 0
+        assert "would publish" in capsys.readouterr().out
+        assert not world["dest"].exists()
 
 
 class TestDiscovery:
