@@ -9,8 +9,11 @@ until ``q``.  A malformed batch file is shown loudly in both, as the
 scheduler skips it, and so is a *blocked* batch — missing committed state
 (replay protection), unreadable state, or a run left running — through the
 same classification the scheduler uses (:func:`silverquillm.scheduler.inspect_batch`).
-Nothing host-local (paths, pids, hosts) is shown except the lock holder,
-which the lock file itself records.
+Committed state that no batch file names is listed too, flagged as state
+only: its entries are the record of what ran, never queued work, and a
+running entry among them blocks the scheduler exactly as it would under a
+batch file.  Nothing host-local (paths, pids, hosts) is shown except the
+lock holder, which the lock file itself records.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ from pathlib import Path
 from typing import TextIO
 
 from silverquillm.scheduler import (
+    BATCH_SUFFIX,
     RUN_PENDING,
     Batch,
     BatchError,
@@ -35,6 +39,7 @@ from silverquillm.scheduler import (
     batch_id_of,
     inspect_batch,
     list_batch_files,
+    list_state_files,
     load_batch,
     lock_status,
 )
@@ -83,6 +88,8 @@ class BatchView:
     runs: list[RunRow] = field(default_factory=list)
     recorded: int = 0
     in_file: int = 0
+    state_only: bool = False
+    """Committed state with no batch file: a record, never queued work."""
 
     @property
     def counts(self) -> dict[str, int]:
@@ -142,7 +149,8 @@ def _rows(batch: Batch | None, state: BatchState) -> list[RunRow]:
 
 def build_queue_view(batches_dir: Path, *, now: datetime | None = None, hostname: str | None = None) -> QueueView:
     """Read every batch file, state file and runtime record under
-    *batches_dir*; write nothing."""
+    *batches_dir*; write nothing.  Batch files come first, in name order;
+    committed state no batch file names follows, flagged as state only."""
     batches_dir = Path(batches_dir)
     moment = now or datetime.now(UTC)
     status = lock_status(batches_dir) if batches_dir.is_dir() else None
@@ -174,6 +182,25 @@ def build_queue_view(batches_dir: Path, *, now: datetime | None = None, hostname
         item.recorded = state.consumed
         item.runs = _rows(batch, state)
         view.batches.append(item)
+    listed = {item.id for item in view.batches}
+    for path in list_state_files(batches_dir):
+        batch_id = path.name[: -len(".json")]
+        if batch_id in listed:
+            continue
+        item = BatchView(id=batch_id, path=batches_dir / f"{batch_id}{BATCH_SUFFIX}", due=False, state_only=True)
+        item.error = (
+            "STATE ONLY (no batch file): the committed record of what ran under this id;"
+            " nothing here is queued"
+        )
+        state, block = inspect_batch(batches_dir, batch_id, hostname=hostname)
+        if block is not None:
+            item.blocked = block.message
+            item.block_kind = block.kind
+        if state is None:
+            state = BatchState(batch=batch_id, batch_file=item.path.name)
+        item.recorded = state.consumed
+        item.runs = _rows(None, state)
+        view.batches.append(item)
     return view
 
 
@@ -203,7 +230,7 @@ def render_queue(view: QueueView, *, width: int | None = None) -> list[str]:
             f"  pending={counts['pending']} running={counts['running']}"
             f" done={counts['done']} failed={counts['failed']}"
         )
-        if item.recorded > item.in_file and not item.error:
+        if item.recorded > item.in_file and not item.error and not item.state_only:
             header += f"  ({item.recorded} started, file now lists {item.in_file})"
         if item.blocked:
             header += "  BLOCKED"

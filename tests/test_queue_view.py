@@ -187,3 +187,25 @@ class TestCli:
             assert command in output
         output = CliRunner().invoke(main, ["scheduler", "--help"]).output
         assert "--replay-without-state" in output and "--acknowledge-cleanup" in output
+
+
+class TestStateOnly:
+    def test_committed_state_without_a_batch_file_is_listed_as_a_record_not_as_work(self, tmp_path: Path) -> None:
+        batches = tmp_path / "batches"
+        batches.mkdir()
+        candidate = make_candidate_dir(tmp_path / "cands", slug="fixture-claude")
+        write_batch(batches, "a", [spec(candidate)])
+        leave_running(batches, "zz-gone", candidate, "smoke-x-2026-09-03T11-00", runtime_host=None)
+        before = tree(batches)
+        view = queue_view.build_queue_view(batches, now=T0, hostname=HOST)
+        assert [b.id for b in view.batches] == ["a", "zz-gone"]
+        item = view.batches[1]
+        assert item.state_only and item.in_file == 0 and item.recorded == 1
+        assert "STATE ONLY" in item.error and "nothing here is queued" in item.error
+        assert item.block_kind == sched.BLOCK_ABANDONED_RUN and "--acknowledge-cleanup zz-gone" in item.blocked
+        assert [r.state for r in item.runs] == ["running"], "no pending rows: there is no file to take them from"
+        text = "\n".join(queue_view.render_queue(view, width=400))
+        assert "zz-gone  not_before=- due=no  pending=0 running=1 done=0 failed=0  BLOCKED" in text
+        assert "!! STATE ONLY (no batch file)" in text and "!! BLOCKED [abandoned-run]" in text
+        assert "started, file now lists" not in text
+        assert tree(batches) == before, "the view is read-only"

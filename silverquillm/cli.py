@@ -1794,8 +1794,11 @@ def scheduler(
     scheduler are reconciled before anything else runs: the runtime metadata
     is bound to the recorded run first, then that run's container is
     force-removed and confirmed gone; state from another host needs
-    --acknowledge-cleanup. A failed run is recorded and the batch continues.
-    A second scheduler on the same directory refuses to start.
+    --acknowledge-cleanup. Committed state no batch file names is reconciled
+    the same way (a running entry in it stops the scheduler; a terminal one is
+    inert), and malformed state blocks its batch without being rewritten. A
+    failed run is recorded and the batch continues. A second scheduler on the
+    same directory refuses to start.
     """
     from silverquillm.results_repo import resolve_results_repo
     from silverquillm.scheduler import (

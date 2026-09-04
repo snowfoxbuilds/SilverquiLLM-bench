@@ -57,7 +57,23 @@ Two kinds of scheduler-owned files sit beside the queue:
   consumed, ``running`` → ``done`` / ``failed``, run id, the identity and
   candidate hash resolved at run start, portable timestamps, outcome summary
   and a sanitized error), written atomically after every transition.  The
-  number of entries is the batch's cursor.  It carries **no** host-local
+  number of entries is the batch's cursor — so a persisted ``pending`` entry
+  is refused: the list records started runs only.  **It is read as strictly
+  as it is written**: every top-level field (``batch`` a plain id,
+  ``batch_file`` exactly ``<id>.toml``, ``updated_at`` the scheduler's own
+  UTC stamp) and every run field is required with the type and shape the
+  scheduler writes (a whole spec with a positive integer budget, canonical
+  timestamps, a plain run id, a 64-hex candidate hash with its ``hash8``, an
+  identity that re-validates and hashes to it, one-line capped summary and
+  error), and the entry must be lifecycle-coherent — a ``running`` run
+  carries its identity and no outcome, a ``done`` run its identity and
+  ``ok: true`` with no failure, a ``failed`` run ``ok: false`` and a failure
+  class, and only an ``unresolvable`` failure carries no run id or identity.
+  Anything less is a :class:`StateError`: the batch is blocked, its cursor
+  does not move and the file is never rewritten.  The file is opened
+  without following a link and proven a regular file on the descriptor that
+  is read — a symlink or special file under a state name is refused, never
+  followed.  It carries **no** host-local
   detail: no absolute path, no home directory, no pid or hostname, no
   container data, no environment value, no traceback.  The consumed spec
   keeps a relative candidate reference verbatim and records an absolute one
@@ -117,13 +133,21 @@ scheduler stops until the operator confirms the cleanup with
 host only: it is refused while valid same-host runtime metadata exists (the
 run is reconciled here instead), and it fails closed — the runtime file
 kept — when the metadata is unreadable or does not bind to the recorded run.
+**Committed state that no batch file names is reconciled too**: startup
+enumerates ``batches/state/*.json`` beside the batch and runtime files, so a
+running entry whose batch file was removed (or never checked out) stops the
+scheduler with the same replacement-host instructions before any container
+or executor call — it is never mistaken for queued work, and neither is a
+terminal orphan, which stays inert as the record of what ran.  An orphan
+state that cannot be read stops the scheduler as well: it may hide a run.
 One scheduler and one run container per queue, always.
 
 Public API
 ----------
 :class:`Scheduler` (``run_next`` / ``run_until_idle`` / ``serve``),
 :class:`SchedulerLock` + :func:`lock_status`, :func:`load_batch`,
-:func:`list_batch_files`, :func:`load_state` / :func:`save_state`,
+:func:`list_batch_files`, :func:`list_state_files`, :func:`load_state` /
+:func:`save_state`,
 :func:`inspect_batch` (the blocked / runnable classification the views
 share), the runtime record helpers, :class:`DockerContainerRuntime` +
 :func:`reconcile_container`, :func:`resolve_candidate_ref`,
@@ -134,11 +158,14 @@ the executor's result shape.
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import json
 import os
+import re
 import signal
 import socket
+import stat
 import subprocess
 import tempfile
 import threading
@@ -155,7 +182,13 @@ from silverquillm.candidate import CandidateBundle, load_candidate_bundle, redac
 from silverquillm.contract import RUNS_DIRNAME, candidate_label, container_name, new_run_name
 from silverquillm.jobdir import BenchmarkRef, load_benchmark
 from silverquillm.modes import BenchmarkMode, get_mode
-from silverquillm.results_repo import candidate_hash, candidate_hash8
+from silverquillm.results_repo import (
+    OZOLITH_SCHEME,
+    CandidateIdentity,
+    InvalidRunRecordError,
+    candidate_hash,
+    candidate_hash8,
+)
 
 __all__ = [
     "BATCHES_DIRNAME",
@@ -168,6 +201,7 @@ __all__ = [
     "FAILURE_ABANDONED",
     "FAILURE_INTERRUPTED",
     "FAILURE_SCHEDULER",
+    "FAILURE_UNCLASSIFIED",
     "FAILURE_UNRESOLVABLE",
     "LOCK_FILENAME",
     "RUNTIME_DIRNAME",
@@ -206,6 +240,7 @@ __all__ = [
     "inspect_batch",
     "list_batch_files",
     "list_runtime_files",
+    "list_state_files",
     "load_batch",
     "load_runtime",
     "load_state",
@@ -242,6 +277,12 @@ FAILURE_UNRESOLVABLE = "unresolvable"
 FAILURE_SCHEDULER = "scheduler"
 FAILURE_INTERRUPTED = "interrupted"
 FAILURE_ABANDONED = "abandoned"
+#: An executor reported a failure without classifying it.
+FAILURE_UNCLASSIFIED = "unclassified"
+#: The states a persisted entry may carry: every entry is a *started* run.
+#: ``pending`` exists for the views (a file entry not yet started) and is
+#: never written — a persisted one is refused.
+_PERSISTED_RUN_STATES = frozenset({RUN_RUNNING, RUN_DONE, RUN_FAILED})
 
 BLOCK_MISSING_STATE = "missing-state"
 BLOCK_UNREADABLE_STATE = "unreadable-state"
@@ -260,6 +301,16 @@ _RUNTIME_KEYS = frozenset({"schema_version", "batch", "index", "run_id", "pid", 
 EXTERNAL_CANDIDATE_PREFIX = "<external-candidate>/"
 #: A sanitized error summary is one line, capped: never a traceback.
 _ERROR_MAX_CHARS = 600
+#: One plain path segment — a batch id, a run id, a failure class: never
+#: dot-prefixed, no separator, no whitespace, no control character.
+_PLAIN_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}")
+#: Exactly what :func:`_stamp` writes: UTC, whole seconds, ``+00:00``.
+_STAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00")
+_HEX64_RE = re.compile(r"[0-9a-f]{64}")
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+#: Open without following a link, without blocking on a FIFO, and prove the
+#: type on the descriptor that is read.
+_NOFOLLOW_READ = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
 
 
 def _now() -> datetime:
@@ -268,6 +319,40 @@ def _now() -> datetime:
 
 def _stamp(moment: datetime) -> str:
     return moment.astimezone(UTC).isoformat(timespec="seconds")
+
+
+def _is_plain_name(value: object) -> bool:
+    return isinstance(value, str) and _PLAIN_NAME_RE.fullmatch(value) is not None
+
+
+def _is_stamp(value: object) -> bool:
+    """*value* is a timestamp exactly as :func:`_stamp` writes one."""
+    if not isinstance(value, str) or _STAMP_RE.fullmatch(value) is None:
+        return False
+    try:
+        datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _is_one_line(value: object) -> bool:
+    """A sanitized summary or error: one line, capped, no control character."""
+    return isinstance(value, str) and len(value) <= _ERROR_MAX_CHARS and _CONTROL_RE.search(value) is None
+
+
+def _file_kind(mode: int) -> str:
+    if stat.S_ISDIR(mode):
+        return "a directory"
+    if stat.S_ISLNK(mode):
+        return "a symlink"
+    if stat.S_ISFIFO(mode):
+        return "a FIFO"
+    if stat.S_ISSOCK(mode):
+        return "a socket"
+    if stat.S_ISCHR(mode) or stat.S_ISBLK(mode):
+        return "a device"
+    return "a special file"
 
 
 class SchedulerError(Exception):
@@ -387,6 +472,11 @@ def batch_id_of(path: Path) -> str:
 def parse_batch(text: str, *, batch_id: str, path: Path) -> Batch:
     """Parse batch TOML strictly: exactly the documented keys and shapes."""
     context = f"batch {batch_id}"
+    if not _is_plain_name(batch_id):
+        raise BatchError(
+            f"{context}: the batch id is not a plain name ({_PLAIN_NAME_RE.pattern}) — it names"
+            " the committed state file and is recorded in it; rename the batch file"
+        )
     try:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
@@ -442,21 +532,133 @@ def portable_spec(spec: RunSpec) -> dict[str, Any]:
 
 
 def _validate_portable_spec(spec: Mapping[str, Any], *, context: str) -> dict[str, Any]:
+    """The consumed spec, whole and typed: exactly the four fields, the
+    strings non-empty and one-line, the budget a positive integer, no
+    absolute path."""
     unknown = sorted(set(spec) - _RUN_SPEC_KEYS)
     if unknown:
         raise StateError(f"{context}: unknown spec field(s) {', '.join(unknown)}; refusing to interpret it")
     for key in ("candidate", "mode", "benchmark"):
-        if key in spec and not isinstance(spec[key], str):
-            raise StateError(f"{context}: spec.{key} must be a string")
-    if "budget_seconds" in spec and (isinstance(spec["budget_seconds"], bool) or not isinstance(spec["budget_seconds"], int)):
-        raise StateError(f"{context}: spec.budget_seconds must be an integer")
+        if key in spec:
+            value = spec[key]
+            if not isinstance(value, str) or not value.strip() or _CONTROL_RE.search(value):
+                raise StateError(f"{context}: spec.{key} must be a non-empty one-line string")
+    if "budget_seconds" in spec:
+        budget = spec["budget_seconds"]
+        if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
+            raise StateError(f"{context}: spec.budget_seconds must be a positive integer")
     for key, value in spec.items():
         if isinstance(value, str) and os.path.isabs(value):
             raise StateError(
                 f"{context}: spec.{key} carries an absolute path — committed state is portable"
                 f" and records an absolute candidate reference as {EXTERNAL_CANDIDATE_PREFIX}<basename>"
             )
+    missing = sorted(_RUN_SPEC_KEYS - set(spec))
+    if missing:
+        raise StateError(f"{context}: spec lacks {', '.join(missing)} — a started run's spec is recorded whole")
     return dict(spec)
+
+
+def _check_run_fields(fields: Mapping[str, Any], *, context: str) -> None:
+    """Every field of a persisted entry has the type and shape the scheduler
+    writes; the identity re-validates and hashes to the recorded hash."""
+
+    def must(key: str, shape: str) -> StateError:
+        return StateError(f"{context}: {key} must be {shape}")
+
+    stamp = "a UTC timestamp as the scheduler writes it (YYYY-MM-DDThh:mm:ss+00:00)"
+    if not _is_stamp(fields["started_at"]):
+        raise must("started_at", stamp)
+    for key in ("finished_at", "resolved_at"):
+        if fields[key] is not None and not _is_stamp(fields[key]):
+            raise must(key, f"null or {stamp}")
+    digest = fields["candidate_hash"]
+    if digest is not None and (not isinstance(digest, str) or _HEX64_RE.fullmatch(digest) is None):
+        raise must("candidate_hash", "null or 64 lowercase hex digits")
+    hash8 = fields["hash8"]
+    if (hash8 is None) != (digest is None) or (hash8 is not None and hash8 != digest[:8]):
+        raise must("hash8", "the first eight digits of candidate_hash (both null, or both recorded)")
+    identity = fields["identity"]
+    if identity is not None:
+        if digest is None:
+            raise must("identity", "null unless candidate_hash is recorded")
+        try:
+            parsed = CandidateIdentity.from_dict(identity)
+        except InvalidRunRecordError as exc:
+            raise StateError(f"{context}: identity is malformed: {exc}") from exc
+        if parsed.scheme != OZOLITH_SCHEME:
+            raise StateError(
+                f"{context}: identity scheme {parsed.scheme!r} is not {OZOLITH_SCHEME!r} — the"
+                " scheduler records only identities recomputed from a Candidate Bundle"
+            )
+        if candidate_hash(parsed) != digest:
+            raise StateError(
+                f"{context}: candidate_hash {digest} is not the hash of the recorded identity"
+                f" ({candidate_hash(parsed)})"
+            )
+    if fields["ok"] is not None and not isinstance(fields["ok"], bool):
+        raise must("ok", "null or a JSON boolean")
+    if fields["failure_class"] is not None and not _is_plain_name(fields["failure_class"]):
+        raise must("failure_class", f"null or one plain token ({_PLAIN_NAME_RE.pattern})")
+    if not _is_one_line(fields["summary"]):
+        raise must("summary", f"one line of at most {_ERROR_MAX_CHARS} characters")
+    if fields["error"] is not None and not _is_one_line(fields["error"]):
+        raise must("error", f"null or one line of at most {_ERROR_MAX_CHARS} characters")
+
+
+_IDENTITY_FIELDS = ("run_id", "candidate_hash", "hash8", "identity", "resolved_at")
+
+
+def _check_run_lifecycle(fields: Mapping[str, Any], *, context: str) -> None:
+    """The entry is a coherent point of one run's life: a ``running`` run
+    has resolved (it carries its identity) and has no outcome; a ``done``
+    run has resolved and succeeded; a ``failed`` run carries ``ok: false``
+    and a failure class, and carries an identity unless — and only unless —
+    the failure is that its spec never resolved."""
+    state = fields["state"]
+    present = [key for key in _IDENTITY_FIELDS if fields[key] is not None]
+    if present and len(present) != len(_IDENTITY_FIELDS):
+        raise StateError(
+            f"{context}: a resolved run carries {', '.join(_IDENTITY_FIELDS)} together; this entry"
+            f" carries only {', '.join(present)}"
+        )
+    resolved = bool(present)
+
+    def incoherent(why: str) -> StateError:
+        return StateError(f"{context}: a {state} run {why}; the entry is incoherent — refusing to interpret it")
+
+    if state == RUN_RUNNING:
+        if not resolved:
+            raise incoherent("carries no identity — a run is recorded running only once its candidate resolved")
+        outcome = (fields["finished_at"], fields["ok"], fields["failure_class"], fields["error"])
+        if any(value is not None for value in outcome) or fields["summary"] != "":
+            raise incoherent("carries an outcome (finished_at, ok, failure_class, summary or error)")
+        return
+    if fields["finished_at"] is None:
+        raise incoherent("has no finished_at")
+    if state == RUN_DONE:
+        if not resolved:
+            raise incoherent("carries no identity")
+        if fields["ok"] is not True:
+            raise incoherent("must record ok: true")
+        if fields["failure_class"] is not None or fields["error"] is not None:
+            raise incoherent("carries a failure_class or an error")
+        return
+    if fields["ok"] is not False:
+        raise incoherent("must record ok: false")
+    if fields["failure_class"] is None:
+        raise incoherent("has no failure_class")
+    if fields["failure_class"] == FAILURE_UNRESOLVABLE:
+        if resolved:
+            raise incoherent(
+                "is unresolvable yet carries a run id and identity — a run id is assigned only"
+                " when the spec resolves"
+            )
+    elif not resolved:
+        raise incoherent(
+            f"is classified {fields['failure_class']!r} yet carries no run id or identity —"
+            f" only {FAILURE_UNRESOLVABLE!r} failures precede resolution"
+        )
 
 
 @dataclass
@@ -499,7 +701,14 @@ class RunState:
         }
 
     @classmethod
-    def from_dict(cls, data: Any, *, context: str) -> RunState:
+    def from_dict(cls, data: Any, *, context: str, position: int | None = None) -> RunState:
+        """Strict: exactly the documented fields, each with the type and
+        shape the scheduler writes, and a lifecycle-coherent whole
+        (:func:`_check_run_fields`, :func:`_check_run_lifecycle`).  A
+        persisted entry is a *started* run, so ``pending`` is refused.
+        *position* is the entry's place in the list — the cursor — which
+        its ``index`` must equal.  Anything less is a :class:`StateError`;
+        nothing is coerced or repaired."""
         if not isinstance(data, Mapping):
             raise StateError(f"{context}: a run entry must be an object")
         unknown = sorted(set(data) - _RUN_STATE_KEYS)
@@ -516,30 +725,44 @@ class RunState:
             raise StateError(f"{context}: run entry lacks {exc}") from exc
         if isinstance(index, bool) or not isinstance(index, int) or index < 0:
             raise StateError(f"{context}: run index must be a non-negative integer")
-        if not isinstance(spec, Mapping):
-            raise StateError(f"{context}: run spec must be an object")
-        spec = _validate_portable_spec(spec, context=context)
-        if state not in RUN_STATES:
+        if position is not None and index != position:
+            raise StateError(f"{context}: run entry #{position} carries index {index}; entries are the batch cursor")
+        if state == RUN_PENDING:
+            raise StateError(
+                f"{context}: a pending entry is never persisted — the run list records started"
+                " runs only and is the batch cursor; refusing to interpret it"
+            )
+        if state not in _PERSISTED_RUN_STATES:
             raise StateError(f"{context}: unknown run state {state!r}")
         run_id = data.get("run_id")
         if run_id is not None and (not isinstance(run_id, str) or not run_id):
             raise StateError(f"{context}: run_id must be a non-empty string or null")
-        identity = data.get("identity")
+        if run_id is not None and not _is_plain_name(run_id):
+            raise StateError(f"{context}: run_id {run_id!r} is not a plain run id ({_PLAIN_NAME_RE.pattern})")
+        if not isinstance(spec, Mapping):
+            raise StateError(f"{context}: run spec must be an object")
+        spec = _validate_portable_spec(spec, context=context)
+        missing = sorted(_RUN_STATE_KEYS - set(data))
+        if missing:
+            raise StateError(f"{context}: run entry lacks field(s) {', '.join(missing)} — an entry is recorded whole")
+        fields = {key: data[key] for key in _RUN_STATE_KEYS}
+        _check_run_fields(fields, context=context)
+        _check_run_lifecycle(fields, context=context)
         return cls(
             index=index,
             spec=spec,
             state=state,
-            started_at=data.get("started_at"),
-            finished_at=data.get("finished_at"),
+            started_at=fields["started_at"],
+            finished_at=fields["finished_at"],
             run_id=run_id,
-            candidate_hash=data.get("candidate_hash"),
-            hash8=data.get("hash8"),
-            identity=dict(identity) if isinstance(identity, Mapping) else None,
-            resolved_at=data.get("resolved_at"),
-            ok=data.get("ok"),
-            failure_class=data.get("failure_class"),
-            summary=str(data.get("summary") or ""),
-            error=data.get("error"),
+            candidate_hash=fields["candidate_hash"],
+            hash8=fields["hash8"],
+            identity=dict(fields["identity"]) if fields["identity"] is not None else None,
+            resolved_at=fields["resolved_at"],
+            ok=fields["ok"],
+            failure_class=fields["failure_class"],
+            summary=fields["summary"],
+            error=fields["error"],
         )
 
 
@@ -584,41 +807,105 @@ class BatchState:
         unknown = sorted(set(data) - _STATE_KEYS)
         if unknown:
             raise StateError(f"{context}: unknown field(s) {', '.join(unknown)}; refusing to interpret it")
-        runs_raw = data.get("runs", [])
+        runs_raw = data.get("runs")
         if not isinstance(runs_raw, list):
             raise StateError(f"{context}: runs must be an array")
-        runs = [RunState.from_dict(entry, context=f"{context} run #{i}") for i, entry in enumerate(runs_raw)]
-        for i, run in enumerate(runs):
-            if run.index != i:
-                raise StateError(f"{context}: run entry #{i} carries index {run.index}; entries are the batch cursor")
-        return cls(
-            batch=str(data.get("batch", "")),
-            batch_file=str(data.get("batch_file", "")),
-            runs=runs,
-            updated_at=str(data.get("updated_at", "")),
-        )
+        runs = [RunState.from_dict(entry, context=f"{context} run #{i}", position=i) for i, entry in enumerate(runs_raw)]
+        missing = sorted(_STATE_KEYS - set(data))
+        if missing:
+            raise StateError(f"{context}: lacks field(s) {', '.join(missing)}; a state file is recorded whole")
+        batch = data["batch"]
+        if not _is_plain_name(batch):
+            raise StateError(f"{context}: batch must be a plain batch id ({_PLAIN_NAME_RE.pattern}), got {batch!r}")
+        batch_file = data["batch_file"]
+        if batch_file != f"{batch}{BATCH_SUFFIX}":
+            raise StateError(
+                f"{context}: batch_file must be {batch}{BATCH_SUFFIX} — the batch file's name, never"
+                f" a path — got {batch_file!r}"
+            )
+        if not _is_stamp(data["updated_at"]):
+            raise StateError(f"{context}: updated_at must be a UTC timestamp as the scheduler writes it")
+        return cls(batch=batch, batch_file=batch_file, runs=runs, updated_at=data["updated_at"])
 
 
 def state_path(batches_dir: Path, batch_id: str) -> Path:
     return Path(batches_dir) / STATE_DIRNAME / f"{batch_id}.json"
 
 
+def _read_scheduler_file(path: Path, what: str) -> bytes | None:
+    """The bytes of *path* — ``None`` when nothing is there — read through a
+    descriptor opened without following a link and proven a regular file by
+    ``fstat`` on that very descriptor.  A symlink (dangling or not), a
+    directory, a FIFO, a socket or a device under the name is a
+    :class:`StateError`: the scheduler never follows a link to state it did
+    not write, and never blocks on a special file."""
+    try:
+        fd = os.open(path, _NOFOLLOW_READ)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise StateError(f"{path.name}: the {what} is a symlink — refusing to follow it") from None
+        try:
+            mode = os.lstat(path).st_mode
+        except OSError:
+            mode = None
+        if mode is not None and not stat.S_ISREG(mode):
+            raise StateError(f"{path.name}: the {what} is {_file_kind(mode)}, not a regular file") from None
+        raise StateError(f"{path.name}: cannot open the {what}: {exc.strerror or exc}") from exc
+    try:
+        mode = os.fstat(fd).st_mode
+    except OSError as exc:
+        os.close(fd)
+        raise StateError(f"{path.name}: cannot inspect the {what}: {exc.strerror or exc}") from exc
+    if not stat.S_ISREG(mode):
+        os.close(fd)
+        raise StateError(f"{path.name}: the {what} is {_file_kind(mode)}, not a regular file")
+    try:
+        with os.fdopen(fd, "rb") as fh:
+            return fh.read()
+    except OSError as exc:
+        raise StateError(f"{path.name}: cannot read the {what}: {exc.strerror or exc}") from exc
+
+
+def _list_json_records(directory: Path) -> list[Path]:
+    """The ``<id>.json`` entries of *directory* by name — a plain id plus the
+    suffix, never dot-prefixed (the atomic-write temp files are) — in name
+    order, whatever each entry's type: loading refuses anything but a regular
+    file, so a symlink or special file under a record's name is discovered
+    and then refused, never followed and never passed over."""
+    try:
+        names = os.listdir(directory)
+    except (FileNotFoundError, NotADirectoryError):
+        return []
+    return sorted(directory / name for name in names if name.endswith(".json") and _is_plain_name(name[: -len(".json")]))
+
+
+def list_state_files(batches_dir: Path) -> list[Path]:
+    """Every ``batches/state/<id>.json`` by name (:func:`_list_json_records`)
+    — the committed state the scheduler must account for at startup whether
+    or not a batch file still names it."""
+    return _list_json_records(Path(batches_dir) / STATE_DIRNAME)
+
+
 def load_state(batches_dir: Path, batch_id: str) -> BatchState | None:
     """The batch's committed state; ``None`` when no state file exists (the
     batch is blocked until the operator acknowledges it — see
-    :func:`inspect_batch`).  A malformed, unreadable or other-version file is
-    a :class:`StateError`."""
+    :func:`inspect_batch`).  A malformed, unreadable or other-version file, a
+    symlink or special file under the name, or an entry that fails the
+    strict lifecycle checks is a :class:`StateError`; the file is never
+    rewritten."""
     path = state_path(batches_dir, batch_id)
-    if not path.exists():
+    raw = _read_scheduler_file(path, "committed state file")
+    if raw is None:
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+        data = json.loads(raw.decode("utf-8"))
+    except ValueError as exc:
         raise StateError(f"{path.name}: {exc}") from exc
-    state = BatchState.from_dict(data, context=path.name)
-    if state.batch != batch_id:
-        raise StateError(f"{path.name}: records batch {state.batch!r}, not {batch_id!r}")
-    return state
+    if isinstance(data, Mapping) and data.get("batch") != batch_id:
+        raise StateError(f"{path.name}: records batch {data.get('batch')!r}, not {batch_id!r}")
+    return BatchState.from_dict(data, context=path.name)
 
 
 def save_state(batches_dir: Path, state: BatchState, *, now: datetime | None = None) -> Path:
@@ -706,19 +993,18 @@ def runtime_path(batches_dir: Path, batch_id: str) -> Path:
 
 
 def list_runtime_files(batches_dir: Path) -> list[Path]:
-    runtime_dir = Path(batches_dir) / RUNTIME_DIRNAME
-    if not runtime_dir.is_dir():
-        return []
-    return sorted(p for p in runtime_dir.iterdir() if p.suffix == ".json" and not p.name.startswith(".") and p.is_file())
+    """Every ``batches/runtime/<id>.json`` by name (:func:`_list_json_records`)."""
+    return _list_json_records(Path(batches_dir) / RUNTIME_DIRNAME)
 
 
 def load_runtime(batches_dir: Path, batch_id: str) -> RuntimeRecord | None:
     path = runtime_path(batches_dir, batch_id)
-    if not path.exists():
+    raw = _read_scheduler_file(path, "runtime record")
+    if raw is None:
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+        data = json.loads(raw.decode("utf-8"))
+    except ValueError as exc:
         raise StateError(f"{path.name}: {exc}") from exc
     return RuntimeRecord.from_dict(data, context=path.name)
 
@@ -1307,7 +1593,7 @@ class Scheduler:
                     f"--replay-without-state {batch_id}: no batch file {batch_file.name} in"
                     f" {self.batches_dir}; the acknowledgement names a batch that does not exist"
                 )
-            if state_path(self.batches_dir, batch_id).exists():
+            if os.path.lexists(state_path(self.batches_dir, batch_id)):
                 raise AcknowledgementError(
                     f"--replay-without-state {batch_id}: {STATE_DIRNAME}/{batch_id}.json already"
                     " exists — there is no missing state to acknowledge; delete the state"
@@ -1411,15 +1697,30 @@ class Scheduler:
         what recovery will do — reading only.  Any record that is unreadable,
         malformed, unbound or from another host, and any running entry
         without a same-host record, is a :class:`ReconciliationError` raised
-        before any container is inspected or removed."""
+        before any container is inspected or removed.  Committed state is
+        enumerated on its own (:func:`list_state_files`), so a state file no
+        batch file names — an orphan — is accounted for like any other: a
+        running orphan stops the scheduler with the replacement-host
+        instructions, an unreadable one stops it because it may hide a run,
+        and a terminal one is inert."""
         items: list[_Reconciliation] = []
-        batch_ids = {batch_id_of(path) for path in list_batch_files(self.batches_dir)}
+        named = {batch_id_of(path) for path in list_batch_files(self.batches_dir)}
+        batch_ids = set(named)
         batch_ids.update(path.stem for path in list_runtime_files(self.batches_dir))
+        batch_ids.update(path.stem for path in list_state_files(self.batches_dir))
         for batch_id in sorted(batch_ids):
             where = f"{RUNTIME_DIRNAME}/{batch_id}.json"
+            orphan = batch_id not in named
             try:
                 state = load_state(self.batches_dir, batch_id)
-            except StateError:
+            except StateError as exc:
+                if orphan:
+                    raise ReconciliationError(
+                        f"{STATE_DIRNAME}/{batch_id}.json is committed state that no batch file"
+                        f" names, and it cannot be read ({exc}); it may record a run still holding"
+                        " a container — inspect it, repair or remove it by hand (the history keeps"
+                        " the record), and start again"
+                    ) from None
                 state = None  # blocked as unreadable by next_work; a runtime file cannot bind to it
             try:
                 runtime = load_runtime(self.batches_dir, batch_id)
@@ -1452,7 +1753,13 @@ class Scheduler:
                         f"batch {batch_id} run #{run.index} ({run.run_id}) is recorded as running"
                         " but this host holds no runtime metadata for it — the state was"
                         " committed on another host and the run cannot be reconciled here."
-                        f" Confirm container {container_name(run.run_id or '')} is gone on the"
+                        + (
+                            f" No batch file names {batch_id}: {STATE_DIRNAME}/{batch_id}.json"
+                            " alone is the record of that run, and nothing from it is queued."
+                            if orphan
+                            else ""
+                        )
+                        + f" Confirm container {container_name(run.run_id or '')} is gone on the"
                         f" host that ran it, then start again with --acknowledge-cleanup {batch_id}"
                     )
                 if bound is not run:
@@ -1565,7 +1872,7 @@ class Scheduler:
             raise
         entry.state = RUN_DONE if outcome.ok else RUN_FAILED
         entry.ok = outcome.ok
-        entry.failure_class = outcome.failure_class
+        entry.failure_class = None if outcome.ok else (outcome.failure_class or FAILURE_UNCLASSIFIED)
         entry.summary = self._sanitize(outcome.summary, bundle=resolved.bundle)
         entry.finished_at = _stamp(self._now())
         save_state(self.batches_dir, state, now=self._now())
