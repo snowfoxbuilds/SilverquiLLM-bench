@@ -59,13 +59,24 @@ Two kinds of scheduler-owned files sit beside the queue:
   and a sanitized error), written atomically after every transition.  The
   number of entries is the batch's cursor.  It carries **no** host-local
   detail: no absolute path, no home directory, no pid or hostname, no
-  container data, no environment value, no traceback — every error summary
-  passes :func:`silverquillm.candidate.redact_credentials` and path
-  sanitization first.
+  container data, no environment value, no traceback.  The consumed spec
+  keeps a relative candidate reference verbatim and records an absolute one
+  as ``<external-candidate>/<basename>`` (:func:`portable_spec`): the
+  recorded identity is the authoritative account of what ran, and a pending
+  entry always resolves from the batch file, never from this copy.  Every
+  summary and error passes the scheduler's redaction first — the exact
+  values bound to the bundle's declared secret slots in the effective
+  environment, a value assigned to one of those slots, every generic
+  credential shape (:func:`silverquillm.candidate.redact_credentials`), then
+  host-local roots replaced by placeholders; log lines pass the same
+  redaction.
 - **Ignored runtime metadata**, ``batches/runtime/<id>.json`` — host-local,
-  gitignored, present only while a run of that batch is active: the run's
-  container name, the scheduler pid and hostname.  Removed after the run's
-  terminal transition.
+  gitignored, present only while a run of that batch is active: the batch,
+  index and run id of the running entry, the scheduler pid and hostname.
+  Removed after the run's terminal transition.  It names no container: the
+  one container a recovery may touch is derived from the committed entry the
+  record binds to (:func:`silverquillm.contract.container_name` of that
+  entry's run id), never read from the record.
 
 **Missing state is fail-closed.**  A batch file whose state file is absent
 is *blocked*: nothing from it runs, and the scheduler warns — once per file
@@ -80,15 +91,22 @@ that id, so an id is never reused for an unrelated batch.
 
 **Abandoned runs are reconciled before anything else runs.**  A run left
 ``running`` by a scheduler that died is reconciled at startup, under the
-lock, before any new work: on the same host (the runtime file's hostname is
-this one) the run's deterministic container is force-removed and its absence
-confirmed, then the run is marked ``failed``; if the container cannot be
+lock, before any new work.  First every batch's runtime record is bound to
+the committed state — batch, index and run id must all equal the running
+entry's (:func:`bind_runtime`); a record that is unreadable, malformed or
+names another run stops the scheduler before any container operation.  Then,
+on the same host (the record's hostname is this one) the container
+``container_name(<that entry's run id>)`` is force-removed and its absence
+confirmed, and the run is marked ``failed``; if the container cannot be
 removed or its removal cannot be confirmed, the scheduler stops with a
 diagnostic and executes nothing.  Without local runtime metadata — the state
 was committed on another host — the run cannot be reconciled here: the
 scheduler stops until the operator confirms the cleanup with
-``--acknowledge-cleanup <id>``.  One scheduler and one run container per
-queue, always.
+``--acknowledge-cleanup <id>``.  That acknowledgement is for a replacement
+host only: it is refused while valid same-host runtime metadata exists (the
+run is reconciled here instead), and it fails closed — the runtime file
+kept — when the metadata is unreadable or does not bind to the recorded run.
+One scheduler and one run container per queue, always.
 
 Public API
 ----------
@@ -135,6 +153,7 @@ __all__ = [
     "BLOCK_MISSING_STATE",
     "BLOCK_UNREADABLE_STATE",
     "DEFAULT_POLL_SECONDS",
+    "EXTERNAL_CANDIDATE_PREFIX",
     "FAILURE_ABANDONED",
     "FAILURE_INTERRUPTED",
     "FAILURE_SCHEDULER",
@@ -170,6 +189,7 @@ __all__ = [
     "SchedulerStopped",
     "StateError",
     "batch_id_of",
+    "bind_runtime",
     "clear_runtime",
     "contract_run_executor",
     "inspect_batch",
@@ -180,8 +200,10 @@ __all__ = [
     "load_state",
     "lock_status",
     "parse_batch",
+    "portable_spec",
     "reconcile_container",
     "resolve_candidate_ref",
+    "running_entry",
     "runtime_path",
     "save_runtime",
     "save_state",
@@ -221,9 +243,10 @@ _RUN_STATE_KEYS = frozenset({
     "index", "spec", "state", "started_at", "finished_at", "run_id", "candidate_hash",
     "hash8", "identity", "resolved_at", "ok", "failure_class", "summary", "error",
 })
-_RUNTIME_KEYS = frozenset({
-    "schema_version", "batch", "index", "run_id", "container", "pid", "hostname", "started_at",
-})
+_RUNTIME_KEYS = frozenset({"schema_version", "batch", "index", "run_id", "pid", "hostname", "started_at"})
+#: How the committed state records an absolute candidate reference: a label
+#: that is not a path, followed by the reference's basename.
+EXTERNAL_CANDIDATE_PREFIX = "<external-candidate>/"
 #: A sanitized error summary is one line, capped: never a traceback.
 _ERROR_MAX_CHARS = 600
 
@@ -395,10 +418,41 @@ def list_batch_files(batches_dir: Path) -> list[Path]:
 # ---------------------------------------------------------------------------
 
 
+def portable_spec(spec: RunSpec) -> dict[str, Any]:
+    """The consumed spec as the committed state records it: a relative
+    candidate reference verbatim, an absolute one — a host-local path — as
+    ``<external-candidate>/<basename>``.  The recorded identity is the
+    authoritative account of what ran; a pending entry always resolves from
+    the batch file, never from this copy."""
+    data = spec.to_dict()
+    if os.path.isabs(spec.candidate):
+        data["candidate"] = EXTERNAL_CANDIDATE_PREFIX + (Path(spec.candidate).name or "candidate")
+    return data
+
+
+def _validate_portable_spec(spec: Mapping[str, Any], *, context: str) -> dict[str, Any]:
+    unknown = sorted(set(spec) - _RUN_SPEC_KEYS)
+    if unknown:
+        raise StateError(f"{context}: unknown spec field(s) {', '.join(unknown)}; refusing to interpret it")
+    for key in ("candidate", "mode", "benchmark"):
+        if key in spec and not isinstance(spec[key], str):
+            raise StateError(f"{context}: spec.{key} must be a string")
+    if "budget_seconds" in spec and (isinstance(spec["budget_seconds"], bool) or not isinstance(spec["budget_seconds"], int)):
+        raise StateError(f"{context}: spec.budget_seconds must be an integer")
+    for key, value in spec.items():
+        if isinstance(value, str) and os.path.isabs(value):
+            raise StateError(
+                f"{context}: spec.{key} carries an absolute path — committed state is portable"
+                f" and records an absolute candidate reference as {EXTERNAL_CANDIDATE_PREFIX}<basename>"
+            )
+    return dict(spec)
+
+
 @dataclass
 class RunState:
     """One started run of a batch, as the scheduler observed it — every
-    field portable (no path, pid, host, container or environment value)."""
+    field portable (no path, pid, host, container or environment value;
+    the spec as :func:`portable_spec` records it)."""
 
     index: int
     spec: dict[str, Any]
@@ -453,16 +507,20 @@ class RunState:
             raise StateError(f"{context}: run index must be a non-negative integer")
         if not isinstance(spec, Mapping):
             raise StateError(f"{context}: run spec must be an object")
+        spec = _validate_portable_spec(spec, context=context)
         if state not in RUN_STATES:
             raise StateError(f"{context}: unknown run state {state!r}")
+        run_id = data.get("run_id")
+        if run_id is not None and (not isinstance(run_id, str) or not run_id):
+            raise StateError(f"{context}: run_id must be a non-empty string or null")
         identity = data.get("identity")
         return cls(
             index=index,
-            spec=dict(spec),
+            spec=spec,
             state=state,
             started_at=data.get("started_at"),
             finished_at=data.get("finished_at"),
-            run_id=data.get("run_id"),
+            run_id=run_id,
             candidate_hash=data.get("candidate_hash"),
             hash8=data.get("hash8"),
             identity=dict(identity) if isinstance(identity, Mapping) else None,
@@ -584,13 +642,15 @@ def _write_atomically(path: Path, payload: str, *, prefix: str) -> None:
 
 @dataclass(frozen=True)
 class RuntimeRecord:
-    """``batches/runtime/<id>.json``: what a replacement scheduler on this
-    host needs to reconcile a run the previous one left behind."""
+    """``batches/runtime/<id>.json``: which committed entry a scheduler on
+    this host left running (batch, index, run id) and who ran it (pid,
+    hostname).  It names no container — the container a recovery may touch
+    is derived from the committed entry the record binds to
+    (:func:`bind_runtime`), never read from here."""
 
     batch: str
     index: int
     run_id: str
-    container: str
     pid: int
     hostname: str
     started_at: str
@@ -601,7 +661,6 @@ class RuntimeRecord:
             "batch": self.batch,
             "index": self.index,
             "run_id": self.run_id,
-            "container": self.container,
             "pid": self.pid,
             "hostname": self.hostname,
             "started_at": self.started_at,
@@ -609,22 +668,26 @@ class RuntimeRecord:
 
     @classmethod
     def from_dict(cls, data: Any, *, context: str) -> RuntimeRecord:
+        """Strict: exactly the documented fields with their documented types
+        — a record is bound, never coerced."""
         if not isinstance(data, Mapping) or data.get("schema_version") != RUNTIME_SCHEMA_VERSION:
             raise StateError(f"{context}: not a runtime record of schema_version {RUNTIME_SCHEMA_VERSION}")
         if set(data) != _RUNTIME_KEYS:
             raise StateError(f"{context}: unexpected runtime record fields")
-        try:
-            return cls(
-                batch=str(data["batch"]),
-                index=int(data["index"]),
-                run_id=str(data["run_id"]),
-                container=str(data["container"]),
-                pid=int(data["pid"]),
-                hostname=str(data["hostname"]),
-                started_at=str(data["started_at"]),
-            )
-        except (TypeError, ValueError) as exc:
-            raise StateError(f"{context}: malformed runtime record: {exc}") from exc
+        for key in ("batch", "run_id", "hostname", "started_at"):
+            if not isinstance(data[key], str) or not data[key]:
+                raise StateError(f"{context}: malformed runtime record: {key} must be a non-empty string")
+        for key, minimum in (("index", 0), ("pid", 1)):
+            if isinstance(data[key], bool) or not isinstance(data[key], int) or data[key] < minimum:
+                raise StateError(f"{context}: malformed runtime record: {key} must be an integer >= {minimum}")
+        return cls(
+            batch=data["batch"],
+            index=data["index"],
+            run_id=data["run_id"],
+            pid=data["pid"],
+            hostname=data["hostname"],
+            started_at=data["started_at"],
+        )
 
 
 def runtime_path(batches_dir: Path, batch_id: str) -> Path:
@@ -661,6 +724,50 @@ def clear_runtime(batches_dir: Path, batch_id: str) -> None:
         os.unlink(runtime_path(batches_dir, batch_id))
     except FileNotFoundError:
         pass
+
+
+def running_entry(batch_id: str, state: BatchState) -> RunState | None:
+    """The one run the committed state records as ``running`` (with the run
+    id its container derives from), or ``None``.  More than one, or one
+    without a run id, is a :class:`StateError`: one scheduler runs one
+    container at a time, so such a state can only be inspected by hand."""
+    running = state.running
+    if len(running) > 1:
+        raise StateError(
+            f"batch {batch_id}: {len(running)} runs are recorded as running (entries"
+            f" {', '.join(f'#{run.index}' for run in running)}); one scheduler runs one at a time"
+        )
+    if running and not running[0].run_id:
+        raise StateError(f"batch {batch_id}: run #{running[0].index} is recorded as running without a run id")
+    return running[0] if running else None
+
+
+def bind_runtime(batch_id: str, runtime: RuntimeRecord, state: BatchState | None) -> RunState:
+    """The committed entry *runtime* belongs to: its batch must be
+    *batch_id* and its index must name an entry of *state* carrying exactly
+    its run id.  That entry's run id — never the record — is what a
+    container name is derived from.  Anything less is a :class:`StateError`
+    and no container is touched."""
+    where = f"{RUNTIME_DIRNAME}/{batch_id}.json"
+    if runtime.batch != batch_id:
+        raise StateError(f"{where} records batch {runtime.batch!r}, not {batch_id!r}")
+    if state is None:
+        raise StateError(
+            f"{where} names run {runtime.run_id} at entry #{runtime.index}, but the batch has no"
+            " readable committed state to bind it to"
+        )
+    if runtime.index >= len(state.runs):
+        raise StateError(
+            f"{where} names entry #{runtime.index}, but the committed state records only"
+            f" {len(state.runs)} run(s)"
+        )
+    run = state.runs[runtime.index]
+    if run.run_id != runtime.run_id:
+        raise StateError(
+            f"{where} names run {runtime.run_id} at entry #{runtime.index}, but the committed"
+            f" state records {run.run_id!r} there"
+        )
+    return run
 
 
 # ---------------------------------------------------------------------------
@@ -848,30 +955,60 @@ def inspect_batch(
         )
     if state is None:
         return None, BatchBlock(BLOCK_MISSING_STATE, missing_state_warning(batch_id))
-    running = state.running
-    if running:
-        run = running[0]
-        try:
-            runtime = load_runtime(batches_dir, batch_id)
-        except StateError:
-            runtime = None
-        local = runtime is not None and runtime.run_id == run.run_id and runtime.hostname == hostname
-        if local:
-            message = (
-                f"run #{run.index} ({run.run_id}) was left running by scheduler pid"
-                f" {runtime.pid} on this host; its container {runtime.container} is"
-                " reconciled (force-removed and confirmed gone) when a scheduler starts"
-            )
-        else:
-            message = (
-                f"run #{run.index} ({run.run_id}) is recorded as running but this host holds no"
-                " runtime metadata for it — the state was committed on another host and the"
-                f" run cannot be reconciled here. Confirm container {container_name(run.run_id or '')}"
-                " is gone on the host that ran it, then start the scheduler with"
-                f" --acknowledge-cleanup {batch_id}"
-            )
-        return state, BatchBlock(BLOCK_ABANDONED_RUN, message)
-    return state, None
+    try:
+        run = running_entry(batch_id, state)
+    except StateError as exc:
+        return state, BatchBlock(
+            BLOCK_ABANDONED_RUN,
+            f"committed state is inconsistent ({exc}); nothing from this batch runs until it is"
+            " repaired by hand",
+        )
+    if run is None:
+        return state, None
+    container = container_name(run.run_id or "")
+    runtime: RuntimeRecord | None = None
+    bound: RunState | None = None
+    binding_error: StateError | None = None
+    try:
+        runtime = load_runtime(batches_dir, batch_id)
+        bound = bind_runtime(batch_id, runtime, state) if runtime is not None else None
+    except StateError as exc:
+        binding_error = exc
+    if binding_error is not None:
+        message = (
+            f"run #{run.index} ({run.run_id}) is recorded as running and this host's runtime"
+            f" metadata does not bind to it ({binding_error}); the scheduler stops until it is"
+            f" inspected by hand — confirm container {container} is gone (`docker ps`), then delete"
+            f" {RUNTIME_DIRNAME}/{batch_id}.json; --acknowledge-cleanup is refused meanwhile"
+        )
+    elif runtime is None:
+        message = (
+            f"run #{run.index} ({run.run_id}) is recorded as running but this host holds no"
+            " runtime metadata for it — the state was committed on another host and the"
+            f" run cannot be reconciled here. Confirm container {container}"
+            " is gone on the host that ran it, then start the scheduler with"
+            f" --acknowledge-cleanup {batch_id}"
+        )
+    elif bound is not run:
+        message = (
+            f"run #{run.index} ({run.run_id}) is recorded as running but this host's runtime"
+            f" metadata binds to entry #{bound.index} ({bound.run_id}); the scheduler stops until"
+            f" it is inspected by hand — confirm container {container} is gone, then delete"
+            f" {RUNTIME_DIRNAME}/{batch_id}.json"
+        )
+    elif runtime.hostname == hostname:
+        message = (
+            f"run #{run.index} ({run.run_id}) was left running by scheduler pid"
+            f" {runtime.pid} on this host; its container {container} is"
+            " reconciled (force-removed and confirmed gone) when a scheduler starts"
+        )
+    else:
+        message = (
+            f"run #{run.index} ({run.run_id}) was left running on host {runtime.hostname!r} and"
+            f" cannot be reconciled here. Confirm container {container} is gone on that host,"
+            f" then start the scheduler with --acknowledge-cleanup {batch_id}"
+        )
+    return state, BatchBlock(BLOCK_ABANDONED_RUN, message)
 
 
 # ---------------------------------------------------------------------------
@@ -984,6 +1121,18 @@ def contract_run_executor(
 Logger = Callable[[str], None]
 
 
+@dataclass(frozen=True)
+class _Reconciliation:
+    """One container recovery will touch: ``container_name(run.run_id)`` for
+    a committed entry a runtime record binds to.  *stale* when the entry is
+    already terminal (only the runtime file is left over)."""
+
+    batch_id: str
+    state: BatchState
+    run: RunState
+    stale: bool
+
+
 def _default_log(message: str) -> None:
     print(f"{_stamp(_now())} {message}", flush=True)
 
@@ -996,8 +1145,12 @@ class Scheduler:
     *container_runtime* reconciles abandoned containers (the production one
     is :class:`DockerContainerRuntime`; tests inject a fake).  *now* /
     *sleep* / *log* / *hostname* are injectable clocks, sinks and identity.
-    *replay_without_state* and *acknowledge_cleanup* are the operator's
-    batch-scoped acknowledgements, applied once under the lock at startup.
+    *environ* is the effective environment the executor binds secret slots
+    from (``os.environ`` by default): the exact values bound to a bundle's
+    declared slots are redacted from everything the scheduler records or
+    logs.  *replay_without_state* and *acknowledge_cleanup* are the
+    operator's batch-scoped acknowledgements, applied once under the lock at
+    startup.
     """
 
     def __init__(
@@ -1014,12 +1167,14 @@ class Scheduler:
         sleep: Callable[[float], None] | None = None,
         log: Logger | None = None,
         hostname: str | None = None,
+        environ: Mapping[str, str] | None = None,
         replay_without_state: Iterable[str] = (),
         acknowledge_cleanup: Iterable[str] = (),
     ) -> None:
         self.batches_dir = Path(batches_dir)
         self.executor = executor
         self._container_runtime = container_runtime
+        self._environ: Mapping[str, str] = os.environ if environ is None else environ
         self.repo_root = Path(repo_root) if repo_root is not None else _REPO_ROOT
         self.runs_root = Path(runs_root) if runs_root is not None else self.repo_root / RUNS_DIRNAME
         self.results_repo = Path(results_repo) if results_repo is not None else None
@@ -1039,15 +1194,13 @@ class Scheduler:
             self._container_runtime = DockerContainerRuntime()
         return self._container_runtime
 
-    # -- sanitizing what reaches the committed state -------------------------
+    # -- sanitizing what reaches the committed state and the log -------------
 
-    def _sanitize(self, text: str) -> str:
-        """One line, credential shapes redacted, host-local roots replaced by
-        placeholders, capped — what a committed state file may carry."""
-        text = redact_credentials(text)
+    def _roots(self) -> list[tuple[str, str]]:
         roots: list[tuple[str, str]] = [
             ("<runs>", str(self.runs_root)),
             ("<repo>", str(self.repo_root)),
+            ("<repo>", str(_REPO_ROOT)),
         ]
         if self.results_repo is not None:
             roots.append(("<results-repo>", str(self.results_repo)))
@@ -1057,10 +1210,30 @@ class Scheduler:
         except (OSError, RuntimeError):
             pass
         roots.append(("<tmp>", tempfile.gettempdir()))
-        for placeholder, root in sorted(roots, key=lambda item: -len(item[1])):
-            if len(Path(root).parts) >= 2:
-                text = text.replace(root, placeholder)
-        text = " ".join(text.split())
+        return [(p, r) for p, r in sorted(roots, key=lambda item: -len(item[1])) if len(Path(r).parts) >= 2]
+
+    def _redact(self, text: str, *, bundle: CandidateBundle | None = None) -> str:
+        """Every secret value and host-local root gone, line structure kept
+        (what a log line may carry).  With *bundle*: the exact non-empty
+        value bound to each of its declared secret slots in the effective
+        environment — whatever its shape — and a value assigned to one of
+        those slots; always: every generic credential shape; then the known
+        roots replaced by placeholders.  Without a bundle (a spec that never
+        resolved) the generic shapes and roots still apply."""
+        slots = tuple(bundle.secret_slots) if bundle is not None else ()
+        bound = sorted(((slot, self._environ.get(slot, "")) for slot in slots), key=lambda item: -len(item[1]))
+        for slot, value in bound:
+            if value:
+                text = text.replace(value, f"[redacted: value bound to secret slot {slot}]")
+        text = redact_credentials(text, secret_slots=slots)
+        for placeholder, root in self._roots():
+            text = text.replace(root, placeholder)
+        return text
+
+    def _sanitize(self, text: str, *, bundle: CandidateBundle | None = None) -> str:
+        """:meth:`_redact`, then one line and capped — what a committed state
+        file may carry."""
+        text = " ".join(self._redact(text, bundle=bundle).split())
         if len(text) > _ERROR_MAX_CHARS:
             text = text[: _ERROR_MAX_CHARS - 1] + "…"
         return text
@@ -1126,19 +1299,59 @@ class Scheduler:
                 " the batch starts from entry 0 (commit the state file with the batch)"
             )
         for batch_id in self.acknowledge_cleanup:
-            state, block = inspect_batch(self.batches_dir, batch_id, hostname=self.hostname)
-            if state is None or block is None or block.kind != BLOCK_ABANDONED_RUN:
-                raise AcknowledgementError(
-                    f"--acknowledge-cleanup {batch_id}: batch {batch_id} has no run recorded as"
-                    " running; there is nothing to acknowledge"
-                    + (f" ({block.message})" if block is not None else "")
-                )
-            for run in state.running:
-                self._finish_abandoned(run, note="cleanup acknowledged by the operator (--acknowledge-cleanup)")
+            state, run = self._acknowledgeable_run(batch_id)
+            self._finish_abandoned(run, note="cleanup acknowledged by the operator (--acknowledge-cleanup)")
             save_state(self.batches_dir, state, now=self._now())
             clear_runtime(self.batches_dir, batch_id)
-            self._log(f"CLEANUP ACKNOWLEDGED {batch_id}: abandoned run(s) marked failed on the operator's word")
+            self._log(
+                f"CLEANUP ACKNOWLEDGED {batch_id}: run #{run.index} ({run.run_id}) marked failed on"
+                " the operator's word"
+            )
         self._acknowledged = True
+
+    def _acknowledgeable_run(self, batch_id: str) -> tuple[BatchState, RunState]:
+        """The run ``--acknowledge-cleanup`` may mark failed — only when local
+        reconciliation is impossible: no runtime metadata on this checkout,
+        or a valid record that belongs to another host.  Valid same-host
+        metadata means the run is reconciled here instead; unreadable,
+        malformed or unbound metadata fails closed with the file kept."""
+        flag = f"--acknowledge-cleanup {batch_id}"
+        try:
+            state = load_state(self.batches_dir, batch_id)
+        except StateError as exc:
+            raise AcknowledgementError(f"{flag}: committed state is unreadable ({exc}); nothing can be acknowledged") from None
+        try:
+            run = running_entry(batch_id, state) if state is not None else None
+        except StateError as exc:
+            raise AcknowledgementError(f"{flag}: {exc}; repair the committed state by hand") from None
+        if state is None or run is None:
+            raise AcknowledgementError(
+                f"{flag}: batch {batch_id} has no run recorded as running; there is nothing to acknowledge"
+            )
+        container = container_name(run.run_id or "")
+        try:
+            runtime = load_runtime(self.batches_dir, batch_id)
+            bound = bind_runtime(batch_id, runtime, state) if runtime is not None else None
+        except StateError as exc:
+            raise AcknowledgementError(
+                f"{flag}: {RUNTIME_DIRNAME}/{batch_id}.json is unreadable or does not bind to the"
+                f" recorded run ({exc}); the acknowledgement cannot stand in for an inspection —"
+                f" confirm container {container} is gone (`docker ps`), delete the runtime file by"
+                " hand, and start again; the file is kept"
+            ) from None
+        if runtime is not None and bound is not run:
+            raise AcknowledgementError(
+                f"{flag}: {RUNTIME_DIRNAME}/{batch_id}.json binds to entry #{bound.index}"
+                f" ({bound.run_id}), not to the running entry #{run.index} ({run.run_id}); inspect by"
+                f" hand — confirm container {container} is gone, then delete the runtime file"
+            )
+        if runtime is not None and runtime.hostname == self.hostname:
+            raise AcknowledgementError(
+                f"{flag}: this host holds runtime metadata for run {run.run_id} (scheduler pid"
+                f" {runtime.pid}), so the run is reconciled here — start without the flag and"
+                f" container {container} is force-removed and confirmed gone"
+            )
+        return state, run
 
     def _finish_abandoned(self, run: RunState, *, note: str) -> None:
         run.state = RUN_FAILED
@@ -1154,35 +1367,67 @@ class Scheduler:
         """Reconcile every run left ``running`` by a previous scheduler before
         any new work: on this host, force-remove its container and confirm it
         gone, then mark the run failed; anything that cannot be confirmed
-        stops the scheduler (:class:`ReconciliationError`).  Called under the
-        lock at startup; returns the run ids touched."""
+        stops the scheduler (:class:`ReconciliationError`).  Every runtime
+        record is bound to its committed entry first — across all batches,
+        before the first container operation — so a record that does not
+        bind stops the scheduler with nothing touched.  Called under the lock
+        at startup; returns the run ids touched."""
         touched: list[str] = []
+        for item in self._plan_recovery():
+            container = container_name(item.run.run_id or "")
+            note = reconcile_container(self.container_runtime, container)
+            if item.stale:
+                self._log(f"RECOVERED {item.batch_id}: stale runtime metadata for {item.run.run_id} — container {note}")
+            else:
+                self._finish_abandoned(item.run, note=f"container {note}")
+                save_state(self.batches_dir, item.state, now=self._now())
+                touched.append(item.run.run_id or f"{item.batch_id}#{item.run.index}")
+                self._log(f"RECOVERED {item.batch_id} #{item.run.index}: {item.run.run_id} — container {container} {note}")
+            clear_runtime(self.batches_dir, item.batch_id)
+        return touched
+
+    def _plan_recovery(self) -> list[_Reconciliation]:
+        """Bind every batch's runtime record to its committed entry and decide
+        what recovery will do — reading only.  Any record that is unreadable,
+        malformed, unbound or from another host, and any running entry
+        without a same-host record, is a :class:`ReconciliationError` raised
+        before any container is inspected or removed."""
+        items: list[_Reconciliation] = []
         batch_ids = {batch_id_of(path) for path in list_batch_files(self.batches_dir)}
         batch_ids.update(path.stem for path in list_runtime_files(self.batches_dir))
         for batch_id in sorted(batch_ids):
+            where = f"{RUNTIME_DIRNAME}/{batch_id}.json"
             try:
                 state = load_state(self.batches_dir, batch_id)
             except StateError:
-                state = None  # blocked as unreadable by next_work; its runtime file, if any, is handled below
-            running = state.running if state is not None else []
+                state = None  # blocked as unreadable by next_work; a runtime file cannot bind to it
             try:
                 runtime = load_runtime(self.batches_dir, batch_id)
             except StateError as exc:
                 raise ReconciliationError(
-                    f"{RUNTIME_DIRNAME}/{batch_id}.json is unreadable ({exc}); a run of batch"
-                    f" {batch_id} may still hold a container on this host — inspect `docker ps`,"
-                    " remove the container by hand, delete the runtime file, and start again"
+                    f"{where} is unreadable ({exc}); a run of batch {batch_id} may still hold a"
+                    " container on this host — inspect `docker ps`, remove the container by hand,"
+                    " delete the runtime file, and start again"
+                ) from None
+            try:
+                run = running_entry(batch_id, state) if state is not None else None
+                bound = bind_runtime(batch_id, runtime, state) if runtime is not None else None
+            except StateError as exc:
+                raise ReconciliationError(
+                    f"{exc}; a run of batch {batch_id} may still hold a container on this host —"
+                    " inspect `docker ps`, remove the container by hand, delete the runtime file,"
+                    " and start again"
                 ) from None
             if runtime is not None and runtime.hostname != self.hostname:
                 raise ReconciliationError(
-                    f"{RUNTIME_DIRNAME}/{batch_id}.json was written on host {runtime.hostname!r},"
-                    f" not this one ({self.hostname!r}): run {runtime.run_id} cannot be reconciled"
-                    f" here. Confirm container {runtime.container} is gone on that host, delete"
-                    " the runtime file, and start again"
-                    + (f" with --acknowledge-cleanup {batch_id}" if running else "")
+                    f"{where} was written on host {runtime.hostname!r}, not this one"
+                    f" ({self.hostname!r}): run {runtime.run_id} cannot be reconciled here. Confirm"
+                    f" container {container_name(runtime.run_id)} is gone on that host, delete the"
+                    " runtime file, and start again"
+                    + (f" with --acknowledge-cleanup {batch_id}" if run is not None else "")
                 )
-            for run in running:
-                if runtime is None or runtime.run_id != run.run_id:
+            if run is not None:
+                if runtime is None:
                     raise ReconciliationError(
                         f"batch {batch_id} run #{run.index} ({run.run_id}) is recorded as running"
                         " but this host holds no runtime metadata for it — the state was"
@@ -1190,20 +1435,22 @@ class Scheduler:
                         f" Confirm container {container_name(run.run_id or '')} is gone on the"
                         f" host that ran it, then start again with --acknowledge-cleanup {batch_id}"
                     )
-                note = reconcile_container(self.container_runtime, runtime.container)
-                self._finish_abandoned(run, note=f"container {note}")
-                touched.append(run.run_id or f"{batch_id}#{run.index}")
-                self._log(f"RECOVERED {batch_id} #{run.index}: {run.run_id} — container {runtime.container} {note}")
-            if runtime is not None and not running:
-                # Stale runtime file (the previous scheduler died between the
-                # terminal transition and the cleanup): reconcile anyway.
-                note = reconcile_container(self.container_runtime, runtime.container)
-                self._log(f"RECOVERED {batch_id}: stale runtime metadata for {runtime.run_id} — container {note}")
-            if running and state is not None:
-                save_state(self.batches_dir, state, now=self._now())
-            if runtime is not None:
-                clear_runtime(self.batches_dir, batch_id)
-        return touched
+                if bound is not run:
+                    raise ReconciliationError(
+                        f"{where} binds to entry #{bound.index} ({bound.run_id}) while entry"
+                        f" #{run.index} ({run.run_id}) is recorded as running; the state and the"
+                        " runtime metadata disagree — inspect `docker ps`, remove any container of"
+                        " this batch by hand, delete the runtime file, and start again"
+                    )
+                assert state is not None
+                items.append(_Reconciliation(batch_id=batch_id, state=state, run=run, stale=False))
+            elif runtime is not None:
+                # The previous scheduler died between the terminal transition
+                # and the cleanup: the bound (terminal) entry's container is
+                # reconciled anyway.
+                assert state is not None and bound is not None
+                items.append(_Reconciliation(batch_id=batch_id, state=state, run=bound, stale=True))
+        return items
 
     # -- execution -----------------------------------------------------------
 
@@ -1238,7 +1485,7 @@ class Scheduler:
         started = self._now()
         entry = RunState(
             index=index,
-            spec=spec.to_dict(),
+            spec=portable_spec(spec),
             state=RUN_RUNNING,
             started_at=_stamp(started),
         )
@@ -1253,7 +1500,7 @@ class Scheduler:
             entry.summary = "run spec could not be resolved"
             entry.finished_at = _stamp(self._now())
             save_state(self.batches_dir, state, now=self._now())
-            self._log(f"FAILED {batch.id} #{index}: {redact_credentials(f'{type(exc).__name__}: {exc}')}")
+            self._log(f"FAILED {batch.id} #{index}: {self._redact(f'{type(exc).__name__}: {exc}')}")
             return True
 
         entry.run_id = resolved.run_id
@@ -1269,7 +1516,6 @@ class Scheduler:
                 batch=batch.id,
                 index=index,
                 run_id=resolved.run_id,
-                container=resolved.container,
                 pid=os.getpid(),
                 hostname=self.hostname,
                 started_at=entry.started_at or _stamp(started),
@@ -1288,10 +1534,10 @@ class Scheduler:
             outcome = RunOutcome(
                 ok=False, summary=f"executor raised {type(exc).__name__}", failure_class=FAILURE_SCHEDULER
             )
-            entry.error = self._sanitize(f"{type(exc).__name__}: {exc}")
+            entry.error = self._sanitize(f"{type(exc).__name__}: {exc}", bundle=resolved.bundle)
             self._log(
                 f"EXECUTOR ERROR {batch.id} #{index}: "
-                + redact_credentials("".join(traceback.format_exception(exc))).rstrip()
+                + self._redact("".join(traceback.format_exception(exc)), bundle=resolved.bundle).rstrip()
             )
         except BaseException as exc:  # SIGINT / SIGTERM: interrupt the run, then unwind
             self._interrupt(batch, index, state, entry, resolved, exc)
@@ -1299,7 +1545,7 @@ class Scheduler:
         entry.state = RUN_DONE if outcome.ok else RUN_FAILED
         entry.ok = outcome.ok
         entry.failure_class = outcome.failure_class
-        entry.summary = self._sanitize(outcome.summary)
+        entry.summary = self._sanitize(outcome.summary, bundle=resolved.bundle)
         entry.finished_at = _stamp(self._now())
         save_state(self.batches_dir, state, now=self._now())
         clear_runtime(self.batches_dir, batch.id)
@@ -1327,7 +1573,10 @@ class Scheduler:
         entry.ok = False
         entry.failure_class = FAILURE_INTERRUPTED
         entry.summary = f"interrupted ({why})"
-        entry.error = self._sanitize(f"the scheduler was interrupted ({why}) while this run was running; container {note}")
+        entry.error = self._sanitize(
+            f"the scheduler was interrupted ({why}) while this run was running; container {note}",
+            bundle=resolved.bundle,
+        )
         entry.finished_at = _stamp(self._now())
         save_state(self.batches_dir, state, now=self._now())
         clear_runtime(self.batches_dir, batch.id)

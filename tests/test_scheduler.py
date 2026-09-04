@@ -85,11 +85,18 @@ class FakeContainers:
     ) -> None:
         self.present = dict(present or {})
         self.removed: list[str] = []
+        self.inspected: list[str] = []
         self.fail_remove = fail_remove
         self.sticky = sticky
         self.fail_status = fail_status
 
+    @property
+    def touched(self) -> list[str]:
+        """Every container name the scheduler inspected or removed."""
+        return self.inspected + self.removed
+
     def status(self, name: str) -> str | None:
+        self.inspected.append(name)
         if self.fail_status:
             raise sched.ReconciliationError("docker inspect could not run: no daemon")
         return self.present.get(name)
@@ -129,6 +136,11 @@ def write_batch(
 
 def spec(candidate: Path | str, mode: str = "basic", benchmark: str = "smoke", budget: int = 600) -> dict[str, Any]:
     return {"candidate": str(candidate), "mode": mode, "benchmark": benchmark, "budget_seconds": budget}
+
+
+def consumed(candidate: Path | str, **kwargs: Any) -> dict[str, Any]:
+    """The spec as the committed state records it (an absolute reference sanitized)."""
+    return sched.portable_spec(sched.RunSpec(**spec(candidate, **kwargs)))
 
 
 def snapshot(root: Path) -> dict[str, tuple[bytes, int]]:
@@ -200,19 +212,32 @@ def leave_running(batches: Path, batch_id: str, candidate: Path, run_id: str, *,
     Returns the run's deterministic container name."""
     state = sched.BatchState(batch=batch_id, batch_file=f"{batch_id}.toml")
     state.runs.append(
-        sched.RunState(index=0, spec=spec(candidate), state="running", run_id=run_id, started_at="2026-09-03T11:00:00+00:00")
+        sched.RunState(index=0, spec=consumed(candidate), state="running", run_id=run_id, started_at="2026-09-03T11:00:00+00:00")
     )
     sched.save_state(batches, state, now=T0)
-    container = container_name(run_id)
     if runtime_host is not None:
-        sched.save_runtime(
-            batches,
-            sched.RuntimeRecord(
-                batch=batch_id, index=0, run_id=run_id, container=container, pid=424242,
-                hostname=runtime_host, started_at="2026-09-03T11:00:00+00:00",
-            ),
-        )
-    return container
+        sched.save_runtime(batches, runtime_record(batch_id, run_id, hostname=runtime_host))
+    return container_name(run_id)
+
+
+def runtime_record(batch_id: str, run_id: str, *, index: int = 0, hostname: str = HOST) -> sched.RuntimeRecord:
+    return sched.RuntimeRecord(
+        batch=batch_id, index=index, run_id=run_id, pid=424242, hostname=hostname, started_at="2026-09-03T11:00:00+00:00"
+    )
+
+
+def write_runtime_json(batches: Path, batch_id: str, payload: dict[str, Any] | str) -> Path:
+    """A hand-written (possibly malformed) runtime file."""
+    path = sched.runtime_path(batches, batch_id)
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(payload if isinstance(payload, str) else json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def runtime_payload(batch_id: str, run_id: str, overrides: dict[str, Any]) -> dict[str, Any]:
+    payload = runtime_record(batch_id, run_id).to_dict()
+    payload.update(overrides)
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +324,10 @@ class TestState:
             ('{"schema_version": 1, "batch": "b", "runs": [{"index": 1, "spec": {}, "state": "done"}]}', "cursor"),
             ('{"schema_version": 1, "batch": "b", "runs": [{"index": 0, "spec": {}, "state": "flying"}]}', "unknown run state"),
             ('{"schema_version": 1, "batch": "b", "runs": [{"index": 0, "spec": {}, "state": "done", "run_dir": "/x"}]}', "unknown run field"),
+            ('{"schema_version": 1, "batch": "b", "runs": [{"index": 0, "spec": {"candidate": "/home/op/cands/x"}, "state": "done"}]}', "absolute path"),
+            ('{"schema_version": 1, "batch": "b", "runs": [{"index": 0, "spec": {"candidate": "x", "path": "/x"}, "state": "done"}]}', "unknown spec field"),
+            ('{"schema_version": 1, "batch": "b", "runs": [{"index": 0, "spec": {"budget_seconds": "9"}, "state": "done"}]}', "integer"),
+            ('{"schema_version": 1, "batch": "b", "runs": [{"index": 0, "spec": {}, "state": "running", "run_id": ""}]}', "run_id"),
         ],
     )
     def test_unreadable_state_raises(self, batches: Path, payload: str, message: str) -> None:
@@ -383,9 +412,14 @@ class TestState:
         (restored / "state").mkdir(parents=True)
         shutil.copy(batches / "a.toml", restored / "a.toml")
         shutil.copy(batches / "state" / "a.json", restored / "state" / "a.json")
+        # The checkpoint names the absolute candidate reference only as a label.
+        committed = (restored / "state" / "a.json").read_text(encoding="utf-8")
+        assert str(candidate) not in committed and str(tmp_path) not in committed
+        assert json.loads(committed)["runs"][0]["spec"]["candidate"] == f"<external-candidate>/{candidate.name}"
         second = StubExecutor()
         assert make_scheduler(restored, second, logs=logs, tmp=tmp_path / "host-b", hostname="host-b").run_until_idle() == 2
         assert [(c.index, c.spec.budget_seconds) for c in second.calls] == [(1, 2), (2, 3)]
+        assert [c.candidate_path for c in second.calls] == [candidate.resolve()] * 2, "pending entries resolve from the batch file"
         assert [r.state for r in load_state(restored, "a").runs] == ["done", "done", "done"]
 
 
@@ -761,10 +795,10 @@ class TestRecovery:
     def test_stale_runtime_metadata_after_a_terminal_transition_is_reconciled(self, batches: Path, candidate: Path, logs) -> None:
         write_batch(batches, "a", [spec(candidate)])
         state = sched.BatchState(batch="a", batch_file="a.toml")
-        state.runs.append(sched.RunState(index=0, spec=spec(candidate), state="done", run_id="smoke-x-2026-09-03T11-00", ok=True))
+        state.runs.append(sched.RunState(index=0, spec=consumed(candidate), state="done", run_id="smoke-x-2026-09-03T11-00", ok=True))
         sched.save_state(batches, state, now=T0)
         container = container_name("smoke-x-2026-09-03T11-00")
-        sched.save_runtime(batches, sched.RuntimeRecord(batch="a", index=0, run_id="smoke-x-2026-09-03T11-00", container=container, pid=1, hostname=HOST, started_at="x"))
+        sched.save_runtime(batches, runtime_record("a", "smoke-x-2026-09-03T11-00"))
         containers = FakeContainers({container: "exited"})
         assert make_scheduler(batches, StubExecutor(), logs=logs, containers=containers).run_until_idle() == 0
         assert containers.removed == [container] and not (batches / "runtime" / "a.json").exists()
@@ -827,6 +861,215 @@ class TestInterruption:
         containers.fail_remove = False
         assert make_scheduler(batches, StubExecutor(), logs=logs, containers=containers).run_until_idle() == 1
         assert [r.state for r in load_state(batches, "a").runs] == ["failed", "done"]
+
+
+class TestRuntimeBinding:
+    """A runtime record authorizes nothing by itself: it must bind — batch,
+    index and run id — to the committed running entry, and the only
+    container recovery may touch is ``container_name(<that entry's run id>)``."""
+
+    RUN = "smoke-x-2026-09-03T11-00"
+    DECOY = "smoke-decoy-2026-09-03T10-00"
+
+    @pytest.mark.parametrize(
+        "tamper",
+        [
+            {"batch": "b"},
+            {"index": 1},
+            {"run_id": "smoke-decoy-2026-09-03T10-00"},
+            {"container": "silverquillm-smoke-decoy-2026-09-03T10-00"},
+            {"index": "0"},
+            {"pid": "424242"},
+            {"hostname": ""},
+            {"schema_version": 2},
+            "{not json",
+        ],
+        ids=["batch", "index", "run-id", "container-field", "index-type", "pid-type", "empty-host", "version", "json"],
+    )
+    def test_metadata_that_does_not_bind_stops_recovery_before_any_container_or_executor_call(
+        self, batches: Path, candidate: Path, logs, tamper: Any
+    ) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        write_batch(batches, "b", [spec(candidate)])
+        container = leave_running(batches, "a", candidate, self.RUN)
+        payload = tamper if isinstance(tamper, str) else runtime_payload("a", self.RUN, tamper)
+        path = write_runtime_json(batches, "a", payload)
+        containers = FakeContainers({container: "running", container_name(self.DECOY): "running"})
+        executor = StubExecutor()
+        before = state_files(batches)
+        runtime_before = path.read_bytes()
+        with pytest.raises(sched.ReconciliationError):
+            make_scheduler(batches, executor, logs=logs, containers=containers).run_until_idle()
+        assert containers.touched == [], "no docker call: nothing inspected, nothing removed"
+        assert executor.calls == [], "nothing executes — not even another batch"
+        assert state_files(batches) == before and path.read_bytes() == runtime_before, "the evidence is kept"
+        assert load_state(batches, "a").runs[0].state == "running"
+        assert sched.lock_status(batches).held is False
+        _, block = sched.inspect_batch(batches, "a", hostname=HOST)
+        assert block is not None and block.kind == sched.BLOCK_ABANDONED_RUN and "inspected by hand" in block.message
+
+    def test_recovery_removes_only_the_container_of_the_recorded_run(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        container = leave_running(batches, "a", candidate, self.RUN)
+        recorded = json.loads(sched.runtime_path(batches, "a").read_text(encoding="utf-8"))
+        assert set(recorded) == {"schema_version", "batch", "index", "run_id", "pid", "hostname", "started_at"}
+        assert "container" not in recorded and container not in json.dumps(recorded)
+        decoy = container_name(self.DECOY)
+        containers = FakeContainers({container: "running", decoy: "running"})
+        assert make_scheduler(batches, StubExecutor(), logs=logs, containers=containers).run_until_idle() == 1
+        assert containers.removed == [container] and containers.inspected == [container, container]
+        assert containers.present == {decoy: "running"}
+        assert container == container_name(load_state(batches, "a").runs[0].run_id)
+
+    def test_a_runtime_record_without_readable_state_to_bind_to_stops_the_scheduler(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate)], admit=False)
+        write_batch(batches, "b", [spec(candidate)])
+        sched.save_runtime(batches, runtime_record("a", self.RUN))
+        containers = FakeContainers({container_name(self.RUN): "running"})
+        executor = StubExecutor()
+        with pytest.raises(sched.ReconciliationError, match="no readable committed state"):
+            make_scheduler(batches, executor, logs=logs, containers=containers).run_until_idle()
+        assert containers.touched == [] and executor.calls == []
+        assert sched.runtime_path(batches, "a").exists()
+
+    def test_two_running_entries_are_inconsistent_state_and_stop_the_scheduler(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate)] * 3)
+        state = sched.BatchState(batch="a", batch_file="a.toml")
+        for index in range(2):
+            state.runs.append(sched.RunState(index=index, spec=consumed(candidate), state="running", run_id=f"{self.RUN}-{index}"))
+        sched.save_state(batches, state, now=T0)
+        sched.save_runtime(batches, runtime_record("a", f"{self.RUN}-1", index=1))
+        containers = FakeContainers({container_name(f"{self.RUN}-1"): "running"})
+        executor = StubExecutor()
+        with pytest.raises(sched.ReconciliationError, match="one scheduler runs one at a time"):
+            make_scheduler(batches, executor, logs=logs, containers=containers).run_until_idle()
+        assert containers.touched == [] and executor.calls == []
+
+
+class TestCleanupAcknowledgement:
+    """``--acknowledge-cleanup`` is for a replacement host only."""
+
+    RUN = "smoke-x-2026-09-03T11-00"
+
+    def test_same_host_metadata_refuses_the_acknowledgement_and_requires_reconciliation(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        container = leave_running(batches, "a", candidate, self.RUN)
+        containers = FakeContainers({container: "running"})
+        executor = StubExecutor()
+        before = state_files(batches)
+        with pytest.raises(sched.AcknowledgementError, match="reconciled here"):
+            make_scheduler(batches, executor, logs=logs, containers=containers, acknowledge_cleanup=("a",)).run_until_idle()
+        assert executor.calls == [] and containers.touched == []
+        assert sched.runtime_path(batches, "a").exists(), "the runtime metadata is not erased"
+        assert state_files(batches) == before and load_state(batches, "a").runs[0].state == "running"
+        assert not any(line.startswith("CLEANUP ACKNOWLEDGED") for line in logs)
+        # Without the flag, the normal force-remove-and-confirm reconciliation runs.
+        assert make_scheduler(batches, executor, logs=logs, containers=containers).run_until_idle() == 1
+        assert containers.removed == [container] and load_state(batches, "a").runs[0].failure_class == "abandoned"
+
+    @pytest.mark.parametrize(
+        "tamper",
+        [{"index": 1}, {"run_id": "smoke-other-2026-09-03T10-00"}, {"batch": "zzz"}, {"container": "silverquillm-x"}, {"pid": 0}, "{not json"],
+        ids=["index", "run-id", "batch", "container-field", "pid", "json"],
+    )
+    def test_unreadable_or_unbound_metadata_cannot_be_bypassed_with_the_flag(self, batches: Path, candidate: Path, logs, tamper: Any) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        container = leave_running(batches, "a", candidate, self.RUN)
+        payload = tamper if isinstance(tamper, str) else runtime_payload("a", self.RUN, tamper)
+        path = write_runtime_json(batches, "a", payload)
+        runtime_before = path.read_bytes()
+        containers = FakeContainers({container: "running"})
+        executor = StubExecutor()
+        with pytest.raises(sched.AcknowledgementError, match="cannot stand in for an inspection"):
+            make_scheduler(batches, executor, logs=logs, containers=containers, acknowledge_cleanup=("a",)).run_until_idle()
+        assert path.read_bytes() == runtime_before, "the acknowledgement does not erase the metadata"
+        assert executor.calls == [] and containers.touched == []
+        assert load_state(batches, "a").runs[0].state == "running"
+
+    def test_a_valid_record_from_another_host_is_acknowledged_and_the_batch_continues(self, batches: Path, candidate: Path, logs) -> None:
+        write_batch(batches, "a", [spec(candidate), spec(candidate)])
+        leave_running(batches, "a", candidate, self.RUN, runtime_host="other-host")
+        containers = FakeContainers()
+        executor = StubExecutor()
+        assert make_scheduler(batches, executor, logs=logs, containers=containers, acknowledge_cleanup=("a",)).run_until_idle() == 1
+        state = load_state(batches, "a")
+        assert state.runs[0].state == "failed" and state.runs[0].failure_class == "abandoned"
+        assert "acknowledged by the operator" in state.runs[0].error
+        assert state.runs[1].state == "done" and executor.calls[0].index == 1
+        assert containers.touched == [] and not sched.runtime_path(batches, "a").exists()
+        assert any(line.startswith("CLEANUP ACKNOWLEDGED a") for line in logs)
+
+
+class TestPortableSpecs:
+    def test_an_absolute_candidate_reference_never_enters_committed_state(self, batches: Path, candidate: Path, tmp_path: Path, logs) -> None:
+        repo = tmp_path / "repo"
+        (repo / "candidates").mkdir(parents=True)
+        (repo / "benchmarks").symlink_to(REPO_ROOT / "benchmarks")
+        shutil.copytree(candidate, repo / "candidates" / candidate.name)
+        write_batch(batches, "a", [spec(candidate), spec(f"candidates/{candidate.name}"), spec(candidate.name)])
+        executor = StubExecutor()
+        assert make_scheduler(batches, executor, logs=logs, repo_root=repo).run_until_idle() == 3
+        text = sched.state_path(batches, "a").read_text(encoding="utf-8")
+        assert str(candidate) not in text and str(candidate.parent) not in text and str(tmp_path) not in text
+        state = load_state(batches, "a")
+        assert [r.spec["candidate"] for r in state.runs] == [
+            f"<external-candidate>/{candidate.name}", f"candidates/{candidate.name}", candidate.name,
+        ]
+        assert [r.state for r in state.runs] == ["done"] * 3
+        # Execution resolved every reference from the batch file, not from the state.
+        assert executor.calls[0].candidate_path == candidate.resolve()
+        assert executor.calls[1].candidate_path == (repo / "candidates" / candidate.name).resolve()
+        assert [r.candidate_hash for r in state.runs] == [load_candidate_bundle(candidate).candidate_hash] * 3
+
+    def test_portable_spec_keeps_relative_references_verbatim(self) -> None:
+        assert sched.portable_spec(sched.RunSpec("candidates/x--12345678", "basic", "smoke", 1))["candidate"] == "candidates/x--12345678"
+        assert sched.portable_spec(sched.RunSpec("../elsewhere/x", "basic", "smoke", 1))["candidate"] == "../elsewhere/x"
+        assert sched.portable_spec(sched.RunSpec("/home/op/cands/x--12345678", "basic", "smoke", 1)) == {
+            "candidate": "<external-candidate>/x--12345678", "mode": "basic", "benchmark": "smoke", "budget_seconds": 1,
+        }
+
+
+class TestSecretRedaction:
+    def test_bound_slot_values_of_any_shape_are_absent_from_state_and_logs(self, batches: Path, candidate: Path, logs) -> None:
+        """The fixture candidate declares ANTHROPIC_API_KEY.  A bound value
+        that matches no generic token shape, an assignment to the declared
+        slot, and a generic-shaped key must all be gone from the state and
+        the log, while unrelated text survives."""
+        odd = "plain7"  # too short and too plain for any shape-based detector
+        assigned = "k" * 30
+        environ = {"ANTHROPIC_API_KEY": odd, "PATH": "/usr/bin"}
+        assert load_candidate_bundle(candidate).secret_slots == ("ANTHROPIC_API_KEY",)
+        write_batch(batches, "a", [spec(candidate)] * 3)
+        executor = StubExecutor([
+            RuntimeError(f"auth failed: ANTHROPIC_API_KEY={assigned}; got {odd} from the provider; also {FAKE_ANTHROPIC_KEY}"),
+            sched.RunOutcome(ok=False, summary=f"[auth] at agent: provider rejected {odd}", failure_class="auth"),
+            sched.RunOutcome(ok=True, summary=f"phase done; token {odd} echoed by the agent"),
+        ])
+        assert make_scheduler(batches, executor, logs=logs, environ=environ).run_until_idle() == 3
+        text = sched.state_path(batches, "a").read_text(encoding="utf-8")
+        joined = "\n".join(logs)
+        for forbidden in (odd, assigned, FAKE_ANTHROPIC_KEY):
+            assert forbidden not in text, forbidden
+            assert forbidden not in joined, forbidden
+        state = load_state(batches, "a")
+        assert state.runs[0].error == (
+            "RuntimeError: auth failed: [redacted: a value assigned to secret slot ANTHROPIC_API_KEY];"
+            " got [redacted: value bound to secret slot ANTHROPIC_API_KEY] from the provider; also"
+            " [redacted: Anthropic API key]"
+        )
+        assert state.runs[1].summary == "[auth] at agent: provider rejected [redacted: value bound to secret slot ANTHROPIC_API_KEY]"
+        assert state.runs[2].summary == "phase done; token [redacted: value bound to secret slot ANTHROPIC_API_KEY] echoed by the agent"
+        assert "Traceback" in joined and "[redacted: value bound to secret slot ANTHROPIC_API_KEY]" in joined
+        assert "/usr/bin" not in text, "only the declared slots' values are redacted, and nothing else leaks"
+
+    def test_a_resolution_failure_before_any_bundle_keeps_the_generic_redaction(self, batches: Path, tmp_path: Path, logs) -> None:
+        secret_dir = tmp_path / f"cands-{FAKE_ANTHROPIC_KEY}"
+        write_batch(batches, "a", [spec(secret_dir / "missing")])
+        assert make_scheduler(batches, StubExecutor(), logs=logs).run_until_idle() == 1
+        text = sched.state_path(batches, "a").read_text(encoding="utf-8")
+        assert FAKE_ANTHROPIC_KEY not in text and "[redacted: Anthropic API key]" in text
+        assert str(tmp_path) not in text and "<tmp>" in text
+        assert FAKE_ANTHROPIC_KEY not in "\n".join(logs)
 
 
 # ---------------------------------------------------------------------------
