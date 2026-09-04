@@ -30,6 +30,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -1028,3 +1029,367 @@ class TestDiscovery:
         staged.rename(world["dest"] / "renamed")
         with pytest.raises(Exception, match="does not match the directory name"):
             list(publish_mod.iter_published_records(world["dest"]))
+
+
+def _assert_clean(world, prior) -> None:
+    """The destination holds exactly the pre-existing record, byte for byte
+    and mtime for mtime, and no journal or staging directory."""
+    dest = world["dest"]
+    assert _entries(dest) == [world["invalid"]], _entries(dest)
+    assert _tree_with_mtimes(dest / world["invalid"]) == prior["snapshot"]
+    assert not publish_mod.journal_path(dest).exists()
+
+
+def _cli(world, *run_ids: str, dry_run: bool = False) -> list[str]:
+    return [
+        "--results-repo", str(world["repo"]), "--dest", str(world["dest"]), "--candidates-dir", str(world["candidates"]),
+        "--allow-invalid", *(["--dry-run"] if dry_run else []), *run_ids,
+    ]
+
+
+#: A publication invocation frozen at one phase of its transaction while it
+#: holds the destination lock — the live counterpart of the invocation under
+#: test.  Run as its own process: the lock arbitrates between processes.
+_HOLDER = '''\
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[1])
+import publish_results as pub  # noqa: E402
+
+args = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+plan = pub.plan_publication(
+    args["run_ids"], results_repo=Path(args["repo"]), dest=Path(args["dest"]),
+    candidates_dir=Path(args["candidates"]), allow_invalid=True,
+)
+lock = pub.PublicationLock(plan.dest)
+lock.__enter__()
+tx = pub.PublicationTransaction(plan)
+tx.begin()
+phase = args["phase"]
+if phase != "begun":
+    tx.stage()
+if phase == "one-rename":
+    tx.commit_one(tx.runs[0])
+elif phase == "all-renames":
+    tx.commit()
+Path(args["ready"]).write_text("ready", encoding="utf-8")
+deadline = time.monotonic() + 60
+while not Path(args["go"]).exists():
+    if time.monotonic() > deadline:
+        os._exit(3)
+    time.sleep(0.02)
+if args["exit"] == "dies":
+    os._exit(0)  # dies holding the lock and its journal: the kernel drops the lock
+if phase == "begun":
+    tx.stage()
+if phase in ("begun", "staged"):
+    tx.commit()
+elif phase == "one-rename":
+    tx.commit_one(tx.runs[1])
+tx.finish()
+lock.__exit__(None, None, None)
+'''
+
+
+class TestSerialization:
+    """One invocation per destination.  While a live invocation holds the
+    destination — at any phase of its transaction — a second one refuses and
+    changes nothing: not the journal, not the staging tree, not a record.
+    Once the holder has exited, the next invocation recovers the journal it
+    left exactly as documented."""
+
+    PHASES = ("begun", "staged", "one-rename", "all-renames")
+
+    def _hold(self, world, tmp_path: Path, phase: str, *, exit: str) -> tuple[subprocess.Popen, Path]:
+        holder = tmp_path / "holder.py"
+        holder.write_text(_HOLDER, encoding="utf-8")
+        ready, go = tmp_path / "ready", tmp_path / "go"
+        args = tmp_path / "holder-args.json"
+        args.write_text(json.dumps({
+            "run_ids": [world["valid"], world["valid2"]], "repo": str(world["repo"]), "dest": str(world["dest"]),
+            "candidates": str(world["candidates"]), "phase": phase, "ready": str(ready), "go": str(go), "exit": exit,
+        }), encoding="utf-8")
+        proc = subprocess.Popen(
+            [sys.executable, str(holder), str(REPO_ROOT / "scripts"), str(args)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        deadline = time.monotonic() + 120
+        while not ready.exists():
+            if proc.poll() is not None or time.monotonic() > deadline:
+                proc.kill()
+                _out, err = proc.communicate(timeout=10)
+                pytest.fail(f"the holder never reached phase {phase}: {err}")
+            time.sleep(0.02)
+        return proc, go
+
+    def _assert_second_invocation_refuses_without_mutation(self, world, capsys) -> None:
+        dest = world["dest"]
+        before = _snapshot(dest)
+        assert publish_mod.main(_cli(world, world["valid2"])) == 1
+        err = capsys.readouterr().err
+        assert "REFUSED" in err and "holds" in err and "in flight" in err and "RECOVER" not in err
+        assert publish_mod.main(_cli(world, world["valid2"], dry_run=True)) == 1
+        err = capsys.readouterr().err
+        assert "holds" in err and "changed nothing" in err and "RECOVERY REQUIRED" not in err
+        with pytest.raises(publish_mod.PublicationLockedError):
+            publish_mod.recover_publication(dest)
+        with pytest.raises(publish_mod.PublicationLockedError):
+            publish_mod.inspect_publication(dest)
+        with pytest.raises(publish_mod.PublicationLockedError), publish_mod.PublicationLock(dest):
+            pass  # pragma: no cover - the lock is never taken
+        assert _snapshot(dest) == before, "the second invocation changed the holder's tree"
+
+    @pytest.mark.parametrize("phase", PHASES)
+    def test_a_second_invocation_refuses_at_every_phase_and_the_next_recovers_the_stale_journal(
+        self, world, prior, tmp_path: Path, capsys, phase: str
+    ) -> None:
+        dest = world["dest"]
+        proc, go = self._hold(world, tmp_path, phase, exit="dies")
+        try:
+            self._assert_second_invocation_refuses_without_mutation(world, capsys)
+        finally:
+            go.write_text("go", encoding="utf-8")
+            proc.wait(timeout=120)
+        assert proc.returncode == 0, proc.stderr.read()
+        assert publish_mod.journal_path(dest).exists(), "the holder died with its journal in place"
+        # Its lock died with it: the next invocation recovers first, then publishes.
+        code = publish_mod.main(_cli(world, world["valid"], world["valid2"]))
+        out = capsys.readouterr().out
+        assert code == 0 and out.startswith("RECOVERED"), out
+        if phase == "all-renames":
+            assert "already committed every record" in out and "nothing to publish" in out
+        else:
+            assert "rolling it back" in out and "approval stamp" in out
+        assert _entries(dest) == sorted([world["invalid"], world["valid"], world["valid2"]])
+        assert _tree_with_mtimes(dest / world["invalid"]) == prior["snapshot"]
+        assert not publish_mod.journal_path(dest).exists()
+
+    def test_a_holder_that_finishes_leaves_the_next_invocation_nothing_to_recover(self, world, prior, tmp_path: Path, capsys) -> None:
+        dest = world["dest"]
+        proc, go = self._hold(world, tmp_path, "staged", exit="finishes")
+        try:
+            self._assert_second_invocation_refuses_without_mutation(world, capsys)
+        finally:
+            go.write_text("go", encoding="utf-8")
+            proc.wait(timeout=120)
+        assert proc.returncode == 0, proc.stderr.read()
+        assert _entries(dest) == sorted([world["invalid"], world["valid"], world["valid2"]])
+        code = publish_mod.main(_cli(world, world["valid"], world["valid2"]))
+        out = capsys.readouterr().out
+        assert code == 0 and not out.startswith("RECOVERED") and "nothing to publish" in out
+        assert out.count("— already published (identical)") == 2
+
+    def test_the_cli_in_another_process_is_refused_while_this_process_holds_the_destination(self, world, prior, capsys) -> None:
+        dest = world["dest"]
+        script = REPO_ROOT / "scripts" / "publish_results.py"
+        before = _snapshot(dest)
+        with publish_mod.PublicationLock(dest):
+            for extra in ([], ["--dry-run"]):
+                proc = subprocess.run(
+                    [sys.executable, str(script), *_cli(world, world["valid"]), *extra],
+                    capture_output=True, text=True, timeout=120, check=False,
+                )
+                assert proc.returncode == 1, proc.stderr
+                assert "REFUSED" in proc.stderr and "holds" in proc.stderr and "in flight" in proc.stderr
+                assert "Traceback" not in proc.stderr
+            assert _snapshot(dest) == before
+        # Released: the same command publishes.
+        assert publish_mod.main(_cli(world, world["valid"])) == 0
+        assert _entries(dest) == sorted([world["invalid"], world["valid"]])
+
+    def test_the_lock_re_enters_within_one_process_and_leaves_no_artifact(self, world, prior) -> None:
+        dest = world["dest"]
+        before = _snapshot(dest)
+        with publish_mod.PublicationLock(dest) as outer:
+            with publish_mod.PublicationLock(dest) as inner, publish_mod.PublicationLock(dest, shared=True) as probe:
+                assert outer.held and inner.held and probe.held
+                assert publish_mod.recover_publication(dest) is None and publish_mod.inspect_publication(dest) is None
+            assert outer.held
+        assert not outer.held
+        assert _snapshot(dest) == before, "locking wrote or touched nothing under the destination"
+        assert not any(name.startswith(".") for name in _entries(dest))
+
+    def test_an_absent_destination_is_created_for_the_lifecycle_and_removed_when_nothing_was_published(self, world, no_git, capsys) -> None:
+        dest = world["dest"]
+        assert not dest.exists()
+        with publish_mod.PublicationLock(dest, shared=True) as probe:
+            assert not probe.held and not dest.exists(), "a shared hold never creates the destination"
+        assert publish_mod.main(_cli(world, world["untraceable"])) == 1
+        assert not dest.exists(), "a refused plan leaves no empty destination behind"
+        assert publish_mod.main(_cli(world, world["valid"])) == 0
+        assert _entries(dest) == [world["valid"]]
+
+
+class TestBegin:
+    """Initialization is all-or-nothing.  A failure while creating, writing
+    or closing the journal, or while creating staging, leaves nothing behind
+    and refuses with the cause chained; a cleanup that itself fails keeps the
+    evidence, names it, says what to do, and still chains the original
+    failure — and the CLI never prints a raw traceback for any of it."""
+
+    def _refuses_cleanly(self, world, prior, capsys, *, match: str) -> None:
+        with pytest.raises(publish_mod.PublicationRefused, match=match) as info:
+            publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        assert isinstance(info.value.__cause__, OSError), "the original failure is chained"
+        _assert_clean(world, prior)
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out, err = capsys.readouterr()
+        assert code == 1 and "REFUSED" in err and "Traceback" not in out + err
+        _assert_clean(world, prior)
+
+    def test_a_journal_that_cannot_be_created_refuses_with_nothing_created(self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+        real_open = os.open
+
+        def denied(path, flags, *a, **kw):
+            if Path(path).name == publish_mod.JOURNAL_FILENAME and flags & os.O_CREAT:
+                raise PermissionError(13, "Permission denied")
+            return real_open(path, flags, *a, **kw)
+
+        monkeypatch.setattr(os, "open", denied)
+        self._refuses_cleanly(world, prior, capsys, match="could not be created")
+
+    @pytest.mark.parametrize("failing_step", ["write", "close"])
+    def test_a_journal_write_or_close_failure_removes_the_half_made_journal(
+        self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys, failing_step: str
+    ) -> None:
+        real = publish_mod._write_whole
+
+        def failing(fd, data):
+            if failing_step == "write":
+                os.write(fd, data[: len(data) // 2])  # half a journal lands on disk
+                os.close(fd)
+                raise OSError(28, "No space left on device")
+            real(fd, data)  # the whole journal lands, then the close fails
+            raise OSError(5, "Input/output error")
+
+        monkeypatch.setattr(publish_mod, "_write_whole", failing)
+        self._refuses_cleanly(world, prior, capsys, match="cannot begin")
+
+    def test_a_staging_mkdir_failure_removes_the_journal(self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+        real = os.mkdir
+
+        def denied(path, *a, **kw):
+            if Path(path).name.startswith(publish_mod.STAGING_PREFIX):
+                raise PermissionError(13, "Permission denied")
+            return real(path, *a, **kw)
+
+        monkeypatch.setattr(os, "mkdir", denied)
+        self._refuses_cleanly(world, prior, capsys, match="cannot begin")
+
+    def test_a_cleanup_failure_keeps_a_complete_journal_as_evidence_and_says_what_to_do(
+        self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        dest = world["dest"]
+        journal = publish_mod.journal_path(dest)
+        real_mkdir, real_unlink = os.mkdir, os.unlink
+
+        def denied_mkdir(path, *a, **kw):
+            if Path(path).name.startswith(publish_mod.STAGING_PREFIX):
+                raise PermissionError(13, "Permission denied")
+            return real_mkdir(path, *a, **kw)
+
+        def denied_unlink(path, *a, **kw):
+            if Path(path) == journal:
+                raise PermissionError(1, "Operation not permitted")
+            return real_unlink(path, *a, **kw)
+
+        monkeypatch.setattr(os, "mkdir", denied_mkdir)
+        monkeypatch.setattr(os, "unlink", denied_unlink)
+        with pytest.raises(publish_mod.PublicationRecoveryError, match="KEPT") as info:
+            publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        message = str(info.value)
+        assert str(journal) in message and world["valid"] in message and "delete it by hand" in message
+        assert isinstance(info.value.__cause__, PermissionError) and info.value.__cause__.errno == 13, "the original failure is the cause"
+        assert isinstance(info.value.__context__, PermissionError) and info.value.__context__.errno == 1, "the cleanup failure is the context"
+        assert _entries(dest) == sorted([world["invalid"], publish_mod.JOURNAL_FILENAME]), "the journal is the only residue"
+        parsed = publish_mod.Journal.from_dict(json.loads(journal.read_text(encoding="utf-8")))
+        assert parsed.planned == [world["valid"]] and parsed.committed == [] and parsed.committing is None
+        assert _tree_with_mtimes(dest / world["invalid"]) == prior["snapshot"]
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out, err = capsys.readouterr()
+        assert code == 2 and "RECOVERY FAILED" in err and "is kept" in err and "Traceback" not in out + err
+        # The permission problem fixed, the retained journal is ordinary recovery.
+        monkeypatch.undo()
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out = capsys.readouterr().out
+        assert code == 0 and out.startswith("RECOVERED") and "removed no record directory" in out
+        assert _entries(dest) == sorted([world["invalid"], world["valid"]]) and not journal.exists()
+
+    def test_a_cleanup_failure_after_a_partial_write_names_the_unparsable_journal(
+        self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        dest = world["dest"]
+        journal = publish_mod.journal_path(dest)
+        real_unlink = os.unlink
+
+        def half_then_fail(fd, data):
+            os.write(fd, data[: len(data) // 2])
+            os.close(fd)
+            raise OSError(28, "No space left on device")
+
+        def denied_unlink(path, *a, **kw):
+            if Path(path) == journal:
+                raise PermissionError(1, "Operation not permitted")
+            return real_unlink(path, *a, **kw)
+
+        monkeypatch.setattr(publish_mod, "_write_whole", half_then_fail)
+        monkeypatch.setattr(os, "unlink", denied_unlink)
+        with pytest.raises(publish_mod.PublicationRecoveryError, match="does not parse") as info:
+            publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        assert isinstance(info.value.__cause__, OSError) and info.value.__cause__.errno == 28
+        assert journal.exists() and not any(name.startswith(publish_mod.STAGING_PREFIX) for name in _entries(dest))
+        monkeypatch.undo()
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out, err = capsys.readouterr()
+        assert code == 2 and "RECOVERY FAILED" in err and "cannot read" in err and "Traceback" not in out + err
+        assert _tree_with_mtimes(dest / world["invalid"]) == prior["snapshot"]
+        journal.unlink()  # what the instructions say, once inspected
+        assert publish_mod.main(_cli(world, world["valid"])) == 0
+        assert _entries(dest) == sorted([world["invalid"], world["valid"]])
+
+    def test_a_journal_replaced_before_cleanup_is_not_removed(self, world, prior, monkeypatch: pytest.MonkeyPatch) -> None:
+        dest = world["dest"]
+        journal = publish_mod.journal_path(dest)
+        real = os.mkdir
+
+        def swap_then_fail(path, *a, **kw):
+            if Path(path).name.startswith(publish_mod.STAGING_PREFIX):
+                journal.unlink()
+                journal.write_text("{}\n", encoding="utf-8")  # someone else's file under the journal's name
+                raise PermissionError(13, "Permission denied")
+            return real(path, *a, **kw)
+
+        monkeypatch.setattr(os, "mkdir", swap_then_fail)
+        with pytest.raises(publish_mod.PublicationRecoveryError, match="no longer the file this transaction created"):
+            publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        assert journal.read_text(encoding="utf-8") == "{}\n", "the impostor is kept for inspection, never removed"
+        assert _tree_with_mtimes(dest / world["invalid"]) == prior["snapshot"]
+
+    def test_a_finish_failure_after_every_commit_keeps_a_complete_journal_the_next_invocation_finishes(
+        self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        dest = world["dest"]
+        real = shutil.rmtree
+
+        def busy(path, *a, **kw):
+            if Path(path).name.startswith(publish_mod.STAGING_PREFIX):
+                raise OSError(16, "Device or resource busy")
+            return real(path, *a, **kw)
+
+        monkeypatch.setattr(shutil, "rmtree", busy)
+        with pytest.raises(publish_mod.PublicationRecoveryError, match="every record was committed"):
+            publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        assert (dest / world["valid"] / "manifest.json").is_file()
+        assert publish_mod.Journal.from_dict(json.loads(publish_mod.journal_path(dest).read_text(encoding="utf-8"))).complete
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out, err = capsys.readouterr()
+        assert code == 2 and "RECOVERY FAILED" in err and "Traceback" not in out + err
+        monkeypatch.undo()
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out = capsys.readouterr().out
+        assert code == 0 and out.startswith("RECOVERED") and "already committed every record" in out and "nothing to publish" in out
+        assert _entries(dest) == sorted([world["invalid"], world["valid"]]) and not publish_mod.journal_path(dest).exists()

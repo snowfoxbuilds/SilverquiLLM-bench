@@ -40,6 +40,28 @@ prominently, the journal stays, and no further publication into that
 destination proceeds until recovery succeeds.  The success summary prints
 only after the transaction commits.
 
+**One invocation per destination.**  Recovery, planning, staging, commit,
+finish and rollback all run under an exclusive per-destination lock — an
+advisory ``flock`` on the destination directory itself
+(:class:`PublicationLock`), so it leaves no artifact under the destination
+or in the operator's commit, and it is never inferred from a recorded pid
+or hostname, which a reused pid or a copied file could fake.  A second live
+invocation refuses rather than recover a journal that belongs to a
+transaction still in flight; once the holder has exited — the kernel drops
+the lock with the process — the next invocation recovers whatever journal
+it left.  A live transaction and a stale journal therefore never look
+alike: the first holds the lock, the second cannot.  ``--dry-run`` takes a
+shared hold, so it reports a transaction in flight as exactly that, never
+as an interrupted one awaiting recovery.
+
+**Beginning is all-or-nothing too.**  A failure while creating, writing or
+closing the initial journal, or while creating the staging directory,
+removes what that attempt created — the journal, proven by descriptor
+identity to be the very file it made — and refuses with the cause chained.
+If even that removal fails, the evidence stays and the failure says exactly
+what is left and how to recover it, so no half-written journal is ever left
+for normal recovery to trip over.
+
 **The journal is an untrusted filesystem boundary.**  It is the one thing
 that grants recovery deletion authority, so it is trusted from nothing but a
 real in-tree regular file: it is opened without following a link (a
@@ -103,6 +125,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import fcntl
 import json
 import os
 import re
@@ -114,7 +137,7 @@ import tempfile
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn, Self
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -157,6 +180,12 @@ class PublicationRecoveryError(Exception):
     the destination may hold a partial publication.  The journal stays in
     place and no further publication into that destination proceeds until
     recovery succeeds."""
+
+
+class PublicationLockedError(PublicationRefused):
+    """Another invocation holds the destination: a transaction into it is in
+    flight.  This one refuses outright — it never recovers, plans over or
+    stages beside a live transaction."""
 
 
 @dataclass(frozen=True)
@@ -350,13 +379,14 @@ def _copy_regular_file(source: Path, target: Path) -> None:
         fd = os.open(source, _NOFOLLOW_READ)
     except OSError as exc:
         raise PublicationRefused(f"cannot open the run record file {source}: {exc.strerror or exc}") from exc
+    mode = os.fstat(fd).st_mode
+    if not stat.S_ISREG(mode):
+        os.close(fd)
+        raise PublicationRefused(
+            f"the run record file {source} is {_file_kind(mode)}, not a regular file;"
+            " refusing to read through it"
+        )
     with os.fdopen(fd, "rb") as fh:
-        mode = os.fstat(fh.fileno()).st_mode
-        if not stat.S_ISREG(mode):
-            raise PublicationRefused(
-                f"the run record file {source} is {_file_kind(mode)}, not a regular file;"
-                " refusing to read through it"
-            )
         target.write_bytes(fh.read())
 
 
@@ -512,8 +542,9 @@ def plan_publication(
     if _lstat_mode(journal_path(dest)) is not None:
         raise PublicationRefused(
             f"{journal_path(dest)} exists: an earlier publication into {dest} was"
-            " interrupted or is still running — run the script again to finish its"
-            " recovery before planning new work"
+            " interrupted — run the script again: under the destination lock it recovers"
+            " the journal before planning new work (a transaction still in flight holds"
+            " that lock and refuses a second invocation outright)"
         )
     plan = PublicationPlan(dest=dest, runs=[], results_repo=Path(results_repo))
     for run_id in run_ids:
@@ -553,6 +584,157 @@ def plan_publication(
                         " published record is never overwritten; resolve by hand"
                     )
     return plan
+
+
+# ---------------------------------------------------------------------------
+# Serialization: one invocation per destination
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _HeldLock:
+    fd: int
+    depth: int
+    exclusive: bool
+    created_dest: bool
+
+
+#: The destinations this process holds locked, by directory identity, so the
+#: phases of one invocation (recover, plan, stage, commit, finish, roll back)
+#: nest under a single hold instead of contending with each other.
+_HELD_LOCKS: dict[tuple[int, int], _HeldLock] = {}
+
+
+class PublicationLock:
+    """The one invocation allowed to recover, plan, stage, commit, finish or
+    roll back a publication into a destination at a time.
+
+    The lock is an advisory ``flock`` on a descriptor of the destination
+    directory *itself*, so it leaves no artifact: nothing under the
+    destination, nothing for the operator to commit or clean up, nothing a
+    replacement host could mistake for a live holder.  The kernel drops it
+    with the process — an invocation that dies holding it releases it, and
+    the next one recovers the journal it left — and it is never inferred
+    from a recorded pid or hostname, which a reused pid or a copied file
+    could fake.  A second live invocation refuses
+    (:class:`PublicationLockedError`) rather than wait: it must never
+    recover a journal that belongs to a transaction still in flight.  Two
+    processes are what the lock arbitrates; within one process the phases
+    re-enter the same hold.
+
+    Exclusive (the default) creates the destination when it is absent and,
+    on release, removes it again if this invocation created it and it is
+    still empty — a refused plan leaves nothing behind.  ``shared`` is the
+    read-only dry run's hold: it never creates anything, coexists with
+    other shared holds, and is refused while an exclusive hold is live, so
+    a dry run reports an in-flight transaction as such instead of as an
+    interrupted one.
+    """
+
+    def __init__(self, dest: Path, *, shared: bool = False) -> None:
+        self.dest = Path(dest)
+        self.shared = shared
+        self._key: tuple[int, int] | None = None
+
+    @property
+    def held(self) -> bool:
+        return self._key is not None
+
+    def __enter__(self) -> Self:
+        created = False
+        while True:
+            try:
+                identity = os.stat(self.dest)
+            except FileNotFoundError:
+                if self.shared:
+                    return self  # nothing there: nothing to lock, nothing to inspect
+                created = self._create_dest() or created
+                continue
+            key = (identity.st_dev, identity.st_ino)
+            held = _HELD_LOCKS.get(key)
+            if held is not None:
+                self._reenter(held)
+                self._key = key
+                return self
+            try:
+                fd = os.open(self.dest, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            except OSError as exc:
+                raise PublicationRefused(f"cannot open the destination {self.dest}: {exc.strerror or exc}") from exc
+            try:
+                fcntl.flock(fd, (fcntl.LOCK_SH if self.shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
+            except BlockingIOError:
+                os.close(fd)
+                raise PublicationLockedError(self._busy()) from None
+            except OSError as exc:
+                os.close(fd)
+                raise PublicationRefused(f"cannot lock the destination {self.dest}: {exc.strerror or exc}") from exc
+            locked = os.fstat(fd)
+            try:
+                current = os.stat(self.dest)
+            except FileNotFoundError:
+                current = None
+            if current is None or (current.st_dev, current.st_ino) != (locked.st_dev, locked.st_ino):
+                # The directory we locked is no longer what the path names —
+                # a releasing invocation removed the empty destination it had
+                # created.  Lock what the path names now.
+                os.close(fd)
+                continue
+            key = (locked.st_dev, locked.st_ino)
+            _HELD_LOCKS[key] = _HeldLock(fd=fd, depth=1, exclusive=not self.shared, created_dest=created)
+            self._key = key
+            return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        key = self._key
+        if key is None:
+            return
+        self._key = None
+        held = _HELD_LOCKS[key]
+        held.depth -= 1
+        if held.depth:
+            return
+        del _HELD_LOCKS[key]
+        if held.created_dest:
+            # Still under the lock: an empty destination this invocation
+            # created is not left behind.  A waiter re-checks the path's
+            # identity after locking, so it never keeps a lock on this
+            # removed directory.
+            try:
+                os.rmdir(self.dest)
+            except OSError:
+                pass
+        fcntl.flock(held.fd, fcntl.LOCK_UN)
+        os.close(held.fd)
+
+    def _create_dest(self) -> bool:
+        try:
+            self.dest.mkdir(parents=True)
+        except FileExistsError:
+            if os.path.isdir(self.dest):
+                return False  # another invocation created it first
+            raise PublicationRefused(
+                f"the destination {self.dest} exists but is not a directory; refusing to use it"
+            ) from None
+        except OSError as exc:
+            raise PublicationRefused(f"cannot create the destination {self.dest}: {exc.strerror or exc}") from exc
+        return True
+
+    def _reenter(self, held: _HeldLock) -> None:
+        if not self.shared and not held.exclusive:
+            try:
+                fcntl.flock(held.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise PublicationLockedError(self._busy()) from None
+            held.exclusive = True
+        held.depth += 1
+
+    def _busy(self) -> str:
+        return (
+            f"another publication invocation holds {self.dest}: a transaction into it is in"
+            " flight, and a second invocation never recovers, plans over or stages beside a"
+            " live one — let it exit and run again (a transaction it leaves interrupted is"
+            " recovered then, from its journal)"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -648,6 +830,18 @@ class Journal:
     @property
     def complete(self) -> bool:
         return self.committing is None and set(self.committed) == set(self.planned)
+
+
+def _write_whole(fd: int, data: bytes) -> None:
+    """Write *data* to *fd* completely, then close it.  A short write is
+    continued; an error from the write or the close propagates, with the
+    descriptor closed either way."""
+    try:
+        view = memoryview(data)
+        while view:
+            view = view[os.write(fd, view):]
+    finally:
+        os.close(fd)
 
 
 def _write_journal(path: Path, journal: Journal) -> None:
@@ -877,8 +1071,10 @@ def _complete_journal(dest: Path, journal: Journal) -> None:
 
 class PublicationTransaction:
     """One publication: ``begin`` → ``stage`` → ``commit`` → ``finish``, or
-    ``rollback``.  Tests drive the steps one at a time; :func:`stage_publication`
-    drives them in order."""
+    ``rollback``.  :func:`stage_publication` drives the steps in order under
+    the destination lock (:class:`PublicationLock`); tests drive them one at
+    a time to stand in for an invocation that died between steps — whose
+    lock the kernel dropped and whose journal the next invocation recovers."""
 
     def __init__(self, plan: PublicationPlan) -> None:
         self.dest = Path(plan.dest)
@@ -893,25 +1089,89 @@ class PublicationTransaction:
 
     def begin(self) -> None:
         """Create the journal (exclusively — a second transaction into the
-        same destination refuses) and the private staging directory."""
-        self.dest.mkdir(parents=True, exist_ok=True)
+        same destination refuses) and the private staging directory, or
+        leave nothing behind.  A failure while creating, writing or closing
+        the journal, or while creating staging, removes the journal this
+        call created — proven by ``fstat``/``lstat`` identity to be that
+        very file — and raises :class:`PublicationRefused` with the cause
+        chained; a removal that itself fails keeps the evidence and raises
+        :class:`PublicationRecoveryError` saying exactly what is left and
+        what to do about it."""
+        try:
+            self.dest.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise PublicationRefused(f"cannot create the destination {self.dest}: {exc.strerror or exc}") from exc
         for run in self.runs:
             if not _safe_record_name(run.run_id):
                 raise PublicationRefused(f"run id {run.run_id!r} is not a safe directory name")
         staging_name = f"{STAGING_PREFIX}{secrets.token_hex(4)}"
         journal = Journal(staging=staging_name, planned=[run.run_id for run in self.runs])
         try:
-            fd = os.open(self.journal_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            fd = os.open(self.journal_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o644)
         except FileExistsError:
             raise PublicationRefused(
                 f"{self.journal_path} exists: another publication into {self.dest} is in"
                 " flight or was interrupted — finish its recovery first"
             ) from None
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps(journal.to_dict(), indent=2, sort_keys=True) + "\n")
+        except OSError as exc:
+            raise PublicationRefused(
+                f"cannot begin a publication into {self.dest}: the journal {self.journal_path}"
+                f" could not be created ({exc.strerror or exc}); nothing was created"
+            ) from exc
+        created = os.fstat(fd)
+        try:
+            _write_whole(fd, (json.dumps(journal.to_dict(), indent=2, sort_keys=True) + "\n").encode("utf-8"))
+        except OSError as exc:
+            self._abandon_begin(exc, journal=journal, created=created)
+        try:
+            (self.dest / staging_name).mkdir()
+        except OSError as exc:
+            self._abandon_begin(exc, journal=journal, created=created)
         self.journal = journal
         self.staging = self.dest / staging_name
-        self.staging.mkdir()
+
+    def _abandon_begin(self, exc: OSError, *, journal: Journal, created: os.stat_result) -> NoReturn:
+        """Beginning failed after the journal was created: remove it and
+        refuse, or — when even that fails — keep the evidence and say so.
+        Only the very file this call created is removed: the entry at the
+        journal's path must still be a regular file with the identity the
+        creating descriptor reported."""
+        path = self.journal_path
+        why = f"{type(exc).__name__}: {exc.strerror or exc}"
+        kept = (
+            f" — {path} is KEPT. It plans {', '.join(journal.planned)} into {journal.staging}"
+            " with nothing committed: if it parses, the next invocation recovers it by removing"
+            " only that staging directory (if present) and the journal; if it does not parse"
+            " (the write was interrupted), confirm it names nothing you want kept and delete it"
+            f" by hand. No publication proceeds into {self.dest} until then"
+        )
+        try:
+            now = os.lstat(path)
+        except FileNotFoundError:
+            now = None
+        except OSError as lstat_exc:
+            raise PublicationRecoveryError(
+                f"beginning the publication into {self.dest} failed ({why}) AND the journal it"
+                f" had created cannot be inspected ({lstat_exc.strerror or lstat_exc}){kept}"
+            ) from exc
+        if now is not None:
+            if not stat.S_ISREG(now.st_mode) or (now.st_dev, now.st_ino) != (created.st_dev, created.st_ino):
+                raise PublicationRecoveryError(
+                    f"beginning the publication into {self.dest} failed ({why}) AND {path} is no"
+                    " longer the file this transaction created; refusing to remove it — inspect"
+                    f" it by hand; no publication proceeds into {self.dest} until it is resolved"
+                ) from exc
+            try:
+                os.unlink(path)
+            except OSError as unlink_exc:
+                raise PublicationRecoveryError(
+                    f"beginning the publication into {self.dest} failed ({why}) AND the journal it"
+                    f" had created could not be removed ({unlink_exc.strerror or unlink_exc}){kept}"
+                ) from exc
+        raise PublicationRefused(
+            f"cannot begin a publication into {self.dest}: {why}; the journal this attempt had"
+            " created is gone and nothing else was created"
+        ) from exc
 
     def stage(self) -> None:
         """Copy every record into staging, then re-read the copies: each must
@@ -1031,75 +1291,98 @@ def recover_publication(dest: Path) -> RecoveryReport | None:
     when the journal is not a real regular file (a symlink, dangling or not,
     is never followed), is unreadable, malformed or names anything that is
     not a plain immediate child of *dest*, and when the rollback itself
-    fails (the journal then stays for the operator)."""
-    path = journal_path(dest)
-    journal = _read_journal(path)
-    if journal is None:
-        return None
+    fails (the journal then stays for the operator).  Runs under the
+    destination's exclusive lock; a transaction in flight there raises
+    :class:`PublicationLockedError` and nothing is read."""
     dest = Path(dest)
-    try:
-        if journal.complete:
-            _complete_journal(dest, journal)
-            return RecoveryReport(action="completed", records=tuple(journal.committed))
-        removed = rollback_journal(dest, journal)
-    except OSError as exc:
-        raise PublicationRecoveryError(
-            f"recovery of the interrupted publication under {dest} FAILED: {exc} — the"
-            f" journal {path} is kept; inspect the directories it names, fix the"
-            " problem, and run again; no publication proceeds until recovery succeeds"
-        ) from exc
-    return RecoveryReport(action="rolled-back", records=tuple(removed))
+    if not os.path.exists(dest):
+        return None
+    path = journal_path(dest)
+    with PublicationLock(dest):
+        journal = _read_journal(path)
+        if journal is None:
+            return None
+        try:
+            if journal.complete:
+                _complete_journal(dest, journal)
+                return RecoveryReport(action="completed", records=tuple(journal.committed))
+            removed = rollback_journal(dest, journal)
+        except OSError as exc:
+            raise PublicationRecoveryError(
+                f"recovery of the interrupted publication under {dest} FAILED: {exc} — the"
+                f" journal {path} is kept; inspect the directories it names, fix the"
+                " problem, and run again; no publication proceeds until recovery succeeds"
+            ) from exc
+        return RecoveryReport(action="rolled-back", records=tuple(removed))
 
 
 def inspect_publication(dest: Path) -> RecoveryReport | None:
     """What :func:`recover_publication` would do under *dest*, without
     changing anything on disk: ``None`` when no journal exists, otherwise a
     report with ``performed=False``.  A journal that recovery would refuse
-    raises :class:`PublicationRecoveryError` here too."""
-    journal = _read_journal(journal_path(dest))
-    if journal is None:
-        return None
+    raises :class:`PublicationRecoveryError` here too.  Runs under a shared
+    hold of the destination lock: a transaction in flight raises
+    :class:`PublicationLockedError` instead of being reported as interrupted."""
     dest = Path(dest)
-    if journal.complete:
-        _validate_completion(dest, journal)
-        return RecoveryReport(action="completed", records=tuple(journal.committed), performed=False)
-    records, _staging = _validate_rollback(dest, journal)
-    return RecoveryReport(action="rolled-back", records=tuple(name for name, _ in records), performed=False)
+    if not os.path.exists(dest):
+        return None
+    with PublicationLock(dest, shared=True):
+        journal = _read_journal(journal_path(dest))
+        if journal is None:
+            return None
+        if journal.complete:
+            _validate_completion(dest, journal)
+            return RecoveryReport(action="completed", records=tuple(journal.committed), performed=False)
+        records, _staging = _validate_rollback(dest, journal)
+        return RecoveryReport(action="rolled-back", records=tuple(name for name, _ in records), performed=False)
 
 
 def stage_publication(plan: PublicationPlan) -> list[Path]:
     """Publish the records of a refusal-free plan transactionally; return the
     files now in place.  Raises :class:`PublicationRefused` (nothing new
     published) on a refusal or a rolled-back failure, and
-    :class:`PublicationRecoveryError` when a rollback itself fails."""
+    :class:`PublicationRecoveryError` when a rollback itself fails.  Holds
+    the destination lock from ``begin`` through ``finish`` or ``rollback``;
+    a transaction already in flight there raises
+    :class:`PublicationLockedError` before anything is created."""
     if plan.refusals:
         raise PublicationRefused("refusals:\n  " + "\n  ".join(plan.refusals))
     if not plan.to_stage:
         return []
-    tx = PublicationTransaction(plan)
-    tx.begin()
-    try:
-        tx.stage()
-        tx.commit()
-    except BaseException as exc:
+    with PublicationLock(plan.dest):
+        tx = PublicationTransaction(plan)
+        tx.begin()
         try:
-            removed = tx.rollback()
-        except (OSError, PublicationRecoveryError) as rollback_exc:
+            tx.stage()
+            tx.commit()
+        except BaseException as exc:
+            try:
+                removed = tx.rollback()
+            except (OSError, PublicationRecoveryError) as rollback_exc:
+                raise PublicationRecoveryError(
+                    f"publication failed ({type(exc).__name__}: {exc}) AND its rollback failed"
+                    f" ({rollback_exc}) — {tx.journal_path} is kept; inspect the directories it"
+                    " names, fix the problem, and run again; no publication proceeds until"
+                    " recovery succeeds"
+                ) from exc
+            if isinstance(exc, Exception):
+                raise PublicationRefused(
+                    f"publication failed and was rolled back (removed"
+                    f" {', '.join(removed) or 'nothing'}; pre-existing records untouched):"
+                    f" {type(exc).__name__}: {exc}"
+                ) from exc
+            raise
+        try:
+            tx.finish()
+        except (OSError, PublicationRecoveryError) as exc:
             raise PublicationRecoveryError(
-                f"publication failed ({type(exc).__name__}: {exc}) AND its rollback failed"
-                f" ({rollback_exc}) — {tx.journal_path} is kept; inspect the directories it"
-                " names, fix the problem, and run again; no publication proceeds until"
-                " recovery succeeds"
+                f"every record was committed, but finishing the publication into {plan.dest}"
+                f" failed ({exc}) — {tx.journal_path} is kept and records the transaction as"
+                " complete, so the next invocation finishes it (removing only its empty staging"
+                " directory and the journal); the records are in place: review and commit them"
+                " once that has run"
             ) from exc
-        if isinstance(exc, Exception):
-            raise PublicationRefused(
-                f"publication failed and was rolled back (removed"
-                f" {', '.join(removed) or 'nothing'}; pre-existing records untouched):"
-                f" {type(exc).__name__}: {exc}"
-            ) from exc
-        raise
-    tx.finish()
-    return tx.written
+        return tx.written
 
 
 # ---------------------------------------------------------------------------
@@ -1229,47 +1512,69 @@ def main(argv: list[str] | None = None) -> int:
         print(f"REFUSED: pass --results-repo or set ${RESULTS_REPO_ENV}", file=sys.stderr)
         return 1
     try:
+        # One hold of the destination lock spans the whole lifecycle: a
+        # shared one for the read-only dry run, an exclusive one for
+        # recovery, planning, staging, commit and finish.
         if args.dry_run:
-            # Strictly read-only: a pending journal is inspected and reported,
-            # never acted on.
-            try:
-                pending = inspect_publication(args.dest)
-            except PublicationRecoveryError as exc:
-                print(f"RECOVERY REQUIRED but would FAIL: {exc} — the dry run changed nothing", file=sys.stderr)
-                return 2
-            if pending is not None:
-                print(pending.describe())
-                print(
-                    f"REFUSED: recovery is required under {args.dest} before new work can be"
-                    " planned; the dry run changed nothing — run again without --dry-run to"
-                    " perform it",
-                    file=sys.stderr,
-                )
-                return 1
-        else:
-            recovered = recover_publication(args.dest)
-            if recovered is not None:
-                print(recovered.describe())
-        plan = plan_publication(
-            args.run_ids,
-            results_repo=results_repo,
-            dest=args.dest,
-            candidates_dir=args.candidates_dir,
-            allow_invalid=args.allow_invalid,
-        )
-        print(format_plan(plan, dry_run=args.dry_run))
-        if plan.refusals:
-            return 1
-        if args.dry_run:
-            return 0
-        written = stage_publication(plan)
-        print(format_committed(written))
+            with PublicationLock(args.dest, shared=True):
+                return _dry_run(args, results_repo)
+        with PublicationLock(args.dest):
+            return _publish(args, results_repo)
     except PublicationRecoveryError as exc:
         print(f"RECOVERY FAILED: {exc}", file=sys.stderr)
         return 2
+    except PublicationLockedError as exc:
+        print(f"REFUSED: {exc}" + (" — the dry run changed nothing" if args.dry_run else ""), file=sys.stderr)
+        return 1
     except PublicationRefused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 1
+
+
+def _dry_run(args: argparse.Namespace, results_repo: Path) -> int:
+    """Strictly read-only: a pending journal is inspected and reported,
+    never acted on."""
+    try:
+        pending = inspect_publication(args.dest)
+    except PublicationRecoveryError as exc:
+        print(f"RECOVERY REQUIRED but would FAIL: {exc} — the dry run changed nothing", file=sys.stderr)
+        return 2
+    if pending is not None:
+        print(pending.describe())
+        print(
+            f"REFUSED: recovery is required under {args.dest} before new work can be"
+            " planned; the dry run changed nothing — run again without --dry-run to"
+            " perform it",
+            file=sys.stderr,
+        )
+        return 1
+    plan = plan_publication(
+        args.run_ids,
+        results_repo=results_repo,
+        dest=args.dest,
+        candidates_dir=args.candidates_dir,
+        allow_invalid=args.allow_invalid,
+    )
+    print(format_plan(plan, dry_run=True))
+    return 1 if plan.refusals else 0
+
+
+def _publish(args: argparse.Namespace, results_repo: Path) -> int:
+    recovered = recover_publication(args.dest)
+    if recovered is not None:
+        print(recovered.describe())
+    plan = plan_publication(
+        args.run_ids,
+        results_repo=results_repo,
+        dest=args.dest,
+        candidates_dir=args.candidates_dir,
+        allow_invalid=args.allow_invalid,
+    )
+    print(format_plan(plan, dry_run=False))
+    if plan.refusals:
+        return 1
+    written = stage_publication(plan)
+    print(format_committed(written))
     return 0
 
 
