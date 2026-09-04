@@ -56,8 +56,9 @@ as an interrupted one awaiting recovery.
 
 **Beginning is all-or-nothing too.**  A failure while creating, writing or
 closing the initial journal, or while creating the staging directory,
-removes what that attempt created — the journal, proven by descriptor
-identity to be the very file it made — and refuses with the cause chained.
+removes what that attempt created — the journal, proven to be the very
+file it made by the still-open creating descriptor's link count and inode
+against what the path names — and refuses with the cause chained.
 If even that removal fails, the evidence stays and the failure says exactly
 what is left and how to recover it, so no half-written journal is ever left
 for normal recovery to trip over.
@@ -1092,11 +1093,12 @@ class PublicationTransaction:
         same destination refuses) and the private staging directory, or
         leave nothing behind.  A failure while creating, writing or closing
         the journal, or while creating staging, removes the journal this
-        call created — proven by ``fstat``/``lstat`` identity to be that
-        very file — and raises :class:`PublicationRefused` with the cause
-        chained; a removal that itself fails keeps the evidence and raises
-        :class:`PublicationRecoveryError` saying exactly what is left and
-        what to do about it."""
+        call created — proven to be that very file: the creating descriptor
+        is held open, so its link count and inode are compared against what
+        the path names — and raises :class:`PublicationRefused` with the
+        cause chained; a removal that itself fails keeps the evidence and
+        raises :class:`PublicationRecoveryError` saying exactly what is left
+        and what to do about it."""
         try:
             self.dest.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
@@ -1118,25 +1120,34 @@ class PublicationTransaction:
                 f"cannot begin a publication into {self.dest}: the journal {self.journal_path}"
                 f" could not be created ({exc.strerror or exc}); nothing was created"
             ) from exc
-        created = os.fstat(fd)
+        # A duplicate of the creating descriptor stays open until begin is
+        # over: its fstat is the identity of the file this attempt created,
+        # link count included, whatever happens to the path meanwhile.
+        created = os.dup(fd)
         try:
-            _write_whole(fd, (json.dumps(journal.to_dict(), indent=2, sort_keys=True) + "\n").encode("utf-8"))
-        except OSError as exc:
-            self._abandon_begin(exc, journal=journal, created=created)
-        try:
-            (self.dest / staging_name).mkdir()
-        except OSError as exc:
-            self._abandon_begin(exc, journal=journal, created=created)
+            try:
+                _write_whole(fd, (json.dumps(journal.to_dict(), indent=2, sort_keys=True) + "\n").encode("utf-8"))
+            except OSError as exc:
+                self._abandon_begin(exc, journal=journal, created=created)
+            try:
+                (self.dest / staging_name).mkdir()
+            except OSError as exc:
+                self._abandon_begin(exc, journal=journal, created=created)
+        finally:
+            os.close(created)
         self.journal = journal
         self.staging = self.dest / staging_name
 
-    def _abandon_begin(self, exc: OSError, *, journal: Journal, created: os.stat_result) -> NoReturn:
+    def _abandon_begin(self, exc: OSError, *, journal: Journal, created: int) -> NoReturn:
         """Beginning failed after the journal was created: remove it and
         refuse, or — when even that fails — keep the evidence and say so.
-        Only the very file this call created is removed: the entry at the
-        journal's path must still be a regular file with the identity the
-        creating descriptor reported."""
+        Only the very file this call created is removed: *created* is a
+        descriptor of that file, still open, so the file must still be
+        linked (``st_nlink``) and the entry at the journal's path must be a
+        regular file with the same device and inode — an inode a filesystem
+        reuses for a replacement is caught by the link count."""
         path = self.journal_path
+        mine = os.fstat(created)
         why = f"{type(exc).__name__}: {exc.strerror or exc}"
         kept = (
             f" — {path} is KEPT. It plans {', '.join(journal.planned)} into {journal.staging}"
@@ -1155,7 +1166,7 @@ class PublicationTransaction:
                 f" had created cannot be inspected ({lstat_exc.strerror or lstat_exc}){kept}"
             ) from exc
         if now is not None:
-            if not stat.S_ISREG(now.st_mode) or (now.st_dev, now.st_ino) != (created.st_dev, created.st_ino):
+            if mine.st_nlink == 0 or not stat.S_ISREG(now.st_mode) or (now.st_dev, now.st_ino) != (mine.st_dev, mine.st_ino):
                 raise PublicationRecoveryError(
                     f"beginning the publication into {self.dest} failed ({why}) AND {path} is no"
                     " longer the file this transaction created; refusing to remove it — inspect"
