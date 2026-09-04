@@ -46,6 +46,42 @@ FAKE_CREDENTIALS: dict[str, str] = {
     "a value assigned to a declared secret slot": 'ANTHROPIC_API_KEY = "' + "k" * 30 + '"',
 }
 
+#: The declared slot ``ANTHROPIC_API_KEY`` used as an assignment key with a
+#: non-empty value — one line per form the detector must flag, deliberately
+#: spanning every length, character class and quoting a config or a log can
+#: take.  No value here is a credential; the detector must not care.  Each
+#: line is exactly the key, the operator and the value, so a redaction that
+#: blanks it whole leaves nothing of it behind.
+SLOT_ASSIGNMENTS: dict[str, str] = {
+    "bare-one-char": "ANTHROPIC_API_KEY=x",
+    "bare-two-chars": "ANTHROPIC_API_KEY=q7",
+    "double-quoted-short": 'ANTHROPIC_API_KEY = "short"',
+    "yaml-symbols": "ANTHROPIC_API_KEY: opaque/+value==",
+    "json-quoted-key": '"ANTHROPIC_API_KEY": "opaque/+value=="',
+    "single-quoted-spaces": "'ANTHROPIC_API_KEY' = 'value with spaces'",
+    "angle-bracket-placeholder": "ANTHROPIC_API_KEY=<your key>",
+    "unterminated-quote": 'ANTHROPIC_API_KEY="abc',
+    "toml-multiline-opener": 'ANTHROPIC_API_KEY = """',
+}
+
+#: The same slot merely *named* — declared, mentioned in prose, or assigned
+#: nothing — one line per form the detector must leave alone.  The empty
+#: assignments are the shapes a worker-type definition's ``[secrets]`` table
+#: and a config template use to declare a slot; they leak nothing.
+SLOT_MENTIONS: dict[str, str] = {
+    "declaration-array": '"secret_slots": ["ANTHROPIC_API_KEY"]',
+    "toml-declaration-list": 'secrets = ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"]',
+    "prose": "Set ANTHROPIC_API_KEY in your environment before running.",
+    "prose-backticks": "The bench binds `ANTHROPIC_API_KEY` from its own environment.",
+    "empty-bare": "ANTHROPIC_API_KEY=",
+    "empty-double-quoted": 'ANTHROPIC_API_KEY = ""',
+    "empty-single-quoted": "ANTHROPIC_API_KEY: ''",
+    "empty-json": '"ANTHROPIC_API_KEY": "",',
+    "empty-with-comment": 'ANTHROPIC_API_KEY = ""  # bound by the bench',
+    "another-variable": "MY_ANTHROPIC_API_KEY=other-slot",
+    "key-as-prefix": "ANTHROPIC_API_KEY_FILE=/run/secrets/key",
+}
+
 
 def make_source(
     root: Path,

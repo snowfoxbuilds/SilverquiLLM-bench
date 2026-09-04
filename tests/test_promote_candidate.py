@@ -34,6 +34,8 @@ from tests.candidate_fixtures import (
     FAKE_ANTHROPIC_KEY,
     FAKE_CREDENTIALS,
     NOW,
+    SLOT_ASSIGNMENTS,
+    SLOT_MENTIONS,
     make_source,
 )
 
@@ -309,6 +311,37 @@ class TestWholeTreeSecretScan:
 
     def test_the_fixture_families_cover_the_production_detector(self) -> None:
         assert set(FAKE_CREDENTIALS) == set(credential_shapes())
+
+    @pytest.mark.parametrize("form", sorted(SLOT_ASSIGNMENTS))
+    def test_refuses_a_declared_slot_assigned_a_value_of_any_shape(self, tmp_path: Path, no_git, form: str) -> None:
+        """Length, character class and quoting are not what makes a value a
+        secret: a one-letter bare value, a symbol-laden YAML scalar, a quoted
+        JSON pair and a placeholder in angle brackets all refuse, naming the
+        file and the shape and never the line."""
+        line = SLOT_ASSIGNMENTS[form]
+        source = _source(tmp_path)
+        (source / "knowledge" / "gold" / "NOTES.md").write_text(f"# notes\n\n{line}\n", encoding="utf-8")
+        candidates = tmp_path / "candidates"
+        with pytest.raises(promote_mod.PromotionRefused) as info:
+            _promote(source, candidates)
+        message = str(info.value)
+        assert "NOTES.md: a value assigned to secret slot ANTHROPIC_API_KEY" in message
+        assert line not in message
+        value = line.split("=" if "=" in line.split(":")[0] else ":", 1)[1].strip().strip("\"'")
+        assert not value or len(value) < 2 or value not in message
+        assert _entries(candidates) == []
+
+    @pytest.mark.parametrize("form", sorted(SLOT_MENTIONS))
+    def test_a_slot_declared_mentioned_or_assigned_nothing_promotes(self, tmp_path: Path, no_git, form: str) -> None:
+        """The slot's name in a declaration list, in prose, or assigned an
+        empty value — the shape the vendored definition's own ``[secrets]``
+        table takes — is not a value and never blocks promotion."""
+        line = SLOT_MENTIONS[form]
+        source = _source(tmp_path)
+        (source / "knowledge" / "gold" / "NOTES.md").write_text(f"# notes\n\n{line}\n", encoding="utf-8")
+        result = _promote(source, tmp_path / "candidates")
+        vendored = result.candidate_dir / "source" / "knowledge" / "gold" / "NOTES.md"
+        assert vendored.read_text(encoding="utf-8").splitlines()[-1] == line
 
     @pytest.mark.parametrize("family", ["GitHub token", "Slack token"])
     def test_a_credential_in_agent_policy_source_never_promotes_or_echoes(self, tmp_path: Path, no_git, family: str) -> None:

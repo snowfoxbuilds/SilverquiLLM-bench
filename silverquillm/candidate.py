@@ -14,9 +14,11 @@ the bench will attribute results to, and it never trusts a recorded value:
 2. **Refuse secret values** — the bundle carries secret slot *names* only.  A
    slot entry that is not an environment-variable name, a manifest field
    shaped like a credential carrier, or any bundle byte that looks like a
-   credential (API-key, token, private-key shapes; a declared slot assigned
-   a credential-shaped value) is a hard refusal that names the file and the
-   shape, never the value.
+   credential (API-key, token, private-key shapes; a declared slot used as
+   an assignment key with a non-empty value of *any* length or character
+   set — ``SLOT=x``, ``"SLOT": "…"``, ``'SLOT' = '…'``; an empty
+   assignment declares the slot and is not a value) is a hard refusal that
+   names the file and the shape, never the value.
 3. **Verify** — delegate to TheOzolith's published verifier
    (``theozolith_control.candidate.verify_bundle``, ``bundle_format_version``
    / ``identity_spec_version`` surface): strict manifest parse, knowledge and
@@ -129,14 +131,69 @@ _CREDENTIAL_PATTERNS: tuple[tuple[str, re.Pattern[bytes]], ...] = (
     ("JSON Web Token", re.compile(rb"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}")),
     ("bearer credential", re.compile(rb"(?i)\bbearer\s+[A-Za-z0-9_\-.=]{20,}")),
 )
-_SLOT_ASSIGNMENT_VALUE = rb"\s*[=:]\s*[\"']?[A-Za-z0-9_\-.]{20,}"
+# A declared secret slot used as an assignment KEY, in any of the forms a
+# config or a log can take: the key optionally quoted (JSON, TOML, YAML and a
+# shell all do), ``=`` or ``:`` as the operator, and the value whatever
+# follows on the same line — a quoted string up to its closing quote, or a
+# bare scalar up to the end of the line (a bare value has no delimiter, so
+# nothing after it on the line is trusted).  No length and no character-class
+# rule: a two-character value is as much a secret as a forty-character one.
+# The pattern admits an EMPTY value on purpose, so that emptiness is decided
+# in exactly one place, :func:`_assigned_value`.
+_SLOT_ASSIGNMENT_TEMPLATE = (
+    rb"(?<![A-Za-z0-9_])(?P<q>[\"']?)%s(?P=q)[ \t]*[=:][ \t]*"
+    rb"(?:\"(?P<dq>[^\"\r\n]*)\"(?![\"'])|'(?P<sq>[^'\r\n]*)'(?![\"'])|(?P<bare>[^\r\n]*))"
+)
 
 
-def _slot_patterns(secret_slots: Iterable[str]) -> list[tuple[str, re.Pattern[bytes]]]:
+def _assigned_value(match: re.Match[bytes]) -> bytes:
+    """The scalar a slot-assignment match assigns, stripped of surrounding
+    whitespace: empty for ``SLOT=``, ``SLOT = ""`` and ``"SLOT": ''`` — the
+    forms a worker-type definition's ``[secrets]`` table and a config
+    template use to *declare* a slot, which leak nothing."""
+    for group in ("dq", "sq", "bare"):
+        value = match.group(group)
+        if value is not None:
+            return value.strip()
+    return b""
+
+
+def _any_match(match: re.Match[bytes]) -> bool:
+    return True
+
+
+def _non_empty_assignment(match: re.Match[bytes]) -> bool:
+    return bool(_assigned_value(match))
+
+
+@dataclass(frozen=True)
+class _Shape:
+    """One credential shape: a bytes pattern and the predicate a match must
+    also satisfy.  :func:`scan_tree_for_credentials` and
+    :func:`redact_credentials` share these, so what one refuses the other
+    blanks — and neither ever surfaces the matched bytes."""
+
+    label: str
+    pattern: re.Pattern[bytes]
+    accept: Callable[[re.Match[bytes]], bool] = _any_match
+
+    def found(self, data: bytes) -> bool:
+        return any(self.accept(match) for match in self.pattern.finditer(data))
+
+    def redact(self, data: bytes) -> bytes:
+        placeholder = f"[redacted: {self.label}]".encode()
+        return self.pattern.sub(lambda match: placeholder if self.accept(match) else match.group(0), data)
+
+
+_CREDENTIAL_SHAPES: tuple[_Shape, ...] = tuple(_Shape(label, pattern) for label, pattern in _CREDENTIAL_PATTERNS)
+
+
+def _slot_shapes(secret_slots: Iterable[str]) -> list[_Shape]:
     return [
-        (
+        _Shape(
             f"a value assigned to secret slot {slot}",
-            re.compile(rb"\b" + slot.encode("ascii") + _SLOT_ASSIGNMENT_VALUE),
+            re.compile(_SLOT_ASSIGNMENT_TEMPLATE % re.escape(slot.encode("ascii"))),
+            _non_empty_assignment,
         )
         for slot in secret_slots
         if isinstance(slot, str) and _SLOT_NAME_RE.fullmatch(slot)
@@ -147,7 +204,7 @@ def credential_shapes() -> tuple[str, ...]:
     """The names of every credential shape the detector recognizes (the
     declared-slot assignment shape is per slot and reads ``a value assigned
     to secret slot <NAME>``)."""
-    return tuple(label for label, _ in _CREDENTIAL_PATTERNS) + ("a value assigned to a declared secret slot",)
+    return tuple(shape.label for shape in _CREDENTIAL_SHAPES) + ("a value assigned to a declared secret slot",)
 
 
 @dataclass(frozen=True)
@@ -167,8 +224,9 @@ def scan_tree_for_credentials(
 ) -> list[CredentialFinding]:
     """Scan every regular file under *root* for a credential shape — the
     complete pattern set (API keys, GitHub / AWS / Slack tokens, private-key
-    blocks, JWTs, bearer credentials) plus a value assigned to any of
-    *secret_slots* — and return one finding per hit, by path and shape only.
+    blocks, JWTs, bearer credentials) plus any of *secret_slots* used as an
+    assignment key with a non-empty value, whatever that value's length or
+    characters — and return one finding per hit, by path and shape only.
 
     Strict on the tree: symlinks (to files or directories) and special files
     are a :class:`CandidateRefusedError`, never followed; an unreadable file
@@ -176,7 +234,7 @@ def scan_tree_for_credentials(
     file is scanned like any other and nothing is ever decoded or echoed.
     """
     root = Path(root)
-    patterns = (*_CREDENTIAL_PATTERNS, *_slot_patterns(secret_slots))
+    shapes = (*_CREDENTIAL_SHAPES, *_slot_shapes(secret_slots))
     findings: list[CredentialFinding] = []
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         rel_dir = Path(dirpath).relative_to(root)
@@ -205,9 +263,9 @@ def scan_tree_for_credentials(
                     f"cannot read {what} {rel} ({exc.strerror or type(exc).__name__}) — an"
                     " unreadable file cannot be cleared of secret values"
                 ) from exc
-            for label, pattern in patterns:
-                if pattern.search(data):
-                    findings.append(CredentialFinding(path=rel, shape=label))
+            for shape in shapes:
+                if shape.found(data):
+                    findings.append(CredentialFinding(path=rel, shape=shape.label))
                     break
     return findings
 
@@ -215,10 +273,14 @@ def scan_tree_for_credentials(
 def redact_credentials(text: str, *, secret_slots: Iterable[str] = ()) -> str:
     """*text* with every credential shape replaced by ``[redacted: <shape>]``
     — for log lines, state files and error summaries that must never carry
-    a value even when an exception message does."""
+    a value even when an exception message does.  The same shapes as
+    :func:`scan_tree_for_credentials`: a declared slot assigned a value of
+    any length or character set is blanked whole (key, operator and value;
+    a bare value to the end of its line, a quoted one to its closing quote),
+    an empty assignment is left as it is."""
     data = text.encode("utf-8", errors="surrogateescape")
-    for label, pattern in (*_CREDENTIAL_PATTERNS, *_slot_patterns(secret_slots)):
-        data = pattern.sub(f"[redacted: {label}]".encode(), data)
+    for shape in (*_CREDENTIAL_SHAPES, *_slot_shapes(secret_slots)):
+        data = shape.redact(data)
     return data.decode("utf-8", errors="replace")
 
 

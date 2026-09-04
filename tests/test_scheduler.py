@@ -35,7 +35,13 @@ from silverquillm import scheduler as sched
 from silverquillm.candidate import load_candidate_bundle
 from silverquillm.contract import container_name
 from silverquillm.results_repo import candidate_hash
-from tests.candidate_fixtures import FAKE_ANTHROPIC_KEY, export_bundle, make_candidate_dir
+from tests.candidate_fixtures import (
+    FAKE_ANTHROPIC_KEY,
+    SLOT_ASSIGNMENTS,
+    SLOT_MENTIONS,
+    export_bundle,
+    make_candidate_dir,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 T0 = datetime(2026, 9, 3, 12, 0, tzinfo=UTC)
@@ -1043,7 +1049,7 @@ class TestSecretRedaction:
         assert load_candidate_bundle(candidate).secret_slots == ("ANTHROPIC_API_KEY",)
         write_batch(batches, "a", [spec(candidate)] * 3)
         executor = StubExecutor([
-            RuntimeError(f"auth failed: ANTHROPIC_API_KEY={assigned}; got {odd} from the provider; also {FAKE_ANTHROPIC_KEY}"),
+            RuntimeError(f"auth failed: got {odd} from the provider; also {FAKE_ANTHROPIC_KEY}; ANTHROPIC_API_KEY={assigned}"),
             sched.RunOutcome(ok=False, summary=f"[auth] at agent: provider rejected {odd}", failure_class="auth"),
             sched.RunOutcome(ok=True, summary=f"phase done; token {odd} echoed by the agent"),
         ])
@@ -1055,14 +1061,44 @@ class TestSecretRedaction:
             assert forbidden not in joined, forbidden
         state = load_state(batches, "a")
         assert state.runs[0].error == (
-            "RuntimeError: auth failed: [redacted: a value assigned to secret slot ANTHROPIC_API_KEY];"
-            " got [redacted: value bound to secret slot ANTHROPIC_API_KEY] from the provider; also"
-            " [redacted: Anthropic API key]"
+            "RuntimeError: auth failed: got [redacted: value bound to secret slot ANTHROPIC_API_KEY]"
+            " from the provider; also [redacted: Anthropic API key];"
+            " [redacted: a value assigned to secret slot ANTHROPIC_API_KEY]"
         )
         assert state.runs[1].summary == "[auth] at agent: provider rejected [redacted: value bound to secret slot ANTHROPIC_API_KEY]"
         assert state.runs[2].summary == "phase done; token [redacted: value bound to secret slot ANTHROPIC_API_KEY] echoed by the agent"
         assert "Traceback" in joined and "[redacted: value bound to secret slot ANTHROPIC_API_KEY]" in joined
         assert "/usr/bin" not in text, "only the declared slots' values are redacted, and nothing else leaks"
+
+    @pytest.mark.parametrize("form", sorted(SLOT_ASSIGNMENTS))
+    def test_a_declared_slot_assignment_of_any_shape_is_absent_from_state_and_logs(self, batches: Path, candidate: Path, logs, form: str) -> None:
+        """The bound value is something else entirely, so only the assignment
+        shape can catch these: a one-letter bare value, a symbol-laden YAML
+        scalar, a quoted JSON pair, a quoted value with spaces — none of them
+        reaches the state or the log; the placeholder does."""
+        line = SLOT_ASSIGNMENTS[form]
+        placeholder = "[redacted: a value assigned to secret slot ANTHROPIC_API_KEY]"
+        write_batch(batches, "a", [spec(candidate)])
+        executor = StubExecutor([RuntimeError(f"provider config: {line}")])
+        runner = make_scheduler(batches, executor, logs=logs, environ={"ANTHROPIC_API_KEY": "bound-elsewhere"})
+        assert runner.run_until_idle() == 1
+        assert load_state(batches, "a").runs[0].error == f"RuntimeError: provider config: {placeholder}"
+        joined = "\n".join(logs)
+        assert line not in joined and line not in sched.state_path(batches, "a").read_text(encoding="utf-8")
+        assert placeholder in joined and "Traceback" in joined
+
+    @pytest.mark.parametrize("form", sorted(SLOT_MENTIONS))
+    def test_a_slot_merely_named_survives_in_state_and_logs(self, batches: Path, candidate: Path, logs, form: str) -> None:
+        """A declaration list, a prose mention and an empty assignment carry
+        no value, so the redactor leaves them as they are."""
+        line = SLOT_MENTIONS[form]
+        write_batch(batches, "a", [spec(candidate)])
+        executor = StubExecutor([sched.RunOutcome(ok=False, summary=f"note: {line}", failure_class="config")])
+        runner = make_scheduler(batches, executor, logs=logs, environ={"ANTHROPIC_API_KEY": "bound-elsewhere"})
+        assert runner.run_until_idle() == 1
+        expected = " ".join(f"note: {line}".split())
+        assert load_state(batches, "a").runs[0].summary == expected
+        assert any(entry.startswith("FAILED ") and entry.endswith(expected) for entry in logs), logs
 
     def test_every_log_line_is_redacted_even_when_the_value_matches_an_identifier(self, batches: Path, candidate: Path, logs) -> None:
         """Bind the fixture candidate's declared slot to text that also occurs
