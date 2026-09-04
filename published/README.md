@@ -39,12 +39,15 @@ committed every record is completed, anything less is rolled back. Recovery
 removes only what the journal proves the transaction created: every name in
 it must be a plain child of the destination, and every directory it would
 remove is proven — before anything goes — to be a real directory directly
-under the destination holding only record files; a symlink is refused, never
-followed, and a journal that fails any check is refused whole with the
-destination unchanged. A rollback that itself fails is reported prominently
-and keeps the journal; nothing publishes into that destination until
-recovery succeeds. Do not delete a journal by hand unless you have inspected
-the directories it names.
+under the destination holding only `manifest.json` and `scores.json` as
+regular files (a directory, symlink, FIFO, socket or device under either
+name is refused; a record still in staging may hold one of the two, a
+committed record must hold both). A symlink is refused, never followed;
+every target is checked before the first is removed; and a journal that
+fails any check is refused whole with every byte, name and mtime unchanged.
+A rollback that itself fails is reported prominently and keeps the journal;
+nothing publishes into that destination until recovery succeeds. Do not
+delete a journal by hand unless you have inspected the directories it names.
 
 `--dry-run` is read-only: it checks every run and lists what would be
 published, and if a journal is pending it reports the recovery that would

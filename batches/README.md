@@ -67,6 +67,15 @@ run (edits to a running Batch affect only runs not yet started); candidate
 identity resolved and recorded at run start; a failed run recorded and the
 Batch continued. `queue ls` and `top` are read-only.
 
+Every scheduler log line is redacted before it is printed, the same way the
+state is: generic credential shapes and host paths always (blocked and
+malformed warnings, acknowledgements, recovery, the serve line — which names
+the queue as `<batches>`), and the exact values bound to the candidate's
+declared secret slots once a run's candidate has resolved (`STARTED`,
+`DONE`/`FAILED`, executor errors, interruptions). Run ids and worker types
+are recorded verbatim in the state; in the log they are redacted by value
+like any other text.
+
 ## Starting a batch: the replay warning
 
 A batch file with **no committed state** is blocked — nothing from it runs.
