@@ -23,7 +23,19 @@ The file-backed queue the bench-side scheduler executes (#39 §5, #66;
   The scheduler writes it atomically after every transition and never runs
   git; **you commit the checkpoints** (after each run, or each completed
   batch — replacement safety reaches exactly as far as the latest committed
-  checkpoint).
+  checkpoint). It is read exactly as strictly as it is written: every field
+  is required with the shape the scheduler writes (a whole spec with a
+  positive integer budget, canonical UTC timestamps, a plain run id, a
+  candidate hash that matches the recorded identity, one-line summary and
+  error), `batch_file` must be exactly `<id>.toml`, a `pending` entry is
+  never persisted and is refused, and each entry must be a coherent point of
+  one run's life — `running` with its identity and no outcome, `done` with
+  `ok: true`, `failed` with `ok: false` and a failure class (only an
+  `unresolvable` failure has no run id). Anything else blocks the batch as
+  unreadable state: nothing runs, the cursor does not move, and the file is
+  never rewritten. A symlink or special file under a state name is refused,
+  never followed. Batch ids themselves must be plain names
+  (`[A-Za-z0-9][A-Za-z0-9._-]*`); a file whose name is not is malformed.
 - **`runtime/<id>.json`** — host-local runtime metadata (gitignored), present
   only while a run of that Batch is active: the batch, index and run id of
   the running entry, the scheduler pid and hostname. It names no container. A
@@ -130,6 +142,18 @@ remove by hand, delete the file). Then:
 SIGINT / SIGTERM interrupt the run in flight the same way (container
 removed, run marked `failed`, scheduler unwinds); SIGKILL leaves the
 `running` entry and its runtime file for the next startup to reconcile.
+
+## State without a batch file
+
+Deleting a finished batch's `.toml` is fine: its `state/<id>.json` stays as
+the record of what ran and the scheduler treats it as inert — never as
+queued work. Startup enumerates `state/*.json` on its own, so a state file
+that still records a run as `running` stops the scheduler exactly as it
+would under a batch file, with the same `--acknowledge-cleanup <id>`
+instructions (the flag applies whether or not the batch file exists), and a
+state file that cannot be read stops it too, because it may hide a run.
+`queue ls` and `top` list such state after the batches, flagged `STATE
+ONLY`.
 
 ## Restore on a replacement host
 

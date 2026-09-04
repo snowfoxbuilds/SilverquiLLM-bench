@@ -44,6 +44,23 @@ resolves to identical bytes — and one that differs is a conflict — a
 published record is never overwritten. The success summary prints only
 after the commit.
 
+Only one invocation works a destination at a time. The whole lifecycle —
+recovery, planning, staging, commit, finish, rollback — runs under a lock on
+the destination directory itself (an advisory `flock` on the directory, so
+there is no lock file to commit or clean up, and nothing is inferred from a
+recorded pid or hostname). A second invocation started while the first is
+still running is refused outright (`REFUSED: another publication invocation
+holds …`) — it never recovers a journal that belongs to a live transaction.
+The kernel drops the lock when the holder exits, crash or not, so the next
+invocation then recovers whatever journal was left. That is the difference
+between a live transaction and a stale journal: the first holds the lock, the
+second cannot. `--dry-run` takes a shared hold and reports a transaction in
+flight as in flight, never as something to recover. Beginning is
+all-or-nothing as well: if creating, writing or closing the journal or
+creating staging fails, the attempt removes the journal it created (proven to
+be that very file) and refuses with the cause; if even that removal fails the
+journal is kept and the message says exactly what it plans and what to do.
+
 If the process dies mid-way, the next invocation against that destination
 reads the journal first and finishes the job: a transaction that had already
 committed every record is completed, anything less is rolled back. The journal

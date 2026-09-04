@@ -121,6 +121,18 @@ source, a bundle that does not recompute to its name, or the same identity
 under another slug is a refusal that leaves the existing directory untouched.
 The script never runs git.
 
+**A refusal or a dry run leaves the tree exactly as it was.** The slug is
+checked before anything is staged; staging lives beside the candidates
+(`candidates/.promote-<slug>-<nonce>/`, same filesystem, so the final rename
+is atomic) and is removed strictly — never with errors ignored — because it
+may hold the very content promotion refused, a rejected credential value
+included; a `candidates/` directory the invocation created is removed again
+when it is left empty. If staging *cannot* be removed, the script does not
+pretend: it prints the refusal, then `CLEANUP FAILED: … <path> is KEPT`, and
+exits 2. Inspect that directory and remove it by hand (`rm -rf`); it is
+gitignored (`candidates/.promote-*`) so it can never be committed by
+accident, and its bytes are never echoed.
+
 Then:
 
 1. Complete the README — every `TODO(promote)` (what the candidate varies,
