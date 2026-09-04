@@ -14,7 +14,12 @@ prints only after the commit.  Recovery is contained: a journal naming
 anything that is not a plain immediate child of the destination, or a
 cleanup target that is a symlink or holds what the transaction did not
 create, is refused with the tree unchanged; ``--dry-run`` is strictly
-read-only, reporting a pending recovery without performing it.
+read-only, reporting a pending recovery without performing it.  Wherever the
+gate establishes that a candidate or a record is present in a tree, the
+entry is proven by ``lstat``: a symlinked candidate wrapper or bundle, a
+symlinked source record, a symlinked destination record with identical
+bytes and a symlinked published record are refused, never followed, with
+every tree unchanged.
 """
 
 from __future__ import annotations
@@ -784,6 +789,127 @@ class TestDryRunIsReadOnly:
         assert self._main(world, world["valid"]) == 0
         assert "would publish" in capsys.readouterr().out
         assert not world["dest"].exists()
+
+
+class TestInTreeArtifacts:
+    """Wherever the gate establishes that a candidate or a record is present
+    in a repository tree, it proves the entry itself by ``lstat``: a symlink
+    is refused, never followed — even one that resolves to byte-identical,
+    perfectly valid content — and the refusal leaves the source, candidate
+    and destination trees unchanged."""
+
+    @staticmethod
+    def _twin(world, tmp_path: Path, source: Path) -> Path:
+        """A valid copy of *source* outside every curated tree."""
+        twin = tmp_path / "elsewhere" / source.name
+        shutil.copytree(source, twin)
+        return twin
+
+    def test_a_symlinked_candidate_wrapper_is_hard_refused_not_followed(self, world, no_git, tmp_path: Path) -> None:
+        twin = self._twin(world, tmp_path, world["promoted"])
+        assert load_candidate_bundle(twin).candidate_hash == world["bundle"].candidate_hash  # valid on its own
+        shutil.rmtree(world["promoted"])
+        world["promoted"].symlink_to(twin, target_is_directory=True)
+        before = _snapshot(tmp_path)
+        with pytest.raises(publish_mod.PublicationRefused, match="is a symlink") as info:
+            publish_mod.check_traceability(
+                world["bundle"].identity, candidates_dir=world["candidates"], results_repo=world["repo"]
+            )
+        assert str(world["promoted"]) in str(info.value) and "refusing to follow" in str(info.value)
+        plan = _plan(world, [world["valid"]])
+        assert plan.refusals and all("untraceable" in r and "symlink" in r for r in plan.refusals)
+        with pytest.raises(publish_mod.PublicationRefused):
+            publish_mod.stage_publication(plan)
+        assert _snapshot(tmp_path) == before
+
+    def test_a_symlinked_bundle_inside_a_real_wrapper_is_refused(self, world, no_git, tmp_path: Path) -> None:
+        twin = self._twin(world, tmp_path, world["promoted"])
+        bundle_dir = world["promoted"] / "bundle"
+        shutil.rmtree(bundle_dir)
+        bundle_dir.symlink_to(twin / "bundle", target_is_directory=True)
+        assert load_candidate_bundle(world["promoted"]).candidate_hash == world["bundle"].candidate_hash  # ingestion alone reads through it
+        before = _snapshot(tmp_path)
+        with pytest.raises(publish_mod.PublicationRefused, match="bundle directory .* is a symlink"):
+            publish_mod.check_traceability(world["bundle"].identity, candidates_dir=world["candidates"])
+        assert _snapshot(tmp_path) == before
+
+    def test_a_symlinked_source_record_file_or_directory_is_refused(self, world, no_git, tmp_path: Path) -> None:
+        source_dir, _ = publish_mod.find_run_record(world["repo"], world["valid"])
+        twin = self._twin(world, tmp_path, source_dir)
+        _replace_with_symlink(source_dir / "scores.json", twin / "scores.json")
+        before = _snapshot(tmp_path)
+        with pytest.raises(publish_mod.PublicationRefused, match=r"scores\.json is a symlink"):
+            publish_mod.find_run_record(world["repo"], world["valid"])
+        with pytest.raises(publish_mod.PublicationRefused, match="symlink"):
+            _plan(world, [world["valid"]])
+        assert _snapshot(tmp_path) == before
+        _replace_with_directory_symlink(source_dir, twin)
+        before = _snapshot(tmp_path)
+        with pytest.raises(publish_mod.PublicationRefused, match="run record directory .* is a symlink"):
+            publish_mod.find_run_record(world["repo"], world["valid"])
+        assert _snapshot(tmp_path) == before and not world["dest"].exists()
+
+    def test_a_source_record_file_replaced_under_the_transaction_is_refused_before_the_copy(self, world, no_git, tmp_path: Path) -> None:
+        plan = _plan(world, [world["valid"]])
+        source_dir = plan.runs[0].source_dir
+        twin = self._twin(world, tmp_path, source_dir)
+        _replace_with_symlink(source_dir / "manifest.json", twin / "manifest.json")
+        with pytest.raises(publish_mod.PublicationRefused, match=r"manifest\.json is a symlink"):
+            publish_mod.stage_publication(plan)
+        assert _tree(world["dest"]) == {}
+
+    def test_a_symlinked_destination_record_with_identical_bytes_is_not_already_published(self, world, no_git, tmp_path: Path) -> None:
+        publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        dest = world["dest"] / world["valid"]
+        twin = self._twin(world, tmp_path, dest)
+        for name in ("manifest.json", "scores.json"):
+            _replace_with_symlink(dest / name, twin / name)
+            assert (dest / name).read_bytes() == (twin / name).read_bytes()  # identical through the link
+            before = _snapshot(tmp_path)
+            plan = _plan(world, [world["valid"]])
+            assert plan.runs[0].already_staged is False
+            assert any(f"{name} is a symlink" in r and "never overwritten" in r for r in plan.refusals)
+            with pytest.raises(publish_mod.PublicationRefused):
+                publish_mod.stage_publication(plan)
+            assert _snapshot(tmp_path) == before
+            (dest / name).unlink()
+            shutil.copyfile(twin / name, dest / name)
+        _replace_with_directory_symlink(dest, twin)
+        before = _snapshot(tmp_path)
+        plan = _plan(world, [world["valid"]])
+        assert plan.runs[0].already_staged is False
+        assert any("record directory" in r and "is a symlink" in r for r in plan.refusals)
+        assert _snapshot(tmp_path) == before
+
+    def test_discovery_refuses_symlinked_record_files_and_directories(self, world, no_git, tmp_path: Path) -> None:
+        publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        root = world["dest"]
+        dest = root / world["valid"]
+        twin = self._twin(world, tmp_path, dest)
+        _replace_with_symlink(dest / "scores.json", twin / "scores.json")
+        with pytest.raises(publish_mod.ResultsRepoError, match=r"scores\.json: a symlink"):
+            list(publish_mod.iter_published_records(root))
+        (dest / "scores.json").unlink()
+        shutil.copyfile(twin / "scores.json", dest / "scores.json")
+        assert [run_dir.name for run_dir, _ in publish_mod.iter_published_records(root)] == [world["valid"]]
+        (root / "linked").symlink_to(twin, target_is_directory=True)
+        with pytest.raises(publish_mod.ResultsRepoError, match="linked: a symlink"):
+            list(publish_mod.iter_published_records(root))
+        (root / "linked").unlink()
+        _replace_with_directory(dest / "manifest.json")
+        with pytest.raises(publish_mod.ResultsRepoError, match=r"manifest\.json is a directory"):
+            list(publish_mod.iter_published_records(root))
+
+    def test_real_candidate_and_record_directories_still_pass(self, world, no_git) -> None:
+        plan = _plan(world, [world["valid"], world["valid2"]])
+        assert plan.refusals == []
+        written = publish_mod.stage_publication(plan)
+        assert len(written) == 4
+        again = _plan(world, [world["valid"], world["valid2"]])
+        assert again.refusals == [] and all(run.already_staged for run in again.runs)
+        assert sorted(run_dir.name for run_dir, _ in publish_mod.iter_published_records(world["dest"])) == sorted(
+            [world["valid"], world["valid2"]]
+        )
 
 
 class TestDiscovery:

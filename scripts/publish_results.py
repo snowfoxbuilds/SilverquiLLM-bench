@@ -62,6 +62,19 @@ inspected, the recovery that would occur is reported, and the exit status is
 nonzero — the journal, staging tree, records, bytes and mtimes stay exactly
 as they were.
 
+**An artifact is what the tree holds, never what a link points at.**
+Wherever the gate establishes that a candidate or a record is present in a
+repository tree it proves the entry itself by ``lstat``: the curated
+``candidates/<slug>--<hash8>/`` wrapper and its ``bundle/`` are real
+directories resolving in place under ``candidates/`` (a symlink under a
+candidate name is a hard refusal, never followed — the run would otherwise
+be traced to content outside the repository); the source run-record
+directory and its ``manifest.json`` and ``scores.json`` are a real directory
+and regular files; a destination record is recognized as "already published
+(identical)" only when it is a real directory holding both record files as
+regular files; and discovery never follows a symlinked directory or accepts
+a symlinked record file.
+
 Discovery of published results (:func:`iter_published_records`) goes through
 manifests only — never a path convention — so the operator organizes
 ``published/`` freely.
@@ -94,7 +107,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from theozolith_control import candidate as ozcandidate
 
-from silverquillm.candidate import CandidateRefusedError, load_candidate_bundle
+from silverquillm.candidate import BUNDLE_SUBDIR, CandidateRefusedError, load_candidate_bundle
 from silverquillm.results_repo import (
     MANIFEST_FILENAME,
     OZOLITH_SCHEME,
@@ -186,10 +199,79 @@ def find_run_record(results_repo: Path, run_id: str) -> tuple[Path, RunRecord]:
             f"run id {run_id!r} is ambiguous in {results_repo}: "
             + ", ".join(str(m) for m in matches)
         )
+    run_dir = matches[0]
+    _require_real_directory(run_dir, "the run record directory")
+    for name in RECORD_FILES:
+        _require_regular_file(run_dir / name, "the run record file")
     try:
-        return matches[0], read_run_record(matches[0])
+        return run_dir, read_run_record(run_dir)
     except ResultsRepoError as exc:
         raise PublicationRefused(f"{run_id}: the record does not re-prove on read: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# In-tree proofs: an artifact is what the tree holds, never what a link
+# points at.  Every predicate here is ``lstat``-based — the type of the entry
+# itself — so a symlink is refused, never followed, wherever the gate
+# establishes that a candidate or a record is present in a repository tree.
+# ---------------------------------------------------------------------------
+
+
+def _file_kind(mode: int) -> str:
+    if stat.S_ISDIR(mode):
+        return "a directory"
+    if stat.S_ISLNK(mode):
+        return "a symlink"
+    if stat.S_ISFIFO(mode):
+        return "a FIFO"
+    if stat.S_ISSOCK(mode):
+        return "a socket"
+    if stat.S_ISCHR(mode) or stat.S_ISBLK(mode):
+        return "a device"
+    return "a special file"
+
+
+def _lstat_mode(path: Path) -> int | None:
+    """The ``lstat`` mode of *path*, or ``None`` when nothing is there."""
+    try:
+        return os.lstat(path).st_mode
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise PublicationRefused(f"cannot inspect {path}: {exc}") from exc
+
+
+def _require_real_directory(path: Path, what: str) -> None:
+    """*path* is a directory in the tree itself — not a symlink to one, which
+    is refused rather than followed — or :class:`PublicationRefused`."""
+    mode = _lstat_mode(path)
+    if mode is None:
+        raise PublicationRefused(f"{what} {path} does not exist")
+    if stat.S_ISLNK(mode):
+        raise PublicationRefused(
+            f"{what} {path} is a symlink — a public artifact is a real directory in the"
+            " repository tree, never a link to content elsewhere; refusing to follow it"
+        )
+    if not stat.S_ISDIR(mode):
+        raise PublicationRefused(f"{what} {path} is {_file_kind(mode)}, not a directory")
+
+
+def _require_regular_file(path: Path, what: str) -> None:
+    """*path* is a regular file by ``lstat`` — a symlink, directory or special
+    file under the name is refused, never read through."""
+    mode = _lstat_mode(path)
+    if mode is None:
+        raise PublicationRefused(f"{what} {path} does not exist")
+    if not stat.S_ISREG(mode):
+        raise PublicationRefused(
+            f"{what} {path} is {_file_kind(mode)}, not a regular file — a public artifact"
+            " holds regular files only; refusing to read through it"
+        )
+
+
+def _is_regular_file(path: Path) -> bool:
+    mode = _lstat_mode(path)
+    return mode is not None and stat.S_ISREG(mode)
 
 
 # ---------------------------------------------------------------------------
@@ -198,13 +280,26 @@ def find_run_record(results_repo: Path, run_id: str) -> tuple[Path, RunRecord]:
 
 
 def _candidate_dirs_with_hash8(candidates_dir: Path, hash8: str) -> list[Path]:
+    """The ``<slug>--<hash8>`` entries of *candidates_dir* that are real
+    directories in the tree.  A symlink under a candidate name is a hard
+    refusal, never followed: the curated candidate is what the repository
+    holds, not what a link on this host points at."""
     if not candidates_dir.is_dir():
         return []
     suffix = f"--{hash8}"
-    return sorted(
-        p for p in candidates_dir.iterdir()
-        if p.is_dir() and not p.name.startswith(".") and p.name.endswith(suffix)
-    )
+    dirs: list[Path] = []
+    for entry in sorted(candidates_dir.iterdir()):
+        if entry.name.startswith(".") or not entry.name.endswith(suffix):
+            continue
+        mode = os.lstat(entry).st_mode
+        if stat.S_ISLNK(mode):
+            raise PublicationRefused(
+                f"{entry} is a symlink — a curated candidate is a real directory under"
+                f" {candidates_dir}, never a link to content elsewhere; refusing to follow it"
+            )
+        if stat.S_ISDIR(mode):
+            dirs.append(entry)
+    return dirs
 
 
 def check_traceability(
@@ -235,6 +330,12 @@ def check_traceability(
             " deduplicating"
         )
     candidate_dir = dirs[0]
+    if Path(os.path.realpath(candidate_dir)).parent != Path(os.path.realpath(candidates_dir)):
+        raise PublicationRefused(
+            f"{candidate_dir} does not resolve to an immediate child of {candidates_dir};"
+            " refusing to trace a run to content outside the curated candidates directory"
+        )
+    _require_real_directory(candidate_dir / BUNDLE_SUBDIR, "the curated candidate's bundle directory")
     try:
         bundle = load_candidate_bundle(candidate_dir)
     except CandidateRefusedError as exc:
@@ -303,7 +404,7 @@ def validity_warnings(record: RunRecord) -> list[str]:
 
 
 def _same_bytes(a: Path, b: Path) -> bool:
-    return a.is_file() and b.is_file() and a.read_bytes() == b.read_bytes()
+    return _is_regular_file(a) and _is_regular_file(b) and a.read_bytes() == b.read_bytes()
 
 
 def plan_publication(
@@ -346,14 +447,25 @@ def plan_publication(
                 "leaderboard_valid is false; pass --allow-invalid to publish it anyway"
                 " (it can never enter a leaderboard: tooling filters on the flag)"
             )
-        if planned.dest_dir.exists():
-            if all(_same_bytes(source_dir / name, planned.dest_dir / name) for name in RECORD_FILES):
-                planned.already_staged = True
-            else:
+        if planned.dest_dir.exists() or planned.dest_dir.is_symlink():
+            try:
+                _require_real_directory(planned.dest_dir, "the published record directory")
+                for name in RECORD_FILES:
+                    _require_regular_file(planned.dest_dir / name, "the published record file")
+            except PublicationRefused as exc:
                 planned.refusals.append(
-                    f"{planned.dest_dir} already exists with different content — a"
-                    " published record is never overwritten; resolve by hand"
+                    f"{exc}: only a real directory holding both record files as regular files"
+                    " can be recognized as already published, and a published record is"
+                    " never overwritten; resolve by hand"
                 )
+            else:
+                if all(_same_bytes(source_dir / name, planned.dest_dir / name) for name in RECORD_FILES):
+                    planned.already_staged = True
+                else:
+                    planned.refusals.append(
+                        f"{planned.dest_dir} already exists with different content — a"
+                        " published record is never overwritten; resolve by hand"
+                    )
     return plan
 
 
@@ -474,20 +586,6 @@ def _read_journal(path: Path) -> Journal:
     except (OSError, ValueError) as exc:
         raise PublicationRecoveryError(f"cannot read {path}: {exc}") from exc
     return Journal.from_dict(data)
-
-
-def _file_kind(mode: int) -> str:
-    if stat.S_ISDIR(mode):
-        return "a directory"
-    if stat.S_ISLNK(mode):
-        return "a symlink"
-    if stat.S_ISFIFO(mode):
-        return "a FIFO"
-    if stat.S_ISSOCK(mode):
-        return "a socket"
-    if stat.S_ISCHR(mode) or stat.S_ISBLK(mode):
-        return "a device"
-    return "a special file"
 
 
 def _removable_directory(parent: Path, name: str) -> Path | None:
@@ -684,6 +782,7 @@ class PublicationTransaction:
             target_dir = self.staging / run.run_id
             target_dir.mkdir()
             for name in RECORD_FILES:
+                _require_regular_file(run.source_dir / name, "the run record file")
                 shutil.copyfile(run.source_dir / name, target_dir / name)
         for run in self.runs:
             target_dir = self.staging / run.run_id
@@ -911,25 +1010,42 @@ def iter_published_records(root: Path = DEFAULT_PUBLISHED_DIR) -> Iterator[tuple
     ``scores.json`` and the pair re-proves as a record whose ``run_id`` is
     the directory's name.  Malformed pairs raise; directory layout above the
     record carries no meaning.  Dot-prefixed directories (a transaction's
-    staging) are never records."""
+    staging) are never records.  Only what the tree itself holds counts: a
+    symlinked directory, or a symlink or special file under a record file's
+    name, raises and is never followed — a published record is a real
+    in-tree directory holding regular files."""
     root = Path(root)
     if not root.is_dir():
         return
-    for manifest in sorted(root.rglob(MANIFEST_FILENAME)):
-        run_dir = manifest.parent
-        if any(part.startswith(".") for part in run_dir.relative_to(root).parts):
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        directory = Path(dirpath)
+        dirnames[:] = sorted(name for name in dirnames if not name.startswith("."))
+        modes = {name: os.lstat(directory / name).st_mode for name in (*dirnames, *filenames)}
+        for name in sorted(modes):
+            if stat.S_ISLNK(modes[name]) and (name in dirnames or name in RECORD_FILES):
+                raise ResultsRepoError(
+                    f"{directory / name}: a symlink — a published record is a real in-tree"
+                    " directory holding regular files; refusing to follow it"
+                )
+        if MANIFEST_FILENAME not in modes:
             continue
-        if not (run_dir / SCORES_FILENAME).is_file():
-            raise ResultsRepoError(f"{run_dir}: {MANIFEST_FILENAME} without {SCORES_FILENAME}")
+        if SCORES_FILENAME not in modes:
+            raise ResultsRepoError(f"{directory}: {MANIFEST_FILENAME} without {SCORES_FILENAME}")
+        for name in RECORD_FILES:
+            if not stat.S_ISREG(modes[name]):
+                raise ResultsRepoError(
+                    f"{directory / name} is {_file_kind(modes[name])}, not a regular file — a"
+                    " published record holds regular files only; refusing to read through it"
+                )
         record = RunRecord.from_dicts(
-            json.loads(manifest.read_text(encoding="utf-8")),
-            json.loads((run_dir / SCORES_FILENAME).read_text(encoding="utf-8")),
+            json.loads((directory / MANIFEST_FILENAME).read_text(encoding="utf-8")),
+            json.loads((directory / SCORES_FILENAME).read_text(encoding="utf-8")),
         )
-        if record.run_id != run_dir.name:
+        if record.run_id != directory.name:
             raise ResultsRepoError(
-                f"{run_dir}: manifest run_id {record.run_id!r} does not match the directory name"
+                f"{directory}: manifest run_id {record.run_id!r} does not match the directory name"
             )
-        yield run_dir, record
+        yield directory, record
 
 
 # ---------------------------------------------------------------------------

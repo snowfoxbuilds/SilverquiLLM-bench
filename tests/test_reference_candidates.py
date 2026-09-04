@@ -20,6 +20,7 @@ import importlib.util
 import json
 import re
 import shutil
+import stat
 import sys
 from pathlib import Path
 from typing import Any
@@ -59,8 +60,22 @@ def _load_script(name: str) -> Any:
 
 def _candidate_dirs(root: Path = CANDIDATES) -> list[Path]:
     """Every candidate directory under *root* — discovered, never enumerated:
-    a further checked-in candidate joins with nothing to register."""
-    return sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("."))
+    a further checked-in candidate joins with nothing to register.  Every
+    entry must be a real directory in the tree: a symlink under a candidate
+    name is rejected, never followed — a checked-in candidate is what the
+    repository holds, not what a link on one host points at."""
+    found: list[Path] = []
+    for path in sorted(root.iterdir()):
+        if path.name.startswith("."):
+            continue
+        mode = path.lstat().st_mode
+        assert not stat.S_ISLNK(mode), (
+            f"{path} is a symlink: a checked-in candidate is a real directory under"
+            f" {root.name}/, never a link to content elsewhere"
+        )
+        if stat.S_ISDIR(mode):
+            found.append(path)
+    return found
 
 
 def _slug(path: Path) -> str:
@@ -198,6 +213,28 @@ def test_discovery_admits_a_further_candidate_with_nothing_to_register(tmp_path:
         assert path.name == candidate_dirname(_slug(path), bundle.identity)
         identities[path.name] = bundle.candidate_hash
     assert len(set(identities.values())) == len(discovered)  # every identity distinct
+
+
+def test_discovery_rejects_a_symlinked_candidate_entry(tmp_path: Path) -> None:
+    """A correctly named ``<slug>--<hash8>`` entry that is a symlink to a
+    valid candidate elsewhere on the host is not a checked-in candidate: the
+    repository would hold a link, not the artifact.  Discovery refuses it
+    naming the entry, and the real directories beside it are unaffected."""
+    tree = tmp_path / "candidates"
+    tree.mkdir()
+    for path in CANDIDATE_DIRS:
+        shutil.copytree(path, tree / path.name)
+    external = make_candidate_dir(
+        tmp_path / "elsewhere", slug="future-codex", name="future-codex", adapter="codex",
+        model="gpt-5.3-codex", base=CODEX_BASE, secrets=("CODEX_AUTH_JSON",),
+    )
+    load_candidate_bundle(external)  # valid on its own — the link is the problem
+    (tree / external.name).symlink_to(external, target_is_directory=True)
+    with pytest.raises(AssertionError, match="symlink") as info:
+        _candidate_dirs(tree)
+    assert external.name in str(info.value)
+    (tree / external.name).unlink()
+    assert [p.name for p in _candidate_dirs(tree)] == sorted(p.name for p in CANDIDATE_DIRS)
 
 
 @pytest.mark.parametrize("candidate_dir", CANDIDATE_DIRS, ids=[p.name for p in CANDIDATE_DIRS])

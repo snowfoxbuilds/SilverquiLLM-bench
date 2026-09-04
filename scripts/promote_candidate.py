@@ -36,8 +36,10 @@ bundle, the vendored definition, the knowledge and policy source (the
 ``PUBLISHABLE`` marker included), the README — the complete staging
 directory is scanned with the bench's own credential detector
 (:func:`silverquillm.candidate.scan_tree_for_credentials`: API keys, GitHub /
-AWS / Slack tokens, private-key blocks, JWTs, bearer credentials, a value
-assigned to a declared secret slot); any hit refuses, naming the file and the
+AWS / Slack tokens, private-key blocks, JWTs, bearer credentials, a declared
+secret slot assigned any non-empty value — no length or character-set rule,
+so ``SLOT=x`` and ``"SLOT": "…"`` count and the definition's own empty
+``SLOT = ""`` declaration does not); any hit refuses, naming the file and the
 shape only.  The files promotion itself generates (the README stub and the
 vendored definition) may name no host-local path: not the Config Repo's
 absolute path, not the home directory, not the Docker config directory.
@@ -50,7 +52,9 @@ recorded ``exported_at`` reproduces its bundle byte for byte, and its
 operator's to edit and is never compared).  Anything else — a missing,
 tampered or irreproducible source, a source that differs, a bundle that does
 not recompute to this identity, the same identity under another slug — is a
-refusal that leaves the existing directory untouched.
+refusal that leaves the existing directory untouched.  A symlink under a
+candidate name in ``candidates/`` is refused, never followed: a curated
+candidate is what the repository holds.
 
 Idempotent and side-effect-free on refusal: every check runs against a
 private staging directory beside the destination, and the candidate
@@ -640,6 +644,11 @@ def _check_destination(
     is already promoted under *dirname* with an equivalent, whole source;
     raises on any conflict; never touches an existing directory."""
     target = candidates_dir / dirname
+    if target.is_symlink():
+        raise PromotionRefused(
+            f"{target} is a symlink — a curated candidate is a real directory under"
+            f" {candidates_dir}, never a link to content elsewhere; refusing to follow it"
+        )
     if target.exists():
         existing = _existing_identity(target)
         if existing is None or existing.candidate_hash != bundle.candidate_hash:
@@ -653,7 +662,14 @@ def _check_destination(
         return target
     suffix = f"--{bundle.hash8}"
     for entry in sorted(candidates_dir.iterdir()) if candidates_dir.is_dir() else []:
-        if not entry.is_dir() or entry.name.startswith(".") or not entry.name.endswith(suffix):
+        if entry.name.startswith(".") or not entry.name.endswith(suffix):
+            continue
+        if entry.is_symlink():
+            raise PromotionRefused(
+                f"{entry} is a symlink — a curated candidate is a real directory under"
+                f" {candidates_dir}, never a link to content elsewhere; refusing to follow it"
+            )
+        if not entry.is_dir():
             continue
         existing = _existing_identity(entry)
         if existing is not None and existing.candidate_hash == bundle.candidate_hash:
