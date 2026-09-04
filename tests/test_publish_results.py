@@ -304,7 +304,7 @@ class TestTransaction:
 
     @pytest.mark.parametrize("fail_on", ["first", "second"])
     def test_a_copy_failure_leaves_no_new_final_record(self, world, prior, monkeypatch: pytest.MonkeyPatch, fail_on: str) -> None:
-        real = shutil.copyfile
+        real = publish_mod._copy_regular_file
         target_run = world["valid"] if fail_on == "first" else world["valid2"]
 
         def failing(src, dst, *a, **kw):
@@ -312,21 +312,21 @@ class TestTransaction:
                 raise OSError(28, "No space left on device")
             return real(src, dst, *a, **kw)
 
-        monkeypatch.setattr(shutil, "copyfile", failing)
+        monkeypatch.setattr(publish_mod, "_copy_regular_file", failing)
         plan = _plan(world, [world["valid"], world["valid2"]], allow_invalid=True)
         with pytest.raises(publish_mod.PublicationRefused, match="rolled back"):
             publish_mod.stage_publication(plan)
         self._assert_clean(world, prior)
 
     def test_a_validation_failure_of_a_staged_copy_leaves_no_new_final_record(self, world, prior, monkeypatch: pytest.MonkeyPatch) -> None:
-        real = shutil.copyfile
+        real = publish_mod._copy_regular_file
 
         def corrupting(src, dst, *a, **kw):
             real(src, dst, *a, **kw)
             if Path(dst).parent.name == world["valid2"] and Path(dst).name == "manifest.json":
                 Path(dst).write_text(Path(dst).read_text() + "\n")  # one byte off
 
-        monkeypatch.setattr(shutil, "copyfile", corrupting)
+        monkeypatch.setattr(publish_mod, "_copy_regular_file", corrupting)
         with pytest.raises(publish_mod.PublicationRefused, match="byte for byte"):
             publish_mod.stage_publication(_plan(world, [world["valid"], world["valid2"]], allow_invalid=True))
         self._assert_clean(world, prior)
@@ -443,14 +443,14 @@ class TestTransaction:
         assert not publish_mod.journal_path(world["dest"]).exists()
 
     def test_the_success_summary_prints_only_after_the_commit(self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
-        real = shutil.copyfile
+        real = publish_mod._copy_regular_file
 
         def failing(src, dst, *a, **kw):
             if Path(dst).parent.name == world["valid2"]:
                 raise OSError(28, "No space left on device")
             return real(src, dst, *a, **kw)
 
-        monkeypatch.setattr(shutil, "copyfile", failing)
+        monkeypatch.setattr(publish_mod, "_copy_regular_file", failing)
         code = publish_mod.main([
             "--results-repo", str(world["repo"]), "--dest", str(world["dest"]), "--candidates-dir", str(world["candidates"]),
             world["valid"], world["valid2"],
@@ -545,6 +545,55 @@ class TestJournalContainment:
         assert _snapshot(arena["root"]) == before, "inspection changed the tree"
         assert (arena["sentinel"] / "keep.txt").read_text() == "keep\n"
         assert publish_mod.journal_path(arena["dest"]).exists(), "the journal stays for the operator"
+
+    def test_a_symlinked_journal_naming_an_existing_record_grants_no_deletion_authority(self, world, prior, arena, capsys) -> None:
+        """The journal is the one thing that authorizes recovery to delete.
+        Here its path is a symlink to an external journal that parses, names
+        the pre-existing published record as committed and a second record
+        as still planned — trusted, it would roll the existing record back.
+        Recovery and inspection refuse it as a symlink, and the record, the
+        staging tree, the external target, the link, every byte and every
+        mtime stay exactly as they were."""
+        dest = arena["dest"]
+        staging = dest / ".publish-staging-0123abcd"
+        (staging / "r2").mkdir(parents=True)
+        (staging / "r2" / "manifest.json").write_text("{}\n")
+        external = arena["root"] / "elsewhere" / "journal.json"
+        external.parent.mkdir()
+        external.write_text(json.dumps(_journal_payload(planned=[world["invalid"], "r2"], committed=[world["invalid"]])))
+        parsed = publish_mod.Journal.from_dict(json.loads(external.read_text()))
+        assert not parsed.complete and parsed.committed == [world["invalid"]], "trusted, it would remove the record"
+        publish_mod.journal_path(dest).symlink_to(external)
+        self._assert_refused_without_mutation(arena, match="is a symlink")
+        assert _tree_with_mtimes(dest / world["invalid"]) == prior["snapshot"]
+        assert os.readlink(publish_mod.journal_path(dest)) == str(external)
+        before = _snapshot(arena["root"])
+        argv = ["--results-repo", str(world["repo"]), "--dest", str(dest), "--candidates-dir", str(world["candidates"]), world["valid"]]
+        assert publish_mod.main(argv) == 2
+        assert "RECOVERY FAILED" in capsys.readouterr().err
+        assert publish_mod.main([*argv, "--dry-run"]) == 2
+        assert "would FAIL" in capsys.readouterr().err
+        assert _snapshot(arena["root"]) == before
+
+    def test_a_dangling_journal_symlink_is_refused_not_treated_as_absent(self, world, arena) -> None:
+        publish_mod.journal_path(arena["dest"]).symlink_to(arena["root"] / "nowhere.json")
+        before = _snapshot(arena["root"])
+        for step in (publish_mod.recover_publication, publish_mod.inspect_publication):
+            with pytest.raises(publish_mod.PublicationRecoveryError, match="is a symlink"):
+                step(arena["dest"])
+        with pytest.raises(publish_mod.PublicationRefused, match="exists"):
+            _plan(world, [world["valid"]])
+        assert _snapshot(arena["root"]) == before
+
+    @pytest.mark.parametrize("kind", ["directory", "FIFO"])
+    def test_a_journal_that_is_not_a_regular_file_is_refused(self, arena, kind: str) -> None:
+        path = publish_mod.journal_path(arena["dest"])
+        if kind == "directory":
+            path.mkdir()
+            (path / "journal.json").write_text(json.dumps(_journal_payload()))
+        else:
+            os.mkfifo(path)
+        self._assert_refused_without_mutation(arena, match=f"is a {kind}, not a regular file")
 
     def test_a_traversal_in_staging_cannot_delete_a_sibling_directory(self, world, arena) -> None:
         # A "complete" journal: recovery would remove exactly the staging directory it names.
@@ -848,6 +897,49 @@ class TestInTreeArtifacts:
         with pytest.raises(publish_mod.PublicationRefused, match="run record directory .* is a symlink"):
             publish_mod.find_run_record(world["repo"], world["valid"])
         assert _snapshot(tmp_path) == before and not world["dest"].exists()
+
+    def test_a_symlinked_candidate_hash_directory_is_refused_through_every_ancestor(self, world, no_git, tmp_path: Path) -> None:
+        """The record is real and valid under the twin tree; only an ancestor
+        is a link.  Every component from ``results/`` down is proven, so a
+        record reached through a symlinked ancestor is never publishable."""
+        source_dir, _ = publish_mod.find_run_record(world["repo"], world["valid"])
+        hash_dir = source_dir.parent
+        twin = self._twin(world, tmp_path, hash_dir)
+        assert publish_mod.read_run_record(twin / world["valid"]).run_id == world["valid"]  # valid on its own
+        _replace_with_directory_symlink(hash_dir, twin)
+        before = _snapshot(tmp_path)
+        with pytest.raises(publish_mod.PublicationRefused, match="is a symlink") as info:
+            publish_mod.find_run_record(world["repo"], world["valid"])
+        assert str(hash_dir) in str(info.value) and "refusing to follow" in str(info.value)
+        with pytest.raises(publish_mod.PublicationRefused, match="is a symlink"):
+            _plan(world, [world["valid"]])
+        assert _snapshot(tmp_path) == before and not world["dest"].exists()
+        hash_dir.unlink()
+        shutil.copytree(twin, hash_dir)
+        results_dir = world["repo"] / publish_mod.RESULTS_DIRNAME
+        _replace_with_directory_symlink(results_dir, self._twin(world, tmp_path, results_dir))
+        before = _snapshot(tmp_path)
+        with pytest.raises(publish_mod.PublicationRefused, match="results directory .* is a symlink"):
+            _plan(world, [world["valid"]])
+        assert _snapshot(tmp_path) == before and not world["dest"].exists()
+
+    def test_a_candidate_hash_directory_swapped_after_planning_is_refused_and_rolled_back(self, world, prior, tmp_path: Path) -> None:
+        """Planning proved a real record; before the copy the whole hash
+        directory becomes a link to a valid twin.  The proof is repeated
+        immediately before the copy, so the transaction refuses, rolls back
+        its journal and staging, publishes nothing and leaves the source
+        tree, the twin and the pre-existing record untouched."""
+        plan = _plan(world, [world["valid"]])
+        hash_dir = plan.runs[0].source_dir.parent
+        twin = self._twin(world, tmp_path, hash_dir)
+        _replace_with_directory_symlink(hash_dir, twin)
+        source_before, twin_before = _snapshot(world["repo"]), _snapshot(twin)
+        with pytest.raises(publish_mod.PublicationRefused, match="rolled back") as info:
+            publish_mod.stage_publication(plan)
+        assert "is a symlink" in str(info.value) and "refusing to follow" in str(info.value)
+        assert _entries(world["dest"]) == [world["invalid"]]
+        assert _tree_with_mtimes(world["dest"] / world["invalid"]) == prior["snapshot"]
+        assert _snapshot(world["repo"]) == source_before and _snapshot(twin) == twin_before
 
     def test_a_source_record_file_replaced_under_the_transaction_is_refused_before_the_copy(self, world, no_git, tmp_path: Path) -> None:
         plan = _plan(world, [world["valid"]])

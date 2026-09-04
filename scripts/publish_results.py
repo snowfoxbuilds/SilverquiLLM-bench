@@ -40,6 +40,16 @@ prominently, the journal stays, and no further publication into that
 destination proceeds until recovery succeeds.  The success summary prints
 only after the transaction commits.
 
+**The journal is an untrusted filesystem boundary.**  It is the one thing
+that grants recovery deletion authority, so it is trusted from nothing but a
+real in-tree regular file: it is opened without following a link (a
+symlinked journal — dangling or pointing at a valid-looking journal
+elsewhere — is refused, never read), the type is proven by ``fstat`` on the
+very descriptor that is then read (so a swap between check and read cannot
+change what is read), and a directory, FIFO, socket or device under its
+name is refused explicitly.  Both recovery and the read-only inspection
+refuse the same way, with the destination unchanged.
+
 **Recovery removes only what the journal proves the transaction created.**
 Every name in the journal must be one plain child-name component of the
 destination (the staging name in the exact format ``begin`` generates; no
@@ -68,12 +78,16 @@ repository tree it proves the entry itself by ``lstat``: the curated
 ``candidates/<slug>--<hash8>/`` wrapper and its ``bundle/`` are real
 directories resolving in place under ``candidates/`` (a symlink under a
 candidate name is a hard refusal, never followed — the run would otherwise
-be traced to content outside the repository); the source run-record
-directory and its ``manifest.json`` and ``scores.json`` are a real directory
-and regular files; a destination record is recognized as "already published
-(identical)" only when it is a real directory holding both record files as
-regular files; and discovery never follows a symlinked directory or accepts
-a symlinked record file.
+be traced to content outside the repository); the source run record is
+proven through every ancestor — the Results Repo's ``results/`` directory,
+the candidate-hash directory and the run directory are real directories and
+``manifest.json`` and ``scores.json`` regular files, so a record reached
+through a symlinked ancestor is never publishable however valid its target
+— and the complete proof is repeated immediately before each copy, so a
+substitution after planning is refused and rolled back; a destination record
+is recognized as "already published (identical)" only when it is a real
+directory holding both record files as regular files; and discovery never
+follows a symlinked directory or accepts a symlinked record file.
 
 Discovery of published results (:func:`iter_published_records`) goes through
 manifests only — never a path convention — so the operator organizes
@@ -88,6 +102,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import os
 import re
@@ -111,6 +126,7 @@ from silverquillm.candidate import BUNDLE_SUBDIR, CandidateRefusedError, load_ca
 from silverquillm.results_repo import (
     MANIFEST_FILENAME,
     OZOLITH_SCHEME,
+    RESULTS_DIRNAME,
     RESULTS_REPO_ENV,
     SCORES_FILENAME,
     CandidateIdentity,
@@ -119,7 +135,6 @@ from silverquillm.results_repo import (
     candidate_copy_dir,
     candidate_hash,
     candidate_hash8,
-    iter_run_dirs,
     read_run_record,
     resolve_results_repo,
 )
@@ -169,6 +184,9 @@ class PlannedRun:
 class PublicationPlan:
     dest: Path
     runs: list[PlannedRun]
+    #: Where the source records live: the transaction re-proves every source
+    #: through every ancestor immediately before it copies.
+    results_repo: Path
 
     @property
     def refusals(self) -> list[str]:
@@ -188,10 +206,42 @@ class PublicationPlan:
 # ---------------------------------------------------------------------------
 
 
-def find_run_record(results_repo: Path, run_id: str) -> tuple[Path, RunRecord]:
-    """The one ``results/<hash>/<run-id>/`` record named *run_id*, re-proven
-    on read.  Zero or several matches refuse."""
-    matches = [run_dir for run_dir in iter_run_dirs(results_repo) if run_dir.name == run_id]
+def source_record_dir(results_repo: Path, run_id: str) -> Path:
+    """The one ``results/<candidate-hash>/<run-id>/`` of *results_repo* named
+    *run_id*, proven a real in-tree record through every ancestor: the
+    ``results/`` directory and the candidate-hash directory are real
+    directories by ``lstat``, so is the run directory, and both record files
+    are regular files.  A symlink or special file at any component refuses,
+    never followed — a record reached through a link is content outside the
+    Results Repo, whatever it resolves to.  An entry under ``results/`` that
+    is neither a directory nor a link is no component of any record's path
+    and is passed over.  Zero or several matches refuse.
+
+    The Results Repo root itself is the operator's ``--results-repo``
+    argument and is taken as given; containment is proven from ``results/``
+    down."""
+    results_dir = Path(results_repo) / RESULTS_DIRNAME
+    _require_real_directory(results_dir, "the Results Repo's results directory")
+    matches: list[Path] = []
+    for entry in sorted(results_dir.iterdir()):
+        if entry.name.startswith("."):
+            continue
+        mode = _lstat_mode(entry)
+        if mode is None:
+            continue
+        if stat.S_ISLNK(mode):
+            raise PublicationRefused(
+                f"{entry} is a symlink — a Results Repo keeps its records under real"
+                " candidate-hash directories, never behind a link to content elsewhere;"
+                " refusing to follow it"
+            )
+        if not stat.S_ISDIR(mode):
+            continue
+        run_dir = entry / run_id
+        if _lstat_mode(run_dir) is None:
+            continue
+        _require_real_directory(run_dir, "the run record directory")
+        matches.append(run_dir)
     if not matches:
         raise PublicationRefused(f"no run record named {run_id!r} in {results_repo}")
     if len(matches) > 1:
@@ -200,9 +250,21 @@ def find_run_record(results_repo: Path, run_id: str) -> tuple[Path, RunRecord]:
             + ", ".join(str(m) for m in matches)
         )
     run_dir = matches[0]
-    _require_real_directory(run_dir, "the run record directory")
     for name in RECORD_FILES:
         _require_regular_file(run_dir / name, "the run record file")
+    in_place = Path(os.path.realpath(results_dir)) / run_dir.parent.name / run_id
+    if Path(os.path.realpath(run_dir)) != in_place:
+        raise PublicationRefused(
+            f"{run_dir} does not resolve in place under {results_dir}; refusing to publish a"
+            " record reached through a link"
+        )
+    return run_dir
+
+
+def find_run_record(results_repo: Path, run_id: str) -> tuple[Path, RunRecord]:
+    """The one record named *run_id* (:func:`source_record_dir`), re-proven
+    on read."""
+    run_dir = source_record_dir(results_repo, run_id)
     try:
         return run_dir, read_run_record(run_dir)
     except ResultsRepoError as exc:
@@ -272,6 +334,30 @@ def _require_regular_file(path: Path, what: str) -> None:
 def _is_regular_file(path: Path) -> bool:
     mode = _lstat_mode(path)
     return mode is not None and stat.S_ISREG(mode)
+
+
+#: Open without following a link, without blocking on a FIFO, and hand the
+#: descriptor to ``fstat`` — the type is proven on the object that will be
+#: read, so nothing swapped in between a check and the read can change it.
+_NOFOLLOW_READ = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+
+
+def _copy_regular_file(source: Path, target: Path) -> None:
+    """Copy *source* to *target* through a descriptor opened without following
+    a link and proven a regular file, so the bytes copied are the bytes that
+    were proven."""
+    try:
+        fd = os.open(source, _NOFOLLOW_READ)
+    except OSError as exc:
+        raise PublicationRefused(f"cannot open the run record file {source}: {exc.strerror or exc}") from exc
+    with os.fdopen(fd, "rb") as fh:
+        mode = os.fstat(fh.fileno()).st_mode
+        if not stat.S_ISREG(mode):
+            raise PublicationRefused(
+                f"the run record file {source} is {_file_kind(mode)}, not a regular file;"
+                " refusing to read through it"
+            )
+        target.write_bytes(fh.read())
 
 
 # ---------------------------------------------------------------------------
@@ -423,13 +509,13 @@ def plan_publication(
     if len(set(run_ids)) != len(run_ids):
         raise PublicationRefused("run ids repeat: " + ", ".join(sorted({r for r in run_ids if run_ids.count(r) > 1})))
     dest = Path(dest)
-    if journal_path(dest).exists():
+    if _lstat_mode(journal_path(dest)) is not None:
         raise PublicationRefused(
             f"{journal_path(dest)} exists: an earlier publication into {dest} was"
             " interrupted or is still running — run the script again to finish its"
             " recovery before planning new work"
         )
-    plan = PublicationPlan(dest=dest, runs=[])
+    plan = PublicationPlan(dest=dest, runs=[], results_repo=Path(results_repo))
     for run_id in run_ids:
         source_dir, record = find_run_record(results_repo, run_id)
         planned = PlannedRun(run_id=run_id, source_dir=source_dir, record=record, dest_dir=plan.dest / run_id)
@@ -580,9 +666,61 @@ def _write_journal(path: Path, journal: Journal) -> None:
         raise
 
 
-def _read_journal(path: Path) -> Journal:
+def _not_a_journal(path: Path, mode: int) -> PublicationRecoveryError:
+    if stat.S_ISLNK(mode):
+        return PublicationRecoveryError(
+            f"{path} is a symlink — the journal is a regular file the transaction writes beside"
+            " its records, never a link; refusing to follow it"
+        )
+    return PublicationRecoveryError(
+        f"{path} is {_file_kind(mode)}, not a regular file — the journal is a regular file the"
+        " transaction writes beside its records; refusing to read it"
+    )
+
+
+def _open_journal(path: Path) -> int | None:
+    """A read descriptor on the journal at *path*, or ``None`` when nothing
+    is there.  The journal is the only thing that grants recovery deletion
+    authority, so it is trusted from nothing but a real in-tree regular
+    file: the open never follows a link (a dangling one is refused like any
+    other), never blocks on a FIFO, and the type is proven by ``fstat`` on
+    the descriptor that is then read — a directory, symlink, FIFO, socket or
+    device under the journal's name is refused, never read through."""
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        fd = os.open(path, _NOFOLLOW_READ)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise _not_a_journal(path, stat.S_IFLNK) from None
+        try:
+            mode = os.lstat(path).st_mode
+        except OSError:
+            mode = None
+        if mode is not None and not stat.S_ISREG(mode):
+            raise _not_a_journal(path, mode) from None
+        raise PublicationRecoveryError(f"cannot open {path}: {exc.strerror or exc}") from exc
+    try:
+        mode = os.fstat(fd).st_mode
+    except OSError as exc:
+        os.close(fd)
+        raise PublicationRecoveryError(f"cannot inspect {path}: {exc}") from exc
+    if not stat.S_ISREG(mode):
+        os.close(fd)
+        raise _not_a_journal(path, mode)
+    return fd
+
+
+def _read_journal(path: Path) -> Journal | None:
+    """The journal at *path* (``None`` when there is none), read through a
+    descriptor proven to be a regular file (:func:`_open_journal`) and
+    validated whole (:meth:`Journal.from_dict`)."""
+    fd = _open_journal(path)
+    if fd is None:
+        return None
+    try:
+        with os.fdopen(fd, "rb") as fh:
+            data = json.loads(fh.read().decode("utf-8"))
     except (OSError, ValueError) as exc:
         raise PublicationRecoveryError(f"cannot read {path}: {exc}") from exc
     return Journal.from_dict(data)
@@ -744,6 +882,7 @@ class PublicationTransaction:
 
     def __init__(self, plan: PublicationPlan) -> None:
         self.dest = Path(plan.dest)
+        self.results_repo = Path(plan.results_repo)
         self.runs = list(plan.to_stage)
         self.journal_path = journal_path(self.dest)
         self.journal: Journal | None = None
@@ -776,14 +915,22 @@ class PublicationTransaction:
 
     def stage(self) -> None:
         """Copy every record into staging, then re-read the copies: each must
-        be byte identical to its source and re-prove as the same Run Record."""
+        be byte identical to its source and re-prove as the same Run Record.
+        The source is re-proven through every ancestor immediately before
+        its copy (:func:`source_record_dir`), so a record swapped for a link
+        after planning is refused and the transaction rolled back."""
         assert self.staging is not None
         for run in self.runs:
+            source_dir = source_record_dir(self.results_repo, run.run_id)
+            if source_dir != run.source_dir:
+                raise PublicationRefused(
+                    f"{run.run_id}: the record moved since planning (from {run.source_dir} to"
+                    f" {source_dir}); refusing to publish it"
+                )
             target_dir = self.staging / run.run_id
             target_dir.mkdir()
             for name in RECORD_FILES:
-                _require_regular_file(run.source_dir / name, "the run record file")
-                shutil.copyfile(run.source_dir / name, target_dir / name)
+                _copy_regular_file(source_dir / name, target_dir / name)
         for run in self.runs:
             target_dir = self.staging / run.run_id
             for name in RECORD_FILES:
@@ -881,13 +1028,14 @@ def recover_publication(dest: Path) -> RecoveryReport | None:
     roll it back, or complete it when every planned record was already
     committed.  ``None`` when there is nothing to recover.  Raises
     :class:`PublicationRecoveryError` — with the destination unchanged —
-    when the journal is unreadable, malformed or names anything that is not
-    a plain immediate child of *dest*, and when the rollback itself fails
-    (the journal then stays for the operator)."""
+    when the journal is not a real regular file (a symlink, dangling or not,
+    is never followed), is unreadable, malformed or names anything that is
+    not a plain immediate child of *dest*, and when the rollback itself
+    fails (the journal then stays for the operator)."""
     path = journal_path(dest)
-    if not path.exists():
-        return None
     journal = _read_journal(path)
+    if journal is None:
+        return None
     dest = Path(dest)
     try:
         if journal.complete:
@@ -908,10 +1056,9 @@ def inspect_publication(dest: Path) -> RecoveryReport | None:
     changing anything on disk: ``None`` when no journal exists, otherwise a
     report with ``performed=False``.  A journal that recovery would refuse
     raises :class:`PublicationRecoveryError` here too."""
-    path = journal_path(dest)
-    if not path.exists():
+    journal = _read_journal(journal_path(dest))
+    if journal is None:
         return None
-    journal = _read_journal(path)
     dest = Path(dest)
     if journal.complete:
         _validate_completion(dest, journal)
