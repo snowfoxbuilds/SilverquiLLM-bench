@@ -35,10 +35,21 @@ overwritten. The success summary prints only after the commit.
 
 If the process dies mid-way, the next invocation against that destination
 reads the journal first and finishes the job: a transaction that had already
-committed every record is completed, anything less is rolled back. A
-rollback that itself fails is reported prominently and keeps the journal;
-nothing publishes into that destination until recovery succeeds. Do not
-delete a journal by hand unless you have inspected the directories it names.
+committed every record is completed, anything less is rolled back. Recovery
+removes only what the journal proves the transaction created: every name in
+it must be a plain child of the destination, and every directory it would
+remove is proven — before anything goes — to be a real directory directly
+under the destination holding only record files; a symlink is refused, never
+followed, and a journal that fails any check is refused whole with the
+destination unchanged. A rollback that itself fails is reported prominently
+and keeps the journal; nothing publishes into that destination until
+recovery succeeds. Do not delete a journal by hand unless you have inspected
+the directories it names.
+
+`--dry-run` is read-only: it checks every run and lists what would be
+published, and if a journal is pending it reports the recovery that would
+occur (`RECOVERY REQUIRED …`) and exits nonzero without performing it —
+bytes and mtimes under the destination stay exactly as they were.
 
 How this tree is organized (per blog post, per experiment, …) is manual.
 Tooling discovers published results by manifest, never by path: any directory

@@ -13,14 +13,20 @@ The file-backed queue the bench-side scheduler executes (#39 §5, #66;
   the candidate identity resolved at run start, timestamps and a sanitized
   outcome. Portable by construction — no absolute path, home directory,
   pid, hostname, container name, environment value or traceback ever enters
-  it. The scheduler writes it atomically after every transition and never
-  runs git; **you commit the checkpoints** (after each run, or each completed
+  it: an absolute `candidate` reference is recorded only as the label
+  `<external-candidate>/<basename>` (the recorded identity says what ran, and
+  pending entries always resolve from the batch file), and every outcome is
+  redacted — the exact values bound to the candidate's declared secret slots,
+  whatever their shape, then every generic credential shape and host path.
+  The scheduler writes it atomically after every transition and never runs
+  git; **you commit the checkpoints** (after each run, or each completed
   batch — replacement safety reaches exactly as far as the latest committed
   checkpoint).
 - **`runtime/<id>.json`** — host-local runtime metadata (gitignored), present
-  only while a run of that Batch is active: the run's container name, the
-  scheduler pid and hostname. A replacement scheduler on the same host uses
-  it to reconcile an abandoned container.
+  only while a run of that Batch is active: the batch, index and run id of
+  the running entry, the scheduler pid and hostname. It names no container. A
+  replacement scheduler on the same host binds it to the committed running
+  entry and reconciles that entry's container, `silverquillm-<run-id>`.
 - **`.scheduler.lock`** — held with `flock` by the one running scheduler
   (gitignored); a second instance refuses to start.
 
@@ -83,20 +89,32 @@ way — nothing is repaired or replayed silently.
 ## Abandoned runs: what a replacement scheduler does first
 
 Before any new work, under the lock, the scheduler reconciles every run the
-previous scheduler left `running`:
+previous scheduler left `running`. It first binds every `runtime/<id>.json`
+to the committed state — batch, index and run id must match the running
+entry exactly — before it touches any container; a runtime file that is
+unreadable, malformed or names another run stops the scheduler with nothing
+inspected or removed, and the file is kept for you to look at (`docker ps`,
+remove by hand, delete the file). Then:
 
-- **Same host** (`runtime/<id>.json` names this host): the run's container
-  `silverquillm-<run-id>` is force-removed and confirmed gone, then the run
-  is marked `failed`. If removal fails or cannot be confirmed, the scheduler
-  stops with a diagnostic and executes nothing — one scheduler and one run
-  container per queue, always. Fix the container by hand and start again.
+- **Same host** (`runtime/<id>.json` names this host): the container
+  `silverquillm-<run-id>` of the bound entry — never a name read from the
+  file — is force-removed and confirmed gone, then the run is marked
+  `failed`. If removal fails or cannot be confirmed, the scheduler stops with
+  a diagnostic and executes nothing — one scheduler and one run container per
+  queue, always. Fix the container by hand and start again.
 - **Another host** (no local runtime metadata — the state was committed
-  elsewhere): the run cannot be reconciled here. The scheduler stops until
-  you confirm the container is gone on the host that ran it:
+  elsewhere — or a valid runtime file naming another host): the run cannot
+  be reconciled here. The scheduler stops until you confirm the container is
+  gone on the host that ran it:
 
   ```bash
   silverquillm scheduler --acknowledge-cleanup 2026-09-04-hob
   ```
+
+  The acknowledgement is for a replacement host only. It is refused while
+  this host holds valid runtime metadata for the run (start without the flag
+  and the container is reconciled here), and it is refused — the runtime
+  file kept — while that metadata is unreadable or does not bind to the run.
 
 SIGINT / SIGTERM interrupt the run in flight the same way (container
 removed, run marked `failed`, scheduler unwinds); SIGKILL leaves the

@@ -166,10 +166,12 @@ The bench-side lifecycle of a candidate (`docs/specs/BENCHMARK-CANDIDATES.md`):
    --dest published/<subdir> RUN_ID...` publishes `manifest.json` +
    `scores.json` per run into `published/` as one transaction (all requested
    records or none; an interrupted run is recovered from its journal next
-   time). A run whose candidate is not checked in under `candidates/` (or does
-   not verify) is refused outright; a run with `leaderboard_valid: false` is a
-   warning, publishable with `--allow-invalid` and filtered out of any
-   leaderboard mechanically. Review the diff and commit.
+   time, and recovery removes only what that journal proves it created under
+   the destination). A run whose candidate is not checked in under
+   `candidates/` (or does not verify) is refused outright; a run with
+   `leaderboard_valid: false` is a warning, publishable with `--allow-invalid`
+   and filtered out of any leaderboard mechanically. `--dry-run` checks and
+   reports without writing anything. Review the diff and commit.
 
 ---
 
