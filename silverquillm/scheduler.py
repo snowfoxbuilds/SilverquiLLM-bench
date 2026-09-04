@@ -68,8 +68,16 @@ Two kinds of scheduler-owned files sit beside the queue:
   values bound to the bundle's declared secret slots in the effective
   environment, a value assigned to one of those slots, every generic
   credential shape (:func:`silverquillm.candidate.redact_credentials`), then
-  host-local roots replaced by placeholders; log lines pass the same
-  redaction.
+  host-local roots replaced by placeholders.  **Every log line passes the
+  same redaction** on its one way to the sink (:meth:`Scheduler._log`): the
+  generic shapes and root placeholders always — blocked and malformed
+  warnings, acknowledgements, recovery, the serve line (which therefore
+  names the queue as ``<batches>``, never by absolute path) — and, once a
+  run has resolved its bundle, the bound values of its declared slots too:
+  ``STARTED``, ``DONE``/``FAILED``, executor errors and interruptions.
+  Identity fields (run id, worker type, candidate hash) are recorded
+  verbatim in the state; in the log they are subject to the same value
+  redaction as any other text.
 - **Ignored runtime metadata**, ``batches/runtime/<id>.json`` — host-local,
   gitignored, present only while a run of that batch is active: the batch,
   index and run id of the running entry, the scheduler pid and hostname.
@@ -1144,9 +1152,10 @@ class Scheduler:
     production one is :func:`contract_run_executor`; tests inject a stub).
     *container_runtime* reconciles abandoned containers (the production one
     is :class:`DockerContainerRuntime`; tests inject a fake).  *now* /
-    *sleep* / *log* / *hostname* are injectable clocks, sinks and identity.
-    *environ* is the effective environment the executor binds secret slots
-    from (``os.environ`` by default): the exact values bound to a bundle's
+    *sleep* / *log* / *hostname* are injectable clocks, sinks and identity;
+    every line reaches *log* through :meth:`_log`, redacted.  *environ* is
+    the effective environment the executor binds secret slots from
+    (``os.environ`` by default): the exact values bound to a bundle's
     declared slots are redacted from everything the scheduler records or
     logs.  *replay_without_state* and *acknowledge_cleanup* are the
     operator's batch-scoped acknowledgements, applied once under the lock at
@@ -1184,7 +1193,7 @@ class Scheduler:
         self.acknowledge_cleanup = tuple(acknowledge_cleanup)
         self._now = now or _now
         self._sleep = sleep or time.sleep
-        self._log = log or _default_log
+        self._sink: Logger = log or _default_log
         self._reported: dict[Path, tuple[float, str]] = {}
         self._acknowledged = False
 
@@ -1237,6 +1246,13 @@ class Scheduler:
         if len(text) > _ERROR_MAX_CHARS:
             text = text[: _ERROR_MAX_CHARS - 1] + "…"
         return text
+
+    def _log(self, message: str, *, bundle: CandidateBundle | None = None) -> None:
+        """The one way a line reaches the log sink: :meth:`_redact` first,
+        always — every generic credential shape and known host root — and,
+        given the *bundle* a run resolved to, its declared slots' exact bound
+        values and assignments too.  Line structure is kept."""
+        self._sink(self._redact(message, bundle=bundle))
 
     # -- observation ---------------------------------------------------------
 
@@ -1500,7 +1516,7 @@ class Scheduler:
             entry.summary = "run spec could not be resolved"
             entry.finished_at = _stamp(self._now())
             save_state(self.batches_dir, state, now=self._now())
-            self._log(f"FAILED {batch.id} #{index}: {self._redact(f'{type(exc).__name__}: {exc}')}")
+            self._log(f"FAILED {batch.id} #{index}: {type(exc).__name__}: {exc}")
             return True
 
         entry.run_id = resolved.run_id
@@ -1526,7 +1542,8 @@ class Scheduler:
         self._log(
             f"STARTED {batch.id} #{index}: {resolved.run_id} — candidate"
             f" {resolved.bundle.worker_type} [{entry.hash8}] mode {spec.mode}"
-            f" benchmark {spec.benchmark} budget {spec.budget_seconds}s"
+            f" benchmark {spec.benchmark} budget {spec.budget_seconds}s",
+            bundle=resolved.bundle,
         )
         try:
             outcome = self.executor(resolved)
@@ -1536,8 +1553,8 @@ class Scheduler:
             )
             entry.error = self._sanitize(f"{type(exc).__name__}: {exc}", bundle=resolved.bundle)
             self._log(
-                f"EXECUTOR ERROR {batch.id} #{index}: "
-                + self._redact("".join(traceback.format_exception(exc)), bundle=resolved.bundle).rstrip()
+                f"EXECUTOR ERROR {batch.id} #{index}: " + "".join(traceback.format_exception(exc)).rstrip(),
+                bundle=resolved.bundle,
             )
         except BaseException as exc:  # SIGINT / SIGTERM: interrupt the run, then unwind
             self._interrupt(batch, index, state, entry, resolved, exc)
@@ -1549,7 +1566,10 @@ class Scheduler:
         entry.finished_at = _stamp(self._now())
         save_state(self.batches_dir, state, now=self._now())
         clear_runtime(self.batches_dir, batch.id)
-        self._log(f"{'DONE' if outcome.ok else 'FAILED'} {batch.id} #{index}: {resolved.run_id} — {entry.summary}")
+        self._log(
+            f"{'DONE' if outcome.ok else 'FAILED'} {batch.id} #{index}: {resolved.run_id} — {entry.summary}",
+            bundle=resolved.bundle,
+        )
         return True
 
     def _interrupt(
@@ -1566,7 +1586,8 @@ class Scheduler:
             self._log(
                 f"INTERRUPTED {batch.id} #{index}: {resolved.run_id} ({why}) — container"
                 f" {resolved.container} could NOT be removed: {rexc}; the run stays recorded as"
-                " running and is reconciled when a scheduler next starts"
+                " running and is reconciled when a scheduler next starts",
+                bundle=resolved.bundle,
             )
             return
         entry.state = RUN_FAILED
@@ -1580,7 +1601,10 @@ class Scheduler:
         entry.finished_at = _stamp(self._now())
         save_state(self.batches_dir, state, now=self._now())
         clear_runtime(self.batches_dir, batch.id)
-        self._log(f"INTERRUPTED {batch.id} #{index}: {resolved.run_id} ({why}) — container {resolved.container} {note}")
+        self._log(
+            f"INTERRUPTED {batch.id} #{index}: {resolved.run_id} ({why}) — container {resolved.container} {note}",
+            bundle=resolved.bundle,
+        )
 
     # -- the loops -----------------------------------------------------------
 

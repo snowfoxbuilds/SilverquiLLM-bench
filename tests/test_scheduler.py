@@ -684,6 +684,8 @@ class TestScheduler:
             runner.serve()
         assert naps == [7, 7]
         assert sched.lock_status(batches).held is False
+        assert logs == ["scheduler serving <batches> (poll 7s)"], "the serve line names the queue by placeholder"
+        assert str(batches) not in "\n".join(logs)
 
 
 # ---------------------------------------------------------------------------
@@ -1061,6 +1063,36 @@ class TestSecretRedaction:
         assert state.runs[2].summary == "phase done; token [redacted: value bound to secret slot ANTHROPIC_API_KEY] echoed by the agent"
         assert "Traceback" in joined and "[redacted: value bound to secret slot ANTHROPIC_API_KEY]" in joined
         assert "/usr/bin" not in text, "only the declared slots' values are redacted, and nothing else leaks"
+
+    def test_every_log_line_is_redacted_even_when_the_value_matches_an_identifier(self, batches: Path, candidate: Path, logs) -> None:
+        """Bind the fixture candidate's declared slot to text that also occurs
+        in the worker type and the run id.  Every STARTED and terminal line
+        carries the placeholder and never the value — the identifiers go
+        through the same redaction as any other text — while the committed
+        identity stays verbatim."""
+        value = "fixture-claude"
+        placeholder = "[redacted: value bound to secret slot ANTHROPIC_API_KEY]"
+        assert load_candidate_bundle(candidate).worker_type == value
+        write_batch(batches, "a", [spec(candidate)] * 3)
+        executor = StubExecutor([
+            sched.RunOutcome(ok=True, summary="stub ok"),
+            sched.RunOutcome(ok=False, summary="gate failed", failure_class="gate"),
+            RuntimeError(f"executor crashed talking to {value}"),
+        ])
+        runner = make_scheduler(batches, executor, logs=logs, environ={"ANTHROPIC_API_KEY": value})
+        assert runner.run_until_idle() == 3
+        started = [line for line in logs if line.startswith("STARTED ")]
+        terminal = [line for line in logs if line.startswith(("DONE ", "FAILED ", "EXECUTOR ERROR "))]
+        assert len(started) == 3 and len(terminal) == 4, logs
+        for line in started + terminal:
+            assert value not in line, line
+            assert placeholder in line, line
+        assert "Traceback" in "\n".join(terminal), "the executor error still carries its redacted traceback"
+        assert value not in "\n".join(logs)
+        state = load_state(batches, "a")
+        assert [run.state for run in state.runs] == ["done", "failed", "failed"]
+        assert all(run.run_id and run.run_id.startswith(f"smoke-{value}--") for run in state.runs), "identity is not weakened"
+        assert all(run.identity for run in state.runs)
 
     def test_a_resolution_failure_before_any_bundle_keeps_the_generic_redaction(self, batches: Path, tmp_path: Path, logs) -> None:
         secret_dir = tmp_path / f"cands-{FAKE_ANTHROPIC_KEY}"
