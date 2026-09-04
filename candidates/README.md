@@ -94,22 +94,23 @@ named `PUBLISHABLE` at its root (your explicit declaration; the marker never
 enters the compiled tree or the identity). Without it the candidate cannot be
 promoted and its results cannot be published.
 
-**The whole directory is public.** Before the final rename the complete
-staged tree — bundle, vendored definition, knowledge and policy source (the
+**The whole directory is public.** Before the final rename the complete staged
+tree — bundle, vendored definition, knowledge and policy source (the
 `PUBLISHABLE` marker included), README — is scanned with the bench's
 credential detector (API keys, GitHub / AWS / Slack tokens, private-key
-blocks, JWTs, bearer credentials, a declared secret slot assigned a value);
-a hit refuses naming the file and the shape, never the value. Slot
-assignment detection has no length or character-set rule: `SLOT=x`,
-`SLOT = "short"`, `SLOT: opaque/+value==`, `"SLOT": "…"` and
-`'SLOT' = 'value with spaces'` are all values — a placeholder such as
-`<your key>` too, since nothing distinguishes it from a secret by shape —
-while an empty assignment (`SLOT = ""`, the way the definition's `[secrets]`
-table declares a slot), a declaration list and prose that merely names the
-slot are not. Write docs as prose, not as an example assignment. The
-generated README and definition name no host-local path (the source is "the
-operator's Config Repo"; a `TODO(promote)` lets you add a safe repository
-label and revision).
+blocks, JWTs, bearer credentials, a declared secret slot assigned a value); a
+hit refuses naming the file and the shape, never the value. Slot assignment
+detection has no length or character-set rule: `SLOT=x`, `SLOT = "short"`,
+`SLOT: opaque/+value==`, `"SLOT": "…"` and `'SLOT' = 'value with spaces'` are
+all values — a placeholder such as `<your key>` too, since nothing
+distinguishes it from a secret by shape — while an empty assignment (`SLOT =
+""`, the way the definition's `[secrets]` table declares a slot), a
+declaration list and prose that merely names the slot are not. A quoted value
+is taken whole to its closing quote, escaped quotes and backslashes included,
+so a JSON value that contains a quote is one value, never two fragments. Write
+docs as prose, not as an example assignment. The generated README and
+definition name no host-local path (the source is "the operator's Config
+Repo"; a `TODO(promote)` lets you add a safe repository label and revision).
 
 **Dedup is by identity and source.** The same identity already promoted
 under the same name is a no-op only when the existing copy is whole and

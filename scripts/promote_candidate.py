@@ -38,9 +38,10 @@ directory is scanned with the bench's own credential detector
 (:func:`silverquillm.candidate.scan_tree_for_credentials`: API keys, GitHub /
 AWS / Slack tokens, private-key blocks, JWTs, bearer credentials, a declared
 secret slot assigned any non-empty value — no length or character-set rule,
-so ``SLOT=x`` and ``"SLOT": "…"`` count and the definition's own empty
-``SLOT = ""`` declaration does not); any hit refuses, naming the file and the
-shape only.  The files promotion itself generates (the README stub and the
+so ``SLOT=x`` and ``"SLOT": "…"`` count, a quoted value is taken whole with
+its escaped quotes and backslashes, and the definition's own empty
+``SLOT = ""`` declaration does not count); any hit refuses, naming the file
+and the shape only.  The files promotion itself generates (the README stub and the
 vendored definition) may name no host-local path: not the Config Repo's
 absolute path, not the home directory, not the Docker config directory.
 

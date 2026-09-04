@@ -68,7 +68,8 @@ Two kinds of scheduler-owned files sit beside the queue:
   values bound to the bundle's declared secret slots in the effective
   environment, one of those slots used as an assignment key with any
   non-empty value (no length or character-set rule; a bare value to its
-  line end, a quoted one to its closing quote), every generic credential
+  line end, a quoted one to its closing quote with every escaped quote or
+  backslash inside it), every generic credential
   shape (:func:`silverquillm.candidate.redact_credentials`), then
   host-local roots replaced by placeholders.  **Every log line passes the
   same redaction** on its one way to the sink (:meth:`Scheduler._log`): the

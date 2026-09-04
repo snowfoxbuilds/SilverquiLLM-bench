@@ -17,8 +17,11 @@ The script is a porter with two checks and never commits:
   candidate must be what the tree holds: a real `candidates/<slug>--<hash8>/`
   directory with a real `bundle/`, never a symlink — even one pointing at a
   valid bundle elsewhere on the host is refused, not followed. The source run
-  record is read only from a real directory holding `manifest.json` and
-  `scores.json` as regular files.
+  record is proven through every ancestor — `results/`, the candidate-hash
+  directory and the run directory real directories, `manifest.json` and
+  `scores.json` regular files — and proven again immediately before each
+  copy; a record behind a symlinked ancestor is never publishable, however
+  valid its target.
 - **Validity — warning.** `leaderboard_valid: false` (a Resume Leg, an
   ineligible benchmark, an unevaluated run) publishes only with
   `--allow-invalid`; the flag travels with the record and leaderboard tooling
@@ -43,19 +46,24 @@ after the commit.
 
 If the process dies mid-way, the next invocation against that destination
 reads the journal first and finishes the job: a transaction that had already
-committed every record is completed, anything less is rolled back. Recovery
-removes only what the journal proves the transaction created: every name in
-it must be a plain child of the destination, and every directory it would
-remove is proven — before anything goes — to be a real directory directly
-under the destination holding only `manifest.json` and `scores.json` as
-regular files (a directory, symlink, FIFO, socket or device under either
-name is refused; a record still in staging may hold one of the two, a
-committed record must hold both). A symlink is refused, never followed;
-every target is checked before the first is removed; and a journal that
-fails any check is refused whole with every byte, name and mtime unchanged.
-A rollback that itself fails is reported prominently and keeps the journal;
-nothing publishes into that destination until recovery succeeds. Do not
-delete a journal by hand unless you have inspected the directories it names.
+committed every record is completed, anything less is rolled back. The journal
+is trusted only as a real regular file in the destination: it is opened
+without following a link and its type is proven on the open descriptor before
+a byte is read, so a symlinked journal (even one pointing at a plausible
+journal elsewhere), a directory, a FIFO or a device under its name is refused,
+never followed — by recovery and by `--dry-run` alike. Recovery removes only
+what the journal proves the transaction created: every name in it must be a
+plain child of the destination, and every directory it would remove is proven
+— before anything goes — to be a real directory directly under the destination
+holding only `manifest.json` and `scores.json` as regular files (a directory,
+symlink, FIFO, socket or device under either name is refused; a record still
+in staging may hold one of the two, a committed record must hold both). A
+symlink is refused, never followed; every target is checked before the first
+is removed; and a journal that fails any check is refused whole with every
+byte, name and mtime unchanged. A rollback that itself fails is reported
+prominently and keeps the journal; nothing publishes into that destination
+until recovery succeeds. Do not delete a journal by hand unless you have
+inspected the directories it names.
 
 `--dry-run` is read-only: it checks every run and lists what would be
 published, and if a journal is pending it reports the recovery that would
