@@ -1100,6 +1100,24 @@ class TestSecretRedaction:
         assert load_state(batches, "a").runs[0].summary == expected
         assert any(entry.startswith("FAILED ") and entry.endswith(expected) for entry in logs), logs
 
+    def test_no_fragment_of_an_escaped_quoted_value_reaches_state_or_logs(self, batches: Path, candidate: Path, logs) -> None:
+        """A serializer writes a value containing a quote as ``\\"``.  The
+        redactor closes the string only at the unescaped quote, so neither
+        the fragment before the escape nor the one after it reaches the
+        state or the log; the field after the scalar survives."""
+        document = json.dumps({"ANTHROPIC_API_KEY": 'left7"right9', "other": "keep"})
+        placeholder = "[redacted: a value assigned to secret slot ANTHROPIC_API_KEY]"
+        write_batch(batches, "a", [spec(candidate)])
+        executor = StubExecutor([RuntimeError(f"provider config: {document}")])
+        runner = make_scheduler(batches, executor, logs=logs, environ={"ANTHROPIC_API_KEY": "bound-elsewhere"})
+        assert runner.run_until_idle() == 1
+        assert load_state(batches, "a").runs[0].error == f'RuntimeError: provider config: {{{placeholder}, "other": "keep"}}'
+        text = sched.state_path(batches, "a").read_text(encoding="utf-8")
+        joined = "\n".join(logs)
+        for fragment in ("left7", "right9"):
+            assert fragment not in text and fragment not in joined, fragment
+        assert placeholder in joined and "Traceback" in joined
+
     def test_every_log_line_is_redacted_even_when_the_value_matches_an_identifier(self, batches: Path, candidate: Path, logs) -> None:
         """Bind the fixture candidate's declared slot to text that also occurs
         in the worker type and the run id.  Every STARTED and terminal line

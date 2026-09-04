@@ -382,6 +382,33 @@ class TestDeclaredSlotAssignment:
         assert redact_credentials(text, secret_slots=()) == text
         assert redact_credentials(text, secret_slots=self.SLOTS) == f"OTHER_KEY=value; {self.PLACEHOLDER}"
 
+    def test_a_serialized_value_holding_an_escaped_quote_is_redacted_whole(self, tmp_path: Path) -> None:
+        """A JSON serializer writes a value that contains a quote as ``\\"``.
+        The string closes only at the unescaped quote, so the tree scan finds
+        the pair and the redactor blanks it whole — neither the fragment
+        before the escape nor the one after it survives — while the field
+        after the correctly closed scalar is left alone."""
+        document = json.dumps({"ANTHROPIC_API_KEY": 'left7"right9', "other": "keep"})
+        assert '\\"' in document
+        (tmp_path / "config.json").write_text(document + "\n", encoding="utf-8")
+        findings = scan_tree_for_credentials(tmp_path, secret_slots=self.SLOTS)
+        assert [str(finding) for finding in findings] == ["config.json: a value assigned to secret slot ANTHROPIC_API_KEY"]
+        redacted = redact_credentials(document, secret_slots=self.SLOTS)
+        assert redacted == f'{{{self.PLACEHOLDER}, "other": "keep"}}'
+        assert "left7" not in redacted and "right9" not in redacted
+
+    def test_an_escaped_backslash_before_the_closing_quote_still_closes_the_string(self) -> None:
+        document = json.dumps({"ANTHROPIC_API_KEY": "tail\\", "other": "keep"})
+        assert document.endswith('\\\\", "other": "keep"}')
+        assert redact_credentials(document, secret_slots=self.SLOTS) == f'{{{self.PLACEHOLDER}, "other": "keep"}}'
+
+    def test_a_quote_that_never_closes_falls_through_to_the_bare_form(self) -> None:
+        """An escaped quote with no closing quote after it, and a YAML doubled
+        single quote, leave the string open; the bare form then takes the
+        line to its end, so the whole line goes rather than a fragment."""
+        for line in ('ANTHROPIC_API_KEY="left7\\"right9', "ANTHROPIC_API_KEY: 'it''s' # note"):
+            assert redact_credentials(f"{line}\nnext", secret_slots=self.SLOTS) == f"{self.PLACEHOLDER}\nnext", line
+
 
 # ---------------------------------------------------------------------------
 # Adapter agnosticism

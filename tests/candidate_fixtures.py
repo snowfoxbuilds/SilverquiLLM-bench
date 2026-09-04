@@ -48,17 +48,23 @@ FAKE_CREDENTIALS: dict[str, str] = {
 
 #: The declared slot ``ANTHROPIC_API_KEY`` used as an assignment key with a
 #: non-empty value — one line per form the detector must flag, deliberately
-#: spanning every length, character class and quoting a config or a log can
-#: take.  No value here is a credential; the detector must not care.  Each
-#: line is exactly the key, the operator and the value, so a redaction that
-#: blanks it whole leaves nothing of it behind.
+#: spanning every length, character class, quoting and escaping a config or
+#: a log can take.  No value here is a credential; the detector must not
+#: care.  Each line is exactly the key, the operator and the value, so a
+#: redaction that blanks it whole leaves nothing of it behind.  The JSON
+#: forms are serializer output (``json.dumps`` of the pair, braces dropped),
+#: so the escaping is exactly what a real config or log line carries.
 SLOT_ASSIGNMENTS: dict[str, str] = {
     "bare-one-char": "ANTHROPIC_API_KEY=x",
     "bare-two-chars": "ANTHROPIC_API_KEY=q7",
     "double-quoted-short": 'ANTHROPIC_API_KEY = "short"',
     "yaml-symbols": "ANTHROPIC_API_KEY: opaque/+value==",
     "json-quoted-key": '"ANTHROPIC_API_KEY": "opaque/+value=="',
+    "json-escaped-quote": json.dumps({"ANTHROPIC_API_KEY": 'left7"right9'})[1:-1],
+    "json-escaped-backslash": json.dumps({"ANTHROPIC_API_KEY": "tail\\"})[1:-1],
     "single-quoted-spaces": "'ANTHROPIC_API_KEY' = 'value with spaces'",
+    "single-quoted-escaped-quote": "'ANTHROPIC_API_KEY' = 'it\\'s'",
+    "yaml-doubled-single-quote": "ANTHROPIC_API_KEY: 'it''s'",
     "angle-bracket-placeholder": "ANTHROPIC_API_KEY=<your key>",
     "unterminated-quote": 'ANTHROPIC_API_KEY="abc',
     "toml-multiline-opener": 'ANTHROPIC_API_KEY = """',

@@ -136,13 +136,20 @@ _CREDENTIAL_PATTERNS: tuple[tuple[str, re.Pattern[bytes]], ...] = (
 # shell all do), ``=`` or ``:`` as the operator, and the value whatever
 # follows on the same line — a quoted string up to its closing quote, or a
 # bare scalar up to the end of the line (a bare value has no delimiter, so
-# nothing after it on the line is trusted).  No length and no character-class
-# rule: a two-character value is as much a secret as a forty-character one.
-# The pattern admits an EMPTY value on purpose, so that emptiness is decided
-# in exactly one place, :func:`_assigned_value`.
+# nothing after it on the line is trusted).  Inside a quoted string a
+# backslash escapes the next character, so an escaped quote (``\"``) or an
+# escaped backslash (``\\``) belongs to the value and the string closes only
+# at an unescaped quote — the way JSON and every serializer that emits it
+# write a value that happens to contain a quote; a quote that never closes
+# falls through to the bare form.  No length and no character-class rule: a
+# two-character value is as much a secret as a forty-character one.  The
+# pattern admits an EMPTY value on purpose, so that emptiness is decided in
+# exactly one place, :func:`_assigned_value`.
 _SLOT_ASSIGNMENT_TEMPLATE = (
     rb"(?<![A-Za-z0-9_])(?P<q>[\"']?)%s(?P=q)[ \t]*[=:][ \t]*"
-    rb"(?:\"(?P<dq>[^\"\r\n]*)\"(?![\"'])|'(?P<sq>[^'\r\n]*)'(?![\"'])|(?P<bare>[^\r\n]*))"
+    rb"(?:\"(?P<dq>(?:[^\"\\\r\n]|\\[^\r\n])*)\"(?![\"'])"
+    rb"|'(?P<sq>(?:[^'\\\r\n]|\\[^\r\n])*)'(?![\"'])"
+    rb"|(?P<bare>[^\r\n]*))"
 )
 
 
@@ -276,8 +283,9 @@ def redact_credentials(text: str, *, secret_slots: Iterable[str] = ()) -> str:
     a value even when an exception message does.  The same shapes as
     :func:`scan_tree_for_credentials`: a declared slot assigned a value of
     any length or character set is blanked whole (key, operator and value;
-    a bare value to the end of its line, a quoted one to its closing quote),
-    an empty assignment is left as it is."""
+    a bare value to the end of its line, a quoted one to its closing quote
+    with every escaped quote or backslash inside it — no fragment of the
+    value survives), an empty assignment is left as it is."""
     data = text.encode("utf-8", errors="surrogateescape")
     for shape in (*_CREDENTIAL_SHAPES, *_slot_shapes(secret_slots)):
         data = shape.redact(data)
