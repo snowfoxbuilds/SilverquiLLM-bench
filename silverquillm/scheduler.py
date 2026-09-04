@@ -66,8 +66,10 @@ Two kinds of scheduler-owned files sit beside the queue:
   entry always resolves from the batch file, never from this copy.  Every
   summary and error passes the scheduler's redaction first — the exact
   values bound to the bundle's declared secret slots in the effective
-  environment, a value assigned to one of those slots, every generic
-  credential shape (:func:`silverquillm.candidate.redact_credentials`), then
+  environment, one of those slots used as an assignment key with any
+  non-empty value (no length or character-set rule; a bare value to its
+  line end, a quoted one to its closing quote), every generic credential
+  shape (:func:`silverquillm.candidate.redact_credentials`), then
   host-local roots replaced by placeholders.  **Every log line passes the
   same redaction** on its one way to the sink (:meth:`Scheduler._log`): the
   generic shapes and root placeholders always — blocked and malformed
@@ -1225,9 +1227,10 @@ class Scheduler:
         """Every secret value and host-local root gone, line structure kept
         (what a log line may carry).  With *bundle*: the exact non-empty
         value bound to each of its declared secret slots in the effective
-        environment — whatever its shape — and a value assigned to one of
-        those slots; always: every generic credential shape; then the known
-        roots replaced by placeholders.  Without a bundle (a spec that never
+        environment — whatever its shape — and one of those slots assigned
+        any non-empty value, whatever its length or characters; always: every
+        generic credential shape; then the known roots replaced by
+        placeholders.  Without a bundle (a spec that never
         resolved) the generic shapes and roots still apply."""
         slots = tuple(bundle.secret_slots) if bundle is not None else ()
         bound = sorted(((slot, self._environ.get(slot, "")) for slot in slots), key=lambda item: -len(item[1]))

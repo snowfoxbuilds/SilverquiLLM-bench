@@ -17,7 +17,9 @@ The file-backed queue the bench-side scheduler executes (#39 §5, #66;
   `<external-candidate>/<basename>` (the recorded identity says what ran, and
   pending entries always resolve from the batch file), and every outcome is
   redacted — the exact values bound to the candidate's declared secret slots,
-  whatever their shape, then every generic credential shape and host path.
+  whatever their shape, a declared slot assigned any non-empty value (no
+  length or character-set rule), then every generic credential shape and
+  host path.
   The scheduler writes it atomically after every transition and never runs
   git; **you commit the checkpoints** (after each run, or each completed
   batch — replacement safety reaches exactly as far as the latest committed

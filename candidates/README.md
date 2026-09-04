@@ -98,8 +98,15 @@ promoted and its results cannot be published.
 staged tree — bundle, vendored definition, knowledge and policy source (the
 `PUBLISHABLE` marker included), README — is scanned with the bench's
 credential detector (API keys, GitHub / AWS / Slack tokens, private-key
-blocks, JWTs, bearer credentials, a value assigned to a declared secret
-slot); a hit refuses naming the file and the shape, never the value. The
+blocks, JWTs, bearer credentials, a declared secret slot assigned a value);
+a hit refuses naming the file and the shape, never the value. Slot
+assignment detection has no length or character-set rule: `SLOT=x`,
+`SLOT = "short"`, `SLOT: opaque/+value==`, `"SLOT": "…"` and
+`'SLOT' = 'value with spaces'` are all values — a placeholder such as
+`<your key>` too, since nothing distinguishes it from a secret by shape —
+while an empty assignment (`SLOT = ""`, the way the definition's `[secrets]`
+table declares a slot), a declaration list and prose that merely names the
+slot are not. Write docs as prose, not as an example assignment. The
 generated README and definition name no host-local path (the source is "the
 operator's Config Repo"; a `TODO(promote)` lets you add a safe repository
 label and revision).
@@ -119,10 +126,14 @@ Then:
    where the base digest came from). The platform test refuses a checked-in
    README that still carries the placeholder.
 2. `pytest tests/test_reference_candidates.py -q` — every checked-in candidate
-   must ingest, carry its recomputed hash in its name, hold no secret value
-   anywhere in its directory (the same scanner promotion uses), re-export
-   byte-identically from its source, and vendor a `PUBLISHABLE` knowledge
-   tree when it bakes one.
+   must be a real directory in the tree (a symlink under a candidate name is
+   rejected, never followed: a curated candidate is what the repository
+   holds, not what a link on one host points at), ingest, carry its
+   recomputed hash in its name, hold no secret value anywhere in its
+   directory (the same scanner promotion uses), re-export byte-identically
+   from its source, and vendor a `PUBLISHABLE` knowledge tree when it bakes
+   one. The publish gate holds the same line: a run traces only to a real
+   `candidates/<slug>--<hash8>/` with a real `bundle/`.
 3. Review the diff and commit — the commit is the approval stamp.
 
 A bundle exported by hand (`theozolith candidate export --source <src>

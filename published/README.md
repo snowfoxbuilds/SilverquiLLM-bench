@@ -13,7 +13,12 @@ The script is a porter with two checks and never commits:
 
 - **Traceability — hard refusal.** The run's candidate identity must be
   checked in under `candidates/` and verify by recomputation. A run of an
-  unpromoted, tampered, or legacy candidate cannot be published.
+  unpromoted, tampered, or legacy candidate cannot be published. The
+  candidate must be what the tree holds: a real `candidates/<slug>--<hash8>/`
+  directory with a real `bundle/`, never a symlink — even one pointing at a
+  valid bundle elsewhere on the host is refused, not followed. The source run
+  record is read only from a real directory holding `manifest.json` and
+  `scores.json` as regular files.
 - **Validity — warning.** `leaderboard_valid: false` (a Resume Leg, an
   ineligible benchmark, an unevaluated run) publishes only with
   `--allow-invalid`; the flag travels with the record and leaderboard tooling
@@ -30,8 +35,11 @@ rename per record — under a journal (`<dest>/.publish-journal.json`) that
 names exactly the directories that invocation creates. A failure at any step
 rolls back every directory the transaction created and leaves records that
 were already there untouched; a record that already exists byte-identically
-is skipped, and one that differs is a conflict — a published record is never
-overwritten. The success summary prints only after the commit.
+is skipped — provided it is a real directory holding both files as regular
+files, since a symlinked record or record file is refused even when it
+resolves to identical bytes — and one that differs is a conflict — a
+published record is never overwritten. The success summary prints only
+after the commit.
 
 If the process dies mid-way, the next invocation against that destination
 reads the journal first and finishes the job: a transaction that had already
@@ -59,5 +67,7 @@ Tooling discovers published results by manifest, never by path: any directory
 under `published/` holding `manifest.json` beside `scores.json` whose pair
 re-proves as a Run Record named after the directory is a published run
 (`scripts/publish_results.py`, `iter_published_records`); dot-prefixed
-directories (a transaction's staging) never are. Heavy artifacts
-(transcripts, workspaces) never enter git.
+directories (a transaction's staging) never are. A published record is a
+real in-tree directory holding regular files: discovery never follows a
+symlinked directory and refuses a symlink or special file under a record
+file's name. Heavy artifacts (transcripts, workspaces) never enter git.
