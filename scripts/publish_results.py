@@ -54,14 +54,17 @@ alike: the first holds the lock, the second cannot.  ``--dry-run`` takes a
 shared hold, so it reports a transaction in flight as exactly that, never
 as an interrupted one awaiting recovery.
 
-**Beginning is all-or-nothing too.**  A failure while creating, writing or
-closing the initial journal, or while creating the staging directory,
-removes what that attempt created — the journal, proven to be the very
-file it made by the still-open creating descriptor's link count and inode
-against what the path names — and refuses with the cause chained.
+**Beginning is all-or-nothing too.**  Once the journal exists, every
+failure — duplicating its descriptor, writing it, closing either
+descriptor, creating the staging directory — is an initialization failure:
+the attempt removes what it created (the staging directory, then the
+journal, proven to be the very file it made: a regular file with the
+created file's device and inode, still linked while a descriptor of it is
+open, or reading back as exactly the bytes written once none is) and
+refuses with the cause chained.  Every descriptor is closed on every path.
 If even that removal fails, the evidence stays and the failure says exactly
-what is left and how to recover it, so no half-written journal is ever left
-for normal recovery to trip over.
+what is left and how to recover it, so no empty or half-written journal is
+ever left for normal recovery to trip over.
 
 **The journal is an untrusted filesystem boundary.**  It is the one thing
 that grants recovery deletion authority, so it is trusted from nothing but a
@@ -845,6 +848,18 @@ def _write_whole(fd: int, data: bytes) -> None:
         os.close(fd)
 
 
+def _read_whole(fd: int, limit: int) -> bytes:
+    """Up to *limit* bytes from *fd*, from its current position."""
+    chunks: list[bytes] = []
+    while limit > 0:
+        chunk = os.read(fd, limit)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        limit -= len(chunk)
+    return b"".join(chunks)
+
+
 def _write_journal(path: Path, journal: Journal) -> None:
     """Atomic replace, so the journal always parses."""
     payload = json.dumps(journal.to_dict(), indent=2, sort_keys=True) + "\n"
@@ -1091,14 +1106,15 @@ class PublicationTransaction:
     def begin(self) -> None:
         """Create the journal (exclusively — a second transaction into the
         same destination refuses) and the private staging directory, or
-        leave nothing behind.  A failure while creating, writing or closing
-        the journal, or while creating staging, removes the journal this
-        call created — proven to be that very file: the creating descriptor
-        is held open, so its link count and inode are compared against what
-        the path names — and raises :class:`PublicationRefused` with the
-        cause chained; a removal that itself fails keeps the evidence and
-        raises :class:`PublicationRecoveryError` saying exactly what is left
-        and what to do about it."""
+        leave nothing behind.  Once the journal exists, every failure —
+        duplicating its descriptor, writing it, closing either descriptor,
+        creating staging — is an initialization failure: what this attempt
+        created is removed (staging, then the journal, proven to be this
+        attempt's very file — :meth:`_journal_is_mine`) and
+        :class:`PublicationRefused` is raised with the cause chained; a
+        removal that itself fails keeps the evidence and raises
+        :class:`PublicationRecoveryError` saying exactly what is left and
+        what to do about it.  Every descriptor is closed on every path."""
         try:
             self.dest.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
@@ -1107,9 +1123,58 @@ class PublicationTransaction:
             if not _safe_record_name(run.run_id):
                 raise PublicationRefused(f"run id {run.run_id!r} is not a safe directory name")
         staging_name = f"{STAGING_PREFIX}{secrets.token_hex(4)}"
+        staging = self.dest / staging_name
         journal = Journal(staging=staging_name, planned=[run.run_id for run in self.runs])
+        payload = (json.dumps(journal.to_dict(), indent=2, sort_keys=True) + "\n").encode("utf-8")
+        writer: int | None = self._create_journal()
+        # The journal exists from here on.  ``writer`` writes it and is
+        # closed as soon as the payload is down — a deferred write error
+        # surfaces there.  ``proof``, a duplicate, outlives that close so a
+        # failure anywhere below can still show that what the path names is
+        # this attempt's file.  A variable is cleared the moment its
+        # descriptor's ownership passes on or its close is attempted, so no
+        # descriptor is closed twice; whichever is still open reaches
+        # _abandon_begin as the proof and is closed on the way out.
+        proof: int | None = None
+        mine: os.stat_result | None = None
+        staged = False
         try:
-            fd = os.open(self.journal_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o644)
+            mine = os.fstat(writer)
+            proof = os.dup(writer)
+            fd, writer = writer, None
+            _write_whole(fd, payload)
+            os.mkdir(staging)
+            staged = True
+            fd, proof = proof, None
+            os.close(fd)
+        except OSError as exc:
+            try:
+                self._abandon_begin(
+                    exc,
+                    journal=journal,
+                    payload=payload,
+                    mine=mine,
+                    proof=proof if proof is not None else writer,
+                    staging=staging if staged else None,
+                )
+            finally:
+                # Whatever is still open has nothing left to report: the
+                # writer's own close is a guarded step above, and by now the
+                # journal is removed, or kept and named in the error in flight.
+                for fd in (writer, proof):
+                    if fd is not None:
+                        try:
+                            os.close(fd)
+                        except OSError:
+                            pass
+        self.journal = journal
+        self.staging = staging
+
+    def _create_journal(self) -> int:
+        """The journal, created exclusively; returns its write descriptor.
+        When this refuses, nothing was created."""
+        try:
+            return os.open(self.journal_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o644)
         except FileExistsError:
             raise PublicationRefused(
                 f"{self.journal_path} exists: another publication into {self.dest} is in"
@@ -1120,35 +1185,28 @@ class PublicationTransaction:
                 f"cannot begin a publication into {self.dest}: the journal {self.journal_path}"
                 f" could not be created ({exc.strerror or exc}); nothing was created"
             ) from exc
-        # A duplicate of the creating descriptor stays open until begin is
-        # over: its fstat is the identity of the file this attempt created,
-        # link count included, whatever happens to the path meanwhile.
-        created = os.dup(fd)
-        try:
-            try:
-                _write_whole(fd, (json.dumps(journal.to_dict(), indent=2, sort_keys=True) + "\n").encode("utf-8"))
-            except OSError as exc:
-                self._abandon_begin(exc, journal=journal, created=created)
-            try:
-                (self.dest / staging_name).mkdir()
-            except OSError as exc:
-                self._abandon_begin(exc, journal=journal, created=created)
-        finally:
-            os.close(created)
-        self.journal = journal
-        self.staging = self.dest / staging_name
 
-    def _abandon_begin(self, exc: OSError, *, journal: Journal, created: int) -> NoReturn:
-        """Beginning failed after the journal was created: remove it and
-        refuse, or — when even that fails — keep the evidence and say so.
-        Only the very file this call created is removed: *created* is a
-        descriptor of that file, still open, so the file must still be
-        linked (``st_nlink``) and the entry at the journal's path must be a
-        regular file with the same device and inode — an inode a filesystem
-        reuses for a replacement is caught by the link count."""
+    def _abandon_begin(
+        self,
+        exc: OSError,
+        *,
+        journal: Journal,
+        payload: bytes,
+        mine: os.stat_result | None,
+        proof: int | None,
+        staging: Path | None,
+    ) -> NoReturn:
+        """Beginning failed after the journal was created: remove what this
+        attempt made and refuse, or — when even that fails — keep the
+        evidence and say so.  *staging* is the directory this attempt
+        created (``None`` when it never got that far) and goes first; the
+        journal goes only once proven to be this attempt's very file
+        (:meth:`_journal_is_mine`).  *mine* is the created file's identity
+        and *proof* a still-open descriptor of it, ``None`` when closing the
+        last one was the failure."""
         path = self.journal_path
-        mine = os.fstat(created)
         why = f"{type(exc).__name__}: {exc.strerror or exc}"
+        failed = f"beginning the publication into {self.dest} failed ({why}) AND"
         kept = (
             f" — {path} is KEPT. It plans {', '.join(journal.planned)} into {journal.staging}"
             " with nothing committed: if it parses, the next invocation recovers it by removing"
@@ -1156,33 +1214,78 @@ class PublicationTransaction:
             " (the write was interrupted), confirm it names nothing you want kept and delete it"
             f" by hand. No publication proceeds into {self.dest} until then"
         )
+        if staging is not None:
+            try:
+                os.rmdir(staging)
+            except FileNotFoundError:
+                pass
+            except OSError as rmdir_exc:
+                raise PublicationRecoveryError(
+                    f"{failed} the staging directory it had created could not be removed"
+                    f" ({rmdir_exc.strerror or rmdir_exc}): {staging} is kept{kept}"
+                ) from exc
         try:
             now = os.lstat(path)
         except FileNotFoundError:
             now = None
         except OSError as lstat_exc:
             raise PublicationRecoveryError(
-                f"beginning the publication into {self.dest} failed ({why}) AND the journal it"
-                f" had created cannot be inspected ({lstat_exc.strerror or lstat_exc}){kept}"
+                f"{failed} the journal it had created cannot be inspected ({lstat_exc.strerror or lstat_exc}){kept}"
             ) from exc
         if now is not None:
-            if mine.st_nlink == 0 or not stat.S_ISREG(now.st_mode) or (now.st_dev, now.st_ino) != (mine.st_dev, mine.st_ino):
+            try:
+                is_mine = self._journal_is_mine(now, mine=mine, proof=proof, payload=payload)
+            except OSError as probe_exc:
                 raise PublicationRecoveryError(
-                    f"beginning the publication into {self.dest} failed ({why}) AND {path} is no"
-                    " longer the file this transaction created; refusing to remove it — inspect"
-                    f" it by hand; no publication proceeds into {self.dest} until it is resolved"
+                    f"{failed} {path} cannot be proven to be the file this transaction created"
+                    f" ({probe_exc.strerror or probe_exc}); refusing to remove it — inspect it by hand;"
+                    f" no publication proceeds into {self.dest} until it is resolved"
+                ) from exc
+            if not is_mine:
+                raise PublicationRecoveryError(
+                    f"{failed} {path} is no longer the file this transaction created; refusing to"
+                    f" remove it — inspect it by hand; no publication proceeds into {self.dest} until"
+                    " it is resolved"
                 ) from exc
             try:
                 os.unlink(path)
             except OSError as unlink_exc:
                 raise PublicationRecoveryError(
-                    f"beginning the publication into {self.dest} failed ({why}) AND the journal it"
-                    f" had created could not be removed ({unlink_exc.strerror or unlink_exc}){kept}"
+                    f"{failed} the journal it had created could not be removed ({unlink_exc.strerror or unlink_exc}){kept}"
                 ) from exc
         raise PublicationRefused(
             f"cannot begin a publication into {self.dest}: {why}; the journal this attempt had"
             " created is gone and nothing else was created"
         ) from exc
+
+    def _journal_is_mine(self, now: os.stat_result, *, mine: os.stat_result | None, proof: int | None, payload: bytes) -> bool:
+        """Whether the entry at the journal's path (*now*, by ``lstat``) is
+        the very file this attempt created: a regular file with the created
+        file's device and inode (*mine*).  While a descriptor of the created
+        file is still open (*proof*), that file's own link count settles it —
+        an inode the filesystem reused for a replacement is caught because
+        the created file's count has dropped to zero.  When no descriptor is
+        open any more (closing the last one was the failure), the entry must
+        read back, through a no-follow descriptor of that same inode, as
+        exactly the bytes this attempt wrote: the one content a file at that
+        path can have and still be this attempt's, so removing an identical
+        replacement would lose nothing."""
+        if mine is None:
+            if proof is None:
+                return False
+            mine = os.fstat(proof)
+        if not stat.S_ISREG(now.st_mode) or (now.st_dev, now.st_ino) != (mine.st_dev, mine.st_ino):
+            return False
+        if proof is not None:
+            return os.fstat(proof).st_nlink > 0
+        fd = os.open(self.journal_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        try:
+            here = os.fstat(fd)
+            if not stat.S_ISREG(here.st_mode) or (here.st_dev, here.st_ino) != (mine.st_dev, mine.st_ino):
+                return False
+            return _read_whole(fd, len(payload) + 1) == payload
+        finally:
+            os.close(fd)
 
     def stage(self) -> None:
         """Copy every record into staging, then re-read the copies: each must

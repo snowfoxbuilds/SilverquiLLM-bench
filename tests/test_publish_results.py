@@ -24,6 +24,7 @@ every tree unchanged.
 
 from __future__ import annotations
 
+import errno
 import importlib.util
 import json
 import os
@@ -1040,6 +1041,15 @@ def _assert_clean(world, prior) -> None:
     assert not publish_mod.journal_path(dest).exists()
 
 
+def _is_the_file_at(fd: int, path: Path) -> bool:
+    """Whether *fd* is open on the very file *path* names right now."""
+    try:
+        here, there = os.fstat(fd), path.stat()
+    except OSError:
+        return False
+    return (here.st_dev, here.st_ino) == (there.st_dev, there.st_ino)
+
+
 def _cli(world, *run_ids: str, dry_run: bool = False) -> list[str]:
     return [
         "--results-repo", str(world["repo"]), "--dest", str(world["dest"]), "--candidates-dir", str(world["candidates"]),
@@ -1350,6 +1360,147 @@ class TestBegin:
         journal.unlink()  # what the instructions say, once inspected
         assert publish_mod.main(_cli(world, world["valid"])) == 0
         assert _entries(dest) == sorted([world["invalid"], world["valid"]])
+
+    def _deny_duplicating_the_journal_descriptor(self, world, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``os.dup`` fails — the process is out of descriptors — exactly on
+        the journal's own descriptor, the moment after the journal was created."""
+        journal = publish_mod.journal_path(world["dest"])
+        real_dup = os.dup
+
+        def exhausted(fd):
+            if _is_the_file_at(fd, journal):
+                raise OSError(errno.EMFILE, "Too many open files")
+            return real_dup(fd)
+
+        monkeypatch.setattr(os, "dup", exhausted)
+
+    def test_a_descriptor_duplication_failure_leaves_no_empty_journal_and_no_traceback(
+        self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        journal = publish_mod.journal_path(world["dest"])
+        self._deny_duplicating_the_journal_descriptor(world, monkeypatch)
+        failure: BaseException | None = None
+        try:
+            publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        except BaseException as exc:  # noqa: BLE001 - whatever escapes is the evidence
+            failure = exc
+        residue = journal.read_bytes() if journal.exists() else None
+        assert isinstance(failure, publish_mod.PublicationRefused), (
+            f"{type(failure).__name__} escaped raw and the journal holds {residue!r}"
+        )
+        assert residue is None, f"an empty journal is left behind: {residue!r}"
+        assert "cannot begin" in str(failure)
+        assert isinstance(failure.__cause__, OSError) and failure.__cause__.errno == errno.EMFILE, "the original failure is the cause"
+        _assert_clean(world, prior)
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out, err = capsys.readouterr()
+        assert code == 1 and "REFUSED" in err and "Too many open files" in err and "Traceback" not in out + err
+        _assert_clean(world, prior)
+
+    def test_a_failed_beginning_leaves_no_destination_this_invocation_created(
+        self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        dest = world["dest"]
+        assert not dest.exists()
+        self._deny_duplicating_the_journal_descriptor(world, monkeypatch)
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out, err = capsys.readouterr()
+        assert code == 1 and "REFUSED" in err and "cannot begin" in err and "Traceback" not in out + err
+        assert not dest.exists(), "the empty destination created for a publication that never began is gone"
+        monkeypatch.undo()
+        assert publish_mod.main(_cli(world, world["valid"])) == 0
+        assert _entries(dest) == [world["valid"]]
+
+    def _fail_closing_the_proof_descriptor(self, world, monkeypatch: pytest.MonkeyPatch, *, then=None) -> None:
+        """Closing the duplicate of the journal's descriptor reports an I/O
+        error — after the descriptor is released, as the kernel does — and
+        *then* runs, if given, before the error is raised."""
+        journal = publish_mod.journal_path(world["dest"])
+        real_dup, real_close = os.dup, os.close
+        proofs: set[int] = set()
+
+        def dup(fd):
+            new = real_dup(fd)
+            if _is_the_file_at(fd, journal):
+                proofs.add(new)
+            return new
+
+        def close(fd):
+            real_close(fd)
+            if fd in proofs:
+                proofs.discard(fd)
+                if then is not None:
+                    then()
+                raise OSError(errno.EIO, "Input/output error")
+
+        monkeypatch.setattr(os, "dup", dup)
+        monkeypatch.setattr(os, "close", close)
+
+    def test_a_failure_closing_the_last_descriptor_removes_staging_and_the_journal_it_reads_back(
+        self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        self._fail_closing_the_proof_descriptor(world, monkeypatch)
+        with pytest.raises(publish_mod.PublicationRefused, match="cannot begin") as info:
+            publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        assert isinstance(info.value.__cause__, OSError) and info.value.__cause__.errno == errno.EIO
+        _assert_clean(world, prior)
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out, err = capsys.readouterr()
+        assert code == 1 and "REFUSED" in err and "Input/output error" in err and "Traceback" not in out + err
+        _assert_clean(world, prior)
+
+    def test_without_an_open_descriptor_a_journal_with_other_content_is_not_removed(
+        self, world, prior, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No descriptor of the created file is open any more, so its link
+        count cannot settle identity; the entry must read back as exactly
+        what this attempt wrote.  Whether or not the filesystem reuses the
+        freed inode, an impostor with other content stays."""
+        dest = world["dest"]
+        journal = publish_mod.journal_path(dest)
+
+        def replace_the_journal() -> None:
+            journal.unlink()
+            journal.write_text("{}\n", encoding="utf-8")
+
+        self._fail_closing_the_proof_descriptor(world, monkeypatch, then=replace_the_journal)
+        with pytest.raises(publish_mod.PublicationRecoveryError, match="no longer the file this transaction created") as info:
+            publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        assert isinstance(info.value.__cause__, OSError) and info.value.__cause__.errno == errno.EIO
+        assert journal.read_text(encoding="utf-8") == "{}\n", "the impostor is kept for inspection, never removed"
+        assert not any(name.startswith(publish_mod.STAGING_PREFIX) for name in _entries(dest)), "this attempt's staging is gone"
+        assert _tree_with_mtimes(dest / world["invalid"]) == prior["snapshot"]
+
+    def test_a_staging_removal_failure_while_abandoning_keeps_both_and_the_next_invocation_recovers(
+        self, world, prior, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        dest = world["dest"]
+        journal = publish_mod.journal_path(dest)
+        real_rmdir = os.rmdir
+
+        def busy(path, *a, **kw):
+            if Path(path).name.startswith(publish_mod.STAGING_PREFIX):
+                raise OSError(errno.EBUSY, "Device or resource busy")
+            return real_rmdir(path, *a, **kw)
+
+        self._fail_closing_the_proof_descriptor(world, monkeypatch)
+        monkeypatch.setattr(os, "rmdir", busy)
+        with pytest.raises(publish_mod.PublicationRecoveryError, match="staging directory it had created could not be removed") as info:
+            publish_mod.stage_publication(_plan(world, [world["valid"]]))
+        message = str(info.value)
+        assert "KEPT" in message and str(journal) in message and world["valid"] in message
+        assert isinstance(info.value.__cause__, OSError) and info.value.__cause__.errno == errno.EIO, "the original failure is the cause"
+        assert isinstance(info.value.__context__, OSError) and info.value.__context__.errno == errno.EBUSY, "the cleanup failure is the context"
+        parsed = publish_mod.Journal.from_dict(json.loads(journal.read_text(encoding="utf-8")))
+        staging = dest / parsed.staging
+        assert parsed.planned == [world["valid"]] and parsed.committed == [] and staging.is_dir() and _entries(staging) == []
+        assert _entries(dest) == sorted([world["invalid"], publish_mod.JOURNAL_FILENAME, parsed.staging]), "journal and staging are the only residue"
+        # As the instructions say: the journal parses, so the next invocation recovers it.
+        monkeypatch.undo()
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out = capsys.readouterr().out
+        assert code == 0 and out.startswith("RECOVERED") and "removed no record directory" in out
+        assert _entries(dest) == sorted([world["invalid"], world["valid"]]) and not journal.exists()
 
     def test_a_journal_replaced_before_cleanup_is_not_removed(self, world, prior, monkeypatch: pytest.MonkeyPatch) -> None:
         dest = world["dest"]

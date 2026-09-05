@@ -56,10 +56,13 @@ invocation then recovers whatever journal was left. That is the difference
 between a live transaction and a stale journal: the first holds the lock, the
 second cannot. `--dry-run` takes a shared hold and reports a transaction in
 flight as in flight, never as something to recover. Beginning is
-all-or-nothing as well: if creating, writing or closing the journal or
-creating staging fails, the attempt removes the journal it created (proven to
-be that very file) and refuses with the cause; if even that removal fails the
-journal is kept and the message says exactly what it plans and what to do.
+all-or-nothing as well: once the journal exists, any failure — running out
+of descriptors, writing the journal, closing a descriptor, creating staging —
+makes the attempt remove what it created (staging, then the journal, proven
+to be that very file and never a replacement) and refuse with the cause,
+leaving no journal, no staging directory and no destination it had created;
+if even that removal fails, what is left is kept and named, and the message
+says exactly what the journal plans and what to do.
 
 If the process dies mid-way, the next invocation against that destination
 reads the journal first and finishes the job: a transaction that had already
