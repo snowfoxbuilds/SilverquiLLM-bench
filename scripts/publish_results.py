@@ -52,14 +52,32 @@ the lock with the process — the next invocation recovers whatever journal
 it left.  A live transaction and a stale journal therefore never look
 alike: the first holds the lock, the second cannot.  ``--dry-run`` takes a
 shared hold, so it reports a transaction in flight as exactly that, never
-as an interrupted one awaiting recovery.  An exclusive hold creates an
-absent destination for the lifecycle and, when the invocation published
-nothing, removes it on release — only if the path still names the very
-directory it created (device and inode) and that directory is empty.  A
-replacement, or content something else wrote there meanwhile, is never
-removed, and that, like a removal that fails, is a
-:class:`PublicationCleanupError` (``CLEANUP FAILED``, exit 2) naming what
-is kept: a refusal over residue is never reported as clean.
+as an interrupted one awaiting recovery.
+
+**A created destination is owned, not guessed at.**  An exclusive hold
+creates an absent destination — and any missing ancestor — for the
+lifecycle and, when the invocation published nothing, removes exactly those
+again on release (:mod:`silverquillm.created_directories`).  Each is
+created descriptor-first: made under a private name, opened, its identity
+taken from that descriptor, then placed with a no-replace rename under a
+lock on its parent directory, so the identity never comes from a pathname
+and a directory that appears under the name meanwhile is someone else's,
+used as found and never removed.  Each is removed only while proven, under
+that same lock, still to be the very directory created and empty, and
+through a private name again, so the one deletion is of a name nobody else
+knows; a replacement caught in that instant is moved back and kept.  The
+destination is locked through a duplicate of the descriptor the creation
+handed over, under the same parent lock, and every failure after the
+destination was created — opening or locking it, a holder already on it,
+inspecting it — unwinds the same way before the refusal is raised.  What is
+not restored — a directory that cannot be inspected or removed, a
+replacement, content something else wrote there, a moved-aside entry that
+cannot be moved back — is a :class:`PublicationCleanupError` (``CLEANUP
+FAILED``, exit 2, the refusal still printed) naming what is kept: a refusal
+over residue is never reported as clean.  The parent lock is what
+serializes cooperating invocations; on a platform without
+``RENAME_NOREPLACE`` the placement is a plain rename, safe under that lock
+alone and no further.
 
 **Beginning is all-or-nothing too.**  Once the journal exists, every
 failure — duplicating its descriptor, writing it, closing either
@@ -157,6 +175,12 @@ if str(REPO_ROOT) not in sys.path:
 from theozolith_control import candidate as ozcandidate
 
 from silverquillm.candidate import BUNDLE_SUBDIR, CandidateRefusedError, load_candidate_bundle
+from silverquillm.created_directories import (
+    CreatedDirectories,
+    CreatedDirectoryError,
+    DirectoryCleanupError,
+    Entry,
+)
 from silverquillm.results_repo import (
     MANIFEST_FILENAME,
     OZOLITH_SCHEME,
@@ -200,12 +224,14 @@ class PublicationLockedError(PublicationRefused):
 
 
 class PublicationCleanupError(Exception):
-    """The invocation published nothing, but the empty destination it had
-    created for the lifecycle is not restored: it could not be removed, the
-    path no longer names it, or it is no longer empty.  Nothing is removed
-    that the invocation cannot prove it created and left empty, and the
-    outcome is never reported as a clean refusal.  *path* is the destination
-    as kept; *refusal* the refusal in flight when cleanup ran, if any."""
+    """The invocation published nothing, but a directory it had created for
+    the lifecycle — the destination, or a missing ancestor made with it — is
+    not restored: it could not be removed, the path no longer names it, it is
+    no longer empty, or it was moved aside for removal and could not be moved
+    back.  Nothing is removed that the invocation cannot prove it created and
+    left empty, and the outcome is never reported as a clean refusal.  *path*
+    is the directory as kept; *refusal* the refusal in flight when cleanup
+    ran, if any."""
 
     def __init__(self, message: str, *, path: Path, refusal: PublicationRefused | None) -> None:
         super().__init__(message)
@@ -621,7 +647,9 @@ class _HeldLock:
     fd: int
     depth: int
     exclusive: bool
-    created_dest: bool
+    #: The directories this hold created for the lifecycle — the destination
+    #: and any missing ancestor — removed again on release unless kept.
+    created: CreatedDirectories
 
 
 #: The destinations this process holds locked, by directory identity, so the
@@ -647,20 +675,29 @@ class PublicationLock:
     processes are what the lock arbitrates; within one process the phases
     re-enter the same hold.
 
-    Exclusive (the default) creates the destination when it is absent and,
-    on release, removes it again when this invocation published nothing into
-    it — only if the path still names the very directory it created (device
-    and inode) and that directory is empty, so a refused plan leaves nothing
-    behind and nothing of anyone else's is ever removed; anything less is a
-    :class:`PublicationCleanupError` naming what is kept
-    (:meth:`_remove_created`).  A hold under which records were committed
-    marks the destination kept (:meth:`keep_dest`), and one released by a
-    :class:`PublicationRecoveryError` keeps it too: the journal that error
-    retains lives there.  ``shared`` is the
-    read-only dry run's hold: it never creates anything, coexists with
-    other shared holds, and is refused while an exclusive hold is live, so
-    a dry run reports an in-flight transaction as such instead of as an
-    interrupted one.
+    Exclusive (the default) creates the destination when it is absent — and
+    any missing ancestor — for the lifecycle, and on release removes exactly
+    those again when this invocation published nothing into it.  Both halves
+    go through :mod:`silverquillm.created_directories`: each directory is
+    created descriptor-first under a private name and placed with a
+    no-replace rename, so its identity never comes from a pathname; each is
+    removed only while proven, under a lock on its parent directory, still to
+    be that very directory and empty, and through a private name again, so
+    the one deletion is of a name nobody else knows.  A replacement, or
+    content something else wrote there meanwhile, is kept, and that, like a
+    removal that fails, is a :class:`PublicationCleanupError` naming what is
+    kept (:meth:`_restore`).  Locking itself happens on a duplicate of the
+    descriptor the creation handed over, under the same parent lock, so the
+    directory locked is the directory created, and every failure after the
+    destination was created — opening, locking (another holder included),
+    inspecting it — unwinds the same way before its refusal is raised: a
+    refusal is only ever reported over a restored tree.  A hold under which
+    records were committed marks the destination kept (:meth:`keep_dest`),
+    and one released by a :class:`PublicationRecoveryError` keeps it too: the
+    journal that error retains lives there.  ``shared`` is the read-only dry
+    run's hold: it never creates anything, coexists with other shared holds,
+    and is refused while an exclusive hold is live, so a dry run reports an
+    in-flight transaction as such instead of as an interrupted one.
     """
 
     def __init__(self, dest: Path, *, shared: bool = False) -> None:
@@ -673,50 +710,17 @@ class PublicationLock:
         return self._key is not None
 
     def __enter__(self) -> Self:
-        created: tuple[int, int] | None = None
-        while True:
-            try:
-                identity = os.stat(self.dest)
-            except FileNotFoundError:
-                if self.shared:
-                    return self  # nothing there: nothing to lock, nothing to inspect
-                created = self._create_dest() or created
-                continue
-            key = (identity.st_dev, identity.st_ino)
-            held = _HELD_LOCKS.get(key)
-            if held is not None:
-                self._reenter(held)
-                self._key = key
-                return self
-            try:
-                fd = os.open(self.dest, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
-            except OSError as exc:
-                raise PublicationRefused(f"cannot open the destination {self.dest}: {exc.strerror or exc}") from exc
-            try:
-                fcntl.flock(fd, (fcntl.LOCK_SH if self.shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
-            except BlockingIOError:
-                os.close(fd)
-                raise PublicationLockedError(self._busy()) from None
-            except OSError as exc:
-                os.close(fd)
-                raise PublicationRefused(f"cannot lock the destination {self.dest}: {exc.strerror or exc}") from exc
-            locked = os.fstat(fd)
-            try:
-                current = os.stat(self.dest)
-            except FileNotFoundError:
-                current = None
-            if current is None or (current.st_dev, current.st_ino) != (locked.st_dev, locked.st_ino):
-                # The directory we locked is no longer what the path names —
-                # a releasing invocation removed the empty destination it had
-                # created.  Lock what the path names now.
-                os.close(fd)
-                continue
-            key = (locked.st_dev, locked.st_ino)
-            # What this hold locked is the directory it created only if the
-            # identities agree; otherwise it locked what the path names now.
-            _HELD_LOCKS[key] = _HeldLock(fd=fd, depth=1, exclusive=not self.shared, created_dest=created == key)
+        key = self._identity_at_path()
+        held = _HELD_LOCKS.get(key) if key is not None else None
+        if held is not None:
+            self._reenter(held)
             self._key = key
             return self
+        if self.shared:
+            self._acquire_shared()
+        else:
+            self._acquire_exclusive()
+        return self
 
     def __exit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         key = self._key
@@ -729,81 +733,146 @@ class PublicationLock:
             return
         del _HELD_LOCKS[key]
         try:
-            # Still under the lock, so a waiter that locks this directory
-            # re-checks the path's identity and never keeps a lock on a
-            # removed one.  A recovery error keeps its journal under the
-            # destination: that destination is evidence, not residue.
-            if held.created_dest and not isinstance(exc, PublicationRecoveryError):
-                self._remove_created(key, refusal=exc if isinstance(exc, PublicationRefused) else None)
+            # A recovery error keeps its journal under the destination: that
+            # destination is evidence, not residue.  Anything else that ends
+            # the hold with the created directories empty removes them.
+            if isinstance(exc, PublicationRecoveryError):
+                held.created.keep()
+            else:
+                self._restore(held.created, refusal=exc if isinstance(exc, PublicationRefused) else None)
         finally:
             fcntl.flock(held.fd, fcntl.LOCK_UN)
             os.close(held.fd)
 
     def keep_dest(self) -> None:
         """The destination now holds what this invocation came to put there:
-        it is no longer an empty directory the hold removes on release."""
+        it, and the ancestors created with it, are no longer empty
+        directories the hold removes on release."""
         if self._key is not None:
-            _HELD_LOCKS[self._key].created_dest = False
+            _HELD_LOCKS[self._key].created.keep()
 
-    def _create_dest(self) -> tuple[int, int] | None:
-        """Create the absent destination; return the identity (device, inode)
-        of the directory this call created, ``None`` when another party made
-        it first — only a directory this invocation created is ever removed."""
+    def _identity_at_path(self) -> tuple[int, int] | None:
         try:
-            self.dest.mkdir(parents=True)
-        except FileExistsError:
-            if os.path.isdir(self.dest):
-                return None  # another invocation created it first
-            raise PublicationRefused(
-                f"the destination {self.dest} exists but is not a directory; refusing to use it"
-            ) from None
+            identity = os.stat(self.dest)
+        except FileNotFoundError:
+            return None
         except OSError as exc:
-            raise PublicationRefused(f"cannot create the destination {self.dest}: {exc.strerror or exc}") from exc
-        try:
-            made = os.lstat(self.dest)
-        except OSError as exc:
-            raise PublicationRefused(f"created the destination {self.dest} but cannot inspect it: {exc.strerror or exc}") from exc
-        return (made.st_dev, made.st_ino) if stat.S_ISDIR(made.st_mode) else None
+            raise PublicationRefused(f"cannot inspect the destination {self.dest}: {exc.strerror or exc}") from exc
+        return (identity.st_dev, identity.st_ino)
 
-    def _remove_created(self, identity: tuple[int, int], *, refusal: PublicationRefused | None) -> None:
-        """Remove the destination this hold created — only if the path still
-        names that very directory (*identity*: device and inode) and it is
-        empty.  A replacement or another party's content is never removed;
-        that, and a removal that fails, is a :class:`PublicationCleanupError`
-        naming what is kept, with *refusal* attached."""
-        dest = self.dest
-        nothing = f"the destination {dest} this invocation created for a publication that published nothing"
-        try:
-            now = os.lstat(dest)
-        except FileNotFoundError:
-            return  # already gone: nothing of this invocation's is left
-        except OSError as exc:
-            raise PublicationCleanupError(
-                f"{nothing} cannot be inspected ({exc.strerror or exc}) and may be left behind — check it"
-                f" and remove it by hand if it is empty (rmdir {dest})",
-                path=dest,
-                refusal=refusal,
-            ) from exc
-        if not stat.S_ISDIR(now.st_mode) or (now.st_dev, now.st_ino) != identity:
-            raise PublicationCleanupError(
-                f"{dest} no longer names the empty directory this invocation created; what is there"
-                " now is someone else's and is kept — inspect it by hand",
-                path=dest,
-                refusal=refusal,
-            )
-        try:
-            os.rmdir(dest)
-        except FileNotFoundError:
+    def _acquire_shared(self) -> None:
+        """The read-only hold: nothing is created, and an absent destination
+        is nothing to lock or inspect."""
+        while True:
+            found = CreatedDirectories()
+            try:
+                with found.ensure(self.dest, create=False) as entry:
+                    if entry.fd is None:
+                        return
+                    fd = self._lock(entry.fd)
+                    key = self._identity_locked(fd, entry)
+            except CreatedDirectoryError as exc:
+                raise self._cannot_use(exc) from exc
+            finally:
+                found.keep()
+            if key is None:
+                continue
+            _HELD_LOCKS[key] = _HeldLock(fd=fd, depth=1, exclusive=False, created=CreatedDirectories())
+            self._key = key
             return
+
+    def _acquire_exclusive(self) -> None:
+        """Create the destination if it is absent, lock it and prove the lock
+        is on what the path names — all under the parent directory's lock —
+        or unwind whatever was created and refuse."""
+        while True:
+            made = CreatedDirectories()
+            try:
+                with made.ensure(self.dest) as entry:
+                    fd = self._lock(entry.fd)
+                    key = self._identity_locked(fd, entry)
+                    if key is None and made:
+                        raise PublicationRefused(
+                            f"the destination {self.dest} was replaced while this invocation was creating it;"
+                            " refusing to use what is there now"
+                        )
+            except CreatedDirectoryError as exc:
+                try:
+                    failure = made.unwind(exc)
+                except DirectoryCleanupError as kept:
+                    refusal = self._cannot_use(kept.during) if kept.during is not None else None
+                    raise PublicationCleanupError(self._not_restored(kept, refusal), path=kept.path, refusal=refusal) from kept
+                raise self._cannot_use(failure) from failure
+            except PublicationRefused as exc:
+                self._restore(made, refusal=exc)
+                raise
+            if key is None:
+                # The pre-existing directory vanished between opening and
+                # locking it — someone outside the protocol removed it.  Lock
+                # what the path names now.
+                made.keep()
+                continue
+            if not made:
+                made.keep()
+            _HELD_LOCKS[key] = _HeldLock(fd=fd, depth=1, exclusive=True, created=made)
+            self._key = key
+            return
+
+    def _lock(self, fd: int) -> int:
+        """Lock the destination through a duplicate of *fd* — the very
+        directory the creation found or made, no path looked up again — and
+        return the locked descriptor."""
+        try:
+            dup = os.dup(fd)
         except OSError as exc:
-            if exc.errno in (errno.ENOTEMPTY, errno.EEXIST):
-                message = (
-                    f"{nothing} is not empty — something else wrote into it meanwhile; it is kept with"
-                    " its contents, which are not this invocation's to remove — inspect it by hand"
-                )
-            else:
-                message = f"{nothing} could not be removed ({exc.strerror or exc}); remove it by hand (rmdir {dest})"
-            raise PublicationCleanupError(message, path=dest, refusal=refusal) from exc
+            raise PublicationRefused(f"cannot open the destination {self.dest}: {exc.strerror or exc}") from exc
+        try:
+            fcntl.flock(dup, (fcntl.LOCK_SH if self.shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(dup)
+            raise PublicationLockedError(self._busy()) from None
+        except OSError as exc:
+            os.close(dup)
+            raise PublicationRefused(f"cannot lock the destination {self.dest}: {exc.strerror or exc}") from exc
+        return dup
+
+    def _identity_locked(self, fd: int, entry: Entry) -> tuple[int, int] | None:
+        """The identity of the locked directory when the path still names it;
+        ``None``, with *fd* closed, when the path names something else now."""
+        assert entry.parent_fd is not None
+        try:
+            locked = os.fstat(fd)
+            current = os.stat(entry.name, dir_fd=entry.parent_fd)
+        except FileNotFoundError:
+            os.close(fd)
+            return None
+        except OSError as exc:
+            os.close(fd)
+            raise PublicationRefused(f"cannot inspect the destination {self.dest}: {exc.strerror or exc}") from exc
+        key = (locked.st_dev, locked.st_ino)
+        if (current.st_dev, current.st_ino) != key:
+            os.close(fd)
+            return None
+        return key
+
+    def _restore(self, made: CreatedDirectories, *, refusal: PublicationRefused | None) -> None:
+        """Remove the directories this hold created — the destination and any
+        ancestor — each only on proof; what is not restored is a
+        :class:`PublicationCleanupError` with *refusal* attached."""
+        try:
+            made.remove()
+        except DirectoryCleanupError as kept:
+            raise PublicationCleanupError(self._not_restored(kept, refusal), path=kept.path, refusal=refusal) from kept
+
+    def _cannot_use(self, failure: CreatedDirectoryError) -> PublicationRefused:
+        refusal = PublicationRefused(f"cannot use the destination {self.dest}: {failure}")
+        refusal.__cause__ = failure
+        return refusal
+
+    @staticmethod
+    def _not_restored(kept: DirectoryCleanupError, refusal: PublicationRefused | None) -> str:
+        outcome = "the publication was refused" if refusal is not None else "nothing was published"
+        return f"{outcome}, but {kept}"
 
     def _reenter(self, held: _HeldLock) -> None:
         if not self.shared and not held.exclusive:

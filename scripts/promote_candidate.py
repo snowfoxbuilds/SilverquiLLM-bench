@@ -64,18 +64,25 @@ atomic rename at the very end.  The slug is validated before staging is
 created; the staging directory is removed strictly — never with errors
 ignored — because it may hold the very content promotion refused, a rejected
 credential value included; and a ``candidates/`` directory this invocation
-created is removed again when a refusal or a dry run leaves it empty — only
-if the path still names the very directory it created (device and inode) and
-that directory is empty, so a replacement or content something else wrote
-there meanwhile is never removed.  When a removal fails, or the created
-directory is no longer the one it made or no longer empty, promotion raises
-:class:`PromotionCleanupError` instead of pretending: it names the retained
-path (never its bytes), says the "nothing written" guarantee was not met,
-and the CLI exits 2.  A retained staging tree must be inspected and removed
-by hand and is never committed (``candidates/.promote-*`` is ignored by the
-repository).  This script never
-runs git: the operator reviews the new directory and commits it — the commit
-is the approval stamp.
+created — with any missing ancestor — is removed again when a refusal or a
+dry run leaves it empty (:mod:`silverquillm.created_directories`): each is
+created descriptor-first under a private name and placed with a no-replace
+rename under a lock on its parent directory, so its identity never comes
+from a pathname and a directory that appears under the name meanwhile is
+someone else's, used as found and never removed; each is removed only while
+proven, under that lock, still to be the very directory created and empty,
+through a private name again, so a replacement caught in that instant is
+moved back and kept.  Every failure after the directory was created —
+opening it, creating staging inside it — unwinds the same way before the
+refusal is raised.  When a removal fails, or the created directory is no
+longer the one made, no longer empty, or cannot be moved back into place,
+promotion raises :class:`PromotionCleanupError` instead of pretending: it
+names the retained path (never its bytes), says the "nothing written"
+guarantee was not met, and the CLI exits 2 — a refusal (exit 1) is reported
+only over a restored tree.  A retained staging tree must be inspected and
+removed by hand and is never committed (``candidates/.promote-*`` is ignored
+by the repository).  This script never runs git: the operator reviews the
+new directory and commits it — the commit is the approval stamp.
 
 Usage::
 
@@ -86,7 +93,6 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import errno
 import json
 import os
 import re
@@ -113,6 +119,11 @@ from silverquillm.candidate import (
     CandidateRefusedError,
     load_candidate_bundle,
     scan_tree_for_credentials,
+)
+from silverquillm.created_directories import (
+    CreatedDirectories,
+    CreatedDirectoryError,
+    DirectoryCleanupError,
 )
 from silverquillm.results_repo import (
     InvalidRunRecordError,
@@ -152,9 +163,11 @@ class PromotionCleanupError(Exception):
     directory that could not be removed — inspect it and remove it by hand;
     it may hold the very content promotion refused (a rejected credential
     value included), so its bytes are never echoed and it must never be
-    committed.  *candidates_dir* is the ``candidates/`` directory this
-    invocation created and could not remove, or found replaced or no longer
-    empty — what is there is kept, never removed unproven.  *refusal* is the
+    committed.  *candidates_dir* is a directory this invocation created on
+    the way to ``candidates/`` (that directory itself, a missing ancestor
+    made with it, or a private-name directory of its own) that it could not
+    remove, or found replaced, no longer empty, or unable to move back into
+    place — what is there is kept, never removed unproven.  *refusal* is the
     refusal that preceded the failed cleanup, if any (a dry run has none)."""
 
     def __init__(
@@ -761,14 +774,22 @@ def promote(
     knowledge_src = check_knowledge_publishable(source, knowledge_tree) if knowledge_tree else None
     policy_src = _check_policy_present(source, policy_tree) if policy_tree else None
 
-    created = _create_candidates_dir(candidates_dir)
+    created = CreatedDirectories()
+    try:
+        created.make(candidates_dir)
+    except CreatedDirectoryError as exc:
+        try:
+            failure = created.unwind(exc)
+        except DirectoryCleanupError as kept:
+            raise _not_restored(kept, refusal=_cannot_use(candidates_dir, kept.during) if kept.during is not None else None) from kept
+        raise _cannot_use(candidates_dir, failure) from failure
     try:
         # Beside the destination: the same filesystem, so the final rename is
         # atomic; dot-prefixed, so it is never a candidate to any reader.
         staging = Path(tempfile.mkdtemp(prefix=f".promote-{slug}-", dir=candidates_dir))
     except OSError as exc:
         refusal = PromotionRefused(f"cannot create a staging directory under {candidates_dir}: {exc.strerror or exc}")
-        _remove_created_dir(candidates_dir, created, refusal=refusal)
+        _restore_created(created, refusal=refusal)
         raise refusal from exc
     failure: BaseException | None = None
     written = False
@@ -875,88 +896,44 @@ def promote(
         )
 
 
-def _create_candidates_dir(candidates_dir: Path) -> tuple[int, int] | None:
-    """Create *candidates_dir* when nothing is at its path; return the
-    identity (device, inode) of the directory this call created, ``None``
-    when something was already there.  Only a directory this invocation
-    created — proven by that identity — is ever removed again."""
-    if os.path.lexists(candidates_dir):
-        return None
-    try:
-        candidates_dir.mkdir(parents=True)
-    except FileExistsError:
-        return None  # made by someone else meanwhile: not this invocation's
-    except OSError as exc:
-        raise PromotionRefused(f"cannot create {candidates_dir}: {exc.strerror or exc}") from exc
-    try:
-        made = os.lstat(candidates_dir)
-    except OSError as exc:
-        raise PromotionRefused(f"created {candidates_dir} but cannot inspect it: {exc.strerror or exc}") from exc
-    return (made.st_dev, made.st_ino) if stat.S_ISDIR(made.st_mode) else None
+def _cannot_use(candidates_dir: Path, failure: CreatedDirectoryError) -> PromotionRefused:
+    refusal = PromotionRefused(f"cannot use {candidates_dir}: {failure}")
+    refusal.__cause__ = failure
+    return refusal
 
 
-def _remove_created_dir(candidates_dir: Path, created: tuple[int, int] | None, *, refusal: PromotionRefused | None) -> None:
-    """Remove the ``candidates/`` directory this invocation created
-    (*created*: its device and inode; ``None`` when it created none) — only
-    if the path still names that very directory and it is empty.  A
-    replacement or content something else wrote there is never removed;
-    that, and a removal that fails, is a :class:`PromotionCleanupError`
-    naming the kept directory, with *refusal* attached."""
-    if created is None:
-        return
+def _not_restored(kept: DirectoryCleanupError, *, refusal: PromotionRefused | None) -> PromotionCleanupError:
     outcome = "promotion " + ("was refused" if refusal is not None else "wrote no candidate")
+    return PromotionCleanupError(f"{outcome}, but {kept}", candidates_dir=kept.path, refusal=refusal)
+
+
+def _restore_created(created: CreatedDirectories, *, refusal: PromotionRefused | None) -> None:
+    """Remove the directories this invocation created on the way to
+    ``candidates/`` — that directory and any missing ancestor — each only
+    while proven still the one created and empty
+    (:meth:`CreatedDirectories.remove`).  What is not restored is a
+    :class:`PromotionCleanupError` naming the kept path, with *refusal*
+    attached."""
     try:
-        now = os.lstat(candidates_dir)
-    except FileNotFoundError:
-        return  # already gone: nothing of this invocation's is left
-    except OSError as exc:
-        raise PromotionCleanupError(
-            f"{outcome}, but the {candidates_dir} directory it created cannot be inspected"
-            f" ({exc.strerror or exc}) and may be left behind — check it and remove it by hand if"
-            f" it is empty (rmdir {candidates_dir})",
-            candidates_dir=candidates_dir,
-            refusal=refusal,
-        ) from exc
-    if not stat.S_ISDIR(now.st_mode) or (now.st_dev, now.st_ino) != created:
-        raise PromotionCleanupError(
-            f"{outcome}, but {candidates_dir} no longer names the empty directory it created; what"
-            " is there now is someone else's and is kept — inspect it by hand",
-            candidates_dir=candidates_dir,
-            refusal=refusal,
-        )
-    try:
-        os.rmdir(candidates_dir)
-    except FileNotFoundError:
-        return
-    except OSError as exc:
-        if exc.errno in (errno.ENOTEMPTY, errno.EEXIST):
-            message = (
-                f"{outcome}, but the {candidates_dir} directory it created is not empty — something"
-                " else wrote into it meanwhile; it is kept with its contents, which are not this"
-                " invocation's to remove — inspect it by hand"
-            )
-        else:
-            message = (
-                f"{outcome}, but the empty {candidates_dir} directory it created could not be removed"
-                f" ({exc.strerror or exc}); remove it by hand (rmdir {candidates_dir})"
-            )
-        raise PromotionCleanupError(message, candidates_dir=candidates_dir, refusal=refusal) from exc
+        created.remove()
+    except DirectoryCleanupError as kept:
+        raise _not_restored(kept, refusal=refusal) from kept
 
 
 def _discard_staging(
     staging: Path,
     candidates_dir: Path,
     *,
-    created: tuple[int, int] | None,
+    created: CreatedDirectories,
     refusal: PromotionRefused | None,
     written: bool,
 ) -> None:
     """Remove the private staging directory — strictly, never with errors
     ignored: it may hold the very content promotion refused — and then, when
-    no candidate was *written*, the ``candidates/`` directory this invocation
-    created (:func:`_remove_created_dir`).  After a successful promotion
-    staging has been renamed into place and the directory is in use, so
-    neither is touched.  A removal that fails raises
+    no candidate was *written*, the directories this invocation created on
+    the way to ``candidates/`` (:func:`_restore_created`).  After a
+    successful promotion staging has been renamed into place and the
+    directory is in use, so neither is touched.  A removal that fails raises
     :class:`PromotionCleanupError` naming the retained path, with the cleanup
     error as its cause and *refusal* attached, so the failure is loud in
     exactly the case where silence would be dangerous."""
@@ -965,6 +942,8 @@ def _discard_staging(
     except FileNotFoundError:
         pass  # renamed into place, or gone: nothing of this invocation's to remove
     except OSError as exc:
+        made = created.paths
+        created.keep()
         raise PromotionCleanupError(
             "promotion "
             + ("was refused" if refusal is not None else "wrote no candidate")
@@ -974,14 +953,15 @@ def _discard_staging(
             " rejected credential value included (its bytes are not echoed here) — so inspect"
             f" it, remove it by hand (rm -rf {staging}), and never commit it"
             " (candidates/.promote-* is ignored by the repository)"
-            + (f"; the {candidates_dir} directory this invocation created is kept with it" if created is not None else "")
+            + (f"; the {', '.join(str(p) for p in made)} director{'y' if len(made) == 1 else 'ies'} this invocation created {'is' if len(made) == 1 else 'are'} kept with it" if made else "")
             + ("; the refusal is attached and was reported separately" if refusal is not None else ""),
             staging=staging,
             refusal=refusal,
         ) from exc
     if written:
-        return  # the candidate is in place: the directory is in use, whoever created it
-    _remove_created_dir(candidates_dir, created, refusal=refusal)
+        created.keep()  # the candidate is in place: the directory is in use, whoever created it
+        return
+    _restore_created(created, refusal=refusal)
 
 
 # ---------------------------------------------------------------------------

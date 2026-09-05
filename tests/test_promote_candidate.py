@@ -23,12 +23,14 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 from theozolith_control import candidate as ozcandidate
 
+from silverquillm import created_directories as created_mod
 from silverquillm.candidate import credential_shapes, load_candidate_bundle
 from tests.candidate_fixtures import (
     DIGEST_A,
@@ -40,6 +42,7 @@ from tests.candidate_fixtures import (
     SLOT_MENTIONS,
     make_source,
 )
+from tests.fs_fixtures import names
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -717,18 +720,17 @@ class TestCleanup:
         for name in _entries(candidates):
             shutil.rmtree(candidates / name)
 
-    def _deny_removing(self, monkeypatch: pytest.MonkeyPatch, directory: Path):
-        """``os.rmdir`` is denied for *directory*; returns the real ``rmdir``
-        so a test can clear the retained directory between invocations."""
-        real = os.rmdir
+    def _deny_removing(self, monkeypatch: pytest.MonkeyPatch, directory: Path) -> None:
+        """Moving *directory* aside for removal is denied — its parent is not
+        writable — exactly for the entry at that path."""
+        real = created_mod.rename_noreplace
 
-        def denied(path, *a, **kw):
-            if Path(path) == directory:
+        def denied(src, dst, *, dir_fd):
+            if names(src, dir_fd, directory):
                 raise PermissionError(errno.EACCES, "Permission denied")
-            return real(path, *a, **kw)
+            return real(src, dst, dir_fd=dir_fd)
 
-        monkeypatch.setattr(os, "rmdir", denied)
-        return real
+        monkeypatch.setattr(created_mod, "rename_noreplace", denied)
 
     def test_a_created_candidates_dir_that_cannot_be_removed_after_a_credential_refusal_is_loud_and_echoes_nothing(
         self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch, capsys
@@ -737,17 +739,19 @@ class TestCleanup:
         sample = FAKE_CREDENTIALS["OpenAI API key"]
         (source / "knowledge" / "gold" / "NOTES.md").write_text(f"# notes\n\n{sample}\n", encoding="utf-8")
         candidates = tmp_path / "fresh" / "candidates"
-        rmdir = self._deny_removing(monkeypatch, candidates)
+        self._deny_removing(monkeypatch, candidates)
         with pytest.raises(promote_mod.PromotionCleanupError) as info:
             _promote(source, candidates)
         exc = info.value
         assert exc.candidates_dir == candidates and exc.staging is None and exc.retained == candidates
-        assert candidates.is_dir() and _entries(candidates) == [], "staging is gone; the created directory is what remains"
+        assert candidates.is_dir() and _entries(candidates) == [], "staging is gone; the created directory is what remains, in place"
         assert isinstance(exc.refusal, promote_mod.PromotionRefused) and "OpenAI API key" in str(exc.refusal)
-        assert isinstance(exc.__cause__, PermissionError) and f"rmdir {candidates}" in str(exc) and "was refused" in str(exc)
+        assert isinstance(exc.__cause__, created_mod.DirectoryCleanupError) and isinstance(exc.__cause__.__cause__, PermissionError)
+        assert f"rmdir {candidates}" in str(exc) and "was refused" in str(exc)
+        assert exc.__cause__.__cause__.__context__ is exc.refusal, "the chain runs cleanup failure → OS failure → refusal"
         for text in (str(exc), str(exc.refusal), str(exc.__cause__)):
             assert sample not in text
-        rmdir(candidates)
+        os.rmdir(candidates)
         code = promote_mod.main([str(source), TYPE, "--candidates-dir", str(candidates)])
         out, err = capsys.readouterr()
         assert code == 2 and "REFUSED" in err and "CLEANUP FAILED" in err and str(candidates) in err
@@ -763,11 +767,11 @@ class TestCleanup:
     ) -> None:
         source = _source(tmp_path, base=PINNED_BASE)
         candidates = tmp_path / "fresh" / "candidates"
-        rmdir = self._deny_removing(monkeypatch, candidates)
+        self._deny_removing(monkeypatch, candidates)
         with pytest.raises(promote_mod.PromotionCleanupError) as info:
             _promote(source, candidates, dry_run=True)
         assert info.value.refusal is None and info.value.candidates_dir == candidates and "wrote no candidate" in str(info.value)
-        rmdir(candidates)
+        os.rmdir(candidates)
         code = promote_mod.main([str(source), TYPE, "--candidates-dir", str(candidates), "--dry-run"])
         out, err = capsys.readouterr()
         assert code == 2 and "REFUSED" not in err and "CLEANUP FAILED" in err and "Traceback" not in out + err
@@ -802,6 +806,108 @@ class TestCleanup:
         assert info.value.candidates_dir == candidates and info.value.refusal is None
         assert moved.is_dir() and _entries(moved) == [], "the directory this invocation created stays where it went"
         assert (candidates / "theirs").read_text(encoding="utf-8") == "not ours\n", "the replacement is untouched"
+        assert not [n for n in _entries(candidates.parent) if n.startswith(".")], "it was never moved: no private name is left beside it"
+
+    def test_a_candidates_dir_that_appears_before_placement_is_someone_elses_and_is_kept(
+        self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Promotion makes its directory under a private name, opens and
+        proves it; in the instant before placing it, someone puts a directory
+        under ``candidates/``.  Theirs is used as found and never removed."""
+        source = _source(tmp_path)
+        candidates = tmp_path / "candidates"
+        real = created_mod.rename_noreplace
+
+        def intruder(src, dst, *, dir_fd):
+            if names(dst, dir_fd, candidates):
+                candidates.mkdir()
+            return real(src, dst, dir_fd=dir_fd)
+
+        monkeypatch.setattr(created_mod, "rename_noreplace", intruder)
+        assert _promote(source, candidates, dry_run=True).written is False
+        assert candidates.is_dir() and _entries(candidates) == [], "the directory that appeared is kept — it was never this invocation's"
+        assert not [n for n in _entries(tmp_path) if n.startswith(".candidates.")], "the private directory of the abandoned creation is gone"
+
+    def test_a_replacement_in_the_instant_before_removal_is_moved_back_and_kept(
+        self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        """The identity check passes; as promotion moves the directory aside
+        for removal, someone outside the protocol swaps it.  The swapped-in
+        directory fails the proof under the private name, goes back where it
+        was, and the CLI reports the residue instead of a clean dry run."""
+        source = _source(tmp_path, base=PINNED_BASE)
+        candidates = tmp_path / "fresh" / "candidates"
+        moved = tmp_path / "moved-away"
+        real = created_mod.rename_noreplace
+
+        def swapped(src, dst, *, dir_fd):
+            if names(src, dir_fd, candidates):
+                os.rename(candidates, moved)
+                candidates.mkdir()
+                (candidates / "theirs").write_text("not ours\n", encoding="utf-8")
+            return real(src, dst, dir_fd=dir_fd)
+
+        monkeypatch.setattr(created_mod, "rename_noreplace", swapped)
+        code = promote_mod.main([str(source), TYPE, "--candidates-dir", str(candidates), "--dry-run"])
+        out, err = capsys.readouterr()
+        assert code == 2 and "CLEANUP FAILED" in err and "no longer names" in err and "REFUSED" not in err and "Traceback" not in out + err
+        assert _entries(candidates) == ["theirs"] and (candidates / "theirs").read_text(encoding="utf-8") == "not ours\n", "back in place, whole"
+        assert moved.is_dir() and _entries(moved) == [], "the directory this invocation created stays where it went"
+        assert not [n for n in _entries(candidates.parent) if n.startswith(".")], "no private name is left beside it"
+
+    def test_a_failure_creating_staging_after_creating_candidates_restores_it(
+        self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        source = _source(tmp_path, base=PINNED_BASE)
+        candidates = tmp_path / "fresh" / "candidates"
+        real = tempfile.mkdtemp
+
+        def denied(*a, dir=None, **kw):
+            if dir is not None and Path(dir) == candidates:
+                raise PermissionError(errno.EACCES, "Permission denied")
+            return real(*a, dir=dir, **kw)
+
+        monkeypatch.setattr(tempfile, "mkdtemp", denied)
+        code = promote_mod.main([str(source), TYPE, "--candidates-dir", str(candidates)])
+        out, err = capsys.readouterr()
+        assert code == 1 and "REFUSED" in err and "staging" in err and "CLEANUP FAILED" not in err and "Traceback" not in out + err
+        assert not (tmp_path / "fresh").exists(), "the directory and the ancestor created with it are gone before the refusal is reported"
+
+    def test_a_failure_opening_the_freshly_created_candidates_dir_leaves_nothing_behind(
+        self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        source = _source(tmp_path, base=PINNED_BASE)
+        candidates = tmp_path / "fresh" / "candidates"
+        real = os.open
+
+        def exhausted(path, flags, *a, **kw):
+            if os.fsdecode(path).startswith(".candidates.creating-"):
+                raise OSError(errno.EMFILE, "Too many open files")
+            return real(path, flags, *a, **kw)
+
+        monkeypatch.setattr(os, "open", exhausted)
+        code = promote_mod.main([str(source), TYPE, "--candidates-dir", str(candidates)])
+        out, err = capsys.readouterr()
+        assert code == 1 and "REFUSED" in err and "cannot open it" in err and "CLEANUP FAILED" not in err and "Traceback" not in out + err
+        assert not (tmp_path / "fresh").exists(), "the private directory and the ancestor created before it are gone"
+
+    def test_an_inspection_failure_while_removing_the_created_candidates_dir_is_loud(
+        self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        source = _source(tmp_path, base=PINNED_BASE)
+        candidates = tmp_path / "fresh" / "candidates"
+        real = os.lstat
+
+        def denied(path, *a, dir_fd=None, **kw):
+            if dir_fd is not None and names(path, dir_fd, candidates):
+                raise PermissionError(errno.EACCES, "Permission denied")
+            return real(path, *a, dir_fd=dir_fd, **kw)
+
+        monkeypatch.setattr(os, "lstat", denied)
+        code = promote_mod.main([str(source), TYPE, "--candidates-dir", str(candidates), "--dry-run"])
+        out, err = capsys.readouterr()
+        assert code == 2 and "CLEANUP FAILED" in err and "cannot be inspected" in err and "Traceback" not in out + err
+        assert candidates.is_dir() and _entries(candidates) == [], "unproven, it is kept"
 
     def test_a_created_candidates_dir_that_became_non_empty_is_kept_and_reported(
         self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch
@@ -814,7 +920,7 @@ class TestCleanup:
             _promote(source, candidates)
         exc = info.value
         assert exc.candidates_dir == candidates and isinstance(exc.refusal, promote_mod.PromotionRefused) and "kept" in str(exc)
-        assert isinstance(exc.__cause__, OSError) and FAKE_ANTHROPIC_KEY not in str(exc) + str(exc.refusal)
+        assert isinstance(exc.__cause__, created_mod.DirectoryCleanupError) and FAKE_ANTHROPIC_KEY not in str(exc) + str(exc.refusal)
         assert exc.__context__.__context__ is exc.refusal, "the chain runs cleanup failure → refusal"
         assert _entries(candidates) == ["theirs"] and (candidates / "theirs").read_text(encoding="utf-8") == "not ours\n"
 
@@ -822,16 +928,21 @@ class TestCleanup:
         source = _source(tmp_path)
         candidates = tmp_path / "candidates"
         candidates.mkdir()
-        calls: list[Path] = []
-        real = os.rmdir
+        touched: list[bool] = []
+        real_rmdir, real_rename = os.rmdir, created_mod.rename_noreplace
 
-        def counting(path, *a, **kw):
-            calls.append(Path(path))
-            return real(path, *a, **kw)
+        def counting_rmdir(path, *a, dir_fd=None, **kw):
+            touched.append(names(path, dir_fd, candidates))
+            return real_rmdir(path, *a, dir_fd=dir_fd, **kw)
 
-        monkeypatch.setattr(os, "rmdir", counting)
+        def counting_rename(src, dst, *, dir_fd):
+            touched.append(names(src, dir_fd, candidates))
+            return real_rename(src, dst, dir_fd=dir_fd)
+
+        monkeypatch.setattr(os, "rmdir", counting_rmdir)
+        monkeypatch.setattr(created_mod, "rename_noreplace", counting_rename)
         assert _promote(source, candidates, dry_run=True).written is False
-        assert candidates not in calls and candidates.is_dir() and _entries(candidates) == []
+        assert not any(touched) and candidates.is_dir() and _entries(candidates) == []
 
     def test_a_successful_promotion_leaves_only_the_candidate(self, tmp_path: Path, no_git) -> None:
         source = _source(tmp_path)

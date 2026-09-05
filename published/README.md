@@ -62,13 +62,24 @@ makes the attempt remove what it created (staging, then the journal, proven
 to be that very file and never a replacement) and refuse with the cause,
 leaving no journal, no staging directory and no destination it had created;
 if even that removal fails, what is left is kept and named, and the message
-says exactly what the journal plans and what to do. An absent destination is
-created for the lifecycle and, when nothing was published into it, removed
-again on release — only if the path still names the very directory the
-invocation created and it is empty; a replacement or anything someone else
-wrote there meanwhile is kept, and that, like a removal that fails, is
-reported as `CLEANUP FAILED: …` (exit 2, the refusal still printed) rather
-than as a clean refusal.
+says exactly what the journal plans and what to do. An absent destination —
+and any missing parent — is created for the lifecycle and, when nothing was
+published into it, removed again on release, each only on proof: the script
+makes it under a private name, opens it and takes its identity from that
+descriptor, then places it without replacing anything under a lock on its
+parent directory, so a directory that appears there meanwhile is someone
+else's and is left alone; it removes it only while, under that same lock, the
+path still names that very directory and it is empty, and through a private
+name again, so the only thing ever deleted is a name nobody else knows. A
+replacement, anything someone else wrote there, a directory that cannot be
+inspected or removed, or one that could not be moved back into place is kept
+and reported as `CLEANUP FAILED: …` (exit 2, the refusal still printed)
+rather than as a clean refusal; a failure while opening, locking or inspecting
+the freshly created destination removes it again before the refusal is
+printed. Every publish and promote invocation takes the same parent lock,
+which is what keeps those instants safe between them; a process outside it
+that swaps the entry in the same instant is caught by the proofs and
+reported, not deleted.
 
 If the process dies mid-way, the next invocation against that destination
 reads the journal first and finishes the job: a transaction that had already

@@ -25,6 +25,7 @@ every tree unchanged.
 from __future__ import annotations
 
 import errno
+import fcntl
 import importlib.util
 import json
 import os
@@ -37,6 +38,7 @@ from typing import Any
 
 import pytest
 
+from silverquillm import created_directories as created_mod
 from silverquillm.candidate import load_candidate_bundle, vendor_candidate
 from silverquillm.results_repo import (
     CandidateIdentity,
@@ -45,6 +47,7 @@ from silverquillm.results_repo import (
     write_run_record,
 )
 from tests.candidate_fixtures import DIGEST_B, make_candidate_dir
+from tests.fs_fixtures import names
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -1235,41 +1238,107 @@ class TestSerialization:
 
 
 class TestCreatedDestination:
-    """An exclusive hold creates an absent destination for the lifecycle and,
-    when the invocation published nothing, removes it on release — only if
-    the path still names that very directory and it is empty.  Anything else
-    is kept, and kept loudly: never a clean refusal over residue, never the
-    removal of what another party put there."""
+    """An exclusive hold creates an absent destination — and any missing
+    ancestor — for the lifecycle and, when the invocation published nothing,
+    removes exactly those again on release, each only on proof: created
+    descriptor-first under a private name and placed without replacing,
+    removed under the parent directory's lock through a private name again.
+    Every failure after the destination was created unwinds the same way
+    before its refusal is raised.  Anything less is kept, and kept loudly:
+    never a clean refusal over residue, never the removal of what another
+    party put there."""
 
-    def _deny_removing(self, monkeypatch: pytest.MonkeyPatch, directory: Path):
-        """``os.rmdir`` is denied for *directory*; returns the real ``rmdir``
-        so a test can clear the retained directory between invocations."""
-        real = os.rmdir
+    def _deny_removing(self, monkeypatch: pytest.MonkeyPatch, directory: Path) -> None:
+        """Moving *directory* aside for removal is denied — its parent is not
+        writable — exactly for the entry at that path."""
+        real = created_mod.rename_noreplace
 
-        def denied(path, *a, **kw):
-            if Path(path) == directory:
+        def denied(src, dst, *, dir_fd):
+            if names(src, dir_fd, directory):
                 raise PermissionError(errno.EACCES, "Permission denied")
-            return real(path, *a, **kw)
+            return real(src, dst, dir_fd=dir_fd)
 
-        monkeypatch.setattr(os, "rmdir", denied)
-        return real
+        monkeypatch.setattr(created_mod, "rename_noreplace", denied)
+
+    def _before_placing(self, monkeypatch: pytest.MonkeyPatch, directory: Path, then) -> None:
+        """*then* runs in the instant before the hold places the directory
+        it made under *directory*'s name — someone outside the protocol
+        acting on that name meanwhile."""
+        real = created_mod.rename_noreplace
+
+        def hooked(src, dst, *, dir_fd):
+            if names(dst, dir_fd, directory):
+                then()
+            return real(src, dst, dir_fd=dir_fd)
+
+        monkeypatch.setattr(created_mod, "rename_noreplace", hooked)
+
+    def _swap_in_the_instant_before_removal(self, monkeypatch: pytest.MonkeyPatch, directory: Path, moved: Path) -> None:
+        """Right after the hold has proven *directory* still its own — as it
+        moves it aside for removal — someone outside the protocol moves it
+        to *moved* and puts their own directory under the name."""
+        real = created_mod.rename_noreplace
+
+        def swapped(src, dst, *, dir_fd):
+            if names(src, dir_fd, directory):
+                os.rename(directory, moved)
+                directory.mkdir()
+                (directory / "theirs.txt").write_text("not ours\n", encoding="utf-8")
+            return real(src, dst, dir_fd=dir_fd)
+
+        monkeypatch.setattr(created_mod, "rename_noreplace", swapped)
+
+    def test_a_refused_plan_restores_every_directory_it_created(self, world, no_git, capsys) -> None:
+        dest = world["dest"]
+        top = dest.parents[1]
+        assert not top.exists()
+        assert publish_mod.main(_cli(world, world["untraceable"])) == 1
+        out, err = capsys.readouterr()
+        assert "REFUSED" in out and "CLEANUP FAILED" not in err
+        assert not top.exists(), "the destination and the ancestors created with it are gone"
+        assert publish_mod.main(_cli(world, world["valid"])) == 0 and _entries(dest) == [world["valid"]]
+
+    def test_a_directory_that_appears_before_placement_is_someone_elses_and_is_kept(self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+        dest = world["dest"] = world["dest"].parents[2] / "published"
+        self._before_placing(monkeypatch, dest, then=dest.mkdir)
+        code = publish_mod.main(_cli(world, world["untraceable"]))
+        out, err = capsys.readouterr()
+        assert code == 1 and "REFUSED" in out and "CLEANUP FAILED" not in err, "nothing of this invocation's remains: the refusal is clean"
+        assert dest.is_dir() and _entries(dest) == [], "the directory that appeared is kept — it was never this invocation's"
+        assert not [n for n in _entries(dest.parent) if n.startswith(".")], "the private directory of the abandoned creation is gone"
+
+    def test_a_replacement_in_the_instant_before_removal_is_moved_back_and_kept(
+        self, world, no_git, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+    ) -> None:
+        dest = world["dest"]
+        moved = tmp_path / "moved-away"
+        self._swap_in_the_instant_before_removal(monkeypatch, dest, moved)
+        code = publish_mod.main(_cli(world, world["untraceable"]))
+        out, err = capsys.readouterr()
+        assert code == 2 and "CLEANUP FAILED" in err and "no longer names" in err and "Traceback" not in out + err
+        assert _entries(dest) == ["theirs.txt"] and (dest / "theirs.txt").read_text(encoding="utf-8") == "not ours\n", "the replacement is back in place, whole"
+        assert moved.is_dir() and _entries(moved) == [], "the directory this invocation created stays where it went"
+        assert not [n for n in _entries(dest.parent) if n.startswith(".")], "no private name is left beside it"
 
     def test_a_permission_failure_removing_the_created_destination_is_loud_and_keeps_the_refusal(
         self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys
     ) -> None:
         dest = world["dest"]
         assert not dest.exists()
-        rmdir = self._deny_removing(monkeypatch, dest)
+        self._deny_removing(monkeypatch, dest)
         refusal = publish_mod.PublicationRefused("nothing traceable")
         with pytest.raises(publish_mod.PublicationCleanupError) as info, publish_mod.PublicationLock(dest):
             assert dest.is_dir()
+            before = os.lstat(dest)
             raise refusal
         exc = info.value
         assert exc.path == dest and exc.refusal is refusal, "the refusal in flight is attached"
-        assert isinstance(exc.__cause__, PermissionError) and f"rmdir {dest}" in str(exc)
-        assert exc.__context__ is exc.__cause__ and exc.__context__.__context__ is refusal, "the chain runs cleanup failure → refusal"
-        assert dest.is_dir() and _entries(dest) == []
-        rmdir(dest)
+        assert isinstance(exc.__cause__, created_mod.DirectoryCleanupError) and isinstance(exc.__cause__.__cause__, PermissionError)
+        assert f"rmdir {dest}" in str(exc) and "was refused" in str(exc)
+        assert exc.__context__ is exc.__cause__ and exc.__cause__.__cause__.__context__ is refusal, "the chain runs cleanup failure → OS failure → refusal"
+        assert dest.is_dir() and _entries(dest) == [] and os.path.samestat(os.lstat(dest), before), "the very directory stays put"
+        assert dest.parent.is_dir(), "the ancestors created with it are kept as its parents"
+        os.rmdir(dest)
         # The CLI cannot report a refused plan as clean while the directory it created stays behind.
         code = publish_mod.main(_cli(world, world["untraceable"]))
         out, err = capsys.readouterr()
@@ -1278,9 +1347,9 @@ class TestCreatedDestination:
         monkeypatch.undo()
         assert publish_mod.main(_cli(world, world["untraceable"])) == 1
         assert dest.is_dir(), "a directory that pre-exists an invocation is never its to remove — the retained one is removed by hand"
-        rmdir(dest)
+        os.rmdir(dest)
         assert publish_mod.main(_cli(world, world["untraceable"])) == 1
-        assert not dest.exists()
+        assert not dest.exists() and dest.parent.is_dir()
 
     def test_a_replaced_destination_is_never_removed(self, world, no_git, tmp_path: Path) -> None:
         dest = world["dest"]
@@ -1292,13 +1361,136 @@ class TestCreatedDestination:
         assert info.value.path == dest and info.value.refusal is None
         assert moved.is_dir() and _entries(moved) == [], "the directory this invocation created stays where it went"
         assert (dest / "theirs.txt").read_text(encoding="utf-8") == "not ours\n", "the replacement is untouched"
+        assert not [n for n in _entries(dest.parent) if n.startswith(".")], "it was never moved: no private name is left beside it"
 
     def test_a_destination_that_became_non_empty_is_kept_and_reported(self, world, no_git) -> None:
         dest = world["dest"]
         with pytest.raises(publish_mod.PublicationCleanupError, match="not empty") as info, publish_mod.PublicationLock(dest):
             (dest / "theirs.txt").write_text("not ours\n", encoding="utf-8")
-        assert info.value.path == dest and isinstance(info.value.__cause__, OSError) and "kept" in str(info.value)
+        assert info.value.path == dest and isinstance(info.value.__cause__, created_mod.DirectoryCleanupError) and "kept" in str(info.value)
         assert _entries(dest) == ["theirs.txt"] and (dest / "theirs.txt").read_text(encoding="utf-8") == "not ours\n"
+
+    @pytest.mark.parametrize("step", ["dup", "flock", "fstat", "stat"])
+    def test_a_failure_after_creating_the_destination_restores_it_before_refusing(
+        self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys, step: str
+    ) -> None:
+        """Duplicating, locking or inspecting the freshly created destination
+        fails — the process out of descriptors, no locks available, an I/O
+        error, a permission failure — and the refusal is reported only once
+        the destination and every ancestor created with it are gone."""
+        dest = world["dest"]
+        top = dest.parents[1]
+        real_fstat = os.fstat
+
+        def on_dest(fd: int) -> bool:
+            try:
+                return os.path.samestat(real_fstat(fd), os.stat(dest))
+            except OSError:
+                return False
+
+        if step == "dup":
+            real = os.dup
+
+            def failing(fd):
+                if on_dest(fd):
+                    raise OSError(errno.EMFILE, "Too many open files")
+                return real(fd)
+
+            monkeypatch.setattr(os, "dup", failing)
+        elif step == "flock":
+            real = fcntl.flock
+
+            def failing(fd, operation):
+                if on_dest(fd) and operation & fcntl.LOCK_EX:
+                    raise OSError(errno.ENOLCK, "No locks available")
+                return real(fd, operation)
+
+            monkeypatch.setattr(fcntl, "flock", failing)
+        elif step == "fstat":
+
+            def failing(fd):
+                if on_dest(fd):
+                    raise OSError(errno.EIO, "Input/output error")
+                return real_fstat(fd)
+
+            monkeypatch.setattr(os, "fstat", failing)
+        else:
+            real = os.stat
+
+            def failing(path, *a, dir_fd=None, **kw):
+                if dir_fd is not None and names(path, dir_fd, dest):
+                    raise PermissionError(errno.EACCES, "Permission denied")
+                return real(path, *a, dir_fd=dir_fd, **kw)
+
+            monkeypatch.setattr(os, "stat", failing)
+        code = publish_mod.main(_cli(world, world["untraceable"]))
+        out, err = capsys.readouterr()
+        assert code == 1 and "REFUSED" in err and "CLEANUP FAILED" not in err and "Traceback" not in out + err, err
+        assert not top.exists(), "the destination and every ancestor created with it are gone before the refusal is reported"
+
+    def test_contention_on_the_just_created_destination_restores_it_and_refuses_as_held(
+        self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        dest = world["dest"]
+        top = dest.parents[1]
+        intruder: list[int] = []
+
+        def grab() -> None:
+            fd = os.open(dest, os.O_RDONLY | os.O_DIRECTORY)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            intruder.append(fd)
+
+        real = created_mod.rename_noreplace
+
+        def placed_then_grabbed(src, dst, *, dir_fd):
+            real(src, dst, dir_fd=dir_fd)
+            if names(dst, dir_fd, dest):
+                grab()
+
+        monkeypatch.setattr(created_mod, "rename_noreplace", placed_then_grabbed)
+        try:
+            code = publish_mod.main(_cli(world, world["untraceable"]))
+            out, err = capsys.readouterr()
+            assert code == 1 and "REFUSED" in err and "holds" in err and "CLEANUP FAILED" not in err and "Traceback" not in out + err
+            assert not top.exists(), "the empty directory the intruder locked was this invocation's, and is gone"
+        finally:
+            for fd in intruder:
+                os.close(fd)
+
+    def test_a_failure_opening_the_freshly_created_destination_leaves_nothing_behind(
+        self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        dest = world["dest"]
+        top = dest.parents[1]
+        real = os.open
+
+        def exhausted(path, flags, *a, **kw):
+            if os.fsdecode(path).startswith(f".{dest.name}.creating-"):
+                raise OSError(errno.EMFILE, "Too many open files")
+            return real(path, flags, *a, **kw)
+
+        monkeypatch.setattr(os, "open", exhausted)
+        code = publish_mod.main(_cli(world, world["untraceable"]))
+        out, err = capsys.readouterr()
+        assert code == 1 and "REFUSED" in err and "cannot open it" in err and "CLEANUP FAILED" not in err and "Traceback" not in out + err
+        assert not top.exists(), "the private directory and the ancestors created before it are gone"
+
+    def test_an_inspection_failure_while_removing_the_created_destination_is_loud(
+        self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        dest = world["dest"]
+        real = os.lstat
+
+        def denied(path, *a, dir_fd=None, **kw):
+            if dir_fd is not None and names(path, dir_fd, dest):
+                raise PermissionError(errno.EACCES, "Permission denied")
+            return real(path, *a, dir_fd=dir_fd, **kw)
+
+        monkeypatch.setattr(os, "lstat", denied)
+        code = publish_mod.main(_cli(world, world["untraceable"]))
+        out, err = capsys.readouterr()
+        assert code == 2 and "CLEANUP FAILED" in err and "cannot be inspected" in err and "Traceback" not in out + err
+        assert dest.is_dir() and _entries(dest) == [], "unproven, it is kept"
 
     def test_a_rolled_back_publication_leaves_no_created_destination(self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
         dest = world["dest"]
@@ -1313,7 +1505,7 @@ class TestCreatedDestination:
         code = publish_mod.main(_cli(world, world["valid"]))
         out, err = capsys.readouterr()
         assert code == 1 and "rolled back" in err and "Traceback" not in out + err
-        assert not dest.exists(), "rolled back to empty, the created destination goes too"
+        assert not dest.parents[1].exists(), "rolled back to empty, the created destination and its created ancestors go too"
 
     def test_a_recovery_error_keeps_the_created_destination_as_the_home_of_its_evidence(
         self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys

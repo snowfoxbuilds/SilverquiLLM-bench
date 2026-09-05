@@ -126,14 +126,21 @@ checked before anything is staged; staging lives beside the candidates
 (`candidates/.promote-<slug>-<nonce>/`, same filesystem, so the final rename
 is atomic) and is removed strictly — never with errors ignored — because it
 may hold the very content promotion refused, a rejected credential value
-included; a `candidates/` directory the invocation created is removed again
-when it is left empty — only if the path still names the very directory the
-script created and that directory is empty, so a replacement or anything
-someone else wrote there meanwhile is never removed. If staging *cannot* be
-removed, or that directory cannot be removed, is no longer the one the script
-made or is no longer empty, the script does not pretend: it prints the
-refusal, then `CLEANUP FAILED: …` naming what is kept (`<path> is KEPT` for
-staging), and exits 2. Inspect a retained staging directory and remove it by
+included; a `candidates/` directory the invocation created (and any missing
+parent made with it) is removed again when it is left empty, and only on
+proof: the script makes it under a private name, opens it and takes its
+identity from that descriptor, then places it without replacing anything
+under a lock on its parent directory, so a directory that appears there
+meanwhile is someone else's and is left alone; it removes it only while, under
+that same lock, the path still names that very directory and it is empty, and
+through a private name again, so a replacement caught in that instant is moved
+back and kept. If staging *cannot* be removed, or a created directory cannot
+be inspected or removed, is no longer the one the script made, is no longer
+empty, or could not be moved back into place, the script does not pretend: it
+prints the refusal, then `CLEANUP FAILED: …` naming what is kept (`<path> is
+KEPT` for staging), and exits 2; a failure while opening the fresh directory
+or creating staging inside it removes what was created before the refusal
+(exit 1) is printed. Inspect a retained staging directory and remove it by
 hand (`rm -rf`); it is gitignored (`candidates/.promote-*`) so it can never
 be committed by accident, and its bytes are never echoed.
 
