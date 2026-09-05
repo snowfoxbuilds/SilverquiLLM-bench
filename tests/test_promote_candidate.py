@@ -16,6 +16,7 @@ refusal leaves the tree untouched, and no git command is ever executed.
 
 from __future__ import annotations
 
+import errno
 import importlib.util
 import json
 import os
@@ -715,6 +716,122 @@ class TestCleanup:
         monkeypatch.undo()
         for name in _entries(candidates):
             shutil.rmtree(candidates / name)
+
+    def _deny_removing(self, monkeypatch: pytest.MonkeyPatch, directory: Path):
+        """``os.rmdir`` is denied for *directory*; returns the real ``rmdir``
+        so a test can clear the retained directory between invocations."""
+        real = os.rmdir
+
+        def denied(path, *a, **kw):
+            if Path(path) == directory:
+                raise PermissionError(errno.EACCES, "Permission denied")
+            return real(path, *a, **kw)
+
+        monkeypatch.setattr(os, "rmdir", denied)
+        return real
+
+    def test_a_created_candidates_dir_that_cannot_be_removed_after_a_credential_refusal_is_loud_and_echoes_nothing(
+        self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        source = _source(tmp_path, base=PINNED_BASE)
+        sample = FAKE_CREDENTIALS["OpenAI API key"]
+        (source / "knowledge" / "gold" / "NOTES.md").write_text(f"# notes\n\n{sample}\n", encoding="utf-8")
+        candidates = tmp_path / "fresh" / "candidates"
+        rmdir = self._deny_removing(monkeypatch, candidates)
+        with pytest.raises(promote_mod.PromotionCleanupError) as info:
+            _promote(source, candidates)
+        exc = info.value
+        assert exc.candidates_dir == candidates and exc.staging is None and exc.retained == candidates
+        assert candidates.is_dir() and _entries(candidates) == [], "staging is gone; the created directory is what remains"
+        assert isinstance(exc.refusal, promote_mod.PromotionRefused) and "OpenAI API key" in str(exc.refusal)
+        assert isinstance(exc.__cause__, PermissionError) and f"rmdir {candidates}" in str(exc) and "was refused" in str(exc)
+        for text in (str(exc), str(exc.refusal), str(exc.__cause__)):
+            assert sample not in text
+        rmdir(candidates)
+        code = promote_mod.main([str(source), TYPE, "--candidates-dir", str(candidates)])
+        out, err = capsys.readouterr()
+        assert code == 2 and "REFUSED" in err and "CLEANUP FAILED" in err and str(candidates) in err
+        assert sample not in out + err and "Traceback" not in out + err
+        assert candidates.is_dir() and _entries(candidates) == []
+        monkeypatch.undo()
+        (source / "knowledge" / "gold" / "NOTES.md").unlink()
+        result = _promote(source, candidates)
+        assert result.written and _entries(candidates) == [result.candidate_dir.name]
+
+    def test_a_created_candidates_dir_that_cannot_be_removed_after_a_dry_run_is_loud_too(
+        self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        source = _source(tmp_path, base=PINNED_BASE)
+        candidates = tmp_path / "fresh" / "candidates"
+        rmdir = self._deny_removing(monkeypatch, candidates)
+        with pytest.raises(promote_mod.PromotionCleanupError) as info:
+            _promote(source, candidates, dry_run=True)
+        assert info.value.refusal is None and info.value.candidates_dir == candidates and "wrote no candidate" in str(info.value)
+        rmdir(candidates)
+        code = promote_mod.main([str(source), TYPE, "--candidates-dir", str(candidates), "--dry-run"])
+        out, err = capsys.readouterr()
+        assert code == 2 and "REFUSED" not in err and "CLEANUP FAILED" in err and "Traceback" not in out + err
+        assert candidates.is_dir() and _entries(candidates) == []
+
+    def _after_staging_is_removed(self, monkeypatch: pytest.MonkeyPatch, then) -> None:
+        """Right after promotion removes its staging tree — before it turns to
+        the candidates directory it created — *then* runs, standing in for
+        another party acting on that directory meanwhile."""
+        real = shutil.rmtree
+
+        def rmtree(path, *a, **kw):
+            real(path, *a, **kw)
+            if Path(path).name.startswith(".promote-"):
+                then()
+
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
+
+    def test_a_replaced_candidates_dir_is_never_removed(self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch) -> None:
+        source = _source(tmp_path)
+        candidates = tmp_path / "fresh" / "candidates"
+        moved = tmp_path / "moved-away"
+
+        def replace() -> None:
+            os.rename(candidates, moved)
+            candidates.mkdir()
+            (candidates / "theirs").write_text("not ours\n", encoding="utf-8")
+
+        self._after_staging_is_removed(monkeypatch, replace)
+        with pytest.raises(promote_mod.PromotionCleanupError, match="no longer names") as info:
+            _promote(source, candidates, dry_run=True)
+        assert info.value.candidates_dir == candidates and info.value.refusal is None
+        assert moved.is_dir() and _entries(moved) == [], "the directory this invocation created stays where it went"
+        assert (candidates / "theirs").read_text(encoding="utf-8") == "not ours\n", "the replacement is untouched"
+
+    def test_a_created_candidates_dir_that_became_non_empty_is_kept_and_reported(
+        self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = _source(tmp_path)
+        candidates = tmp_path / "fresh" / "candidates"
+        (source / "knowledge" / "gold" / "NOTES.md").write_text(f"{FAKE_ANTHROPIC_KEY}\n", encoding="utf-8")
+        self._after_staging_is_removed(monkeypatch, lambda: (candidates / "theirs").write_text("not ours\n", encoding="utf-8"))
+        with pytest.raises(promote_mod.PromotionCleanupError, match="not empty") as info:
+            _promote(source, candidates)
+        exc = info.value
+        assert exc.candidates_dir == candidates and isinstance(exc.refusal, promote_mod.PromotionRefused) and "kept" in str(exc)
+        assert isinstance(exc.__cause__, OSError) and FAKE_ANTHROPIC_KEY not in str(exc) + str(exc.refusal)
+        assert exc.__context__.__context__ is exc.refusal, "the chain runs cleanup failure → refusal"
+        assert _entries(candidates) == ["theirs"] and (candidates / "theirs").read_text(encoding="utf-8") == "not ours\n"
+
+    def test_a_pre_existing_candidates_dir_is_never_a_removal_candidate(self, tmp_path: Path, no_git, monkeypatch: pytest.MonkeyPatch) -> None:
+        source = _source(tmp_path)
+        candidates = tmp_path / "candidates"
+        candidates.mkdir()
+        calls: list[Path] = []
+        real = os.rmdir
+
+        def counting(path, *a, **kw):
+            calls.append(Path(path))
+            return real(path, *a, **kw)
+
+        monkeypatch.setattr(os, "rmdir", counting)
+        assert _promote(source, candidates, dry_run=True).written is False
+        assert candidates not in calls and candidates.is_dir() and _entries(candidates) == []
 
     def test_a_successful_promotion_leaves_only_the_candidate(self, tmp_path: Path, no_git) -> None:
         source = _source(tmp_path)

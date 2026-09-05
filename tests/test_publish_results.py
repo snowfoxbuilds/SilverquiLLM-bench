@@ -1234,6 +1234,115 @@ class TestSerialization:
         assert _entries(dest) == [world["valid"]]
 
 
+class TestCreatedDestination:
+    """An exclusive hold creates an absent destination for the lifecycle and,
+    when the invocation published nothing, removes it on release — only if
+    the path still names that very directory and it is empty.  Anything else
+    is kept, and kept loudly: never a clean refusal over residue, never the
+    removal of what another party put there."""
+
+    def _deny_removing(self, monkeypatch: pytest.MonkeyPatch, directory: Path):
+        """``os.rmdir`` is denied for *directory*; returns the real ``rmdir``
+        so a test can clear the retained directory between invocations."""
+        real = os.rmdir
+
+        def denied(path, *a, **kw):
+            if Path(path) == directory:
+                raise PermissionError(errno.EACCES, "Permission denied")
+            return real(path, *a, **kw)
+
+        monkeypatch.setattr(os, "rmdir", denied)
+        return real
+
+    def test_a_permission_failure_removing_the_created_destination_is_loud_and_keeps_the_refusal(
+        self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        dest = world["dest"]
+        assert not dest.exists()
+        rmdir = self._deny_removing(monkeypatch, dest)
+        refusal = publish_mod.PublicationRefused("nothing traceable")
+        with pytest.raises(publish_mod.PublicationCleanupError) as info, publish_mod.PublicationLock(dest):
+            assert dest.is_dir()
+            raise refusal
+        exc = info.value
+        assert exc.path == dest and exc.refusal is refusal, "the refusal in flight is attached"
+        assert isinstance(exc.__cause__, PermissionError) and f"rmdir {dest}" in str(exc)
+        assert exc.__context__ is exc.__cause__ and exc.__context__.__context__ is refusal, "the chain runs cleanup failure → refusal"
+        assert dest.is_dir() and _entries(dest) == []
+        rmdir(dest)
+        # The CLI cannot report a refused plan as clean while the directory it created stays behind.
+        code = publish_mod.main(_cli(world, world["untraceable"]))
+        out, err = capsys.readouterr()
+        assert code == 2 and "REFUSED" in out and "CLEANUP FAILED" in err and str(dest) in err and "Traceback" not in out + err
+        assert dest.is_dir() and _entries(dest) == []
+        monkeypatch.undo()
+        assert publish_mod.main(_cli(world, world["untraceable"])) == 1
+        assert dest.is_dir(), "a directory that pre-exists an invocation is never its to remove — the retained one is removed by hand"
+        rmdir(dest)
+        assert publish_mod.main(_cli(world, world["untraceable"])) == 1
+        assert not dest.exists()
+
+    def test_a_replaced_destination_is_never_removed(self, world, no_git, tmp_path: Path) -> None:
+        dest = world["dest"]
+        moved = tmp_path / "moved-away"
+        with pytest.raises(publish_mod.PublicationCleanupError, match="no longer names") as info, publish_mod.PublicationLock(dest):
+            os.rename(dest, moved)
+            dest.mkdir()
+            (dest / "theirs.txt").write_text("not ours\n", encoding="utf-8")
+        assert info.value.path == dest and info.value.refusal is None
+        assert moved.is_dir() and _entries(moved) == [], "the directory this invocation created stays where it went"
+        assert (dest / "theirs.txt").read_text(encoding="utf-8") == "not ours\n", "the replacement is untouched"
+
+    def test_a_destination_that_became_non_empty_is_kept_and_reported(self, world, no_git) -> None:
+        dest = world["dest"]
+        with pytest.raises(publish_mod.PublicationCleanupError, match="not empty") as info, publish_mod.PublicationLock(dest):
+            (dest / "theirs.txt").write_text("not ours\n", encoding="utf-8")
+        assert info.value.path == dest and isinstance(info.value.__cause__, OSError) and "kept" in str(info.value)
+        assert _entries(dest) == ["theirs.txt"] and (dest / "theirs.txt").read_text(encoding="utf-8") == "not ours\n"
+
+    def test_a_rolled_back_publication_leaves_no_created_destination(self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+        dest = world["dest"]
+        real = os.rename
+
+        def refuse(src, dst, *a, **kw):
+            if Path(dst).parent == dest:
+                raise OSError(errno.EXDEV, "Invalid cross-device link")
+            return real(src, dst, *a, **kw)
+
+        monkeypatch.setattr(os, "rename", refuse)
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out, err = capsys.readouterr()
+        assert code == 1 and "rolled back" in err and "Traceback" not in out + err
+        assert not dest.exists(), "rolled back to empty, the created destination goes too"
+
+    def test_a_recovery_error_keeps_the_created_destination_as_the_home_of_its_evidence(
+        self, world, no_git, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        dest = world["dest"]
+        journal = publish_mod.journal_path(dest)
+        real_mkdir, real_unlink = os.mkdir, os.unlink
+
+        def denied_mkdir(path, *a, **kw):
+            if Path(path).name.startswith(publish_mod.STAGING_PREFIX):
+                raise PermissionError(13, "Permission denied")
+            return real_mkdir(path, *a, **kw)
+
+        def denied_unlink(path, *a, **kw):
+            if Path(path) == journal:
+                raise PermissionError(1, "Operation not permitted")
+            return real_unlink(path, *a, **kw)
+
+        monkeypatch.setattr(os, "mkdir", denied_mkdir)
+        monkeypatch.setattr(os, "unlink", denied_unlink)
+        code = publish_mod.main(_cli(world, world["valid"]))
+        out, err = capsys.readouterr()
+        assert code == 2 and "RECOVERY FAILED" in err and "KEPT" in err and "CLEANUP FAILED" not in err and "Traceback" not in out + err
+        assert _entries(dest) == [publish_mod.JOURNAL_FILENAME], "the kept journal needs its directory"
+        monkeypatch.undo()
+        code = publish_mod.main(_cli(world, world["valid"]))
+        assert code == 0 and capsys.readouterr().out.startswith("RECOVERED") and _entries(dest) == [world["valid"]]
+
+
 class TestBegin:
     """Initialization is all-or-nothing.  A failure while creating, writing
     or closing the journal, or while creating staging, leaves nothing behind

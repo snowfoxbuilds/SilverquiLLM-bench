@@ -127,11 +127,15 @@ checked before anything is staged; staging lives beside the candidates
 is atomic) and is removed strictly — never with errors ignored — because it
 may hold the very content promotion refused, a rejected credential value
 included; a `candidates/` directory the invocation created is removed again
-when it is left empty. If staging *cannot* be removed, the script does not
-pretend: it prints the refusal, then `CLEANUP FAILED: … <path> is KEPT`, and
-exits 2. Inspect that directory and remove it by hand (`rm -rf`); it is
-gitignored (`candidates/.promote-*`) so it can never be committed by
-accident, and its bytes are never echoed.
+when it is left empty — only if the path still names the very directory the
+script created and that directory is empty, so a replacement or anything
+someone else wrote there meanwhile is never removed. If staging *cannot* be
+removed, or that directory cannot be removed, is no longer the one the script
+made or is no longer empty, the script does not pretend: it prints the
+refusal, then `CLEANUP FAILED: …` naming what is kept (`<path> is KEPT` for
+staging), and exits 2. Inspect a retained staging directory and remove it by
+hand (`rm -rf`); it is gitignored (`candidates/.promote-*`) so it can never
+be committed by accident, and its bytes are never echoed.
 
 Then:
 
