@@ -11,14 +11,13 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import secrets
 import shutil
 import subprocess
 import tempfile
 import time
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # Load .env from repo root into os.environ (values already in the environment take precedence)
@@ -81,7 +80,7 @@ def _runner_log(msg: str, *, err: bool = False) -> None:
     if log_dir is None or not log_dir.exists():
         return
 
-    ts = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+    ts = datetime.now(tz=UTC).isoformat(timespec="seconds")
     line = f"{ts} {msg}\n"
 
     with open(log_dir / "runner.log", "a", encoding="utf-8") as f:
@@ -135,8 +134,7 @@ def _image_dir(image: str) -> str:
         my-custom-image:v2 → my-custom-image
     """
     short = image.rsplit("/", 1)[-1].split(":")[0]
-    if short.startswith("silverquillm-"):
-        short = short[len("silverquillm-"):]
+    short = short.removeprefix("silverquillm-")
     return short
 
 
@@ -161,7 +159,7 @@ def _make_run_name(
     If that directory already exists under *results_dir*, a short hex
     nonce is appended to disambiguate (``-<4 hex chars>``).
     """
-    ts = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H-%M")
+    ts = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H-%M")
     base = f"{set_code}-{_image_dir(image)}-{ts}"
 
     candidate = base
@@ -190,7 +188,7 @@ def _rewrite_diff_headers(diff_text: str, old_a: str, old_b: str) -> str:
     for line in diff_text.splitlines(keepends=True):
         if line.startswith("diff -ruN "):
             line = line.replace(old_a + "/", "a/").replace(old_b + "/", "b/")
-        elif line.startswith("--- ") or line.startswith("+++ "):
+        elif line.startswith(("--- ", "+++ ")):
             prefix = line[:4]
             rest = line[4:]
             rest = rest.replace(old_a + "/", "a/", 1).replace(old_b + "/", "b/", 1)
@@ -275,6 +273,7 @@ def _harvest_results(
                 ["diff", "-ruN", str(engine_repo), str(engine_ws)],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             if diff_result.stdout.strip():
                 patch_text = _rewrite_diff_headers(
@@ -372,6 +371,7 @@ def _make_snapshot_callback(workspace: Path, run_dir: Path) -> Callable[[], None
                 capture_output=True,
                 text=True,
                 timeout=5,
+                check=False,
             )
             paths = (
                 [p for p in status.stdout.split("\0") if p]
@@ -388,7 +388,7 @@ def _make_snapshot_callback(workspace: Path, run_dir: Path) -> Callable[[], None
         except (OSError, subprocess.SubprocessError):
             files_changed = 0
         record = {
-            "ts": datetime.now(tz=timezone.utc).isoformat(timespec="milliseconds"),
+            "ts": datetime.now(tz=UTC).isoformat(timespec="milliseconds"),
             "snapshot_index": idx,
             "files_changed": files_changed,
             "elapsed_s": round(elapsed, 3),
@@ -443,9 +443,9 @@ def _write_card_statuses(
         original = cards_dir / "sos" / cn / "card_impl.py"
         workspace_impl = workspace / "cards" / "sos" / cn / "card_impl.py"
 
-        if not workspace_impl.exists():
-            status = "timeout" if timed_out else "no_output"
-        elif original.exists() and workspace_impl.read_text() == original.read_text():
+        if not workspace_impl.exists() or (
+            original.exists() and workspace_impl.read_text() == original.read_text()
+        ):
             status = "timeout" if timed_out else "no_output"
         else:
             status = "completed"
@@ -482,7 +482,7 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
 
     try:
         full_result = evaluate(run_dir, cards_dir, engine_dir)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - any evaluation failure is logged; the run's artifacts still land
         _runner_log(f"Evaluation failed: {exc}", err=True)
         return
 
@@ -787,7 +787,7 @@ def run(
         # post-hoc run_summary.json (see ADR-009).
         manifest = {
             "timeout_seconds": timeout,
-            "deadline_utc": (datetime.now(tz=timezone.utc) + timedelta(seconds=timeout)).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "deadline_utc": (datetime.now(tz=UTC) + timedelta(seconds=timeout)).isoformat(timespec="seconds").replace("+00:00", "Z"),
             "docker_image": image,
             "card_filter": card_filter,
             "benchmark_set": "sos",
@@ -803,7 +803,7 @@ def run(
         run_dir.mkdir(parents=True, exist_ok=True)
 
         # TUI display object — reads module-level _display (None until wired)
-        pass  # _display is read from module-level silverquillm.cli._display
+        # _display is read from module-level silverquillm.cli._display
 
         # Build snapshot callback closure
         _snapshot_callback = _make_snapshot_callback(workspace, run_dir)
@@ -861,7 +861,7 @@ def run(
     finally:
         # Clean up staging directory
         shutil.rmtree(staging_dir, ignore_errors=True)
-        _runner_log_dir = None  # noqa: F841
+        _runner_log_dir = None
 
 
 @main.command()
@@ -934,13 +934,6 @@ def smoke(image: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _candidate_label(candidate_path: Path) -> str:
-    """The run-dir / run-id label for a candidate path: its directory name
-    (``<slug>--<hash8>`` for a checked-in candidate), as one safe segment."""
-    name = Path(candidate_path).resolve().name or "candidate"
-    return re.sub(r"[^A-Za-z0-9._-]", "-", name).lstrip(".") or "candidate"
-
-
 def _report_contract_run(result) -> None:
     """Echo a Contract Run's outcome (every classified failure included)."""
     for warning in result.warnings:
@@ -997,7 +990,12 @@ def _run_candidate(
 ) -> None:
     """Drive a Candidate Bundle through TheOzolith's implementer Run Contract
     (the body of ``silverquillm run --candidate``)."""
-    from silverquillm.contract import drive_contract_run
+    from silverquillm.contract import (
+        RUNS_DIRNAME,
+        candidate_label,
+        drive_contract_run,
+        new_run_name,
+    )
     from silverquillm.jobdir import BenchmarkNotRunnableError, load_benchmark
     from silverquillm.modes import UnknownModeError, get_mode
     from silverquillm.results_repo import resolve_results_repo
@@ -1011,10 +1009,10 @@ def _run_candidate(
     except (BenchmarkNotRunnableError, UnknownModeError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    label = _candidate_label(candidate_path)
+    label = candidate_label(candidate_path)
     if results_dir is None:
-        results_dir = _REPO_ROOT / "runs" / label
-    run_name = _make_run_name(set_code=benchmark.id, image=label, results_dir=results_dir)
+        results_dir = _REPO_ROOT / RUNS_DIRNAME / label
+    run_name = new_run_name(benchmark.id, label, results_dir)
     run_dir = results_dir / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
     _runner_log_dir = run_dir
@@ -1485,7 +1483,7 @@ def resume(
         manifest = {
             "timeout_seconds": timeout,
             "deadline_utc": (
-                datetime.now(tz=timezone.utc) + timedelta(seconds=timeout)
+                datetime.now(tz=UTC) + timedelta(seconds=timeout)
             ).isoformat(timespec="seconds").replace("+00:00", "Z"),
             "docker_image": chosen_image,
             "card_filter": card_filter,
@@ -1568,7 +1566,7 @@ def resume(
 
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)
-        _runner_log_dir = None  # noqa: F841
+        _runner_log_dir = None
 
 
 def _strip_resume_preamble(prompt_text: str) -> str:
@@ -1726,6 +1724,152 @@ def rescore(run_id: str, cards: str | None) -> None:
         run_status=run_status,
         wall_clock_seconds=wall_clock_seconds,
     )
+
+
+# ---------------------------------------------------------------------------
+# Batch queue: scheduler / queue ls / top (#39 §5, #66)
+# ---------------------------------------------------------------------------
+
+_BATCHES_DIR_OPTION = click.option(
+    "--batches-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="The batch queue directory (default: batches/ in this repo)",
+)
+
+
+def _batches_dir(value: Path | None) -> Path:
+    from silverquillm.scheduler import BATCHES_DIRNAME
+
+    return value if value is not None else _REPO_ROOT / BATCHES_DIRNAME
+
+
+@main.command()
+@_BATCHES_DIR_OPTION
+@click.option("--once", is_flag=True, default=False, help="Run every due batch entry, then exit (instead of polling forever)")
+@click.option("--poll-seconds", type=float, default=None, help="Idle poll interval (default: 30)")
+@click.option(
+    "--results-repo", default=None, type=click.Path(file_okay=False, path_type=Path),
+    help="Results repo every run records into (or $SILVERQUILLM_RESULTS_REPO)",
+)
+@click.option("--container-user", default=None, help="uid:gid to run every container as (default: the image's user)")
+@click.option(
+    "--replay-without-state", "replay_without_state", multiple=True, metavar="BATCH_ID",
+    help=(
+        "Acknowledge, for this one batch, that it has no committed state and may start"
+        " from entry 0 (replaying may repeat completed runs and incur costs); creates"
+        " the empty batches/state/<id>.json. Repeatable; never global."
+    ),
+)
+@click.option(
+    "--acknowledge-cleanup", "acknowledge_cleanup", multiple=True, metavar="BATCH_ID",
+    help=(
+        "Confirm that the run this batch's committed state records as running — on"
+        " another host — has had its container cleaned up; marks it failed so the"
+        " batch can continue here. Replacement host only: refused while this host"
+        " holds valid runtime metadata for the run (start without the flag to"
+        " reconcile it), and refused with the metadata kept when it is unreadable or"
+        " does not bind to the run. Repeatable; never global."
+    ),
+)
+def scheduler(
+    batches_dir: Path | None,
+    once: bool,
+    poll_seconds: float | None,
+    results_repo: Path | None,
+    container_user: str | None,
+    replay_without_state: tuple[str, ...],
+    acknowledge_cleanup: tuple[str, ...],
+) -> None:
+    """Run the single-writer batch scheduler over batches/*.toml.
+
+    Scans batch files in name order, respects not_before, consumes run specs
+    in file order (re-reading the file before every not-yet-started run),
+    resolves and records each candidate's identity at run start, executes
+    each run through the bundle run path (`silverquillm run --candidate`),
+    and writes per-run outcomes to the committed, portable state file
+    batches/state/<batch>.json — never to a batch file; you commit the state
+    checkpoints. A batch with no state file is blocked (replay protection)
+    until --replay-without-state names it. Runs left running by a dead
+    scheduler are reconciled before anything else runs: the runtime metadata
+    is bound to the recorded run first, then that run's container is
+    force-removed and confirmed gone; state from another host needs
+    --acknowledge-cleanup. Committed state no batch file names is reconciled
+    the same way (a running entry in it stops the scheduler; a terminal one is
+    inert), and malformed state blocks its batch without being rewritten. A
+    failed run is recorded and the batch continues. A second scheduler on the
+    same directory refuses to start.
+    """
+    from silverquillm.results_repo import resolve_results_repo
+    from silverquillm.scheduler import (
+        DEFAULT_POLL_SECONDS,
+        AcknowledgementError,
+        DockerContainerRuntime,
+        ReconciliationError,
+        Scheduler,
+        SchedulerLockedError,
+        SchedulerStopped,
+        contract_run_executor,
+    )
+
+    # One environment for the executor's slot binding and the scheduler's
+    # redaction, so every value the run can see is a value the state cannot.
+    environ = os.environ
+    runner = Scheduler(
+        _batches_dir(batches_dir),
+        executor=contract_run_executor(container_user=container_user, environ=environ),
+        container_runtime=DockerContainerRuntime(),
+        repo_root=_REPO_ROOT,
+        results_repo=resolve_results_repo(results_repo),
+        poll_seconds=DEFAULT_POLL_SECONDS if poll_seconds is None else poll_seconds,
+        log=lambda message: click.echo(f"{datetime.now(tz=UTC).isoformat(timespec='seconds')} {message}"),
+        environ=environ,
+        replay_without_state=replay_without_state,
+        acknowledge_cleanup=acknowledge_cleanup,
+    )
+    try:
+        if once:
+            count = runner.run_until_idle()
+            click.echo(f"scheduler idle: {count} run(s) executed")
+        else:
+            runner.serve()
+    except SchedulerLockedError as exc:
+        raise click.ClickException(str(exc)) from exc
+    except (AcknowledgementError, ReconciliationError) as exc:
+        raise click.ClickException(f"scheduler stopped, nothing executed: {exc}") from exc
+    except KeyboardInterrupt:
+        click.echo("scheduler stopped (interrupted)", err=True)
+        raise SystemExit(130) from None
+    except SchedulerStopped:
+        click.echo("scheduler stopped (SIGTERM)", err=True)
+        raise SystemExit(143) from None
+
+
+@main.group()
+def queue() -> None:
+    """Inspect the batch queue (read-only)."""
+
+
+@queue.command("ls")
+@_BATCHES_DIR_OPTION
+def queue_ls(batches_dir: Path | None) -> None:
+    """One-shot table: every batch, its not_before, per-run specs and states, and
+    whether it is blocked (missing committed state, unreadable state, a run
+    left running). Read-only."""
+    from silverquillm.queue_view import build_queue_view, render_queue
+
+    for line in render_queue(build_queue_view(_batches_dir(batches_dir))):
+        click.echo(line)
+
+
+@main.command()
+@_BATCHES_DIR_OPTION
+@click.option("--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds")
+def top(batches_dir: Path | None, interval: float) -> None:
+    """Live, read-only view of the queue: order, not_before, running progress. q quits."""
+    from silverquillm.queue_view import run_top
+
+    run_top(_batches_dir(batches_dir), interval=interval)
 
 
 @main.command("results-init")
