@@ -31,9 +31,14 @@ The file-backed queue the bench-side scheduler executes (#39 §5, #66;
   never persisted and is refused, and each entry must be a coherent point of
   one run's life — `running` with its identity and no outcome, `done` with
   `ok: true`, `failed` with `ok: false` and a failure class (only an
-  `unresolvable` failure has no run id). Anything else blocks the batch as
-  unreadable state: nothing runs, the cursor does not move, and the file is
-  never rewritten. A symlink or special file under a state name is refused,
+  `unresolvable` failure has no run id) — and the list as a whole must be a
+  sequence the serial scheduler can write: at most one `running` entry, and
+  only as the last one. A `done` or `failed` entry recorded after a `running`
+  one would be a cursor advanced past a run that never finished, so
+  `[running, done]` is refused whole, never reordered or repaired. Anything
+  else blocks the batch as unreadable state: nothing runs, the cursor does
+  not move, and the file is never rewritten; the same list in a state file
+  no batch names stops the scheduler, because it may hide a run. A symlink or special file under a state name is refused,
   never followed. Batch ids themselves must be plain names
   (`[A-Za-z0-9][A-Za-z0-9._-]*`); a file whose name is not is malformed.
 - **`runtime/<id>.json`** — host-local runtime metadata (gitignored), present

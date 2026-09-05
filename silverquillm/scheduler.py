@@ -68,9 +68,12 @@ Two kinds of scheduler-owned files sit beside the queue:
   error), and the entry must be lifecycle-coherent — a ``running`` run
   carries its identity and no outcome, a ``done`` run its identity and
   ``ok: true`` with no failure, a ``failed`` run ``ok: false`` and a failure
-  class, and only an ``unresolvable`` failure carries no run id or identity.
-  Anything less is a :class:`StateError`: the batch is blocked, its cursor
-  does not move and the file is never rewritten.  The file is opened
+  class, and only an ``unresolvable`` failure carries no run id or identity
+  — and the list as a whole must be a sequence the serial scheduler can
+  write: at most one ``running`` entry, and only as the last, since a
+  terminal entry after a running one would be a cursor advanced past a run
+  that never finished.  Anything less is a :class:`StateError`: the batch is
+  blocked, its cursor does not move and the file is never rewritten.  The file is opened
   without following a link and proven a regular file on the descriptor that
   is read — a symlink or special file under a state name is refused, never
   followed.  It carries **no** host-local
@@ -661,6 +664,29 @@ def _check_run_lifecycle(fields: Mapping[str, Any], *, context: str) -> None:
         )
 
 
+def _check_run_sequence(runs: list[RunState], *, context: str) -> None:
+    """The list as a whole is a sequence the serial scheduler can produce.
+    It starts a run only after the previous one finished, so at most one
+    entry is ``running`` and it is the last one: a terminal entry after a
+    running one would be a cursor advanced past a run that never finished,
+    and accepting it would preserve that cursor through recovery.  The
+    sequence is refused, never reordered or repaired."""
+    running = [run.index for run in runs if run.state == RUN_RUNNING]
+    if len(running) > 1:
+        raise StateError(
+            f"{context}: runs {', '.join(f'#{index}' for index in running)} are all recorded as running;"
+            " one scheduler runs one at a time, so this is not a sequence it wrote — refusing to"
+            " interpret it"
+        )
+    if running and running[0] != len(runs) - 1:
+        raise StateError(
+            f"{context}: run #{running[0]} is recorded as running, yet {len(runs) - 1 - running[0]} later"
+            f" run(s) (#{running[0] + 1} onwards) are recorded as started after it; the serial"
+            " scheduler starts a run only once the previous one finished, so this is not a sequence"
+            " it wrote — refusing to interpret it"
+        )
+
+
 @dataclass
 class RunState:
     """One started run of a batch, as the scheduler observed it — every
@@ -769,7 +795,8 @@ class RunState:
 @dataclass
 class BatchState:
     """``batches/state/<id>.json``: every started run of the batch, in order.
-    ``batch_file`` is the batch file's *name* (never a path)."""
+    ``batch_file`` is the batch file's *name* (never a path).  The list is
+    the batch's cursor, so at most its last entry is ``running``."""
 
     batch: str
     batch_file: str = ""
@@ -796,6 +823,11 @@ class BatchState:
 
     @classmethod
     def from_dict(cls, data: Any, *, context: str) -> BatchState:
+        """Strict: exactly the documented top-level fields in the shape the
+        scheduler writes, every entry strict on its own
+        (:meth:`RunState.from_dict`), and the run list as a whole a sequence
+        the serial scheduler can produce (:func:`_check_run_sequence`).
+        Anything less is a :class:`StateError`; nothing is repaired."""
         if not isinstance(data, Mapping):
             raise StateError(f"{context}: must be a JSON object")
         version = data.get("schema_version")
@@ -811,6 +843,7 @@ class BatchState:
         if not isinstance(runs_raw, list):
             raise StateError(f"{context}: runs must be an array")
         runs = [RunState.from_dict(entry, context=f"{context} run #{i}", position=i) for i, entry in enumerate(runs_raw)]
+        _check_run_sequence(runs, context=context)
         missing = sorted(_STATE_KEYS - set(data))
         if missing:
             raise StateError(f"{context}: lacks field(s) {', '.join(missing)}; a state file is recorded whole")
@@ -892,9 +925,10 @@ def load_state(batches_dir: Path, batch_id: str) -> BatchState | None:
     """The batch's committed state; ``None`` when no state file exists (the
     batch is blocked until the operator acknowledges it — see
     :func:`inspect_batch`).  A malformed, unreadable or other-version file, a
-    symlink or special file under the name, or an entry that fails the
-    strict lifecycle checks is a :class:`StateError`; the file is never
-    rewritten."""
+    symlink or special file under the name, an entry that fails the strict
+    lifecycle checks, or a run list the serial scheduler could not have
+    written (a ``running`` entry anywhere but last) is a :class:`StateError`;
+    the file is never rewritten."""
     path = state_path(batches_dir, batch_id)
     raw = _read_scheduler_file(path, "committed state file")
     if raw is None:
@@ -1027,7 +1061,10 @@ def running_entry(batch_id: str, state: BatchState) -> RunState | None:
     """The one run the committed state records as ``running`` (with the run
     id its container derives from), or ``None``.  More than one, or one
     without a run id, is a :class:`StateError`: one scheduler runs one
-    container at a time, so such a state can only be inspected by hand."""
+    container at a time, so such a state can only be inspected by hand.  The
+    strict loader already refuses both shapes on the way in
+    (:func:`_check_run_sequence`, :func:`_check_run_lifecycle`); this guards a
+    state built in memory."""
     running = state.running
     if len(running) > 1:
         raise StateError(
@@ -1711,6 +1748,7 @@ class Scheduler:
         for batch_id in sorted(batch_ids):
             where = f"{RUNTIME_DIRNAME}/{batch_id}.json"
             orphan = batch_id not in named
+            unreadable: StateError | None = None
             try:
                 state = load_state(self.batches_dir, batch_id)
             except StateError as exc:
@@ -1721,7 +1759,7 @@ class Scheduler:
                         " a container — inspect it, repair or remove it by hand (the history keeps"
                         " the record), and start again"
                     ) from None
-                state = None  # blocked as unreadable by next_work; a runtime file cannot bind to it
+                state, unreadable = None, exc  # blocked as unreadable by next_work; a runtime file cannot bind to it
             try:
                 runtime = load_runtime(self.batches_dir, batch_id)
             except StateError as exc:
@@ -1735,7 +1773,9 @@ class Scheduler:
                 bound = bind_runtime(batch_id, runtime, state) if runtime is not None else None
             except StateError as exc:
                 raise ReconciliationError(
-                    f"{exc}; a run of batch {batch_id} may still hold a container on this host —"
+                    f"{exc}"
+                    + (f" (the committed state cannot be read: {unreadable})" if unreadable is not None else "")
+                    + f"; a run of batch {batch_id} may still hold a container on this host —"
                     " inspect `docker ps`, remove the container by hand, delete the runtime file,"
                     " and start again"
                 ) from None

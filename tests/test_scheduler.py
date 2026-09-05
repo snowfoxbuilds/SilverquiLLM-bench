@@ -1564,6 +1564,109 @@ class TestStrictState:
         assert executor.calls == [] and os.readlink(path) == str(batches / "nowhere.json")
 
 
+#: ``(entry states in list order, message)`` — run lists the serial scheduler
+#: cannot write, each entry coherent on its own.
+SEQUENCES = [
+    (("running", "done"), "run #0 is recorded as running, yet 1 later run"),
+    (("running", "failed"), "run #0 is recorded as running, yet 1 later run"),
+    (("running", "running"), "runs #0, #1 are all recorded as running"),
+    (("done", "running", "failed"), "run #1 is recorded as running, yet 1 later run"),
+    (("running", "done", "failed"), "run #0 is recorded as running, yet 2 later run"),
+]
+SEQUENCE_IDS = ["running-done", "running-failed", "running-running", "done-running-failed", "running-done-failed"]
+
+
+class TestRunSequence:
+    """The run list is the cursor of a *serial* scheduler, which starts a run
+    only once the previous one finished: at most one entry is ``running`` and
+    it is the last.  A list the scheduler cannot have written — a terminal
+    entry after a running one — is refused whole, so an advanced cursor over
+    a run that never finished is never preserved through recovery."""
+
+    RUNS = ("smoke-x-2026-09-03T11-00", "smoke-x-2026-09-03T11-30", "smoke-x-2026-09-03T12-00")
+
+    def _payload(self, candidate: Path, states: tuple[str, ...], *, batch_id: str = "b") -> dict[str, Any]:
+        entries = [run_entry(i, candidate, state, run_id=self.RUNS[i]) for i, state in enumerate(states)]
+        return state_payload(candidate, *entries, batch_id=batch_id)
+
+    def _frozen(self, path: Path) -> tuple[bytes, int]:
+        os.utime(path, (1_600_000_000, 1_600_000_000))
+        return path.read_bytes(), path.stat().st_mtime_ns
+
+    @pytest.mark.parametrize(("states", "message"), SEQUENCES, ids=SEQUENCE_IDS)
+    def test_the_strict_loader_refuses_the_sequence_although_every_entry_is_coherent(
+        self, batches: Path, candidate: Path, states: tuple[str, ...], message: str
+    ) -> None:
+        payload = self._payload(candidate, states)
+        for i, entry in enumerate(payload["runs"]):
+            assert sched.RunState.from_dict(entry, context=f"run #{i}", position=i).state == states[i]
+        with pytest.raises(sched.StateError, match=message):
+            sched.BatchState.from_dict(payload, context="b.json")
+        (batches / "state").mkdir()
+        (batches / "state" / "b.json").write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(sched.StateError, match=message):
+            sched.load_state(batches, "b")
+
+    def test_the_sequences_the_scheduler_writes_load(self, candidate: Path) -> None:
+        for states in (("done", "running"), ("failed", "done", "running"), ("done", "failed"), ("running",), ()):
+            assert [r.state for r in sched.BatchState.from_dict(self._payload(candidate, states), context="b.json").runs] == list(states)
+
+    @pytest.mark.parametrize("with_runtime", [False, True], ids=["no-runtime", "runtime"])
+    @pytest.mark.parametrize(("states", "message"), SEQUENCES, ids=SEQUENCE_IDS)
+    def test_a_named_batch_with_the_sequence_is_blocked_and_nothing_runs_or_is_touched(
+        self, batches: Path, candidate: Path, logs, states: tuple[str, ...], message: str, with_runtime: bool
+    ) -> None:
+        write_batch(batches, "b", [spec(candidate) for _ in range(4)])
+        path = batches / "state" / "b.json"
+        path.write_text(json.dumps(self._payload(candidate, states)), encoding="utf-8")
+        before = self._frozen(path)
+        running = states.index("running")
+        if with_runtime:
+            sched.save_runtime(batches, runtime_record("b", self.RUNS[running], index=running))
+        write_batch(batches, "c", [spec(candidate, budget=7)])
+        containers = FakeContainers({container_name(run): "running" for run in self.RUNS})
+        executor = StubExecutor()
+        runner = make_scheduler(batches, executor, logs=logs, containers=containers)
+        if with_runtime:
+            # This host's runtime record must bind to committed state before any
+            # container is inspected; state that cannot be read binds nothing, so
+            # recovery stops everything with the evidence — state and record — kept.
+            with pytest.raises(sched.ReconciliationError, match="no readable committed state") as info:
+                runner.run_until_idle()
+            assert re.search(message, str(info.value)), str(info.value)
+            assert executor.calls == [] and sched.runtime_path(batches, "b").exists()
+        else:
+            assert runner.run_until_idle() == 1
+            assert [(c.batch_id, c.spec.budget_seconds) for c in executor.calls] == [("c", 7)], "only the healthy batch runs"
+            blocked = [line for line in logs if line.startswith("BLOCKED b [unreadable-state]")]
+            assert len(blocked) == 1 and re.search(message, blocked[0]), logs
+            _, block = sched.inspect_batch(batches, "b", hostname=HOST)
+            assert block is not None and block.kind == sched.BLOCK_UNREADABLE_STATE
+        assert containers.touched == [], "no container is inspected or removed"
+        assert (path.read_bytes(), path.stat().st_mtime_ns) == before, "the state is never rewritten"
+
+    @pytest.mark.parametrize("with_runtime", [False, True], ids=["no-runtime", "runtime"])
+    @pytest.mark.parametrize(("states", "message"), SEQUENCES, ids=SEQUENCE_IDS)
+    def test_a_state_only_file_with_the_sequence_stops_the_scheduler_before_anything(
+        self, batches: Path, candidate: Path, logs, states: tuple[str, ...], message: str, with_runtime: bool
+    ) -> None:
+        write_batch(batches, "a", [spec(candidate)])
+        path = batches / "state" / "gone.json"
+        path.write_text(json.dumps(self._payload(candidate, states, batch_id="gone")), encoding="utf-8")
+        before = self._frozen(path)
+        running = states.index("running")
+        if with_runtime:
+            sched.save_runtime(batches, runtime_record("gone", self.RUNS[running], index=running))
+        containers = FakeContainers({container_name(run): "running" for run in self.RUNS})
+        executor = StubExecutor()
+        with pytest.raises(sched.ReconciliationError, match="no batch file names, and it cannot be read") as info:
+            make_scheduler(batches, executor, logs=logs, containers=containers).run_until_idle()
+        assert re.search(message, str(info.value)) and "may record a run still holding a container" in str(info.value)
+        assert executor.calls == [] and containers.touched == [], "nothing runs — not even the healthy batch"
+        assert (path.read_bytes(), path.stat().st_mtime_ns) == before
+        assert sched.runtime_path(batches, "gone").exists() is with_runtime
+
+
 class TestOrphanedState:
     """Committed state that no batch file names is still committed state: a
     running entry in it stops the scheduler before any container or executor
