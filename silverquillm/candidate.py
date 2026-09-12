@@ -14,9 +14,11 @@ the bench will attribute results to, and it never trusts a recorded value:
 2. **Refuse secret values** — the bundle carries secret slot *names* only.  A
    slot entry that is not an environment-variable name, a manifest field
    shaped like a credential carrier, or any bundle byte that looks like a
-   credential (API-key, token, private-key shapes; a declared slot assigned
-   a credential-shaped value) is a hard refusal that names the file and the
-   shape, never the value.
+   credential (API-key, token, private-key shapes; a declared slot used as
+   an assignment key with a non-empty value of *any* length or character
+   set — ``SLOT=x``, ``"SLOT": "…"``, ``'SLOT' = '…'``; an empty
+   assignment declares the slot and is not a value) is a hard refusal that
+   names the file and the shape, never the value.
 3. **Verify** — delegate to TheOzolith's published verifier
    (``theozolith_control.candidate.verify_bundle``, ``bundle_format_version``
    / ``identity_spec_version`` surface): strict manifest parse, knowledge and
@@ -35,6 +37,13 @@ The adapter is an opaque field throughout: nothing here (or anywhere in the
 bench) allowlists adapter names — claude and codex today, Pi later; which
 adapters a bundle *can* name is TheOzolith's parse gate, consumed through the
 verifier, never restated.
+
+The credential-shape detector behind step 2 is exported as
+:func:`scan_tree_for_credentials` so the promote gate can hold the *whole*
+promoted candidate — vendored knowledge and policy source, the ``PUBLISHABLE``
+marker, the README — to the same rule, and :func:`redact_credentials` lets a
+log line or a state file carry an error message with any credential shape
+blanked out.
 
 Two more responsibilities live here because they are the same trust boundary:
 
@@ -59,7 +68,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -81,11 +90,15 @@ __all__ = [
     "CandidateBundle",
     "CandidateRefusedError",
     "CandidateVendorError",
+    "CredentialFinding",
     "ImageBuildError",
     "VendoredCandidate",
     "build_candidate_image",
+    "credential_shapes",
     "load_candidate_bundle",
+    "redact_credentials",
     "resolve_candidate_path",
+    "scan_tree_for_credentials",
     "vendor_candidate",
 ]
 
@@ -118,7 +131,165 @@ _CREDENTIAL_PATTERNS: tuple[tuple[str, re.Pattern[bytes]], ...] = (
     ("JSON Web Token", re.compile(rb"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}")),
     ("bearer credential", re.compile(rb"(?i)\bbearer\s+[A-Za-z0-9_\-.=]{20,}")),
 )
-_SLOT_ASSIGNMENT_VALUE = rb"\s*[=:]\s*[\"']?[A-Za-z0-9_\-.]{20,}"
+# A declared secret slot used as an assignment KEY, in any of the forms a
+# config or a log can take: the key optionally quoted (JSON, TOML, YAML and a
+# shell all do), ``=`` or ``:`` as the operator, and the value whatever
+# follows on the same line — a quoted string up to its closing quote, or a
+# bare scalar up to the end of the line (a bare value has no delimiter, so
+# nothing after it on the line is trusted).  Inside a quoted string a
+# backslash escapes the next character, so an escaped quote (``\"``) or an
+# escaped backslash (``\\``) belongs to the value and the string closes only
+# at an unescaped quote — the way JSON and every serializer that emits it
+# write a value that happens to contain a quote; a quote that never closes
+# falls through to the bare form.  No length and no character-class rule: a
+# two-character value is as much a secret as a forty-character one.  The
+# pattern admits an EMPTY value on purpose, so that emptiness is decided in
+# exactly one place, :func:`_assigned_value`.
+_SLOT_ASSIGNMENT_TEMPLATE = (
+    rb"(?<![A-Za-z0-9_])(?P<q>[\"']?)%s(?P=q)[ \t]*[=:][ \t]*"
+    rb"(?:\"(?P<dq>(?:[^\"\\\r\n]|\\[^\r\n])*)\"(?![\"'])"
+    rb"|'(?P<sq>(?:[^'\\\r\n]|\\[^\r\n])*)'(?![\"'])"
+    rb"|(?P<bare>[^\r\n]*))"
+)
+
+
+def _assigned_value(match: re.Match[bytes]) -> bytes:
+    """The scalar a slot-assignment match assigns, stripped of surrounding
+    whitespace: empty for ``SLOT=``, ``SLOT = ""`` and ``"SLOT": ''`` — the
+    forms a worker-type definition's ``[secrets]`` table and a config
+    template use to *declare* a slot, which leak nothing."""
+    for group in ("dq", "sq", "bare"):
+        value = match.group(group)
+        if value is not None:
+            return value.strip()
+    return b""
+
+
+def _any_match(match: re.Match[bytes]) -> bool:
+    return True
+
+
+def _non_empty_assignment(match: re.Match[bytes]) -> bool:
+    return bool(_assigned_value(match))
+
+
+@dataclass(frozen=True)
+class _Shape:
+    """One credential shape: a bytes pattern and the predicate a match must
+    also satisfy.  :func:`scan_tree_for_credentials` and
+    :func:`redact_credentials` share these, so what one refuses the other
+    blanks — and neither ever surfaces the matched bytes."""
+
+    label: str
+    pattern: re.Pattern[bytes]
+    accept: Callable[[re.Match[bytes]], bool] = _any_match
+
+    def found(self, data: bytes) -> bool:
+        return any(self.accept(match) for match in self.pattern.finditer(data))
+
+    def redact(self, data: bytes) -> bytes:
+        placeholder = f"[redacted: {self.label}]".encode()
+        return self.pattern.sub(lambda match: placeholder if self.accept(match) else match.group(0), data)
+
+
+_CREDENTIAL_SHAPES: tuple[_Shape, ...] = tuple(_Shape(label, pattern) for label, pattern in _CREDENTIAL_PATTERNS)
+
+
+def _slot_shapes(secret_slots: Iterable[str]) -> list[_Shape]:
+    return [
+        _Shape(
+            f"a value assigned to secret slot {slot}",
+            re.compile(_SLOT_ASSIGNMENT_TEMPLATE % re.escape(slot.encode("ascii"))),
+            _non_empty_assignment,
+        )
+        for slot in secret_slots
+        if isinstance(slot, str) and _SLOT_NAME_RE.fullmatch(slot)
+    ]
+
+
+def credential_shapes() -> tuple[str, ...]:
+    """The names of every credential shape the detector recognizes (the
+    declared-slot assignment shape is per slot and reads ``a value assigned
+    to secret slot <NAME>``)."""
+    return tuple(shape.label for shape in _CREDENTIAL_SHAPES) + ("a value assigned to a declared secret slot",)
+
+
+@dataclass(frozen=True)
+class CredentialFinding:
+    """One file that carries a credential shape: *where* (relative to the
+    scanned root) and *what shape* — never the bytes."""
+
+    path: Path
+    shape: str
+
+    def __str__(self) -> str:
+        return f"{self.path}: {self.shape}"
+
+
+def scan_tree_for_credentials(
+    root: Path, *, secret_slots: Iterable[str] = (), what: str = "entry"
+) -> list[CredentialFinding]:
+    """Scan every regular file under *root* for a credential shape — the
+    complete pattern set (API keys, GitHub / AWS / Slack tokens, private-key
+    blocks, JWTs, bearer credentials) plus any of *secret_slots* used as an
+    assignment key with a non-empty value, whatever that value's length or
+    characters — and return one finding per hit, by path and shape only.
+
+    Strict on the tree: symlinks (to files or directories) and special files
+    are a :class:`CandidateRefusedError`, never followed; an unreadable file
+    is a refusal naming the file.  Bytes are matched as bytes, so a binary
+    file is scanned like any other and nothing is ever decoded or echoed.
+    """
+    root = Path(root)
+    shapes = (*_CREDENTIAL_SHAPES, *_slot_shapes(secret_slots))
+    findings: list[CredentialFinding] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        rel_dir = Path(dirpath).relative_to(root)
+        for name in sorted(dirnames):
+            entry = Path(dirpath) / name
+            if os.path.islink(entry) or not stat.S_ISDIR(os.lstat(entry).st_mode):
+                raise CandidateRefusedError(
+                    f"{what} {rel_dir / name} is not a regular directory — symlinks and"
+                    " special files are refused"
+                )
+        for name in sorted(filenames):
+            file = Path(dirpath) / name
+            rel = rel_dir / name
+            try:
+                mode = os.lstat(file).st_mode
+            except OSError as exc:
+                raise CandidateRefusedError(f"cannot inspect {what} {rel}: {exc}") from exc
+            if os.path.islink(file) or not stat.S_ISREG(mode):
+                raise CandidateRefusedError(
+                    f"{what} {rel} is not a regular file — symlinks and special files are refused"
+                )
+            try:
+                data = file.read_bytes()
+            except OSError as exc:
+                raise CandidateRefusedError(
+                    f"cannot read {what} {rel} ({exc.strerror or type(exc).__name__}) — an"
+                    " unreadable file cannot be cleared of secret values"
+                ) from exc
+            for shape in shapes:
+                if shape.found(data):
+                    findings.append(CredentialFinding(path=rel, shape=shape.label))
+                    break
+    return findings
+
+
+def redact_credentials(text: str, *, secret_slots: Iterable[str] = ()) -> str:
+    """*text* with every credential shape replaced by ``[redacted: <shape>]``
+    — for log lines, state files and error summaries that must never carry
+    a value even when an exception message does.  The same shapes as
+    :func:`scan_tree_for_credentials`: a declared slot assigned a value of
+    any length or character set is blanked whole (key, operator and value;
+    a bare value to the end of its line, a quoted one to its closing quote
+    with every escaped quote or backslash inside it — no fragment of the
+    value survives), an empty assignment is left as it is."""
+    data = text.encode("utf-8", errors="surrogateescape")
+    for shape in (*_CREDENTIAL_SHAPES, *_slot_shapes(secret_slots)):
+        data = shape.redact(data)
+    return data.decode("utf-8", errors="replace")
 
 
 class CandidateRefusedError(Exception):
@@ -303,31 +474,13 @@ def _refuse_secret_values(bundle_dir: Path, manifest: Mapping[str, Any]) -> None
                 " name — a slot entry carries the NAME a consumer binds, never a value"
                 " (refused without echoing the entry)"
             )
-    slot_patterns = [
-        (f"a value assigned to secret slot {slot}", re.compile(rb"\b" + slot.encode("ascii") + _SLOT_ASSIGNMENT_VALUE))
-        for slot in slots
-    ]
-    for dirpath, _dirnames, filenames in os.walk(bundle_dir, followlinks=False):
-        for name in sorted(filenames):
-            file = Path(dirpath) / name
-            try:
-                mode = os.lstat(file).st_mode
-            except OSError as exc:
-                raise CandidateRefusedError(f"cannot inspect bundle entry {file}: {exc}") from exc
-            if not stat.S_ISREG(mode):
-                continue  # the verifier refuses symlinks and special files by shape
-            try:
-                data = file.read_bytes()
-            except OSError as exc:
-                raise CandidateRefusedError(f"cannot read bundle entry {file}: {exc}") from exc
-            rel = file.relative_to(bundle_dir)
-            for label, pattern in (*_CREDENTIAL_PATTERNS, *slot_patterns):
-                if pattern.search(data):
-                    raise CandidateRefusedError(
-                        f"bundle entry {rel} contains what looks like {label} — a Candidate"
-                        " Bundle carries secret slot NAMES only; a secret value anywhere"
-                        " in the bundle is a hard refusal (the value is not echoed)"
-                    )
+    findings = scan_tree_for_credentials(bundle_dir, secret_slots=slots, what="bundle entry")
+    if findings:
+        raise CandidateRefusedError(
+            f"bundle entry {findings[0].path} contains what looks like {findings[0].shape}"
+            " — a Candidate Bundle carries secret slot NAMES only; a secret value anywhere"
+            " in the bundle is a hard refusal (the value is not echoed)"
+        )
 
 
 def _string(manifest: Mapping[str, Any], key: str) -> str:

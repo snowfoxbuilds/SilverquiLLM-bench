@@ -1,0 +1,118 @@
+# Published results
+
+The curated public set of benchmark results (#39 §4, #66;
+`docs/specs/BENCHMARK-CANDIDATES.md`). Each published run is one directory
+holding its Run Record byte for byte — `manifest.json` + `scores.json` —
+ported from the private Results Repo by:
+
+```bash
+python scripts/publish_results.py --results-repo <clone> --dest published/<subdir> RUN_ID...
+```
+
+The script is a porter with two checks and never commits:
+
+- **Traceability — hard refusal.** The run's candidate identity must be
+  checked in under `candidates/` and verify by recomputation. A run of an
+  unpromoted, tampered, or legacy candidate cannot be published. The
+  candidate must be what the tree holds: a real `candidates/<slug>--<hash8>/`
+  directory with a real `bundle/`, never a symlink — even one pointing at a
+  valid bundle elsewhere on the host is refused, not followed. The source run
+  record is proven through every ancestor — `results/`, the candidate-hash
+  directory and the run directory real directories, `manifest.json` and
+  `scores.json` regular files — and proven again immediately before each
+  copy; a record behind a symlinked ancestor is never publishable, however
+  valid its target.
+- **Validity — warning.** `leaderboard_valid: false` (a Resume Leg, an
+  ineligible benchmark, an unevaluated run) publishes only with
+  `--allow-invalid`; the flag travels with the record and leaderboard tooling
+  filters on it mechanically.
+
+Review the published files and commit them — the commit is the approval stamp.
+
+## Publication is a transaction
+
+Every run is checked before a byte is written. New records are copied into a
+private staging directory beside the destination, re-read and proven byte
+identical to their sources, and only then moved into place — one atomic
+rename per record — under a journal (`<dest>/.publish-journal.json`) that
+names exactly the directories that invocation creates. A failure at any step
+rolls back every directory the transaction created and leaves records that
+were already there untouched; a record that already exists byte-identically
+is skipped — provided it is a real directory holding both files as regular
+files, since a symlinked record or record file is refused even when it
+resolves to identical bytes — and one that differs is a conflict — a
+published record is never overwritten. The success summary prints only
+after the commit.
+
+Only one invocation works a destination at a time. The whole lifecycle —
+recovery, planning, staging, commit, finish, rollback — runs under a lock on
+the destination directory itself (an advisory `flock` on the directory, so
+there is no lock file to commit or clean up, and nothing is inferred from a
+recorded pid or hostname). A second invocation started while the first is
+still running is refused outright (`REFUSED: another publication invocation
+holds …`) — it never recovers a journal that belongs to a live transaction.
+The kernel drops the lock when the holder exits, crash or not, so the next
+invocation then recovers whatever journal was left. That is the difference
+between a live transaction and a stale journal: the first holds the lock, the
+second cannot. `--dry-run` takes a shared hold and reports a transaction in
+flight as in flight, never as something to recover. Beginning is
+all-or-nothing as well: once the journal exists, any failure — running out
+of descriptors, writing the journal, closing a descriptor, creating staging —
+makes the attempt remove what it created (staging, then the journal, proven
+to be that very file and never a replacement) and refuse with the cause,
+leaving no journal, no staging directory and no destination it had created;
+if even that removal fails, what is left is kept and named, and the message
+says exactly what the journal plans and what to do. An absent destination —
+and any missing parent — is created for the lifecycle and, when nothing was
+published into it, removed again on release, each only on proof: the script
+makes it under a private name, opens it and takes its identity from that
+descriptor, then places it without replacing anything under a lock on its
+parent directory, so a directory that appears there meanwhile is someone
+else's and is left alone; it removes it only while, under that same lock, the
+path still names that very directory and it is empty, and through a private
+name again, so the only thing ever deleted is a name nobody else knows. A
+replacement, anything someone else wrote there, a directory that cannot be
+inspected or removed, or one that could not be moved back into place is kept
+and reported as `CLEANUP FAILED: …` (exit 2, the refusal still printed)
+rather than as a clean refusal; a failure while opening, locking or inspecting
+the freshly created destination removes it again before the refusal is
+printed. Every publish and promote invocation takes the same parent lock,
+which is what keeps those instants safe between them; a process outside it
+that swaps the entry in the same instant is caught by the proofs and
+reported, not deleted.
+
+If the process dies mid-way, the next invocation against that destination
+reads the journal first and finishes the job: a transaction that had already
+committed every record is completed, anything less is rolled back. The journal
+is trusted only as a real regular file in the destination: it is opened
+without following a link and its type is proven on the open descriptor before
+a byte is read, so a symlinked journal (even one pointing at a plausible
+journal elsewhere), a directory, a FIFO or a device under its name is refused,
+never followed — by recovery and by `--dry-run` alike. Recovery removes only
+what the journal proves the transaction created: every name in it must be a
+plain child of the destination, and every directory it would remove is proven
+— before anything goes — to be a real directory directly under the destination
+holding only `manifest.json` and `scores.json` as regular files (a directory,
+symlink, FIFO, socket or device under either name is refused; a record still
+in staging may hold one of the two, a committed record must hold both). A
+symlink is refused, never followed; every target is checked before the first
+is removed; and a journal that fails any check is refused whole with every
+byte, name and mtime unchanged. A rollback that itself fails is reported
+prominently and keeps the journal; nothing publishes into that destination
+until recovery succeeds. Do not delete a journal by hand unless you have
+inspected the directories it names.
+
+`--dry-run` is read-only: it checks every run and lists what would be
+published, and if a journal is pending it reports the recovery that would
+occur (`RECOVERY REQUIRED …`) and exits nonzero without performing it —
+bytes and mtimes under the destination stay exactly as they were.
+
+How this tree is organized (per blog post, per experiment, …) is manual.
+Tooling discovers published results by manifest, never by path: any directory
+under `published/` holding `manifest.json` beside `scores.json` whose pair
+re-proves as a Run Record named after the directory is a published run
+(`scripts/publish_results.py`, `iter_published_records`); dot-prefixed
+directories (a transaction's staging) never are. A published record is a
+real in-tree directory holding regular files: discovery never follows a
+symlinked directory and refuses a symlink or special file under a record
+file's name. Heavy artifacts (transcripts, workspaces) never enter git.

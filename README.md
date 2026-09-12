@@ -125,8 +125,53 @@ directory, with no adapter or model registry to update.
 | `silverquillm chain <run_id>` | Print the chain of resume legs leading to a run. |
 | `silverquillm rescore <run_id>` | Re-run audited tests against an existing run and rewrite its scores. |
 | `silverquillm logs --run <run_name>` | Tabbed, per-channel log viewer (live or archived). |
+| `silverquillm scheduler [--once] [--replay-without-state ID] [--acknowledge-cleanup ID]` | Run the single-writer batch scheduler over `batches/*.toml` (serial, name order then file order, `not_before` respected, identity resolved at run start; committed portable state in `batches/state/`; a batch without state is blocked until acknowledged; abandoned containers reconciled before anything runs). |
+| `silverquillm queue ls` | One-shot, read-only table of the batch queue: batches, `not_before`, per-run specs and states, and every blocked batch (missing state, unreadable state, an abandoned run). |
+| `silverquillm top` | Live, read-only view of the queue (`q` quits). |
+| `scripts/promote_candidate.py <config-repo> <worker-type>` | Promote a worker-type definition into `candidates/` (vendor-at-promote is strict; the whole tree is scanned for secret values; never runs git). |
+| `scripts/publish_results.py --results-repo … --dest published/<subdir> RUN_ID…` | Publish Run Records into `published/` transactionally (traceability = hard refusal, validity = warning; never commits). |
 
 A `--cards` filter is available for development and pipeline validation, but filtered runs are **not** leaderboard-valid.
+
+---
+
+## Candidates, Batches, and Publishing
+
+The bench-side lifecycle of a candidate (`docs/specs/BENCHMARK-CANDIDATES.md`):
+
+1. **Promote.** `python scripts/promote_candidate.py <config-repo> <worker-type>`
+   copies a worker-type definition from your private Config Repo into
+   `candidates/<slug>--<hash8>/` — definition (base pinned by digest), the
+   knowledge and policy source trees it references, the exported bundle, and a
+   README stub you complete. A referenced knowledge tree must carry a
+   `PUBLISHABLE` marker at its root or the candidate cannot be promoted:
+   knowledge that cannot be published means its results cannot be published
+   either. The whole directory is scanned for secret values before it appears
+   and the generated files name no host-local path; promoting the same
+   identity again is a no-op only when the vendored source is unchanged (your
+   completed README is never compared). Commit the directory yourself — the
+   commit is the approval stamp.
+2. **Queue.** Write `batches/<id>.toml` (an optional `not_before` plus ordered
+   `[[runs]]` of candidate + mode + benchmark + budget; `batches/README.md`),
+   start it with `silverquillm scheduler --replay-without-state <id>` (a batch
+   without committed state is blocked, because starting from entry 0 could
+   replay finished runs), and commit `batches/state/<id>.json` as the
+   scheduler advances it. Batches execute serially; the file is re-read before
+   every not-yet-started run; each candidate's identity is recomputed at run
+   start; a failed run is recorded and the batch continues; a run abandoned by
+   a dead scheduler has its container removed before anything else runs.
+   `silverquillm queue ls` and `silverquillm top` show the queue without
+   touching it. Batch ids are one-shot: never reuse one.
+3. **Publish.** `python scripts/publish_results.py --results-repo <clone>
+   --dest published/<subdir> RUN_ID...` publishes `manifest.json` +
+   `scores.json` per run into `published/` as one transaction (all requested
+   records or none; an interrupted run is recovered from its journal next
+   time, and recovery removes only what that journal proves it created under
+   the destination). A run whose candidate is not checked in under
+   `candidates/` (or does not verify) is refused outright; a run with
+   `leaderboard_valid: false` is a warning, publishable with `--allow-invalid`
+   and filtered out of any leaderboard mechanically. `--dry-run` checks and
+   reports without writing anything. Review the diff and commit.
 
 ---
 

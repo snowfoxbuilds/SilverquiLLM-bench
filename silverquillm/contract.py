@@ -70,6 +70,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import secrets
 import shutil
 import time
 import traceback
@@ -120,16 +122,19 @@ from silverquillm.proposal import (
 __all__ = [
     "EVIDENCE_FILE",
     "FAILURE_CLASSES",
+    "RUNS_DIRNAME",
     "TRUSTED_INPUT_DIRNAME",
     "WORKSPACE_FINAL_DIRNAME",
     "ContractRunResult",
     "RunFailure",
     "apply_proposal",
+    "candidate_label",
     "container_name",
     "container_spec",
     "drive_contract_run",
     "evidence_path",
     "harvest_workspace_final",
+    "new_run_name",
     "read_harness_status",
     "snapshot_trusted_input",
 ]
@@ -194,6 +199,11 @@ EVIDENCE_SCHEMA = "silverquillm.contract-run/2"
 TRUSTED_INPUT_DIRNAME = "trusted_input"
 WORKSPACE_FINAL_DIRNAME = "workspace_final"
 PR_BODY_FILE = "pr_body.md"
+#: Where Contract Run artifacts live under the bench repo: ``runs/<label>/<run-id>/``
+#: (gitignored — heavy, never committed; records go to the results repo).
+RUNS_DIRNAME = "runs"
+
+_UNSAFE_LABEL_CHARS = re.compile(r"[^A-Za-z0-9._-]")
 
 # The harness anchors two pre-work refusals at the START of its status error
 # (behind the session layer's "harness failed: " wrapper), exactly as the
@@ -221,6 +231,26 @@ CandidateVendor = Callable[[Path, CandidateBundle], VendoredCandidate]
 
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def candidate_label(candidate_path: Path) -> str:
+    """The run-dir / run-id label for a candidate path: its directory name
+    (``<slug>--<hash8>`` for a checked-in candidate), as one safe segment."""
+    name = Path(candidate_path).resolve().name or "candidate"
+    return _UNSAFE_LABEL_CHARS.sub("-", name).lstrip(".") or "candidate"
+
+
+def new_run_name(benchmark_id: str, label: str, results_dir: Path) -> str:
+    """A fresh run id ``<benchmark>-<label>-<YYYY-MM-DDThh-mm>`` that does not
+    yet exist under *results_dir* (a short hex nonce disambiguates a clash) —
+    the one naming rule ``silverquillm run --candidate`` and the scheduler
+    share, so a run is addressable the same way whoever started it."""
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M")
+    base = f"{benchmark_id}-{label}-{ts}"
+    name = base
+    while (Path(results_dir) / name).exists():
+        name = f"{base}-{secrets.token_hex(2)}"
+    return name
 
 
 # ---------------------------------------------------------------------------
