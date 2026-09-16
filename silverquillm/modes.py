@@ -6,16 +6,10 @@ benchmark, never part of candidate identity, and never encoded in an image
 name.  The registry is in-code (not filesystem-discovered) so the set of
 runnable modes is fixed and auditable.
 
-Per the Bench Contract (``docs/specs/BENCH-CONTRACT.md``), the scaffolding
-prompt always comes from TheOzolith's production renderer
-(:func:`theozolith_worker.api.render_run_prompt`) — a hand-rolled template
-would drift silently as the production prompt evolves.  A Benchmark Mode may
-therefore vary only the *synthetic issue* the renderer wraps (task synthesis),
-never the prompt scaffolding and never the substrate's execution ``mode``.
-
-The substrate's execution mode (``run`` / ``review``) is a different concept
-that selects the Output Proposal schema; bench implementer runs are always
-``mode: run`` (BENCH-CONTRACT.md).  Reviewer runs are deferred (#39).
+The benchmark owns the shared prompt and proposal contract. Basic and planned
+modes vary only the synthetic issue addendum; their inputs and gate semantics
+are compared through the standalone Construct file interface. Review modes
+remain separately selectable experiments rather than an Ozolith runtime dependency.
 
 Public API
 ----------
@@ -38,13 +32,13 @@ __all__ = [
 
 #: Constant driver reference stamped by every bench-driven mode.  The bench is
 #: one driver; the mode does not select a different one.
-DRIVER_REF = "bench:jobdir-v1"
+DRIVER_REF = "bench:construct-v1"
 
 #: Constant evaluation method: every bench run is scored by the Audited Eval.
 EVALUATION_METHOD = "audited_eval"
 
 #: The ``planned`` mode's task-synthesis variation: a plan-first clause appended
-#: to the synthetic issue body.  The production renderer wraps it unchanged.
+#: to the synthetic issue body.  The benchmark renderer wraps it unchanged.
 _PLANNED_ADDENDUM = (
     "\n\n## Approach\n\n"
     "Before implementing, write a short plan: list the target cards, the engine "
@@ -61,10 +55,10 @@ class UnknownModeError(Exception):
 class BenchmarkMode:
     """A Benchmark Mode: a name plus its task-synthesis variation.
 
-    ``issue_addendum`` is appended to the synthetic issue body the production
+    ``issue_addendum`` is appended to the synthetic issue body the benchmark
     prompt renderer wraps (empty for no change).  ``basic`` and ``planned``
     differ only in that addendum — same driver, same evaluation method, same
-    production prompt scaffolding, same proposal contract.
+    benchmark prompt scaffolding, same proposal contract.
     """
 
     name: str

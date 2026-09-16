@@ -1,56 +1,6 @@
-"""Job-directory staging: the bench replays TheOzolith's implementer Run Contract.
+"""Benchmark-owned task staging and isolated driver git.
 
-A Contract Run drives a candidate through the *same* on-disk seam the production
-substrate uses (BENCH-CONTRACT.md; ADR-0013/0019/0046): a per-run job directory
-bind-mounted at ``/job`` holding the manifest, the driver-rendered task, the
-Context Tree, the checked-out repo the agent works in, and the ``output/`` slot
-the in-image harness and the agent write.  Benchmark evidence transfers by
-construction because the bench does not imitate the contract — it *consumes*
-TheOzolith's published entry points (``theozolith_worker.api``), so nothing here
-can drift from production as the templates evolve.
-
-What :func:`stage_job_dir` materializes (all via the published API):
-
-- ``input/manifest.json`` — a production :class:`~theozolith_worker.api.Manifest`
-  (``mode: "run"``, ``round: 1``, stamped ``schema_version``, the production
-  default ``workdir``, the Candidate Bundle's ``adapter`` verbatim) written
-  with :func:`~theozolith_worker.api.write_manifest`.  The real
-  ``read_manifest`` rejects unknown keys, so the Benchmark Mode never rides
-  the manifest — it lives on the RunRecord and shapes only the task.
-- ``input/prompt.md`` — the production implementer prompt, byte-for-byte from
-  :func:`~theozolith_worker.api.render_run_prompt` (the task rides the synthetic
-  issue body it wraps, never a bench-authored template).
-- ``input/issue.json`` + ``input/issue/`` — the synthetic GitHub-style issue and
-  its Context Tree, the latter via :func:`~theozolith_worker.api.write_tree`.
-- ``input/jobs/`` + ``output/jobs/`` — the driver↔harness jobs channel the gate
-  travels over; ``output/`` is otherwise empty (the harness writes
-  ``status.json``/``transcript.txt``, the agent ``proposal.json``).
-- ``checkout/`` — the benchmark workspace, git-initialized with a seed commit so
-  the agent sees an ordinary repository (``git status``/``git diff``).
-
-Beside the job dir — outside the bind mount, so nothing that runs in the
-container can reach it — :func:`stage_job_dir` also creates the **driver-owned
-repository** ``run_dir/driver.git`` (:func:`driver_git_dir`), seeded with the
-same tree.  The driver's post-exit commit is made through that repository with
-the checkout as its work tree (:func:`driver_git`), never through the
-checkout's own ``.git``: hooks, ``core.fsmonitor``, filters, or aliases a
-candidate plants in ``checkout/.git`` are candidate-controlled code and would
-otherwise execute in the benchmark process at commit time.
-
-Staging is atomic and retry-safe: the job tree is built in a private sibling
-and published with a single :func:`os.replace` as the last step, and an
-existing job dir or driver repository is a loud conflict — a retry can never
-inherit a prior attempt's proposal, status, transcript, or checkout.
-
-Public API
-----------
-- :class:`BenchmarkRef` — a resolved, runnable benchmark.
-- :func:`load_benchmark` — resolve ``benchmarks/<id>/config.json``.
-- :func:`stage_job_dir` — build ``run_dir/job/`` (+ ``run_dir/driver.git``).
-- :func:`driver_git_dir` / :func:`driver_git` — the driver-owned repository.
-- :class:`BenchmarkNotRunnableError` / :class:`BenchmarkNotFoundError`
-  / :class:`JobDirConflictError`.
-"""
+The candidate sees its workspace and declared file mounts. The driver uses a separate, unmounted bare repository so candidate hooks and git configuration never execute on the host. Staging publishes atomically and refuses reuse of an existing run."""
 
 from __future__ import annotations
 
@@ -65,8 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from theozolith_worker import api
-
+from silverquillm import workflow as api
+from silverquillm._bootstrap import repository_root
 from silverquillm.modes import BenchmarkMode
 
 __all__ = [
@@ -84,7 +34,7 @@ __all__ = [
     "stage_job_dir",
 ]
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = repository_root()
 
 #: Where the job directory is bind-mounted inside the container (substrate parity).
 CONTAINER_JOB_PATH = api.CONTAINER_JOB_PATH  # "/job"
@@ -176,8 +126,7 @@ def load_benchmark(bench_id: str, *, repo_root: Path | None = None) -> Benchmark
     if not config_path.is_file():
         available = _available_benchmarks(repo_root)
         raise BenchmarkNotFoundError(
-            f"unknown benchmark {bench_id!r}; "
-            f"available: {', '.join(available) or '(none)'}"
+            f"unknown benchmark {bench_id!r}; available: {', '.join(available) or '(none)'}"
         )
     config = json.loads(config_path.read_text(encoding="utf-8"))
     if not isinstance(config, dict):
@@ -309,6 +258,8 @@ def driver_git(
         **os.environ,
         "GIT_DIR": str(driver_git_dir(run_dir)),
         "GIT_WORK_TREE": str(checkout),
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
     }
     return subprocess.run(
         ["git", *_GIT_ID, *args],
@@ -386,8 +337,8 @@ def stage_job_dir(
     staging = Path(tempfile.mkdtemp(dir=run_dir, prefix=".job-staging-"))
     try:
         # The driver<->harness jobs channel, empty; output/ otherwise empty.
-        (staging / "input" / "jobs").mkdir(parents=True, exist_ok=True)
-        (staging / "output" / "jobs").mkdir(parents=True, exist_ok=True)
+        (staging / "input").mkdir(parents=True, exist_ok=True)
+        (staging / "output").mkdir(parents=True, exist_ok=True)
 
         # checkout/ — the repo the agent works in (the manifest's workdir).
         checkout = staging / CHECKOUT_DIRNAME
@@ -408,9 +359,7 @@ def stage_job_dir(
 
         # input/prompt.md — the production implementer prompt, byte-for-byte.
         issue = _synthetic_issue(benchmark, mode)
-        api.atomic_write(
-            staging / api.PROMPT_FILE, api.render_run_prompt(issue, 1, None)
-        )
+        api.atomic_write(staging / api.PROMPT_FILE, api.render_run_prompt(issue, 1, None))
 
         # input/issue.json + input/issue/ Context Tree.
         _write_issue_metadata(staging, issue)

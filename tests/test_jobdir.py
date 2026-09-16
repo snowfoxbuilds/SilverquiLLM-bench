@@ -14,10 +14,17 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from theozolith_worker import api
+
+from silverquillm import workflow as api
+
+
+def read_metadata(job):
+    return SimpleNamespace(**json.loads((job / "input/benchmark.json").read_text()))
+
 
 from silverquillm.jobdir import (
     CHECKOUT_DIRNAME,
@@ -73,8 +80,12 @@ def _stage(
     run_dir: Path, mode_name: str = "basic", run_id: str = "run-1", adapter: str = "claude"
 ) -> Path:
     return stage_job_dir(
-        run_dir, load_benchmark("smoke"), get_mode(mode_name),
-        run_id=run_id, budget_seconds=3600, adapter=adapter,
+        run_dir,
+        load_benchmark("smoke"),
+        get_mode(mode_name),
+        run_id=run_id,
+        budget_seconds=3600,
+        adapter=adapter,
     )
 
 
@@ -84,30 +95,33 @@ class TestStageJobDir:
         bench: an adapter the bench has never heard of stages exactly like
         claude does — no allowlist anywhere on the bench side."""
         job = _stage(tmp_path / "codex", adapter="codex")
-        assert api.read_manifest(job).adapter == "codex"
+        assert read_metadata(job).adapter == "codex"
         job = _stage(tmp_path / "pi", adapter="pi")
-        assert api.read_manifest(job).adapter == "pi"
+        assert read_metadata(job).adapter == "pi"
 
     def test_adapter_is_required(self, tmp_path: Path) -> None:
         with pytest.raises(TypeError):
             stage_job_dir(
-                tmp_path, load_benchmark("smoke"), get_mode("basic"),
-                run_id="r", budget_seconds=1,
+                tmp_path,
+                load_benchmark("smoke"),
+                get_mode("basic"),
+                run_id="r",
+                budget_seconds=1,
             )
         with pytest.raises(ValueError, match="adapter"):
             _stage(tmp_path, adapter="")
 
     def test_tree_shape(self, tmp_path: Path) -> None:
         job = _stage(tmp_path)
-        assert (job / "input" / "manifest.json").is_file()
+        assert (job / "input" / "benchmark.json").is_file()
         assert (job / "input" / "prompt.md").is_file()
         assert (job / "input" / "issue.json").is_file()
         assert (job / "input" / "issue" / "body.md").is_file()
         assert (job / "input" / "issue" / "comments" / "INDEX.md").is_file()
         assert (job / "input" / "issue" / "timeline.md").is_file()
         # The jobs channel, empty, on both sides.
-        assert (job / "input" / "jobs").is_dir() and not any((job / "input" / "jobs").iterdir())
-        assert (job / "output" / "jobs").is_dir() and not any((job / "output" / "jobs").iterdir())
+        assert not (job / "input" / "jobs").exists()
+        assert not (job / "output" / "jobs").exists()
         # The checkout the agent works in lives inside the job dir.
         assert (job / CHECKOUT_DIRNAME / "cards").is_dir()
         assert (job / CHECKOUT_DIRNAME / "engine").is_dir()
@@ -115,20 +129,20 @@ class TestStageJobDir:
     def test_manifest_is_accepted_by_the_production_parser(self, tmp_path: Path) -> None:
         job = _stage(tmp_path)
         # No adapters, no shims: the real read_manifest accepts it as-is.
-        manifest = api.read_manifest(job)
+        manifest = read_metadata(job)
         assert manifest.mode == api.MODE_RUN  # production execution mode
         assert manifest.schema_version == api.SCHEMA_VERSION
         assert manifest.workdir == CHECKOUT_DIRNAME == "checkout"  # the production default
         assert manifest.adapter == "claude"
         assert manifest.round == 1 and manifest.round_budget == 0
         assert manifest.agent_timeout_seconds == 3600
-        assert manifest.serve_jobs  # the gate rides the jobs channel
+        assert not hasattr(manifest, "serve_jobs")
 
     def test_manifest_has_no_bench_only_keys(self, tmp_path: Path) -> None:
         """The Benchmark Mode and benchmark id never ride the production
         manifest (unknown keys would make the real parser reject it)."""
         job = _stage(tmp_path, "planned")
-        raw = json.loads((job / "input" / "manifest.json").read_text())
+        raw = json.loads((job / "input" / "benchmark.json").read_text())
         assert "benchmark" not in raw
         assert "task_path" not in raw
         assert raw["mode"] == "run"  # never the Benchmark Mode name
@@ -144,16 +158,19 @@ class TestStageJobDir:
     def test_checkout_is_git_seeded(self, tmp_path: Path) -> None:
         job = _stage(tmp_path)
         head = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=job / CHECKOUT_DIRNAME,
-            capture_output=True, text=True, check=True,
+            ["git", "rev-parse", "HEAD"],
+            cwd=job / CHECKOUT_DIRNAME,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         assert head.stdout.strip()
 
     def test_prompt_is_the_production_renderer(self, tmp_path: Path) -> None:
         job = _stage(tmp_path)
         prompt = (job / "input" / "prompt.md").read_text()
-        assert "Implementer in TheOzolith" in prompt
-        assert "format-output" in prompt
+        assert "Implementer in a standalone coding benchmark" in prompt
+        assert "declared JSON output file" in prompt
         # Every target card is enumerated (the task rides the issue body).
         for cn in load_benchmark("smoke").cards:
             assert cn in prompt, f"prompt.md omits target card {cn}"
@@ -174,7 +191,7 @@ class TestStageJobDir:
     def test_same_run_id_is_reproducible(self, tmp_path: Path) -> None:
         a = _stage(tmp_path / "a", run_id="run-x")
         b = _stage(tmp_path / "b", run_id="run-x")
-        for rel in ("input/manifest.json", "input/prompt.md", "input/issue.json"):
+        for rel in ("input/benchmark.json", "input/prompt.md", "input/issue.json"):
             assert (a / rel).read_bytes() == (b / rel).read_bytes(), rel
 
     def test_existing_job_dir_is_a_loud_conflict(self, tmp_path: Path) -> None:
@@ -190,12 +207,17 @@ class TestStageJobDir:
 
     def test_missing_workspace_raises_and_leaves_nothing(self, tmp_path: Path) -> None:
         fake: Any = BenchmarkRef(
-            id="x", root=tmp_path / "noroot",
+            id="x",
+            root=tmp_path / "noroot",
             config={"cards": ["1"], "draft_set": {"primary_set_code": "fdn"}},
         )
         with pytest.raises(FileNotFoundError):
             stage_job_dir(
-                tmp_path / "run", fake, get_mode("basic"), run_id="r", budget_seconds=60,
+                tmp_path / "run",
+                fake,
+                get_mode("basic"),
+                run_id="r",
+                budget_seconds=60,
                 adapter="claude",
             )
         assert not (tmp_path / "run" / "job").exists()
@@ -213,15 +235,20 @@ class TestDriverRepository:
         assert not driver.is_relative_to(job)
         tree = subprocess.run(
             ["git", "--git-dir", str(driver), "ls-tree", "-r", "--name-only", "HEAD"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.split()
         assert "test_utils.py" in tree and "cards/fdn/fdn_129/card_impl.py" in tree
         # The checkout's own repository is never tracked (its .gitignore is).
         assert not any(name.startswith(".git/") for name in tree)
         # Same content as the agent-visible seed inside the checkout.
         agent_tree = subprocess.run(
-            ["git", "ls-tree", "-r", "--name-only", "HEAD"], cwd=job / CHECKOUT_DIRNAME,
-            capture_output=True, text=True, check=True,
+            ["git", "ls-tree", "-r", "--name-only", "HEAD"],
+            cwd=job / CHECKOUT_DIRNAME,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.split()
         assert sorted(tree) == sorted(agent_tree)
 
@@ -236,7 +263,11 @@ class TestDriverRepository:
         assert len(sha) == 40
         # The driver repository advanced; the checkout's own repository did not.
         agent_log = subprocess.run(
-            ["git", "log", "--format=%s"], cwd=checkout, capture_output=True, text=True, check=True,
+            ["git", "log", "--format=%s"],
+            cwd=checkout,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.split("\n")
         assert "driver commit" not in agent_log
         assert (checkout / ".git" / "HEAD").read_text() == agent_head_before

@@ -576,7 +576,7 @@ class TestScheduler:
     def test_an_unresolvable_spec_fails_without_the_executor_and_the_batch_continues(self, batches: Path, candidate: Path, tmp_path: Path, logs) -> None:
         tampered = tmp_path / "tampered"
         shutil.copytree(candidate, tampered / candidate.name)
-        dockerfile = tampered / candidate.name / "bundle" / "Dockerfile"
+        dockerfile = tampered / candidate.name / "bundle" / "definition.json"
         dockerfile.write_text(dockerfile.read_text() + "RUN echo x\n")
         write_batch(batches, "a", [
             spec(tmp_path / "missing"),
@@ -593,7 +593,7 @@ class TestScheduler:
         assert "resolves to no directory" in state.runs[0].error
         assert "unknown benchmark mode" in state.runs[1].error
         assert "unknown benchmark" in state.runs[2].error
-        assert "verification" in state.runs[3].error
+        assert "invalid standalone definition" in state.runs[3].error
         assert len(executor.calls) == 1
 
     def test_not_before_gates_the_batch(self, batches: Path, candidate: Path, logs) -> None:
@@ -1214,10 +1214,6 @@ class TestContractRunExecutor:
             return SimpleNamespace(ok=False, phase="agent", proposal_status=None, failure_class="timeout", record_dir=tmp_path / "rec", failure=SimpleNamespace(failure_class="timeout", phase="agent", reason="agent timed out"))
 
         monkeypatch.setattr(contract_mod, "drive_contract_run", fake_drive)
-        from theozolith_worker import api
-
-        monkeypatch.setattr(api, "DockerEngine", lambda: "engine")
-        monkeypatch.setattr(api, "container_session_factory", lambda engine: f"factory({engine})")
 
         bundle = load_candidate_bundle(candidate)
         resolved = sched.ResolvedRun(
@@ -1229,7 +1225,7 @@ class TestContractRunExecutor:
         assert outcome == sched.RunOutcome(ok=False, summary="[timeout] at agent: agent timed out", failure_class="timeout", record_dir=tmp_path / "rec")
         assert seen["loaded"] is bundle
         assert seen["run_id"] == "smoke-x" and seen["budget_seconds"] == 123 and seen["mode"].name == "planned"
-        assert seen["session_factory"] == "factory(engine)" and seen["container_user"] == "1000:1000"
+        assert "session_factory" not in seen and seen["container_user"] == "1000:1000"
         assert seen["results_repo"] == tmp_path / "rr" and seen["candidate"] == candidate
 
 
@@ -1755,3 +1751,36 @@ class TestOrphanedState:
         (state_dir / "dir.json").mkdir()
         assert [p.name for p in sched.list_state_files(batches)] == ["a.json", "b.json", "dir.json", "link.json"]
         assert sched.list_state_files(batches / "missing") == []
+
+
+class TestStandaloneResourceRecovery:
+    def test_unconfirmed_cleanup_keeps_inventory_and_blocks_next_run(self, batches, candidate):
+        class JournalRuntime(FakeContainers):
+            def __init__(self):
+                super().__init__()
+                self.recovered = []
+            def recover_construct(self, run_dir, run_id):
+                self.recovered.append((run_dir, run_id))
+                return "owned resources removed"
+        runtime = JournalRuntime()
+        write_batch(batches, "journal", [spec(candidate), spec(candidate)])
+        executor = StubExecutor([sched.RunOutcome(ok=False, failure_class="cleanup", cleanup_pending=True)])
+        runner = make_scheduler(batches, executor, containers=runtime)
+        with pytest.raises(sched.ReconciliationError, match="inventory retained"):
+            runner.run_until_idle()
+        assert len(executor.calls) == 1
+        assert sched.load_runtime(batches, "journal") is not None
+        second = make_scheduler(batches, StubExecutor(), containers=runtime)
+        assert second.run_until_idle() == 1
+        assert runtime.recovered == [(executor.calls[0].run_dir, executor.calls[0].run_id)]
+        assert sched.load_runtime(batches, "journal") is None
+
+    def test_scheduler_does_not_bypass_definition_symlink_refusal(self, batches, candidate, tmp_path):
+        link = tmp_path / "linked-definition"
+        link.symlink_to(candidate, target_is_directory=True)
+        write_batch(batches, "symlink", [spec(link)])
+        executor = StubExecutor()
+        runner = make_scheduler(batches, executor)
+        assert runner.run_until_idle() == 1
+        assert not executor.calls
+        assert load_state(batches, "symlink").runs[0].failure_class == sched.FAILURE_UNRESOLVABLE

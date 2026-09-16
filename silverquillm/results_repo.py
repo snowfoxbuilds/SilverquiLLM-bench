@@ -125,6 +125,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 SCHEMA_VERSION = 1
+DEFINITION_RECORD_VERSION = 2
 
 #: Environment variable naming the results repo clone; an explicit flag wins.
 RESULTS_REPO_ENV = "SILVERQUILLM_RESULTS_REPO"
@@ -142,6 +143,7 @@ LEGACY_SCHEME = "legacy"
 #: (base image digest, instruction hash, adapter name) TheOzolith's identity
 #: spec defines, recomputed by its verifier and never trusted from a record.
 OZOLITH_SCHEME = "ozolith-v1"
+DEFINITION_SCHEME = "karn-definition-v1"
 
 #: The reserved entry under ``results/<candidate-hash>/`` holding the vendored
 #: Candidate Bundle of an ``ozolith-v1`` candidate (never a run id).
@@ -248,6 +250,14 @@ class CandidateIdentity:
     adapter_identity: str
     scheme: str
     verified: bool = False
+    definition_digest: str | None = None
+    image_digest: str | None = None
+
+    @classmethod
+    def definition(cls, definition_digest: str, image_digest: str) -> CandidateIdentity:
+        identity = cls("", "", "", DEFINITION_SCHEME, True, definition_digest, image_digest)
+        identity.validate()
+        return identity
 
     @classmethod
     def recomputed(
@@ -298,6 +308,19 @@ class CandidateIdentity:
         runs before every write) and deserialization (:meth:`from_dict`) — so
         the writer can never produce an identity the reader rejects.
         """
+        if self.scheme == DEFINITION_SCHEME:
+            if (
+                self.verified is not True
+                or any(
+                    not isinstance(value, str) or not _DIGEST_RE.fullmatch(value)
+                    for value in (self.definition_digest, self.image_digest)
+                )
+                or any((self.base_image_digest, self.instruction_hash, self.adapter_identity))
+            ):
+                raise InvalidRunRecordError("invalid standalone definition identity")
+            return
+        if self.definition_digest is not None or self.image_digest is not None:
+            raise InvalidRunRecordError("historical identity carries standalone fields")
         for key in ("scheme", "base_image_digest", "instruction_hash", "adapter_identity"):
             value = getattr(self, key)
             if not isinstance(value, str) or not value:
@@ -354,6 +377,13 @@ class CandidateIdentity:
             raise InvalidRunRecordError(f"unknown candidate identity scheme: {self.scheme!r}")
 
     def to_dict(self) -> dict[str, Any]:
+        if self.scheme == DEFINITION_SCHEME:
+            return {
+                "scheme": self.scheme,
+                "definition_digest": self.definition_digest,
+                "image_digest": self.image_digest,
+                "verified": self.verified,
+            }
         return {
             "scheme": self.scheme,
             "base_image_digest": self.base_image_digest,
@@ -374,9 +404,21 @@ class CandidateIdentity:
         :meth:`validate`, the same ones the writer enforces.
         """
         if not isinstance(data, Mapping):
-            raise InvalidRunRecordError(
-                f"candidate identity must be a JSON object, got {data!r}"
+            raise InvalidRunRecordError(f"candidate identity must be a JSON object, got {data!r}")
+        if data.get("scheme") == DEFINITION_SCHEME:
+            if set(data) != {"scheme", "definition_digest", "image_digest", "verified"}:
+                raise InvalidRunRecordError("invalid standalone identity fields")
+            identity = cls(
+                "",
+                "",
+                "",
+                DEFINITION_SCHEME,
+                data["verified"],
+                data["definition_digest"],
+                data["image_digest"],
             )
+            identity.validate()
+            return identity
         identity = cls(
             base_image_digest=data.get("base_image_digest"),
             instruction_hash=data.get("instruction_hash"),
@@ -424,6 +466,15 @@ def candidate_hash(identity: CandidateIdentity) -> str:
     identity.validate()
     if identity.scheme == LEGACY_SCHEME:
         return identity.base_image_digest[len(f"{LEGACY_SCHEME}:") :]
+    if identity.scheme == DEFINITION_SCHEME:
+        payload = {
+            "scheme": DEFINITION_SCHEME,
+            "definition_digest": identity.definition_digest,
+            "image_digest": identity.image_digest,
+        }
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
     canonical = json.dumps(
         {
             "adapter": identity.adapter_identity,
@@ -455,7 +506,7 @@ def candidate_dirname(slug: str, identity: CandidateIdentity) -> str:
 def candidate_copy_dir(repo_root: Path, identity: CandidateIdentity) -> Path:
     """Where the vendored Candidate Bundle of *identity* lives in a results repo:
     ``results/<candidate-hash>/candidate/`` (``ozolith-v1`` only)."""
-    if identity.scheme != OZOLITH_SCHEME:
+    if identity.scheme not in {OZOLITH_SCHEME, DEFINITION_SCHEME}:
         raise ResultsRepoError(
             f"only an {OZOLITH_SCHEME!r} candidate is vendored; {identity.scheme!r} has no bundle"
         )
@@ -583,7 +634,9 @@ class RunRecord:
     def manifest_dict(self) -> dict[str, Any]:
         """The ``manifest.json`` payload (everything but the scores)."""
         return {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": DEFINITION_RECORD_VERSION
+            if self.candidate.scheme == DEFINITION_SCHEME
+            else SCHEMA_VERSION,
             "run_id": self.run_id,
             "candidate": self.candidate.to_dict(),
             "candidate_hash": candidate_hash(self.candidate),
@@ -620,9 +673,9 @@ class RunRecord:
         if missing:
             raise InvalidRunRecordError(f"manifest lacks {', '.join(missing)}")
         version = manifest["schema_version"]
-        if isinstance(version, bool) or not isinstance(version, int) or version != SCHEMA_VERSION:
+        if type(version) is not int or version not in {SCHEMA_VERSION, DEFINITION_RECORD_VERSION}:
             raise InvalidRunRecordError(
-                f"schema_version must be the integer {SCHEMA_VERSION}, got {version!r}"
+                f"schema_version must be integer 1 or 2, got {version!r}"
             )
         if "workload" in manifest:
             raise InvalidRunRecordError("manifest carries the retired 'workload' field")
@@ -631,11 +684,13 @@ class RunRecord:
             raise InvalidRunRecordError(
                 f"manifest candidate must be a JSON object, got {candidate_data!r}"
             )
+        if (version == DEFINITION_RECORD_VERSION) != (
+            candidate_data.get("scheme") == DEFINITION_SCHEME
+        ):
+            raise InvalidRunRecordError("record version and candidate identity scheme disagree")
         run_metadata = manifest["run_metadata"]
         if not isinstance(run_metadata, dict):
-            raise InvalidRunRecordError(
-                f"run_metadata must be a JSON object, got {run_metadata!r}"
-            )
+            raise InvalidRunRecordError(f"run_metadata must be a JSON object, got {run_metadata!r}")
         artifact_pointers = manifest["artifact_pointers"]
         if not isinstance(artifact_pointers, list):
             raise InvalidRunRecordError(
@@ -930,9 +985,7 @@ def init_results_repo(path: Path) -> list[Path]:
             raise ResultsRepoError(f"{path} is not a directory")
         entries = sorted(p.name for p in path.iterdir() if p.name != ".git")
         if AGENTS_FILENAME in entries:
-            raise ResultsRepoError(
-                f"{path} is not an empty results repo: {AGENTS_FILENAME} exists"
-            )
+            raise ResultsRepoError(f"{path} is not an empty results repo: {AGENTS_FILENAME} exists")
         if entries:
             raise ResultsRepoError(
                 f"{path} is not empty; refusing to initialize over: {', '.join(entries)}"

@@ -1,4 +1,4 @@
-"""Unit tests for silverquillm.proposal — validation delegated to production.
+"""Unit tests for silverquillm.proposal — benchmark-owned schema conformance.
 
 The bench does not reimplement the Output Proposal schema; it runs TheOzolith's
 ``validate_run`` at round one.  These tests pin the bench adapter's status
@@ -11,8 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from theozolith_worker import api
-
+from silverquillm import proposal_schema as api
 from silverquillm.proposal import (
     PROPOSAL_APPLIED,
     PROPOSAL_INVALID,
@@ -86,9 +85,7 @@ class TestStatuses:
         assert result.status == PROPOSAL_INVALID
 
     def test_decision_entry_unknown_key_rejected(self, tmp_path: Path) -> None:
-        result = load_proposal(
-            _job(tmp_path, _valid_doc(decisions=[{"what": "a", "extra": "b"}]))
-        )
+        result = load_proposal(_job(tmp_path, _valid_doc(decisions=[{"what": "a", "extra": "b"}])))
         assert result.status == PROPOSAL_INVALID
 
 
@@ -96,5 +93,7 @@ class TestFallbackCommitMessage:
     def test_carries_the_production_trailer(self) -> None:
         msg = fallback_commit_message("run-9")
         assert "Ozolith-Run: run-9" in msg
-        assert "no valid Output Proposal" in msg.lower() or "no valid output proposal" in msg.lower()
+        assert (
+            "no valid Output Proposal" in msg.lower() or "no valid output proposal" in msg.lower()
+        )
         assert msg.rstrip().endswith("Ozolith-Round: 1")

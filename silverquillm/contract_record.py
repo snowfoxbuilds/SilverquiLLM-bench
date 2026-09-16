@@ -1,22 +1,4 @@
-"""Write a Contract Run's :class:`RunRecord` into the results repo.
-
-Kept out of :mod:`silverquillm.contract` so the driver has no hard dependency
-on the results-repo schema — the record is written only when a repo is
-configured.  The candidate identity is the ``ozolith-v1`` triple
-:mod:`silverquillm.candidate` recomputed from the Candidate Bundle through
-TheOzolith's verifier (``verified: true`` — the only way such an identity
-exists); adapter and product versions, the export timestamp, the built image
-and the run date are recorded as run metadata only, never identity-bearing.
-
-The record is *attempted for every run that reached a verified identity*,
-however it ended: ``run_metadata`` carries the whole ``contract_run.json``
-evidence — phase reached, classified failures, the harness-authored status,
-the agent outcome, the gate result, the pinned packages — and an unevaluated
-run records zeroed scores marked ``evaluated: false`` so it can never be
-mistaken for a legitimate zero.  ``leaderboard_valid`` comes from its one
-owner, :func:`silverquillm.results_repo.derive_leaderboard_valid`, over the
-scored card set (an unevaluated run is never valid).
-"""
+"""Immutable records of standalone definition execution, audited grading and benchmark-owned eligibility."""
 
 from __future__ import annotations
 
@@ -57,11 +39,9 @@ CANDIDATE_BUNDLE_KIND = "candidate-bundle"
 
 #: ``run_metadata`` keys copied verbatim from the ``contract_run.json`` evidence.
 _EVIDENCE_KEYS = (
-    "contract_schema_version",
-    "contract_bundle_format_version",
-    "contract_identity_spec_version",
-    "worker",
-    "contract_packages",
+    "benchmark_interface_version",
+    "definition_version",
+    "input_hashes",
     "phase",
     "phases_run",
     "failure",
@@ -71,7 +51,7 @@ _EVIDENCE_KEYS = (
     "image",
     "secret_slots",
     "agent_outcome",
-    "harness_status",
+    "runtime_observation",
     "transcript",
     "gate",
     "proposal_errors",
@@ -81,6 +61,10 @@ _EVIDENCE_KEYS = (
 
 #: ``candidate`` evidence keys recorded as run metadata (never identity).
 _CANDIDATE_METADATA_KEYS = (
+    "definition",
+    "definition_version",
+    "image",
+    "identity",
     "path",
     "worker_type",
     "adapter",
@@ -119,12 +103,8 @@ def _contract_scores(eval_result: FullEvalResult | None) -> dict[str, dict[str, 
             "engine_regression": _unevaluated(),
         }
     return {
-        "card_correctness": _dimension_score(
-            eval_result.sos_results, eval_result.sos_pass_rate
-        ),
-        "fdn_regression": _dimension_score(
-            eval_result.fdn_results, eval_result.fdn_pass_rate
-        ),
+        "card_correctness": _dimension_score(eval_result.sos_results, eval_result.sos_pass_rate),
+        "fdn_regression": _dimension_score(eval_result.fdn_results, eval_result.fdn_pass_rate),
         "engine_regression": {
             "pass_rate": eval_result.engine_pass_rate,
             "tests_passed": eval_result.engine_result.tests_passed,

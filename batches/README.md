@@ -55,13 +55,13 @@ The file-backed queue the bench-side scheduler executes (#39 §5, #66;
 not_before = 2026-09-04T02:00:00Z      # optional; RFC 3339 with an offset
 
 [[runs]]
-candidate = "candidates/vanilla-claude--4e8b75b6"   # a path, or a candidates/ entry name
+candidate = "candidates/vanilla-claude-standalone--650023f7"   # a path, or a candidates/ entry name
 mode = "basic"                                      # basic | planned
 benchmark = "smoke"                                 # benchmarks/<id>/
 budget_seconds = 14400
 
 [[runs]]
-candidate = "vanilla-codex--90a33424"
+candidate = "vanilla-codex-standalone--552e2ed2"
 mode = "planned"
 benchmark = "smoke"
 budget_seconds = 14400

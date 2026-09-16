@@ -1,23 +1,12 @@
-"""Candidate Bundle fixtures for the bench tests.
-
-Every fixture bundle is a REAL export through TheOzolith's export tooling
-(``theozolith_control.candidate.export_candidate``) with a fake base-digest
-resolver and a fixed timestamp — no registry, no Docker — so the bench's
-ingestion is exercised against exactly the bytes ``theozolith candidate
-export`` writes, never a hand-built imitation of the format.  The image
-builder double stands in for the Docker-bound verified build only.
-"""
-
+"""Real Karn standalone-definition fixtures, with deterministic identities and no runtime packages."""
 from __future__ import annotations
-
-import hashlib
 import json
+import uuid
 from pathlib import Path
-
-from theozolith_control import candidate as ozcandidate
-
-from silverquillm.candidate import BuiltImage, CandidateBundle
-from silverquillm.results_repo import CandidateIdentity, candidate_dirname
+from karn.definition import canonical, new_definition
+from silverquillm.candidate import BuiltImage, CandidateBundle, load_candidate_bundle
+from silverquillm.promotion import promote
+from silverquillm.results_repo import CandidateIdentity
 
 DIGEST_A = "sha256:" + "a" * 64
 DIGEST_B = "sha256:" + "b" * 64
@@ -89,103 +78,45 @@ SLOT_MENTIONS: dict[str, str] = {
 }
 
 
-def make_source(
-    root: Path,
-    *,
-    name: str = "fixture-claude",
-    adapter: str = "claude",
-    model: str = "claude-sonnet-5",
-    effort: str = "",
-    driver: str = "builtin:implementer",
-    base: str = CLAUDE_BASE,
-    setup: tuple[str, ...] = (),
-    knowledge: bool = False,
-    policy: bool = False,
-    secrets: tuple[str, ...] = ("ANTHROPIC_API_KEY",),
-    extra_lines: tuple[str, ...] = (),
-) -> Path:
-    """A minimal config-repo-shaped source directory holding one worker type."""
-    source = root / "config-src"
-    (source / "worker-types").mkdir(parents=True, exist_ok=True)
-    lines = [f'base = "{base}"', "setup = [" + ", ".join(json.dumps(s) for s in setup) + "]"]
-    for key, value in (
-        ("driver", driver),
-        ("adapter", adapter),
-        ("model", model),
-        ("effort", effort),
-    ):
-        if value:
-            lines.append(f'{key} = "{value}"')
-    if knowledge:
-        tree = source / "knowledge" / "gold"
-        tree.mkdir(parents=True, exist_ok=True)
-        (tree / "AGENTS.md").write_text("# golden knowledge\n", encoding="utf-8")
-        lines.append('knowledge = "knowledge/gold"')
-    if policy:
-        tree = source / "policy" / "gold"
-        tree.mkdir(parents=True, exist_ok=True)
-        (tree / "attribution.json").write_text(
-            '{"attribution": {"sessionUrl": false}}\n', encoding="utf-8"
-        )
-        lines.append('policy = "policy/gold"')
-    lines.extend(extra_lines)
-    if secrets:
-        lines.append("[secrets]")
-        lines.extend(f'{slot} = ""' for slot in secrets)
-    (source / "worker-types" / f"{name}.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+def make_source(root, *, name="fixture-claude", adapter="claude", model="claude-sonnet-5", effort="", driver="configured", base=CLAUDE_BASE, setup=(), knowledge=False, policy=False, secrets=("ANTHROPIC_API_KEY",), extra_lines=(), digest=DIGEST_A):
+    source=Path(root)/"definition-src"
+    source.mkdir(parents=True,exist_ok=True)
+    document=new_definition(name=name,mode="automaton",image=digest,main=["/bin/true"],definition_version=3).document
+    document["definition_id"]=str(uuid.uuid5(uuid.NAMESPACE_URL,json.dumps([name,adapter,model,effort,driver,base,setup,knowledge,policy,secrets],sort_keys=True)))
+    runtime=document["runtime"]
+    runtime["environment"]={"BENCHMARK_ADAPTER":adapter,"BENCHMARK_MODEL":model,"BENCHMARK_EFFORT":effort}
+    runtime["mounts"]=[dict(name=n,target=t,source=dict(kind="runtime",value=n),persistent=False,access="read_only" if n=="input" else "read_write",purpose=n) for n,t in (("workspace","/work"),("input","/in"),("output","/out"))]
+    runtime["files"]=[dict(name="prompt",mount="input",path="prompt.md",direction="input",schema={"type":"string"}),dict(name="proposal",mount="output",path="proposal.json",direction="output",schema={"type":"object"})]
+    runtime["credentials"]=[dict(name="credential-"+str(i),source=dict(type="raw",secret=slot.lower().replace("_","-")),delivery=dict(type="environment",variable=slot)) for i,slot in enumerate(secrets)]
+    if extra_lines:runtime["environment"]["FIXTURE_EXTRA"]="\n".join(extra_lines)
+    (source/"definition.json").write_bytes(canonical(document)+b"\n")
     return source
 
 
-def export_bundle(
-    root: Path,
-    out: Path | None = None,
-    *,
-    digest: str = DIGEST_A,
-    now: str = NOW,
-    **source_kwargs,
-) -> tuple[Path, ozcandidate.CandidateSummary]:
-    """Export a fixture bundle to *out* (default ``root/bundle``) and return
-    ``(bundle_dir, TheOzolith's summary)``."""
-    source = make_source(root, **source_kwargs)
-    name = source_kwargs.get("name", "fixture-claude")
-    out = out if out is not None else root / "bundle"
-    summary = ozcandidate.export_candidate(
-        source, name, out, resolve_digest=lambda ref: digest, now=lambda: now
-    )
-    return out, summary
+def export_bundle(root, out=None, *, digest=DIGEST_A, now=NOW, **source_kwargs):
+    source=make_source(root,digest=digest,**source_kwargs)
+    out=Path(out) if out is not None else Path(root)/"bundle"
+    out.mkdir(parents=True,exist_ok=False)
+    (out/"definition.json").write_bytes((source/"definition.json").read_bytes())
+    return out,load_candidate_bundle(out)
 
 
-def identity_of(summary: ozcandidate.CandidateSummary) -> CandidateIdentity:
-    return CandidateIdentity.recomputed(
-        summary.base_digest, summary.instruction_hash, summary.adapter
-    )
+def identity_of(summary):
+    return summary.identity
 
 
-def make_candidate_dir(root: Path, *, slug: str | None = None, **export_kwargs) -> Path:
-    """A checked-in-style candidate directory ``<slug>--<hash8>/`` with the
-    bundle under ``bundle/`` and a README beside it."""
-    name = export_kwargs.setdefault("name", "fixture-claude")
-    slug = slug or name
-    staging = root / f".export-{slug}"
-    bundle, summary = export_bundle(staging, **export_kwargs)
-    dirname = candidate_dirname(slug, identity_of(summary))
-    candidate_dir = root / dirname
-    candidate_dir.mkdir(parents=True)
-    bundle.rename(candidate_dir / "bundle")
-    (candidate_dir / "README.md").write_text(f"# {slug}\n\nA fixture candidate.\n", encoding="utf-8")
-    return candidate_dir
+def make_candidate_dir(root, *, slug=None, **export_kwargs):
+    name=export_kwargs.setdefault("name","fixture-claude")
+    bundle,_=export_bundle(Path(root)/(".export-"+(slug or name)),**export_kwargs)
+    return promote(bundle,candidates_dir=root,slug=slug or name).candidate_dir
 
 
-def rewrite_manifest(bundle: Path, **overrides) -> None:
-    path = bundle / ozcandidate.MANIFEST_NAME
-    manifest = json.loads(path.read_text(encoding="utf-8"))
-    manifest.update(overrides)
-    path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+def rewrite_manifest(bundle,**overrides):
+    path=Path(bundle)/"definition.json"
+    value=json.loads(path.read_text())
+    value.update(overrides)
+    path.write_bytes(canonical(value)+b"\n")
 
 
-def fake_image_builder(bundle: CandidateBundle) -> BuiltImage:
-    """The image-builder double: no Docker; a deterministic fake image ID
-    derived from the bundle's deterministic tag."""
-    return BuiltImage(
-        tag=bundle.tag, image_id="sha256:" + hashlib.sha256(bundle.tag.encode()).hexdigest()
-    )
+def fake_image_builder(bundle):
+    return BuiltImage(tag=bundle.manifest["image"],image_id=bundle.manifest["image"])

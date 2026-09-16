@@ -31,13 +31,12 @@ if _ENV_FILE.exists():
 
 import click
 
-from silverquillm._bootstrap import ensure_workspace_on_path
+from silverquillm._bootstrap import ensure_workspace_on_path, repository_root
 
 # Bootstrap workspace dir on sys.path so `engine` / `cards` / `test_utils`
 # resolve in the CLI process and in subprocesses that inherit our env.
 ensure_workspace_on_path()
 
-from theozolith_worker import api
 
 from silverquillm.card_loader import load_all_card_specs
 from silverquillm.card_names import build_card_name_map
@@ -95,7 +94,7 @@ def _runner_log(msg: str, *, err: bool = False) -> None:
 # Repo root detection
 # ---------------------------------------------------------------------------
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = repository_root()
 
 # ---------------------------------------------------------------------------
 # API key passthrough
@@ -654,12 +653,12 @@ main.add_command(_replay_validate)
 @main.command()
 @click.option(
     "--candidate", "candidate_path", default=None,
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    type=click.Path(exists=True, path_type=Path),
     help=(
-        "A Candidate Bundle directory (exported by `theozolith candidate export`), "
+        "A standalone Karn definition file or directory containing definition.json, "
         "or a candidates/<slug>--<hash8>/ directory wrapping one under bundle/. "
         "The only input of a Contract Run: identity is recomputed and verified "
-        "from the bundle, its derived image is built through the verified build."
+        "from the definition; its immutable image must already exist locally."
     ),
 )
 @click.option(
@@ -686,7 +685,7 @@ main.add_command(_replay_validate)
 )
 @click.option(
     "--container-user", default=None,
-    help="uid:gid to run the container as (default: the image's user) — --candidate only",
+    help="uid:gid to run the container as (default: the invoking account's uid:gid) — --candidate only",
 )
 @click.option(
     "--cards",
@@ -711,21 +710,16 @@ def run(
     cards: str | None,
     hang_timeout: int | None,
 ) -> None:
-    """Run a benchmark: a Candidate Bundle through TheOzolith's Run Contract
-    (--candidate), or a legacy image through the entrypoint lineage (--image).
+    """Run a standalone Karn definition (--candidate) or a historical image (--image).
 
-    With --candidate: the bundle is verified and its identity recomputed
-    (never trusted from a recorded value), its derived image is built through
-    the verified standalone build and launched by image ID with the in-image
-    harness as PID 1, the production gate runs over the jobs channel, the
-    Output Proposal is applied post-exit, the checkout is graded by the
-    Audited Eval, and the run is recorded under the verified identity. Exits 1
-    when the run carries a classified failure; the evidence is in the run
-    dir's contract_run.json either way.
+    A candidate selects an existing immutable image and declared runtime file
+    interfaces. The benchmark supplies basic/planned intake, isolated gates,
+    proposal validation and audited grading, then records definition/image
+    identity. Classified failures exit 1 and retain contract_run.json evidence.
     """
     if (candidate_path is None) == (image is None):
         raise click.UsageError(
-            "pass exactly one of --candidate <bundle> (a Contract Run) or --image "
+            "pass exactly one of --candidate <definition> (a Contract Run) or --image "
             "<name> (the legacy entrypoint lineage)"
         )
     if candidate_path is not None:
@@ -941,9 +935,8 @@ def _report_contract_run(result) -> None:
     if result.bundle is not None:
         bundle = result.bundle
         _runner_log(
-            f"Candidate: {bundle.worker_type} ({bundle.adapter}) hash {bundle.candidate_hash}"
-            f" [{bundle.hash8}]  base {bundle.base_digest[:19]}…"
-            f"  instruction {bundle.instruction_hash[:12]}…"
+            f"Candidate: {bundle.worker_type} hash {bundle.candidate_hash} [{bundle.hash8}] "
+            f"definition {bundle.identity.definition_digest} image {bundle.identity.image_digest}"
         )
         if result.vendored is not None:
             state = "written" if result.vendored.written else "already present, re-verified"
@@ -951,11 +944,11 @@ def _report_contract_run(result) -> None:
     if result.image is not None:
         _runner_log(f"Image: {result.image.tag} = {result.image.image_id}")
     agent = result.agent_outcome.describe() if result.agent_outcome is not None else "n/a"
-    harness = (result.harness_status or {}).get("phase", "n/a")
+    backend = (result.runtime_observation or {}).get("backend", "n/a")
     gate = " -> ".join(result.gate.steps_run) or "not run"
     if not result.gate.clean:
         gate += " (findings)"
-    _runner_log(f"Agent: {agent}  Harness: {harness}  Gate: {gate}")
+    _runner_log(f"Container: {agent}  Backend: {backend}  Gate: {gate}")
     _runner_log(f"Proposal status: {result.proposal_status}")
     if result.eval_result is not None:
         _runner_log(
@@ -1032,7 +1025,6 @@ def _run_candidate(
             mode=mode,
             budget_seconds=timeout,
             candidate=candidate_path,
-            session_factory=api.container_session_factory(api.DockerEngine()),
             results_repo=repo,
             container_user=container_user,
         )
@@ -1752,7 +1744,7 @@ def _batches_dir(value: Path | None) -> Path:
     "--results-repo", default=None, type=click.Path(file_okay=False, path_type=Path),
     help="Results repo every run records into (or $SILVERQUILLM_RESULTS_REPO)",
 )
-@click.option("--container-user", default=None, help="uid:gid to run every container as (default: the image's user)")
+@click.option("--container-user", default=None, help="uid:gid to run every container as (default: the invoking account's uid:gid)")
 @click.option(
     "--replay-without-state", "replay_without_state", multiple=True, metavar="BATCH_ID",
     help=(

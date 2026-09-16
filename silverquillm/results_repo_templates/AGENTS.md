@@ -11,7 +11,7 @@ repo to read, filter, and aggregate runs. The bench repo
 ```
 AGENTS.md                                   this file — the schema
 runs.jsonl                                  derived index (see "Index is derived")
-results/<candidate-hash>/candidate/         the vendored Candidate Bundle (ozolith-v1 only)
+results/<candidate-hash>/candidate/         the vendored definition or historical Candidate Bundle
 results/<candidate-hash>/<run-id>/manifest.json
 results/<candidate-hash>/<run-id>/scores.json
 ```
@@ -28,7 +28,7 @@ results/<candidate-hash>/<run-id>/scores.json
   identity omits the adapter name. The bench recomputes it from the bundle on
   every run; the first eight characters are the `<slug>--<hash8>` suffix of a
   checked-in candidate in the bench repo's `candidates/`.
-- `candidate/` (ozolith-v1 candidates only) is the vendored Candidate Bundle
+- `candidate/` (historical ozolith-v1 candidates) is the vendored Candidate Bundle
   exactly as verified — `candidate.json`, `Dockerfile`, and the compiled
   knowledge / baked policy trees when the candidate bakes them. Written once,
   on the candidate's first run, and verified at write time (TheOzolith's
@@ -65,7 +65,33 @@ results/<candidate-hash>/<run-id>/scores.json
    run always consumes the entire set. The retired "workload" (card-subset) term
    does not appear in this repo.
 
-## `manifest.json`
+## Current standalone identity and record schema
+
+New Construct runs use `schema_version: 2` and exactly this candidate shape:
+
+```json
+{
+  "scheme": "karn-definition-v1",
+  "definition_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "verified": true
+}
+```
+
+The Candidate Hash is SHA-256 of compact canonical JSON (sorted keys, comma/colon separators) of `scheme`, `definition_digest` and `image_digest`, excluding `verified`.
+The definition digest identifies the full Karn document, including its immutable image reference and runtime declarations.
+The image digest is the immutable digest selected by that reference; the actual local Engine image ID is recorded separately as an observation.
+`candidate/definition.json` is a write-once canonical source copy, reverified on later runs.
+A definition and image mismatch is an error; a local image alone is not ineligible.
+
+All other RunRecord fields and the scores layout below retain their meanings.
+New execution metadata includes `benchmark_interface_version`, `definition_version`, `input_hashes`, `runtime_observation`, actual `image`, container outcome, gate and proposal status.
+Missing model/tool observations remain absent or null; they are not identity attestations.
+Schema-1 records below retain their original serialization and hashes; readers never reinterpret them as schema 2.
+The `bench:construct-v1` driver owns basic/planned prompts and gates independently of Ozolith.
+
+## Historical schema-1 `manifest.json`
+
 
 ```json
 {
@@ -94,7 +120,7 @@ results/<candidate-hash>/<run-id>/scores.json
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `schema_version` | int | Always `1` for this schema. |
+| `schema_version` | int | `1` for the historical shapes below; `2` for `karn-definition-v1`. |
 | `run_id` | string | The Benchmark Run id; equals the directory name. |
 | `candidate` | object | Candidate identity: `scheme` (`legacy` or `ozolith-v1`), `base_image_digest`, `instruction_hash`, `adapter_identity`, `verified`. Under `ozolith-v1` they are TheOzolith's identity triple — the base image digest (`sha256:…`), the instruction hash (sha256 over the canonical identity: base, materialized setup, knowledge ref + pin, conditional knowledge target / policy keys) and the adapter name (opaque: claude, codex, or any adapter the substrate maps — the bench keeps no allowlist) — recomputed by the verifier, `verified: true`. Under `legacy` all three hash fields carry `legacy:<image-dir>` — the Docker image was the whole agent configuration, so the tuple does not decompose — and `verified` is `false`. |
 | `candidate_hash` | string | The `results/<candidate-hash>/` key; equals the parent directory name. |

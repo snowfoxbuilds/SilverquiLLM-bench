@@ -1,0 +1,20 @@
+{
+  "build_source": {
+    "files": {
+      "Dockerfile": "92c5418702cbde27abac9b782854504a563eaa67c8fd368105881045d3fadf39",
+      "README.md": "05e780ab1481385db650ac3f3011bb2671fe590a97d978e2124fb6bbc498fc13",
+      "adapter.py": "63db05853cc43b6ad886fb8649a5c099d6e13544ded4941ccece1ca318b5a688",
+      "build.py": "9814ffecd4a4c82508f40a51c9c5e9a103033cf57f781083610fa269631fd726",
+      "lock.json": "c91cf99b15cb6591eef69a2655225f8d38248e134cc66ac5b8ae2d55156a251a"
+    },
+    "karn_revision": "d6beb12fa0686ceaabb4a9ed3c929794eed8eff3",
+    "version": 1
+  },
+  "image": "sha256:e31d6ef6dace56ef1536450ab0344cdebe24835bca480deaf92f7d9da8ec0377",
+  "offline_cli": {
+    "adapter": "claude",
+    "version": "2.1.260 (Claude Code)"
+  },
+  "recipe": "reference-recipes/lock.json",
+  "version": 1
+}

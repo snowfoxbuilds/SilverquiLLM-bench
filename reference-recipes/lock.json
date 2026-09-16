@@ -1,0 +1,21 @@
+{
+  "base": "python@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+  "bootstrap_sha256": "556c67217dc19f7acf8cc217443206e85fab6dfd5d1467f43a40442e32aaee67",
+  "initializer_sha256": "4ee3ec87ee88a48240f6c47edea4a041ccafbca58a3a01554a65b21bc8cdf38d",
+  "karn_revision": "d6beb12fa0686ceaabb4a9ed3c929794eed8eff3",
+  "native": {
+    "claude": {
+      "integrity": "sha512-sq79dM8gHYc0eGW44knR7LkzHntJRLODp1e6BIv2pEg6vXvKZHfhzwNyjWE1iX/kzZvtaZrEA5Pg7i+Al3gUdw==",
+      "model": "claude-opus-4-8",
+      "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.260.tgz",
+      "version": "2.1.260"
+    },
+    "codex": {
+      "integrity": "sha512-x1EcwBlY3AObM1VTUHNM2AzAJQsyreGdagpF+qFiYi/Oa30VBktvvG0C6tLtCzqW6hjZNWkGZQWmeVk7MuJKWg==",
+      "model": "gpt-6-astra",
+      "url": "https://registry.npmjs.org/@openai/codex/-/codex-0.153.4-linux-x64.tgz",
+      "version": "0.153.4"
+    }
+  },
+  "version": 1
+}

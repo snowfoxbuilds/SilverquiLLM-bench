@@ -11,12 +11,19 @@ Appended rather than prepended to avoid shadowing common module names
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
-_WORKSPACE = Path(__file__).resolve().parent.parent / "benchmarks" / "sos" / "workspace"
 
-__all__ = ["ensure_workspace_on_path"]
+def repository_root() -> Path:
+    """The operator-selected benchmark data checkout, or the editable package root."""
+    return Path(os.environ.get("SILVERQUILLM_BENCH_ROOT", Path(__file__).resolve().parent.parent)).resolve()
+
+
+_WORKSPACE = repository_root() / "benchmarks" / "sos" / "workspace"
+
+__all__ = ["ensure_workspace_on_path", "repository_root"]
 
 
 def ensure_workspace_on_path() -> None:

@@ -8,7 +8,7 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 - Engine: Python port of XMage (Java, MIT)
 - Base set: FDN Draft Set (301 cards: FDN 001–291 + SPG 074–083) — used as in-context examples
 - Benchmark set: SOS Draft Set (271 cards: SOS 001–271, released 2026-04-24) — benchmark targets
-- Agents: Docker-based black-box containers (one image per agent+mode+strategy variant)
+- Agents: standalone Karn Construct Definitions selecting immutable Docker images; multiple definitions may share one image
 - License: MIT (matching XMage)
 - Card implementations: one class per card, subclassing `CardImpl`
 - Tests: pytest with `test_utils` helpers, max 30 per card. Audited grader tests are host-side only, not run from the agent workspace.
@@ -41,7 +41,7 @@ All specs, code, and agent instructions use these terms exactly.
 | `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): picked pools (23/5/5, selective subsets of the HOB set), run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |
 | `DECISION-MODEL.md` | V2 engine Player Query / Player Decision protocol, Game Symbols/Refs, Intents, DeterministicPlayer (V2) — engine-level, pool-neutral |
 | `BENCHMARK-CANDIDATES.md` | The bench-side candidate lifecycle (#39 §§4–5, #66): the curated `candidates/` tree and the promote gate (vendor-at-promote is strict), the file-backed batch queue and single-writer scheduler (`batches/`, `queue ls`, `top`), and the publish gate into `published/` (traceability = hard refusal, validity = warning; never commits) |
-| `BENCH-CONTRACT.md` | The contract TheOzolith must publish for a Benchmark Candidate to equal a worker-type definition: build-context authentication, candidate-identity triple, bench-implementer run fidelity (vendored read-only from the-ozolith) |
+| `BENCH-CONTRACT.md` | Standalone Karn definition execution, versioned definition/image identity, benchmark-owned workflow and supported host capabilities |
 | `KNOWN-ISSUES.md` | Known issues encountered during benchmark-runner development, with the fixes applied |
 
 Each spec's own **Relevant ADRs** appendix links the architectural decisions behind it; there is no separate ADR index here.

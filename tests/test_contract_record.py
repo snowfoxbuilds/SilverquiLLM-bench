@@ -11,8 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from theozolith_worker import api
 
+from silverquillm import workflow as api
 from silverquillm.candidate import BuiltImage, load_candidate_bundle
 from silverquillm.contract import (
     FAILURE_EVALUATION,
@@ -26,11 +26,12 @@ from silverquillm.contract_record import (
     RUN_ARTIFACTS_KIND,
     write_contract_run_record,
 )
-from silverquillm.contract_version import CONTRACT_SCHEMA_VERSION, InstalledWorker
+from silverquillm.contract_version import BENCHMARK_INTERFACE_VERSION
+from silverquillm.docker_host import ContainerOutcome
 from silverquillm.evaluator import CardResult, FullEvalResult
 from silverquillm.jobdir import BenchmarkRef, load_benchmark
 from silverquillm.modes import get_mode
-from silverquillm.results_repo import OZOLITH_SCHEME, candidate_hash, read_run_record
+from silverquillm.results_repo import DEFINITION_SCHEME, candidate_hash, read_run_record
 from tests.candidate_fixtures import export_bundle, fake_image_builder
 
 
@@ -50,15 +51,12 @@ def _result(tmp_path: Path, run_id: str, mode: str, bundle, **overrides) -> Cont
         "candidate_path": bundle.path,
         "budget_seconds": 600,
         "phase": PHASE_DONE,
-        "worker": InstalledWorker(
-            version="0.3.0", revision="a" * 40, source="git+x", tree_digest="b" * 64
-        ),
         "bundle": bundle,
         "image": fake_image_builder(bundle),
         "bound_slots": ["ANTHROPIC_API_KEY"],
         "job_dir": tmp_path / "artifacts" / run_id / "job",
-        "agent_outcome": api.AgentOutcome(completed=True, exit_code=0),
-        "harness_status": {"phase": "done", "error": "", "agent": {"completed": True}},
+        "agent_outcome": ContainerOutcome(exit_code=0),
+        "runtime_observation": {"image_id": bundle.manifest["image"]},
         "transcript": {"path": "output/transcript.txt", "bytes": 12, "lines": 3},
         "gate": api.GateResult(steps_run=["test", "lint"]),
         "proposal_status": "applied",
@@ -90,7 +88,7 @@ class TestWriteContractRunRecord:
         assert record.mode == "basic"
         assert record.proposal_status == "applied"
         assert record.candidate == bundle.identity
-        assert record.candidate.scheme == OZOLITH_SCHEME and record.candidate.verified is True
+        assert record.candidate.scheme == DEFINITION_SCHEME and record.candidate.verified is True
         assert rec_dir.parent.name == candidate_hash(bundle.identity) == bundle.candidate_hash
         assert record.leaderboard_valid is False  # smoke is never leaderboard-eligible
         assert set(record.scores) == {"card_correctness", "fdn_regression", "engine_regression"}
@@ -98,9 +96,12 @@ class TestWriteContractRunRecord:
 
     def test_records_the_execution_and_candidate_evidence(self, tmp_path: Path, bundle) -> None:
         result = _result(
-            tmp_path, "run-2", "basic", bundle,
-            agent_outcome=api.AgentOutcome(session_died=True, exit_code=1),
-            harness_status={"phase": "done", "error": "", "agent": {"session_died": True}},
+            tmp_path,
+            "run-2",
+            "basic",
+            bundle,
+            agent_outcome=ContainerOutcome(session_died=True, exit_code=1),
+            runtime_observation={"image_id": bundle.manifest["image"]},
             gate=api.GateResult(
                 steps_run=["test", "lint"],
                 findings=[api.Finding(step="test", severity="error", summary="boom")],
@@ -108,24 +109,14 @@ class TestWriteContractRunRecord:
         )
         record = read_run_record(_write(tmp_path, result, FullEvalResult()))
         meta = record.run_metadata
-        assert meta["contract_schema_version"] == CONTRACT_SCHEMA_VERSION
-        assert meta["contract_bundle_format_version"] == 2
-        assert meta["contract_identity_spec_version"] == 2
-        assert meta["worker"] == {
-            "version": "0.3.0", "revision": "a" * 40, "source": "git+x", "tree_digest": "b" * 64,
-        }
-        # Candidate metadata: adapter/product version/export time are metadata
-        # only — never identity-bearing — and no secret value appears.
-        assert meta["adapter"] == "claude"
-        assert meta["worker_type"] == "fixture-claude"
-        assert meta["model"] == "claude-sonnet-5"
-        assert meta["product_version"] == "0.3.0"
-        assert meta["exported_at"] == "2026-09-03T00:00:00Z"
+        assert meta["benchmark_interface_version"] == BENCHMARK_INTERFACE_VERSION
+        assert meta["definition_version"] == bundle.manifest["definition_version"]
+        assert meta["identity"] == bundle.identity.to_dict()
         assert meta["image"] == result.image.to_dict()
         assert meta["secret_slots"] == {"bound": ["ANTHROPIC_API_KEY"], "unbound": []}
         assert meta["run_date"] == "2026-09-03T10:00:00+00:00"
         assert meta["agent_outcome"]["session_died"] is True
-        assert meta["harness_status"]["agent"]["session_died"] is True
+        assert meta["runtime_observation"]["image_id"] == bundle.manifest["image"]
         assert meta["transcript"]["lines"] == 3
         assert meta["gate"]["steps_run"] == ["test", "lint"]
         assert meta["gate"]["clean"] is False
@@ -138,13 +129,17 @@ class TestWriteContractRunRecord:
     def test_vendored_copy_is_pointed_at_from_the_record(self, tmp_path: Path, bundle) -> None:
         from silverquillm.candidate import VendoredCandidate
 
-        vendored = VendoredCandidate(path=tmp_path / "results" / bundle.candidate_hash / "candidate", written=True)
+        vendored = VendoredCandidate(
+            path=tmp_path / "results" / bundle.candidate_hash / "candidate", written=True
+        )
         result = _result(tmp_path, "run-vendored", "basic", bundle, vendored=vendored)
         record = read_run_record(_write(tmp_path, result, FullEvalResult()))
         pointers = {p["kind"]: p["location"] for p in record.artifact_pointers}
         assert pointers[CANDIDATE_BUNDLE_KIND] == f"results/{bundle.candidate_hash}/candidate/"
 
-    def test_unevaluated_run_is_attempted_with_zeroed_marked_scores(self, tmp_path: Path, bundle) -> None:
+    def test_unevaluated_run_is_attempted_with_zeroed_marked_scores(
+        self, tmp_path: Path, bundle
+    ) -> None:
         failure = RunFailure(FAILURE_EVALUATION, "evaluation", "grader exploded", "Traceback ...")
         result = _result(tmp_path, "run-3", "basic", bundle, phase="evaluation", failures=[failure])
         record = read_run_record(_write(tmp_path, result, None))
@@ -155,14 +150,22 @@ class TestWriteContractRunRecord:
         assert record.leaderboard_valid is False
         for score in record.scores.values():
             assert score == {
-                "pass_rate": 0.0, "tests_passed": 0, "tests_total": 0, "cards": 0, "evaluated": False,
+                "pass_rate": 0.0,
+                "tests_passed": 0,
+                "tests_total": 0,
+                "cards": 0,
+                "evaluated": False,
             }
 
     def test_mode_is_not_part_of_candidate_identity(self, tmp_path: Path, bundle) -> None:
         """AC: no mode string is folded into the candidate identity — two runs
         of the same candidate under different modes share a candidate directory."""
-        basic_dir = _write(tmp_path, _result(tmp_path, "run-basic", "basic", bundle), FullEvalResult())
-        planned_dir = _write(tmp_path, _result(tmp_path, "run-planned", "planned", bundle), FullEvalResult())
+        basic_dir = _write(
+            tmp_path, _result(tmp_path, "run-basic", "basic", bundle), FullEvalResult()
+        )
+        planned_dir = _write(
+            tmp_path, _result(tmp_path, "run-planned", "planned", bundle), FullEvalResult()
+        )
         assert basic_dir.parent == planned_dir.parent
         basic_rec = read_run_record(basic_dir)
         assert basic_dir.parent.name == candidate_hash(basic_rec.candidate)
@@ -185,7 +188,9 @@ class TestWriteContractRunRecord:
             _write(tmp_path, _result(tmp_path, "run-full", "basic", bundle), full, eligible)
         )
         assert record.leaderboard_valid is True
-        partial = FullEvalResult(sos_results={"fdn_129": CardResult("129", tests_passed=1, tests_total=1)})
+        partial = FullEvalResult(
+            sos_results={"fdn_129": CardResult("129", tests_passed=1, tests_total=1)}
+        )
         record = read_run_record(
             _write(tmp_path, _result(tmp_path, "run-partial", "basic", bundle), partial, eligible)
         )
@@ -197,7 +202,10 @@ class TestWriteContractRunRecord:
         assert evidence["candidate"]["candidate_hash"] == bundle.candidate_hash
         assert evidence["candidate"]["identity"] == bundle.identity.to_dict()
         assert evidence["candidate"]["secret_slots"] == ["ANTHROPIC_API_KEY"]
-        assert evidence["image"] == {"tag": bundle.tag, "id": result.image.image_id}
+        assert evidence["image"] == {
+            "reference": bundle.manifest["image"],
+            "id": result.image.image_id,
+        }
         assert evidence["candidate_path"] == str(bundle.path)
         assert "ANTHROPIC_API_KEY" in evidence["secret_slots"]["bound"]
 
@@ -208,7 +216,7 @@ class TestWriteContractRunRecord:
 
         result = _result(tmp_path, "run-forged", "basic", bundle)
         forged = dataclasses.replace(bundle.identity, verified=False)
-        with pytest.raises(InvalidRunRecordError, match="verified"):
+        with pytest.raises(InvalidRunRecordError, match="identity"):
             write_contract_run_record(
                 results_repo=tmp_path,
                 run_id=result.run_id,
@@ -225,4 +233,4 @@ class TestWriteContractRunRecord:
     def test_image_builder_double_is_deterministic(self, bundle) -> None:
         first, second = fake_image_builder(bundle), fake_image_builder(bundle)
         assert first == second and isinstance(first, BuiltImage)
-        assert first.tag == bundle.tag and first.image_id.startswith("sha256:")
+        assert first.tag == bundle.manifest["image"] and first.image_id.startswith("sha256:")

@@ -31,7 +31,7 @@ class TestRegistry:
 
     def test_constant_driver_and_eval_refs(self) -> None:
         for mode in MODES.values():
-            assert mode.driver_ref == DRIVER_REF == "bench:jobdir-v1"
+            assert mode.driver_ref == DRIVER_REF == "bench:construct-v1"
             assert mode.evaluation_method == EVALUATION_METHOD == "audited_eval"
 
 
@@ -57,8 +57,8 @@ class TestModeVariesOnlyTheTask:
     def test_manifest_is_identical_across_modes(self, tmp_path: Path) -> None:
         basic = self._stage(tmp_path / "basic", "basic")
         planned = self._stage(tmp_path / "planned", "planned")
-        assert (basic / "input" / "manifest.json").read_bytes() == (
-            planned / "input" / "manifest.json"
+        assert (basic / "input" / "benchmark.json").read_bytes() == (
+            planned / "input" / "benchmark.json"
         ).read_bytes()
 
     def test_only_task_and_synthetic_issue_differ(self, tmp_path: Path) -> None:

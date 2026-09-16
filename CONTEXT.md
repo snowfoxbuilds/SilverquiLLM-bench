@@ -66,13 +66,13 @@ _Avoid_: "blind implementation" as a noun (deprecated — was `blind_impl.py`)
 
 **Candidate Bundle**
 
-The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling (`theozolith candidate export`: `candidate.json` + generated `Dockerfile` + compiled knowledge tree + baked policy tree; `docs/specs/BENCH-CONTRACT.md`, `bundle_format_version` 2); the only thing `silverquillm run --candidate <path>` accepts (a bundle directory, or a checked-in `candidates/<slug>--<hash8>/` directory wrapping one under `bundle/`). Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle by TheOzolith's verifier (`silverquillm.candidate` consumes `verify_bundle`; the bench never reimplements the hash) — never trusted from a recorded value: a bundle whose recorded identity, or whose directory-name suffix, disagrees with the recomputed one is a hard refusal, as is a bundle carrying a secret value (#65). Adapter-agnostic by contract: the format never hardcodes the adapter set, and neither does the bench.
+Historical directory artifact containing a worker-type export, generated build context and recorded `ozolith-v1` identity. Preserved for historical records; new execution consumes an explicit Karn Construct Definition rather than reinterpreting this artifact.
 
 _Avoid_: "worker-type TOML" as the candidate input (a bare TOML is not self-contained — it references Config Repo siblings), "candidate config"
 
 **Candidate Hash**
 
-The bench's key for a verified candidate: the SHA-256 of the canonical JSON of the whole identity triple `{"adapter", "base_digest", "instruction_hash"}` (`silverquillm.results_repo.candidate_hash`; the-ozolith's canonical identity omits the adapter name, so the instruction hash alone is not injective over the triple). Names `results/<candidate-hash>/` in the Results Repo and, as its first eight characters (`hash8`), the `candidates/<slug>--<hash8>/` directory of a checked-in candidate (#39 §4: identity-hash suffix, flat, deduplicating). A recorded value everywhere it appears: recomputed on every run and every test run.
+The benchmark key for a candidate identity. New `karn-definition-v1` identities hash the canonical scheme, complete definition digest and immutable image digest. Historical `legacy` and `ozolith-v1` keys keep their original formulas. The full hash names results directories and its first eight characters name curated candidates.
 
 _Avoid_: "identity hash" for this key (the-ozolith's identity spec uses that phrase for the instruction hash), "candidate id"
 
@@ -246,7 +246,7 @@ _Avoid_: "Question" (working name), "prompt" alone (one field of a query)
 
 **Promoted Candidate**
 
-A Benchmark Candidate checked into the bench repo's `candidates/<slug>--<hash8>/` by the promote script from the operator's private Config Repo: the worker-type definition with its base pinned by digest, the referenced knowledge and Agent Policy source trees vendored whole, the exported Candidate Bundle, and a README the operator completes (what the candidate varies). Vendor-at-promote is strict (#39 §4, the-ozolith ADR-0048): a referenced knowledge tree must exist and be declared publishable (a `PUBLISHABLE` marker at its root) or the candidate cannot be promoted and its results cannot be published. The Reference Candidates are the promoted candidates that vary nothing.
+An explicit Benchmark Candidate curated under `candidates/<slug>--<hash8>/` with its canonical definition, exact source copy, hashed source inventory and public README. Its source must reproduce the selected definition and contain no credential values. Promotion proves definition traceability, not image-build provenance.
 
 _Avoid_: "imported candidate", "registered candidate" (nothing is registered — the directory is discovered)
 
@@ -258,7 +258,7 @@ _Avoid_: "leaderboard entry" (a leaderboard is a derivation over Published Resul
 
 **Reference Candidate**
 
-One of the public vanilla candidates checked in under `candidates/` (#65): `vanilla-claude` and `vanilla-codex` — the stock TheOzolith run image for the adapter, no setup, no knowledge, no Agent Policy, the adapter's default model spelled as its most-pinned provider ID, the model's default effort. They vary nothing: the fixed points every operator can run (smoke, calibration, Pipeline Validation Runs) and compare against. Pi joins when its adapter exists.
+A public vanilla candidate used as a fixed comparison point. Current references declare native CLI settings and immutable images explicitly. Historical references preserve their original bundles and identity scheme; neither a synthetic qualification workload nor a migrated label silently replaces them.
 
 _Avoid_: "baseline agent", "default candidate"
 
@@ -270,7 +270,7 @@ _Avoid_: "differential testing" (deprecated XMage approach), "checkpoint validat
 
 **Results Repo**
 
-The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: `results/<candidate-hash>/<run-id>/` holding one Run Record each, `results/<candidate-hash>/candidate/` holding the vendored Candidate Bundle of an `ozolith-v1` candidate (written once on its first run, verified at write time — the copy must recompute to the directory's Candidate Hash — immutable; #65), a derived `runs.jsonl` index regenerated from the tree (never hand-edited, never authoritative), and a root `AGENTS.md` carrying the full schema so the repo is self-contained for analysis agents. Heavy artifacts (transcripts, snapshots, per-card trees) never enter it — records carry pointers. Written only through `silverquillm.results_repo`; laid out by `silverquillm results-init <clone>`; the legacy Validated Results corpus is backfilled into it by `scripts/migrate_validated_results.py`.
+The private repository holding immutable Run Records under `results/<candidate-hash>/<run-id>/`, write-once vendored candidate definitions under `results/<candidate-hash>/candidate/`, and a derived index. Heavy artifacts remain outside it; historical layouts and identity keys are preserved.
 
 _Avoid_: "results dir" (the per-run `docker/<image>/results/` working output), "leaderboard repo" (publishing is the separate port into the bench repo's `published/` — see Published Result)
 
@@ -300,7 +300,7 @@ _Avoid_: "config.json" (implies agent configuration), "agent config"
 
 **Run Record**
 
-One Benchmark Run's immutable entry in the Results Repo: `manifest.json` (candidate identity — `ozolith-v1` with `verified: true`, the triple recomputed from a Candidate Bundle, or `legacy` with `verified: false`, a label — `mode`, `benchmark` — never "workload" — `budget_seconds`, `leaderboard_valid`, `resumed_from`, `proposal_status`, `run_metadata`, `artifact_pointers`) plus `scores.json` (the three audited dimensions under the benchmark-neutral keys `card_correctness`, `fdn_regression`, `engine_regression`). Written once, atomically; never edited — corrections are new runs. `leaderboard_valid` has one owner, `derive_leaderboard_valid`: false for a `leaderboard.eligible: false` benchmark, a Resume Leg, a card filter that differs from the benchmark's card set after integer normalization of collector numbers, or a scored set that differs from it.
+One Benchmark Run’s immutable manifest and scores in the Results Repo. Current schema-2 records carry `karn-definition-v1` definition/image identity; schema-1 `legacy` and `ozolith-v1` records remain readable with their original meaning. Records include mode, benchmark, budget, proposal outcome, eligibility, runtime evidence and pointers to heavy artifacts. Corrections are new runs.
 
 _Avoid_: "run summary" (`run_summary.json` is the legacy per-run aggregate the record's scores are mapped from), "result" alone
 
@@ -387,7 +387,7 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - All card tests follow a uniform structure: `tests/audited/{set_code}/{collector_number}/tests.py`, importing from `card_impl`. FDN and SOS tests share this structure.
 - The Base Set (FDN 001–291 + SPG 074–083) is validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.
 - A Pipeline Validation Run precedes scored benchmark runs to verify the orchestration pipeline.
-- A Benchmark Candidate enters the public set only as a Promoted Candidate; a Run Record becomes a Published Result only if its candidate is a Promoted Candidate that verifies by recomputation. Knowledge that cannot be published blocks both.
+- A Benchmark Candidate enters the public set only as a Promoted Candidate; a Run Record becomes a Published Result only if its candidate is a Promoted Candidate that verifies by recomputation. A missing or altered promoted definition source blocks publication.
 - A Batch holds ordered run specs; the scheduler executes one run at a time, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
 - Filesystem checks (does the file exist, does it differ from the template?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only.
 - `run_summary.json` is automatically generated after evaluation by aggregating per-card `result.json` files. The aggregator is a pure, idempotent function.

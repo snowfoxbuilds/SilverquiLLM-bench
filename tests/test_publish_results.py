@@ -178,7 +178,7 @@ class TestTraceability:
         assert _tree(world["dest"]) == {}
 
     def test_a_tampered_checked_in_candidate_is_a_hard_refusal(self, world, no_git) -> None:
-        dockerfile = world["promoted"] / "bundle" / "Dockerfile"
+        dockerfile = world["promoted"] / "bundle" / "definition.json"
         dockerfile.write_text(dockerfile.read_text() + "RUN echo tampered\n")
         plan = _plan(world, [world["valid"]])
         assert any("fails verification" in r for r in plan.refusals)
@@ -199,9 +199,9 @@ class TestTraceability:
         from silverquillm.results_repo import candidate_copy_dir
 
         copy = candidate_copy_dir(world["repo"], world["bundle"].identity)
-        (copy / "Dockerfile").write_text((copy / "Dockerfile").read_text() + "RUN echo x\n")
+        (copy / "definition.json").write_text((copy / "definition.json").read_text() + "RUN echo x\n")
         plan = _plan(world, [world["valid"]])
-        assert any("vendored candidate copy" in r for r in plan.refusals)
+        assert any("vendored definition" in r for r in plan.refusals)
 
     def test_an_unknown_or_ambiguous_run_id_refuses(self, world, no_git) -> None:
         with pytest.raises(publish_mod.PublicationRefused, match="no run record"):

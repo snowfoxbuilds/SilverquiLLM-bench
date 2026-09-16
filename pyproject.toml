@@ -12,22 +12,10 @@ dependencies = [
     "requests",
     "pyyaml",
     "click",
-    # TheOzolith's published packages: the bench CONSUMES its Run Contract
-    # entry points (theozolith_worker.api) and its Candidate Bundle verifier
-    # (theozolith_control.candidate — export, verify_bundle, the verified
-    # build, over theozolith_nodedaemon's Dockerfile codegen and tree hash and
-    # theozolith_knowledge's compiler) rather than reimplementing them, and
-    # pins EVERY one of them to the EXACT immutable revision
-    # docs/specs/BENCH-CONTRACT.md is vendored from (the packages are not on
-    # PyPI and the-ozolith publishes no release tags).
-    # silverquillm/contract_version.py states the same revision plus each
-    # package's tree digest and the driver refuses any other;
-    # tests/test_contract_pin.py keeps the sources in agreement. Re-sync the
-    # vendored contract and vectors when moving this pin.
-    "theozolith-worker @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=worker",
-    "theozolith-control @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=control",
-    "theozolith-nodedaemon @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=nodedaemon",
-    "theozolith-knowledge @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=knowledge",
+    "jsonschema>=4.26.0",
+    "referencing>=0.37",
+    "pytest>=8",
+    "karn @ git+https://github.com/snowfoxbuilds/karn.git@d6beb12fa0686ceaabb4a9ed3c929794eed8eff3",
 ]
 
 [project.scripts]
@@ -49,10 +37,8 @@ dev = [
 include = ["silverquillm*"]
 
 [tool.setuptools.package-data]
-# The results-repo schema doc that `silverquillm results-init` writes.  (The
-# job dir's input/prompt.md now comes from the production prompt renderer, so
-# there are no bench-side task templates to package.)
-silverquillm = ["results_repo_templates/*.md"]
+# The self-contained results schema and benchmark-owned prompt are runtime assets.
+silverquillm = ["results_repo_templates/*.md", "prompt_template.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

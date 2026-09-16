@@ -181,11 +181,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, Self
 
+from silverquillm._bootstrap import repository_root
 from silverquillm.candidate import CandidateBundle, load_candidate_bundle, redact_credentials
 from silverquillm.contract import RUNS_DIRNAME, candidate_label, container_name, new_run_name
 from silverquillm.jobdir import BenchmarkRef, load_benchmark
 from silverquillm.modes import BenchmarkMode, get_mode
 from silverquillm.results_repo import (
+    DEFINITION_SCHEME,
     OZOLITH_SCHEME,
     CandidateIdentity,
     InvalidRunRecordError,
@@ -259,7 +261,7 @@ __all__ = [
     "state_path",
 ]
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = repository_root()
 
 BATCHES_DIRNAME = "batches"
 STATE_DIRNAME = "state"
@@ -589,7 +591,7 @@ def _check_run_fields(fields: Mapping[str, Any], *, context: str) -> None:
             parsed = CandidateIdentity.from_dict(identity)
         except InvalidRunRecordError as exc:
             raise StateError(f"{context}: identity is malformed: {exc}") from exc
-        if parsed.scheme != OZOLITH_SCHEME:
+        if parsed.scheme not in {OZOLITH_SCHEME, DEFINITION_SCHEME}:
             raise StateError(
                 f"{context}: identity scheme {parsed.scheme!r} is not {OZOLITH_SCHEME!r} — the"
                 " scheduler records only identities recomputed from a Candidate Bundle"
@@ -1127,6 +1129,15 @@ class DockerContainerRuntime:
     def __init__(self, binary: str = "docker") -> None:
         self._binary = binary
 
+    def recover_construct(self, run_dir: Path, run_id: str) -> str:
+        from silverquillm.docker_host import HostError, recover_resources
+
+        try:
+            recover_resources(run_dir, run_id)
+        except (HostError, OSError, ValueError) as exc:
+            raise ReconciliationError(str(exc)) from None
+        return "owned resources removed"
+
     def _run(self, args: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
         try:
             return subprocess.run(
@@ -1360,8 +1371,8 @@ def resolve_candidate_ref(ref: str, *, repo_root: Path) -> Path:
     if not path.is_absolute() and "/" not in ref:
         tried.append(Path(repo_root) / "candidates" / ref)
     for option in tried:
-        if option.is_dir():
-            return option.resolve()
+        if option.is_dir() or option.is_file():
+            return option.absolute()
     raise SchedulerError(
         f"candidate ref {ref!r} resolves to no directory (tried {', '.join(str(t) for t in tried)})"
     )
@@ -1396,6 +1407,7 @@ class RunOutcome:
     summary: str = ""
     failure_class: str | None = None
     record_dir: Path | None = None
+    cleanup_pending: bool = False
 
 
 Executor = Callable[[ResolvedRun], RunOutcome]
@@ -1414,8 +1426,6 @@ def contract_run_executor(
     same recomputation."""
 
     def execute(resolved: ResolvedRun) -> RunOutcome:
-        from theozolith_worker import api
-
         from silverquillm.contract import drive_contract_run
 
         result = drive_contract_run(
@@ -1425,7 +1435,6 @@ def contract_run_executor(
             mode=resolved.mode,
             budget_seconds=resolved.spec.budget_seconds,
             candidate=resolved.candidate_path,
-            session_factory=api.container_session_factory(api.DockerEngine()),
             results_repo=resolved.results_repo,
             eval_timeout=eval_timeout,
             environ=environ,
@@ -1442,6 +1451,7 @@ def contract_run_executor(
             summary=summary,
             failure_class=result.failure_class,
             record_dir=result.record_dir,
+            cleanup_pending=any(row.failure_class == "cleanup" for row in getattr(result, "failures", [])),
         )
 
     return execute
@@ -1706,6 +1716,20 @@ class Scheduler:
             f"the scheduler exited while this run was running; {note}; marked failed at scheduler startup"
         )
 
+    def _reconcile_run(self, run: RunState, *, run_dir: Path | None = None) -> str:
+        recover = getattr(self.container_runtime, "recover_construct", None)
+        if (run.identity or {}).get("scheme") == "karn-definition-v1" and recover is not None:
+            if run_dir is None:
+                label = Path(run.spec["candidate"]).name
+                if label in {"", ".", ".."}:
+                    raise ReconciliationError("invalid persisted candidate label")
+                label = re.sub(r"[^A-Za-z0-9._-]", "-", label).lstrip(".") or "candidate"
+                run_dir = self.runs_root / label / (run.run_id or "")
+            if run_dir.absolute().resolve() != run_dir.absolute():
+                raise ReconciliationError("run recovery path contains a symlink")
+            return recover(run_dir, run.run_id or "")
+        return reconcile_container(self.container_runtime, container_name(run.run_id or ""))
+
     def recover(self) -> list[str]:
         """Reconcile every run left ``running`` by a previous scheduler before
         any new work: on this host, force-remove its container and confirm it
@@ -1718,7 +1742,7 @@ class Scheduler:
         touched: list[str] = []
         for item in self._plan_recovery():
             container = container_name(item.run.run_id or "")
-            note = reconcile_container(self.container_runtime, container)
+            note = self._reconcile_run(item.run)
             if item.stale:
                 self._log(f"RECOVERED {item.batch_id}: stale runtime metadata for {item.run.run_id} — container {note}")
             else:
@@ -1899,8 +1923,14 @@ class Scheduler:
         try:
             outcome = self.executor(resolved)
         except Exception as exc:  # noqa: BLE001 - an executor crash is a failed run, not a dead scheduler
+            cleanup_pending = False
+            try:
+                self._reconcile_run(entry, run_dir=resolved.run_dir)
+            except ReconciliationError:
+                cleanup_pending = True
             outcome = RunOutcome(
-                ok=False, summary=f"executor raised {type(exc).__name__}", failure_class=FAILURE_SCHEDULER
+                ok=False, summary=f"executor raised {type(exc).__name__}", failure_class=FAILURE_SCHEDULER,
+                cleanup_pending=cleanup_pending
             )
             entry.error = self._sanitize(f"{type(exc).__name__}: {exc}", bundle=resolved.bundle)
             self._log(
@@ -1916,6 +1946,8 @@ class Scheduler:
         entry.summary = self._sanitize(outcome.summary, bundle=resolved.bundle)
         entry.finished_at = _stamp(self._now())
         save_state(self.batches_dir, state, now=self._now())
+        if outcome.cleanup_pending:
+            raise ReconciliationError("run cleanup is unconfirmed; runtime inventory retained for recovery")
         clear_runtime(self.batches_dir, batch.id)
         self._log(
             f"{'DONE' if outcome.ok else 'FAILED'} {batch.id} #{index}: {resolved.run_id} — {entry.summary}",
@@ -1932,7 +1964,7 @@ class Scheduler:
         so the next scheduler reconciles it at startup."""
         why = "SIGTERM" if isinstance(exc, SchedulerStopped) else type(exc).__name__
         try:
-            note = reconcile_container(self.container_runtime, resolved.container)
+            note = self._reconcile_run(entry, run_dir=resolved.run_dir)
         except ReconciliationError as rexc:
             self._log(
                 f"INTERRUPTED {batch.id} #{index}: {resolved.run_id} ({why}) — container"

@@ -1,24 +1,4 @@
-"""Output Proposal handling — validation delegated to TheOzolith's validator.
-
-The bench does not reimplement the Output Proposal schema.  Per the Bench
-Contract (``docs/specs/BENCH-CONTRACT.md``), proposal validation is
-``schema_version`` surface consumed from the published API
-(:func:`theozolith_worker.api.validate_run`), never copied — a hand-rolled
-allowlist would drift silently as production's schema evolves.
-
-This module is a thin bench adapter: locate ``output/proposal.json``, run the
-*production* driver-side validator at round one, and map the result to a bench
-``proposal_status`` (``applied`` / ``missing`` / ``invalid``).  It never raises
-through the driver — a missing or invalid proposal is recorded as a status and
-the checkout is committed and graded regardless (the workspace is the evidence).
-
-Public API
-----------
-- :class:`LoadedProposal` — the :func:`load_proposal` result.
-- :func:`load_proposal` — read + validate via the production validator.
-- :func:`fallback_commit_message` — the driver's commit body when no valid
-  proposal shipped (a deliberate bench deviation; production ships none).
-"""
+"""Benchmark-owned Output Proposal schema validation and fallback provenance."""
 
 from __future__ import annotations
 
@@ -26,7 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from theozolith_worker import api
+from silverquillm import workflow as api
 
 __all__ = [
     "PROPOSAL_APPLIED",
@@ -52,8 +32,8 @@ class LoadedProposal:
 
     ``status`` is one of :data:`PROPOSAL_APPLIED` / :data:`PROPOSAL_MISSING` /
     :data:`PROPOSAL_INVALID`.  ``proposal`` is the validated
-    :class:`~theozolith_worker.api.RunProposal` on success, else ``None``;
-    ``errors`` carries the production validator's messages on failure.
+    benchmark RunProposal on success, else ``None``;
+    ``errors`` carries the benchmark validator's messages on failure.
     """
 
     status: str
@@ -61,15 +41,17 @@ class LoadedProposal:
     errors: list[str]
 
 
-def load_proposal(job_dir: Path) -> LoadedProposal:
-    """Load ``job_dir/output/proposal.json`` and validate it with production's
-    :func:`theozolith_worker.api.validate_run` (round one).  Never raises."""
-    path = Path(job_dir) / api.PROPOSAL_FILE
-    if not path.is_file():
+def load_proposal(job_dir: Path, *, path: Path | None = None) -> LoadedProposal:
+    """Load ``job_dir/output/proposal.json`` and validate it with the benchmark's
+    benchmark validate_run (round one).  Never raises."""
+    path = path or Path(job_dir) / api.PROPOSAL_FILE
+    if not path.exists() and not path.is_symlink():
         return LoadedProposal(PROPOSAL_MISSING, None, [f"no Output Proposal at {path}"])
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        from silverquillm.safe_files import read_regular
+
+        raw = json.loads(read_regular(path).decode("utf-8"))
+    except (OSError, ValueError) as exc:
         return LoadedProposal(PROPOSAL_INVALID, None, [f"proposal is not valid JSON: {exc}"])
     if not isinstance(raw, dict):
         return LoadedProposal(PROPOSAL_INVALID, None, ["proposal must be a JSON object"])

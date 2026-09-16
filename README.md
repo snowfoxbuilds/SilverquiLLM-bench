@@ -95,22 +95,23 @@ Smoke runs validate that a container starts and produces output — they use a t
 ### Run a benchmark
 
 ```bash
-# A Candidate Bundle through TheOzolith's Run Contract (the current contract):
-silverquillm run --candidate candidates/vanilla-claude--4e8b75b6 --benchmark smoke --timeout 3600
-# The legacy entrypoint lineage (being phased out):
+# An explicit standalone Karn Construct Definition:
+silverquillm run --candidate definition.json --benchmark smoke --timeout 3600
+# The historical entrypoint lineage:
 silverquillm run --image my-agent:latest --timeout 7200
 ```
 
-A **Candidate Bundle** (`candidates/README.md`) is the only input of a
-Contract Run: the bench verifies it through TheOzolith's verifier, recomputes
-its identity (never trusted from a recorded value), builds its derived image
-through the verified standalone build, launches it by image ID with the
-in-image harness as PID 1, and records the run under the recomputed identity.
-The bundle's `secret_slots` name the environment variables the bench binds
-(`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` for claude, `CODEX_AUTH_JSON`
-for codex). The current vanilla reference candidates ship under `candidates/`;
-they are examples, not a closed set — a further candidate is one more exported
-directory, with no adapter or model registry to update.
+A candidate pairs a versioned runtime definition with an immutable image already available in your local Docker Engine.
+The benchmark validates the declaration, selects the actual image ID, supplies the declared files and runs the configured process.
+Neither an Ozolith installation nor a Node Daemon is required.
+With a non-editable wheel installation, set `SILVERQUILLM_BENCH_ROOT` to this benchmark data checkout; it supplies the prompts, workspaces and audited suites.
+Basic and planned prompts, proposal validation, isolated gates and audited grading belong to the benchmark.
+Distinct definitions can share one image while receiving different candidate identities.
+
+The current host supports Docker Automatons with launch-private runtime mounts, configured initialization/bootstrap and direct raw credentials.
+Bind sources, persistent mounts, host plugins, retained login lifecycle and relay/provider credentials are explicitly unsupported and refused before launch.
+See [Bench Contract](docs/specs/BENCH-CONTRACT.md) for the exact capability boundary and raw-secret binding convention.
+Historical bundles and results keep their original meaning; new runs require explicit definitions.
 
 ---
 
@@ -118,7 +119,7 @@ directory, with no adapter or model registry to update.
 
 | Command | Purpose |
 | --- | --- |
-| `silverquillm run --candidate <bundle> --benchmark … [--mode basic\|planned] [--results-repo …]` | Drive a Candidate Bundle through TheOzolith's implementer Run Contract: bundle verification + identity recomputation, vendored results-repo copy, verified image build, production job dir, gate over the jobs channel, post-exit proposal application, Audited Eval, RunRecord under the verified identity. |
+| `silverquillm run --candidate <definition> --benchmark … [--mode basic\|planned] [--results-repo …]` | Run a standalone definition using the existing immutable image, declared file interface, isolated gates and audited grading; record definition and image identity. |
 | `silverquillm run --image … --timeout …` | Launch a legacy entrypoint-lineage run (being phased out). |
 | `silverquillm smoke --image …` | Validate that an image starts and produces output. |
 | `silverquillm resume <run_id> --timeout …` | Continue from a prior run's final state as an independent leg. |
@@ -128,7 +129,7 @@ directory, with no adapter or model registry to update.
 | `silverquillm scheduler [--once] [--replay-without-state ID] [--acknowledge-cleanup ID]` | Run the single-writer batch scheduler over `batches/*.toml` (serial, name order then file order, `not_before` respected, identity resolved at run start; committed portable state in `batches/state/`; a batch without state is blocked until acknowledged; abandoned containers reconciled before anything runs). |
 | `silverquillm queue ls` | One-shot, read-only table of the batch queue: batches, `not_before`, per-run specs and states, and every blocked batch (missing state, unreadable state, an abandoned run). |
 | `silverquillm top` | Live, read-only view of the queue (`q` quits). |
-| `scripts/promote_candidate.py <config-repo> <worker-type>` | Promote a worker-type definition into `candidates/` (vendor-at-promote is strict; the whole tree is scanned for secret values; never runs git). |
+| `scripts/promote_candidate.py <definition.json>` | Promote an explicit definition into `candidates/` (vendor-at-promote is strict; the whole tree is scanned for secret values; never runs git). |
 | `scripts/publish_results.py --results-repo … --dest published/<subdir> RUN_ID…` | Publish Run Records into `published/` transactionally (traceability = hard refusal, validity = warning; never commits). |
 
 A `--cards` filter is available for development and pipeline validation, but filtered runs are **not** leaderboard-valid.
@@ -139,18 +140,11 @@ A `--cards` filter is available for development and pipeline validation, but fil
 
 The bench-side lifecycle of a candidate (`docs/specs/BENCHMARK-CANDIDATES.md`):
 
-1. **Promote.** `python scripts/promote_candidate.py <config-repo> <worker-type>`
-   copies a worker-type definition from your private Config Repo into
-   `candidates/<slug>--<hash8>/` — definition (base pinned by digest), the
-   knowledge and policy source trees it references, the exported bundle, and a
-   README stub you complete. A referenced knowledge tree must carry a
-   `PUBLISHABLE` marker at its root or the candidate cannot be promoted:
-   knowledge that cannot be published means its results cannot be published
-   either. The whole directory is scanned for secret values before it appears
-   and the generated files name no host-local path; promoting the same
-   identity again is a no-op only when the vendored source is unchanged (your
-   completed README is never compared). Commit the directory yourself — the
-   commit is the approval stamp.
+1. **Promote.** `python scripts/promote_candidate.py definition.json` writes
+   `candidates/<slug>--<hash8>/` with the canonical definition, exact source
+   copy, hashed source inventory and README. It verifies the whole tree for
+   credential values before atomic publication. The source proves the
+   definition; it does not attest an image build. Review and commit it yourself.
 2. **Queue.** Write `batches/<id>.toml` (an optional `not_before` plus ordered
    `[[runs]]` of candidate + mode + benchmark + budget; `batches/README.md`),
    start it with `silverquillm scheduler --replay-without-state <id>` (a batch

@@ -172,8 +172,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from theozolith_control import candidate as ozcandidate
-
 from silverquillm.candidate import BUNDLE_SUBDIR, CandidateRefusedError, load_candidate_bundle
 from silverquillm.created_directories import (
     CreatedDirectories,
@@ -181,9 +179,10 @@ from silverquillm.created_directories import (
     DirectoryCleanupError,
     Entry,
 )
+from silverquillm.promotion import verify_source
 from silverquillm.results_repo import (
+    DEFINITION_SCHEME,
     MANIFEST_FILENAME,
-    OZOLITH_SCHEME,
     RESULTS_DIRNAME,
     RESULTS_REPO_ENV,
     SCORES_FILENAME,
@@ -474,11 +473,11 @@ def check_traceability(
 ) -> Traceability:
     """The traceability check: *identity* is checked in under *candidates_dir*
     and verifies by recomputation.  Raises :class:`PublicationRefused`."""
-    if identity.scheme != OZOLITH_SCHEME:
+    if identity.scheme != DEFINITION_SCHEME:
         raise PublicationRefused(
             f"the run's candidate identity is scheme {identity.scheme!r}, which has no"
             " Candidate Bundle to trace to — only a run driven from a verified bundle"
-            f" ({OZOLITH_SCHEME}) is publishable"
+            f" ({DEFINITION_SCHEME}) is publishable"
         )
     expected_hash = candidate_hash(identity)
     hash8 = candidate_hash8(identity)
@@ -510,12 +509,9 @@ def check_traceability(
             f"{candidate_dir} fails verification, so the run cannot be traced to a"
             f" verified candidate: {exc}"
         ) from exc
+    verify_source(candidate_dir, bundle)
     recomputed = bundle.identity
-    if bundle.candidate_hash != expected_hash or (
-        recomputed.base_image_digest,
-        recomputed.instruction_hash,
-        recomputed.adapter_identity,
-    ) != (identity.base_image_digest, identity.instruction_hash, identity.adapter_identity):
+    if bundle.candidate_hash != expected_hash or recomputed != identity:
         raise PublicationRefused(
             f"{candidate_dir} recomputes to candidate hash {bundle.candidate_hash}"
             f" {recomputed.to_dict()}, but the record carries {expected_hash}"
@@ -526,14 +522,9 @@ def check_traceability(
         copy = candidate_copy_dir(results_repo, identity)
         if copy.exists():
             try:
-                summary = ozcandidate.verify_bundle(copy)
-            except ozcandidate.CandidateError as exc:
-                raise PublicationRefused(
-                    f"the vendored candidate copy {copy} fails verification: {exc}"
-                ) from exc
-            vendored = CandidateIdentity.recomputed(
-                summary.base_digest, summary.instruction_hash, summary.adapter
-            )
+                vendored = load_candidate_bundle(copy).identity
+            except CandidateRefusedError as exc:
+                raise PublicationRefused(f"the vendored definition is unverifiable: {exc}") from exc
             if candidate_hash(vendored) != expected_hash:
                 raise PublicationRefused(
                     f"the vendored candidate copy {copy} recomputes to"
