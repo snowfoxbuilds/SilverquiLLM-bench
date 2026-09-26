@@ -124,6 +124,11 @@ def queue_rows(directory: Path) -> list[dict]:
     return rows
 
 
+def _failure_reason(error: Exception) -> str:
+    """A KarnError's code, else only the exception type: messages can carry paths or secrets."""
+    return str(error) if isinstance(error, KarnError) else type(error).__name__
+
+
 class KarnScheduler:
     def __init__(
         self,
@@ -197,6 +202,9 @@ class KarnScheduler:
                         self.recoverer(run_id=row["run_id"], spec=row["spec"], **self.options)
                     except RecordWritePendingError:
                         continue
+                    except Exception as error:  # noqa: BLE001 -- one unrecoverable row must not stop every scheduler start.
+                        self._warn(f"{state_path.stem}: record retry failed: {_failure_reason(error)}")
+                        continue
                     del row["record_write_pending"]
                     row.pop("error", None)
                     self._save(state_path, state)
@@ -215,6 +223,14 @@ class KarnScheduler:
                 continue
             except LoginInUseError:
                 self._warn(f"{state_path.stem}: login_in_use; recovery deferred")
+                continue
+            except Exception as error:  # noqa: BLE001 -- one unrecoverable row must not stop every scheduler start.
+                row.update(
+                    status="failed",
+                    error="recovery_failed:" + _failure_reason(error),
+                    recovered_at=datetime.now(UTC).isoformat(),
+                )
+                self._save(state_path, state)
                 continue
             status = record.run_metadata["execution"]["status"]
             if record.run_id != row["run_id"]:

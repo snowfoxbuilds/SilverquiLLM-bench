@@ -868,3 +868,46 @@ def test_login_is_released_before_grading(tmp_path):
 
     run_benchmark(**opts, login="shared", evaluator=evaluator)
     assert acquired == [True]
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("boom"), KarnError("invalid_canonical_json")])
+def test_an_unrecoverable_row_fails_and_the_scheduler_continues(tmp_path, failure):
+    directory = batch(tmp_path / "batches")
+
+    def interrupted(**kwargs):
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        scheduler(tmp_path, directory, executor=interrupted).run_until_idle()
+
+    def broken(**kwargs):
+        raise failure
+
+    executed = []
+
+    def execute(**kwargs):
+        executed.append(kwargs["run_id"])
+        return completed(**kwargs)
+
+    assert scheduler(tmp_path, directory, executor=execute, recoverer=broken).run_until_idle() == 1
+    state = json.loads((directory / "state/trial.json").read_text())
+    expected = "recovery_failed:" + (str(failure) if isinstance(failure, KarnError) else "RuntimeError")
+    assert [(row["status"], row.get("error")) for row in state["runs"]] == [
+        ("failed", expected),
+        ("done", None),
+    ]
+    assert executed == [state["runs"][1]["run_id"]]
+
+
+def test_a_recoverer_interrupt_still_propagates(tmp_path):
+    directory = batch(tmp_path / "batches")
+
+    def interrupted(**kwargs):
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        scheduler(tmp_path, directory, executor=interrupted).run_until_idle()
+    with pytest.raises(KeyboardInterrupt):
+        scheduler(tmp_path, directory, recoverer=interrupted).run_until_idle()
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert [row["status"] for row in state["runs"]] == ["running"]
