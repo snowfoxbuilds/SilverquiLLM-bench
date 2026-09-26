@@ -42,6 +42,7 @@ from silverquillm.card_loader import load_all_card_specs
 from silverquillm.card_names import build_card_name_map
 from silverquillm.replay.cli import validate as _replay_validate
 from silverquillm.runner import ContainerLifecycle
+from silverquillm.safe_files import open_directory, read_regular_at
 from silverquillm.token_report import render as render_token_report
 from silverquillm.workspace import (
     build_resume_preamble,
@@ -196,6 +197,24 @@ def _rewrite_diff_headers(diff_text: str, old_a: str, old_b: str) -> str:
     return "".join(out_lines)
 
 
+HARVESTED_FILE_LIMIT = 32 * 1024 * 1024
+
+
+def _harvest_regular(workspace: Path, parts: tuple[str, ...], destination: Path) -> None:
+    """Copy one agent-written file only if no component of its path is a link."""
+    try:
+        directory = open_directory(workspace, parts[:-1])
+    except OSError:
+        return
+    try:
+        content = read_regular_at(directory, parts[-1], HARVESTED_FILE_LIMIT)
+    except OSError:
+        return
+    finally:
+        os.close(directory)
+    destination.write_bytes(content)
+
+
 def _harvest_results(
     workspace: Path,
     output: Path,
@@ -245,21 +264,15 @@ def _harvest_results(
 
         card_workspace_dir = sos_dir / cn
 
-        if not card_workspace_dir.exists():
+        if card_workspace_dir.is_symlink() or not card_workspace_dir.is_dir():
             continue
 
         card_results = cards_out / cn
         card_results.mkdir(parents=True, exist_ok=True)
 
-        # card_impl.py
-        impl_src = card_workspace_dir / "card_impl.py"
-        if impl_src.exists():
-            shutil.copy2(impl_src, card_results / "card_impl.py")
-
-        # tests.py (optional)
-        tests_src = card_workspace_dir / "tests.py"
-        if tests_src.exists():
-            shutil.copy2(tests_src, card_results / "tests.py")
+        # card_impl.py, and tests.py when present
+        for name in ("card_impl.py", "tests.py"):
+            _harvest_regular(workspace, ("cards", "sos", cn, name), card_results / name)
 
     # Engine diff — compare repo engine against workspace engine.
     # Rewrite absolute paths to a/<file> and b/<file> so the patch is portable
@@ -268,8 +281,9 @@ def _harvest_results(
     engine_ws = workspace / "engine"
     if engine_repo.exists() and engine_ws.exists():
         try:
+            # --no-dereference: an agent's link must never pull host files into the patch.
             diff_result = subprocess.run(
-                ["diff", "-ruN", str(engine_repo), str(engine_ws)],
+                ["diff", "-ruN", "--no-dereference", str(engine_repo), str(engine_ws)],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -289,13 +303,13 @@ def _harvest_results(
     # to run_dir by _drain_pipe (see KEY_DECISIONS.md). Skip them if already present.
     _DIRECT_STREAM_FILES = {"docker_stdout.log", "docker_stderr.log"}
     for src in output.iterdir():
-        if src.is_file() and (src.suffix in (".log", ".jsonl")):
+        if not src.is_symlink() and src.is_file() and (src.suffix in (".log", ".jsonl")):
             if src.name in _DIRECT_STREAM_FILES and (run_dir / src.name).exists():
                 continue
             if src.name == "progress.jsonl":
                 continue  # progress.jsonl is deprecated; skip it
             dest = run_dir / src.name
-            shutil.copy2(src, dest)
+            shutil.copy2(src, dest, follow_symlinks=False)
 
     # Per-card status
     _write_card_statuses(workspace, run_dir, timed_out, card_filter=filter_set)
@@ -308,17 +322,19 @@ def _harvest_results(
     # makes the harvest robust if the symlink ever reappears for other reasons.
     workspace_final = run_dir / "workspace_final"
     if workspace.exists():
+        # Links stay links: evidence, never a way to copy host files into the run.
         shutil.copytree(
             workspace,
             workspace_final,
+            symlinks=True,
             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "benchmarks"),
             dirs_exist_ok=True,
         )
 
     # Run manifest — copy from workspace_final (snapshot) to results dir
     manifest_src = workspace_final / "run_manifest.json" if workspace_final.exists() else workspace / "run_manifest.json"
-    if manifest_src.exists():
-        shutil.copy2(manifest_src, run_dir / "run_manifest.json")
+    if manifest_src.is_file() and not manifest_src.is_symlink():
+        shutil.copy2(manifest_src, run_dir / "run_manifest.json", follow_symlinks=False)
 
     return run_dir
 

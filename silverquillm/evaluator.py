@@ -572,17 +572,18 @@ def _prepare_engine_work(
         Surfaced loudly to prevent silently scoring against the baseline.
     """
     engine_work = run_dir / "engine_work"
-    if engine_work.is_dir():
+    if engine_work.is_dir() and not engine_work.is_symlink():
         # Copy engine_work into a staging dir named "engine/" so that
         # PYTHONPATH=staging_dir makes ``import engine as engine`` work.
         staging = Path(tempfile.mkdtemp(prefix="eval_engine_"))
-        shutil.copytree(engine_work, staging / "engine")
+        shutil.copytree(engine_work, staging / "engine", symlinks=True)
         return staging / "engine", staging
 
     snapshot_engine = run_dir / "workspace_final" / "engine"
-    if snapshot_engine.is_dir():
+    if snapshot_engine.is_dir() and not snapshot_engine.is_symlink():
         staging = Path(tempfile.mkdtemp(prefix="eval_engine_"))
-        shutil.copytree(snapshot_engine, staging / "engine")
+        # The agent's links stay links; they resolve, if at all, inside the grader container.
+        shutil.copytree(snapshot_engine, staging / "engine", symlinks=True)
         return staging / "engine", staging
 
     patch_file = run_dir / "engine_diff.patch"

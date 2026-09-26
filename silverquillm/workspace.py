@@ -180,7 +180,8 @@ def stage_workspace_from_prior_run(
 
     # copytree preserves .git/ and every tracking file the prior run
     # accumulated. No ignore patterns — we want byte-for-byte continuity.
-    shutil.copytree(src, workspace)
+    # symlinks=True: a prior leg's links are copied as links, never dereferenced on the host.
+    shutil.copytree(src, workspace, symlinks=True)
     output.mkdir(parents=True, exist_ok=True)
 
     # Refresh per-run files only. Do NOT touch agent-prompt-layer tracking
