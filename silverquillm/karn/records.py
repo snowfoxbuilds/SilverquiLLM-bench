@@ -2,24 +2,35 @@
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import math
 import os
 import re
 import shutil
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from silverquillm.queue_state import SchedulerLock
 from silverquillm.results_repo import InvalidRunRecordError, RunRecordExistsError
 
 from .definition import DIGEST, KarnError, canonical, decode_definition, digest
 
 SCHEMA_VERSION = 2
 DIMENSIONS = ("card_correctness", "fdn_regression", "engine_regression")
+RECORD_LOCK_SECONDS = 120
+
+
+class RecordWritePendingError(KarnError):
+    """The results repository stayed locked; the record is retained locally for recovery."""
+
+    def __init__(self, record: KarnRunRecord | None = None):
+        super().__init__("record_write_pending")
+        self.record = record
 
 
 @dataclass(frozen=True)
@@ -243,12 +254,34 @@ def missing_scores(reason: str) -> dict:
     }
 
 
-def write_record(repo_root: Path, record: KarnRunRecord) -> Path:
+@contextlib.contextmanager
+def _record_lock(results: Path, timeout: float, record: KarnRunRecord):
+    # flock the results directory itself, so no lock file ever enters the results repository.
+    descriptor = os.open(results, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise RecordWritePendingError(record) from None
+                time.sleep(0.1)
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def write_record(
+    repo_root: Path, record: KarnRunRecord, *, lock_seconds: float = RECORD_LOCK_SECONDS
+) -> Path:
+    """Wait for concurrent writers; on timeout raise :class:`RecordWritePendingError`."""
     record.validate()
     repo_root = Path(repo_root)
     target = repo_root / "results" / record.candidate.hash / record.run_id
     target.parent.mkdir(parents=True, exist_ok=True)
-    with SchedulerLock(repo_root / ".record-lock"):
+    with _record_lock(repo_root / "results", lock_seconds, record):
         if target.exists():
             raise RunRecordExistsError(str(target))
         temporary = Path(tempfile.mkdtemp(prefix=".record-", dir=target.parent))

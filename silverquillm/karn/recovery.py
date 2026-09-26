@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import json
+import re
 import uuid
 from pathlib import Path
 
@@ -12,12 +14,61 @@ from silverquillm.queue_state import _write_atomically
 
 from .benchmark import load_benchmark
 from .definition import KarnError, canonical, load_candidate
-from .execution import _scores, login_profile, mark_observation_problems, observation_session
+from .execution import (
+    _scores,
+    login_profile,
+    mark_observation_problems,
+    observation_session,
+    run_lock,
+)
 from .grading_inputs import grading_inputs
 from .host import DockerHost, HostResult
-from .login import PluginProcess, install_plugin, recover_login
+from .login import (
+    NATIVE_PRESERVED,
+    PluginProcess,
+    install_plugin,
+    preserve_pending_native,
+    recover_login,
+)
 from .records import KarnIdentity, KarnRunRecord, missing_scores, read_record, write_record
 from .snapshots import WorkspaceSnapshots, retain_git_history
+
+
+class RunNeverLaunchedError(KarnError):
+    """The runner stopped before the run input existed, so no workload was ever launched."""
+
+    def __init__(self):
+        super().__init__("interrupted_before_launch")
+
+
+def recover_run(
+    *,
+    run_id: str,
+    stop: bool = False,
+    bench_root: Path,
+    results_dir: Path,
+    results_repo: Path,
+    state_root: Path,
+    collector_host=None,
+) -> KarnRunRecord:
+    """Recover one direct or batch run by id; a live workload is stopped only on request."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", run_id):
+        raise KarnError("invalid_run_id")
+    if not (Path(results_dir).resolve() / run_id).is_dir():
+        raise KarnError("run_not_found:" + run_id)
+    docker = DockerHost(plugin_cache=Path(state_root).resolve() / "plugins").docker
+    info = docker.inspect_container("sq-run-" + run_id)
+    if info is not None and info["State"].get("Running") and not stop:
+        raise KarnError("run_container_still_running")
+    return recover_benchmark(
+        run_id=run_id,
+        spec={},
+        bench_root=bench_root,
+        results_dir=results_dir,
+        results_repo=results_repo,
+        state_root=state_root,
+        collector_host=collector_host,
+    )
 
 
 def recover_benchmark(
@@ -30,9 +81,26 @@ def recover_benchmark(
     state_root: Path,
     collector_host=None,
 ) -> KarnRunRecord:
+    """Idempotent: a recovered or retained record is returned instead of recovering twice.
+
+    Raises :class:`RunNeverLaunchedError` when the runner died before writing its input.
+    """
+    run_dir = Path(results_dir).resolve() / run_id
+    with contextlib.ExitStack() as held:
+        if run_dir.is_dir():
+            held.enter_context(run_lock(run_dir))
+        return _recover(
+            run_id=run_id,
+            run_dir=run_dir,
+            bench_root=bench_root,
+            results_repo=results_repo,
+            state_root=state_root,
+        )
+
+
+def _recover(*, run_id, run_dir, bench_root, results_repo, state_root) -> KarnRunRecord:
     from .observations import CodexTelemetryCollector, summarize_events
 
-    run_dir = Path(results_dir) / run_id
     previous_record = None
     previous_path = None
     recovery_link = run_dir / "recovery-record.json"
@@ -67,8 +135,13 @@ def recover_benchmark(
         previous_record = read_record(previous_path)
         if previous_record.run_metadata["execution"]["workspace_stopped"]:
             return previous_record
+    host = DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     try:
         inputs = json.loads((run_dir / "run-input.json").read_text())
+    except FileNotFoundError:
+        # The input is written before launch, so no workload should exist; remove any that does.
+        host.docker.cleanup_run("sq-run-" + run_id, run_id)
+        raise RunNeverLaunchedError() from None
     except (OSError, ValueError):
         raise KarnError("interrupted_run_input_unavailable:" + run_id) from None
     original = inputs.get("candidate_identity")
@@ -77,14 +150,19 @@ def recover_benchmark(
     if original is None:
         raise KarnError("original_candidate_identity_unavailable")
     identity = KarnIdentity.from_dict(original)
-    candidate = load_candidate(run_dir / "candidate", inputs["construct"])
+    # Recovery never runs the image, so it verifies the retained definition against the
+    # recorded image identity instead of requiring the image to still be present locally.
+    candidate = load_candidate(
+        run_dir / "candidate",
+        inputs["construct"],
+        image_inspector=lambda reference: {"Id": identity.image_id, "RepoDigests": [reference]},
+    )
     retained_identity = KarnIdentity.from_dict({"scheme": "karn-v4", **candidate.identity()})
     if retained_identity != identity or (
         previous_record is not None and previous_record.candidate != identity
     ):
         raise KarnError("retained_definition_identity_mismatch")
     benchmark = load_benchmark(bench_root, inputs["benchmark"])
-    host = DockerHost(plugin_cache=Path(state_root) / "plugins")
     profile = login_profile(state_root, inputs["login"])
     observed = HostResult(
         run_id,
@@ -120,8 +198,7 @@ def recover_benchmark(
                     raise KarnError("recovery_login_plugin_missing")
                 python = install_plugin(artifact, host.plugin_cache)
                 with PluginProcess(artifact, python, profile) as plugin:
-                    if (profile.state / "work").is_dir():
-                        collector.harvest_native(profile.state / "work")
+                    stale = preserve_pending_native(profile)
                     recover_login(
                         profile,
                         plugin,
@@ -130,6 +207,13 @@ def recover_benchmark(
                     )
                     observed.login_state = plugin.status()
                 host.docker.cleanup_run(observed.container_name, run_id)
+            # Only journals attributed to this run are read: another run's live native state
+            # is preserved into that run's own evidence, never harvested here.
+            preserved = run_dir / "host" / NATIVE_PRESERVED
+            if preserved.is_dir():
+                collector.harvest_native(preserved)
+            elif stale is not None and stale["run_id"] != run_id:
+                collector.mark_incomplete("native_state_belongs_to_other_run")
         else:
             host.docker.stop_and_confirm(observed.container_name, run_id)
             host.docker.cleanup_run(observed.container_name, run_id)

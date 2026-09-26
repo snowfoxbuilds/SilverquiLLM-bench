@@ -24,6 +24,12 @@ from pathlib import Path
 from .definition import KarnError, PluginArtifact, canonical, read_regular, strict_json
 
 MAX_MESSAGE = 1024 * 1024
+NATIVE_PRESERVED = "native-preserved"
+MAX_NATIVE_BYTES = 128 * 1024 * 1024
+
+
+class LoginInUseError(KarnError):
+    """Another local runner holds this login; the caller may retry later."""
 
 
 def private_directory(path: Path) -> Path:
@@ -77,7 +83,7 @@ class LoginProfile:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
-                raise KarnError("login_in_use") from None
+                raise LoginInUseError("login_in_use") from None
             yield
         finally:
             os.close(descriptor)
@@ -393,6 +399,62 @@ class PluginProcess:
             self.server_thread.join(timeout=5)
         if self.socket_directory is not None:
             shutil.rmtree(self.socket_directory)
+
+
+def _mounted_run(profile: LoginProfile) -> str | None:
+    try:
+        value = strict_json(read_regular(profile.state / "mounted.json", limit=4096))
+    except KarnError:
+        return None
+    return value.get("run_id") if isinstance(value, dict) else None
+
+
+def preserve_pending_native(profile: LoginProfile) -> dict | None:
+    """Copy a pending run's native session journals, never auth, into that run's own evidence.
+
+    Called under profile.exclusive before recover_login settles the pending run, because
+    settling clears the plugin's work directory. State is attributed to the pending run only
+    when the journal and the plugin's mounted.json name the same run.
+    """
+    pending = profile.pending()
+    if pending is None:
+        return None
+    run_id = pending.get("run_id")
+    outcome = {"run_id": run_id, "preserved": False, "reason": None}
+    sessions = profile.state / "work" / "sessions"
+    evidence = pending.get("evidence_dir")
+    if _mounted_run(profile) != run_id or sessions.is_symlink() or not sessions.is_dir():
+        outcome["reason"] = "native_state_unavailable"
+        return outcome
+    if not isinstance(evidence, str) or not Path(evidence).is_dir():
+        outcome["reason"] = "native_state_run_directory_unavailable"
+        return outcome
+    target = Path(evidence) / NATIVE_PRESERVED
+    if target.exists():
+        outcome["preserved"] = True
+        return outcome
+    temporary = Path(tempfile.mkdtemp(prefix=".native-", dir=evidence))
+    try:
+        consumed = 0
+        for directory, names, files in os.walk(sessions, followlinks=False):
+            names[:] = [name for name in names if not (Path(directory) / name).is_symlink()]
+            for name in sorted(files):
+                if not name.startswith("rollout-") or not name.endswith(".jsonl"):
+                    continue
+                source = Path(directory) / name
+                content = read_regular(source, limit=MAX_NATIVE_BYTES - consumed)
+                consumed += len(content)
+                destination = temporary / "sessions" / source.relative_to(sessions)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(content)
+        os.rename(temporary, target)
+        outcome["preserved"] = True
+    except (KarnError, OSError):
+        outcome["reason"] = "native_state_copy_failed"
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+    return outcome
 
 
 def recover_login(

@@ -14,7 +14,9 @@ from pathlib import Path
 from silverquillm.queue_state import SchedulerLock, _write_atomically
 
 from .definition import KarnError
-from .execution import run_benchmark
+from .execution import NATIVE_TELEMETRY, run_benchmark
+from .login import LoginInUseError
+from .records import RecordWritePendingError
 
 FORMAT = "karn-v4"
 
@@ -28,7 +30,14 @@ def load_batch(path: Path) -> dict | None:
         return None
     if set(value) - {"format", "not_before", "runs"} or not isinstance(value.get("runs"), list):
         raise KarnError("invalid_karn_batch:" + path.name)
-    allowed = {"build_output", "construct", "benchmark", "login", "budget_seconds"}
+    allowed = {
+        "build_output",
+        "construct",
+        "benchmark",
+        "login",
+        "budget_seconds",
+        "native_telemetry",
+    }
     for spec in value["runs"]:
         if (
             not isinstance(spec, dict)
@@ -40,6 +49,7 @@ def load_batch(path: Path) -> dict | None:
             or type(spec.get("budget_seconds", 86400)) is not int
             or spec.get("budget_seconds", 86400) < 1
             or ("login" in spec and not isinstance(spec["login"], str))
+            or spec.get("native_telemetry", "auto") not in NATIVE_TELEMETRY
         ):
             raise KarnError("invalid_karn_run_spec:" + path.name)
     due = value.get("not_before")
@@ -155,7 +165,14 @@ class KarnScheduler:
         with SchedulerLock(self.directory):
             return self._run_locked()
 
+    def _warn(self, message: str) -> None:
+        if message not in self.warnings:
+            self.warnings.append(message)
+            logging.getLogger(__name__).warning("%s", message)
+
     def _recover_running_states(self):
+        from .recovery import RunNeverLaunchedError
+
         for state_path in sorted((self.directory / "state").glob("*.json")):
             try:
                 header = json.loads(state_path.read_text())
@@ -165,14 +182,35 @@ class KarnScheduler:
                 self._warn("unsupported_legacy_state:" + state_path.name)
                 continue
             state = read_state(state_path, state_path.stem)
-            if not state["runs"] or state["runs"][-1]["status"] != "running":
-                continue
-            row = state["runs"][-1]
             if self.recoverer is None:
                 from .recovery import recover_benchmark
 
                 self.recoverer = recover_benchmark
-            record = self.recoverer(run_id=row["run_id"], spec=row["spec"], **self.options)
+            for row in state["runs"]:
+                if row.get("record_write_pending"):
+                    try:
+                        self.recoverer(run_id=row["run_id"], spec=row["spec"], **self.options)
+                    except RecordWritePendingError:
+                        continue
+                    del row["record_write_pending"]
+                    row.pop("error", None)
+                    self._save(state_path, state)
+            if not state["runs"] or state["runs"][-1]["status"] != "running":
+                continue
+            row = state["runs"][-1]
+            try:
+                record = self.recoverer(run_id=row["run_id"], spec=row["spec"], **self.options)
+            except RunNeverLaunchedError as error:
+                row.update(
+                    status="failed",
+                    error=str(error),
+                    recovered_at=datetime.now(UTC).isoformat(),
+                )
+                self._save(state_path, state)
+                continue
+            except LoginInUseError:
+                self._warn(f"{state_path.stem}: login_in_use; recovery deferred")
+                continue
             status = record.run_metadata["execution"]["status"]
             if record.run_id != row["run_id"]:
                 row["recovery_record"] = record.run_id
@@ -201,6 +239,8 @@ class KarnScheduler:
                 state = read_state(state_path, path.stem)
             except KarnError as error:
                 self._warn(str(error))
+                continue
+            if state is not None and state["runs"] and state["runs"][-1]["status"] == "running":
                 continue
             if state is None:
                 if path.stem not in self.replay:
@@ -237,6 +277,7 @@ class KarnScheduler:
                         benchmark_id=spec["benchmark"],
                         login=spec.get("login"),
                         budget_seconds=spec.get("budget_seconds", 86400),
+                        native_telemetry=spec.get("native_telemetry", "auto"),
                         run_id=row["run_id"],
                         **self.options,
                     )
@@ -245,6 +286,21 @@ class KarnScheduler:
                         status="done" if status == "completed" else "failed",
                         execution_status=status,
                         candidate=record.candidate.to_dict(),
+                    )
+                except LoginInUseError:
+                    # Nothing was created; the entry stays pending for the next pass.
+                    state["runs"].pop()
+                    self._save(state_path, state)
+                    self._warn(f"{path.stem}: login_in_use; run deferred")
+                    break
+                except RecordWritePendingError as error:
+                    status = error.record.run_metadata["execution"]["status"]
+                    row.update(
+                        status="done" if status == "completed" else "failed",
+                        execution_status=status,
+                        candidate=error.record.candidate.to_dict(),
+                        record_write_pending=True,
+                        error=str(error),
                     )
                 except Exception as error:  # noqa: BLE001 -- one failed run does not discard the rest of a batch.
                     row.update(

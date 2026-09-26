@@ -12,6 +12,7 @@ import click
 
 from .definition import KarnError, load_candidate
 from .host import DockerHost
+from .interruption import terminate_as_interrupt
 
 
 BATCHES_DIR_OPTION = click.option(
@@ -65,15 +66,32 @@ def common_options(function):
 @click.option("--login", default=None, help="Named local subscription login profile.")
 @click.option("--budget-seconds", type=click.IntRange(min=1), default=86400, show_default=True)
 @click.option("--snapshot-seconds", type=click.FloatRange(min=0.1), default=60, show_default=True)
+@click.option(
+    "--native-telemetry",
+    type=click.Choice(["auto", "codex", "none"]),
+    default="auto",
+    show_default=True,
+    help="Collect native Codex journals and OTel; auto detects a declared CODEX_HOME.",
+)
 @common_options
 def run(**options):
     """Execute a fixed definition and image, grade available work, and retain a record."""
     from .execution import run_benchmark
+    from .records import RecordWritePendingError
 
     try:
-        record = run_benchmark(**options)
+        with terminate_as_interrupt():
+            record = run_benchmark(**options)
+    except RecordWritePendingError as error:
+        raise click.ClickException(
+            f"{error}: retry with `silverquillm recover {error.record.run_id}`"
+        ) from None
     except (KarnError, OSError, ValueError) as error:
         raise click.ClickException(str(error)) from None
+    _report(record)
+
+
+def _report(record, *, exit_on_status=True):
     execution = record.run_metadata["execution"]
     click.echo(
         json.dumps(
@@ -87,7 +105,7 @@ def run(**options):
             sort_keys=True,
         )
     )
-    if execution["status"] != "completed":
+    if exit_on_status and execution["status"] != "completed":
         raise click.exceptions.Exit(130 if execution["status"] == "interrupted" else 1)
 
 
@@ -113,7 +131,7 @@ def enroll(profile, build_output, construct, state_root):
         ]
         if len(artifacts) != 1:
             raise KarnError("candidate_requires_codex_login_plugin")
-        status = DockerHost(plugin_cache=state_root / "plugins").enroll_login(
+        status = DockerHost(plugin_cache=state_root.resolve() / "plugins").enroll_login(
             login_profile(state_root, profile), artifacts[0]
         )
     except (KarnError, OSError, ValueError) as error:
@@ -136,7 +154,9 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, **options):
     runner = KarnScheduler(batches_dir, replay_without_state=replay_without_state, **options)
     try:
         if once:
-            click.echo(f"scheduler idle: {runner.run_until_idle()} run(s) executed")
+            with terminate_as_interrupt():
+                executed = runner.run_until_idle()
+            click.echo(f"scheduler idle: {executed} run(s) executed")
             for row in queue_rows(batches_dir):
                 if row["status"] == "missing_state":
                     click.echo(
@@ -144,12 +164,38 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, **options):
                         err=True,
                     )
         else:
-            runner.serve(poll_seconds)
+            with terminate_as_interrupt():
+                runner.serve(poll_seconds)
     except (KarnError, OSError, SchedulerLockedError) as error:
         raise click.ClickException(str(error)) from None
     except KeyboardInterrupt:
         click.echo("scheduler stopped; interrupted run evidence retained", err=True)
         raise click.exceptions.Exit(130) from None
+
+
+@click.command()
+@click.argument("run_id")
+@click.option("--stop", is_flag=True, help="Stop the run's container if it is still running.")
+@common_options
+def recover(run_id, stop, **options):
+    """Settle an interrupted run: stop its workload, harvest, grade, and write its record."""
+    from .recovery import RunNeverLaunchedError, recover_run
+
+    try:
+        with terminate_as_interrupt():
+            record = recover_run(run_id=run_id, stop=stop, **options)
+    except RunNeverLaunchedError as error:
+        click.echo(json.dumps({"run_id": run_id, "execution": str(error)}, sort_keys=True))
+        raise click.exceptions.Exit(1) from None
+    except (KarnError, OSError, ValueError) as error:
+        message = str(error)
+        if message == "run_container_still_running":
+            message += "; pass --stop to stop it and recover"
+        raise click.ClickException(message) from None
+    except KeyboardInterrupt:
+        click.echo("recovery interrupted; run it again to finish", err=True)
+        raise click.exceptions.Exit(130) from None
+    _report(record, exit_on_status=False)
 
 
 @click.group()
@@ -183,4 +229,4 @@ def top(batches_dir, interval):
     run_top(batches_dir, interval=interval)
 
 
-COMMANDS = (run, enroll, scheduler, queue, top)
+COMMANDS = (run, enroll, scheduler, recover, queue, top)

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import fcntl
 import ipaddress
 import json
+import os
 import re
 import shutil
 import socket
@@ -50,6 +52,41 @@ def mark_observation_problems(measurements: dict, problems: list[str]) -> None:
         if isinstance(field, dict):
             field["reasons"] = sorted(set(field.get("reasons", [])) | set(problems))
             field["completeness"] = "missing" if field.get("value") is None else "partial"
+
+
+NATIVE_TELEMETRY = ("auto", "codex", "none")
+
+
+def select_native_telemetry(candidate, requested: str) -> dict:
+    """Native Codex journals and the OTel relay, chosen by the operator or batch spec.
+
+    The v4 Construct Definition has no telemetry field, so this is bench-side configuration;
+    ``auto`` keeps the documented fallback of detecting a declared ``CODEX_HOME``.
+    """
+    if requested not in NATIVE_TELEMETRY:
+        raise KarnError("invalid_native_telemetry")
+    declared = "CODEX_HOME" in candidate.runtime["environment"]
+    if requested == "codex" and not declared:
+        raise KarnError("native_telemetry_requires_codex_home")
+    return {
+        "requested": requested,
+        "enabled": declared if requested == "auto" else requested == "codex",
+        "source": "codex_home_heuristic" if requested == "auto" else "operator",
+    }
+
+
+@contextlib.contextmanager
+def run_lock(run_dir: Path):
+    """Held while a process executes or recovers a run, so recovery never races a live runner."""
+    descriptor = os.open(run_dir / ".runner.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise KarnError("run_in_progress") from None
+        yield
+    finally:
+        os.close(descriptor)
 
 
 def login_profile(state_root: Path, name: str | None) -> LoginProfile | None:
@@ -165,20 +202,72 @@ def run_benchmark(
     host: DockerHost | None = None,
     collector_factory=None,
     evaluator=evaluate_run,
+    native_telemetry: str = "auto",
 ) -> KarnRunRecord:
-    from .observations import CodexTelemetryCollector
+    """Refuse what cannot run before any evidence exists, then collect under both locks.
 
+    A busy login raises :class:`LoginInUseError` without creating a run directory, so a
+    batch can defer the entry instead of consuming it.
+    """
     candidate = load_candidate(
         build_output, construct, **({"image_inspector": host.docker.inspect_image} if host else {})
     )
     benchmark = load_benchmark(bench_root, benchmark_id)
     selected_login = login_profile(state_root, login)
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
+    telemetry = select_native_telemetry(candidate, native_telemetry)
+    host.preflight(candidate, budget_seconds)
     run_id = run_id or uuid.uuid4().hex
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", run_id):
         raise KarnError("invalid_run_id")
     run_dir = Path(results_dir).resolve() / run_id
-    run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
+    with contextlib.ExitStack() as held:
+        login_hold = held.enter_context(contextlib.ExitStack())
+        if selected_login is not None:
+            login_hold.enter_context(selected_login.exclusive())
+        run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
+        held.enter_context(run_lock(run_dir))
+        return _collect(
+            candidate=candidate,
+            construct=construct,
+            benchmark=benchmark,
+            login=login,
+            selected_login=selected_login,
+            host=host,
+            telemetry=telemetry,
+            run_id=run_id,
+            run_dir=run_dir,
+            results_repo=results_repo,
+            budget_seconds=budget_seconds,
+            snapshot_seconds=snapshot_seconds,
+            collector_host=collector_host,
+            collector_factory=collector_factory,
+            evaluator=evaluator,
+            login_hold=login_hold,
+        )
+
+
+def _collect(
+    *,
+    candidate,
+    construct,
+    benchmark,
+    login,
+    selected_login,
+    host,
+    telemetry,
+    run_id,
+    run_dir,
+    results_repo,
+    budget_seconds,
+    snapshot_seconds,
+    collector_host,
+    collector_factory,
+    evaluator,
+    login_hold,
+) -> KarnRunRecord:
+    from .observations import CodexTelemetryCollector
+
     start = datetime.now(UTC).isoformat()
     artifact_dir = run_dir / "candidate"
     artifact_dir.mkdir()
@@ -197,6 +286,7 @@ def run_benchmark(
         "benchmark_identity": benchmark.identity,
         "login": login,
         "budget_seconds": budget_seconds,
+        "native_telemetry": telemetry,
         "started_at": start,
     }
     _write_atomically(
@@ -210,6 +300,7 @@ def run_benchmark(
         "benchmark_input": benchmark.identity,
         "candidate_definition": candidate.definition,
         "login_profile": login,
+        "native_telemetry": telemetry,
         "grading_source": None,
         "measurements": None,
     }
@@ -230,7 +321,7 @@ def run_benchmark(
             run_dir / "run-input.json", canonical(run_input).decode() + "\n", prefix=".run-input-"
         )
         (run_dir / "prompt.md").write_text(prompt)
-        native = "CODEX_HOME" in candidate.runtime["environment"]
+        native = telemetry["enabled"]
         factory = collector_factory or CodexTelemetryCollector
         bind = collector_host or (collector_address() if native else "127.0.0.1")
         with observation_session(
@@ -264,6 +355,7 @@ def run_benchmark(
                         run_id=run_id,
                         budget_seconds=budget_seconds,
                         login_profile=selected_login,
+                        login_lock_held=selected_login is not None,
                         after_stop=after_stop,
                         **arguments,
                     )
@@ -278,6 +370,8 @@ def run_benchmark(
                     host.docker.stop_and_confirm(observed.container_name, run_id)
                     observed.workspace_stopped = True
                     collector.mark_incomplete("host_execution_failed")
+                # The host has harvested the login; grading must not keep it from other runs.
+                login_hold.close()
             try:
                 metadata["measurements"] = collector.finalize(exit_kind=observed.status)
             except Exception:  # noqa: BLE001 -- measurement failure must not suppress grading.

@@ -79,6 +79,9 @@ class FixtureHost:
         kwargs["after_stop"](result, None)
         return result
 
+    def preflight(self, candidate, budget_seconds):
+        pass
+
 
 def options(tmp_path, **changes):
     candidate = make_candidate(tmp_path)
@@ -551,13 +554,6 @@ def test_recovery_refuses_a_changed_retained_definition_and_preserves_original_i
     document = json.loads(selected.read_text())
     document["runtime"]["environment"]["ALTERED"] = "after execution"
     selected.write_bytes(definition.canonical(document))
-    monkeypatch.setattr(
-        recovery,
-        "load_candidate",
-        lambda path, construct: definition.load_candidate(
-            path, construct, image_inspector=opts["host"].docker.inspect_image
-        ),
-    )
     with pytest.raises(definition.KarnError, match="retained_definition_identity_mismatch"):
         recovery.recover_benchmark(
             run_id="interrupted",
@@ -573,7 +569,7 @@ def test_recovery_refuses_a_changed_retained_definition_and_preserves_original_i
 def test_recovery_of_uncertain_record_stops_writers_and_appends_linked_evidence(
     tmp_path, monkeypatch
 ):
-    from silverquillm.karn import definition, recovery
+    from silverquillm.karn import recovery
 
     class UncertainHost(FixtureHost):
         def run(self, candidate, workspace, evidence_dir, prompt, **kwargs):
@@ -608,13 +604,6 @@ def test_recovery_of_uncertain_record_stops_writers_and_appends_linked_evidence(
         recovery,
         "DockerHost",
         lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=tmp_path / "cache"),
-    )
-    monkeypatch.setattr(
-        recovery,
-        "load_candidate",
-        lambda path, construct: definition.load_candidate(
-            path, construct, image_inspector=opts["host"].docker.inspect_image
-        ),
     )
     recovered = recovery.recover_benchmark(
         run_id=original.run_id,
