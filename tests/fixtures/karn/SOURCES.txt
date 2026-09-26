@@ -1,0 +1,19 @@
+Producer interoperability fixtures
+
+Source: https://github.com/snowfoxbuilds/ozolith
+Revision inspected: 8dffc2dd224a2ea71755f92a3ae77b5eb468f2fb
+License: MIT (the login wheel also contains its source license)
+
+wire-vectors-v4/: exact producer canonical wire fixtures copied from
+  ozolith/nodedaemon/tests/fixtures/wire-vectors-v4/
+  Whitespace in loose input.json fixtures is intentional.
+
+runtime/: unchanged account-bootstrap.py and run-initializer.py from
+  karn/src/karn/library/root/.
+
+login-build/: generated offline using karn.plugin_builder.build_plugin on
+  karn/plugins/karn-codex-login/, source="catalog", with network fetch disabled.
+  Plugin artifact:
+  sha256:e166309ad71cc1ff1a83bf91dc804c0361a1601025707f1657912987d2317630
+  Includes the unchanged Codex login 0.1.0 and Plugin SDK 1.3.0 wheel closure.
+  Tests use synthetic credentials and a fake enrollment CLI, never account state.
