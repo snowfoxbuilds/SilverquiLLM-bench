@@ -9,7 +9,6 @@ import re
 import uuid
 from pathlib import Path
 
-from silverquillm.evaluator import evaluate_run
 from silverquillm.queue_state import _write_atomically
 
 from .benchmark import load_benchmark
@@ -21,6 +20,7 @@ from .execution import (
     observation_session,
     run_lock,
 )
+from .grader import DEFAULT_GRADER_IMAGE, DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError
 from .grading_inputs import grading_inputs
 from .host import DockerHost, HostResult
 from .login import (
@@ -50,6 +50,9 @@ def recover_run(
     results_repo: Path,
     state_root: Path,
     collector_host=None,
+    grader_image: str = DEFAULT_GRADER_IMAGE,
+    grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
+    grader: ContainerGrader | None = None,
 ) -> KarnRunRecord:
     """Recover one direct or batch run by id; a live workload is stopped only on request."""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", run_id):
@@ -68,6 +71,9 @@ def recover_run(
         results_repo=results_repo,
         state_root=state_root,
         collector_host=collector_host,
+        grader_image=grader_image,
+        grading_timeout=grading_timeout,
+        grader=grader,
     )
 
 
@@ -80,6 +86,9 @@ def recover_benchmark(
     results_repo: Path,
     state_root: Path,
     collector_host=None,
+    grader_image: str = DEFAULT_GRADER_IMAGE,
+    grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
+    grader: ContainerGrader | None = None,
 ) -> KarnRunRecord:
     """Idempotent: a recovered or retained record is returned instead of recovering twice.
 
@@ -95,10 +104,23 @@ def recover_benchmark(
             bench_root=bench_root,
             results_repo=results_repo,
             state_root=state_root,
+            grader_image=grader_image,
+            grading_timeout=grading_timeout,
+            grader=grader,
         )
 
 
-def _recover(*, run_id, run_dir, bench_root, results_repo, state_root) -> KarnRunRecord:
+def _recover(
+    *,
+    run_id,
+    run_dir,
+    bench_root,
+    results_repo,
+    state_root,
+    grader_image,
+    grading_timeout,
+    grader,
+) -> KarnRunRecord:
     from .observations import CodexTelemetryCollector, summarize_events
 
     previous_record = None
@@ -163,6 +185,7 @@ def _recover(*, run_id, run_dir, bench_root, results_repo, state_root) -> KarnRu
     ):
         raise KarnError("retained_definition_identity_mismatch")
     benchmark = load_benchmark(bench_root, inputs["benchmark"])
+    grader = grader or ContainerGrader.from_image(grader_image, timeout=grading_timeout)
     profile = login_profile(state_root, inputs["login"])
     observed = HostResult(
         run_id,
@@ -230,24 +253,31 @@ def _recover(*, run_id, run_dir, bench_root, results_repo, state_root) -> KarnRu
     if observation_problems:
         observed.observation_errors.extend(observation_problems)
         mark_observation_problems(measurements, observation_problems)
-    snapshots = WorkspaceSnapshots(run_dir / "workspace", run_dir)
+    snapshots = WorkspaceSnapshots(
+        run_dir / "workspace", run_dir, import_probe=grader.engine_health
+    )
     try:
         snapshots.entries = json.loads((run_dir / "snapshots.json").read_text())
     except (OSError, ValueError):
         snapshots.entries = []
     previous_selection = run_dir / "grading-source.json"
-    if (
-        previous_record is not None
-        or previous_selection.exists()
-        or (run_dir / "workspace_final").exists()
-    ):
-        selection = snapshots.select(
-            final_name=recovery_directory.name + "/workspace_final",
-            manifest_name=recovery_directory.name + "/grading-source.json",
-        )
-    else:
-        selection = snapshots.select()
-    scores = missing_scores("no_usable_recovered_workspace")
+    grading_failure = None
+    try:
+        if (
+            previous_record is not None
+            or previous_selection.exists()
+            or (run_dir / "workspace_final").exists()
+        ):
+            selection = snapshots.select(
+                final_name=recovery_directory.name + "/workspace_final",
+                manifest_name=recovery_directory.name + "/grading-source.json",
+            )
+        else:
+            selection = snapshots.select()
+        scores = missing_scores("no_usable_recovered_workspace")
+    except GraderError as error:
+        selection, grading_failure = None, error
+        scores = missing_scores("grading_container_failed:" + error.reason)
     metadata = {
         "run_date": inputs["started_at"],
         "benchmark_input": inputs.get(
@@ -262,24 +292,30 @@ def _recover(*, run_id, run_dir, bench_root, results_repo, state_root) -> KarnRu
         "login_profile": inputs["login"],
         "execution": observed.to_dict(),
         "grading_source": selection,
+        "grading_isolation": grader.isolation(),
         "measurements": measurements,
         "git_history": retain_git_history(run_dir / "workspace", run_dir),
     }
     if benchmark.identity != inputs["benchmark_identity"]:
         scores = missing_scores("benchmark_changed_since_run_started")
-    elif selection["selected"]:
+    elif selection and selection["selected"]:
         try:
             metadata["grading_inputs"] = grading_inputs(benchmark)
-            evaluated = evaluate_run(
+            evaluated = grader.evaluate_run(
                 run_dir, benchmark, workspace_source=run_dir / selection["selected"]
             )
             (run_dir / "evaluation.json").write_bytes(
                 canonical(dataclasses.asdict(evaluated)) + b"\n"
             )
             scores = _scores(evaluated, benchmark)
+        except GraderError as error:
+            grading_failure = error
+            scores = missing_scores("grading_container_failed:" + error.reason)
         except Exception as error:  # noqa: BLE001 -- recovered implementation and measurements remain useful.
             scores = missing_scores("recovery_grading_failed")
             metadata["collection_error"] = {"stage": "grading", "reason": type(error).__name__}
+    if grading_failure is not None:
+        metadata["grading_failure"] = grading_failure.to_dict()
     record_id = uuid.uuid4().hex if previous_record is not None else run_id
     pointers = [{"kind": "run-artifacts", "location": str(run_dir)}]
     if previous_record is not None:

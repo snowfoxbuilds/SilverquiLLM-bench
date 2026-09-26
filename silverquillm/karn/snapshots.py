@@ -8,7 +8,6 @@ import re
 import shutil
 import stat
 import subprocess
-import sys
 import tempfile
 import threading
 from datetime import UTC, datetime
@@ -115,46 +114,38 @@ def copy_workspace(source: Path, destination: Path) -> dict:
     }
 
 
-def engine_health(workspace: Path) -> dict:
+def engine_health(workspace: Path, import_probe) -> dict:
+    """Reject unparsable engine source here; *import_probe* imports it in the grader container."""
     engine = workspace / "engine"
     if not engine.is_dir():
         return {"usable": False, "reason": "engine_directory_missing"}
     for path in engine.rglob("*.py"):
         try:
             ast.parse(path.read_bytes(), filename=str(path.relative_to(workspace)))
-        except (SyntaxError, ValueError, OSError):
+        except (SyntaxError, ValueError, OSError, RecursionError, MemoryError):
             return {
                 "usable": False,
                 "reason": "engine_source_invalid",
                 "path": str(path.relative_to(workspace)),
             }
-    with tempfile.TemporaryDirectory(prefix="sq-engine-probe-") as scratch:
-        code = "import sys; sys.path.insert(0, sys.argv[1]); import engine.card, engine.game_state, engine.types"
-        try:
-            checked = subprocess.run(
-                [sys.executable, "-I", "-c", code, str(workspace)],
-                cwd=scratch,
-                env={"PATH": os.defpath, "HOME": scratch},
-                capture_output=True,
-                timeout=20,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            return {"usable": False, "reason": "engine_import_timeout"}
-    return {
-        "usable": checked.returncode == 0,
-        "reason": None if checked.returncode == 0 else "engine_import_failed",
-    }
+    return import_probe(workspace)
 
 
 class WorkspaceSnapshots:
     def __init__(
-        self, workspace: Path, run_dir: Path, *, interval_seconds: float = 60, retain: int = 8
+        self,
+        workspace: Path,
+        run_dir: Path,
+        *,
+        import_probe,
+        interval_seconds: float = 60,
+        retain: int = 8,
     ):
         if interval_seconds <= 0 or retain < 1:
             raise ValueError("snapshot_interval_and_retention_must_be_positive")
         self.workspace, self.run_dir = Path(workspace), Path(run_dir)
         self.interval, self.retain = interval_seconds, retain
+        self.import_probe = import_probe
         self.entries = []
         self.stop = threading.Event()
         self.thread = None
@@ -210,7 +201,7 @@ class WorkspaceSnapshots:
     ) -> dict:
         final = self.run_dir / final_name
         captured = copy_workspace(self.workspace, final)
-        health = engine_health(final)
+        health = engine_health(final, self.import_probe)
         selection = {
             "final": {"path": final_name, **captured, "engine_health": health},
             "selected": None,
@@ -225,7 +216,7 @@ class WorkspaceSnapshots:
             for entry in reversed(self.entries):
                 if not entry["retained"] or entry["errors"]:
                     continue
-                checked = engine_health(self.run_dir / entry["path"])
+                checked = engine_health(self.run_dir / entry["path"], self.import_probe)
                 entry["engine_health"] = checked
                 if checked["usable"]:
                     selection["selected"], selection["fallback"] = entry["path"], True

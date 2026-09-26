@@ -373,7 +373,7 @@ class TestEvaluateResults:
             engine_result=EngineResult(),
         )
 
-        with patch("silverquillm.evaluator.evaluate", return_value=mock_full_result):
+        with patch("silverquillm.karn.grader.evaluate_legacy", return_value=mock_full_result):
             _evaluate_results(run_dir, card_filter=["1"])
 
         result_path = cards_out / "result.json"
@@ -407,7 +407,7 @@ class TestEvaluateResults:
             sos_results={"1": cr}, fdn_results={}, engine_result=EngineResult(),
         )
 
-        with patch("silverquillm.evaluator.evaluate", return_value=mock_full_result):
+        with patch("silverquillm.karn.grader.evaluate_legacy", return_value=mock_full_result):
             _evaluate_results(run_dir, card_filter=["1"])
 
         data = json.loads((run_dir / "cards" / "1" / "result.json").read_text())
@@ -434,7 +434,7 @@ class TestEvaluateResults:
             sos_results={"1": cr}, fdn_results={}, engine_result=EngineResult(),
         )
 
-        with patch("silverquillm.evaluator.evaluate", return_value=mock_full_result):
+        with patch("silverquillm.karn.grader.evaluate_legacy", return_value=mock_full_result):
             _evaluate_results(run_dir, card_filter=["1"])
 
         data = json.loads((run_dir / "cards" / "1" / "result.json").read_text())
@@ -458,7 +458,7 @@ class TestEvaluateResults:
             engine_result=EngineResult(),
         )
 
-        with patch("silverquillm.evaluator.evaluate", return_value=mock_full_result):
+        with patch("silverquillm.karn.grader.evaluate_legacy", return_value=mock_full_result):
             _evaluate_results(run_dir, card_filter=["1"])
 
         postmortem_path = run_dir / "cards" / "1" / "postmortem.jsonl"
@@ -485,7 +485,7 @@ class TestEvaluateResults:
         )
 
         # But filter only card "1"
-        with patch("silverquillm.evaluator.evaluate", return_value=mock_full_result):
+        with patch("silverquillm.karn.grader.evaluate_legacy", return_value=mock_full_result):
             _evaluate_results(run_dir, card_filter=["1"])
 
         # Card 1 should have result.json
@@ -511,7 +511,7 @@ class TestEvaluateResults:
             engine_result=EngineResult(),
         )
 
-        with patch("silverquillm.evaluator.evaluate", return_value=mock_full_result):
+        with patch("silverquillm.karn.grader.evaluate_legacy", return_value=mock_full_result):
             _evaluate_results(run_dir, card_filter=["1"])
 
         postmortem_path = run_dir / "cards" / "1" / "postmortem.jsonl"
@@ -526,7 +526,7 @@ class TestEvaluateResults:
         run_dir = tmp_path / "run"
         run_dir.mkdir()
 
-        with patch("silverquillm.evaluator.evaluate", side_effect=RuntimeError("eval broken")):
+        with patch("silverquillm.karn.grader.evaluate_legacy", side_effect=RuntimeError("eval broken")):
             # Should not raise
             _evaluate_results(run_dir, card_filter=["1"])
 

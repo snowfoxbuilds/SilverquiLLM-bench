@@ -25,6 +25,7 @@ from silverquillm.results_repo import (
     write_run_record,
 )
 
+from .grader_fixtures import local_grader
 from .test_karn_host import FakeDocker, make_candidate
 
 
@@ -95,6 +96,7 @@ def options(tmp_path, **changes):
         "results_repo": tmp_path / "records",
         "state_root": tmp_path / "state",
         "host": FixtureHost(),
+        "grader": local_grader(),
         **changes,
     }
 
@@ -238,7 +240,10 @@ def test_batch_uses_shared_runner_and_does_not_replay_completed_entries(tmp_path
     def execute(**kwargs):
         calls.append(kwargs["run_id"])
         return run_benchmark(
-            **kwargs, host=FixtureHost(), evaluator=lambda *a, **k: FullEvalResult()
+            **kwargs,
+            host=FixtureHost(),
+            grader=local_grader(),
+            evaluator=lambda *a, **k: FullEvalResult(),
         )
 
     scheduler = KarnScheduler(
@@ -385,7 +390,10 @@ def test_batch_recovers_finalized_local_record_even_when_batch_file_was_removed(
     def execute(**kwargs):
         calls.append(kwargs["run_id"])
         return run_benchmark(
-            **kwargs, host=FixtureHost(), evaluator=lambda *a, **k: FullEvalResult()
+            **kwargs,
+            host=FixtureHost(),
+            grader=local_grader(),
+            evaluator=lambda *a, **k: FullEvalResult(),
         )
 
     scheduler = KarnScheduler(
@@ -480,10 +488,14 @@ def test_audited_card_impl_import_resolves_selected_candidate_after_trusted_supp
 def test_selected_benchmark_data_root_reaches_grader_without_source_package_import(tmp_path):
     opts = options(tmp_path)
     suite = opts["bench_root"] / "benchmarks/example/workspace/engine_tests/test_engine.py"
+    replays = opts["bench_root"] / "data/replays"
+    replays.mkdir(parents=True)
+    (replays / "card_id_map.json").write_text('{"selected": "example"}')
     suite.write_text(
-        "import os\nfrom pathlib import Path\ndef test_data_root():\n    assert Path(os.environ['SILVERQUILLM_BENCH_ROOT']) == Path("
-        + repr(str(opts["bench_root"].resolve()))
-        + ")\n"
+        "import json, os\nfrom pathlib import Path\ndef test_data_root():\n"
+        "    root = Path(os.environ['SILVERQUILLM_BENCH_ROOT'])\n"
+        "    selected = json.loads((root / 'data/replays/card_id_map.json').read_text())\n"
+        "    assert selected == {'selected': 'example'}\n"
     )
     result = run_benchmark(**opts)
     assert result.scores["engine_regression"]["tests_passed"] == 1
@@ -560,7 +572,7 @@ def test_recovery_refuses_a_changed_retained_definition_and_preserves_original_i
             spec={},
             **{
                 key: opts[key]
-                for key in ("bench_root", "results_dir", "results_repo", "state_root")
+                for key in ("bench_root", "results_dir", "results_repo", "state_root", "grader")
             },
         )
     assert not list(iter_run_records(opts["results_repo"]))
@@ -608,7 +620,10 @@ def test_recovery_of_uncertain_record_stops_writers_and_appends_linked_evidence(
     recovered = recovery.recover_benchmark(
         run_id=original.run_id,
         spec={},
-        **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+        **{
+            key: opts[key]
+            for key in ("bench_root", "results_dir", "results_repo", "state_root", "grader")
+        },
     )
     assert stopped and recovered.run_metadata["execution"]["workspace_stopped"]
     assert recovered.run_id != original.run_id
@@ -624,7 +639,10 @@ def test_recovery_of_uncertain_record_stops_writers_and_appends_linked_evidence(
     again = recovery.recover_benchmark(
         run_id=original.run_id,
         spec={},
-        **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+        **{
+            key: opts[key]
+            for key in ("bench_root", "results_dir", "results_repo", "state_root", "grader")
+        },
     )
     assert again.run_id == recovered.run_id and len(stopped) == 2
 

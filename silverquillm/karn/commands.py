@@ -11,6 +11,7 @@ from pathlib import Path
 import click
 
 from .definition import KarnError, load_candidate
+from .grader import DEFAULT_GRADER_IMAGE, DEFAULT_GRADING_TIMEOUT
 from .host import DockerHost
 from .interruption import terminate_as_interrupt
 
@@ -50,6 +51,20 @@ def common_options(function):
                 "--collector-host",
                 default=None,
                 help="Host address reachable by Docker's telemetry relay; normally detected.",
+            ),
+            click.option(
+                "--grader-image",
+                default=DEFAULT_GRADER_IMAGE,
+                show_default=True,
+                envvar="SILVERQUILLM_GRADER_IMAGE",
+                help="Local grader image built by `grader build`; never pulled or built by a run.",
+            ),
+            click.option(
+                "--grading-timeout",
+                type=click.IntRange(min=1),
+                default=DEFAULT_GRADING_TIMEOUT,
+                show_default=True,
+                help="Seconds before the grading container is killed.",
             ),
         ]
     ):
@@ -150,9 +165,11 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, **options):
     from silverquillm.queue_state import SchedulerLockedError
 
     from .batching import KarnScheduler, queue_rows
+    from .grader import ContainerGrader
 
     runner = KarnScheduler(batches_dir, replay_without_state=replay_without_state, **options)
     try:
+        ContainerGrader.from_image(options["grader_image"])
         if once:
             with terminate_as_interrupt():
                 executed = runner.run_until_idle()
@@ -229,4 +246,21 @@ def top(batches_dir, interval):
     run_top(batches_dir, interval=interval)
 
 
-COMMANDS = (run, enroll, scheduler, recover, queue, top)
+@click.group()
+def grader():
+    """Build the network-less image that grades candidate work."""
+
+
+@grader.command("build")
+@click.option("--tag", default=DEFAULT_GRADER_IMAGE, show_default=True)
+def grader_build(tag):
+    """Build the pinned grader image and print its image ID."""
+    from .grader import build_grader_image
+
+    try:
+        click.echo(build_grader_image(tag))
+    except KarnError as error:
+        raise click.ClickException(str(error)) from None
+
+
+COMMANDS = (run, enroll, scheduler, recover, queue, top, grader)

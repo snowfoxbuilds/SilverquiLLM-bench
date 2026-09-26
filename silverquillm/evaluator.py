@@ -59,6 +59,15 @@ logger = logging.getLogger(__name__)
 # Repo root — resolved once at import time
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BENCHMARK_DATA_ROOT: ContextVar[Path | None] = ContextVar("benchmark_data_root", default=None)
+_PYTEST_ENVIRONMENT = (
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "PYTHONDONTWRITEBYTECODE",
+    "SILVERQUILLM_BENCH_ROOT",
+)
 
 __all__ = [
     "CardResult",
@@ -741,11 +750,12 @@ def _run_pytest_with_pythonpath(
     is ``True``, returns a 5-tuple with an additional list of per-node
     outcome dicts: ``[{"test_node": "tests.py::test_x", "outcome": "pass"|"fail"}, ...]``.
     """
-    env = dict(os.environ)
+    # Graded code gets no inherited credentials or tokens; see ADR-013.
+    env = {key: os.environ[key] for key in _PYTEST_ENVIRONMENT if key in os.environ}
     data_root = _BENCHMARK_DATA_ROOT.get()
     if data_root is not None:
         env["SILVERQUILLM_BENCH_ROOT"] = str(data_root)
-    existing = env.get("PYTHONPATH", "") if isolated_workspace is None else ""
+    existing = os.environ.get("PYTHONPATH", "") if isolated_workspace is None else ""
     parts = pythonpath_parts + ([existing] if existing else [])
     env["PYTHONPATH"] = os.pathsep.join(parts)
 

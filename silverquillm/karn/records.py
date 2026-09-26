@@ -181,6 +181,22 @@ class KarnRunRecord:
             not in ("completed", "failed", "deadline", "interrupted", "host_failed")
         ):
             raise InvalidRunRecordError("invalid recorded execution outcome")
+        isolation = self.run_metadata.get("grading_isolation")
+        if isolation is not None and (
+            not isinstance(isolation, dict)
+            or set(isolation) != {"mode", "grader_image_id", "network"}
+            or isolation["mode"] != "container"
+            or isolation["network"] != "none"
+            or not DIGEST.fullmatch(str(isolation["grader_image_id"]))
+        ):
+            raise InvalidRunRecordError("invalid grading isolation")
+        failure = self.run_metadata.get("grading_failure")
+        if failure is not None and (
+            not isinstance(failure, dict)
+            or set(failure) != {"reason", "stderr_tail"}
+            or not all(isinstance(value, str) for value in failure.values())
+        ):
+            raise InvalidRunRecordError("invalid grading failure")
         for pointer in self.artifact_pointers:
             if (
                 not isinstance(pointer, dict)

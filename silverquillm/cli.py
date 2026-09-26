@@ -472,14 +472,15 @@ def _evaluate_results(run_dir: Path, card_filter: list[str] | None = None) -> No
         When set, only evaluate cards in this list. When ``None``, evaluate all
         completed cards.
     """
-    from silverquillm.evaluator import evaluate
+    # Candidate code is graded only in the network-less grader container (ADR-013).
+    from silverquillm.karn.grader import evaluate_legacy
 
     cards_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "cards"
     engine_dir = _REPO_ROOT / "benchmarks" / "sos" / "workspace" / "engine"
     name_map = build_card_name_map(cards_dir, "sos")
 
     try:
-        full_result = evaluate(run_dir, cards_dir, engine_dir)
+        full_result = evaluate_legacy(run_dir, cards_dir, engine_dir)
     except Exception as exc:  # noqa: BLE001 - any evaluation failure is logged; the run's artifacts still land
         _runner_log(f"Evaluation failed: {exc}", err=True)
         return

@@ -17,11 +17,11 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-from silverquillm.evaluator import evaluate_run
 from silverquillm.queue_state import _write_atomically
 
 from .benchmark import load_benchmark, stage_benchmark
 from .definition import KarnError, canonical, load_candidate
+from .grader import DEFAULT_GRADER_IMAGE, DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError
 from .grading_inputs import grading_inputs
 from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
 from .login import LoginProfile
@@ -201,7 +201,10 @@ def run_benchmark(
     collector_host: str | None = None,
     host: DockerHost | None = None,
     collector_factory=None,
-    evaluator=evaluate_run,
+    grader_image: str = DEFAULT_GRADER_IMAGE,
+    grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
+    grader: ContainerGrader | None = None,
+    evaluator=None,
     native_telemetry: str = "auto",
 ) -> KarnRunRecord:
     """Refuse what cannot run before any evidence exists, then collect under both locks.
@@ -214,6 +217,8 @@ def run_benchmark(
     )
     benchmark = load_benchmark(bench_root, benchmark_id)
     selected_login = login_profile(state_root, login)
+    grader = grader or ContainerGrader.from_image(grader_image, timeout=grading_timeout)
+    evaluator = evaluator or grader.evaluate_run
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     telemetry = select_native_telemetry(candidate, native_telemetry)
     host.preflight(candidate, budget_seconds)
@@ -242,6 +247,7 @@ def run_benchmark(
             snapshot_seconds=snapshot_seconds,
             collector_host=collector_host,
             collector_factory=collector_factory,
+            grader=grader,
             evaluator=evaluator,
             login_hold=login_hold,
         )
@@ -263,6 +269,7 @@ def _collect(
     snapshot_seconds,
     collector_host,
     collector_factory,
+    grader,
     evaluator,
     login_hold,
 ) -> KarnRunRecord:
@@ -302,6 +309,7 @@ def _collect(
         "login_profile": login,
         "native_telemetry": telemetry,
         "grading_source": None,
+        "grading_isolation": grader.isolation(),
         "measurements": None,
     }
     observed = HostResult(
@@ -328,7 +336,10 @@ def _collect(
             factory, run_dir, observation_problems, bind_host=bind
         ) as collector:
             with WorkspaceSnapshots(
-                workspace, run_dir, interval_seconds=snapshot_seconds
+                workspace,
+                run_dir,
+                import_probe=grader.engine_health,
+                interval_seconds=snapshot_seconds,
             ) as snapshots:
                 stage = "execution"
 
@@ -412,6 +423,9 @@ def _collect(
             "operator_interruption",
         )
         scores = missing_scores("interrupted_before_grading")
+    except GraderError as error:
+        metadata["grading_failure"] = error.to_dict()
+        scores = missing_scores("grading_container_failed:" + error.reason)
     except Exception as error:  # noqa: BLE001 -- failed collection still produces an immutable observation.
         if stage in ("staging", "execution"):
             observed.status, observed.failure_stage = "host_failed", stage

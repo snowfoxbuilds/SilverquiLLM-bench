@@ -15,6 +15,7 @@ from silverquillm.queue_state import SchedulerLock, _write_atomically
 
 from .definition import KarnError
 from .execution import NATIVE_TELEMETRY, run_benchmark
+from .grader import DEFAULT_GRADER_IMAGE, DEFAULT_GRADING_TIMEOUT
 from .login import LoginInUseError
 from .records import RecordWritePendingError
 
@@ -134,6 +135,8 @@ class KarnScheduler:
         state_root: Path,
         replay_without_state=(),
         collector_host: str | None = None,
+        grader_image: str = DEFAULT_GRADER_IMAGE,
+        grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
         executor=run_benchmark,
         recoverer=None,
     ):
@@ -144,6 +147,8 @@ class KarnScheduler:
             "results_repo": Path(results_repo).resolve(),
             "state_root": Path(state_root).resolve(),
             "collector_host": collector_host,
+            "grader_image": grader_image,
+            "grading_timeout": grading_timeout,
         }
         self.replay = set(replay_without_state)
         self.executor, self.recoverer = executor, recoverer
