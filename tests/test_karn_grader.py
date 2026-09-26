@@ -245,7 +245,6 @@ def test_scheduler_refuses_to_start_without_the_grader_image(tmp_path, monkeypat
     result = CliRunner().invoke(
         main,
         [
-            "karn",
             "scheduler",
             "--once",
             "--batches-dir",
@@ -274,7 +273,7 @@ def test_grader_build_command_prints_the_built_image_id(monkeypatch):
     monkeypatch.setattr(
         grader_module.DockerRunner, "image_id", lambda self, reference: FIXTURE_IMAGE_ID
     )
-    result = CliRunner().invoke(main, ["karn", "grader", "build", "--tag", "sq-grader:test"])
+    result = CliRunner().invoke(main, ["grader", "build", "--tag", "sq-grader:test"])
     assert result.exit_code == 0, result.output
     assert result.output.strip() == FIXTURE_IMAGE_ID
     assert built == [("sq-grader:test", grader_module.IMAGE_CONTEXT)]

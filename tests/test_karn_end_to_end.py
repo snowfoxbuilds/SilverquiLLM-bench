@@ -35,7 +35,7 @@ def grader_image():
         ["docker", "image", "inspect", DEFAULT_GRADER_IMAGE], capture_output=True, check=False
     )
     if checked.returncode:
-        pytest.skip("requires the grader image; run `silverquillm karn grader build` first")
+        pytest.skip("requires the grader image; run `silverquillm grader build` first")
     return json.loads(checked.stdout)[0]["Id"]
 
 

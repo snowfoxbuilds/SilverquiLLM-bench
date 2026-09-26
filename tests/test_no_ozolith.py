@@ -94,7 +94,13 @@ for flag in ("--bench-root", "--results-dir", "--results-repo", "--state-root"):
     target = scratch / flag.strip("-")
     target.mkdir()
     options += [flag, str(target)]
+from silverquillm.karn import grader as grader_module
+
+# The scheduler checks for the grader image before starting; Docker stays out of unit tests.
+grader_module.DockerRunner.image_id = lambda self, reference: "sha256:" + "0" * 64
 assert "0 run(s) executed" in invoke("scheduler", "--once", "--batches-dir", str(empty), *options)
+missing = CliRunner().invoke(main, ["recover", "absent", *options])
+assert missing.exit_code == 1 and "run_not_found:absent" in missing.output, missing.output
 
 assert not [name for name in sys.modules if name.startswith("theozolith")]
 print("ok")

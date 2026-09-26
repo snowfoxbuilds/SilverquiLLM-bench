@@ -20,15 +20,27 @@ from silverquillm.karn import recovery
 from silverquillm.karn.batching import KarnScheduler
 from silverquillm.karn.definition import KarnError, canonical, digest, load_candidate
 from silverquillm.karn.execution import run_benchmark
+from silverquillm.karn.grader import ContainerGrader
 from silverquillm.karn.host import DockerHost
 from silverquillm.karn.login import NATIVE_PRESERVED, LoginProfile
 from silverquillm.karn.records import RecordWritePendingError, write_record
 from silverquillm.results_repo import RunRecordExistsError, iter_run_records
 
+from .grader_fixtures import local_grader
 from .test_karn_execution import FixtureHost, benchmark_data, options
 from .test_karn_host import FIXTURES, FakeDocker, make_candidate
 
 REPO = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(autouse=True)
+def _grade_without_docker(request, monkeypatch):
+    """Runs, schedulers and recoveries built inside these tests grade through the local stand-in."""
+    if request.node.get_closest_marker("integration"):
+        return
+    monkeypatch.setattr(
+        ContainerGrader, "from_image", classmethod(lambda cls, reference=None, **kw: local_grader(**kw))
+    )
 
 
 def batch(directory: Path, entries: int = 2) -> Path:
@@ -545,6 +557,10 @@ SIGNAL_RUNNER = textwrap.dedent(
             return result
 
     execution.DockerHost = lambda **kwargs: BlockingHost()
+    from tests.grader_fixtures import local_grader
+    execution.ContainerGrader.from_image = classmethod(
+        lambda cls, reference=None, **kwargs: local_grader(**kwargs)
+    )
     load = execution.load_candidate
     execution.load_candidate = lambda path, construct, **kwargs: load(
         path, construct, image_inspector=lambda reference: {"Id": reference}

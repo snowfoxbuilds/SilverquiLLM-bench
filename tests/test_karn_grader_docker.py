@@ -121,7 +121,6 @@ def test_run_refuses_before_launch_without_the_grader_image(tmp_path, python_ima
     candidate = make_candidate(tmp_path, image=python_image)
     runs = tmp_path / "runs"
     result = invoke(
-        "karn",
         "run",
         "--build-output",
         str(candidate.build_output),
