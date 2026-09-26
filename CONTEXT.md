@@ -10,7 +10,7 @@ Italicized flavor label printed on a card naming a triggered or static effect (e
 
 _Avoid_: "keyword" (Ability Words are not Keyword Abilities), "flag", "tag"
 
-**Agent Container**
+**Agent Container** *(legacy image-based candidate)*
 
 Docker image packaging a single coding agent with its CLI, entrypoint, mode (blind/tested), strategy, model selection, and prompt — the full benchmark configuration. The runner launches it with mounted volumes and API key env vars. The runner has zero knowledge of agent internals. Image name encodes the variant (e.g. `silverquillm-pi-blind:latest`).
 
@@ -21,6 +21,13 @@ _Avoid_: "agent adapter" (deprecated), "agent tool" (ambiguous)
 The `tests.py` files a coding agent writes during a Tested Mode run — one per card, alongside its `card_impl.py`. Harvested as artifacts in Validated Results but never used for v1 scoring (Audited Tests are the grader). The raw source the Test Harvester mines for promotion candidates. Distinct from Audited Tests (the grading suite) and FDN Reference Tests (agent-visible learning material).
 
 _Avoid_: "benchmark tests" (ambiguous — "benchmark" already names Run/Tier/Mode, and Audited Tests also serve the benchmark), "candidate tests" (reserve for promotion candidates mined from Agent Tests), "harvested tests" (Harvested Results is the post-harvest dataset; pre-harvest these are Agent Tests)
+
+**Agent Turn**
+
+One model response or one tool call made during a Benchmark Run, including descendant-agent work.
+The total combines both kinds of event; response and tool-call counts remain separately observable (grilling 2026-09-26).
+
+_Avoid_: "Codex turn" (one native user request can contain many Agent Turns), "tool call" as a synonym for the total
 
 **Audited Eval**
 
@@ -48,9 +55,31 @@ _Avoid_: "foundation cards" (use "Foundations cards" or "base set")
 
 **Batch**
 
-One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (candidate ref + mode + benchmark + budget). Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
+One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (candidate ref + benchmark + budget; historical batches also select a mode). Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
 
 _Avoid_: "job" (the substrate's job dir is a different concept), "queue entry" for the file (a Batch holds several runs)
+
+**Benchmark Candidate**
+
+An executable agent configuration selected for evaluation.
+For Karn v4, the candidate is an immutable image paired with the Construct Definition that selects its runtime behavior (grilling 2026-09-26).
+Legacy candidates retain their historical representation and identity.
+
+_Avoid_: "recipe" or "image tag" as the complete candidate identity
+
+**Benchmark Mode** *(historical run parameter)*
+
+A bench-owned task-presentation variant recorded by historical runs, independently of candidate identity.
+New Karn v4 runs take their planning and task guidance from the selected benchmark, without a separate basic/planned selector (grilling 2026-09-26).
+
+_Avoid_: "execution mode" (Automaton versus Vehicle is an upstream distinction), "strategy" (candidate behavior)
+
+**Benchmark Run**
+
+One budgeted execution of a Benchmark Candidate against a benchmark's entire Card Pool and instruction data, followed by harvesting and Audited Eval.
+Each run has its own observations and results, including when it belongs to a Resume Chain.
+
+_Avoid_: "workload" (retired), "session" (ambiguous)
 
 **Benchmark Tier**
 
@@ -64,7 +93,7 @@ Benchmark mode (`MODE=blind`) where the prompt does not instruct the agent to wr
 
 _Avoid_: "blind implementation" as a noun (deprecated — was `blind_impl.py`)
 
-**Candidate Bundle**
+**Candidate Bundle** *(legacy interchange format)*
 
 The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling (`theozolith candidate export`: `candidate.json` + generated `Dockerfile` + compiled knowledge tree + baked policy tree; `docs/specs/BENCH-CONTRACT.md`, `bundle_format_version` 2); the only thing `silverquillm run --candidate <path>` accepts (a bundle directory, or a checked-in `candidates/<slug>--<hash8>/` directory wrapping one under `bundle/`). Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle by TheOzolith's verifier (`silverquillm.candidate` consumes `verify_bundle`; the bench never reimplements the hash) — never trusted from a recorded value: a bundle whose recorded identity, or whose directory-name suffix, disagrees with the recomputed one is a hard refusal, as is a bundle carrying a secret value (#65). Adapter-agnostic by contract: the format never hardcodes the adapter set, and neither does the bench.
 
@@ -99,6 +128,13 @@ _Avoid_: "Output Snapshot" (runner-owned 60-second Git commits), "snapshot" alon
 Classification of card difficulty: trivial (1×), simple (2×), medium (3×), complex (4×), expert (5×). Assigned via automated heuristics. Recorded per card, but v1 leaderboard scoring is unweighted (raw pass/total) — complexity weighting is not applied in v1. Canonical key name in code and JSON is `complexity_tier` (not `tier`).
 
 _Avoid_: "difficulty level", "tier" (as a standalone key name)
+
+**Construct Definition**
+
+The Karn-owned artifact binding an immutable image to its declared execution behavior and required runtime facilities.
+Distinct Construct Definitions may select the same image.
+
+_Avoid_: "Candidate Bundle" (the historical interchange format), "image" alone
 
 **Contamination**
 
@@ -141,6 +177,13 @@ _Avoid_: "engine test" alone (ambiguous — specify "engine regression tests")
 Maintainer-authored core MTG-engine mechanics tests at `engine_tests/` — the input to the Engine Regression evaluation dimension (mana, stack, combat, state-based actions, etc.), run against the agent's final Writable Engine post-run. They live in the workspace at `workspace/engine_tests/` per ADR-006 so agents can self-verify Engine Extensions; grading uses the host-repo copy. A separate bucket from Audited Tests (which grade card behavior) and Platform Tests (which test the tooling).
 
 _Avoid_: "engine test" alone (ambiguous — say "Engine Tests" / "Engine Regression"), folding under "audited tests"
+
+**Estimated Cost**
+
+The API-equivalent USD estimate of a Benchmark Run's observed model usage under a recorded pricing basis.
+It supports resource-use comparisons and does not represent the actual subscription charge attributable to the run (grilling 2026-09-26).
+
+_Avoid_: "billed cost", "subscription cost" for this estimate
 
 **FDN Card Regression**
 
@@ -202,11 +245,25 @@ A test-scoped Player Query handler with an explicit lifecycle (`start_intent` �
 
 _Avoid_: "goal" / "policy" (rejected names), "answer script" (the V1 FIFO model this replaces)
 
+**Karn**
+
+The builder that resolves Construct recipes and produces the images, Construct Definitions, and plugins used by a Benchmark Candidate.
+Karn is independent of Ozolith's runtime manager.
+
+_Avoid_: "Ozolith" when referring to candidate building
+
 **Keyword Ability**
 
 MTG rules construct the engine implements (e.g. Flying, Reach, Deathtouch, Affinity, Casualty, Cascade, the Miracle keyword). Cards with a Keyword Ability inherit its rules text by reference. Tests probe the behavior produced by the keyword, not just presence in a `keywords[]` list.
 
 _Avoid_: "ability word" (distinct concept — see Ability Word)
+
+**Login Profile**
+
+A named host-local binding through which a runner selects subscription authentication, independently of Benchmark Candidate identity.
+A profile reuses the existing local login binding across candidate variants and batches, with only one runner using that login at a time on the host (grilling 2026-09-26).
+
+_Avoid_: "candidate credential" (authentication is not candidate identity)
 
 **Modifiers**
 
@@ -300,7 +357,9 @@ _Avoid_: "config.json" (implies agent configuration), "agent config"
 
 **Run Record**
 
-One Benchmark Run's immutable entry in the Results Repo: `manifest.json` (candidate identity — `ozolith-v1` with `verified: true`, the triple recomputed from a Candidate Bundle, or `legacy` with `verified: false`, a label — `mode`, `benchmark` — never "workload" — `budget_seconds`, `leaderboard_valid`, `resumed_from`, `proposal_status`, `run_metadata`, `artifact_pointers`) plus `scores.json` (the three audited dimensions under the benchmark-neutral keys `card_correctness`, `fdn_regression`, `engine_regression`). Written once, atomically; never edited — corrections are new runs. `leaderboard_valid` has one owner, `derive_leaderboard_valid`: false for a `leaderboard.eligible: false` benchmark, a Resume Leg, a card filter that differs from the benchmark's card set after integer normalization of collector numbers, or a scored set that differs from it.
+An immutable account of a Benchmark Run's selected candidate, benchmark, conditions, observed outcomes, and available evidence.
+It retains grading, Estimated Cost, Agent Turns, and diagnostics when available, explaining missing or partial observations instead of discarding an unsuccessful run (grilling 2026-09-26).
+Historical records retain their original schemas, identities, and interpretation.
 
 _Avoid_: "run summary" (`run_summary.json` is the legacy per-run aggregate the record's scores are mapped from), "result" alone
 
@@ -324,13 +383,16 @@ _Avoid_: "cross-eval" / "self-eval" (retired N×N framing), "cross-validation" (
 
 **Test Oracle Impl**
 
-Host-side `card_impl.py` inside the Test Oracle Workspace that encodes the correct mechanic for one audited SOS card, derived from xmage. Used solely as the validation oracle for the rewritten audited test suite — a test must pass against the matching Test Oracle Impl before it is committed. Never staged into agent runs.
+A host-side implementation of a target card used as the behavioral reference for validating Audited Tests.
+It belongs to the benchmark's Test Oracle Workspace and is never staged into candidate runs.
 
 _Avoid_: "reference implementation" (already names FDN learning material at `workspace/cards/fdn/{cn}/card_impl.py`), "gold impl"
 
 **Test Oracle Workspace**
 
-Host-side pre-built workspace at `benchmarks/sos/data/test_oracle_workspace/` that **mirrors **`benchmarks/sos/workspace/`** 1:1** — `engine/`, `cards/fdn/`, `cards/sos/` (with stubs for non-audited cards), `tests/`, `test_utils.py`, `AGENTS.md`, `pytest.ini`. Contains the Test Oracle Impls for every audited SOS card and an independent copy of `engine/` that may diverge from the canonical agent-visible engine. The oracle workspace's `test_utils.py` is the **home for the host-side ergonomic helpers** used by audited tests (`set_mana_pool`, `set_hand`, `set_battlefield`, `set_library_top`, `set_graveyard`, `assert_on_stack`, `assert_in_zone`, `assert_casting_error`) — there is no separate `silverquillm/test_utils.py`. Audited tests develop against this workspace and are copied to the canonical audited path at `benchmarks/sos/data/tests/audited/` once green. Never staged into agent runs; never seen by the agent. See ADR-010.
+A host-only mirror of a benchmark's agent-visible Workspace, holding its Test Oracle Impls and an independent engine.
+It supports developing and validating Audited Tests while keeping oracle implementations separate from candidate runs.
+Its engine may implement required mechanics independently; Audited Tests still use the canonical public API.
 
 _Avoid_: "reference workspace" (reference is overloaded), "oracle" alone (ambiguous)
 
@@ -354,13 +416,13 @@ _Avoid_: "results" alone (ambiguous with `results/{run_name}/` run output), "val
 
 **Workload** *(retired — grilling 2026-08-27)*
 
-Retired run-spec term. Formerly a card subset within a benchmark; killed because card subsets were a SOS-era hack that confuses benchmarks. One benchmark = one problem set; a run always consumes the whole set. The run spec is candidate + mode + benchmark + budget. Cheap pipeline validation uses a dedicated smoke benchmark (its own small problem set of validated FDN cards), never a subset of a real one.
+Retired run-spec term. Formerly a card subset within a benchmark; killed because card subsets were a SOS-era hack that confuses benchmarks. One benchmark = one problem set; a run always consumes the whole set. The current run spec is candidate + benchmark + budget; historical runs also selected a mode. Cheap pipeline validation uses a dedicated smoke benchmark (its own small problem set of validated FDN cards), never a subset of a real one.
 
 _Avoid_: "workload", "card subset", "filtered run"
 
 **Workspace**
 
-The per-benchmark directory at `benchmarks/<benchmark>/workspace/` in the bench repo (e.g. `benchmarks/sos/workspace/`, `benchmarks/hob-medium/workspace/`), copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + SOS Card Stubs), test scaffolding (`conftest.py`, `test_utils.py`, `engine_tests/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The resume staging variant (see Resume Chain) skips `git init` and preserves the prior run's `workspace_final/` `.git` history instead. The agent has read-write access to the entire workspace.
+The per-benchmark directory at `benchmarks/<benchmark>/workspace/` in the bench repo (e.g. `benchmarks/sos/workspace/`, `benchmarks/hob-medium/workspace/`), copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + target-card stubs), test scaffolding (`conftest.py`, `test_utils.py`, `engine_tests/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The resume staging variant (see Resume Chain) skips `git init` and preserves the prior run's `workspace_final/` `.git` history instead. The agent has read-write access to the entire workspace.
 
 _Avoid_: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run), "staged from scratch" (deprecated — workspace is a pre-built directory copied wholesale)
 
@@ -372,7 +434,7 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 
 ## Relationships
 
-- A Benchmark Run evaluates one Agent Container (one agent + one model) against one benchmark's Card Pool — the whole SOS Draft Set for SOS, a selective HOB subset for each HOB benchmark.
+- A Benchmark Run evaluates one Benchmark Candidate against the selected benchmark's configured Card Pool and instruction data.
 - A Benchmark Run launches one container session. The agent receives the benchmark's entire problem set (every target card) in a single Workspace — one benchmark = one problem set; there is no card-subset "workload" notion (grilling 2026-08-27).
 - FDN cards are in-context examples (filled `card_impl.py` + colocated `tests.py` demonstrating the testing pattern). SOS cards are benchmark targets (SOS Card Stubs to fill in).
 - Each agent produces `card_impl.py` per SOS card. In Tested Mode, also `tests.py` per card.
@@ -386,22 +448,22 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - Draft Set defines the card pool for Replay Validation (17lands replays are draft games).
 - All card tests follow a uniform structure: `tests/audited/{set_code}/{collector_number}/tests.py`, importing from `card_impl`. FDN and SOS tests share this structure.
 - The Base Set (FDN 001–291 + SPG 074–083) is validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.
-- A Pipeline Validation Run precedes scored benchmark runs to verify the orchestration pipeline.
-- A Benchmark Candidate enters the public set only as a Promoted Candidate; a Run Record becomes a Published Result only if its candidate is a Promoted Candidate that verifies by recomputation. Knowledge that cannot be published blocks both.
+- A Pipeline Validation Run exercises the orchestration pipeline; its observations are retained as learning data alongside other run outcomes.
+- The existing publication pipeline requires a Promoted Candidate that verifies by recomputation and permits its knowledge to be published; these publication rules do not gate collection or analysis of Karn v4 run data.
 - A Batch holds ordered run specs; the scheduler executes one run at a time, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
 - Filesystem checks (does the file exist, does it differ from the template?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only.
 - `run_summary.json` is automatically generated after evaluation by aggregating per-card `result.json` files. The aggregator is a pure, idempotent function.
 - The runner does NOT orchestrate test iteration — the agent self-manages. The runner stages, launches, harvests, evaluates.
 - On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
-- Two benchmark modes: **Blind** (prompt omits test instructions) and **Tested** (prompt includes test instructions). Both produce `card_impl.py`. Distinction is prompt-only for v1. Compare modes via separate runs.
+- Historical **Blind** and **Tested** modes varied test instructions. New Karn v4 runs take their guidance from the selected benchmark and have no independent mode selector.
 - SOS and FDN audited tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Engine tests are staged at `workspace/engine_tests/` per ADR-006 so agents can locally verify engine extensions; grading still uses host-repo copies for all three dimensions. FDN Reference Tests are colocated with the FDN card implementations at `workspace/cards/fdn/{collector_number}/tests.py` as additional reference for agents. Audited SOS grader tests live host-side only — there is no `workspace/tests/cards/` directory.
 - The runner is the hard timeout authority. Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
 - Output Snapshots are runner-owned, Workspace-only, and independent of Agent Container cooperation. The runner may use prior snapshot commits as fallback if final engine state is corrupted.
 - The runner writes the User Prompt to `/workspace/prompt.md`; Agent Containers bake System Prompts into their entrypoints.
 - Hard Timeout and Hang Timeout are independent — either can trigger `docker stop -t 10` to end a benchmark run.
-- Test Oracle Workspace's `engine/` is independent of canonical `benchmarks/sos/workspace/engine/`. Canonical engine is frozen with respect to Phase 18 work to preserve cross-run benchmark comparability and to keep Engine Extension Quality scoring meaningful; engine extensions needed by Test Oracle Impls live in the oracle's engine only (ADR-010).
+- A Test Oracle Workspace has an engine independent of the corresponding benchmark's agent-visible baseline; mechanics needed by an oracle do not alter that baseline merely for oracle convenience.
 - Audited tests call only public APIs present in the canonical engine. Tests never depend on extensions present in the Test Oracle Workspace's engine but absent from canonical — otherwise correct agent impls using different primitives would fail tests for non-correctness reasons.
-- Audited tests are authored inside the Test Oracle Workspace mirror at `benchmarks/sos/data/test_oracle_workspace/tests/audited/sos/sos_{cn}/tests.py` and copied to the canonical audited path at `benchmarks/sos/data/tests/audited/sos/sos_{cn}/tests.py` once green against the matching Test Oracle Impl. The canonical path is what the validation harness `tests/test_audited_against_reference.py` reads from when running against agent impls.
+- Audited Tests are developed and validated against the matching Test Oracle Impl, then promoted to the benchmark's host-side authoritative audited-test tree; benchmark identity and target set code are resolved separately.
 - Audited tests target observable game-state outcomes ("what the card does"), not card-text annotations ("what the card says"). Ability Words are not tested for presence; only the behavior described by the text following the ability word is asserted.
 - The Audited Test API is the only sanctioned way an audited test touches the engine. It references only canonical-engine primitives and composes or duplicates canonical behavior (e.g. `cast_spell_from_exile` for alt-zone casts); building and using it requires no change to any workspace engine.
 - The Host-Side Driver (`priority_loop`) advances audited tests by polling DeterministicPlayers for directives and resolving one stack object at a time; `advance_to_phase` fast-forwards turn structure (turn-based actions, triggers, end-of-turn cleanup) without opening priority windows, though a triggered ability that forces a choice is still answered from the choice script.

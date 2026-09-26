@@ -1,10 +1,13 @@
 Status: DRAFT
 
-Last updated: 2026-09-05
+Last updated: 2026-09-26
 
 # Benchmark Candidates
 
 The bench-side lifecycle of a Benchmark Candidate: how a candidate is promoted from the operator's private Config Repo into the public `candidates/` tree, how runs of it are queued and executed by the batch scheduler, and how its results are published.
+
+This page describes the existing Candidate Bundle pipeline and its publication behavior.
+[Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md) governs v4 candidate execution and observation collection; historical publication and leaderboard rules do not gate that collection (grilling 2026-09-26).
 
 ## Context
 
@@ -128,3 +131,4 @@ Discovery of published results goes through manifests only, never a path convent
 | --- | --- |
 | [ADR-008](../adr/ADR-008-resume-legs-are-independent-benchmark-runs.md) | Resume Legs Are Independent Benchmark Runs — why a Resume Leg is never leaderboard-valid, and so publishes only with `--allow-invalid` |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking — Released → Benchmarking retracts published scores |
+| [ADR-0012](../adr/ADR-0012-independent-host-for-karn-benchmark-candidates.md) | The independent v4 consumer has a separate execution and observation contract |

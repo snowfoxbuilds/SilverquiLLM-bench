@@ -1,10 +1,13 @@
 Status: SETTLED
 
-Last updated: 2026-05-24
+Last updated: 2026-09-26
 
 # Run Artifacts and Telemetry
 
 The runner produces artifacts for evaluation, auditability, recovery, and observability. Evaluatable state comes from the Workspace. `/output/` and Docker logs are telemetry only.
+
+This page preserves the existing artifact layouts and workspace recovery behavior.
+[Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md) governs v4 run outcomes, Agent Turns, Estimated Cost, and observation completeness; historical validity fields are not data-collection gates (grilling 2026-09-26).
 
 ## Context
 
@@ -242,3 +245,4 @@ Rules for the `silverquillm smoke` command:
 | --- | --- |
 | [ADR-008](../adr/ADR-008-resume-legs-are-independent-benchmark-runs.md) | Resume Legs Are Independent Benchmark Runs |
 | [ADR-009](../adr/ADR-009-resume-reads-prefer-run-time-artifacts-over-harvest-time-artifacts.md) | Resume Reads Prefer Run-Time Artifacts Over Harvest-Time Artifacts |
+| [ADR-0012](../adr/ADR-0012-independent-host-for-karn-benchmark-candidates.md) | Karn v4 execution and observations have an independent consumer contract |
