@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import subprocess
 from types import SimpleNamespace
 
@@ -129,6 +130,55 @@ def test_failed_run_uses_proven_snapshot_only_when_final_engine_is_unusable(tmp_
         in (opts["results_dir"] / record.run_id / "workspace_final/engine/card.py").read_text()
     )
     assert all(score["pass_rate"] == 1.0 for score in record.scores.values())
+
+
+class LeftoversHost(FixtureHost):
+    """Leaves what an agent plausibly leaves: a venv symlink, a large data file, a FIFO."""
+
+    def __init__(self, *, unreadable_engine=False):
+        super().__init__()
+        self.unreadable_engine = unreadable_engine
+
+    def run(self, candidate, workspace, evidence_dir, prompt, **kwargs):
+        (workspace / "cards/fdn/fdn_1/card_impl.py").write_text("value = 1\nedited = True\n")
+        (workspace / ".venv/bin").mkdir(parents=True)
+        (workspace / ".venv/bin/python").symlink_to("/usr/bin/python3")
+        (workspace / "data").mkdir()
+        with open(workspace / "data/big.bin", "wb") as large:
+            large.truncate(33 * 1024 * 1024)
+        os.mkfifo(workspace / "pipe")
+        if self.unreadable_engine:
+            secret = workspace / "engine/extra.py"
+            secret.write_text("")
+            secret.chmod(0)
+        return super().run(candidate, workspace, evidence_dir, prompt, **kwargs)
+
+
+def test_symlinks_large_files_and_fifos_are_omitted_without_demoting_final_work(tmp_path):
+    opts = options(tmp_path, host=LeftoversHost())
+    record = run_benchmark(**opts)
+    source = record.run_metadata["grading_source"]
+    assert source["selected"] == "workspace_final" and source["fallback"] is False
+    assert source["final"]["errors"] == []
+    assert {(row["path"], row["reason"]) for row in source["final"]["omissions"]} == {
+        (".venv/bin/python", "symlink_excluded"),
+        ("data/big.bin", "file_too_large"),
+        ("pipe", "not_regular_file"),
+    }
+    final = opts["results_dir"] / record.run_id / "workspace_final"
+    assert "edited" in (final / "cards/fdn/fdn_1/card_impl.py").read_text()
+    assert not (final / "data/big.bin").exists() and not (final / "pipe").exists()
+
+
+def test_unreadable_engine_source_still_falls_back_to_a_complete_snapshot(tmp_path):
+    opts = options(tmp_path, host=LeftoversHost(unreadable_engine=True))
+    record = run_benchmark(**opts)
+    source = record.run_metadata["grading_source"]
+    assert source["fallback"] is True and source["selected"] == "snapshots/00000"
+    assert source["reason"] == "final_workspace_copy_incomplete"
+    assert source["final"]["errors"] == [
+        {"path": "engine/extra.py", "reason": "file_unavailable_during_copy"}
+    ]
 
 
 def test_grader_failure_is_absent_not_zero_and_does_not_erase_execution(tmp_path):

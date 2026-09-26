@@ -57,7 +57,7 @@ def load_benchmark(bench_root: Path, benchmark_id: str) -> Benchmark:
 
 def stage_benchmark(benchmark: Benchmark, destination: Path) -> tuple[str, dict]:
     copied = copy_workspace(benchmark.root / "workspace", destination)
-    if copied["errors"]:
+    if copied["errors"] or copied["omissions"]:
         raise KarnError("benchmark_workspace_incomplete")
     selected = {str(int(number)) if number.isdigit() else number for number in benchmark.cards}
     targets = []

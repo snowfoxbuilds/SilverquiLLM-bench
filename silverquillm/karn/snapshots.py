@@ -20,13 +20,47 @@ from .definition import KarnError, canonical, digest, read_regular
 
 IGNORED = {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
 MAX_FILE_BYTES = 32 * 1024 * 1024
+GRADED_TREES = ("engine", "cards")
+GRADED_FILES = ("test_utils.py",)
+
+
+def _graded(path: Path) -> bool:
+    return bool(path.parts) and (path.parts[0] in GRADED_TREES or str(path) in GRADED_FILES)
+
+
+def _classify(size: int | None, mode: int) -> str | None:
+    if stat.S_ISLNK(mode):
+        return "symlink_excluded"
+    if not stat.S_ISREG(mode):
+        return "not_regular_file"
+    if size is not None and size > MAX_FILE_BYTES:
+        return "file_too_large"
+    return None
 
 
 def copy_workspace(source: Path, destination: Path) -> dict:
+    """Copy regular files; exclusions are ``omissions``, unreadable graded sources ``errors``.
+
+    Only ``errors`` disqualify a copy for grading: a symlinked virtualenv or a large data
+    file the agent left behind must not demote its final work to an earlier snapshot.
+    """
     source, destination = Path(source), Path(destination)
     destination.mkdir(mode=0o700, parents=True, exist_ok=False)
-    errors, rows = [], []
-    for directory, names, filenames, directory_fd in os.fwalk(source, follow_symlinks=False):
+    errors, omissions, rows = [], [], []
+
+    def unavailable(path: Path) -> None:
+        (errors if _graded(path) else omissions).append(
+            {"path": str(path), "reason": "file_unavailable_during_copy"}
+        )
+
+    def walk_failed(error: OSError) -> None:
+        # fwalk names only the entry, not its parent; directories are probed before descent,
+        # so this is a race, and an unplaceable failure is treated as disqualifying.
+        errors.append({"path": str(error.filename), "reason": "file_unavailable_during_copy"})
+
+    for directory, names, filenames, directory_fd in os.fwalk(
+        source, follow_symlinks=False, onerror=walk_failed
+    ):
         relative = Path(directory).relative_to(source)
         target = destination / relative
         target.mkdir(parents=True, exist_ok=True)
@@ -36,29 +70,49 @@ def copy_workspace(source: Path, destination: Path) -> dict:
                 continue
             info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
             if stat.S_ISLNK(info.st_mode):
-                errors.append({"path": str(relative / name), "reason": "symlink_excluded"})
-            else:
-                kept.append(name)
+                omissions.append({"path": str(relative / name), "reason": "symlink_excluded"})
+                continue
+            try:
+                os.close(
+                    os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory_fd)
+                )
+                os.listdir(Path(directory) / name)
+            except OSError:
+                unavailable(relative / name)
+                continue
+            kept.append(name)
         names[:] = kept
         for name in sorted(filenames):
             if name.endswith(".pyc"):
                 continue
             path = relative / name
             try:
+                info = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                reason = _classify(info.st_size, info.st_mode)
+                if reason is not None:
+                    omissions.append({"path": str(path), "reason": reason})
+                    continue
                 fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
                 with os.fdopen(fd, "rb") as stream:
                     info = os.fstat(stream.fileno())
-                    if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
-                        raise ValueError("file_not_regular_or_too_large")
-                    content = stream.read(MAX_FILE_BYTES + 1)
-                    if len(content) > MAX_FILE_BYTES:
-                        raise ValueError("file_too_large")
+                    reason = _classify(info.st_size, info.st_mode)
+                    content = b"" if reason else stream.read(MAX_FILE_BYTES + 1)
+                if reason is None and len(content) > MAX_FILE_BYTES:
+                    reason = "file_too_large"
+                if reason is not None:
+                    omissions.append({"path": str(path), "reason": reason})
+                    continue
                 (target / name).write_bytes(content)
                 (target / name).chmod(stat.S_IMODE(info.st_mode) & 0o777)
                 rows.append([str(path), digest(content)])
-            except (OSError, ValueError):
-                errors.append({"path": str(path), "reason": "file_unavailable_during_copy"})
-    return {"digest": digest(canonical(sorted(rows))), "files": len(rows), "errors": errors}
+            except OSError:
+                unavailable(path)
+    return {
+        "digest": digest(canonical(sorted(rows))),
+        "files": len(rows),
+        "errors": errors,
+        "omissions": omissions,
+    }
 
 
 def engine_health(workspace: Path) -> dict:
