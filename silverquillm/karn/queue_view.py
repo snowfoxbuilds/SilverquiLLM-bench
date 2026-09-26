@@ -71,7 +71,7 @@ def run_top(
         read_key = _terminal_key_reader(interval)
     elif read_key is None:
         max_frames = 1 if max_frames is None else max_frames
-        read_key = lambda: None  # noqa: E731
+        read_key = lambda: None
 
     stop = False
 

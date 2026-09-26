@@ -15,7 +15,6 @@ from .grader import DEFAULT_GRADER_IMAGE, DEFAULT_GRADING_TIMEOUT
 from .host import DockerHost
 from .interruption import terminate_as_interrupt
 
-
 BATCHES_DIR_OPTION = click.option(
     "--batches-dir",
     type=click.Path(file_okay=False, path_type=Path),
