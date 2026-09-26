@@ -15,8 +15,10 @@ Code written inside the sandbox therefore reached the host at grading time.
 Candidate code executes only inside a grader container.
 The container runs a bench-owned image pinned by base-image digest and hashed pytest requirements, built explicitly with `grader build` and referenced by image ID; a run refuses before launch when the image is missing and never pulls or builds it.
 Each probe or grading pass runs with no network, the operator's UID and GID, a read-only root filesystem, all capabilities dropped, no privilege escalation, memory and process limits, a size-limited `/tmp`, and an allowlisted environment.
-Only the selected workspace, SilverquiLLM's package, and the grading inputs the evaluation reads are mounted, read-only; one empty output directory is writable.
-The host treats the container's output as untrusted data: one size-capped regular file, parsed as strict JSON and accepted only in the exact evaluation shape, with pass rates recomputed from counts.
+Only the selected workspace, SilverquiLLM's package, and the grading inputs the evaluation reads are mounted, all read-only; nothing in the container can write to the host.
+The result leaves as one sentinel-framed line on the container's stdout; the worker discards every other stdout write, including the graded code's.
+The host kills the container once stdout passes 1 MiB or stderr passes 64 MiB, and bounds the daemon's log of the attached output.
+It treats the result as untrusted data: parsed as strict JSON and accepted only in the exact evaluation shape, with counts bounded and pass rates recomputed from counts.
 A timeout, failed container, or rejected output records the run with absent scores and the reason, never zero.
 Each Run Record states the grading isolation and grader image ID.
 
@@ -29,6 +31,7 @@ Each Run Record states the grading isolation and grader image ID.
 
 ## Alternatives Considered
 
+- **A writable output directory**: simpler to read, but a hostile container could fill the host's disk through it. Rejected for the capped stdout stream.
 - **Scrub the environment only**: removes inherited credentials but leaves the login secret file, the operator's files, and the network reachable. Rejected as a partial fix.
 - **Grade in the candidate's own image**: no extra image, but the grader's interpreter and pytest would be candidate-controlled. Rejected.
 

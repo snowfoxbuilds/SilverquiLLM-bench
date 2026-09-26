@@ -142,3 +142,34 @@ def test_run_refuses_before_launch_without_the_grader_image(tmp_path, python_ima
     assert result.returncode != 0
     assert "grader_image_unavailable" in result.stderr
     assert not runs.exists()
+
+
+FLOODING_ENGINE = """
+import os, stat
+
+for name in os.listdir(f"/proc/{os.getppid()}/fd"):
+    try:
+        path = f"/proc/{os.getppid()}/fd/{name}"
+        if stat.S_ISFIFO(os.stat(path).st_mode):
+            descriptor = os.open(path, os.O_WRONLY | os.O_NONBLOCK)
+            for _ in range(64):
+                os.write(descriptor, b"x" * 65536)
+    except OSError:
+        pass
+"""
+
+
+@pytest.mark.integration
+def test_grader_output_past_its_cap_is_refused(tmp_path, grader_image):
+    """Graded code flooding the worker's result stream ends as output_too_large, not a host write."""
+    from silverquillm.karn.grader import GraderError
+
+    root = benchmark_data(tmp_path / "data")
+    workspace = root / "benchmarks/example/workspace"
+    (workspace / "engine/card.py").write_text(
+        (workspace / "engine/card.py").read_text() + FLOODING_ENGINE
+    )
+    benchmark = load_benchmark(root, "example")
+    with pytest.raises(GraderError) as refused:
+        ContainerGrader(grader_image).evaluate_run(tmp_path, benchmark, workspace_source=workspace)
+    assert refused.value.reason in {"output_too_large", "evaluation_not_framed"}

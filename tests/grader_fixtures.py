@@ -14,12 +14,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-from silverquillm.karn.grader import ContainerGrader
+from silverquillm.karn.grader import ContainerGrader, DockerRun
 
 FIXTURE_IMAGE_ID = "sha256:" + "0" * 64
 VALUE_OPTIONS = {
     "--name", "--label", "--network", "--user", "--pids-limit", "--memory", "--memory-swap",
     "--tmpfs", "--workdir", "--env", "--mount", "--security-opt", "--cap-drop", "--pull",
+    "--log-driver", "--log-opt",
 }  # fmt: skip
 FLAG_OPTIONS = {"--rm", "--read-only"}
 CONTAINER_ROOTS = ("/opt/sq", "/grade", "/tmp")
@@ -36,7 +37,7 @@ class LocalDocker:
     def remove(self, name):
         self.removed.append(name)
 
-    def run(self, arguments, *, timeout):
+    def run(self, arguments, *, timeout, stdout_limit=0):
         assert arguments[0] == "run"
         options, index = [], 1
         while arguments[index].startswith("--"):
@@ -51,7 +52,7 @@ class LocalDocker:
         image, command = arguments[index], arguments[index + 1 :]
         self.runs.append({"options": options, "image": image, "command": command})
         if self.code is not None:
-            return self.code, "fixture failure"
+            return DockerRun(self.code, "fixture failure")
         with tempfile.TemporaryDirectory(prefix="sq-fake-container-") as scratch:
             root = Path(scratch)
             (root / "tmp").mkdir()
@@ -81,8 +82,11 @@ class LocalDocker:
                     check=False,
                 )
             except subprocess.TimeoutExpired:
-                return None, ""
-            return completed.returncode, completed.stderr.decode(errors="replace")[-4096:]
+                return DockerRun(None, "")
+            tail = completed.stderr.decode(errors="replace")[-4096:]
+            if stdout_limit and len(completed.stdout) > stdout_limit:
+                return DockerRun(None, tail, overflow=True)
+            return DockerRun(completed.returncode, tail, completed.stdout if stdout_limit else b"")
 
 
 def local_grader(**options) -> ContainerGrader:

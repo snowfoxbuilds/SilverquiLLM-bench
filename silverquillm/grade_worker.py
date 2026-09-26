@@ -2,13 +2,16 @@
 
 It lives outside ``silverquillm.karn`` because importing that package needs
 host-only dependencies the grader image does not carry. The host mounts
-SilverquiLLM at the package root and the grading inputs and one writable output
-directory under the grade root; ``job.json`` names what to grade.
+SilverquiLLM at the package root and the read-only grading inputs under the
+grade root; ``job.json`` names what to grade. Nothing is mounted writable: the
+result leaves as one sentinel-framed line on the original stdout, and every other
+write to stdout during grading is discarded so it cannot corrupt that line.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -62,10 +65,20 @@ def grade(package_root: Path, grade_root: Path) -> dict:
     return asdict(result)
 
 
+EVALUATION_SENTINEL = b"SILVERQUILLM-EVALUATION-V1 "
+
+
 def main(package_root: str, grade_root: str) -> int:
-    root = Path(grade_root)
-    evaluation = grade(Path(package_root), root)
-    (root / "out" / "evaluation.json").write_text(json.dumps(evaluation, sort_keys=True))
+    # os.dup is non-inheritable, so pytest subprocesses never receive the result stream.
+    result = os.dup(1)
+    quiet = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(quiet, 1)
+    os.close(quiet)
+    sys.stdout = open(1, "w", closefd=False)  # noqa: SIM115 -- fd 1 is now /dev/null.
+    evaluation = grade(Path(package_root), Path(grade_root))
+    document = EVALUATION_SENTINEL + json.dumps(evaluation, sort_keys=True).encode() + b"\n"
+    with os.fdopen(result, "wb") as stream:
+        stream.write(document)
     return 0
 
 

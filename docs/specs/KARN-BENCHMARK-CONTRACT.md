@@ -69,7 +69,7 @@ Container termination and declared result files describe execution, while Audite
 Grading imports and runs code the candidate wrote, so it never executes on the benchmark host.
 Every engine-viability probe and grading pass runs in a bench-owned grader image, built explicitly and referenced by image ID, with no network, the operator's UID, a read-only root, dropped capabilities, resource limits, an allowlisted environment, and read-only mounts of only the selected Workspace, SilverquiLLM, and the grading inputs.
 A run refuses before launch when the grader image is missing; it never builds or pulls it.
-The container's output is untrusted data, accepted only in the exact evaluation shape; a timeout, failure, or rejected output records absent grades with the reason.
+Nothing is mounted writable: the result returns as one size-capped, framed line on the container's stdout and is untrusted data, accepted only in the exact evaluation shape with bounded counts; a timeout, failure, oversized or rejected output records absent grades with the reason.
 Each Run Record states its grading isolation and grader image ID.
 Isolation protects the host's files, credentials, and network; it does not make scores tamper-proof, because candidate code shares the process that counts its results.
 

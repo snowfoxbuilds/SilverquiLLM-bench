@@ -18,10 +18,12 @@ from silverquillm.karn.definition import KarnError
 from silverquillm.karn.execution import run_benchmark
 from silverquillm.karn.grader import (
     ENVIRONMENT,
+    EVALUATION_SENTINEL,
     MAX_EVALUATION_BYTES,
     WORKER,
+    DockerRun,
     GraderError,
-    _read_output,
+    _evaluation_payload,
     evaluation_from_json,
 )
 
@@ -63,17 +65,17 @@ def test_every_grading_container_is_sandboxed_and_sees_only_declared_inputs(tmp_
         assert selected["--tmpfs"].startswith("/tmp:rw,nosuid,nodev,size=4g")
         environment = dict(v.split("=", 1) for k, v in run["options"] if k == "--env")
         assert environment == ENVIRONMENT
-        writable = [row for row in mounts(run) if not row[2]]
+        assert [row for row in mounts(run) if not row[2]] == [], "nothing is mounted writable"
+        assert selected["--log-driver"] == "json-file"
+        assert [v for k, v in run["options"] if k == "--log-opt"] == ["max-size=1m", "max-file=1"]
         home_state = str(Path.home() / ".local/state")
         assert all(not source.startswith(home_state) for source, _, _ in mounts(run))
         assert all(not source.endswith("docker.sock") for source, _, _ in mounts(run))
         if WORKER in run["command"]:
-            assert [target for _, target, _ in writable] == ["/grade/out"]
             targets = {target for _, target, _ in mounts(run)}
             assert "/grade/workspace" in targets and "/opt/sq/silverquillm" in targets
             assert not any(target.startswith(str(opts["results_dir"])) for target in targets)
         else:
-            assert writable == []
             assert [target for _, target, _ in mounts(run)] == ["/grade/workspace"]
 
 
@@ -161,22 +163,80 @@ def test_untrusted_output_that_is_not_strict_json_is_refused(raw):
         evaluation_from_json(raw)
 
 
-def test_output_file_must_be_a_bounded_regular_file(tmp_path):
+def test_grader_stdout_must_be_exactly_one_framed_line():
+    document = json.dumps(valid_evaluation()).encode()
+    assert _evaluation_payload(EVALUATION_SENTINEL + document + b"\n") == document
     with pytest.raises(GraderError, match="evaluation_missing"):
-        _read_output(tmp_path, "evaluation.json")
-    secret = tmp_path.parent / "host-secret"
-    secret.write_text("secret")
-    (tmp_path / "evaluation.json").symlink_to(secret)
-    with pytest.raises(GraderError, match="evaluation_missing"):
-        _read_output(tmp_path, "evaluation.json")
-    (tmp_path / "evaluation.json").unlink()
-    os.mkfifo(tmp_path / "evaluation.json")
-    with pytest.raises(GraderError, match="evaluation_not_regular"):
-        _read_output(tmp_path, "evaluation.json")
-    (tmp_path / "evaluation.json").unlink()
-    (tmp_path / "evaluation.json").write_bytes(b" " * (MAX_EVALUATION_BYTES + 1))
+        _evaluation_payload(b"")
+    for stdout in (
+        document + b"\n",
+        EVALUATION_SENTINEL + document,
+        b"noise\n" + EVALUATION_SENTINEL + document + b"\n",
+        EVALUATION_SENTINEL + document + b"\n" + EVALUATION_SENTINEL + document + b"\n",
+    ):
+        with pytest.raises(GraderError, match="evaluation_not_framed"):
+            _evaluation_payload(stdout)
     with pytest.raises(GraderError, match="evaluation_too_large"):
-        _read_output(tmp_path, "evaluation.json")
+        _evaluation_payload(EVALUATION_SENTINEL + b" " * (MAX_EVALUATION_BYTES + 1) + b"\n")
+
+
+def test_candidate_prints_during_grading_do_not_reach_the_result_line(tmp_path):
+    """The worker discards everything else written to stdout, including by graded code."""
+    opts = options(tmp_path, grader=local_grader())
+    engine = opts["bench_root"] / "benchmarks/example/workspace/engine/card.py"
+    engine.write_text(
+        engine.read_text()
+        + "import os\n"
+        + "print('noise')\n"
+        + "try:\n"
+        + "    parent = os.open(f'/proc/{os.getppid()}/fd/1', os.O_WRONLY)\n"
+        + "    os.write(parent, b'noise written into the grader process stdout\\n')\n"
+        + "except OSError:\n"
+        + "    pass\n"
+    )
+    record = run_benchmark(**opts)
+    assert "grading_failure" not in record.run_metadata
+    assert all(score["evaluated"] for score in record.scores.values())
+
+
+REAL_RUN = grader_module.DockerRunner.run
+
+
+def fake_docker_client(tmp_path, monkeypatch, script: str):
+    client = tmp_path / "bin/docker"
+    client.parent.mkdir()
+    client.write_text("#!/bin/sh\n" + script)
+    client.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{client.parent}:{os.environ['PATH']}")
+
+
+def test_runner_kills_the_client_once_stdout_passes_its_cap(tmp_path, monkeypatch):
+    fake_docker_client(tmp_path, monkeypatch, "exec yes silverquillm\n")
+    result = REAL_RUN(grader_module.DockerRunner(), ["run"], timeout=30, stdout_limit=4096)
+    assert result == DockerRun(None, "", overflow=True)
+
+
+def test_runner_kills_the_client_once_stderr_passes_its_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(grader_module, "MAX_STDERR_BYTES", 1024 * 1024)
+    fake_docker_client(tmp_path, monkeypatch, "yes silverquillm >&2\n")
+    result = REAL_RUN(grader_module.DockerRunner(), ["run"], timeout=30)
+    assert result.overflow and result.code is None
+    assert len(result.stderr_tail.encode()) <= grader_module.STDERR_TAIL_BYTES
+
+
+def test_runner_returns_bounded_stdout_and_the_exit_code(tmp_path, monkeypatch):
+    fake_docker_client(tmp_path, monkeypatch, "printf result; echo tail >&2; exit 3\n")
+    result = REAL_RUN(grader_module.DockerRunner(), ["run"], timeout=30, stdout_limit=64)
+    assert result == DockerRun(3, "tail\n", b"result")
+
+
+def test_output_over_the_cap_is_refused_and_the_container_removed(tmp_path):
+    docker = GradingFails(DockerRun(None, "", overflow=True))
+    record = run_benchmark(**options(tmp_path, grader=local_grader(docker=docker)))
+    assert record.run_metadata["grading_failure"]["reason"] == "output_too_large"
+    for score in record.scores.values():
+        assert score["missing_reasons"] == ["grading_container_failed:output_too_large"]
+    assert docker.removed
 
 
 class GradingFails(LocalDocker):
@@ -186,18 +246,18 @@ class GradingFails(LocalDocker):
         super().__init__()
         self.result = result
 
-    def run(self, arguments, *, timeout):
+    def run(self, arguments, *, timeout, stdout_limit=0):
         if WORKER in arguments:
             self.runs.append({"options": [], "image": None, "command": arguments})
             return self.result
-        return super().run(arguments, timeout=timeout)
+        return super().run(arguments, timeout=timeout, stdout_limit=stdout_limit)
 
 
 @pytest.mark.parametrize(
     ("result", "reason"), [((None, "slow"), "timeout"), ((1, "Traceback"), "exit_1")]
 )
 def test_grading_container_failure_is_recorded_and_the_run_still_written(tmp_path, result, reason):
-    docker = GradingFails(result)
+    docker = GradingFails(DockerRun(*result))
     opts = options(tmp_path, grader=local_grader(docker=docker))
     record = run_benchmark(**opts)
     assert record.run_metadata["execution"]["status"] == "completed"
@@ -220,7 +280,7 @@ def test_probe_timeout_marks_engine_unusable_and_docker_failure_is_not_blamed_on
     (workspace / "engine").mkdir(parents=True)
     (workspace / "engine/card.py").write_text("value = 1\n")
     timed_out = local_grader(docker=LocalDocker(code=None))
-    timed_out.docker.run = lambda arguments, timeout: (None, "")
+    timed_out.docker.run = lambda arguments, timeout, stdout_limit=0: DockerRun(None, "")
     assert timed_out.engine_health(workspace) == {
         "usable": False,
         "reason": "engine_import_timeout",
@@ -288,13 +348,9 @@ def test_grader_build_command_prints_the_built_image_id(monkeypatch):
 class CannedOutput(LocalDocker):
     """Records the legacy grading container and answers with a fixed evaluation."""
 
-    def run(self, arguments, *, timeout):
+    def run(self, arguments, *, timeout, stdout_limit=0):
         self.runs.append(arguments)
-        for index, value in enumerate(arguments):
-            if value == "--mount" and "dst=/grade/out" in arguments[index + 1]:
-                fields = dict(f.split("=", 1) for f in arguments[index + 1].split(","))
-                Path(fields["src"], "evaluation.json").write_text(json.dumps(valid_evaluation()))
-        return 0, ""
+        return DockerRun(0, "", EVALUATION_SENTINEL + json.dumps(valid_evaluation()).encode() + b"\n")
 
 
 def test_legacy_evaluation_mounts_only_run_inputs_and_keeps_patch_errors(tmp_path):
@@ -317,7 +373,8 @@ def test_legacy_evaluation_mounts_only_run_inputs_and_keeps_patch_errors(tmp_pat
         for i, value in enumerate(arguments)
         if value == "--mount"
     }
-    assert {"/grade/run/status.json", "/grade/run/cards", "/grade/out"} <= targets
+    assert {"/grade/run/status.json", "/grade/run/cards"} <= targets
+    assert "/grade/out" not in targets
     assert {"/grade/legacy/workspace/cards", "/grade/legacy/workspace/engine"} <= targets
     assert "/grade/run" not in targets
     assert not any("operator-notes" in value for value in arguments)

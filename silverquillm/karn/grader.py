@@ -2,7 +2,8 @@
 
 Candidate code runs only in the container, with no network, no host environment
 and no host files beyond read-only grading inputs. What comes back is untrusted
-data: one size-capped regular file whose shape is checked field by field.
+data: one size-capped, framed line on the container's stdout whose shape is
+checked field by field. Nothing in the container can write to the host.
 Isolation protects the host, not score integrity: candidate code shares the
 pytest process that counts its results.
 """
@@ -14,7 +15,6 @@ import math
 import os
 import re
 import shutil
-import stat
 import subprocess
 import tempfile
 import threading
@@ -33,6 +33,7 @@ from silverquillm.evaluator import (
     _prepare_engine_work,
     resolve_eval_paths,
 )
+from silverquillm.grade_worker import EVALUATION_SENTINEL
 
 from .definition import KarnError, strict_json
 
@@ -41,6 +42,8 @@ DEFAULT_GRADING_TIMEOUT = 3600
 PROBE_TIMEOUT = 60
 SUITE_TIMEOUT = 60
 MAX_EVALUATION_BYTES = 1024 * 1024
+# Past this much stderr the container is killed; only the tail is kept either way.
+MAX_STDERR_BYTES = 64 * 1024 * 1024
 MAX_TEST_COUNT = 10**9
 STDERR_TAIL_BYTES = 4096
 IMAGE_CONTEXT = Path(__file__).with_name("grader_image")
@@ -48,6 +51,8 @@ PACKAGE_ROOT = "/opt/sq"
 GRADE_ROOT = "/grade"
 GRADER_LABEL = "org.silverquillm.grader"
 DOCKER_FAILURES = {125, 126, 127}
+# Attached output still reaches the daemon's log driver; cap what it keeps on disk.
+LOG_OPTIONS = ("--log-driver", "json-file", "--log-opt", "max-size=1m", "--log-opt", "max-file=1")
 ENVIRONMENT = {
     "PATH": "/usr/local/bin:/usr/bin:/bin",
     "HOME": "/tmp",
@@ -84,6 +89,16 @@ class GraderError(KarnError):
 
 
 @dataclass(frozen=True)
+class DockerRun:
+    """One ``docker run``: exit code (``None`` when killed), stderr tail, and capped stdout."""
+
+    code: int | None
+    stderr_tail: str
+    stdout: bytes = b""
+    overflow: bool = False
+
+
+@dataclass(frozen=True)
 class GraderLimits:
     memory: str = "8g"
     pids: int = 512
@@ -93,38 +108,58 @@ class GraderLimits:
 class DockerRunner:
     """The subprocess boundary: one bounded ``docker`` invocation per call."""
 
-    def run(self, arguments: list[str], *, timeout: float) -> tuple[int | None, str]:
-        """Return the exit code, or ``None`` on timeout, and a bounded stderr tail."""
+    def run(self, arguments: list[str], *, timeout: float, stdout_limit: int = 0) -> DockerRun:
+        """Run the client once; kill it on timeout or when stdout or stderr passes its cap."""
         try:
             process = subprocess.Popen(
                 ["docker", *arguments],
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
+                stdout=subprocess.PIPE if stdout_limit else subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
             )
         except OSError:
             raise GraderError("docker_unavailable") from None
-        tail, size = deque(), 0
+        tail, stdout, overflow = deque(), bytearray(), threading.Event()
 
-        def drain():
-            nonlocal size
+        def exceed():
+            overflow.set()
+            process.kill()
+
+        def drain_stderr():
+            size = total = 0
             while chunk := process.stderr.read(65536):
                 tail.append(chunk)
-                size += len(chunk)
+                size, total = size + len(chunk), total + len(chunk)
                 while size - len(tail[0]) >= STDERR_TAIL_BYTES:
                     size -= len(tail.popleft())
+                if total > MAX_STDERR_BYTES:
+                    exceed()
+                    return
 
-        reader = threading.Thread(target=drain, daemon=True)
-        reader.start()
+        def drain_stdout():
+            while chunk := process.stdout.read(65536):
+                if len(stdout) + len(chunk) > stdout_limit:
+                    exceed()
+                    return
+                stdout.extend(chunk)
+
+        readers = [threading.Thread(target=drain_stderr, daemon=True)]
+        if stdout_limit:
+            readers.append(threading.Thread(target=drain_stdout, daemon=True))
+        for reader in readers:
+            reader.start()
         try:
             code = process.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait()
             code = None
-        reader.join(timeout=5)
+        for reader in readers:
+            reader.join(timeout=5)
         text = b"".join(tail)[-STDERR_TAIL_BYTES:].decode(errors="replace")
-        return code, text
+        if overflow.is_set():
+            return DockerRun(None, text, overflow=True)
+        return DockerRun(code, text, bytes(stdout))
 
     def remove(self, name: str) -> None:
         try:
@@ -204,7 +239,9 @@ class ContainerGrader:
     def isolation(self) -> dict:
         return {"mode": "container", "grader_image_id": self.image_id, "network": "none"}
 
-    def _container(self, mounts, command: list[str], timeout: float) -> tuple[int | None, str]:
+    def _container(
+        self, mounts, command: list[str], timeout: float, *, stdout_limit: int = 0
+    ) -> DockerRun:
         name = "sq-grade-" + uuid.uuid4().hex
         arguments = [
             "run", "--rm", "--pull", "never", "--name", name, "--label", GRADER_LABEL + "=1",
@@ -213,7 +250,7 @@ class ContainerGrader:
             "--pids-limit", str(self.limits.pids),
             "--memory", self.limits.memory, "--memory-swap", self.limits.memory,
             "--tmpfs", f"/tmp:rw,nosuid,nodev,size={self.limits.tmpfs},mode=1777",
-            "--workdir", "/tmp",
+            "--workdir", "/tmp", *LOG_OPTIONS,
         ]  # fmt: skip
         for key, value in ENVIRONMENT.items():
             arguments += ["--env", f"{key}={value}"]
@@ -223,18 +260,19 @@ class ContainerGrader:
                 targets.add(target)
                 arguments += ["--mount", _mount(source, target, readonly)]
         arguments += [self.image_id, "python3", "-I", "-c", *command]
-        code, tail = self.docker.run(arguments, timeout=timeout)
-        if code is None or code in DOCKER_FAILURES:
-            # A timed-out client or failed start can leave the container behind.
+        result = self.docker.run(arguments, timeout=timeout, stdout_limit=stdout_limit)
+        if result.code is None or result.code in DOCKER_FAILURES:
+            # A killed client or failed start can leave the container behind.
             self.docker.remove(name)
-        return code, tail
+        return result
 
     def engine_health(self, workspace: Path) -> dict:
-        code, tail = self._container(
+        probe = self._container(
             [(Path(workspace), GRADE_ROOT + "/workspace", True)],
             [PROBE, GRADE_ROOT + "/workspace"],
             PROBE_TIMEOUT,
         )
+        code, tail = probe.code, probe.stderr_tail
         if code is None:
             return {"usable": False, "reason": "engine_import_timeout"}
         if code in DOCKER_FAILURES:
@@ -313,25 +351,25 @@ class ContainerGrader:
     def _grade(self, job: dict, mounts: list) -> FullEvalResult:
         package = Path(silverquillm.__file__).resolve().parent
         with tempfile.TemporaryDirectory(prefix="sq-grade-") as scratch:
-            output = Path(scratch) / "out"
-            output.mkdir()
             job_file = Path(scratch) / "job.json"
             job_file.write_text(json.dumps(job))
-            code, tail = self._container(
+            result = self._container(
                 [
                     (package, PACKAGE_ROOT + "/silverquillm", True),
                     (job_file, GRADE_ROOT + "/job.json", True),
-                    (output, GRADE_ROOT + "/out", False),
                     *mounts,
                 ],
                 [WORKER, PACKAGE_ROOT, GRADE_ROOT],
                 self.timeout,
+                stdout_limit=len(EVALUATION_SENTINEL) + MAX_EVALUATION_BYTES + 1,
             )
-            if code is None:
-                raise GraderError("timeout", tail)
-            if code:
-                raise GraderError(f"exit_{code}", tail)
-            return evaluation_from_json(_read_output(output, "evaluation.json"))
+        if result.overflow:
+            raise GraderError("output_too_large", result.stderr_tail)
+        if result.code is None:
+            raise GraderError("timeout", result.stderr_tail)
+        if result.code:
+            raise GraderError(f"exit_{result.code}", result.stderr_tail)
+        return evaluation_from_json(_evaluation_payload(result.stdout))
 
 
 def _replay_inputs(data_root: Path) -> list:
@@ -342,23 +380,20 @@ def _replay_inputs(data_root: Path) -> list:
     ]
 
 
-def _read_output(directory: Path, name: str) -> bytes:
-    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        try:
-            fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptor)
-        except OSError:
-            raise GraderError("evaluation_missing") from None
-        with os.fdopen(fd, "rb") as source:
-            info = os.fstat(source.fileno())
-            if not stat.S_ISREG(info.st_mode):
-                raise GraderError("evaluation_not_regular")
-            raw = source.read(MAX_EVALUATION_BYTES + 1)
-    finally:
-        os.close(descriptor)
-    if len(raw) > MAX_EVALUATION_BYTES:
+def _evaluation_payload(stdout: bytes) -> bytes:
+    """The worker's stdout must be exactly one sentinel-framed line and nothing else."""
+    if not stdout:
+        raise GraderError("evaluation_missing")
+    if (
+        not stdout.startswith(EVALUATION_SENTINEL)
+        or not stdout.endswith(b"\n")
+        or stdout.count(b"\n") != 1
+    ):
+        raise GraderError("evaluation_not_framed")
+    payload = stdout[len(EVALUATION_SENTINEL) : -1]
+    if len(payload) > MAX_EVALUATION_BYTES:
         raise GraderError("evaluation_too_large")
-    return raw
+    return payload
 
 
 CARD_FIELDS = {
