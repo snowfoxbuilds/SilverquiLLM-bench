@@ -101,7 +101,6 @@ def test_direct_and_batch_cli_retain_all_three_dimensions(tmp_path, python_image
         str(tmp_path / "state"),
     ]
     direct = invoke(
-        "karn",
         "run",
         "--build-output",
         str(candidate.build_output),
@@ -124,7 +123,6 @@ def test_direct_and_batch_cli_retain_all_three_dimensions(tmp_path, python_image
         + "\nbudget_seconds = 20\n"
     )
     queued = invoke(
-        "karn",
         "scheduler",
         "--batches-dir",
         str(batches),

@@ -376,7 +376,7 @@ class TestResumeCommand:
         prior = _make_prior_run(tmp_path)
         monkeypatch.setattr(cli_mod, "_REPO_ROOT", tmp_path)
 
-        result = runner.invoke(main, ["resume", prior.name])
+        result = runner.invoke(main, ["legacy", "resume", prior.name])
         assert result.exit_code != 0
         assert "--timeout is required" in result.output
         # Hint should reference prior timeout and wall-clock
@@ -392,7 +392,7 @@ class TestResumeCommand:
         monkeypatch.setattr(cli_mod, "_REPO_ROOT", tmp_path)
 
         result = runner.invoke(
-            main, ["resume", prior.name, "--timeout", "60"]
+            main, ["legacy", "resume", prior.name, "--timeout", "60"]
         )
         assert result.exit_code != 0
         assert "no_viable_output_produced" in result.output
@@ -408,7 +408,7 @@ class TestResumeCommand:
         monkeypatch.setattr(cli_mod, "_REPO_ROOT", tmp_path)
 
         result = runner.invoke(
-            main, ["resume", prior.name, "--timeout", "60"]
+            main, ["legacy", "resume", prior.name, "--timeout", "60"]
         )
         assert result.exit_code != 0
         assert "workspace_final" in result.output
@@ -420,7 +420,7 @@ class TestResumeCommand:
         monkeypatch.setattr(cli_mod, "_REPO_ROOT", tmp_path)
 
         result = runner.invoke(
-            main, ["resume", prior.name, "--timeout", "60"]
+            main, ["legacy", "resume", prior.name, "--timeout", "60"]
         )
         assert result.exit_code != 0
         assert "force-missing-summary" in result.output
@@ -433,7 +433,7 @@ class TestResumeCommand:
         monkeypatch.setattr(cli_mod, "_REPO_ROOT", tmp_path)
 
         result = runner.invoke(
-            main, ["resume", prior.name, "--timeout", "60"]
+            main, ["legacy", "resume", prior.name, "--timeout", "60"]
         )
         assert result.exit_code != 0
         assert "run_manifest.json" in result.output
@@ -459,7 +459,7 @@ class TestResumeCommand:
         _patch_resume_deps.side_effect = _capture
 
         result = runner.invoke(
-            main, ["resume", prior.name, "--timeout", "60"]
+            main, ["legacy", "resume", prior.name, "--timeout", "60"]
         )
         assert result.exit_code == 0, result.output
 
@@ -500,6 +500,7 @@ class TestResumeCommand:
         result = runner.invoke(
             main,
             [
+                "legacy",
                 "resume",
                 prior.name,
                 "--timeout",
@@ -534,7 +535,7 @@ class TestResumeCommand:
 
         result = runner.invoke(
             main,
-            ["resume", prior.name, "--timeout", "60", "--cards", "3"],
+            ["legacy", "resume", prior.name, "--timeout", "60", "--cards", "3"],
         )
         assert result.exit_code == 0, result.output
         prompt = captured_prompt["text"]
@@ -572,7 +573,7 @@ class TestResumeCommand:
         _patch_resume_deps.side_effect = _capture
 
         result = runner.invoke(
-            main, ["resume", prior.name, "--timeout", "60"]
+            main, ["legacy", "resume", prior.name, "--timeout", "60"]
         )
         assert result.exit_code == 0, result.output
         prompt = captured["text"]
@@ -593,7 +594,7 @@ class TestChainCommand:
         prior = _make_prior_run(tmp_path, run_name="leg-only")
         monkeypatch.setattr(cli_mod, "_REPO_ROOT", tmp_path)
 
-        result = runner.invoke(main, ["chain", "leg-only"])
+        result = runner.invoke(main, ["legacy", "chain", "leg-only"])
         assert result.exit_code == 0, result.output
         assert "leg-only" in result.output
         assert "docker_image" in result.output
@@ -610,7 +611,7 @@ class TestChainCommand:
         )
         monkeypatch.setattr(cli_mod, "_REPO_ROOT", tmp_path)
 
-        result = runner.invoke(main, ["chain", "leg-3"])
+        result = runner.invoke(main, ["legacy", "chain", "leg-3"])
         assert result.exit_code == 0, result.output
         # Oldest first ordering
         i1 = result.output.find("leg-1")
@@ -626,6 +627,6 @@ class TestChainCommand:
         _make_prior_run(tmp_path, run_name="leg-b", resumed_from="leg-a")
         monkeypatch.setattr(cli_mod, "_REPO_ROOT", tmp_path)
 
-        result = runner.invoke(main, ["chain", "leg-a"])
+        result = runner.invoke(main, ["legacy", "chain", "leg-a"])
         assert result.exit_code != 0
         assert "cycle" in result.output.lower()

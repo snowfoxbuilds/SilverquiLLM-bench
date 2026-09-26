@@ -53,20 +53,25 @@ class TestCLIGroup:
         assert hasattr(main, "commands") or hasattr(main, "list_commands")
 
     def test_has_run_command(self, runner):
-        result = runner.invoke(main, ["run", "--help"])
+        result = runner.invoke(main, ["legacy", "run-image", "--help"])
         assert result.exit_code == 0
         assert "image" in result.output.lower()
 
     def test_has_smoke_command(self, runner):
-        result = runner.invoke(main, ["smoke", "--help"])
+        result = runner.invoke(main, ["legacy", "smoke", "--help"])
         assert result.exit_code == 0
         assert "image" in result.output.lower()
 
     def test_help_text(self, runner):
         result = runner.invoke(main, ["--help"])
         assert result.exit_code == 0
-        assert "run" in result.output
-        assert "smoke" in result.output
+        for command in ("run", "scheduler", "login", "queue", "top", "legacy"):
+            assert command in result.output
+        assert "karn" not in result.output.split("Commands:")[1]
+        legacy = runner.invoke(main, ["legacy", "--help"])
+        assert legacy.exit_code == 0
+        for command in ("run-image", "smoke", "resume", "chain", "rescore", "logs"):
+            assert command in legacy.output
 
 
 # ---------------------------------------------------------------------------
@@ -78,22 +83,22 @@ class TestRemovedCLIFlags:
     """The --cards-dir and --engine-dir CLI flags must not exist."""
 
     def test_run_help_does_not_mention_cards_dir(self, runner):
-        result = runner.invoke(main, ["run", "--help"])
+        result = runner.invoke(main, ["legacy", "run-image", "--help"])
         assert "--cards-dir" not in result.output
 
     def test_run_help_does_not_mention_engine_dir(self, runner):
-        result = runner.invoke(main, ["run", "--help"])
+        result = runner.invoke(main, ["legacy", "run-image", "--help"])
         assert "--engine-dir" not in result.output
 
     def test_run_rejects_cards_dir_flag(self, runner):
         """Passing --cards-dir should cause an error (no such option)."""
-        result = runner.invoke(main, ["run", "--image", "x", "--cards-dir", "/tmp"])
+        result = runner.invoke(main, ["legacy", "run-image", "--image", "x", "--cards-dir", "/tmp"])
         assert result.exit_code != 0
         assert "no such option" in result.output.lower() or "error" in result.output.lower()
 
     def test_run_rejects_engine_dir_flag(self, runner):
         """Passing --engine-dir should cause an error (no such option)."""
-        result = runner.invoke(main, ["run", "--image", "x", "--engine-dir", "/tmp"])
+        result = runner.invoke(main, ["legacy", "run-image", "--image", "x", "--engine-dir", "/tmp"])
         assert result.exit_code != 0
         assert "no such option" in result.output.lower() or "error" in result.output.lower()
 
@@ -240,7 +245,7 @@ class TestRunDefaults:
         mock_lifecycle_cls.return_value = mock_instance
         mock_harvest.return_value = tmp_path / "results" / "run"
 
-        result = runner.invoke(main, ["run", "--image", "test-img", "--results-dir", str(tmp_path / "results")])
+        result = runner.invoke(main, ["legacy", "run-image", "--image", "test-img", "--results-dir", str(tmp_path / "results")])
         # ContainerLifecycle should have been called with hard_timeout=3600
         call_kwargs = mock_lifecycle_cls.call_args
         assert call_kwargs.kwargs.get("hard_timeout", call_kwargs[1].get("hard_timeout")) == 3600
@@ -503,7 +508,7 @@ class TestTimeout:
 
         result = runner.invoke(
             main,
-            ["run", "--image", "test-img",
+            ["legacy", "run-image", "--image", "test-img",
              "--results-dir", str(tmp_path / "results")],
         )
 
@@ -536,7 +541,7 @@ class TestSmokePass:
 
         mock_lifecycle_cls.side_effect = create_hello_side_effect
 
-        result = runner.invoke(main, ["smoke", "--image", "test-img"])
+        result = runner.invoke(main, ["legacy", "smoke", "--image", "test-img"])
         assert "PASS" in result.output
 
     @patch("silverquillm.cli.ContainerLifecycle")
@@ -548,7 +553,7 @@ class TestSmokePass:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        result = runner.invoke(main, ["smoke", "--image", "test-img"])
+        result = runner.invoke(main, ["legacy", "smoke", "--image", "test-img"])
         assert "FAIL" in result.output
         assert "hello.py" in result.output.lower()
 
@@ -561,7 +566,7 @@ class TestSmokePass:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        result = runner.invoke(main, ["smoke", "--image", "test-img"])
+        result = runner.invoke(main, ["legacy", "smoke", "--image", "test-img"])
         assert "FAIL" in result.output
         assert "exit code" in result.output.lower()
 
@@ -588,7 +593,7 @@ class TestRunDockerArgs:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        result = runner.invoke(main, ["run", "--image", "my-img:v1", "--results-dir", str(tmp_path / "results")])
+        result = runner.invoke(main, ["legacy", "run-image", "--image", "my-img:v1", "--results-dir", str(tmp_path / "results")])
         call_kwargs = mock_lifecycle_cls.call_args
         assert call_kwargs.kwargs.get("image") == "my-img:v1"
 
@@ -606,7 +611,7 @@ class TestRunDockerArgs:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        result = runner.invoke(main, ["run", "--image", "my-img", "--results-dir", str(tmp_path / "results")])
+        result = runner.invoke(main, ["legacy", "run-image", "--image", "my-img", "--results-dir", str(tmp_path / "results")])
         call_kwargs = mock_lifecycle_cls.call_args
         assert call_kwargs.kwargs.get("workspace") == workspace
         assert call_kwargs.kwargs.get("output") == output
@@ -627,7 +632,7 @@ class TestRunDockerArgs:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        result = runner.invoke(main, ["run", "--image", "my-img", "--results-dir", str(tmp_path / "results")])
+        result = runner.invoke(main, ["legacy", "run-image", "--image", "my-img", "--results-dir", str(tmp_path / "results")])
         call_kwargs = mock_lifecycle_cls.call_args
         env_args = call_kwargs.kwargs.get("env_args", [])
         assert "OPENAI_API_KEY=sk-test" in env_args
@@ -656,7 +661,7 @@ class TestRunManifest:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300", "--results-dir", str(tmp_path / "results")])
+        runner.invoke(main, ["legacy", "run-image", "--image", "test-img", "--timeout", "300", "--results-dir", str(tmp_path / "results")])
 
         manifest_path = workspace / "run_manifest.json"
         assert manifest_path.exists(), "run_manifest.json should be written to workspace"
@@ -676,7 +681,7 @@ class TestRunManifest:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "600", "--results-dir", str(tmp_path / "results")])
+        runner.invoke(main, ["legacy", "run-image", "--image", "test-img", "--timeout", "600", "--results-dir", str(tmp_path / "results")])
 
         manifest = json.loads((workspace / "run_manifest.json").read_text())
         assert isinstance(manifest, dict)
@@ -696,7 +701,7 @@ class TestRunManifest:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "420", "--results-dir", str(tmp_path / "results")])
+        runner.invoke(main, ["legacy", "run-image", "--image", "test-img", "--timeout", "420", "--results-dir", str(tmp_path / "results")])
 
         manifest = json.loads((workspace / "run_manifest.json").read_text())
         assert "timeout_seconds" in manifest
@@ -718,7 +723,7 @@ class TestRunManifest:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300", "--results-dir", str(tmp_path / "results")])
+        runner.invoke(main, ["legacy", "run-image", "--image", "test-img", "--timeout", "300", "--results-dir", str(tmp_path / "results")])
 
         manifest = json.loads((workspace / "run_manifest.json").read_text())
         assert "deadline_utc" in manifest
@@ -750,7 +755,7 @@ class TestRunManifest:
         )
         mock_lifecycle_cls.return_value = mock_instance
 
-        runner.invoke(main, ["run", "--image", "test-img", "--timeout", "300", "--results-dir", str(tmp_path / "results")])
+        runner.invoke(main, ["legacy", "run-image", "--image", "test-img", "--timeout", "300", "--results-dir", str(tmp_path / "results")])
 
         manifest = json.loads((workspace / "run_manifest.json").read_text())
         required = {"timeout_seconds", "deadline_utc", "docker_image", "card_filter", "benchmark_set"}

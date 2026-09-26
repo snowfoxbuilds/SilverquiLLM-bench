@@ -81,6 +81,9 @@ def queue_rows(directory: Path) -> list[dict]:
         try:
             batch = load_batch(path)
             if batch is None:
+                rows.append(
+                    {"batch": path.stem, "format": "legacy", "status": "unsupported_legacy_batch"}
+                )
                 continue
             state = read_state(Path(directory) / "state" / (path.stem + ".json"), path.stem)
             started = len(state["runs"]) if state else 0
@@ -136,6 +139,12 @@ class KarnScheduler:
         self.executor, self.recoverer = executor, recoverer
         self.warnings = []
 
+    def _warn(self, message: str) -> None:
+        """Log each distinct problem once per scheduler; the file itself is never rewritten."""
+        if message not in self.warnings:
+            self.warnings.append(message)
+            logging.getLogger(__name__).warning("%s", message)
+
     def _save(self, path, state):
         path.parent.mkdir(parents=True, exist_ok=True)
         _write_atomically(
@@ -153,6 +162,7 @@ class KarnScheduler:
             except (OSError, ValueError):
                 raise KarnError("queue_state_unreadable:" + state_path.name) from None
             if not isinstance(header, dict) or header.get("schema_version") != 2:
+                self._warn("unsupported_legacy_state:" + state_path.name)
                 continue
             state = read_state(state_path, state_path.stem)
             if not state["runs"] or state["runs"][-1]["status"] != "running":
@@ -185,13 +195,12 @@ class KarnScheduler:
             try:
                 batch = load_batch(path)
                 if batch is None:
+                    self._warn("unsupported_legacy_batch:" + path.name)
                     continue
                 state_path = self.directory / "state" / (path.stem + ".json")
                 state = read_state(state_path, path.stem)
             except KarnError as error:
-                if str(error) not in self.warnings:
-                    self.warnings.append(str(error))
-                    logging.getLogger(__name__).warning("%s", error)
+                self._warn(str(error))
                 continue
             if state is None:
                 if path.stem not in self.replay:
@@ -202,9 +211,7 @@ class KarnScheduler:
                 try:
                     batch = load_batch(path)
                 except KarnError as error:
-                    if str(error) not in self.warnings:
-                        self.warnings.append(str(error))
-                        logging.getLogger(__name__).warning("%s", error)
+                    self._warn(str(error))
                     break
                 if batch is None or len(state["runs"]) >= len(batch["runs"]):
                     break

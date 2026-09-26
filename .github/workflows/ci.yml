@@ -30,23 +30,11 @@ jobs:
           uv venv --python 3.13 .venv
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      # Installs the exact the-ozolith revision pyproject.toml pins for every
-      # package the bench consumes (git direct references, so each install
-      # records the commit and tests/test_contract_pin.py can prove it), plus
-      # the dev extra (pytest, the pinned ruff the finding-budget test
-      # measures with).
+      # The dev extra carries pytest and the pinned ruff the finding-budget
+      # test measures with; the runtime needs no Ozolith package (ADR-014).
       - name: Install
         run: |
-          uv pip install --python .venv/bin/python -e ".[dev,legacy]"
-
-      - name: Show the installed contract pin
-        run: |
-          python - <<'EOF'
-          from silverquillm import contract_version as cv
-          for name, dist in cv.installed_contract().items():
-              print(name, dist)
-          print("support errors:", cv.support_errors())
-          EOF
+          uv pip install --python .venv/bin/python -e ".[dev]"
 
       # A job-private basetemp: the host's own pytest sessions share
       # /tmp/pytest-of-<user> and prune each other's numbered directories.

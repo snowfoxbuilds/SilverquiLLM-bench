@@ -44,21 +44,21 @@ class TestPythonVersionAlignment:
         with open(REPO_ROOT / "ruff.toml", "rb") as f:
             self.ruff: dict[str, Any] = tomllib.load(f)
 
-    def test_pyproject_requires_python_3_12(self) -> None:
-        """requires-python must be >=3.12."""
+    def test_pyproject_requires_python_3_13(self) -> None:
+        """requires-python must be >=3.13 (the login-plugin wheel closure needs 3.13)."""
         rp = self.pyproject["project"]["requires-python"]
-        assert rp == ">=3.12", f"Expected '>=3.12', got '{rp}'"
+        assert rp == ">=3.13", f"Expected '>=3.13', got '{rp}'"
 
     def test_ruff_target_version_py312(self) -> None:
         """ruff.toml target-version must be py312."""
         tv = self.ruff.get("target-version")
         assert tv == "py312", f"Expected 'py312', got '{tv}'"
 
-    def test_mypy_python_version_3_12(self) -> None:
-        """mypy python_version in pyproject.toml must be 3.12."""
+    def test_mypy_python_version_3_13(self) -> None:
+        """mypy python_version in pyproject.toml must match requires-python (3.13)."""
         mypy_cfg = self.pyproject.get("tool", {}).get("mypy", {})
         pv = mypy_cfg.get("python_version")
-        assert pv == "3.12", f"Expected '3.12', got '{pv}'"
+        assert pv == "3.13", f"Expected '3.13', got '{pv}'"
 
     def test_ruff_config_is_parseable_with_py312(self) -> None:
         """ruff must accept the py312 target-version without config errors.

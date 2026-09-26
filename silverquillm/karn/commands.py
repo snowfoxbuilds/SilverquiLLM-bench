@@ -1,4 +1,7 @@
-"""Operator commands for Karn candidates and local data collection."""
+"""Operator commands for Karn candidates and local data collection.
+
+``COMMANDS`` lists every command ``silverquillm.cli`` registers at top level.
+"""
 
 from __future__ import annotations
 
@@ -11,9 +14,13 @@ from .definition import KarnError, load_candidate
 from .host import DockerHost
 
 
-@click.group()
-def karn():
-    """Run prebuilt Karn candidates and collect benchmark observations."""
+BATCHES_DIR_OPTION = click.option(
+    "--batches-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("batches"),
+    show_default=True,
+    help="The batch queue directory.",
+)
 
 
 def common_options(function):
@@ -49,7 +56,7 @@ def common_options(function):
     return function
 
 
-@karn.command()
+@click.command()
 @click.option(
     "--build-output", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path)
 )
@@ -84,7 +91,7 @@ def run(**options):
         raise click.exceptions.Exit(130 if execution["status"] == "interrupted" else 1)
 
 
-@karn.command("login")
+@click.command("login")
 @click.argument("profile")
 @click.option(
     "--build-output", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path)
@@ -114,10 +121,8 @@ def enroll(profile, build_output, construct, state_root):
     raise click.exceptions.Exit(status)
 
 
-@karn.command()
-@click.option(
-    "--batches-dir", type=click.Path(file_okay=False, path_type=Path), default=Path("batches")
-)
+@click.command()
+@BATCHES_DIR_OPTION
 @click.option("--once", is_flag=True)
 @click.option("--poll-seconds", type=click.FloatRange(min=0.1), default=30)
 @click.option("--replay-without-state", multiple=True, metavar="BATCH_ID")
@@ -147,12 +152,35 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, **options):
         raise click.exceptions.Exit(130) from None
 
 
-@karn.command("queue")
-@click.option(
-    "--batches-dir", type=click.Path(file_okay=False, path_type=Path), default=Path("batches")
-)
-def queue_status(batches_dir):
-    """Show Karn batches, including interrupted and partially observed runs."""
-    from .batching import queue_rows
+@click.group()
+def queue():
+    """Inspect the batch queue."""
 
-    click.echo(json.dumps(queue_rows(batches_dir), sort_keys=True))
+
+@queue.command("ls")
+@BATCHES_DIR_OPTION
+@click.option("--json", "as_json", is_flag=True, help="Print the raw queue rows as JSON.")
+def queue_ls(batches_dir, as_json):
+    """Show every batch, including interrupted, partially observed and unsupported ones."""
+    from .batching import queue_rows
+    from .queue_view import render_rows
+
+    rows = queue_rows(batches_dir)
+    if as_json:
+        click.echo(json.dumps(rows, sort_keys=True))
+        return
+    for line in render_rows(rows):
+        click.echo(line)
+
+
+@click.command()
+@BATCHES_DIR_OPTION
+@click.option("--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds")
+def top(batches_dir, interval):
+    """Live, read-only view of the batch queue. q quits."""
+    from .queue_view import run_top
+
+    run_top(batches_dir, interval=interval)
+
+
+COMMANDS = (run, enroll, scheduler, queue, top)

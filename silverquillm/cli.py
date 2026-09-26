@@ -1,8 +1,8 @@
 """CLI entry point for the SilverquiLLM benchmark runner.
 
-Provides two commands:
-- ``benchmark run`` — launch a full benchmark run in a Docker container
-- ``benchmark smoke`` — quick smoke test to verify a Docker image works
+Karn v4 runs, batches and logins are the top-level commands (see
+``silverquillm.karn.commands``); the pre-Karn ``--image`` entrypoint lineage
+lives under ``silverquillm legacy``.
 
 Entry point registered in pyproject.toml: ``benchmark = "silverquillm.cli:main"``
 """
@@ -58,7 +58,7 @@ _display = None
 # Runner log helper
 # ---------------------------------------------------------------------------
 
-# Module-level path set by `run`/`smoke` commands so _runner_log can append.
+# Module-level path set by `legacy run-image`/`smoke` commands so _runner_log can append.
 _runner_log_dir: Path | None = None
 
 
@@ -649,23 +649,13 @@ def main() -> None:
 main.add_command(_replay_validate)
 
 
-@main.command()
-@click.option(
-    "--candidate", "candidate_path", default=None,
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-    help=(
-        "A Candidate Bundle directory (exported by `theozolith candidate export`), "
-        "or a candidates/<slug>--<hash8>/ directory wrapping one under bundle/. "
-        "The only input of a Contract Run: identity is recomputed and verified "
-        "from the bundle, its derived image is built through the verified build."
-    ),
-)
-@click.option(
-    "--image", default=None,
-    help="Legacy entrypoint lineage only (retired by #66): the Docker image to run.",
-)
-@click.option("--benchmark", "benchmark_id", default=None, help="Benchmark id (e.g. smoke); required with --candidate")
-@click.option("--mode", "mode_name", default=None, help="Benchmark Mode (basic|planned; default basic) — --candidate only")
+@main.group()
+def legacy() -> None:
+    """The pre-Karn `--image` entrypoint lineage and its historical run directories."""
+
+
+@legacy.command("run-image")
+@click.option("--image", required=True, help="The Docker image to run (entrypoint lineage).")
 @click.option(
     "--timeout",
     default=3600,
@@ -676,78 +666,27 @@ main.add_command(_replay_validate)
     "--results-dir",
     default=None,
     type=click.Path(file_okay=False, path_type=Path),
-    help="Run-artifacts directory (default: runs/<candidate-dir>/ with --candidate, docker/<image_dir>/results/ with --image)",
-)
-@click.option(
-    "--results-repo", default=None, type=click.Path(file_okay=False, path_type=Path),
-    help="Results repo to write the RunRecord and vendored candidate into (or $SILVERQUILLM_RESULTS_REPO) — --candidate only",
-)
-@click.option(
-    "--container-user", default=None,
-    help="uid:gid to run the container as (default: the image's user) — --candidate only",
+    help="Run-artifacts directory (default: docker/<image_dir>/results/)",
 )
 @click.option(
     "--cards",
     default=None,
-    help="Legacy lineage only: comma-separated SOS collector numbers to stage (default: all)",
+    help="Comma-separated SOS collector numbers to stage (default: all)",
 )
 @click.option(
     "--hang-timeout",
     default=None,
     type=int,
-    help="Legacy lineage only: hang timeout in seconds (default: 900)",
+    help="Hang timeout in seconds (default: 900)",
 )
-def run(
-    candidate_path: Path | None,
-    image: str | None,
-    benchmark_id: str | None,
-    mode_name: str | None,
+def run_image(
+    image: str,
     timeout: int,
     results_dir: Path | None,
-    results_repo: Path | None,
-    container_user: str | None,
     cards: str | None,
     hang_timeout: int | None,
 ) -> None:
-    """Run a benchmark: a Candidate Bundle through TheOzolith's Run Contract
-    (--candidate), or a legacy image through the entrypoint lineage (--image).
-
-    With --candidate: the bundle is verified and its identity recomputed
-    (never trusted from a recorded value), its derived image is built through
-    the verified standalone build and launched by image ID with the in-image
-    harness as PID 1, the production gate runs over the jobs channel, the
-    Output Proposal is applied post-exit, the checkout is graded by the
-    Audited Eval, and the run is recorded under the verified identity. Exits 1
-    when the run carries a classified failure; the evidence is in the run
-    dir's contract_run.json either way.
-    """
-    if (candidate_path is None) == (image is None):
-        raise click.UsageError(
-            "pass exactly one of --candidate <bundle> (a Contract Run) or --image "
-            "<name> (the legacy entrypoint lineage)"
-        )
-    if candidate_path is not None:
-        for flag, value in (("--cards", cards), ("--hang-timeout", hang_timeout)):
-            if value is not None:
-                raise click.UsageError(f"{flag} belongs to the legacy --image lineage, not --candidate")
-        _run_candidate(
-            candidate_path,
-            benchmark_id=benchmark_id,
-            mode_name=mode_name or "basic",
-            timeout=timeout,
-            results_dir=results_dir,
-            results_repo=results_repo,
-            container_user=container_user,
-        )
-        return
-    for flag, value in (
-        ("--benchmark", benchmark_id),
-        ("--mode", mode_name),
-        ("--results-repo", results_repo),
-        ("--container-user", container_user),
-    ):
-        if value is not None:
-            raise click.UsageError(f"{flag} belongs to --candidate (the Contract Run), not the legacy --image lineage")
+    """Run a legacy image through the entrypoint lineage."""
     if hang_timeout is None:
         hang_timeout = 900
     # Parse --cards into a list of collector numbers
@@ -862,7 +801,7 @@ def run(
         _runner_log_dir = None
 
 
-@main.command()
+@legacy.command()
 @click.option("--image", required=True, help="Docker image name")
 def smoke(image: str) -> None:
     """Quick smoke test to verify a Docker image works."""
@@ -925,122 +864,6 @@ def smoke(image: str) -> None:
     finally:
         _runner_log_dir = None
         shutil.rmtree(staging_dir, ignore_errors=True)
-
-
-# ---------------------------------------------------------------------------
-# `run --candidate` (Contract Run driver)
-# ---------------------------------------------------------------------------
-
-
-def _report_contract_run(result) -> None:
-    """Echo a Contract Run's outcome (every classified failure included)."""
-    for warning in result.warnings:
-        _runner_log(warning, err=True)
-    if result.bundle is not None:
-        bundle = result.bundle
-        _runner_log(
-            f"Candidate: {bundle.worker_type} ({bundle.adapter}) hash {bundle.candidate_hash}"
-            f" [{bundle.hash8}]  base {bundle.base_digest[:19]}…"
-            f"  instruction {bundle.instruction_hash[:12]}…"
-        )
-        if result.vendored is not None:
-            state = "written" if result.vendored.written else "already present, re-verified"
-            _runner_log(f"Vendored candidate copy: {result.vendored.path} ({state})")
-    if result.image is not None:
-        _runner_log(f"Image: {result.image.tag} = {result.image.image_id}")
-    agent = result.agent_outcome.describe() if result.agent_outcome is not None else "n/a"
-    harness = (result.harness_status or {}).get("phase", "n/a")
-    gate = " -> ".join(result.gate.steps_run) or "not run"
-    if not result.gate.clean:
-        gate += " (findings)"
-    _runner_log(f"Agent: {agent}  Harness: {harness}  Gate: {gate}")
-    _runner_log(f"Proposal status: {result.proposal_status}")
-    if result.eval_result is not None:
-        _runner_log(
-            "Scores — "
-            f"card_correctness={result.eval_result.sos_pass_rate:.3f} "
-            f"fdn_regression={result.eval_result.fdn_pass_rate:.3f} "
-            f"engine_regression={result.eval_result.engine_pass_rate:.3f}"
-        )
-    else:
-        _runner_log("Scores — not evaluated", err=True)
-    if result.record_dir is not None:
-        _runner_log(f"RunRecord written: {result.record_dir}")
-    elif result.record_error:
-        _runner_log(f"RunRecord NOT written: {result.record_error}", err=True)
-    _runner_log(f"Evidence: {result.run_dir / 'contract_run.json'}")
-    for failure in result.failures:
-        _runner_log(
-            f"FAILED [{failure.failure_class}] at {failure.phase}: {failure.reason}", err=True
-        )
-    _runner_log(f"Contract run {'complete' if result.ok else 'FAILED'}: {result.run_id}")
-
-
-def _run_candidate(
-    candidate_path: Path,
-    *,
-    benchmark_id: str | None,
-    mode_name: str,
-    timeout: int,
-    results_dir: Path | None,
-    results_repo: Path | None,
-    container_user: str | None,
-) -> None:
-    """Drive a Candidate Bundle through TheOzolith's implementer Run Contract
-    (the body of ``silverquillm run --candidate``)."""
-    from theozolith_worker import api
-
-    from silverquillm.contract import (
-        RUNS_DIRNAME,
-        candidate_label,
-        drive_contract_run,
-        new_run_name,
-    )
-    from silverquillm.jobdir import BenchmarkNotRunnableError, load_benchmark
-    from silverquillm.modes import UnknownModeError, get_mode
-    from silverquillm.results_repo import resolve_results_repo
-
-    global _runner_log_dir
-    if benchmark_id is None:
-        raise click.UsageError("--benchmark is required with --candidate (e.g. --benchmark smoke)")
-    try:
-        benchmark = load_benchmark(benchmark_id)
-        mode = get_mode(mode_name)
-    except (BenchmarkNotRunnableError, UnknownModeError) as exc:
-        raise click.ClickException(str(exc)) from exc
-
-    label = candidate_label(candidate_path)
-    if results_dir is None:
-        results_dir = _REPO_ROOT / RUNS_DIRNAME / label
-    run_name = new_run_name(benchmark.id, label, results_dir)
-    run_dir = results_dir / run_name
-    run_dir.mkdir(parents=True, exist_ok=True)
-    _runner_log_dir = run_dir
-
-    repo = resolve_results_repo(results_repo)
-
-    _runner_log(f"Starting contract run: {run_name}")
-    _runner_log(
-        f"Candidate: {candidate_path}  Benchmark: {benchmark.id}  Mode: {mode.name}"
-        f"  Timeout: {timeout}s"
-    )
-    try:
-        result = drive_contract_run(
-            run_dir=run_dir,
-            run_id=run_name,
-            benchmark=benchmark,
-            mode=mode,
-            budget_seconds=timeout,
-            candidate=candidate_path,
-            session_factory=api.container_session_factory(api.DockerEngine()),
-            results_repo=repo,
-            container_user=container_user,
-        )
-        _report_contract_run(result)
-    finally:
-        _runner_log_dir = None
-    if not result.ok:
-        raise SystemExit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -1263,7 +1086,7 @@ def _is_run_active(run_dir: Path) -> bool:
     return not (run_dir / "run_summary.json").exists()
 
 
-@main.command()
+@legacy.command()
 @click.option("--run", "run_name", required=True, help="Run name (e.g. sos-2026-05-23T07-13)")
 @click.option("--live", "force_live", is_flag=True, default=False, help="Force live tailing mode")
 @click.option("--archived", "force_archived", is_flag=True, default=False, help="Force archived (static) mode")
@@ -1301,7 +1124,7 @@ def logs(run_name: str, force_live: bool, force_archived: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
-@main.command()
+@legacy.command()
 @click.argument("prior_run_id")
 @click.option(
     "--timeout",
@@ -1591,7 +1414,7 @@ def _strip_resume_preamble(prompt_text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@main.command()
+@legacy.command()
 @click.argument("run_id")
 def chain(run_id: str) -> None:
     """Print the Resume Chain ending at <run_id>, oldest leg first.
@@ -1680,7 +1503,7 @@ def chain(run_id: str) -> None:
         click.echo(fmt.format(*r))
 
 
-@main.command()
+@legacy.command()
 @click.argument("run_id")
 @click.option(
     "--cards",
@@ -1726,158 +1549,6 @@ def rescore(run_id: str, cards: str | None) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Batch queue: scheduler / queue ls / top (#39 §5, #66)
-# ---------------------------------------------------------------------------
-
-_BATCHES_DIR_OPTION = click.option(
-    "--batches-dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=None,
-    help="The batch queue directory (default: batches/ in this repo)",
-)
-
-
-def _batches_dir(value: Path | None) -> Path:
-    return value if value is not None else _REPO_ROOT / "batches"
-
-
-@main.command()
-@_BATCHES_DIR_OPTION
-@click.option("--once", is_flag=True, default=False, help="Run every due batch entry, then exit (instead of polling forever)")
-@click.option("--poll-seconds", type=float, default=None, help="Idle poll interval (default: 30)")
-@click.option(
-    "--results-repo", default=None, type=click.Path(file_okay=False, path_type=Path),
-    help="Results repo every run records into (or $SILVERQUILLM_RESULTS_REPO)",
-)
-@click.option("--container-user", default=None, help="uid:gid to run every container as (default: the image's user)")
-@click.option(
-    "--replay-without-state", "replay_without_state", multiple=True, metavar="BATCH_ID",
-    help=(
-        "Acknowledge, for this one batch, that it has no committed state and may start"
-        " from entry 0 (replaying may repeat completed runs and incur costs); creates"
-        " the empty batches/state/<id>.json. Repeatable; never global."
-    ),
-)
-@click.option(
-    "--acknowledge-cleanup", "acknowledge_cleanup", multiple=True, metavar="BATCH_ID",
-    help=(
-        "Confirm that the run this batch's committed state records as running — on"
-        " another host — has had its container cleaned up; marks it failed so the"
-        " batch can continue here. Replacement host only: refused while this host"
-        " holds valid runtime metadata for the run (start without the flag to"
-        " reconcile it), and refused with the metadata kept when it is unreadable or"
-        " does not bind to the run. Repeatable; never global."
-    ),
-)
-def scheduler(
-    batches_dir: Path | None,
-    once: bool,
-    poll_seconds: float | None,
-    results_repo: Path | None,
-    container_user: str | None,
-    replay_without_state: tuple[str, ...],
-    acknowledge_cleanup: tuple[str, ...],
-) -> None:
-    """Run the single-writer batch scheduler over batches/*.toml.
-
-    Scans batch files in name order, respects not_before, consumes run specs
-    in file order (re-reading the file before every not-yet-started run),
-    resolves and records each candidate's identity at run start, executes
-    each run through the bundle run path (`silverquillm run --candidate`),
-    and writes per-run outcomes to the committed, portable state file
-    batches/state/<batch>.json — never to a batch file; you commit the state
-    checkpoints. A batch with no state file is blocked (replay protection)
-    until --replay-without-state names it. Runs left running by a dead
-    scheduler are reconciled before anything else runs: the runtime metadata
-    is bound to the recorded run first, then that run's container is
-    force-removed and confirmed gone; state from another host needs
-    --acknowledge-cleanup. Committed state no batch file names is reconciled
-    the same way (a running entry in it stops the scheduler; a terminal one is
-    inert), and malformed state blocks its batch without being rewritten. A
-    failed run is recorded and the batch continues. A second scheduler on the
-    same directory refuses to start.
-    """
-    from silverquillm.results_repo import resolve_results_repo
-    from silverquillm.scheduler import (
-        DEFAULT_POLL_SECONDS,
-        AcknowledgementError,
-        DockerContainerRuntime,
-        ReconciliationError,
-        Scheduler,
-        SchedulerLockedError,
-        SchedulerStopped,
-        contract_run_executor,
-    )
-
-    # One environment for the executor's slot binding and the scheduler's
-    # redaction, so every value the run can see is a value the state cannot.
-    environ = os.environ
-    runner = Scheduler(
-        _batches_dir(batches_dir),
-        executor=contract_run_executor(container_user=container_user, environ=environ),
-        container_runtime=DockerContainerRuntime(),
-        repo_root=_REPO_ROOT,
-        results_repo=resolve_results_repo(results_repo),
-        poll_seconds=DEFAULT_POLL_SECONDS if poll_seconds is None else poll_seconds,
-        log=lambda message: click.echo(f"{datetime.now(tz=UTC).isoformat(timespec='seconds')} {message}"),
-        environ=environ,
-        replay_without_state=replay_without_state,
-        acknowledge_cleanup=acknowledge_cleanup,
-    )
-    try:
-        if once:
-            count = runner.run_until_idle()
-            click.echo(f"scheduler idle: {count} run(s) executed")
-        else:
-            runner.serve()
-    except SchedulerLockedError as exc:
-        raise click.ClickException(str(exc)) from exc
-    except (AcknowledgementError, ReconciliationError) as exc:
-        raise click.ClickException(f"scheduler stopped, nothing executed: {exc}") from exc
-    except KeyboardInterrupt:
-        click.echo("scheduler stopped (interrupted)", err=True)
-        raise SystemExit(130) from None
-    except SchedulerStopped:
-        click.echo("scheduler stopped (SIGTERM)", err=True)
-        raise SystemExit(143) from None
-
-
-@main.group()
-def queue() -> None:
-    """Inspect the batch queue (read-only)."""
-
-
-@queue.command("ls")
-@_BATCHES_DIR_OPTION
-def queue_ls(batches_dir: Path | None) -> None:
-    """One-shot table: every batch, its not_before, per-run specs and states, and
-    whether it is blocked (missing committed state, unreadable state, a run
-    left running). Read-only."""
-    from silverquillm.karn.batching import queue_rows
-
-    directory = _batches_dir(batches_dir)
-    rows = queue_rows(directory)
-    for row in rows:
-        click.echo(f"{row['batch']} [karn-v4]: {row['status']} ({row.get('started', 0)}/{row.get('total', 0)})")
-    if rows and len(rows) == len(list(directory.glob("*.toml"))):
-        return
-    from silverquillm.queue_view import build_queue_view, render_queue
-
-    for line in render_queue(build_queue_view(_batches_dir(batches_dir))):
-        click.echo(line)
-
-
-@main.command()
-@_BATCHES_DIR_OPTION
-@click.option("--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds")
-def top(batches_dir: Path | None, interval: float) -> None:
-    """Live, read-only view of the queue: order, not_before, running progress. q quits."""
-    from silverquillm.queue_view import run_top
-
-    run_top(_batches_dir(batches_dir), interval=interval)
-
-
 @main.command("results-init")
 @click.argument("path", type=click.Path(file_okay=False, path_type=Path))
 def results_init(path: Path) -> None:
@@ -1900,9 +1571,10 @@ def results_init(path: Path) -> None:
         click.echo(f"wrote {file_path}")
 
 
-from silverquillm.karn.commands import karn as _karn_commands
+from silverquillm.karn.commands import COMMANDS as _KARN_COMMANDS
 
-main.add_command(_karn_commands)
+for _command in _KARN_COMMANDS:
+    main.add_command(_command)
 
 if __name__ == "__main__":
     main()

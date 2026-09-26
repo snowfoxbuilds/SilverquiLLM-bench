@@ -21,7 +21,7 @@ from silverquillm.evaluator import (
     evaluate_run,
     resolve_eval_paths,
 )
-from silverquillm.jobdir import load_benchmark
+from silverquillm.karn.benchmark import load_benchmark
 
 REPO = Path(__file__).resolve().parents[1]
 SMOKE_WS = REPO / "benchmarks/smoke/workspace"
@@ -61,7 +61,7 @@ class TestEvaluateRun:
 
     def test_three_dimensions_computed(self, tmp_path: Path) -> None:
         run_dir = self._harvest(tmp_path, implement=["fdn_129"])
-        result = evaluate_run(run_dir, load_benchmark("smoke"), timeout=120)
+        result = evaluate_run(run_dir, load_benchmark(REPO, "smoke"), timeout=120)
         assert set(result.sos_results) == {"fdn_129", "fdn_205", "fdn_232"}
         assert result.sos_results["fdn_129"].tests_passed >= 8
         assert result.sos_results["fdn_129"].tests_failed == 0
@@ -72,7 +72,7 @@ class TestEvaluateRun:
     def test_missing_workspace_final_is_reported_not_crashed(self, tmp_path: Path) -> None:
         run_dir = tmp_path / "empty-run"
         run_dir.mkdir()
-        result = evaluate_run(run_dir, load_benchmark("smoke"), timeout=30)
+        result = evaluate_run(run_dir, load_benchmark(REPO, "smoke"), timeout=30)
         assert result.engine_result.errors
         assert result.sos_results == {}
 

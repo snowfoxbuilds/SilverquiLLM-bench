@@ -43,10 +43,16 @@ import tempfile
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from silverquillm.jobdir import BenchmarkRef
+
+class GradedBenchmark(Protocol):
+    """What grading reads from a benchmark (``silverquillm.karn.benchmark.Benchmark``)."""
+
+    root: Path
+    cards: list[str]
+    target_set: str
+
 
 logger = logging.getLogger(__name__)
 
@@ -1253,15 +1259,15 @@ def _eval_audited_dir(
 
 def evaluate_run(
     run_dir: Path,
-    benchmark: BenchmarkRef,
+    benchmark: GradedBenchmark,
     timeout: int = 60,
     *,
     workspace_source: Path | None = None,
 ) -> FullEvalResult:
     """Run the three-dimension Audited Eval for a Contract Run.
 
-    *benchmark* is a :class:`silverquillm.jobdir.BenchmarkRef` (duck-typed:
-    ``root``, ``cards``, ``target_set``).  The agent's harvested tree at
+    *benchmark* is any :class:`GradedBenchmark` (``root``, ``cards``,
+    ``target_set``).  The agent's harvested tree at
     ``run_dir/workspace_final/`` is the evidence: every suite is resolved from
     the benchmark root and run against a throwaway copy of that tree, so
     ``cards``/``engine``/``test_utils`` resolve from what the agent left and the

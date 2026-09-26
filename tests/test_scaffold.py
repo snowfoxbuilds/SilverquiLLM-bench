@@ -48,11 +48,11 @@ class TestPyprojectToml:
         normalized = raw_name.lower().replace("_", "-").replace(".", "-")
         assert normalized == "silverquillm-bench"
 
-    def test_requires_python_at_least_3_10(self) -> None:
-        """requires-python must specify >=3.12 as minimum."""
+    def test_requires_python_at_least_3_13(self) -> None:
+        """requires-python must specify >=3.13 as minimum."""
         requires_python: str = self.data["project"]["requires-python"]
-        assert "3.12" in requires_python, (
-            f"requires-python should specify >=3.12, got '{requires_python}'"
+        assert "3.13" in requires_python, (
+            f"requires-python should specify >=3.13, got '{requires_python}'"
         )
 
     def test_runtime_dependency_requests(self) -> None:

@@ -203,8 +203,39 @@ def test_batch_uses_shared_runner_and_does_not_replay_completed_entries(tmp_path
     assert "[karn-v4]: done" in outcome.output
 
 
+def test_legacy_batches_and_state_are_reported_once_and_never_rewritten(tmp_path, caplog):
+    directory = tmp_path / "batches"
+    (directory / "state").mkdir(parents=True)
+    batch = directory / "old.toml"
+    batch.write_text('[[runs]]\ncandidate = "candidates/x"\nbenchmark = "smoke"\n')
+    state = directory / "state" / "old.json"
+    state.write_text('{"schema_version": 1, "batch": "old", "runs": [{"status": "running"}]}\n')
+    before = {path: path.read_bytes() for path in (batch, state)}
+    scheduler = KarnScheduler(
+        directory,
+        bench_root=tmp_path,
+        results_dir=tmp_path / "runs",
+        results_repo=tmp_path / "results",
+        state_root=tmp_path / "state-root",
+        executor=lambda **kwargs: pytest.fail("a legacy batch must never run"),
+        recoverer=lambda **kwargs: pytest.fail("legacy state must never be recovered"),
+    )
+    with caplog.at_level("WARNING"):
+        assert scheduler.run_until_idle() == 0
+        assert scheduler.run_until_idle() == 0
+    assert scheduler.warnings == [
+        "unsupported_legacy_state:old.json",
+        "unsupported_legacy_batch:old.toml",
+    ]
+    assert len(caplog.records) == 2
+    assert {path: path.read_bytes() for path in (batch, state)} == before
+    assert queue_rows(directory) == [
+        {"batch": "old", "format": "legacy", "status": "unsupported_legacy_batch"}
+    ]
+
+
 def test_new_run_command_has_no_mode_or_proposal_options():
-    result = CliRunner().invoke(main, ["karn", "run", "--help"])
+    result = CliRunner().invoke(main, ["run", "--help"])
     assert result.exit_code == 0
     assert "--build-output" in result.output and "--benchmark" in result.output
     assert "--mode" not in result.output and "--proposal" not in result.output
