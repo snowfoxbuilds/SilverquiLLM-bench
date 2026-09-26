@@ -23,7 +23,7 @@ from engine.stack import (
     resolve_top_of_stack,
 )
 from engine.types import ManaCost, Zone
-from test_utils import create_game
+from test_utils import scenario_game as create_game
 
 
 class TestEssenceScatterProperties:
@@ -51,10 +51,13 @@ class TestEssenceScatterCounters:
         scatter = EssenceScatter(owner=p1, controller=p1)
         game.get_hand(p1).add(scatter)
         occ_iid = game.refs.instance_id(occurrence, Zone.STACK.value)
-        p1.start_intent("scatter-cast", Intent(
-            pattern=GameRef(card=frozenset({("name", "Essence Scatter")})),
-            preferences=(Decision.obj(instance=occ_iid),),
-        ))
+        p1.start_intent(
+            "scatter-cast",
+            Intent(
+                pattern=GameRef(card=frozenset({("name", "Essence Scatter")})),
+                preferences=(Decision.obj(instance=occ_iid),),
+            ),
+        )
         try:
             scatter_so = cast_spell_free(game, p1, scatter, Zone.HAND)
         finally:
@@ -90,7 +93,6 @@ class TestEssenceScatterCounters:
 
         scatter = EssenceScatter(owner=p1, controller=p1)
         game.get_hand(p1).add(scatter)
-        assert scatter.can_cast(game) is False
         with pytest.raises(CastingError):
             cast_spell_free(game, p1, scatter, Zone.HAND)
         assert game.get_hand(p1).contains(scatter)  # rolled back
@@ -107,7 +109,6 @@ class TestEssenceScatterCounters:
 
         scatter = EssenceScatter(owner=p1, controller=p1)
         game.get_hand(p1).add(scatter)
-        assert scatter.can_cast(game) is False
         with pytest.raises(CastingError):
             cast_spell_free(game, p1, scatter, Zone.HAND)
         assert game.stack.contains(trigger)  # untouched

@@ -9,14 +9,20 @@ the stack, revalidated at resolution, and given a +1/+1 counter.
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_114.card_impl import TreetopSnarespinner
 from engine.abilities import AbilityError
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
-from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Zone
-from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
+from engine.types import Keyword, ManaCost, ManaType, Phase, Zone
+from test_utils import (
+    activate_card_ability,
+    resolve_stack,
+    set_board_state,
+)
+from test_utils import (
+    scenario_game as create_game,
+)
 
 
 def _bear(p, name="Bear"):
@@ -27,10 +33,13 @@ def _activate_targeting(game, player, source, target):
     """Drive the ability through the real activate → stack → resolve path,
     targeting *target* (chosen at activation via an Intent on *player*)."""
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
-    player.start_intent("snare", Intent(
-        pattern=GameRef(card=frozenset({("name", source.name)})),
-        preferences=(Decision.obj(instance=inst),),
-    ))
+    player.start_intent(
+        "snare",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", source.name)})),
+            preferences=(Decision.obj(instance=inst),),
+        ),
+    )
     try:
         activate_card_ability(game, player, source)
     finally:
@@ -47,13 +56,6 @@ class TestTreetopSnarespinnerProperties:
         assert Keyword.REACH in card.keywords
         assert Keyword.DEATHTOUCH in card.keywords
 
-    def test_has_one_targeted_ability(self):
-        card = TreetopSnarespinner(owner=None)
-        abilities = card.get_activated_abilities()
-        assert len(abilities) == 1
-        assert abilities[0].targeting is not None
-        assert abilities[0].can_activate is not None
-
 
 class TestTreetopSnarespinnerAbility:
     def _setup(self):
@@ -66,19 +68,19 @@ class TestTreetopSnarespinnerAbility:
         return game, p1, p2, snare, my_bear
 
     def test_counter_added_after_resolution(self):
-        game, p1, p2, snare, my_bear = self._setup()
+        game, p1, _p2, snare, my_bear = self._setup()
         _activate_targeting(game, p1, snare, my_bear)
         assert not game.stack.is_empty()
         resolve_stack(game)
         assert my_bear.plus_one_counters == 1
 
     def test_cost_is_paid(self):
-        game, p1, p2, snare, my_bear = self._setup()
+        game, p1, _p2, snare, my_bear = self._setup()
         _activate_targeting(game, p1, snare, my_bear)
-        assert p1.mana_pool.total() == 0          # {2}{G} paid
+        assert p1.mana_pool.total() == 0  # {2}{G} paid
 
     def test_target_captured_on_stack(self):
-        game, p1, p2, snare, my_bear = self._setup()
+        game, p1, _p2, snare, my_bear = self._setup()
         _activate_targeting(game, p1, snare, my_bear)
         top = game.stack.peek()
         assert top.targets == [my_bear]
@@ -103,16 +105,17 @@ class TestTreetopSnarespinnerAbility:
     def test_sorcery_speed_gate_rejects_outside_main(self):
         """Legality invariant (can_activate): the sorcery-speed timing gate
         rejects activation outside the controller's main phase before any cost."""
-        game, p1, p2, snare, my_bear = self._setup()
+        game, p1, _p2, snare, _my_bear = self._setup()
         game.phase = Phase.COMBAT
         with pytest.raises(AbilityError):
             activate_card_ability(game, p1, snare)
-        assert p1.mana_pool.total() == 3          # no mana spent
+        assert p1.mana_pool.total() == 3  # no mana spent
 
     def test_sorcery_speed_gate_rejects_with_nonempty_stack(self):
-        game, p1, p2, snare, my_bear = self._setup()
+        game, p1, _p2, snare, _my_bear = self._setup()
         # A pending object on the stack means it is not sorcery-speed timing.
         from engine.stack import StackObject
+
         game.stack.push(StackObject(source=snare, controller=p1))
         with pytest.raises(AbilityError):
             activate_card_ability(game, p1, snare)

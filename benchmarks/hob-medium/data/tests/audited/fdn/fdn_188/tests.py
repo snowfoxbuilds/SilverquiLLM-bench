@@ -17,7 +17,8 @@ from engine.decisions import Decision, DecisionKind, GameRef
 from engine.intent_player import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
-from test_utils import cast_spell, create_game, set_board_state
+from test_utils import cast_spell, set_board_state
+from test_utils import scenario_game as create_game
 
 
 def _cast_modal_no_resolve(game, idx, card, mode_name, target):
@@ -26,10 +27,13 @@ def _cast_modal_no_resolve(game, idx, card, mode_name, target):
     resolution-time target revalidation."""
     player = game.players[idx]
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
-    player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
-        preferences=(Decision.mode(mode_name), Decision.obj(instance=inst)),
-    ))
+    player.start_intent(
+        "cast",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", card.name)})),
+            preferences=(Decision.mode(mode_name), Decision.obj(instance=inst)),
+        ),
+    )
     try:
         engine_cast_spell(game, player, card)
     finally:
@@ -41,10 +45,13 @@ def _cast_modal(game, idx, name, mode_name, target):
     from one Intent."""
     player = game.players[idx]
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
-    player.start_intent("modal", Intent(
-        pattern=GameRef(card=frozenset({("name", name)})),
-        preferences=(Decision.mode(mode_name), Decision.obj(instance=inst)),
-    ))
+    player.start_intent(
+        "modal",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", name)})),
+            preferences=(Decision.mode(mode_name), Decision.obj(instance=inst)),
+        ),
+    )
     try:
         cast_spell(game, idx, name)
     finally:
@@ -62,7 +69,6 @@ class TestAbradeProperties:
         abrade = Abrade(owner=None)
         assert abrade.name == "Abrade"
         assert abrade.mana_cost == ManaCost.parse("{1}{R}")
-        assert len(abrade.get_modes()) == 2
 
 
 class TestAbradeDamageMode:
@@ -86,7 +92,7 @@ class TestAbradeDamageMode:
         set_board_state(game, 1, battlefield=[wall])
         _prime(game)
         _cast_modal(game, 0, "Abrade", "Damage", wall)
-        assert game.get_battlefield(p2).contains(wall)     # survives (5 > 3)
+        assert game.get_battlefield(p2).contains(wall)  # survives (5 > 3)
         assert wall.damage_marked == 3
 
     def test_damage_mode_target_no_longer_creature_does_nothing(self):
@@ -105,13 +111,13 @@ class TestAbradeDamageMode:
         # permanent — now an artifact — so it stays on the battlefield).
         bear.card_types = {CardType.ARTIFACT}
         resolve_top_of_stack(game)
-        assert game.get_battlefield(p2).contains(bear)   # survives
-        assert getattr(bear, "damage_marked", 0) == 0    # no damage dealt
+        assert game.get_battlefield(p2).contains(bear)  # survives
+        assert getattr(bear, "damage_marked", 0) == 0  # no damage dealt
 
     def test_damage_mode_offers_only_creatures(self):
         """Option-set invariant: mode 0 targets creatures, never the artifact."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         abrade = Abrade(owner=p1, controller=p1)
         bear = Creature(name="Bear", base_power=2, base_toughness=2)
         signet = Artifact(name="Signet")
@@ -144,7 +150,7 @@ class TestAbradeDestroyArtifactMode:
     def test_destroy_mode_offers_only_artifacts(self):
         """Option-set invariant: mode 1 targets artifacts, never the plain creature."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         abrade = Abrade(owner=p1, controller=p1)
         bear = Creature(name="Bear", base_power=2, base_toughness=2)
         signet = Artifact(name="Signet")

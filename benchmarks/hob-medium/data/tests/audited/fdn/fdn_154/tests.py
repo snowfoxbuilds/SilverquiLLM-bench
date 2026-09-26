@@ -13,13 +13,10 @@ from __future__ import annotations
 
 from cards.fdn.fdn_154.card_impl import ExtravagantReplication
 from engine.card import Creature, Enchantment
-from engine.decisions import Decision, GameRef
-from engine.events import BeginningOfUpkeepTriggeredEvent
 from engine.game import add_counter
-from engine.intent_player import Intent
-from engine.stack import priority_loop
-from engine.types import ManaCost, Zone
-from test_utils import create_game, set_board_state
+from engine.types import ManaCost
+from test_utils import scenario_game as create_game
+from test_utils import set_board_state
 
 
 def _copy_tokens(game, player, name):
@@ -31,18 +28,21 @@ def _copy_tokens(game, player, name):
 
 
 def _fire_upkeep_copying(game, p1, replication, chosen):
-    """Fire the upkeep trigger, choosing *chosen* to copy via an Intent."""
-    replication.register_triggers(game)
-    chosen_iid = game.refs.instance_id(chosen, Zone.BATTLEFIELD.value)
-    p1.start_intent(
-        "replicate",
-        Intent(pattern=GameRef(), preferences=(Decision.obj(instance=chosen_iid),)),
+    from engine.types import Phase, Step
+    from test_utils import (
+        advance_game_to_phase,
+        enter_permanent,
+        object_preference,
+        prefer,
+        resolve_stack,
     )
-    try:
-        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
-        priority_loop(game)
-    finally:
-        p1.end_intent("replicate")
+
+    if game.get_battlefield(p1).contains(replication):
+        game.get_battlefield(p1).remove(replication)
+    enter_permanent(game, p1, replication)
+    prefer(p1, object_preference(game, chosen))
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    resolve_stack(game)
 
 
 class TestExtravagantReplicationProperties:
@@ -56,11 +56,15 @@ class TestExtravagantReplicationProperties:
 class TestExtravagantReplicationCopyToken:
     def _setup(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         replication = ExtravagantReplication(owner=p1, controller=p1)
         bear = Creature(
-            name="Grizzly Bears", base_power=2, base_toughness=2,
-            subtypes={"Bear"}, owner=p1, controller=p1,
+            name="Grizzly Bears",
+            base_power=2,
+            base_toughness=2,
+            subtypes={"Bear"},
+            owner=p1,
+            controller=p1,
         )
         set_board_state(game, 0, battlefield=[replication, bear])
         assert game.active_player is p1  # upkeep trigger only fires on your turn

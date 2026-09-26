@@ -243,3 +243,43 @@ def test_payment_and_cast_triggers_are_ordered_apnap():
     assert game.stack.peek().source is elrond
     resolve_stack(game)
     assert len(game.get_hand(p).get_all()) == 1
+
+
+class ProtectionSpell(Instant):
+    def __init__(self, target, color, **kwargs):
+        from engine.types import ManaCost
+
+        super().__init__(name="Protection response", mana_cost=ManaCost(), **kwargs)
+        self.target, self.color = target, color
+
+    def on_resolve(self, game):
+        from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer
+        from engine.protection import ProtectionAbility
+
+        def apply(state):
+            self.target.protections = [ProtectionAbility(self.color)]
+
+        game.effect_manager.add(
+            ContinuousEffect(
+                source=self, layer=Layer.ABILITY, apply=apply, duration=DURATION_END_OF_TURN
+            )
+        )
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_protection_gained_in_response_invalidates_only_that_target(count):
+    from engine.types import Color
+    from test_utils import cast_card
+
+    game, p, elrond = arrange()
+    targets = [bear(game, p, f"Target {i}") for i in range(count)]
+    prefer(p, *(object_preference(game, card) for card in targets))
+    fund(p, BLUE=2, COLORLESS=5)
+    activate_card_ability(game, p, elrond)
+    cast_card(game, p, ProtectionSpell(targets[0], Color.BLUE, owner=p), resolve=False)
+    resolve_stack(game)
+    assert game.get_battlefield(p).contains(targets[0])
+    assert all(p.zones[Zone.EXILE].contains(card) for card in targets[1:])
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+    resolve_stack(game)
+    assert all(game.get_battlefield(p).contains(card) for card in targets)

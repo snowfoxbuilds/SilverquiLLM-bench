@@ -8,11 +8,9 @@ from __future__ import annotations
 
 from cards.fdn.fdn_249.card_impl import AdventuringGear
 from engine.card import Creature, Equipment, Land
-from engine.stack import priority_loop
-from engine.turn import cleanup_mechanical
-from engine.types import ManaCost, Zone
-from engine.zones import move_to_zone
-from test_utils import create_game, set_board_state
+from engine.types import ManaCost
+from test_utils import scenario_game as create_game
+from test_utils import set_board_state
 
 
 def _bear(p):
@@ -30,31 +28,53 @@ class TestAdventuringGearProperties:
 
 class TestAdventuringGearBehaviour:
     def test_no_static_buff(self):
+        from engine.types import ManaType, Phase
+        from test_utils import (
+            activate_card_ability,
+            enter_permanent,
+            object_preference,
+            prefer,
+            resolve_stack,
+        )
+
         game = create_game()
         p1 = game.players[0]
         bear = _bear(p1)
-        gear = AdventuringGear(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, gear])
-        gear.equip(bear, game)
+        set_board_state(game, 0, battlefield=[bear], mana={ManaType.COLORLESS: 1})
+        gear = enter_permanent(game, p1, AdventuringGear())
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
+        prefer(p1, object_preference(game, bear))
+        activate_card_ability(game, p1, gear)
+        resolve_stack(game)
         assert (bear.power, bear.toughness) == (2, 2)
 
     def test_landfall_pumps_until_end_of_turn(self):
+        from engine.casting import play_land
+        from engine.types import ManaType, Phase, Step
+        from test_utils import (
+            activate_card_ability,
+            advance_game_to_phase,
+            enter_permanent,
+            object_preference,
+            prefer,
+            resolve_stack,
+        )
+
         game = create_game()
         p1 = game.players[0]
         bear = _bear(p1)
-        gear = AdventuringGear(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, gear])
-        gear.register_triggers(game)
-        gear.equip(bear, game)
+        set_board_state(game, 0, battlefield=[bear], mana={ManaType.COLORLESS: 1})
+        gear = enter_permanent(game, p1, AdventuringGear())
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
+        prefer(p1, object_preference(game, bear))
+        activate_card_ability(game, p1, gear)
+        resolve_stack(game)
+        assert (bear.power, bear.toughness) == (2, 2)
 
-        land = Land(name="Forest", owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[land])
-        move_to_zone(game, land, Zone.HAND, Zone.BATTLEFIELD)
-        # Resolving the landfall trigger through the real stack applies the
-        # +2/+2 immediately — the engine re-derives continuous effects after a
-        # stack object resolves, so no manual apply_all is needed here.
-        priority_loop(game)
+        land = Land(name="Forest", owner=p1)
+        game.get_hand(p1).add(land)
+        play_land(game, p1, land)
+        resolve_stack(game)
         assert (bear.power, bear.toughness) == (4, 4)
-
-        cleanup_mechanical(game)  # the +2/+2 is until end of turn
+        advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
         assert (bear.power, bear.toughness) == (2, 2)

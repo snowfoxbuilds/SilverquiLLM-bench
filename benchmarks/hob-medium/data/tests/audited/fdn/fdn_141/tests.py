@@ -12,12 +12,14 @@ from cards.fdn.fdn_141.card_impl import GiadaFontOfHope
 from engine.card import Creature
 from engine.types import ManaCost, Zone
 from engine.zones import move_to_zone
-from test_utils import create_game, set_board_state
+from test_utils import enter_permanent, set_board_state
+from test_utils import scenario_game as create_game
 
 
 def _angel(p, name):
-    return Creature(name=name, subtypes={"Angel"}, base_power=1,
-                    base_toughness=1, owner=p, controller=p)
+    return Creature(
+        name=name, subtypes={"Angel"}, base_power=1, base_toughness=1, owner=p, controller=p
+    )
 
 
 class TestGiadaProperties:
@@ -33,8 +35,8 @@ class TestGiadaThirdPartyEntryCounters:
         p1 = game.players[0]
         giada = GiadaFontOfHope(owner=p1, controller=p1)
         other = _angel(p1, "Serra Angel")
-        set_board_state(game, 0, battlefield=[giada, other])
-        giada.register_replacement_effects(game)
+        set_board_state(game, 0, battlefield=[other])
+        enter_permanent(game, p1, giada)
 
         # Two Angels already controlled (Giada + Serra) => +2 on the newcomer.
         newcomer = _angel(p1, "Youthful Valkyrie")
@@ -59,10 +61,10 @@ class TestGiadaThirdPartyEntryCounters:
         game = create_game()
         p1 = game.players[0]
         giada = GiadaFontOfHope(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[giada])
-        giada.register_replacement_effects(game)
-        bear = Creature(name="Bear", subtypes={"Bear"}, base_power=2,
-                        base_toughness=2, owner=p1, controller=p1)
+        enter_permanent(game, p1, giada)
+        bear = Creature(
+            name="Bear", subtypes={"Bear"}, base_power=2, base_toughness=2, owner=p1, controller=p1
+        )
         set_board_state(game, 0, hand=[bear], battlefield=[giada])
         move_to_zone(game, bear, Zone.HAND, Zone.BATTLEFIELD)
         assert bear.plus_one_counters == 0
@@ -71,8 +73,7 @@ class TestGiadaThirdPartyEntryCounters:
         game = create_game()
         p1, p2 = game.players[0], game.players[1]
         giada = GiadaFontOfHope(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[giada])
-        giada.register_replacement_effects(game)
+        enter_permanent(game, p1, giada)
         enemy_angel = _angel(p2, "Enemy Angel")
         set_board_state(game, 1, hand=[enemy_angel])
         move_to_zone(game, enemy_angel, Zone.HAND, Zone.BATTLEFIELD)

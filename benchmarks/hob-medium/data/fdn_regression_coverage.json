@@ -37,7 +37,6 @@
     "fdn_189",
     "fdn_195",
     "fdn_2",
-    "fdn_200",
     "fdn_201",
     "fdn_204",
     "fdn_205",
@@ -77,10 +76,7 @@
     "fdn_81",
     "fdn_86",
     "fdn_87",
-    "fdn_88",
     "fdn_92",
-    "fdn_93",
-    "fdn_94",
     "fdn_95",
     "fdn_98",
     "fdn_99",
@@ -164,6 +160,7 @@
     "fdn_198",
     "fdn_199",
     "fdn_20",
+    "fdn_200",
     "fdn_202",
     "fdn_203",
     "fdn_206",
@@ -274,10 +271,13 @@
     "fdn_83",
     "fdn_84",
     "fdn_85",
+    "fdn_88",
     "fdn_89",
     "fdn_9",
     "fdn_90",
     "fdn_91",
+    "fdn_93",
+    "fdn_94",
     "fdn_96",
     "fdn_97",
     "spg_75",
@@ -289,6 +289,21 @@
     "spg_82",
     "spg_83"
   ],
-  "source": "V2 FDN reference suites (behavioral and identity checks)",
-  "tests": 429
+  "source": "Public V2 gameplay migrations of the frozen FDN reference suites; supplemental integrity cases are counted separately.",
+  "tests": 394,
+  "behavioral_tests": 307,
+  "supplemental_integrity_tests": 87,
+  "partial_behavior_card_ids": [
+    "fdn_13",
+    "fdn_236",
+    "fdn_244",
+    "fdn_81"
+  ],
+  "excluded_baseline_card_ids": [
+    "fdn_200",
+    "fdn_88",
+    "fdn_93",
+    "fdn_94"
+  ],
+  "migration_record": "fdn_audit_migration.json"
 }

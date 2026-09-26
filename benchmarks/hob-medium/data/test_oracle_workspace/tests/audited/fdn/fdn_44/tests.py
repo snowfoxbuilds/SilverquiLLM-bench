@@ -17,18 +17,19 @@ resolution — never re-selected.
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_44.card_impl import KaitoCunningInfiltrator
 from engine.abilities import AbilityError, clear_loyalty_tracking
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
-from engine.types import CardType, ManaCost, Phase, Supertype, Zone
+from engine.types import ManaCost, Phase, Supertype, Zone
 from test_utils import (
     activate_loyalty_ability,
-    create_game,
     resolve_stack,
     set_board_state,
+)
+from test_utils import (
+    scenario_game as create_game,
 )
 
 
@@ -62,10 +63,13 @@ def _seed_library(game, player, n=1):
 
 
 def _activate_targeting(game, player, walker, index, target):
-    player.start_intent("kaito", Intent(
-        pattern=GameRef(card=frozenset({("name", walker.name)})),
-        preferences=(Decision.obj(instance=target.instance_id),),
-    ))
+    player.start_intent(
+        "kaito",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", walker.name)})),
+            preferences=(Decision.obj(instance=target.instance_id),),
+        ),
+    )
     try:
         activate_loyalty_ability(game, player, walker, index)
     finally:
@@ -81,15 +85,6 @@ class TestKaitoProperties:
         assert Supertype.LEGENDARY in kaito.supertypes
         assert "Kaito" in kaito.subtypes
 
-    def test_only_plus_one_is_targeted(self):
-        kaito = KaitoCunningInfiltrator(owner=None)
-        abilities = kaito.get_loyalty_abilities()
-        assert len(abilities) == 3
-        assert abilities[0].targeting is not None   # +1
-        assert abilities[1].targeting is None       # −2
-        assert abilities[2].targeting is None       # −9
-        assert [a.loyalty_cost for a in abilities] == [1, -2, -9]
-
 
 class TestKaitoPlusOne:
     def _setup(self):
@@ -99,24 +94,28 @@ class TestKaitoPlusOne:
         mine = _bear(p1, "My Bear")
         set_board_state(game, 0, battlefield=[kaito, mine], hand=[_spell(p1)])
         _seed_library(game, p1, 1)
-        game.phase = Phase.PRECOMBAT_MAIN
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         return game, p1, p2, kaito, mine
 
     def test_target_cant_be_blocked_and_draw_discard(self):
+        from engine.combat import combat_damage_step
+        from test_utils import declare_attackers, declare_blockers, put_on_battlefield
+
         game, p1, p2, kaito, mine = self._setup()
-        hand_before = len(p1.zones[Zone.HAND])
+        hand_before = len(game.get_hand(p1))
+        blocker = put_on_battlefield(game, p2, _bear(p2, "Blocker"))
         _activate_targeting(game, p1, kaito, 0, mine)
-        assert kaito.loyalty == 4                     # +1 paid
-        top = game.stack.peek()
-        assert top.targets == [mine]
         resolve_stack(game)
-        game.effect_manager.apply_all(game)
-        assert mine._cant_be_blocked is True
-        # Draw one, discard one → net hand size unchanged.
-        assert len(p1.zones[Zone.HAND]) == hand_before
+        assert kaito.loyalty == 4 and len(game.get_hand(p1)) == hand_before
+        mine.summoning_sick = False
+        declare_attackers(game, [mine.name])
+        declare_blockers(game, {mine.name: [blocker.name]})
+        combat_damage_step(game)
+        resolve_stack(game)
+        assert p2.life == 18 and game.get_battlefield(p1).contains(mine)
 
     def test_targets_only_own_creatures(self):
-        """"Target creature you control" — an opponent's creature is not a
+        """ "Target creature you control" — an opponent's creature is not a
         legal choice, so it is never captured as the target."""
         game = create_game()
         p1, p2 = game.players
@@ -125,7 +124,7 @@ class TestKaitoPlusOne:
         theirs = _bear(p2, "Their Bear")
         set_board_state(game, 0, battlefield=[kaito, mine], hand=[_spell(p1)])
         set_board_state(game, 1, battlefield=[theirs])
-        game.phase = Phase.PRECOMBAT_MAIN
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         # Intent still names my own creature; the opponent's is not in the
         # option set (verified indirectly — targeting only offers own creatures).
         _activate_targeting(game, p1, kaito, 0, mine)
@@ -137,42 +136,38 @@ class TestKaitoPlusOne:
         """No creature to target → targeting returns []; the ability still
         activates and the draw/discard still happens."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[kaito], hand=[_spell(p1)])
         _seed_library(game, p1, 1)
-        game.phase = Phase.PRECOMBAT_MAIN
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         hand_before = len(p1.zones[Zone.HAND])
         activate_loyalty_ability(game, p1, kaito, 0)
         assert kaito.loyalty == 4
         top = game.stack.peek()
         assert top.targets == []
         resolve_stack(game)
-        assert len(p1.zones[Zone.HAND]) == hand_before   # drew then discarded
+        assert len(p1.zones[Zone.HAND]) == hand_before  # drew then discarded
 
     def test_once_per_turn(self):
-        game, p1, p2, kaito, mine = self._setup()
+        game, p1, _p2, kaito, mine = self._setup()
         _activate_targeting(game, p1, kaito, 0, mine)
-        resolve_stack(game)                          # clear the stack (sorcery speed)
-        with pytest.raises(AbilityError):            # once-per-turn restriction
+        resolve_stack(game)  # clear the stack (sorcery speed)
+        with pytest.raises(AbilityError):  # once-per-turn restriction
             _activate_targeting(game, p1, kaito, 0, mine)
-        assert kaito.loyalty == 4                     # second activation spent nothing
+        assert kaito.loyalty == 4  # second activation spent nothing
 
 
 class TestKaitoUntargeted:
     def test_minus_two_creates_ninja_token(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         kaito = KaitoCunningInfiltrator(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[kaito])
-        game.phase = Phase.PRECOMBAT_MAIN
-        activate_loyalty_ability(game, p1, kaito, 1)   # −2, untargeted
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
+        activate_loyalty_ability(game, p1, kaito, 1)  # −2, untargeted
         assert kaito.loyalty == 1
         resolve_stack(game)
-        ninjas = [
-            obj
-            for obj in game.get_battlefield(p1).get_all()
-            if obj.name == "Ninja"
-        ]
+        ninjas = [obj for obj in game.get_battlefield(p1).get_all() if obj.name == "Ninja"]
         assert len(ninjas) == 1
         assert (ninjas[0].base_power, ninjas[0].base_toughness) == (2, 1)

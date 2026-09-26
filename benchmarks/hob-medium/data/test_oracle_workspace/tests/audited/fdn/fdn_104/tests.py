@@ -9,7 +9,6 @@ the return applied in ``on_resolve``.
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_104.card_impl import ElvishRegrower
 from engine.card import Creature, Instant, Land
 from engine.casting import cast_spell as engine_cast_spell
@@ -19,9 +18,13 @@ from engine.stack import resolve_top_of_stack
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from test_utils import (
     TestSetupError as _TestSetupError,
+)
+from test_utils import (
     cast_spell,
-    create_game,
     set_board_state,
+)
+from test_utils import (
+    scenario_game as create_game,
 )
 
 
@@ -41,14 +44,14 @@ def _cast_no_resolve(game, player_index, card, targets, zone=Zone.BATTLEFIELD):
     game.priority_player_index = player_index
     game.phase = Phase.PRECOMBAT_MAIN
     game.step = None
-    prefs = tuple(
-        Decision.obj(instance=game.refs.instance_id(t, zone.value))
-        for t in targets
+    prefs = tuple(Decision.obj(instance=game.refs.instance_id(t, zone.value)) for t in targets)
+    player.start_intent(
+        "cast",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", card.name)})),
+            preferences=prefs,
+        ),
     )
-    player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
-        preferences=prefs,
-    ))
     try:
         engine_cast_spell(game, player, card)
     finally:
@@ -62,7 +65,10 @@ def _setup(dead=None):
     regrower = ElvishRegrower(owner=p1, controller=p1)
     dead = dead if dead is not None else Land(name="Fallen Forest")
     set_board_state(
-        game, 0, hand=[regrower], graveyard=[dead],
+        game,
+        0,
+        hand=[regrower],
+        graveyard=[dead],
         mana={ManaType.GREEN: 2, ManaType.COLORLESS: 2},
     )
     game.phase = Phase.PRECOMBAT_MAIN
@@ -80,56 +86,58 @@ class TestElvishRegrowerProperties:
 
 class TestElvishRegrowerETB:
     def test_returns_targeted_land_card_to_hand(self):
-        game, p1, p2, regrower, dead = _setup(Land(name="Fallen Forest"))
+        game, p1, _p2, regrower, dead = _setup(Land(name="Fallen Forest"))
         cast_spell(game, 0, "Elvish Regrower", targets=[dead])
         assert game.get_hand(p1).contains(dead)
         assert not game.get_graveyard(p1).contains(dead)
         assert game.get_battlefield(p1).contains(regrower)
 
     def test_option_set_any_permanent_card_but_not_instant(self):
-        """Legality invariant: any permanent card in your graveyard is legal
-        (creature, land, …) but an instant/sorcery card is not, and an
-        opponent's graveyard is excluded."""
-        game = create_game()
-        p1, p2 = game.players
-        game.active_player_index = 0
-        regrower = ElvishRegrower(owner=p1, controller=p1)
-        my_creature = _bear("My Creature")
-        my_land = Land(name="My Land")
-        my_instant = Instant(name="My Instant")
-        opp_land = Land(name="Their Land")
-        set_board_state(game, 0, battlefield=[regrower],
-                        graveyard=[my_creature, my_land, my_instant])
-        set_board_state(game, 1, graveyard=[opp_land])
+        from engine.card import Artifact, Enchantment, Planeswalker
+        from engine.casting import CastingError
+        from test_utils import cast_card, object_preference, prefer
 
-        spec = regrower.get_targets(game)[0]
-        assert spec.filter_fn(my_creature) is True
-        assert spec.filter_fn(my_land) is True
-        assert spec.filter_fn(my_instant) is False
-        assert spec.filter_fn(opp_land) is False
+        for dead in [
+            Creature(name="Creature", base_power=2, base_toughness=2),
+            Land(name="Land"),
+            Artifact(name="Artifact"),
+            Enchantment(name="Enchantment"),
+            Planeswalker(name="Walker"),
+        ]:
+            game, p1, _p2, regrower, dead = _setup(dead)
+            prefer(p1, object_preference(game, dead))
+            cast_card(game, p1, regrower)
+            assert game.get_hand(p1).contains(dead)
+        game, p1, _p2, regrower, dead = _setup(Instant(name="Not permanent"))
+        with pytest.raises(CastingError):
+            cast_card(game, p1, regrower)
 
     def test_target_no_longer_permanent_card_does_nothing(self):
         """Resolution-time revalidation (rule 608.2b): the ETB re-checks the
         FULL predicate, not merely graveyard membership. If the chosen card
         ceases to be a *permanent* card before resolution, it is not returned —
         the Regrower still enters, but the graveyard card stays put."""
-        game, p1, p2, regrower, dead = _setup(Land(name="Fallen Forest"))
+        game, p1, _p2, regrower, dead = _setup(Land(name="Fallen Forest"))
         _cast_no_resolve(game, 0, regrower, [dead], zone=Zone.GRAVEYARD)
         # The chosen card stops being a permanent card while the spell resolves.
         dead.card_types = {CardType.INSTANT}
         resolve_top_of_stack(game)
-        assert game.get_graveyard(p1).contains(dead)          # not returned
+        assert game.get_graveyard(p1).contains(dead)  # not returned
         assert not game.get_hand(p1).contains(dead)
-        assert game.get_battlefield(p1).contains(regrower)    # creature entered
+        assert game.get_battlefield(p1).contains(regrower)  # creature entered
 
     def test_no_legal_target_makes_cast_illegal(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         game.active_player_index = 0
         regrower = ElvishRegrower(owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[regrower],
-                        graveyard=[Instant(name="Only Instant")],
-                        mana={ManaType.GREEN: 2, ManaType.COLORLESS: 2})
+        set_board_state(
+            game,
+            0,
+            hand=[regrower],
+            graveyard=[Instant(name="Only Instant")],
+            mana={ManaType.GREEN: 2, ManaType.COLORLESS: 2},
+        )
         game.phase = Phase.PRECOMBAT_MAIN
         with pytest.raises(_TestSetupError):
             cast_spell(game, 0, "Elvish Regrower")

@@ -23,19 +23,21 @@ from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, DecisionKind, GameRef
 from engine.intent_player import Intent
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
-from test_utils import cast_spell, create_game, resolve_stack, set_board_state
+from test_utils import cast_spell, resolve_stack, set_board_state
+from test_utils import scenario_game as create_game
 
 
 def _cast_bushwhack(game, mode_name, obj_instance_ids):
     """Cast Bushwhack; one Intent answers the MODE query then each OBJECT query."""
     p1 = game.players[0]
-    prefs = (Decision.mode(mode_name),) + tuple(
-        Decision.obj(instance=i) for i in obj_instance_ids
+    prefs = (Decision.mode(mode_name),) + tuple(Decision.obj(instance=i) for i in obj_instance_ids)
+    p1.start_intent(
+        "bw",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            preferences=prefs,
+        ),
     )
-    p1.start_intent("bw", Intent(
-        pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
-        preferences=prefs,
-    ))
     try:
         cast_spell(game, 0, "Bushwhack")
     finally:
@@ -51,13 +53,14 @@ def _cast_bushwhack_no_resolve(game, mode_name, obj_instance_ids):
     game.phase = Phase.PRECOMBAT_MAIN
     game.step = None
     bw = next(c for c in game.get_hand(p1).get_all() if c.name == "Bushwhack")
-    prefs = (Decision.mode(mode_name),) + tuple(
-        Decision.obj(instance=i) for i in obj_instance_ids
+    prefs = (Decision.mode(mode_name),) + tuple(Decision.obj(instance=i) for i in obj_instance_ids)
+    p1.start_intent(
+        "bw",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            preferences=prefs,
+        ),
     )
-    p1.start_intent("bw", Intent(
-        pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
-        preferences=prefs,
-    ))
     try:
         engine_cast_spell(game, p1, bw)
     finally:
@@ -77,7 +80,6 @@ class TestBushwhackProperties:
         bw = Bushwhack(owner=None)
         assert bw.name == "Bushwhack"
         assert bw.mana_cost == ManaCost.parse("{G}")
-        assert len(bw.get_modes()) == 2
 
 
 class TestBushwhackFight:
@@ -114,7 +116,7 @@ class TestBushwhackFight:
     def test_fight_targets_split_by_control(self):
         """Option-set invariant: the first target is a creature you control, the
         second a creature you don't control — the two option sets are disjoint."""
-        game, p1, p2, ours, theirs = self._setup()
+        game, p1, _p2, ours, theirs = self._setup()
         _cast_bushwhack(game, "Fight", [ours.instance_id, theirs.instance_id])
         obj_records = p1.transcript.queries(DecisionKind.OBJECT)
         assert len(obj_records) == 2
@@ -127,7 +129,7 @@ class TestBushwhackFight:
 class TestBushwhackSearch:
     def test_finds_basic_land_and_puts_it_in_hand(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         bw = Bushwhack(owner=p1, controller=p1)
         set_board_state(game, 0, hand=[bw], mana={ManaType.GREEN: 1})
         forest = _put_in_library(game, p1, Forest(name="Forest"))
@@ -139,7 +141,7 @@ class TestBushwhackSearch:
     def test_search_offers_only_basics(self):
         """Option-set invariant: only basic lands are search candidates."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         bw = Bushwhack(owner=p1, controller=p1)
         set_board_state(game, 0, hand=[bw], mana={ManaType.GREEN: 1})
         forest = _put_in_library(game, p1, Forest(name="Forest"))
@@ -152,6 +154,7 @@ class TestBushwhackSearch:
             if o.kind is DecisionKind.OBJECT
         }
         assert offered == {"Forest"}
+
 
 class TestBushwhackFightRevalidation:
     def _setup(self):
@@ -179,7 +182,7 @@ class TestBushwhackFightRevalidation:
     def test_target_ceases_to_be_creature_before_resolution_no_fight(self):
         """Negative revalidation: one target stops being a creature before
         resolution → illegal, so the fight does not happen."""
-        game, p1, p2, ours, theirs = self._setup()
+        game, _p1, p2, ours, theirs = self._setup()
         _cast_bushwhack_no_resolve(game, "Fight", [ours.instance_id, theirs.instance_id])
         ours.card_types = set(ours.card_types) - {CardType.CREATURE}  # no longer a creature
         resolve_stack(game)

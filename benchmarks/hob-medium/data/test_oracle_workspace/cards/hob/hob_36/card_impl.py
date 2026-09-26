@@ -51,12 +51,16 @@ class ElrondMoonReader(Creature):
         from engine.events import EndStepTriggeredEvent
         from engine.game import exile
         from engine.hob_support import choose_targets, delayed, on_battlefield, return_from_exile
+        from engine.protection import has_protection_from
         from engine.stack import object_stint_id, surviving_targets
         from engine.types import CardType
 
         def legal(c, controller):
             return (
-                c is not self and c.controller is controller and CardType.LAND not in c.card_types
+                c is not self
+                and c.controller is controller
+                and CardType.LAND not in c.card_types
+                and not has_protection_from(c, self)
             )
 
         def targeting(g, source, controller):

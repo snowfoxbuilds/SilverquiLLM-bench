@@ -10,15 +10,21 @@ follow this shape.
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_95.card_impl import SowerOfChaos
 from engine.abilities import AbilityError
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
-from engine.types import CardType, ManaCost, ManaType, Phase, Zone
+from engine.types import ManaCost, ManaType, Phase, Zone
 from engine.zones import move_to_zone
-from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
+from test_utils import (
+    activate_card_ability,
+    resolve_stack,
+    set_board_state,
+)
+from test_utils import (
+    scenario_game as create_game,
+)
 
 
 def _bear(p, name="Bear"):
@@ -29,10 +35,13 @@ def _activate_targeting(game, player, source, target):
     """Drive Sower's ability through the real activate → stack → resolve path,
     targeting *target* (chosen at activation via an Intent on *player*)."""
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
-    player.start_intent("sower", Intent(
-        pattern=GameRef(card=frozenset({("name", source.name)})),
-        preferences=(Decision.obj(instance=inst),),
-    ))
+    player.start_intent(
+        "sower",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", source.name)})),
+            preferences=(Decision.obj(instance=inst),),
+        ),
+    )
     try:
         activate_card_ability(game, player, source)
     finally:
@@ -47,12 +56,6 @@ class TestSowerOfChaosProperties:
         assert (sower.base_power, sower.base_toughness) == (4, 3)
         assert "Devil" in sower.subtypes
 
-    def test_has_one_activated_ability(self):
-        sower = SowerOfChaos(owner=None)
-        abilities = sower.get_activated_abilities()
-        assert len(abilities) == 1
-        assert abilities[0].targeting is not None
-
 
 class TestSowerOfChaosAbility:
     def _setup(self):
@@ -62,24 +65,31 @@ class TestSowerOfChaosAbility:
         their_bear = _bear(p2, "Their Bear")
         set_board_state(game, 0, battlefield=[sower], mana={ManaType.RED: 3})
         set_board_state(game, 1, battlefield=[their_bear])
-        game.phase = Phase.PRECOMBAT_MAIN
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         return game, p1, p2, sower, their_bear
 
     def test_target_cant_block_after_resolution(self):
+        from engine.combat import combat_damage_step
+        from test_utils import declare_attackers, declare_blockers, put_on_battlefield
+
         game, p1, p2, sower, their_bear = self._setup()
+        attacker = put_on_battlefield(game, p1, _bear(p1, "Attacker"))
         _activate_targeting(game, p1, sower, their_bear)
-        assert not game.stack.is_empty()          # pushed to the stack
         resolve_stack(game)
-        game.effect_manager.apply_all(game)
-        assert their_bear._cant_block is True
+        attacker.summoning_sick = False
+        declare_attackers(game, [attacker.name])
+        declare_blockers(game, {attacker.name: [their_bear.name]})
+        combat_damage_step(game)
+        resolve_stack(game)
+        assert p2.life == 18 and their_bear.damage_marked == 0
 
     def test_cost_is_paid(self):
-        game, p1, p2, sower, their_bear = self._setup()
+        game, p1, _p2, sower, their_bear = self._setup()
         _activate_targeting(game, p1, sower, their_bear)
-        assert p1.mana_pool.total() == 0          # {2}{R} paid
+        assert p1.mana_pool.total() == 0  # {2}{R} paid
 
     def test_targets_creature_captured_on_stack(self):
-        game, p1, p2, sower, their_bear = self._setup()
+        game, p1, _p2, sower, their_bear = self._setup()
         _activate_targeting(game, p1, sower, their_bear)
         top = game.stack.peek()
         assert top.targets == [their_bear]
@@ -93,15 +103,22 @@ class TestSowerOfChaosAbility:
         sower = SowerOfChaos(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[sower], mana={ManaType.RED: 3})
         move_to_zone(game, sower, Zone.BATTLEFIELD, Zone.GRAVEYARD)  # source leaves
-        game.phase = Phase.PRECOMBAT_MAIN
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         with pytest.raises(AbilityError):
             activate_card_ability(game, p1, sower)
-        assert p1.mana_pool.total() == 3            # no mana spent
+        assert p1.mana_pool.total() == 3  # no mana spent
 
     def test_can_target_any_creature_including_own(self):
-        game, p1, p2, sower, their_bear = self._setup()
-        # Sower can target itself (any creature is legal).
+        from engine.combat import combat_damage_step
+        from test_utils import declare_attackers, declare_blockers
+
+        game, p1, _p2, sower, their_bear = self._setup()
+        game.active_player_index = 1
         _activate_targeting(game, p1, sower, sower)
         resolve_stack(game)
-        game.effect_manager.apply_all(game)
-        assert sower._cant_block is True
+        their_bear.summoning_sick = False
+        declare_attackers(game, [their_bear.name])
+        declare_blockers(game, {their_bear.name: [sower.name]})
+        combat_damage_step(game)
+        resolve_stack(game)
+        assert p1.life == 18 and sower.damage_marked == 0

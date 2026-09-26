@@ -11,8 +11,9 @@ from cards.fdn.fdn_177.card_impl import MacabreWaltz
 from engine.card import Creature, Instant
 from engine.decisions import GameRef
 from engine.intent_player import Intent
-from engine.types import ManaCost, ManaType, Zone
-from test_utils import cast_spell, create_game, set_board_state
+from engine.types import ManaCost, ManaType
+from test_utils import cast_spell, set_board_state
+from test_utils import scenario_game as create_game
 
 
 def _corpse(p, name):
@@ -31,12 +32,6 @@ class TestMacabreWaltzProperties:
         assert mw.name == "Macabre Waltz"
         assert mw.mana_cost == ManaCost.parse("{1}{B}")
 
-    def test_two_optional_graveyard_specs(self):
-        mw = MacabreWaltz(owner=None)
-        specs = mw.get_targets(create_game())
-        assert len(specs) == 2
-        assert all(s.optional and s.zone == Zone.GRAVEYARD for s in specs)
-
 
 class TestMacabreWaltz:
     def test_castable_with_empty_graveyard(self):
@@ -45,22 +40,19 @@ class TestMacabreWaltz:
         game = create_game()
         p1 = game.players[0]
         mw = MacabreWaltz(owner=p1, controller=p1)
-        spare = Instant(name="Spare", mana_cost=ManaCost.parse("{R}"),
-                        owner=p1, controller=p1)
+        spare = Instant(name="Spare", mana_cost=ManaCost.parse("{R}"), owner=p1, controller=p1)
         set_board_state(game, 0, hand=[mw, spare], mana={ManaType.BLACK: 2})
         _permissive_baseline(p1)
-        cast_spell(game, 0, "Macabre Waltz")   # no target given → castable
-        assert game.get_graveyard(p1).contains(mw)   # resolved to graveyard
+        cast_spell(game, 0, "Macabre Waltz")  # no target given → castable
+        assert game.get_graveyard(p1).contains(mw)  # resolved to graveyard
 
     def test_returns_one_creature_card(self):
         game = create_game()
         p1 = game.players[0]
         corpse = _corpse(p1, "Corpse")
         mw = MacabreWaltz(owner=p1, controller=p1)
-        spare = Instant(name="Spare", mana_cost=ManaCost.parse("{R}"),
-                        owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[mw, spare], graveyard=[corpse],
-                        mana={ManaType.BLACK: 2})
-        _permissive_baseline(p1)   # answers the reflexive discard (picks spare)
+        spare = Instant(name="Spare", mana_cost=ManaCost.parse("{R}"), owner=p1, controller=p1)
+        set_board_state(game, 0, hand=[mw, spare], graveyard=[corpse], mana={ManaType.BLACK: 2})
+        _permissive_baseline(p1)  # answers the reflexive discard (picks spare)
         cast_spell(game, 0, "Macabre Waltz", targets=[corpse])
-        assert game.get_hand(p1).contains(corpse)   # returned to hand, not discarded
+        assert game.get_hand(p1).contains(corpse)  # returned to hand, not discarded

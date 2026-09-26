@@ -20,18 +20,19 @@ activated-ability exemplar.
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride
 from engine.abilities import AbilityError, clear_loyalty_tracking
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
-from engine.types import CardType, Keyword, ManaCost, Phase, Supertype, Zone
+from engine.types import CardType, Keyword, ManaCost, Phase, Supertype
 from test_utils import (
     activate_loyalty_ability,
-    create_game,
     resolve_stack,
     set_board_state,
+)
+from test_utils import (
+    scenario_game as create_game,
 )
 
 
@@ -50,10 +51,13 @@ def _bear(p, name="Bear"):
 def _activate_targeting(game, player, walker, index, target):
     """Drive a loyalty ability through the real activate → stack path, choosing
     *target* at activation via an Intent on *player* (pattern = walker name)."""
-    player.start_intent("ajani", Intent(
-        pattern=GameRef(card=frozenset({("name", walker.name)})),
-        preferences=(Decision.obj(instance=target.instance_id),),
-    ))
+    player.start_intent(
+        "ajani",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", walker.name)})),
+            preferences=(Decision.obj(instance=target.instance_id),),
+        ),
+    )
     try:
         activate_loyalty_ability(game, player, walker, index)
     finally:
@@ -71,16 +75,6 @@ class TestAjaniProperties:
         assert "Ajani" in ajani.subtypes
         assert CardType.PLANESWALKER in ajani.card_types
 
-    def test_loyalty_ability_targeting_shape(self):
-        ajani = AjaniCallerOfThePride(owner=None)
-        abilities = ajani.get_loyalty_abilities()
-        assert len(abilities) == 3
-        # +1 and −3 are targeted; −8 is untargeted.
-        assert abilities[0].targeting is not None  # +1 (up to one)
-        assert abilities[1].targeting is not None  # −3 (required)
-        assert abilities[2].targeting is None      # −8
-        assert [a.loyalty_cost for a in abilities] == [1, -3, -8]
-
 
 class TestAjaniPlusOne:
     def _setup(self):
@@ -93,42 +87,42 @@ class TestAjaniPlusOne:
         return game, p1, p2, ajani, bear
 
     def test_plus_one_counter_lands_on_target(self):
-        game, p1, p2, ajani, bear = self._setup()
+        game, p1, _p2, ajani, bear = self._setup()
         _activate_targeting(game, p1, ajani, 0, bear)
-        assert ajani.loyalty == 5                    # +1 paid
+        assert ajani.loyalty == 5  # +1 paid
         assert not game.stack.is_empty()
         resolve_stack(game)
         assert bear.plus_one_counters == 1
         assert bear.counters.get("+1/+1") == 1
 
     def test_target_captured_on_stack(self):
-        game, p1, p2, ajani, bear = self._setup()
+        game, p1, _p2, ajani, bear = self._setup()
         _activate_targeting(game, p1, ajani, 0, bear)
         top = game.stack.peek()
         assert top.targets == [bear]
         assert top.controller is p1
 
     def test_up_to_one_activates_with_no_target(self):
-        """"Up to one target" is optional: with no legal creature the ability
+        """ "Up to one target" is optional: with no legal creature the ability
         still activates (targeting returns []) and loyalty still changes."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         ajani = AjaniCallerOfThePride(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[ajani])   # no creatures at all
+        set_board_state(game, 0, battlefield=[ajani])  # no creatures at all
         game.phase = Phase.PRECOMBAT_MAIN
         activate_loyalty_ability(game, p1, ajani, 0)
-        assert ajani.loyalty == 5                    # activated, +1 paid
+        assert ajani.loyalty == 5  # activated, +1 paid
         top = game.stack.peek()
-        assert top.targets == []                     # nothing targeted
-        resolve_stack(game)                          # resolves cleanly
+        assert top.targets == []  # nothing targeted
+        resolve_stack(game)  # resolves cleanly
 
     def test_once_per_turn(self):
-        game, p1, p2, ajani, bear = self._setup()
+        game, p1, _p2, ajani, bear = self._setup()
         _activate_targeting(game, p1, ajani, 0, bear)
-        resolve_stack(game)                          # clear the stack (sorcery speed)
+        resolve_stack(game)  # clear the stack (sorcery speed)
         with pytest.raises(AbilityError):
             _activate_targeting(game, p1, ajani, 0, bear)
-        assert ajani.loyalty == 5                     # second activation spent nothing
+        assert ajani.loyalty == 5  # second activation spent nothing
         # A fresh turn (tracker cleared) allows reactivation.
         clear_loyalty_tracking()
         _activate_targeting(game, p1, ajani, 0, bear)
@@ -147,10 +141,10 @@ class TestAjaniMinusThree:
         return game, p1, p2, ajani, bear
 
     def test_grants_flying_and_double_strike(self):
-        game, p1, p2, ajani, bear = self._setup()
+        game, p1, _p2, ajani, bear = self._setup()
         assert Keyword.FLYING not in bear.keywords
         _activate_targeting(game, p1, ajani, 1, bear)
-        assert ajani.loyalty == 1                     # 4 − 3
+        assert ajani.loyalty == 1  # 4 − 3
         resolve_stack(game)
         assert Keyword.FLYING in bear.keywords
         assert Keyword.DOUBLE_STRIKE in bear.keywords
@@ -163,37 +157,33 @@ class TestAjaniMinusThree:
         """Required target: with no legal creature, the ability cannot be
         activated and no loyalty is spent (targeting returns None)."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         ajani = AjaniCallerOfThePride(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[ajani])   # no creatures anywhere
+        set_board_state(game, 0, battlefield=[ajani])  # no creatures anywhere
         game.phase = Phase.PRECOMBAT_MAIN
         with pytest.raises(AbilityError):
             activate_loyalty_ability(game, p1, ajani, 1)
-        assert ajani.loyalty == 4                     # unchanged
+        assert ajani.loyalty == 4  # unchanged
 
 
 class TestAjaniMinusEight:
     def test_creates_x_cat_tokens_equal_to_life(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         ajani = AjaniCallerOfThePride(owner=p1, controller=p1)
-        ajani.loyalty = 8                             # enough to pay −8
+        ajani.loyalty = 8  # enough to pay −8
         set_board_state(game, 0, battlefield=[ajani], life=3)
         game.phase = Phase.PRECOMBAT_MAIN
         activate_loyalty_ability(game, p1, ajani, 2)  # untargeted
         assert ajani.loyalty == 0
         resolve_stack(game)
-        cats = [
-            obj
-            for obj in game.get_battlefield(p1).get_all()
-            if obj.name == "Cat"
-        ]
+        cats = [obj for obj in game.get_battlefield(p1).get_all() if obj.name == "Cat"]
         assert len(cats) == 3
         assert all((c.base_power, c.base_toughness) == (2, 2) for c in cats)
 
     def test_minus_eight_rejected_when_insufficient_loyalty(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         ajani = AjaniCallerOfThePride(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[ajani], life=5)
         game.phase = Phase.PRECOMBAT_MAIN

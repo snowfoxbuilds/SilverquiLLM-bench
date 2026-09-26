@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from cards.fdn.fdn_142.card_impl import HealersHawk
 from engine.card import Creature
-from engine.combat import _can_block
 from engine.types import Keyword, ManaCost
 
 
@@ -63,23 +62,97 @@ class TestHealersHawkBlockerRules:
         return c
 
     def test_ground_creature_cannot_block_flying_attacker(self) -> None:
-        attacker = HealersHawk(owner=None)
-        blocker = self._ground_creature()
-        assert _can_block(blocker, attacker) is False
+        from engine.combat import combat_damage_step
+        from test_utils import (
+            declare_attackers,
+            declare_blockers,
+            put_on_battlefield,
+            resolve_stack,
+            scenario_game,
+        )
+
+        game = scenario_game()
+        p1, p2 = game.players
+        attacker = put_on_battlefield(game, p1, HealersHawk())
+        attacker.summoning_sick = False
+        blocker = put_on_battlefield(game, p2, self._ground_creature())
+        blocker.is_tapped = False
+        declare_attackers(game, [attacker.name])
+        declare_blockers(game, {attacker.name: [blocker.name]})
+        combat_damage_step(game)
+        resolve_stack(game)
+        assert p2.life == 19
+        assert p1.life == 21
+        assert game.get_graveyard(p1).contains(attacker) is False
 
     def test_flying_blocker_can_block_flying_attacker(self) -> None:
-        attacker = HealersHawk(owner=None)
-        blocker = self._flying_creature()
-        assert _can_block(blocker, attacker) is True
+        from engine.combat import combat_damage_step
+        from test_utils import (
+            declare_attackers,
+            declare_blockers,
+            put_on_battlefield,
+            resolve_stack,
+            scenario_game,
+        )
+
+        game = scenario_game()
+        p1, p2 = game.players
+        attacker = put_on_battlefield(game, p1, HealersHawk())
+        attacker.summoning_sick = False
+        blocker = put_on_battlefield(game, p2, self._flying_creature())
+        blocker.is_tapped = False
+        declare_attackers(game, [attacker.name])
+        declare_blockers(game, {attacker.name: [blocker.name]})
+        combat_damage_step(game)
+        resolve_stack(game)
+        assert p2.life == 20
+        assert p1.life == 21
+        assert game.get_graveyard(p1).contains(attacker) is True
 
     def test_reach_blocker_can_block_flying_attacker(self) -> None:
-        attacker = HealersHawk(owner=None)
-        blocker = self._reach_creature()
-        assert _can_block(blocker, attacker) is True
+        from engine.combat import combat_damage_step
+        from test_utils import (
+            declare_attackers,
+            declare_blockers,
+            put_on_battlefield,
+            resolve_stack,
+            scenario_game,
+        )
+
+        game = scenario_game()
+        p1, p2 = game.players
+        attacker = put_on_battlefield(game, p1, HealersHawk())
+        attacker.summoning_sick = False
+        blocker = put_on_battlefield(game, p2, self._reach_creature())
+        blocker.is_tapped = False
+        declare_attackers(game, [attacker.name])
+        declare_blockers(game, {attacker.name: [blocker.name]})
+        combat_damage_step(game)
+        resolve_stack(game)
+        assert p2.life == 20
+        assert p1.life == 21
+        assert game.get_graveyard(p1).contains(attacker) is True
 
     def test_tapped_creature_cannot_block(self) -> None:
-        """Tapped creatures cannot be declared as blockers at all."""
-        attacker = HealersHawk(owner=None)
-        blocker = self._flying_creature()
+        from engine.combat import combat_damage_step
+        from test_utils import (
+            declare_attackers,
+            declare_blockers,
+            put_on_battlefield,
+            resolve_stack,
+            scenario_game,
+        )
+
+        game = scenario_game()
+        p1, p2 = game.players
+        attacker = put_on_battlefield(game, p1, HealersHawk())
+        attacker.summoning_sick = False
+        blocker = put_on_battlefield(game, p2, self._flying_creature())
         blocker.is_tapped = True
-        assert _can_block(blocker, attacker) is False
+        declare_attackers(game, [attacker.name])
+        declare_blockers(game, {attacker.name: [blocker.name]})
+        combat_damage_step(game)
+        resolve_stack(game)
+        assert p2.life == 19
+        assert p1.life == 21
+        assert game.get_graveyard(p1).contains(attacker) is False

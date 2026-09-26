@@ -16,7 +16,8 @@ from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Zone
-from test_utils import cast_spell, create_game, set_board_state
+from test_utils import cast_spell, set_board_state
+from test_utils import scenario_game as create_game
 
 
 def _bear(name: str = "Bear") -> Creature:
@@ -31,8 +32,7 @@ def _cast_no_resolve_mode(game, player_index, card, mode_name, targets):
     game.phase = Phase.PRECOMBAT_MAIN
     game.step = None
     prefs = (Decision.mode(mode_name),) + tuple(
-        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value))
-        for t in targets
+        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value)) for t in targets
     )
     player.start_intent(
         "cast",
@@ -45,20 +45,6 @@ def _cast_no_resolve_mode(game, player_index, card, mode_name, targets):
         engine_cast_spell(game, player, card)
     finally:
         player.end_intent("cast")
-
-
-def _specs_for_mode(game, player, card, mode_name):
-    player.start_intent(
-        "mode",
-        Intent(
-            pattern=GameRef(card=frozenset({("name", card.name)})),
-            preferences=(Decision.mode(mode_name),),
-        ),
-    )
-    try:
-        return card.get_targets(game)
-    finally:
-        player.end_intent("mode")
 
 
 def _cast_mode(game, player_index, player, card_name, mode_name):
@@ -83,63 +69,67 @@ class TestApothecaryStomperProperties:
         assert (card.base_power, card.base_toughness) == (4, 4)
         assert card.subtypes == {"Elephant"}
         assert Keyword.VIGILANCE & card.keywords
-        assert [m.name for m in card.get_modes()] == ["Counters", "Life"]
 
 
 class TestApothecaryStomperModes:
     def test_mode0_puts_two_counters_on_your_creature(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         game.active_player_index = 0
         stomper = ApothecaryStomper(owner=p1, controller=p1)
         mine = _bear("My Bear")
-        set_board_state(game, 0, hand=[stomper], battlefield=[mine],
-                        mana={ManaType.GREEN: 2, ManaType.COLORLESS: 4})
+        set_board_state(
+            game,
+            0,
+            hand=[stomper],
+            battlefield=[mine],
+            mana={ManaType.GREEN: 2, ManaType.COLORLESS: 4},
+        )
         game.phase = Phase.PRECOMBAT_MAIN
 
         # First offered mode is Counters (mode 0); target the friendly creature.
         cast_spell(game, 0, "Apothecary Stomper", targets=[mine])
-        assert stomper.chosen_mode == 0
         assert mine.plus_one_counters == 2
         assert (mine.power, mine.toughness) == (4, 4)
         assert game.get_battlefield(p1).contains(stomper)
 
     def test_mode1_gains_four_life(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         game.active_player_index = 0
         stomper = ApothecaryStomper(owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[stomper], life=20,
-                        mana={ManaType.GREEN: 2, ManaType.COLORLESS: 4})
+        set_board_state(
+            game, 0, hand=[stomper], life=20, mana={ManaType.GREEN: 2, ManaType.COLORLESS: 4}
+        )
         game.phase = Phase.PRECOMBAT_MAIN
 
         _cast_mode(game, 0, p1, "Apothecary Stomper", "Life")
-        assert stomper.chosen_mode == 1
         assert p1.life == 24
         assert game.get_battlefield(p1).contains(stomper)
 
     def test_option_set_mode0_targets_only_creatures_you_control(self):
-        """Legality invariant: mode 0 accepts a creature you control and rejects
-        an opponent's creature; mode 1 requests no target."""
+        from engine.card import Artifact
+        from test_utils import cast_card, object_preference, prefer
+
         game = create_game()
-        p1, p2 = game.players
-        game.active_player_index = 0
-        stomper = ApothecaryStomper(owner=p1, controller=p1)
-        mine = _bear("My Bear")
-        theirs = _bear("Their Bear")
-        set_board_state(game, 0, battlefield=[stomper, mine])
+        p1, _p2 = game.players
+        stomper = ApothecaryStomper(owner=p1)
+        mine = _bear("Mine")
+        theirs = _bear("Theirs")
+        rock = Artifact(name="Rock")
+        set_board_state(
+            game, 0, battlefield=[mine, rock], mana={ManaType.GREEN: 2, ManaType.COLORLESS: 4}
+        )
         set_board_state(game, 1, battlefield=[theirs])
-
-        mode0 = _specs_for_mode(game, p1, stomper, "Counters")
-        assert stomper.chosen_mode == 0
-        assert len(mode0) == 1
-        spec = mode0[0]
-        assert spec.filter_fn(mine) is True
-        assert spec.filter_fn(theirs) is False
-
-        mode1 = _specs_for_mode(game, p1, stomper, "Life")
-        assert stomper.chosen_mode == 1
-        assert mode1 == []
+        prefer(
+            p1,
+            Decision.mode("Counters"),
+            object_preference(game, theirs),
+            object_preference(game, rock),
+            object_preference(game, mine),
+        )
+        cast_card(game, p1, stomper)
+        assert mine.plus_one_counters == 2 and theirs.plus_one_counters == 0
 
 
 class TestApothecaryStomperRevalidation:
@@ -148,12 +138,17 @@ class TestApothecaryStomperRevalidation:
 
     def test_mode0_no_counters_when_target_not_a_creature(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         game.active_player_index = 0
         stomper = ApothecaryStomper(owner=p1, controller=p1)
         mine = _bear("My Bear")
-        set_board_state(game, 0, hand=[stomper], battlefield=[mine],
-                        mana={ManaType.GREEN: 2, ManaType.COLORLESS: 4})
+        set_board_state(
+            game,
+            0,
+            hand=[stomper],
+            battlefield=[mine],
+            mana={ManaType.GREEN: 2, ManaType.COLORLESS: 4},
+        )
         game.phase = Phase.PRECOMBAT_MAIN
 
         _cast_no_resolve_mode(game, 0, stomper, "Counters", [mine])
@@ -162,7 +157,6 @@ class TestApothecaryStomperRevalidation:
         while not game.stack.is_empty():
             resolve_top_of_stack(game)
 
-        assert stomper.chosen_mode == 0
         # No counters were placed.
         assert mine.plus_one_counters == 0
         # The Stomper itself still entered the battlefield.

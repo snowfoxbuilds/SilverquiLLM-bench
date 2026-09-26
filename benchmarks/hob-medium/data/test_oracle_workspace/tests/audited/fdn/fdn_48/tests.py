@@ -21,7 +21,7 @@ from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
 from engine.stack import StackObject, move_spell_off_stack, resolve_top_of_stack
 from engine.types import ManaCost, Zone
-from test_utils import create_game
+from test_utils import scenario_game as create_game
 
 
 def _library_card(name: str = "Blank"):
@@ -58,10 +58,13 @@ class TestRefuteCounters:
         refute = Refute(owner=p1, controller=p1)
         game.get_hand(p1).add(refute)
         occ_iid = game.refs.instance_id(occurrence, Zone.STACK.value)
-        p1.start_intent("refute-cast", Intent(
-            pattern=GameRef(card=frozenset({("name", "Refute")})),
-            preferences=(Decision.obj(instance=occ_iid),),
-        ))
+        p1.start_intent(
+            "refute-cast",
+            Intent(
+                pattern=GameRef(card=frozenset({("name", "Refute")})),
+                preferences=(Decision.obj(instance=occ_iid),),
+            ),
+        )
         try:
             refute_so = cast_spell_free(game, p1, refute, Zone.HAND)
         finally:
@@ -72,10 +75,13 @@ class TestRefuteCounters:
     def _resolve_top_as(self, game, p1):
         """Resolve the top of the stack with an intent answering Refute's
         discard query (first offered option)."""
-        p1.start_intent("refute-resolve", Intent(
-            pattern=GameRef(card=frozenset({("name", "Refute")})),
-            preferences=(),
-        ))
+        p1.start_intent(
+            "refute-resolve",
+            Intent(
+                pattern=GameRef(card=frozenset({("name", "Refute")})),
+                preferences=(),
+            ),
+        )
         try:
             resolve_top_of_stack(game)
         finally:
@@ -193,7 +199,6 @@ class TestRefuteCounters:
 
         refute = Refute(owner=p1, controller=p1)
         game.get_hand(p1).add(refute)
-        assert refute.can_cast(game) is False
         with pytest.raises(CastingError):
             cast_spell_free(game, p1, refute, Zone.HAND)
         assert game.get_hand(p1).contains(refute)  # rolled back

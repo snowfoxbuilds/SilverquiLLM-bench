@@ -14,15 +14,20 @@ from cards.fdn.fdn_163.card_impl import SelfReflection
 from engine.card import Creature, Sorcery
 from engine.game import add_counter
 from engine.types import ManaCost
-from test_utils import create_game, set_board_state
+from test_utils import (
+    cast_card,
+    fund_mana_cost,
+    object_preference,
+    prefer,
+    set_board_state,
+)
+from test_utils import (
+    scenario_game as create_game,
+)
 
 
 def _copy_tokens(game, player):
-    return [
-        o
-        for o in game.get_battlefield(player).get_all()
-        if getattr(o, "is_token", False)
-    ]
+    return [o for o in game.get_battlefield(player).get_all() if getattr(o, "is_token", False)]
 
 
 class TestSelfReflectionProperties:
@@ -38,10 +43,14 @@ class TestSelfReflectionProperties:
 class TestSelfReflectionCopyToken:
     def _setup(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         bear = Creature(
-            name="Grizzly Bears", base_power=2, base_toughness=2,
-            subtypes={"Bear"}, owner=p1, controller=p1,
+            name="Grizzly Bears",
+            base_power=2,
+            base_toughness=2,
+            subtypes={"Bear"},
+            owner=p1,
+            controller=p1,
         )
         set_board_state(game, 0, battlefield=[bear])
         spell = SelfReflection(owner=p1, controller=p1)
@@ -49,8 +58,9 @@ class TestSelfReflectionCopyToken:
 
     def test_creates_one_token_copy(self) -> None:
         game, p1, bear, spell = self._setup()
-        spell.chosen_targets = [bear]
-        spell.on_resolve(game)
+        fund_mana_cost(p1, spell.mana_cost)
+        prefer(p1, object_preference(game, bear))
+        cast_card(game, p1, spell)
         tokens = _copy_tokens(game, p1)
         assert len(tokens) == 1
 
@@ -58,8 +68,9 @@ class TestSelfReflectionCopyToken:
         """The placed token differs in identity from the copied creature — the
         crux the object_id re-mint fixes (copy.copy shared the id)."""
         game, p1, bear, spell = self._setup()
-        spell.chosen_targets = [bear]
-        spell.on_resolve(game)
+        fund_mana_cost(p1, spell.mana_cost)
+        prefer(p1, object_preference(game, bear))
+        cast_card(game, p1, spell)
         token = _copy_tokens(game, p1)[0]
         assert token is not bear
         assert token.object_id != bear.object_id
@@ -67,8 +78,9 @@ class TestSelfReflectionCopyToken:
     def test_token_carries_copiable_characteristics(self) -> None:
         """Existing behaviour preserved: the token is a functional copy."""
         game, p1, bear, spell = self._setup()
-        spell.chosen_targets = [bear]
-        spell.on_resolve(game)
+        fund_mana_cost(p1, spell.mana_cost)
+        prefer(p1, object_preference(game, bear))
+        cast_card(game, p1, spell)
         token = _copy_tokens(game, p1)[0]
         assert token.name == "Grizzly Bears"
         assert (token.base_power, token.base_toughness) == (2, 2)
@@ -80,10 +92,10 @@ class TestSelfReflectionCopyToken:
         """Mutating the token's subtypes must not bleed into the original — a
         shallow copy shared the very same set object."""
         game, p1, bear, spell = self._setup()
-        spell.chosen_targets = [bear]
-        spell.on_resolve(game)
+        fund_mana_cost(p1, spell.mana_cost)
+        prefer(p1, object_preference(game, bear))
+        cast_card(game, p1, spell)
         token = _copy_tokens(game, p1)[0]
-        assert token.subtypes is not bear.subtypes
         token.subtypes.add("Zombie")
         assert "Zombie" not in bear.subtypes
 
@@ -94,15 +106,22 @@ class TestSelfReflectionCopyToken:
         game, p1, bear, spell = self._setup()
         add_counter(game, bear, "+1/+1", 2)
         assert bear.power == 4  # the source is a 4/4 now
-        spell.chosen_targets = [bear]
-        spell.on_resolve(game)
+        fund_mana_cost(p1, spell.mana_cost)
+        prefer(p1, object_preference(game, bear))
+        cast_card(game, p1, spell)
         token = _copy_tokens(game, p1)[0]
         assert token.plus_one_counters == 0
         assert token.power == 2
         assert token.toughness == 2
 
     def test_no_target_is_a_noop(self) -> None:
+        import pytest
+        from engine.casting import CastingError
+        from engine.types import CardType
+
         game, p1, bear, spell = self._setup()
-        spell.chosen_targets = []
-        spell.on_resolve(game)
+        bear.card_types = {CardType.ARTIFACT}
+        fund_mana_cost(p1, spell.mana_cost)
+        with pytest.raises(CastingError):
+            cast_card(game, p1, spell)
         assert _copy_tokens(game, p1) == []

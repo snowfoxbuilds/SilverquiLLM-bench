@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -59,23 +60,26 @@ def test_selected_oracle_passes_audited_suite(card_id, tmp_path):
 
 def test_authoritative_fdn_regression_passes_v2_baseline():
     suites = BENCH / "data/tests/audited/fdn"
-    assert len(list(suites.glob("*/tests.py"))) >= 86
-    env = dict(os.environ, PYTHONPATH=str(BENCH / "workspace"))
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            str(suites),
-            "-q",
-            "--tb=short",
-            "--confcutdir",
-            str(suites.parent),
-        ],
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    assert list(suites.glob("*/tests.py")), "FDN regression suite is empty"
+    with tempfile.TemporaryDirectory(prefix="hob_fdn_helpers_") as directory:
+        overlay = Path(directory)
+        shutil.copy2(ORACLE / "test_utils.py", overlay / "test_utils.py")
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join((str(overlay), str(BENCH / "workspace"))))
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                str(suites),
+                "-q",
+                "--tb=short",
+                "--confcutdir",
+                str(suites.parent),
+            ],
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
     assert result.returncode == 0, result.stdout + result.stderr

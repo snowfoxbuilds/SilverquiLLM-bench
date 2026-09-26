@@ -35,6 +35,7 @@ class TheEaglesAreComing(Instant):
         from engine.events import BeginningOfUpkeepTriggeredEvent
         from engine.game import create_token
         from engine.hob_support import delayed, on_battlefield
+        from engine.protection import has_protection_from
         from engine.types import CardType, Color, Keyword, Zone
         from engine.zones import move_to_zone
 
@@ -46,6 +47,7 @@ class TheEaglesAreComing(Instant):
                 and on_battlefield(game, card)
                 and CardType.CREATURE in card.card_types
                 and card.owner is player
+                and not has_protection_from(card, self)
             ):
                 move_to_zone(game, card, Zone.BATTLEFIELD, Zone.HAND)
                 returned += int(player.zones[Zone.HAND].contains(card))

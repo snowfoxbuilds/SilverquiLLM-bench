@@ -23,10 +23,10 @@ from engine.types import (
     ManaCost,
     ManaType,
     Phase,
-    TargetRequirement,
     Zone,
 )
-from test_utils import cast_spell, create_game, set_board_state
+from test_utils import cast_spell, set_board_state
+from test_utils import scenario_game as create_game
 
 
 def _cast_no_resolve(game, player_index, card, targets):
@@ -37,8 +37,7 @@ def _cast_no_resolve(game, player_index, card, targets):
     game.phase = Phase.PRECOMBAT_MAIN
     game.step = None
     prefs = tuple(
-        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value))
-        for t in targets
+        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value)) for t in targets
     )
     player.start_intent(
         "cast",
@@ -69,14 +68,6 @@ class TestFaebloomTrickProperties:
         assert c.mana_cost == ManaCost.parse("{2}{U}")
         assert CardType.INSTANT in c.card_types
 
-    def test_target_is_optional_requirement(self):
-        c = FaebloomTrick(owner=None, controller=None)
-        specs = c.get_targets(create_game())
-        assert len(specs) == 1
-        assert isinstance(specs[0], TargetRequirement)
-        assert specs[0].zone == Zone.BATTLEFIELD
-        assert specs[0].optional is True
-
 
 class TestFaebloomTrickResolve:
     def _setup(self):
@@ -89,7 +80,7 @@ class TestFaebloomTrickResolve:
         return game, p1, p2, trick, their_bear
 
     def test_creates_two_flying_faeries_and_taps_target(self):
-        game, p1, p2, trick, their_bear = self._setup()
+        game, p1, _p2, _trick, their_bear = self._setup()
         cast_spell(game, 0, "Faebloom Trick", targets=[their_bear])
         faeries = _faeries(game, p1)
         assert len(faeries) == 2
@@ -100,7 +91,7 @@ class TestFaebloomTrickResolve:
         assert their_bear.is_tapped is True
 
     def test_cost_is_paid(self):
-        game, p1, p2, trick, their_bear = self._setup()
+        game, p1, _p2, _trick, their_bear = self._setup()
         cast_spell(game, 0, "Faebloom Trick", targets=[their_bear])
         assert p1.mana_pool.total() == 0
 
@@ -108,7 +99,7 @@ class TestFaebloomTrickResolve:
         """Optional target: with no opponent creature the spell still resolves
         and makes both tokens; nothing is tapped."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         trick = FaebloomTrick(owner=p1, controller=p1)
         set_board_state(game, 0, hand=[trick], mana={ManaType.BLUE: 3})
         cast_spell(game, 0, "Faebloom Trick")  # no targets available/needed
@@ -145,18 +136,17 @@ class TestFaebloomTrickTokenIdentity:
     replay correlation keys to the Faerie grpId."""
 
     def test_tokens_are_blue_flying_faeries(self):
+        from test_utils import cast_card, fund_mana_cost
+
         game = create_game()
         p1 = game.players[0]
-        trick = FaebloomTrick(owner=p1, controller=p1)
-        # No opponent creature / no chosen target: the reflexive tap is a no-op
-        # and only the two-token mint runs.
-        trick.on_resolve(game)
-
-        faeries = _faeries(game, p1)
-        assert len(faeries) == 2
-        for tok in faeries:
-            assert tok.subtypes == {"Faerie"}
-            assert get_colors(tok) == {Color.BLUE}
-            assert (tok.base_power, tok.base_toughness) == (1, 1)
-            assert Keyword.FLYING & tok.keywords
-            assert tok.is_token is True
+        spell = FaebloomTrick(owner=p1)
+        fund_mana_cost(p1, spell.mana_cost)
+        cast_card(game, p1, spell)
+        tokens = [
+            card for card in game.get_battlefield(p1).get_all() if getattr(card, "is_token", False)
+        ]
+        assert len(tokens) == 2
+        for token in tokens:
+            assert token.subtypes == {"Faerie"} and get_colors(token) == {Color.BLUE}
+            assert (token.power, token.toughness) == (1, 1) and token.keywords & Keyword.FLYING

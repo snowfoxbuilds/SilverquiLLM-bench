@@ -10,21 +10,20 @@ controller gains life equal to its toughness.
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.spg_74.card_impl import Condemn
 from engine.card import Creature
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
 from engine.stack import resolve_top_of_stack
-from engine.types import ManaCost, ManaType, Phase, TargetRequirement, Zone
+from engine.types import ManaCost, ManaType, Phase, Zone
 from test_utils import TestSetupError as _CastError
-from test_utils import cast_spell, create_game, set_board_state
+from test_utils import cast_spell, set_board_state
+from test_utils import scenario_game as create_game
 
 
 def _bear(p, name="Bear", toughness=2):
-    return Creature(name=name, base_power=2, base_toughness=toughness,
-                    owner=p, controller=p)
+    return Creature(name=name, base_power=2, base_toughness=toughness, owner=p, controller=p)
 
 
 def _cast_no_resolve(game, player_index, card, targets):
@@ -40,13 +39,15 @@ def _cast_no_resolve(game, player_index, card, targets):
     game.phase = Phase.PRECOMBAT_MAIN
     game.step = None
     prefs = tuple(
-        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value))
-        for t in targets
+        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value)) for t in targets
     )
-    player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
-        preferences=prefs,
-    ))
+    player.start_intent(
+        "cast",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", card.name)})),
+            preferences=prefs,
+        ),
+    )
     try:
         engine_cast_spell(game, player, card)
     finally:
@@ -60,17 +61,28 @@ class TestCondemnProperties:
         assert c.mana_cost == ManaCost.parse("{W}")
 
     def test_get_targets_requirement_filters_attackers(self):
+        from test_utils import (
+            cast_card,
+            declare_attackers,
+            fund_mana_cost,
+            object_preference,
+            prefer,
+            set_board_state,
+        )
+
         game = create_game()
-        p2 = game.players[1]
+        p1, p2 = game.players
         attacker = _bear(p2, "Attacker")
         idle = _bear(p2, "Idle")
-        attacker.is_attacking = True
-        spec = Condemn(owner=None).get_targets(game)[0]
-        assert isinstance(spec, TargetRequirement)
-        assert spec.zone == Zone.BATTLEFIELD
-        assert spec.optional is False
-        assert spec.filter_fn(attacker) is True   # attacking creature: legal
-        assert spec.filter_fn(idle) is False        # not attacking: illegal
+        set_board_state(game, 1, battlefield=[attacker, idle])
+        attacker.summoning_sick = False
+        game.active_player_index = 1
+        declare_attackers(game, [attacker.name])
+        spell = Condemn(owner=p1)
+        fund_mana_cost(p1, spell.mana_cost)
+        prefer(p1, object_preference(game, idle), object_preference(game, attacker))
+        cast_card(game, p1, spell)
+        assert game.get_library(p2).contains(attacker) and game.get_battlefield(p2).contains(idle)
 
 
 class TestCondemnResolve:
@@ -85,7 +97,7 @@ class TestCondemnResolve:
         return game, p1, p2, condemn, attacker
 
     def test_puts_attacker_on_bottom_of_library(self):
-        game, p1, p2, condemn, attacker = self._setup()
+        game, _p1, p2, _condemn, attacker = self._setup()
         cast_spell(game, 0, "Condemn", targets=[attacker])
         assert not game.get_battlefield(p2).contains(attacker)
         library = p2.zones[Zone.LIBRARY]
@@ -94,12 +106,12 @@ class TestCondemnResolve:
         assert library.get_all()[0] is attacker
 
     def test_controller_gains_life_equal_to_toughness(self):
-        game, p1, p2, condemn, attacker = self._setup(toughness=5)
+        game, _p1, p2, _condemn, attacker = self._setup(toughness=5)
         cast_spell(game, 0, "Condemn", targets=[attacker])
         assert p2.life == 25  # 20 + toughness 5
 
     def test_cost_is_paid(self):
-        game, p1, p2, condemn, attacker = self._setup()
+        game, p1, _p2, _condemn, attacker = self._setup()
         cast_spell(game, 0, "Condemn", targets=[attacker])
         assert p1.mana_pool.total() == 0
 
@@ -108,14 +120,14 @@ class TestCondemnResolve:
         combat before Condemn resolves is no longer a legal 'attacking creature'
         target, so Condemn does nothing — it stays on the battlefield and its
         controller gains no life."""
-        game, p1, p2, condemn, attacker = self._setup(toughness=5)
+        game, _p1, p2, condemn, attacker = self._setup(toughness=5)
         _cast_no_resolve(game, 0, condemn, [attacker])
         # The attacker is removed from combat while Condemn is on the stack.
         attacker.is_attacking = False
         resolve_top_of_stack(game)
-        assert game.get_battlefield(p2).contains(attacker)   # not bottomed
+        assert game.get_battlefield(p2).contains(attacker)  # not bottomed
         assert not p2.zones[Zone.LIBRARY].contains(attacker)
-        assert p2.life == 20                                  # no life gained
+        assert p2.life == 20  # no life gained
 
     def test_no_attacking_creature_makes_spell_uncastable(self):
         """Required target: a non-attacking creature is not a legal target, so

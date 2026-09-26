@@ -243,8 +243,7 @@ def cast_spell(
     """
     if player_index < 0 or player_index >= len(game.players):
         raise TestSetupError(
-            f"Invalid player_index {player_index} — game has "
-            f"{len(game.players)} players"
+            f"Invalid player_index {player_index} — game has {len(game.players)} players"
         )
 
     player = game.players[player_index]
@@ -280,9 +279,7 @@ def cast_spell(
 
     # Ensure the stack is empty for sorcery-speed
     if not game.stack.is_empty():
-        raise TestSetupError(
-            f"Cannot cast {card_name!r} — stack is not empty"
-        )
+        raise TestSetupError(f"Cannot cast {card_name!r} — stack is not empty")
 
     # Targets are chosen via a transient Intent: the engine raises a target
     # Player Query during casting; the intent prefers the given targets by their
@@ -302,9 +299,7 @@ def cast_spell(
     try:
         _engine_cast_spell(game, player, card)
     except Exception as exc:
-        raise TestSetupError(
-            f"Failed to cast {card_name!r}: {exc}"
-        ) from exc
+        raise TestSetupError(f"Failed to cast {card_name!r}: {exc}") from exc
     finally:
         if intent_name is not None and intent_name in player._intents:
             player.end_intent(intent_name)
@@ -366,6 +361,7 @@ def activate_card_ability(
     """
     from engine.abilities import ActivatedAbilityInstance, activate_ability
     from engine.card import ManaAbility
+
     ability = source_card.get_activated_abilities()[index]
     is_mana = isinstance(ability, ManaAbility)
     instance = ActivatedAbilityInstance(
@@ -608,6 +604,7 @@ def declare_blockers(
 def enter_permanent(game, player, card):
     """Set up a hand card, then enter through the canonical zone-transition pipeline."""
     from engine.zones import move_to_zone
+
     card.owner = player
     card.controller = player
     game.get_hand(player).add(card)
@@ -617,9 +614,16 @@ def enter_permanent(game, player, card):
 
 def advance_game_to_phase(game, phase, step=None):
     """Drive canonical phase transitions and their public boundary events."""
-    from engine.events import BeginningOfUpkeepTriggeredEvent, EndStepTriggeredEvent
+    from engine.combat import combat_damage_step, end_combat_step
+    from engine.events import (
+        BeginningOfCombatTriggeredEvent,
+        BeginningOfUpkeepTriggeredEvent,
+        EndOfTurnTriggeredEvent,
+        EndStepTriggeredEvent,
+    )
     from engine.game import draw_card
-    from engine.turn import cleanup_mechanical, untap_step
+    from engine.turn import untap_step
+
     for _ in range(len(_TURN_SEQUENCE) + 1):
         if (game.phase, game.step) == (phase, step):
             return
@@ -632,23 +636,31 @@ def advance_game_to_phase(game, phase, step=None):
         elif game.step == Step.DRAW:
             if game.get_library(game.active_player).get_all():
                 draw_card(game, game.active_player)
+        elif game.step == Step.BEGIN_COMBAT:
+            game.trigger_manager.fire_event(game, BeginningOfCombatTriggeredEvent())
+        elif game.step == Step.COMBAT_DAMAGE:
+            combat_damage_step(game)
+        elif game.step == Step.END_COMBAT:
+            end_combat_step(game)
         elif game.step == Step.END:
             game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=game.active_player))
+            game.trigger_manager.fire_event(game, EndOfTurnTriggeredEvent())
         elif game.step == Step.CLEANUP:
-            cleanup_mechanical(game)
+            finish_cleanup(game)
     raise TestSetupError("phase boundary was not reached")
-
 
 
 def behavioral_game():
     from engine.card import Creature
+
     game = create_game()
     game.phase, game.step = Phase.PRECOMBAT_MAIN, None
     for player in game.players:
         player.set_baseline(Intent(pattern=GameRef()))
         for i in range(40):
-            game.get_library(player).add(Creature(name=f"Library {i}", owner=player,
-                                                base_power=2, base_toughness=2))
+            game.get_library(player).add(
+                Creature(name=f"Library {i}", owner=player, base_power=2, base_toughness=2)
+            )
     return game
 
 
@@ -657,14 +669,112 @@ def prefer(player, *decisions):
 
 
 def object_preference(game, card):
-    return Decision.obj(instance=game.refs.instance_id(card, "battlefield"))
+    from engine.stack import object_current_zone
+
+    zone = object_current_zone(game, card)
+    if zone is None:
+        raise TestSetupError("Choice object has not been placed in a zone")
+    return Decision.obj(instance=game.refs.instance_id(card, zone))
 
 
 def cast_vanilla_spell(game, seat, value=2):
     from engine.card import Instant
     from engine.casting import cast_spell as cast
     from engine.types import ManaCost
-    spell = Instant(name=f"Test spell {value}", owner=game.players[seat], mana_cost=ManaCost(generic=value))
+
+    spell = Instant(
+        name=f"Test spell {value}", owner=game.players[seat], mana_cost=ManaCost(generic=value)
+    )
     game.get_hand(game.players[seat]).add(spell)
     game.players[seat].mana_pool.add(ManaType.COLORLESS, value)
     return cast(game, game.players[seat], spell)
+
+
+def ability_instance(game, player, source, index=0):
+    """Prepare a reusable activation through the canonical public descriptor types."""
+    from engine.abilities import ActivatedAbilityInstance
+    from engine.card import ManaAbility
+
+    descriptor = source.get_activated_abilities()[index]
+    is_mana = isinstance(descriptor, ManaAbility)
+    return ActivatedAbilityInstance(
+        source=source,
+        controller=player,
+        cost=descriptor.cost,
+        effect=descriptor.mana_produced if is_mana else descriptor.effect,
+        is_mana_ability=is_mana,
+        description=descriptor.description,
+        targeting=getattr(descriptor, "targeting", None),
+        can_activate=getattr(descriptor, "can_activate", None),
+    )
+
+
+def cast_card(game, player, card, resolve=True):
+    """Stage an unzoned card and cast it; the test supplies mana and Intents."""
+    from engine.casting import can_cast_at_instant_speed
+    from engine.casting import cast_spell as cast
+    from engine.stack import object_current_zone
+
+    if card.owner is None:
+        card.owner = player
+    card.controller = player
+    zone = object_current_zone(game, card)
+    if zone is None:
+        game.get_hand(player).add(card)
+    elif not game.get_hand(player).contains(card):
+        raise TestSetupError("cast_card expects an unzoned card or one in the caster's hand")
+    if not can_cast_at_instant_speed(card):
+        game.active_player_index = game.players.index(player)
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
+    result = cast(game, player, card)
+    if resolve:
+        resolve_stack(game)
+    return result
+
+
+def finish_cleanup(game):
+    from engine.card_queries import choose_object
+    from engine.game import discard
+    from engine.state_based_actions import resolve_state_based_actions
+    from engine.turn import MAX_HAND_SIZE, cleanup_mechanical
+
+    while True:
+        player = game.active_player
+        hand = game.get_hand(player)
+        while len(hand) > MAX_HAND_SIZE:
+            card = choose_object(game, player, hand.get_all(), "Discard to maximum hand size")
+            discard(game, player, card)
+        cleanup_mechanical(game)
+        changed = resolve_state_based_actions(game)
+        if not changed and game.stack.is_empty():
+            return
+        resolve_stack(game)
+
+
+def scenario_game(*args, **kwargs):
+    """Create an empty canonical game with deterministic first-offered defaults."""
+    game = create_game(*args, **kwargs)
+    for player in game.players:
+        player.set_baseline(Intent(pattern=GameRef()))
+    return game
+
+
+def fund_mana_cost(player, cost):
+    """Provide a specified cost's mana as test setup, without paying it."""
+    for color, amount in cost.pips.items():
+        player.mana_pool.add(color, amount)
+    player.mana_pool.add(ManaType.COLORLESS, cost.generic)
+
+
+def mana_ability_instance(game, player, source, index=0):
+    from engine.abilities import ActivatedAbilityInstance
+
+    descriptor = source.get_mana_abilities()[index]
+    return ActivatedAbilityInstance(
+        source=source,
+        controller=player,
+        cost=descriptor.cost,
+        effect=descriptor.mana_produced,
+        is_mana_ability=True,
+        description=descriptor.description,
+    )

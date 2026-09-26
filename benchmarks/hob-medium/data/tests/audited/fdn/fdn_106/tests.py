@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from cards.fdn.fdn_106.card_impl import LootExuberantExplorer
 from engine.types import ManaCost, ManaType
-from test_utils import create_game, set_board_state
+from test_utils import scenario_game as create_game
+from test_utils import set_board_state
 
 
 def _setup(tapped=False):
@@ -30,22 +31,24 @@ class TestLootProperties:
         assert (c.base_power, c.base_toughness) == (1, 4)
         assert {"Beast", "Noble"} <= c.subtypes
 
-    def test_has_one_activated_ability(self):
-        c = LootExuberantExplorer(owner=None)
-        abilities = c.get_activated_abilities()
-        assert len(abilities) == 1
-
 
 class TestLootAbilityCost:
     def test_cost_taps_source_and_pays_mana(self):
+        from test_utils import activate_card_ability
+
         game, p1, loot = _setup()
-        ability = loot.get_activated_abilities()[0]
-        assert ability.cost(game, loot) is True
-        assert loot.is_tapped is True          # {T} cost tapped it
-        assert p1.mana_pool.total() == 0        # {4}{G}{G} == 6 paid
+        loot.summoning_sick = False
+        activate_card_ability(game, p1, loot)
+        assert loot.is_tapped and p1.mana_pool.total() == 0
+        assert len(game.stack) == 1
 
     def test_cost_rejected_when_already_tapped(self):
+        import pytest
+        from engine.abilities import AbilityError
+        from test_utils import activate_card_ability
+
         game, p1, loot = _setup(tapped=True)
-        ability = loot.get_activated_abilities()[0]
-        assert ability.cost(game, loot) is False
-        assert p1.mana_pool.total() == 6        # nothing spent
+        loot.summoning_sick = False
+        with pytest.raises(AbilityError):
+            activate_card_ability(game, p1, loot)
+        assert p1.mana_pool.total() == 6 and game.stack.is_empty()

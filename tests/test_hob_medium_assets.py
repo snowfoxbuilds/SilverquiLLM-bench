@@ -47,15 +47,41 @@ def test_fdn_coverage_is_explicit_and_matches_real_suites():
     all_cards = {p.parent.name for p in (BENCH / "workspace/cards/fdn").glob("*/card_impl.py")}
     assert covered == set(coverage["covered_card_ids"])
     assert all_cards - covered == set(coverage["uncovered_card_ids"])
-    assert len(covered) == 86 and len(all_cards) == 286
+    assert len(covered) == 82 and len(all_cards) == 286
+    migration = json.loads((BENCH / "data" / coverage["migration_record"]).read_text())
+    assert coverage["tests"] == migration["current_audited_tests"] == 394
+    assert coverage["behavioral_tests"] == 307
+    assert (
+        coverage["supplemental_integrity_tests"]
+        == len(migration["supplemental_integrity_nodeids"])
+        == 87
+    )
+    assert set(coverage["excluded_baseline_card_ids"]) == {"fdn_88", "fdn_93", "fdn_94", "fdn_200"}
+    actual_nodeids = set()
     for card in covered:
         canonical = BENCH / f"data/tests/audited/fdn/{card}/tests.py"
+        tree = ast.parse(canonical.read_text())
+        card_nodeids = set()
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                card_nodeids.update(
+                    f"{card}/tests.py::{node.name}::{member.name}"
+                    for member in node.body
+                    if isinstance(member, ast.FunctionDef) and member.name.startswith("test_")
+                )
+            elif isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                card_nodeids.add(f"{card}/tests.py::{node.name}")
+        assert card_nodeids - set(migration["supplemental_integrity_nodeids"]), card
+        actual_nodeids.update(card_nodeids)
         assert (
             canonical.read_bytes()
             == (
                 BENCH / f"data/test_oracle_workspace/tests/audited/fdn/{card}/tests.py"
             ).read_bytes()
         )
+
+    assert len(actual_nodeids) == coverage["tests"]
+    assert set(migration["supplemental_integrity_nodeids"]) <= actual_nodeids
 
 
 def test_oracle_is_independent_and_never_staged():

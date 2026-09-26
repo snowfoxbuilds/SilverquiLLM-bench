@@ -13,7 +13,8 @@ from __future__ import annotations
 from cards.fdn.fdn_64.card_impl import InfestationSage
 from engine.protection import get_colors
 from engine.types import Color, Keyword, ManaCost
-from test_utils import create_game, resolve_stack, set_board_state
+from test_utils import resolve_stack
+from test_utils import scenario_game as create_game
 
 
 def _insects(game, player):
@@ -35,21 +36,17 @@ class TestInfestationSageProperties:
 class TestInfestationSageDeathToken:
     def test_death_mints_flying_black_green_insect(self) -> None:
         from engine.game import destroy
+        from test_utils import enter_permanent
 
         game = create_game()
-        p1 = game.players[0]
-        sage = InfestationSage()
-        set_board_state(game, 0, battlefield=[sage])
-        sage.register_triggers(game)
-
+        player = game.players[0]
+        sage = enter_permanent(game, player, InfestationSage())
         destroy(game, sage)
         resolve_stack(game)
-
-        insects = _insects(game, p1)
-        assert len(insects) == 1
-        insect = insects[0]
-        assert insect.subtypes == {"Insect"}
-        assert (insect.base_power, insect.base_toughness) == (1, 1)
-        assert insect.is_token is True
-        assert get_colors(insect) == {Color.BLACK, Color.GREEN}
-        assert Keyword.FLYING in insect.keywords
+        tokens = [
+            c for c in game.get_battlefield(player).get_all() if getattr(c, "is_token", False)
+        ]
+        assert len(tokens) == 1
+        token = tokens[0]
+        assert token.subtypes == {"Insect"} and get_colors(token) == {Color.BLACK, Color.GREEN}
+        assert (token.power, token.toughness) == (1, 1) and token.keywords & Keyword.FLYING

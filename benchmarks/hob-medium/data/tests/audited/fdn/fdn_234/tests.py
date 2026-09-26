@@ -16,18 +16,19 @@ The target is chosen at activation via a Player Query answered by an Intent
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_234.card_impl import VivienReid
 from engine.abilities import AbilityError, clear_loyalty_tracking
 from engine.card import Artifact, Creature, Enchantment
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
-from engine.types import CardType, Keyword, ManaCost, Phase, Supertype, Zone
+from engine.types import Keyword, ManaCost, Phase, Supertype, Zone
 from test_utils import (
     activate_loyalty_ability,
-    create_game,
     resolve_stack,
     set_board_state,
+)
+from test_utils import (
+    scenario_game as create_game,
 )
 
 
@@ -40,8 +41,12 @@ def _reset_loyalty_tracker():
 
 def _flyer(p, name="Flyer"):
     return Creature(
-        name=name, base_power=1, base_toughness=1,
-        keywords=Keyword.FLYING, owner=p, controller=p,
+        name=name,
+        base_power=1,
+        base_toughness=1,
+        keywords=Keyword.FLYING,
+        owner=p,
+        controller=p,
     )
 
 
@@ -58,10 +63,13 @@ def _enchantment(p, name="Curse"):
 
 
 def _activate_targeting(game, player, walker, index, target):
-    player.start_intent("vivien", Intent(
-        pattern=GameRef(card=frozenset({("name", walker.name)})),
-        preferences=(Decision.obj(instance=target.instance_id),),
-    ))
+    player.start_intent(
+        "vivien",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", walker.name)})),
+            preferences=(Decision.obj(instance=target.instance_id),),
+        ),
+    )
     try:
         activate_loyalty_ability(game, player, walker, index)
     finally:
@@ -81,15 +89,6 @@ class TestVivienProperties:
         assert Supertype.LEGENDARY in vivien.supertypes
         assert "Vivien" in vivien.subtypes
 
-    def test_only_minus_three_is_targeted(self):
-        vivien = VivienReid(owner=None)
-        abilities = vivien.get_loyalty_abilities()
-        assert len(abilities) == 3
-        assert abilities[0].targeting is None       # +1
-        assert abilities[1].targeting is not None   # −3
-        assert abilities[2].targeting is None       # −8
-        assert [a.loyalty_cost for a in abilities] == [1, -3, -8]
-
 
 class TestVivienMinusThree:
     def _setup(self, extra=None):
@@ -108,7 +107,7 @@ class TestVivienMinusThree:
         flyer = _flyer(p2, "Their Flyer")
         set_board_state(game, 1, battlefield=[flyer])
         _activate_targeting(game, p1, vivien, 1, flyer)
-        assert vivien.loyalty == 2                    # 5 − 3
+        assert vivien.loyalty == 2  # 5 − 3
         top = game.stack.peek()
         assert top.targets == [flyer]
         resolve_stack(game)
@@ -139,10 +138,10 @@ class TestVivienMinusThree:
         game.phase = Phase.PRECOMBAT_MAIN
         with pytest.raises(AbilityError):
             activate_loyalty_ability(game, p1, vivien, 1)
-        assert vivien.loyalty == 5                     # unchanged
+        assert vivien.loyalty == 5  # unchanged
 
     def test_no_legal_target_rejected_before_cost(self):
-        game, p1, p2, vivien = self._setup()   # nothing but the walker
+        game, p1, _p2, vivien = self._setup()  # nothing but the walker
         with pytest.raises(AbilityError):
             activate_loyalty_ability(game, p1, vivien, 1)
         assert vivien.loyalty == 5
@@ -151,10 +150,10 @@ class TestVivienMinusThree:
 class TestVivienUntargeted:
     def test_plus_one_activates_and_resolves(self):
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         vivien = VivienReid(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[vivien])
         game.phase = Phase.PRECOMBAT_MAIN
-        activate_loyalty_ability(game, p1, vivien, 0)   # +1, untargeted
+        activate_loyalty_ability(game, p1, vivien, 0)  # +1, untargeted
         assert vivien.loyalty == 6
-        resolve_stack(game)                             # empty library → no-op
+        resolve_stack(game)  # empty library → no-op

@@ -10,7 +10,6 @@ resolution, and dealt 1 damage.
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_195.card_impl import FanaticalFirebrand
 from engine.abilities import AbilityError
 from engine.card import Creature
@@ -18,7 +17,14 @@ from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
 from engine.types import Keyword, ManaCost, Zone
 from engine.zones import move_to_zone
-from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
+from test_utils import (
+    activate_card_ability,
+    resolve_stack,
+    set_board_state,
+)
+from test_utils import (
+    scenario_game as create_game,
+)
 
 
 def _bear(p, name="Bear"):
@@ -31,10 +37,13 @@ def _on_battlefield(game, obj):
 
 def _activate_targeting(game, player, source, target, *, target_zone=Zone.BATTLEFIELD.value):
     inst = game.refs.instance_id(target, target_zone)
-    player.start_intent("brand", Intent(
-        pattern=GameRef(card=frozenset({("name", source.name)})),
-        preferences=(Decision.obj(instance=inst),),
-    ))
+    player.start_intent(
+        "brand",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", source.name)})),
+            preferences=(Decision.obj(instance=inst),),
+        ),
+    )
     try:
         activate_card_ability(game, player, source)
     finally:
@@ -50,11 +59,6 @@ class TestFanaticalFirebrandProperties:
         assert {"Goblin", "Pirate"} <= card.subtypes
         assert Keyword.HASTE in card.keywords
 
-    def test_has_one_targeted_ability(self):
-        abilities = FanaticalFirebrand(owner=None).get_activated_abilities()
-        assert len(abilities) == 1
-        assert abilities[0].targeting is not None
-
 
 class TestFanaticalFirebrandAbility:
     def _setup(self):
@@ -67,35 +71,35 @@ class TestFanaticalFirebrandAbility:
         return game, p1, p2, brand, target
 
     def test_deals_damage_to_target_creature(self):
-        game, p1, p2, brand, target = self._setup()
+        game, p1, _p2, brand, target = self._setup()
         _activate_targeting(game, p1, brand, target)
         resolve_stack(game)
         assert target.damage_marked == 1
-        assert not _on_battlefield(game, brand)          # sacrificed as cost
+        assert not _on_battlefield(game, brand)  # sacrificed as cost
 
     def test_deals_damage_to_a_player(self):
         """Option-set invariant: "any target" includes players."""
-        game, p1, p2, brand, target = self._setup()
+        game, p1, p2, brand, _target = self._setup()
         _activate_targeting(game, p1, brand, p2)
         resolve_stack(game)
         assert p2.life == 19
 
     def test_cost_taps_and_sacrifices(self):
-        game, p1, p2, brand, target = self._setup()
+        game, p1, _p2, brand, target = self._setup()
         _activate_targeting(game, p1, brand, target)
         assert brand.is_tapped is True
         assert not _on_battlefield(game, brand)
         assert game.get_graveyard(p1).contains(brand)
 
     def test_target_captured_on_stack(self):
-        game, p1, p2, brand, target = self._setup()
+        game, p1, _p2, brand, target = self._setup()
         _activate_targeting(game, p1, brand, target)
         assert game.stack.peek().targets == [target]
 
     def test_source_off_battlefield_rejected_before_cost(self):
         """Legality invariant (can_activate): activating while the source is
         not on the battlefield is rejected before any cost is paid."""
-        game, p1, p2, brand, target = self._setup()
+        game, p1, _p2, brand, _target = self._setup()
         move_to_zone(game, brand, Zone.BATTLEFIELD, Zone.GRAVEYARD)
         with pytest.raises(AbilityError):
             activate_card_ability(game, p1, brand)

@@ -6,15 +6,14 @@ factory; this test drives a land-ETB event through the registered landfall
 trigger and pins the minted token's identity (subtypes, explicit green colour,
 base P/T, ``is_token``) so replay correlation keys it to the Elf Warrior grpId.
 """
+
 from __future__ import annotations
 
 from cards.fdn.fdn_103.card_impl import ElfswornGiant
 from engine.card import Land
-from engine.events import EntersBattlefieldTriggeredEvent
 from engine.protection import get_colors
-from engine.stack import priority_loop
 from engine.types import Color
-from test_utils import create_game, set_board_state
+from test_utils import scenario_game as create_game
 
 
 def _elf_warrior_tokens(game, player):
@@ -22,30 +21,27 @@ def _elf_warrior_tokens(game, player):
     return [
         o
         for o in bf.get_all()
-        if getattr(o, "is_token", False)
-        and getattr(o, "name", None) == "Elf Warrior"
+        if getattr(o, "is_token", False) and getattr(o, "name", None) == "Elf Warrior"
     ]
 
 
 class TestElfswornGiantToken:
     def test_landfall_mints_green_elf_warrior_token(self) -> None:
+        from engine.casting import play_land
+        from engine.types import Phase
+        from test_utils import enter_permanent, resolve_stack
+
         game = create_game()
         p1 = game.players[0]
-        giant = ElfswornGiant(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[giant])
-        giant.register_triggers(game)
-
-        land = Land(name="Forest", owner=p1, controller=p1)
-        game.trigger_manager.fire_event(
-            game,
-            EntersBattlefieldTriggeredEvent(permanent=land, controller=p1),
-        )
-        priority_loop(game)
-
+        enter_permanent(game, p1, ElfswornGiant())
+        land = Land(name="Forest", owner=p1)
+        game.get_hand(p1).add(land)
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
+        play_land(game, p1, land)
+        resolve_stack(game)
         tokens = _elf_warrior_tokens(game, p1)
         assert len(tokens) == 1
-        tok = tokens[0]
-        assert tok.subtypes == {"Elf", "Warrior"}
-        assert get_colors(tok) == {Color.GREEN}
-        assert (tok.base_power, tok.base_toughness) == (1, 1)
-        assert tok.is_token is True
+        token = tokens[0]
+        assert token.subtypes == {"Elf", "Warrior"}
+        assert get_colors(token) == {Color.GREEN}
+        assert (token.power, token.toughness) == (1, 1) and token.is_token

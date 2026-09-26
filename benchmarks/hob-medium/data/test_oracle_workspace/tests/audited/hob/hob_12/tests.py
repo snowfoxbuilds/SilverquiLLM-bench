@@ -1,5 +1,5 @@
 import pytest
-from engine.card import Creature
+from engine.card import Creature, Instant
 from engine.decisions import Decision
 from engine.game import exile
 from engine.types import Keyword, ManaType, Phase, Step, Zone
@@ -166,3 +166,41 @@ def test_returned_target_with_a_new_zone_stint_is_illegal():
     advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
     resolve_stack(game)
     assert not birds(game, p)
+
+
+class ProtectionSpell(Instant):
+    def __init__(self, target, color, **kwargs):
+        from engine.types import ManaCost
+
+        super().__init__(name="Protection response", mana_cost=ManaCost(), **kwargs)
+        self.target, self.color = target, color
+
+    def on_resolve(self, game):
+        from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer
+        from engine.protection import ProtectionAbility
+
+        def apply(state):
+            self.target.protections = [ProtectionAbility(self.color)]
+
+        game.effect_manager.add(
+            ContinuousEffect(
+                source=self, layer=Layer.ABILITY, apply=apply, duration=DURATION_END_OF_TURN
+            )
+        )
+
+
+@pytest.mark.parametrize("count", [1, 2])
+def test_protection_gained_in_response_invalidates_only_that_target(count):
+    from engine.casting import cast_spell as cast
+    from engine.types import Color
+    from test_utils import cast_card
+
+    game, p, card, targets = arrange(count == 2, count)
+    cast(game, p, card)
+    cast_card(game, p, ProtectionSpell(targets[0], Color.WHITE, owner=p), resolve=False)
+    resolve_stack(game)
+    assert game.get_battlefield(p).contains(targets[0])
+    assert all(p.zones[Zone.HAND].contains(c) for c in targets[1:])
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    resolve_stack(game)
+    assert len(birds(game, p)) == count - 1

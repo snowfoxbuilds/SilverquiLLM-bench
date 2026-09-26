@@ -118,15 +118,13 @@ def test_artifact_retains_sacrifice_ability():
 
 
 def test_reusing_one_ability_keeps_each_activations_paid_power():
-    from engine.abilities import ActivatedAbilityInstance, activate_ability
+    from engine.abilities import activate_ability
+    from test_utils import ability_instance
 
     game, p, card = arrange()
     small = bear(game, p, "Small", 1)
     large = bear(game, p, "Large", 4)
-    descriptor = card.get_activated_abilities()[0]
-    ability = ActivatedAbilityInstance(
-        source=card, controller=p, cost=descriptor.cost, effect=descriptor.effect
-    )
+    ability = ability_instance(game, p, card)
     fund(p, COLORLESS=2)
     prefer(p, object_preference(game, small))
     activate_ability(game, p, ability)
