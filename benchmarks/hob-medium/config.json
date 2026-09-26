@@ -8,7 +8,13 @@
     "extra_set_codes": []
   },
   "tier": "Beta",
-  "cards": [],
+  "cards": [
+    "12",
+    "36",
+    "70",
+    "131",
+    "169"
+  ],
   "leaderboard": {
     "requires_full_set": true,
     "requires_unfiltered": true

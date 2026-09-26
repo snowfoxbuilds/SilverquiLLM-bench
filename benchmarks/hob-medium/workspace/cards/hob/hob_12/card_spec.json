@@ -1,0 +1,16 @@
+{
+  "name": "The Eagles Are Coming!",
+  "mana_cost": "{1}{W}",
+  "type_line": "Instant",
+  "oracle_text": "Kicker {2}{W}{W} (You may pay an additional {2}{W}{W} as you cast this spell.)\nChoose target creature you own. If this spell was kicked, instead choose any number of target creatures you own. Return each chosen creature to your hand. At the beginning of the next upkeep, create a 4/4 white Bird Soldier creature token with flying for each creature returned to your hand this way.",
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Kicker"
+  ],
+  "rarity": "rare",
+  "set": "hob",
+  "collector_number": "12",
+  "mana_cost_str": "{1}{W}"
+}

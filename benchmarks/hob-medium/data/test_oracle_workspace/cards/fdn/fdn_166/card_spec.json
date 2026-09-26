@@ -1,0 +1,17 @@
+{
+  "name": "Time Stop",
+  "mana_cost": "{4}{U}{U}",
+  "type_line": "Instant",
+  "oracle_text": "End the turn. (Exile all spells and abilities, including this spell. The player whose turn it is discards down to their maximum hand size. Damage heals and \"this turn\" and \"until end of turn\" effects end.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "166",
+  "complexity_tier": "medium"
+}
