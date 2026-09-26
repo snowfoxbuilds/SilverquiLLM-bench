@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-09-03
+Last updated: 2026-09-26
 
 # Testing Conventions
 
@@ -175,15 +175,21 @@ Integration tests that spawn the CLI as a subprocess must use `[sys.executable, 
 **Bad:**
 
 ```python
-subprocess.run(["silverquillm", "run", "--image", ...])
+subprocess.run(["silverquillm", "run", "--build-output", ...])
 ```
 
 **Good:**
 
 ```python
 import sys
-subprocess.run([sys.executable, "-m", "silverquillm.cli", "run", "--image", ...])
+subprocess.run([sys.executable, "-m", "silverquillm.cli", "run", "--build-output", ...])
 ```
+
+### 9. Grade through the local stand-in; only integration tests reach Docker
+
+Grading runs candidate code in the grader container.
+Unit tests that reach grading inject `tests.grader_fixtures.local_grader()`, which interprets the exact container arguments without Docker; the suite's conftest fails any unit test that reaches the grader's Docker client.
+Tests that need a real daemon or grader image carry the `integration` marker, which the default run deselects.
 
 ---
 
@@ -201,6 +207,7 @@ Before committing any bench-authored test file (host-side or staged reference), 
 - [ ] `tmp_path` used for all filesystem operations
 - [ ] No background threads or timers left running after test
 - [ ] Integration tests invoke CLI as `[sys.executable, "-m", "silverquillm.cli", ...]`
+- [ ] Unit tests that reach grading inject `local_grader()`; Docker-backed tests are marked `integration`
 ---
 
 ## Enforcing These Conventions

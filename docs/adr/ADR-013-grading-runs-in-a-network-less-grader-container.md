@@ -31,3 +31,7 @@ Each Run Record states the grading isolation and grader image ID.
 
 - **Scrub the environment only**: removes inherited credentials but leaves the login secret file, the operator's files, and the network reachable. Rejected as a partial fix.
 - **Grade in the candidate's own image**: no extra image, but the grader's interpreter and pytest would be candidate-controlled. Rejected.
+
+## Relevant PRs
+
+- #85 — Grades candidate work and probes engine health only in the grader container.

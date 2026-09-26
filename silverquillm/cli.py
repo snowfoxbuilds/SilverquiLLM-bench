@@ -1517,8 +1517,10 @@ def rescore(run_id: str, cards: str | None) -> None:
     RUN_ID may be a bare run name (e.g. sos-copilot-claude-opus-4.6-2026-05-25T22-52)
     or a full path to the run directory. Rewrites eval_result.json,
     per-card cards/<cn>/result.json + postmortem.jsonl, and run_summary.json
-    in place. The agent's workspace_final/engine and cards/ are reused —
-    nothing is re-executed inside Docker.
+    in place. The agent's workspace_final/engine and cards/ are reused — the
+    agent is never rerun; grading runs in the grader container (ADR-013).
+    Engine regression now uses the authoritative test_utils in an isolated
+    copy, so scores can differ from the run's original grading.
     """
     run_dir = _resolve_prior_run(run_id)
     if not run_dir.is_dir():

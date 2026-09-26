@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-08-27
+Last updated: 2026-09-26
 
 # Agent Container System
 
@@ -375,12 +375,13 @@ The image name encodes the full configuration: agent, mode, and optionally the s
 
 ## Adding a New Agent
 
-To add a new agent to the benchmark:
+New agents are Karn constructs run through `silverquillm run` ([KARN-BENCHMARK-CONTRACT.md](KARN-BENCHMARK-CONTRACT.md)).
+The steps below describe the historical `--image` lineage, now under `silverquillm legacy`:
 
 1. Create `docker/{agent}-{mode}/Dockerfile` — install the agent CLI, bake in mode and prompt
 2. Create `docker/{agent}-{mode}/entrypoint.sh` — set up agent, invoke it, capture output
 3. Build: `docker build -t silverquillm-{agent}-{mode}:latest docker/{agent}-{mode}/`
-4. Run: `python -m silverquillm run --image silverquillm-{agent}-{mode}:latest --timeout 7200`
+4. Run: `python -m silverquillm legacy run-image --image silverquillm-{agent}-{mode}:latest --timeout 7200`
 No Python adapter code needed. The runner only knows about the file-based contract.
 
 ## Hello World Benchmark
@@ -397,7 +398,7 @@ This catches:
 Run before every real benchmark to avoid wasting hours on a broken image.
 
 ```bash
-python -m silverquillm smoke --image silverquillm-pi-blind:latest
+python -m silverquillm legacy smoke --image silverquillm-pi-blind:latest
 ```
 
 ## What This Tests (Beyond Code Generation)

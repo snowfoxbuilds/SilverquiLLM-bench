@@ -88,7 +88,7 @@ Deliberately excluded from every pool: Sagas and Vehicles (each a whole new subs
 - Runs use [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md): run spec = candidate + benchmark + budget (grilling 2026-09-26).
   Karn builds the immutable image and v4 Construct Definition before the run; the bench launches the candidate independently and grades its harvested implementation.
   No PR metadata, Implementer proposal, or production test/docs/lint gate is required.
-  The first scored HOB run uses this contract; the legacy entrypoint lineage remains ineligible.
+  HOB benchmarks run only through this contract: Candidate Bundle execution is removed, and the historical `silverquillm legacy` lineage stages SOS only.
 
 ## Repo layout
 

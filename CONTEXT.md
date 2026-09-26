@@ -55,7 +55,7 @@ _Avoid_: "foundation cards" (use "Foundations cards" or "base set")
 
 **Batch**
 
-One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (candidate ref + benchmark + budget; historical batches also select a mode). Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
+One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (Karn build output + construct + benchmark, with an optional Login Profile and budget). Historical Candidate Bundle batches (candidate ref + mode) are unsupported and never run. Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
 
 _Avoid_: "job" (the substrate's job dir is a different concept), "queue entry" for the file (a Batch holds several runs)
 
@@ -95,7 +95,7 @@ _Avoid_: "blind implementation" as a noun (deprecated — was `blind_impl.py`)
 
 **Candidate Bundle** *(legacy interchange format)*
 
-The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling (`theozolith candidate export`: `candidate.json` + generated `Dockerfile` + compiled knowledge tree + baked policy tree; `docs/specs/BENCH-CONTRACT.md`, `bundle_format_version` 2); the only thing `silverquillm run --candidate <path>` accepts (a bundle directory, or a checked-in `candidates/<slug>--<hash8>/` directory wrapping one under `bundle/`). Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle by TheOzolith's verifier (`silverquillm.candidate` consumes `verify_bundle`; the bench never reimplements the hash) — never trusted from a recorded value: a bundle whose recorded identity, or whose directory-name suffix, disagrees with the recomputed one is a hard refusal, as is a bundle carrying a secret value (#65). Adapter-agnostic by contract: the format never hardcodes the adapter set, and neither does the bench.
+The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling (`theozolith candidate export`: `candidate.json` + generated `Dockerfile` + compiled knowledge tree + baked policy tree; `docs/specs/BENCH-CONTRACT.md`, `bundle_format_version` 2); historically the only thing the removed Candidate Bundle run path accepted. Candidate Bundles are no longer executed; each historical `ozolith-v1` Run Record carries its vendored bundle. Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle by TheOzolith's verifier (`silverquillm.candidate` consumes `verify_bundle`; the bench never reimplements the hash) — never trusted from a recorded value: a bundle whose recorded identity, or whose directory-name suffix, disagrees with the recomputed one is a hard refusal, as is a bundle carrying a secret value (#65). Adapter-agnostic by contract: the format never hardcodes the adapter set, and neither does the bench.
 
 _Avoid_: "worker-type TOML" as the candidate input (a bare TOML is not self-contained — it references Config Repo siblings), "candidate config"
 
@@ -209,6 +209,11 @@ The immutable, benchmark-owned vocabulary of Player Decision kinds and attribute
 
 _Avoid_: "symbol" alone (collides with MTG mana symbols), "symbol set"
 
+**Grader Container**
+
+The network-less, bench-owned container in which every grading pass and engine-viability probe runs the candidate's code, so candidate code never executes on the benchmark host.
+It protects the host, not the integrity of the candidate's own score.
+
 **Hang Timeout**
 
 Secondary timeout that triggers when no monitored file activity (Docker pipe output, `/output/` files) occurs for a configurable period during a benchmark run. Catches catastrophic agent failures (process death, API outage, infinite loops) without false-positiving on long thinking pauses. CLI flag: `--hang-timeout`.
@@ -249,6 +254,7 @@ _Avoid_: "goal" / "policy" (rejected names), "answer script" (the V1 FIFO model 
 
 The builder that resolves Construct recipes and produces the images, Construct Definitions, and plugins used by a Benchmark Candidate.
 Karn is independent of Ozolith's runtime manager.
+SilverquiLLM takes only the construct contract from Karn and runs a completed build by itself.
 
 _Avoid_: "Ozolith" when referring to candidate building
 
@@ -302,19 +308,19 @@ A question an engine raises to a player: source (set of Player Decisions identif
 
 _Avoid_: "Question" (working name), "prompt" alone (one field of a query)
 
-**Promoted Candidate**
+**Promoted Candidate** *(historical)*
 
-A Benchmark Candidate checked into the bench repo's `candidates/<slug>--<hash8>/` by the promote script from the operator's private Config Repo: the worker-type definition with its base pinned by digest, the referenced knowledge and Agent Policy source trees vendored whole, the exported Candidate Bundle, and a README the operator completes (what the candidate varies). Vendor-at-promote is strict (#39 §4, the-ozolith ADR-0048): a referenced knowledge tree must exist and be declared publishable (a `PUBLISHABLE` marker at its root) or the candidate cannot be promoted and its results cannot be published. The Reference Candidates are the promoted candidates that vary nothing.
+A Benchmark Candidate checked into the bench repo's `candidates/<slug>--<hash8>/` by the promote script from the operator's private Config Repo: the worker-type definition with its base pinned by digest, the referenced knowledge and Agent Policy source trees vendored whole, the exported Candidate Bundle, and a README the operator completes (what the candidate varies). Vendor-at-promote is strict (#39 §4, the-ozolith ADR-0048): a referenced knowledge tree must exist and be declared publishable (a `PUBLISHABLE` marker at its root) or the candidate cannot be promoted and its results cannot be published. The Reference Candidates are the promoted candidates that vary nothing. Promotion and the `candidates/` tree were removed with Candidate Bundle execution.
 
 _Avoid_: "imported candidate", "registered candidate" (nothing is registered — the directory is discovered)
 
-**Published Result**
+**Published Result** *(historical)*
 
-A Run Record (`manifest.json` + `scores.json`, byte for byte) ported from the private Results Repo into the bench repo's public `published/` tree by the publish script — as one transaction: all requested records appear or none — and committed by the operator — the commit is the approval stamp. Publishable only when traceable: its candidate identity is a Promoted Candidate that verifies by recomputation (hard refusal otherwise). A record with `leaderboard_valid: false` may be published at the operator's discretion (warning, `--allow-invalid`) and can never enter a leaderboard, because tooling filters on the flag. Discovered by manifest, never by path convention; the organization of `published/` is manual.
+A Run Record (`manifest.json` + `scores.json`, byte for byte) ported from the private Results Repo into the bench repo's public `published/` tree by the publish script — as one transaction: all requested records appear or none — and committed by the operator — the commit is the approval stamp. Publishable only when traceable: its candidate identity is a Promoted Candidate that verifies by recomputation (hard refusal otherwise). A record with `leaderboard_valid: false` may be published at the operator's discretion (warning, `--allow-invalid`) and can never enter a leaderboard, because tooling filters on the flag. Discovered by manifest, never by path convention; the organization of `published/` is manual. The publish path was removed with Candidate Bundle execution before any result was published.
 
 _Avoid_: "leaderboard entry" (a leaderboard is a derivation over Published Results, future work), "exported result"
 
-**Reference Candidate**
+**Reference Candidate** *(historical)*
 
 One of the public vanilla candidates checked in under `candidates/` (#65): `vanilla-claude` and `vanilla-codex` — the stock TheOzolith run image for the adapter, no setup, no knowledge, no Agent Policy, the adapter's default model spelled as its most-pinned provider ID, the model's default effort. They vary nothing: the fixed points every operator can run (smoke, calibration, Pipeline Validation Runs) and compare against. Pi joins when its adapter exists.
 

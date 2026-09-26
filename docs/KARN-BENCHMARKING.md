@@ -1,8 +1,8 @@
 # Karn benchmarking
 
-Build once, select a local subscription login, and collect benchmark data with the `silverquillm karn` commands.
+Build once, select a local subscription login, and collect benchmark data with the `silverquillm` commands.
 Python 3.13 is required by the current stock login-plugin wheel closure.
-The installed benchmark package needs Docker and its own Python dependencies; Karn is used separately to build the candidate.
+The installed benchmark package needs Docker and its own Python dependencies; Karn is used separately to build the candidate, and no Ozolith package is involved.
 
 ## Build and enroll
 
@@ -11,7 +11,7 @@ It carries no custom skills or polling controller.
 
 ```bash
 karn build examples/karn --worktree --out /tmp/bench-codex-build
-silverquillm karn login benchmark --build-output /tmp/bench-codex-build --construct bare-codex
+silverquillm login benchmark --build-output /tmp/bench-codex-build --construct bare-codex
 ```
 
 `--worktree` explicitly builds the supplied example files and records the producer's dirty-source provenance.
@@ -23,13 +23,25 @@ A direct run refuses a login another runner holds (`login_in_use`) without creat
 
 A run interrupted while its login was mounted leaves a pending refresh that only the plugin artifact which mounted it may settle.
 Switching to a build with a different login plugin then fails with `login_recovery_requires_previous_plugin`.
-Settle it first with `silverquillm karn recover RUN_ID`, naming the run in `<state-root>/logins/<profile>/active.json`; recovery uses that run's retained plugin artifact.
+Settle it first with `silverquillm recover RUN_ID`, naming the run in `<state-root>/logins/<profile>/active.json`; recovery uses that run's retained plugin artifact.
+
+## Build the grader
+
+```bash
+silverquillm grader build
+```
+
+Grading imports and runs the agent's engine and cards, so it happens only in this bench-owned image: pinned base image and hashed pytest requirements, no network, your UID, a read-only root, dropped capabilities, memory and process limits, and read-only mounts of only the selected workspace, SilverquiLLM, and the grading inputs.
+`run`, `scheduler`, and `recover` refuse before launch with `grader_image_unavailable` when the image is missing; they never build or pull it.
+`--grader-image` (or `SILVERQUILLM_GRADER_IMAGE`) selects another local tag, and `--grading-timeout` (default 3600 seconds) bounds a grading pass.
+A timed-out or failed grading pass records absent scores with `grading_container_failed:<reason>`, never zero, and each record's `grading_isolation` names the grader image ID.
+Isolation protects the host, not score integrity: candidate code shares the pytest process that counts its results.
 
 ## Run and inspect
 
 ```bash
-silverquillm karn run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --login benchmark --results-repo ./private-results
-silverquillm karn run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --login benchmark --results-repo ./private-results
+silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --login benchmark --results-repo ./private-results
+silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --login benchmark --results-repo ./private-results
 ```
 
 Use `--bench-root` when launching outside the benchmark checkout.
@@ -77,9 +89,9 @@ budget_seconds = 86400
 ```
 
 ```bash
-silverquillm karn scheduler --once --replay-without-state hob-learning --results-repo ./private-results
-silverquillm karn queue
+silverquillm scheduler --once --replay-without-state hob-learning --results-repo ./private-results
 silverquillm queue ls
+silverquillm top
 ```
 
 The first invocation acknowledges the missing state for that one new batch.
@@ -96,15 +108,22 @@ The index and queue expose `recovery_of` and `execution_run_id` so this addition
 Each host maintains its own queue and login state.
 A scheduler interrupted before a run wrote its `run-input.json` never launched that run; the entry is recorded as failed with `interrupted_before_launch` and the batch continues.
 
-`silverquillm karn recover RUN_ID` recovers a direct run the same way, from its retained artifacts and without the candidate image.
+`silverquillm recover RUN_ID` recovers a direct run the same way, from its retained artifacts and without the candidate image.
 It refuses a run whose container is still running unless `--stop` is given, and refuses a run another process is still executing.
 Recovering an already recovered run returns the existing record.
 SIGTERM and SIGHUP interrupt `run`, `scheduler`, and `recover` like Ctrl-C, so the workload is stopped and the interrupted outcome recorded.
 Record writes wait up to 120 seconds for concurrent writers; on timeout the record stays in the run directory as `run-record.json`, and `recover` (or the scheduler's next start) writes it.
 
+## Reading results
+
+- The stub workspace already passes 14 of hob-medium's 69 target cases, so read card correctness against that floor.
+- `fdn_regression.complete` is always false on hob-medium because the coverage ledger lists uncovered FDN cards; filter on the coverage fields instead.
+- The Test Harvester reads only records that point into the historical `docker/` tree, so Karn records do not yet feed agent-test promotion.
+
 ## Historical records
 
-Schema 1 records and their identities keep their existing meaning.
+Schema 1 records and their identities, including `legacy` and `ozolith-v1`, keep their existing meaning and stay readable without Ozolith; every `ozolith-v1` record carries its vendored bundle.
 The shared reader and index accept both schemas; new rows do not invent a historical mode or leaderboard flag.
-Legacy Candidate Bundle execution and publication use the optional `legacy` dependency extra.
-The historical publication command reports that schema 2 records are outside its format; this has no effect on collecting, retaining, or analyzing new run data.
+Candidate Bundles can no longer be run, promoted, or published; rebuild an old candidate as a Karn construct to run it again.
+Batch files and state in the Candidate Bundle format are shown as unsupported and never run or rewritten.
+The historical `--image` lineage remains under `silverquillm legacy`; `legacy rescore` grades with the authoritative `test_utils` in an isolated copy, so re-grading an old run can change its numbers without touching stored records.

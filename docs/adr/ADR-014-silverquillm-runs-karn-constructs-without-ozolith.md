@@ -15,7 +15,7 @@ SilverquiLLM takes a completed Karn build (a v4 Construct Definition and its exa
 The Karn construct contract, vendored as the v4 schema, is the only thing taken from Karn; no command, module or retained script in the default install imports a `theozolith-*` package, and a test refuses such an import anywhere.
 
 Candidate Bundle execution is removed: its run driver, job-directory staging, Output Proposal handling, contract pin, bundle ingestion, batch scheduler, promotion and publication scripts, and the checked-in `candidates/` tree.
-The Karn commands own the top level (`run`, `scheduler`, `login`, `queue ls`, `top`).
+The Karn commands own the top level (`run`, `scheduler`, `login`, `recover`, `queue ls`, `top`, and `grader build`).
 The pre-Karn `--image` entrypoint lineage, which never depended on Ozolith, stays available under `silverquillm legacy` for its historical run directories.
 
 Historical evidence keeps its meaning: schema 1 Run Records, including `legacy` and `ozolith-v1` identities, stay readable without Ozolith, and every `ozolith-v1` record carries its vendored bundle.

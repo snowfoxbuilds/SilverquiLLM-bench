@@ -11,7 +11,7 @@ run — staged, driven, harvested, evaluated — without waiting on a full HOB p
   candidate, harvests `workspace_final/`, and scores the three audited dimensions
   end-to-end.
 - **Candidate calibration**: a fast, low-cost target to sanity-check a new
-  Candidate Bundle before spending a real HOB run on it.
+  Karn construct before spending a real HOB run on it.
 
 It **replaces** the retired card-subset ("workload") / filtered runs: cheap
 validation is a dedicated benchmark, not a partial run of a real one
@@ -24,7 +24,7 @@ The smoke benchmark is run **like any other benchmark** (one container session
 over its whole problem set, one Workspace), but its results never enter a
 leaderboard.
 
-Distinct from the `silverquillm smoke` **command**, which is container-boot
+Distinct from the historical `silverquillm legacy smoke` **command**, which is container-boot
 validation only (a synthetic workspace, no real cards) — see
 RUN-ARTIFACTS-AND-TELEMETRY.md → Smoke runs.
 
