@@ -12,6 +12,7 @@ dependencies = [
     "requests",
     "pyyaml",
     "click",
+    "jsonschema>=4.18",
     # TheOzolith's published packages: the bench CONSUMES its Run Contract
     # entry points (theozolith_worker.api) and its Candidate Bundle verifier
     # (theozolith_control.candidate — export, verify_bundle, the verified
@@ -53,6 +54,7 @@ include = ["silverquillm*"]
 # job dir's input/prompt.md now comes from the production prompt renderer, so
 # there are no bench-side task templates to package.)
 silverquillm = ["results_repo_templates/*.md"]
+"silverquillm.karn" = ["*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
