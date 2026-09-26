@@ -37,6 +37,7 @@ from silverquillm._bootstrap import ensure_workspace_on_path
 # resolve in the CLI process and in subprocesses that inherit our env.
 ensure_workspace_on_path()
 
+from silverquillm import untrusted_git
 from silverquillm.card_loader import load_all_card_specs
 from silverquillm.card_names import build_card_name_map
 from silverquillm.replay.cli import validate as _replay_validate
@@ -358,33 +359,16 @@ def _make_snapshot_callback(workspace: Path, run_dir: Path) -> Callable[[], None
         # from the staged baseline. stage_workspace() git-inits + commits
         # the workspace, so `git status --porcelain` reports anything the
         # agent touched (modified-tracked + new untracked). We filter to
-        # the two file groups that meaningfully represent agent work.
-        try:
-            # --untracked-files=all expands untracked directories so each
-            # contained file is reported individually (needed to catch a
-            # new card_impl.py in a brand-new card dir).
-            status = subprocess.run(
-                ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
-                cwd=workspace,
-                capture_output=True,
-                text=True,
-                timeout=5,
-                check=False,
-            )
-            paths = (
-                [p for p in status.stdout.split("\0") if p]
-                if status.returncode == 0
-                else []
-            )
-            # Porcelain v1 prefixes each entry with a two-char status + space.
-            files_changed = sum(
-                1
-                for entry in paths
-                for path in [entry[3:] if len(entry) > 3 else entry]
-                if path.endswith("/card_impl.py") or path.startswith("engine/")
-            )
-        except (OSError, subprocess.SubprocessError):
-            files_changed = 0
+        # the two file groups that meaningfully represent agent work. The
+        # agent owns .git/config, so status runs through untrusted_git.
+        paths = untrusted_git.status_paths(workspace) or []
+        # Porcelain v1 prefixes each entry with a two-char status + space.
+        files_changed = sum(
+            1
+            for entry in paths
+            for path in [entry[3:] if len(entry) > 3 else entry]
+            if path.endswith("/card_impl.py") or path.startswith("engine/")
+        )
         record = {
             "ts": datetime.now(tz=UTC).isoformat(timespec="milliseconds"),
             "snapshot_index": idx,

@@ -45,6 +45,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from silverquillm import untrusted_git
+
 
 class GradedBenchmark(Protocol):
     """What grading reads from a benchmark (``silverquillm.karn.benchmark.Benchmark``)."""
@@ -593,12 +595,14 @@ def _prepare_engine_work(
             # inside the staging copy. Using cwd= avoids `git apply`'s
             # "invalid path" rejection of absolute --directory targets
             # outside a git working tree.
+            # The patch is candidate-derived: git reads no config beyond the host's overrides.
             subprocess.run(
-                ["git", "apply", "-p1", str(patch_file)],
+                ["git", *untrusted_git.OVERRIDES, "apply", "-p1", str(patch_file)],
                 check=True,
                 capture_output=True,
                 text=True,
                 cwd=str(staging / "engine"),
+                env=untrusted_git.environment(staging),
             )
         except subprocess.CalledProcessError as exc:
             shutil.rmtree(staging, ignore_errors=True)
