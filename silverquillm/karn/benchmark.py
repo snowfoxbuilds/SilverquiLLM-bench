@@ -72,12 +72,8 @@ def stage_benchmark(benchmark: Benchmark, destination: Path) -> tuple[str, dict]
             targets.append(str(directory.relative_to(destination)))
     if len(targets) != len(selected):
         raise KarnError("benchmark_selected_cards_missing")
-    instruction = benchmark.root / "instructions.md"
-    guidance = (
-        instruction.read_text()
-        if instruction.is_file()
-        else "Read the Workspace guidance and each selected card's instructions.md when present."
-    )
+    # Benchmark guidance ships inside the Workspace (e.g. hob-medium's workspace/instructions.md).
+    guidance = "Read the Workspace guidance and each selected card's instructions.md when present."
     prompt = (
         f"Implement the selected cards for {benchmark.id} in your Workspace.\n\n"
         + "\n".join("- " + target for target in targets)
