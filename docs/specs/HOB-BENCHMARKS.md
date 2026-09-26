@@ -140,4 +140,4 @@ Oracle-first audited tests are the sole scored method for all three tiers (Audit
 | [ADR-009](../adr/ADR-009-resume-reads-prefer-run-time-artifacts-over-harvest-time-artifacts.md) | Resume Reads Prefer Run-Time Artifacts Over Harvest-Time Artifacts |
 | [ADR-010](../adr/ADR-010-test-oracle-workspace-uses-independent-engine.md) | Oracle mechanics use an independent engine while tests remain portable across implementations |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |
-| [ADR-0012](../adr/ADR-0012-independent-host-for-karn-benchmark-candidates.md) | Independent execution of prebuilt Karn candidates |
+| [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Independent execution of prebuilt Karn candidates |

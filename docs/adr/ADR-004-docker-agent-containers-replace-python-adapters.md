@@ -48,4 +48,4 @@ Python adapters, per-card workspaces, strategy classes, harness-managed rounds, 
 ## Amendments
 
 - **2026-09-03**: Clarified that the agent's engine modifications are harvested from `/workspace/engine/`, edited in place — there is no separate `engine_work/` directory (aligns with ADR-005).
-- **2026-09-26**: Applied the Karn image/definition boundary and selected authentication facilities, with benchmark-owned instruction data. Container isolation and implementation harvesting remain; [ADR-0012](ADR-0012-independent-host-for-karn-benchmark-candidates.md) records the independent v4 host decision.
+- **2026-09-26**: Applied the Karn image/definition boundary and selected authentication facilities, with benchmark-owned instruction data. Container isolation and implementation harvesting remain; [ADR-012](ADR-012-independent-host-for-karn-benchmark-candidates.md) records the independent v4 host decision.

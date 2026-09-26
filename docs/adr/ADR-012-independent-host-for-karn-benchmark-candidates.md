@@ -1,7 +1,7 @@
 Status: ACCEPTED
 Date: 2026-09-26
 
-# ADR-0012: Execute Karn Candidates through an Independent Benchmark Host
+# ADR-012: Execute Karn Candidates through an Independent Benchmark Host
 
 ## Context
 
@@ -37,3 +37,14 @@ The bench never rebuilds a recipe implicitly when a queued run starts, and build
 ## Amendments
 
 - **2026-09-26**: Recorded the landed producer support for controller-free Automatons, verified by a real bare Codex build with only its login plugin.
+- **2026-09-26 (#85)**: Renumbered from ADR-0012 to the repository's three-digit ADR sequence; the decision is unchanged.
+
+## Relevant PRs
+
+- #79 — Karn v4 benchmark design: the consumer contract, this decision, and the hob-medium plan.
+- #80 — v4 Construct Definition and exact-image intake from completed Karn build output.
+- #81 — The independent Docker host, restricted egress, and the Codex login plugin lifecycle.
+- #82 — The hob-medium Test Oracle Workspace, oracles, and audited tests.
+- #83 — Native Codex Agent Turns and API-equivalent Estimated Cost.
+- #84 — Public-gameplay grading for hob-medium and FDN regression.
+- #85 — CLI, batches, immutable schema 2 records, and interrupted-run recovery.

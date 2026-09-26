@@ -131,4 +131,4 @@ Discovery of published results goes through manifests only, never a path convent
 | --- | --- |
 | [ADR-008](../adr/ADR-008-resume-legs-are-independent-benchmark-runs.md) | Resume Legs Are Independent Benchmark Runs — why a Resume Leg is never leaderboard-valid, and so publishes only with `--allow-invalid` |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking — Released → Benchmarking retracts published scores |
-| [ADR-0012](../adr/ADR-0012-independent-host-for-karn-benchmark-candidates.md) | The independent v4 consumer has a separate execution and observation contract |
+| [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | The independent v4 consumer has a separate execution and observation contract |

@@ -173,4 +173,4 @@ This consumer contract governs Karn v4 execution.
 | --- | --- |
 | [ADR-004](../adr/ADR-004-docker-agent-containers-replace-python-adapters.md) | The host stages, launches, harvests, and evaluates isolated candidates |
 | [ADR-005](../adr/ADR-005-in-place-workspace-engine-with-snapshot-fallback.md) | Preserve final Workspace and snapshot/fallback evidence |
-| [ADR-0012](../adr/ADR-0012-independent-host-for-karn-benchmark-candidates.md) | Karn builds candidates and an independent bench host executes their declared contract |
+| [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Karn builds candidates and an independent bench host executes their declared contract |
