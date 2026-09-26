@@ -41,6 +41,7 @@ DEFAULT_GRADING_TIMEOUT = 3600
 PROBE_TIMEOUT = 60
 SUITE_TIMEOUT = 60
 MAX_EVALUATION_BYTES = 1024 * 1024
+MAX_TEST_COUNT = 10**9
 STDERR_TAIL_BYTES = 4096
 IMAGE_CONTEXT = Path(__file__).with_name("grader_image")
 PACKAGE_ROOT = "/opt/sq"
@@ -374,7 +375,10 @@ NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 
 def _counts(value: dict) -> tuple[int, int, int]:
     counts = tuple(value[key] for key in ("tests_passed", "tests_failed", "tests_total"))
-    if any(type(count) is not int or count < 0 for count in counts) or counts[2] != sum(counts[:2]):
+    if (
+        any(type(count) is not int or not 0 <= count < MAX_TEST_COUNT for count in counts)
+        or counts[2] != sum(counts[:2])
+    ):
         raise GraderError("evaluation_invalid_counts")
     rate = value["pass_rate"]
     if type(rate) not in (int, float) or not math.isfinite(rate) or not 0 <= rate <= 1:

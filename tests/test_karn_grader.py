@@ -131,6 +131,10 @@ def test_valid_output_round_trips_and_rates_are_recomputed():
         lambda v: v["engine_result"].update(tests_passed=-1),
         lambda v: v["engine_result"].update(tests_total=9),
         lambda v: v["engine_result"].update(tests_passed=True),
+        lambda v: v["engine_result"].update(tests_passed=10**9, tests_total=10**9),
+        lambda v: v["sos_results"]["hob_12"].update(
+            tests_passed=10**4299, tests_failed=0, tests_total=10**4299, test_nodes=[]
+        ),
         lambda v: v["sos_results"]["hob_12"].update(collector_number="hob_13"),
         lambda v: v["sos_results"]["hob_12"].update(
             test_nodes=[{"test_node": "x", "outcome": "ok"}]
@@ -317,3 +321,23 @@ def test_legacy_evaluation_mounts_only_run_inputs_and_keeps_patch_errors(tmp_pat
     assert {"/grade/legacy/workspace/cards", "/grade/legacy/workspace/engine"} <= targets
     assert "/grade/run" not in targets
     assert not any("operator-notes" in value for value in arguments)
+
+
+def test_counts_too_large_to_record_still_produce_a_record_without_scores(tmp_path):
+    """Scores that cannot be serialized fail inside the grading guard, not at the record write."""
+    huge = FullEvalResult(
+        sos_results={
+            key: CardResult(
+                collector_number=key, tests_passed=10**4299, tests_total=10**4299, pass_rate=1.0
+            )
+            for key in [f"hob_{number}" for number in range(10)]
+        },
+        engine_result=EngineResult(tests_passed=1, tests_total=1, pass_rate=1.0),
+    )
+    opts = options(tmp_path, grader=local_grader(), evaluator=lambda *a, **k: huge)
+    record = run_benchmark(**opts)
+    assert record.run_metadata["collection_error"] == {"stage": "grading", "reason": "KarnError"}
+    for score in record.scores.values():
+        assert not score["evaluated"]
+        assert score["missing_reasons"] == ["collection_failed:grading"]
+    assert (opts["results_dir"] / record.run_id / "run-record.json").is_file()
