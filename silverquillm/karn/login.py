@@ -19,13 +19,16 @@ import tempfile
 import threading
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+
+from silverquillm.safe_files import TreeLimitExceeded, iter_regular_files, open_directory
 
 from .definition import KarnError, PluginArtifact, canonical, read_regular, strict_json
 
 MAX_MESSAGE = 1024 * 1024
 NATIVE_PRESERVED = "native-preserved"
 MAX_NATIVE_BYTES = 128 * 1024 * 1024
+MAX_NATIVE_FILES = 10_000
 
 
 class LoginInUseError(KarnError):
@@ -409,21 +412,27 @@ def _mounted_run(profile: LoginProfile) -> str | None:
     return value.get("run_id") if isinstance(value, dict) else None
 
 
-def preserve_pending_native(profile: LoginProfile) -> dict | None:
+def _is_rollout(path: PurePosixPath) -> bool:
+    return path.name.startswith("rollout-") and path.name.endswith(".jsonl")
+
+
+def preserve_pending_native(
+    profile: LoginProfile, stop_and_confirm: Callable[[str, str], None]
+) -> dict | None:
     """Copy a pending run's native session journals, never auth, into that run's own evidence.
 
     Called under profile.exclusive before recover_login settles the pending run, because
     settling clears the plugin's work directory. State is attributed to the pending run only
-    when the journal and the plugin's mounted.json name the same run.
+    when the journal and the plugin's mounted.json name the same run, and is read only once
+    that run's container is confirmed stopped, through descriptors that follow no link.
     """
     pending = profile.pending()
     if pending is None:
         return None
     run_id = pending.get("run_id")
     outcome = {"run_id": run_id, "preserved": False, "reason": None}
-    sessions = profile.state / "work" / "sessions"
     evidence = pending.get("evidence_dir")
-    if _mounted_run(profile) != run_id or sessions.is_symlink() or not sessions.is_dir():
+    if _mounted_run(profile) != run_id:
         outcome["reason"] = "native_state_unavailable"
         return outcome
     if not isinstance(evidence, str) or not Path(evidence).is_dir():
@@ -433,25 +442,32 @@ def preserve_pending_native(profile: LoginProfile) -> dict | None:
     if target.exists():
         outcome["preserved"] = True
         return outcome
+    try:
+        stop_and_confirm(pending["container_name"], run_id)
+    except (KarnError, KeyError):
+        outcome["reason"] = "native_state_container_not_stopped"
+        return outcome
+    try:
+        sessions = open_directory(profile.state, ("work", "sessions"))
+    except OSError:
+        outcome["reason"] = "native_state_unavailable"
+        return outcome
     temporary = Path(tempfile.mkdtemp(prefix=".native-", dir=evidence))
     try:
-        consumed = 0
-        for directory, names, files in os.walk(sessions, followlinks=False):
-            names[:] = [name for name in names if not (Path(directory) / name).is_symlink()]
-            for name in sorted(files):
-                if not name.startswith("rollout-") or not name.endswith(".jsonl"):
-                    continue
-                source = Path(directory) / name
-                content = read_regular(source, limit=MAX_NATIVE_BYTES - consumed)
-                consumed += len(content)
-                destination = temporary / "sessions" / source.relative_to(sessions)
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(content)
+        for relative, content in iter_regular_files(
+            sessions, accept=_is_rollout, max_files=MAX_NATIVE_FILES, max_bytes=MAX_NATIVE_BYTES
+        ):
+            destination = temporary / "sessions" / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(content)
         os.rename(temporary, target)
         outcome["preserved"] = True
-    except (KarnError, OSError):
+    except TreeLimitExceeded:
+        outcome["reason"] = "native_state_limit_exceeded"
+    except OSError:
         outcome["reason"] = "native_state_copy_failed"
     finally:
+        os.close(sessions)
         if temporary.exists():
             shutil.rmtree(temporary)
     return outcome

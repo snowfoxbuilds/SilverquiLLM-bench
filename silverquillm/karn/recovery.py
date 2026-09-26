@@ -221,7 +221,7 @@ def _recover(
                     raise KarnError("recovery_login_plugin_missing")
                 python = install_plugin(artifact, host.plugin_cache)
                 with PluginProcess(artifact, python, profile) as plugin:
-                    stale = preserve_pending_native(profile)
+                    stale = preserve_pending_native(profile, host.docker.stop_and_confirm)
                     recover_login(
                         profile,
                         plugin,

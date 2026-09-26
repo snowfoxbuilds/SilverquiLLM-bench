@@ -399,7 +399,7 @@ class DockerHost:
                     plugin = lifecycle.enter_context(
                         PluginProcess(artifact, executable, login_profile)
                     )
-                    stale = preserve_pending_native(login_profile)
+                    stale = preserve_pending_native(login_profile, self.docker.stop_and_confirm)
                     if stale is not None and stale["reason"] not in (
                         None,
                         "native_state_unavailable",
