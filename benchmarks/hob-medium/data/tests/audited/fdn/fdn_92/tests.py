@@ -12,10 +12,9 @@ from __future__ import annotations
 
 from cards.fdn.fdn_92.card_impl import RiteOfTheDragoncaller
 from engine.card import Instant
-from engine.events import SpellCastTriggeredEvent
 from engine.protection import get_colors
 from engine.types import Color, Keyword, ManaCost
-from test_utils import create_game, set_board_state
+from test_utils import cast_card, create_game, enter_permanent
 
 
 def _dragons(game, player):
@@ -27,15 +26,8 @@ def _dragons(game, player):
     ]
 
 
-def _cast_instant(game, p1) -> None:
-    """Fire the cast event for an instant spell and resolve the trigger."""
-    from engine.stack import priority_loop
-
-    spell = Instant(name="Some Instant", owner=p1, controller=p1)
-    game.trigger_manager.fire_event(
-        game, SpellCastTriggeredEvent(spell=spell, player=p1)
-    )
-    priority_loop(game)
+def _cast_instant(game, p1):
+    cast_card(game, p1, Instant(name="Some Instant", owner=p1))
 
 
 class TestRiteOfTheDragoncallerProperties:
@@ -50,8 +42,7 @@ class TestRiteOfTheDragoncallerToken:
         game = create_game()
         p1 = game.players[0]
         rite = RiteOfTheDragoncaller()
-        set_board_state(game, 0, battlefield=[rite])
-        rite.register_triggers(game)
+        enter_permanent(game, p1, rite)
 
         _cast_instant(game, p1)
 

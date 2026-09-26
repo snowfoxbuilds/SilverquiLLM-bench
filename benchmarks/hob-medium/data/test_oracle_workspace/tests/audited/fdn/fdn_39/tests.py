@@ -16,7 +16,7 @@ from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
 from engine.types import ManaCost, Phase, Zone
 from engine.zones import move_to_zone
-from test_utils import create_game, resolve_stack, set_board_state
+from test_utils import create_game, enter_permanent, resolve_stack, set_board_state
 
 
 def _bear(name: str = "Bear") -> Creature:
@@ -49,9 +49,9 @@ def _setup():
     game.active_player_index = 0
     kraken = GrapplingKraken(owner=p1, controller=p1)
     opp = _bear("Opp Bear")
-    set_board_state(game, 0, battlefield=[kraken])
+    set_board_state(game, 0, battlefield=[])
     set_board_state(game, 1, battlefield=[opp])
-    kraken.register_triggers(game)  # normally wired by move_to_zone on ETB
+    enter_permanent(game, p1, kraken)  # normally wired by move_to_zone on ETB
     game.phase = Phase.PRECOMBAT_MAIN
     return game, p1, p2, kraken, opp
 
@@ -67,10 +67,10 @@ class TestGrapplingKrakenProperties:
 
 class TestGrapplingKrakenLandfall:
     def test_landfall_taps_and_stuns_opponent_creature(self):
-        game, p1, p2, kraken, opp = _setup()
+        game, p1, _p2, _kraken, opp = _setup()
         assert opp.is_tapped is False
         _prefer(game, p1, "Grappling Kraken", opp)
-        _trigger_landfall(game, p1)          # pushes the landfall trigger
+        _trigger_landfall(game, p1)  # pushes the landfall trigger
         assert not game.stack.is_empty()
         resolve_stack(game)
         p1.end_intent("kraken")
@@ -82,11 +82,11 @@ class TestGrapplingKrakenLandfall:
         """Option-set invariant: with no opponent creature there is no legal
         target — landfall resolves doing nothing (no query, no error)."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         game.active_player_index = 0
         kraken = GrapplingKraken(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[kraken])
-        kraken.register_triggers(game)
+        set_board_state(game, 0, battlefield=[])
+        enter_permanent(game, p1, kraken)
         game.phase = Phase.PRECOMBAT_MAIN
 
         _trigger_landfall(game, p1)
@@ -95,7 +95,7 @@ class TestGrapplingKrakenLandfall:
     def test_landfall_only_from_your_own_land(self):
         """The trigger condition ignores a land an opponent plays — only *your*
         land's entry triggers landfall, so the opponent creature stays untapped."""
-        game, p1, p2, kraken, opp = _setup()
+        game, _p1, p2, _kraken, opp = _setup()
         # An opponent land entering must not fire the Kraken's landfall.
         _trigger_landfall(game, p2)
         assert game.stack.is_empty()

@@ -1,16 +1,4 @@
-"""Reference test for FDN 15 — Hare Apparent.
-
-Illustrative test covering a **self-referential ETB token multiplier**: on
-entry, the creature counts the *other* creatures you control that share its
-name and mints that many 1/1 white Rabbit tokens. ``on_resolve`` is the
-engine's enters-the-battlefield hook for a creature spell, so these tests
-drive it directly (the isolated postcondition style) and also once through
-the full cast pipeline (the real resolution path).
-
-Note: engine-minted tokens carry no grpId identity, so the replay layer's
-Rabbit-token zone divergences persist until the token-correlation phase —
-what this card fixes is the ETB firing and the MISSING_CARD entries clearing.
-"""
+"""Hare Apparent counts other friendly Hares through actual cast and entry."""
 
 from __future__ import annotations
 
@@ -26,8 +14,7 @@ def _rabbit_tokens(game, player) -> list:
     return [
         obj
         for obj in game.get_battlefield(player).get_all()
-        if getattr(obj, "name", None) == "Rabbit"
-        and "Rabbit" in getattr(obj, "subtypes", set())
+        if getattr(obj, "name", None) == "Rabbit" and "Rabbit" in getattr(obj, "subtypes", set())
     ]
 
 
@@ -60,9 +47,9 @@ class TestHareApparentEtb:
         game = create_game()
         p1 = game.players[0]
         hare = HareApparent(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[hare])
+        set_board_state(game, 0, hand=[hare], mana={ManaType.WHITE: 2})
 
-        hare.on_resolve(game)
+        cast_spell(game, 0, "Hare Apparent")
 
         assert _rabbit_tokens(game, p1) == []
 
@@ -72,9 +59,11 @@ class TestHareApparentEtb:
         entering = HareApparent(owner=p1, controller=p1)
         other1 = HareApparent(owner=p1, controller=p1)
         other2 = HareApparent(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[entering, other1, other2])
+        set_board_state(
+            game, 0, battlefield=[other1, other2], hand=[entering], mana={ManaType.WHITE: 2}
+        )
 
-        entering.on_resolve(game)
+        cast_spell(game, 0, "Hare Apparent")
 
         assert len(_rabbit_tokens(game, p1)) == 2
 
@@ -84,16 +73,17 @@ class TestHareApparentEtb:
         p1, p2 = game.players
         entering = HareApparent(owner=p1, controller=p1)
         mine = HareApparent(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[entering, mine])
+        set_board_state(game, 0, battlefield=[mine], hand=[entering], mana={ManaType.WHITE: 2})
         set_board_state(
-            game, 1,
+            game,
+            1,
             battlefield=[
                 HareApparent(owner=p2, controller=p2),
                 HareApparent(owner=p2, controller=p2),
             ],
         )
 
-        entering.on_resolve(game)
+        cast_spell(game, 0, "Hare Apparent")
 
         # One *other* Hare of mine -> exactly one Rabbit; the opponent's two
         # do not contribute.
@@ -104,9 +94,9 @@ class TestHareApparentEtb:
         p1 = game.players[0]
         entering = HareApparent(owner=p1, controller=p1)
         other = HareApparent(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[entering, other])
+        set_board_state(game, 0, battlefield=[other], hand=[entering], mana={ManaType.WHITE: 2})
 
-        entering.on_resolve(game)
+        cast_spell(game, 0, "Hare Apparent")
 
         tokens = _rabbit_tokens(game, p1)
         assert len(tokens) == 1
@@ -122,9 +112,9 @@ class TestHareApparentEtb:
         p1 = game.players[0]
         entering = HareApparent(owner=p1, controller=p1)
         other = HareApparent(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[entering, other])
+        set_board_state(game, 0, battlefield=[other], hand=[entering], mana={ManaType.WHITE: 2})
 
-        entering.on_resolve(game)
+        cast_spell(game, 0, "Hare Apparent")
 
         tok = _rabbit_tokens(game, p1)[0]
         assert get_colors(tok) == {Color.WHITE}
@@ -139,7 +129,8 @@ class TestHareApparentEtb:
         game = create_game()
         p1 = game.players[0]
         set_board_state(
-            game, 0,
+            game,
+            0,
             battlefield=[
                 HareApparent(owner=p1, controller=p1),
                 HareApparent(owner=p1, controller=p1),

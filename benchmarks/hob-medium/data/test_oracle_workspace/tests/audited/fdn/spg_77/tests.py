@@ -1,71 +1,67 @@
-"""Reference test for SPG 77 — Embercleave.
-
-Legendary Equipment with Flash. Costs {1} less per attacking creature you
-control. ETB: attach to a creature you control (Player Query). Static:
-equipped creature gets +1/+1 and has double strike and trample. See
-fdn_129/tests.py for the canonical Equipment test shape.
-"""
-
-from __future__ import annotations
+"""Embercleave's attacking discount, paid equip and entry attachment are observable."""
 
 from cards.fdn.spg_77.card_impl import Embercleave
 from engine.card import Creature, Equipment
-from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
-from engine.types import Keyword, ManaCost, Supertype, Zone
-from test_utils import create_game, set_board_state
+from engine.types import Keyword, ManaCost, ManaType, Supertype
+from test_utils import (
+    activate_card_ability,
+    behavioral_game,
+    cast_card,
+    declare_attackers,
+    object_preference,
+    prefer,
+    put_on_battlefield,
+    resolve_stack,
+)
 
 
-def _bear(p, name="Bear"):
-    return Creature(name=name, base_power=2, base_toughness=2, owner=p, controller=p)
+def test_static_data():
+    card = Embercleave()
+    assert card.name == "Embercleave" and card.mana_cost == ManaCost.parse("{4}{R}{R}")
+    assert card.equip_cost == ManaCost.parse("{3}")
+    assert Supertype.LEGENDARY in card.supertypes and card.keywords & Keyword.FLASH
+    assert isinstance(card, Equipment) and card.is_equipment
 
 
-class TestEmbercleaveProperties:
-    def test_static_data(self):
-        cleave = Embercleave(owner=None)
-        assert cleave.name == "Embercleave"
-        assert cleave.mana_cost == ManaCost.parse("{4}{R}{R}")
-        assert cleave.equip_cost == ManaCost.parse("{3}")
-        assert Supertype.LEGENDARY in cleave.supertypes
-        assert Keyword.FLASH in cleave.keywords
-        assert isinstance(cleave, Equipment) and cleave.is_equipment is True
+def test_cost_reduction_per_attacking_creature():
+    game = behavioral_game()
+    player = game.players[0]
+    attackers = [
+        put_on_battlefield(game, player, Creature(name=f"Bear {i}", base_power=2, base_toughness=2))
+        for i in range(2)
+    ]
+    for card in attackers:
+        card.summoning_sick = False
+    declare_attackers(game, [card.name for card in attackers])
+    player.mana_pool.add(ManaType.RED, 2)
+    player.mana_pool.add(ManaType.COLORLESS, 2)
+    prefer(player, object_preference(game, attackers[0]))
+    cleave = Embercleave(owner=player)
+    cast_card(game, player, cleave)
+    assert player.mana_pool.total() == 0 and cleave.attached_to is attackers[0]
+    assert game.get_battlefield(player).contains(cleave)
 
 
-class TestEmbercleaveBehaviour:
-    def test_cost_reduction_per_attacking_creature(self):
-        game = create_game()
-        p1 = game.players[0]
-        a, b = _bear(p1, "A"), _bear(p1, "B")
-        a.is_attacking = True
-        b.is_attacking = True
-        cleave = Embercleave(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[a, b])
-        assert cleave.cost_reduction(game) == 2
+def test_static_buff_after_paid_equip():
+    game = behavioral_game()
+    player = game.players[0]
+    bear = put_on_battlefield(game, player, Creature(name="Bear", base_power=2, base_toughness=2))
+    cleave = put_on_battlefield(game, player, Embercleave())
+    player.mana_pool.add(ManaType.COLORLESS, 3)
+    prefer(player, object_preference(game, bear))
+    activate_card_ability(game, player, cleave)
+    resolve_stack(game)
+    assert (bear.power, bear.toughness) == (3, 3)
+    assert bear.keywords & Keyword.DOUBLE_STRIKE and bear.keywords & Keyword.TRAMPLE
 
-    def test_static_buff(self):
-        game = create_game()
-        p1 = game.players[0]
-        bear = _bear(p1)
-        cleave = Embercleave(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, cleave])
-        cleave.equip(bear, game)
-        assert (bear.power, bear.toughness) == (3, 3)
-        assert Keyword.DOUBLE_STRIKE in bear.keywords
-        assert Keyword.TRAMPLE in bear.keywords
 
-    def test_etb_attaches_to_chosen_creature(self):
-        game = create_game()
-        p1 = game.players[0]
-        bear = _bear(p1)
-        cleave = Embercleave(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, cleave])
-        inst = game.refs.instance_id(bear, Zone.BATTLEFIELD.value)
-        p1.start_intent("cleave", Intent(
-            pattern=GameRef(card=frozenset({("name", "Embercleave")})),
-            preferences=(Decision.obj(instance=inst),),
-        ))
-        cleave.on_resolve(game)
-        p1.end_intent("cleave")
-        game.effect_manager.apply_all(game)
-        assert cleave.attached_to is bear
-        assert bear.power == 3
+def test_cast_entry_attaches_to_the_chosen_creature():
+    game = behavioral_game()
+    player = game.players[0]
+    bear = put_on_battlefield(game, player, Creature(name="Bear", base_power=2, base_toughness=2))
+    other = put_on_battlefield(game, player, Creature(name="Other", base_power=2, base_toughness=2))
+    player.mana_pool.add(ManaType.RED, 6)
+    prefer(player, object_preference(game, bear))
+    cleave = Embercleave(owner=player)
+    cast_card(game, player, cleave)
+    assert cleave.attached_to is bear and bear.power == 3 and other.power == 2

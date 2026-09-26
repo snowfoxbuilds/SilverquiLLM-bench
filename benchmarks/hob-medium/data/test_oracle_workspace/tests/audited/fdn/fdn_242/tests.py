@@ -1,52 +1,33 @@
-"""Reference test for FDN 242 — Lathril, Blade of the Elves (token identity).
-
-"Whenever Lathril deals combat damage to a player, create that many 1/1 green
-Elf Warrior creature tokens." The per-token mint routes through the shared
-``make_creature_token`` factory. This test drives a combat-damage event of
-amount 2 through the registered trigger and pins both the "that many" count
-and each minted token's identity (subtypes, explicit green colour, base P/T,
-``is_token``).
-"""
-from __future__ import annotations
+"""Lathril's unblocked combat damage creates the specified Elf Warriors."""
 
 from cards.fdn.fdn_242.card_impl import LathrilBladeOfTheElves
-from engine.events import DealsDamageTriggeredEvent
+from engine.combat import combat_damage_step
 from engine.protection import get_colors
-from engine.stack import priority_loop
 from engine.types import Color
-from test_utils import create_game, set_board_state
+from test_utils import (
+    behavioral_game,
+    declare_attackers,
+    declare_blockers,
+    enter_permanent,
+    resolve_stack,
+)
 
 
-def _elf_warrior_tokens(game, player):
-    bf = game.get_battlefield(player)
-    return [
-        o
-        for o in bf.get_all()
-        if getattr(o, "is_token", False)
-        and getattr(o, "name", None) == "Elf Warrior"
+def test_combat_damage_mints_green_elf_warriors():
+    game = behavioral_game()
+    player, opponent = game.players
+    card = enter_permanent(game, player, LathrilBladeOfTheElves())
+    card.summoning_sick = False
+    declare_attackers(game, [card.name])
+    declare_blockers(game, {})
+    combat_damage_step(game)
+    resolve_stack(game)
+    assert opponent.life == 18
+    tokens = [
+        obj for obj in game.get_battlefield(player).get_all() if getattr(obj, "is_token", False)
     ]
-
-
-class TestLathrilToken:
-    def test_combat_damage_mints_green_elf_warriors(self) -> None:
-        game = create_game()
-        p1, p2 = game.players
-        lathril = LathrilBladeOfTheElves(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[lathril])
-        lathril.register_triggers(game)
-
-        game.trigger_manager.fire_event(
-            game,
-            DealsDamageTriggeredEvent(
-                source=lathril, target=p2, amount=2, is_combat=True
-            ),
-        )
-        priority_loop(game)
-
-        tokens = _elf_warrior_tokens(game, p1)
-        assert len(tokens) == 2  # "that many" = 2 combat damage
-        for tok in tokens:
-            assert tok.subtypes == {"Elf", "Warrior"}
-            assert get_colors(tok) == {Color.GREEN}
-            assert (tok.base_power, tok.base_toughness) == (1, 1)
-            assert tok.is_token is True
+    assert len(tokens) == 2
+    for token in tokens:
+        assert token.subtypes == {"Elf", "Warrior"}
+        assert (token.base_power, token.base_toughness) == (1, 1)
+        assert get_colors(token) == {Color.GREEN}

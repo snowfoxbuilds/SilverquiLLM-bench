@@ -1,62 +1,52 @@
-"""Reference test for FDN 5 — Celestial Armor.
-
-Flash Equipment. Static: equipped creature gets +2/+0 and flying. ETB: attach
-to target creature you control and grant it hexproof + indestructible until end
-of turn. Equip {3}{W} — a real colored equip cost. See fdn_129/tests.py for the
-canonical Equipment test shape.
-"""
-
-from __future__ import annotations
+"""Celestial Armor uses paid equip or its actual cast/entry attachment."""
 
 from cards.fdn.fdn_5.card_impl import CelestialArmor
 from engine.card import Creature, Equipment
-from engine.turn import cleanup_mechanical
-from engine.types import Keyword, ManaCost
-from test_utils import create_game, set_board_state
+from engine.types import Keyword, ManaCost, ManaType, Phase, Step
+from test_utils import (
+    activate_card_ability,
+    advance_game_to_phase,
+    behavioral_game,
+    cast_card,
+    object_preference,
+    prefer,
+    put_on_battlefield,
+    resolve_stack,
+)
 
 
-def _bear(p):
-    return Creature(name="Bear", base_power=2, base_toughness=2, owner=p, controller=p)
+def test_static_data():
+    card = CelestialArmor()
+    assert card.name == "Celestial Armor" and card.mana_cost == ManaCost.parse("{2}{W}")
+    assert card.equip_cost == ManaCost.parse("{3}{W}") and card.keywords & Keyword.FLASH
+    assert isinstance(card, Equipment) and card.is_equipment
 
 
-class TestCelestialArmorProperties:
-    def test_static_data(self):
-        armor = CelestialArmor(owner=None)
-        assert armor.name == "Celestial Armor"
-        assert armor.mana_cost == ManaCost.parse("{2}{W}")
-        assert armor.equip_cost == ManaCost.parse("{3}{W}")  # colored, not approximated
-        assert Keyword.FLASH in armor.keywords
-        assert isinstance(armor, Equipment) and armor.is_equipment is True
+def test_static_buff_after_paid_equip():
+    game = behavioral_game()
+    player = game.players[0]
+    bear = put_on_battlefield(game, player, Creature(name="Bear", base_power=2, base_toughness=2))
+    armor = put_on_battlefield(game, player, CelestialArmor())
+    player.mana_pool.add(ManaType.WHITE, 4)
+    prefer(player, object_preference(game, bear))
+    activate_card_ability(game, player, armor)
+    resolve_stack(game)
+    assert (bear.power, bear.toughness) == (4, 2) and bear.keywords & Keyword.FLYING
+    assert player.mana_pool.total() == 0
 
 
-class TestCelestialArmorBehaviour:
-    def test_static_buff(self):
-        game = create_game()
-        p1 = game.players[0]
-        bear = _bear(p1)
-        armor = CelestialArmor(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, armor])
-        armor.equip(bear, game)
-        assert (bear.power, bear.toughness) == (4, 2)  # +2/+0
-        assert Keyword.FLYING in bear.keywords
-
-    def test_etb_attach_grants_protection_until_eot(self):
-        game = create_game()
-        p1 = game.players[0]
-        bear = _bear(p1)
-        armor = CelestialArmor(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, armor])
-        armor.chosen_targets = [bear]
-        armor.on_resolve(game)
-        game.effect_manager.apply_all(game)
-
-        assert armor.attached_to is bear
-        assert Keyword.FLYING in bear.keywords
-        assert Keyword.HEXPROOF in bear.keywords
-        assert Keyword.INDESTRUCTIBLE in bear.keywords
-
-        cleanup_mechanical(game)  # protection expires; static buff remains
-        assert Keyword.HEXPROOF not in bear.keywords
-        assert Keyword.INDESTRUCTIBLE not in bear.keywords
-        assert Keyword.FLYING in bear.keywords
-        assert bear.power == 4
+def test_etb_attach_grants_protection_until_cleanup():
+    game = behavioral_game()
+    player = game.players[0]
+    bear = put_on_battlefield(game, player, Creature(name="Bear", base_power=2, base_toughness=2))
+    armor = CelestialArmor(owner=player)
+    player.mana_pool.add(ManaType.WHITE, 3)
+    prefer(player, object_preference(game, bear))
+    cast_card(game, player, armor)
+    assert armor.attached_to is bear
+    assert bear.keywords & Keyword.FLYING and bear.keywords & Keyword.HEXPROOF
+    assert bear.keywords & Keyword.INDESTRUCTIBLE
+    advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
+    resolve_stack(game)
+    assert not bear.keywords & (Keyword.HEXPROOF | Keyword.INDESTRUCTIBLE)
+    assert bear.keywords & Keyword.FLYING and bear.power == 4

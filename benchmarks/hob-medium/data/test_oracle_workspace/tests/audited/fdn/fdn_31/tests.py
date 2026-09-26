@@ -10,14 +10,13 @@ the creature itself enters. Targeting is driven the intent-style way through
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_31.card_impl import BigfinBouncer
 from engine.card import Creature
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
 from engine.stack import resolve_top_of_stack
-from engine.types import ManaCost, ManaType, Phase, TargetRequirement, Zone
+from engine.types import ManaCost, ManaType, Phase, Zone
 from test_utils import TestSetupError as _CastError
 from test_utils import cast_spell, create_game, set_board_state
 
@@ -35,13 +34,15 @@ def _cast_no_resolve(game, player_index, card, targets):
     game.phase = Phase.PRECOMBAT_MAIN
     game.step = None
     prefs = tuple(
-        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value))
-        for t in targets
+        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value)) for t in targets
     )
-    player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
-        preferences=prefs,
-    ))
+    player.start_intent(
+        "cast",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", card.name)})),
+            preferences=prefs,
+        ),
+    )
     try:
         engine_cast_spell(game, player, card)
     finally:
@@ -55,14 +56,6 @@ class TestBigfinBouncerProperties:
         assert c.mana_cost == ManaCost.parse("{3}{U}")
         assert (c.base_power, c.base_toughness) == (3, 2)
         assert {"Shark", "Pirate"} <= c.subtypes
-
-    def test_get_targets_is_a_requirement_not_objects(self):
-        c = BigfinBouncer(owner=None, controller=None)
-        specs = c.get_targets(create_game())
-        assert len(specs) == 1
-        assert isinstance(specs[0], TargetRequirement)
-        assert specs[0].zone == Zone.BATTLEFIELD
-        assert specs[0].optional is False
 
 
 class TestBigfinBouncerBounce:
@@ -85,25 +78,22 @@ class TestBigfinBouncerBounce:
         assert game.get_battlefield(p1).contains(bigfin)
 
     def test_cost_is_paid(self):
-        game, p1, p2, bigfin, their_bear = self._setup()
+        game, p1, _p2, _bigfin, their_bear = self._setup()
         cast_spell(game, 0, "Bigfin Bouncer", targets=[their_bear])
         assert p1.mana_pool.total() == 0
 
     def test_filter_targets_only_opponent_creatures(self):
-        """Legality invariant: the filter accepts an opponent's creature and
-        rejects one the caster controls."""
         game, p1, p2, bigfin, their_bear = self._setup()
         my_bear = _bear(p1, "My Bear")
-        set_board_state(game, 0, battlefield=[my_bear], hand=[bigfin],
-                        mana={ManaType.BLUE: 4})
-        spec = bigfin.get_targets(game)[0]
-        assert spec.filter_fn(their_bear) is True
-        assert spec.filter_fn(my_bear) is False
+        game.get_battlefield(p1).add(my_bear)
+        cast_spell(game, 0, bigfin.name, targets=[my_bear, their_bear])
+        assert game.get_battlefield(p1).contains(my_bear)
+        assert game.get_hand(p2).contains(their_bear)
 
     def test_no_legal_target_makes_spell_uncastable(self):
         """Required target with no opponent creature → rejected at cast."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         bigfin = BigfinBouncer(owner=p1, controller=p1)
         set_board_state(game, 0, hand=[bigfin], mana={ManaType.BLUE: 4})
         with pytest.raises(_CastError):

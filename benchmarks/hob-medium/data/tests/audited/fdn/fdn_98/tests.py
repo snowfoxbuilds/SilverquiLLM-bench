@@ -27,14 +27,6 @@ class TestAmbushWolfProperties:
         assert card.subtypes == {"Wolf"}
         assert Keyword.FLASH & card.keywords
 
-    def test_target_is_optional(self):
-        game = create_game()
-        wolf = AmbushWolf(owner=game.players[0], controller=game.players[0])
-        set_board_state(game, 0, battlefield=[wolf])
-        specs = wolf.get_targets(game)
-        assert len(specs) == 1
-        assert specs[0].optional is True
-
 
 class TestAmbushWolfETB:
     def test_exiles_targeted_graveyard_card(self):
@@ -43,8 +35,7 @@ class TestAmbushWolfETB:
         game.active_player_index = 0
         wolf = AmbushWolf(owner=p1, controller=p1)
         victim = _bear("Graveyard Bear")
-        set_board_state(game, 0, hand=[wolf],
-                        mana={ManaType.GREEN: 1, ManaType.COLORLESS: 2})
+        set_board_state(game, 0, hand=[wolf], mana={ManaType.GREEN: 1, ManaType.COLORLESS: 2})
         set_board_state(game, 1, graveyard=[victim])
         game.phase = Phase.PRECOMBAT_MAIN
 
@@ -58,29 +49,28 @@ class TestAmbushWolfETB:
         """Option-set invariant: 'up to one' declines cleanly with an empty
         candidate set — the Wolf still enters."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         game.active_player_index = 0
         wolf = AmbushWolf(owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[wolf],
-                        mana={ManaType.GREEN: 1, ManaType.COLORLESS: 2})
+        set_board_state(game, 0, hand=[wolf], mana={ManaType.GREEN: 1, ManaType.COLORLESS: 2})
         game.phase = Phase.PRECOMBAT_MAIN
 
         cast_spell(game, 0, "Ambush Wolf")  # no targets available
         assert game.get_battlefield(p1).contains(wolf)
 
-    def test_option_set_only_graveyard_cards(self):
-        """The filter accepts a card sitting in any graveyard and rejects a
-        battlefield permanent (not a graveyard card) and the players."""
+    def test_only_graveyard_cards_can_be_exiled(self):
         game = create_game()
         p1, p2 = game.players
-        game.active_player_index = 0
         wolf = AmbushWolf(owner=p1, controller=p1)
-        in_gy = _bear("In Graveyard")
-        on_bf = _bear("On Battlefield")
-        set_board_state(game, 0, battlefield=[wolf, on_bf])
+        in_gy, on_bf = _bear("In Graveyard"), _bear("On Battlefield")
+        set_board_state(
+            game,
+            0,
+            hand=[wolf],
+            battlefield=[on_bf],
+            mana={ManaType.GREEN: 1, ManaType.COLORLESS: 2},
+        )
         set_board_state(game, 1, graveyard=[in_gy])
-
-        spec = wolf.get_targets(game)[0]
-        assert spec.filter_fn(in_gy) is True
-        assert spec.filter_fn(on_bf) is False
-        assert spec.filter_fn(p1) is False
+        cast_spell(game, 0, wolf.name, targets=[on_bf, in_gy])
+        assert game.get_battlefield(p1).contains(on_bf)
+        assert game.get_exile(p2).contains(in_gy)

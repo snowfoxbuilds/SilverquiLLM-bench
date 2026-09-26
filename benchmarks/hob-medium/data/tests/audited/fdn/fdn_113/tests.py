@@ -1,64 +1,33 @@
-"""Reference test for FDN 113 — Sylvan Scavenging (token identity).
-
-At the beginning of your end step, choose one — the "token" mode creates a 3/3
-green Raccoon creature token if you control a creature with power 4 or greater.
-The mint routes through the shared ``make_creature_token`` factory. This test
-drives the end-step trigger, answers the mode choice with "token" via an
-intent, and pins the minted token's identity (subtypes, explicit green colour,
-base P/T, ``is_token``).
-"""
-from __future__ import annotations
+"""Sylvan Scavenging resolves its controller's end-step token choice."""
 
 from cards.fdn.fdn_113.card_impl import SylvanScavenging
 from engine.card import Creature
-from engine.decisions import Decision, GameRef
-from engine.events import EndStepTriggeredEvent
-from engine.intent_player import Intent
+from engine.decisions import Decision
 from engine.protection import get_colors
-from engine.stack import priority_loop
-from engine.types import Color
-from test_utils import create_game, set_board_state
+from engine.types import Color, Phase, Step
+from test_utils import (
+    advance_game_to_phase,
+    behavioral_game,
+    enter_permanent,
+    prefer,
+    put_on_battlefield,
+    resolve_stack,
+)
 
 
-def _raccoon_tokens(game, player):
-    bf = game.get_battlefield(player)
-    return [
-        o
-        for o in bf.get_all()
-        if getattr(o, "is_token", False)
-        and getattr(o, "name", None) == "Raccoon"
+def test_end_step_token_mode_mints_green_raccoon():
+    game = behavioral_game()
+    player = game.players[0]
+    put_on_battlefield(game, player, Creature(name="Behemoth", base_power=4, base_toughness=4))
+    enter_permanent(game, player, SylvanScavenging())
+    prefer(player, Decision.mode("token"))
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+    resolve_stack(game)
+    tokens = [
+        card for card in game.get_battlefield(player).get_all() if getattr(card, "is_token", False)
     ]
-
-
-class TestSylvanScavengingToken:
-    def test_end_step_token_mode_mints_green_raccoon(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        scavenging = SylvanScavenging(owner=p1, controller=p1)
-        behemoth = Creature(
-            name="Grizzly Behemoth", base_power=4, base_toughness=4
-        )
-        set_board_state(game, 0, battlefield=[scavenging, behemoth])
-        game.active_player_index = 0
-        scavenging.register_triggers(game)
-
-        # Both modes are legal (a creature is present and it has power >= 4),
-        # so the mode is chosen via an intent answering "token".
-        p1.start_intent(
-            "scav",
-            Intent(
-                pattern=GameRef(card=frozenset({("name", "Sylvan Scavenging")})),
-                preferences=(Decision.mode("token"),),
-            ),
-        )
-        game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=p1))
-        priority_loop(game)
-        p1.end_intent("scav")
-
-        tokens = _raccoon_tokens(game, p1)
-        assert len(tokens) == 1
-        tok = tokens[0]
-        assert tok.subtypes == {"Raccoon"}
-        assert get_colors(tok) == {Color.GREEN}
-        assert (tok.base_power, tok.base_toughness) == (3, 3)
-        assert tok.is_token is True
+    assert len(tokens) == 1
+    token = tokens[0]
+    assert token.name == "Raccoon" and token.subtypes == {"Raccoon"}
+    assert (token.base_power, token.base_toughness) == (3, 3)
+    assert get_colors(token) == {Color.GREEN}

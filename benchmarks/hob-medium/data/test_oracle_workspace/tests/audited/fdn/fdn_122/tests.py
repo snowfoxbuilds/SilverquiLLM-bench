@@ -1,6 +1,6 @@
 """Reference test for FDN 122 — Kykar, Zephyr Awakener.
 
-Illustrative test covering the **flicker leg of the cast trigger**: exile
+Behavioral coverage of the flicker leg of the cast trigger: exile
 another creature you control, return it at the beginning of the next end
 step. The flicker drives both legs through ``move_to_zone``, so it also
 pins the instance-id contract — a zone change yields a new object, and the
@@ -11,15 +11,19 @@ observes the exile stint.
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_122.card_impl import KykarZephyrAwakener
 from engine.card import Creature, Instant
 from engine.decisions import Decision, GameRef, UnmatchedQueryError
-from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
 from engine.intent_player import Intent
 from engine.protection import get_colors
-from engine.types import Color, Keyword, ManaCost, Zone
-from test_utils import create_game, set_board_state
+from engine.types import Color, Keyword, ManaCost, Phase, Step, Zone
+from test_utils import (
+    advance_game_to_phase,
+    cast_card,
+    create_game,
+    enter_permanent,
+    set_board_state,
+)
 
 
 def _flicker_setup():
@@ -28,20 +32,14 @@ def _flicker_setup():
     p1 = game.players[0]
     kykar = KykarZephyrAwakener()
     bear = Creature(name="Bear", base_power=2, base_toughness=2)
-    set_board_state(game, 0, battlefield=[kykar, bear])
-    kykar.register_triggers(game)
+    set_board_state(game, 0, battlefield=[bear])
+    enter_permanent(game, p1, kykar)
     return game, p1, kykar, bear
 
 
 def _cast_noncreature(game, p1):
-    """Fire the cast event for a noncreature spell and resolve the trigger."""
-    from engine.stack import priority_loop
-
-    spell = Instant(name="Some Instant", owner=p1, controller=p1)
-    game.trigger_manager.fire_event(
-        game, SpellCastTriggeredEvent(spell=spell, player=p1)
-    )
-    priority_loop(game)  # resolve the pushed trigger (auto-pass)
+    spell = Instant(name="Some Instant", owner=p1)
+    cast_card(game, p1, spell)
 
 
 class TestKykarProperties:
@@ -58,18 +56,21 @@ class TestKykarFlicker:
     """Flicker mode: exile via move_to_zone, return at the next end step."""
 
     def test_flicker_exiles_then_returns_with_fresh_instance_id(self) -> None:
-        game, p1, kykar, bear = _flicker_setup()
+        game, p1, _kykar, bear = _flicker_setup()
         pre_flicker = game.refs.instance_id(bear, "battlefield")
 
         # One intent answers both queries the trigger raises: the MODE query
         # (flicker) and the OBJECT query (the bear).
-        p1.start_intent("kykar", Intent(
-            pattern=GameRef(card=frozenset({("name", "Kykar, Zephyr Awakener")})),
-            preferences=(
-                Decision.mode("flicker"),
-                Decision.obj(instance=pre_flicker),
+        p1.start_intent(
+            "kykar",
+            Intent(
+                pattern=GameRef(card=frozenset({("name", "Kykar, Zephyr Awakener")})),
+                preferences=(
+                    Decision.mode("flicker"),
+                    Decision.obj(instance=pre_flicker),
+                ),
             ),
-        ))
+        )
         _cast_noncreature(game, p1)
         p1.end_intent("kykar")
 
@@ -80,7 +81,7 @@ class TestKykarFlicker:
         # Return leg at the next end step.
         from engine.stack import priority_loop
 
-        game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=p1))
+        advance_game_to_phase(game, Phase.ENDING, Step.END)
         priority_loop(game)
         assert p1.zones[Zone.BATTLEFIELD].contains(bear)
 
@@ -97,22 +98,23 @@ class TestKykarFlicker:
         # try/except-Exception fallback made it.
         from engine.stack import priority_loop
 
-        game, p1, kykar, bear = _flicker_setup()
+        game, p1, _kykar, _bear = _flicker_setup()
         spell = Instant(name="Some Instant", owner=p1, controller=p1)
-        game.trigger_manager.fire_event(
-            game, SpellCastTriggeredEvent(spell=spell, player=p1)
-        )
+        cast_card(game, p1, spell, resolve=False)
         with pytest.raises(UnmatchedQueryError):
             priority_loop(game)
         bf = p1.zones[Zone.BATTLEFIELD].get_all()
         assert not any(getattr(c, "name", "") == "Spirit" for c in bf)
 
     def test_token_mode_creates_spirit_and_no_flicker(self) -> None:
-        game, p1, kykar, bear = _flicker_setup()
-        p1.start_intent("kykar", Intent(
-            pattern=GameRef(card=frozenset({("name", "Kykar, Zephyr Awakener")})),
-            preferences=(Decision.mode("token"),),
-        ))
+        game, p1, _kykar, bear = _flicker_setup()
+        p1.start_intent(
+            "kykar",
+            Intent(
+                pattern=GameRef(card=frozenset({("name", "Kykar, Zephyr Awakener")})),
+                preferences=(Decision.mode("token"),),
+            ),
+        )
         _cast_noncreature(game, p1)
         p1.end_intent("kykar")
         bf = p1.zones[Zone.BATTLEFIELD].get_all()
@@ -125,11 +127,14 @@ class TestKykarSpiritToken:
     """The token leg mints a 1/1 white Spirit creature token with flying."""
 
     def test_spirit_token_has_spec_characteristics(self) -> None:
-        game, p1, kykar, bear = _flicker_setup()
-        p1.start_intent("kykar", Intent(
-            pattern=GameRef(card=frozenset({("name", "Kykar, Zephyr Awakener")})),
-            preferences=(Decision.mode("token"),),
-        ))
+        game, p1, _kykar, _bear = _flicker_setup()
+        p1.start_intent(
+            "kykar",
+            Intent(
+                pattern=GameRef(card=frozenset({("name", "Kykar, Zephyr Awakener")})),
+                preferences=(Decision.mode("token"),),
+            ),
+        )
         _cast_noncreature(game, p1)
         p1.end_intent("kykar")
 

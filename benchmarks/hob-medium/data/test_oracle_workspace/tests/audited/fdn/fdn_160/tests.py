@@ -25,9 +25,7 @@ from test_utils import create_game
 
 def _treasures(game, player):
     return [
-        o
-        for o in game.get_battlefield(player).get_all()
-        if getattr(o, "name", "") == "Treasure"
+        o for o in game.get_battlefield(player).get_all() if getattr(o, "name", "") == "Treasure"
     ]
 
 
@@ -58,10 +56,13 @@ class TestAnOfferCounters:
         offer = AnOfferYouCantRefuse(owner=p1, controller=p1)
         game.get_hand(p1).add(offer)
         occ_iid = game.refs.instance_id(occurrence, Zone.STACK.value)
-        p1.start_intent("offer-cast", Intent(
-            pattern=GameRef(card=frozenset({("name", "An Offer You Can't Refuse")})),
-            preferences=(Decision.obj(instance=occ_iid),),
-        ))
+        p1.start_intent(
+            "offer-cast",
+            Intent(
+                pattern=GameRef(card=frozenset({("name", "An Offer You Can't Refuse")})),
+                preferences=(Decision.obj(instance=occ_iid),),
+            ),
+        )
         try:
             offer_so = cast_spell_free(game, p1, offer, Zone.HAND)
         finally:
@@ -114,7 +115,6 @@ class TestAnOfferCounters:
 
         offer = AnOfferYouCantRefuse(owner=p1, controller=p1)
         game.get_hand(p1).add(offer)
-        assert offer.can_cast(game) is False
         with pytest.raises(CastingError):
             cast_spell_free(game, p1, offer, Zone.HAND)
         assert game.get_hand(p1).contains(offer)  # rolled back

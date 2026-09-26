@@ -38,10 +38,13 @@ def _cast_no_resolve(game, player, card, targets):
     """Cast *card* choosing *targets* via an Intent, WITHOUT resolving — leaves
     the spell on the stack so the test can alter the board before resolution."""
     prefs = tuple(_pref(game, t) for t in targets)
-    player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
-        preferences=prefs,
-    ))
+    player.start_intent(
+        "cast",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", card.name)})),
+            preferences=prefs,
+        ),
+    )
     try:
         engine_cast_spell(game, player, card)
     finally:
@@ -63,57 +66,52 @@ class TestFieryAnnihilationTargets:
         set_board_state(game, 1, battlefield=[c1, c2, eq1, eq2])
         return game, p1, p2, spell, c1, c2, eq1, eq2
 
-    def test_dependent_filter_only_accepts_equipment_on_chosen_creature(self):
-        """The second query's option set excludes Equipment on the *other*
-        creature — only Equipment attached to the chosen creature is legal."""
+    def test_second_creatures_equipment_is_selected_independently(self):
         game, p1, p2, spell, c1, c2, eq1, eq2 = self._board()
-        specs = spell.get_targets(game)
-        equip_filter = specs[1].filter_fn
-        # Chosen creature is c1: only eq1 (attached to c1) qualifies.
-        assert equip_filter(eq1, [c1]) is True
-        assert equip_filter(eq2, [c1]) is False
-        # Chosen creature is c2: now only eq2 qualifies.
-        assert equip_filter(eq2, [c2]) is True
-        assert equip_filter(eq1, [c2]) is False
+        _cast_no_resolve(game, p1, spell, [c2, eq2])
+        resolve_top_of_stack(game)
+        assert c2.damage_marked == 5 and c1.damage_marked == 0
+        assert game.get_exile(p2).contains(eq2)
+        assert game.get_battlefield(p2).contains(eq1)
 
     def test_other_creatures_equipment_not_selected(self):
         """Preferring the other creature's Equipment cannot exile it — it is
         never a legal option, so nothing is exiled beyond the damage."""
-        game, p1, p2, spell, c1, c2, eq1, eq2 = self._board()
+        game, p1, p2, spell, c1, _c2, _eq1, eq2 = self._board()
         # Target c1 but try to pick eq2 (attached to c2): not offered → declined.
         _cast_no_resolve(game, p1, spell, [c1, eq2])
         resolve_top_of_stack(game)
-        assert game.get_battlefield(p2).contains(eq2)   # not exiled
+        assert game.get_battlefield(p2).contains(eq2)  # not exiled
         assert not game.get_exile(p2).contains(eq2)
         assert c1.damage_marked == 5
 
     def test_chosen_equipment_exiled(self):
-        game, p1, p2, spell, c1, c2, eq1, eq2 = self._board()
+        game, p1, p2, spell, c1, _c2, eq1, _eq2 = self._board()
         _cast_no_resolve(game, p1, spell, [c1, eq1])
         resolve_top_of_stack(game)
-        assert game.get_exile(p2).contains(eq1)         # exiled
+        assert game.get_exile(p2).contains(eq1)  # exiled
         assert c1.damage_marked == 5
 
     def test_chosen_equipment_detached_before_resolution_not_exiled(self):
         """The chosen Equipment moves off the creature before resolution: it is
         no longer legal and is not exiled, but the creature target still takes 5
         (independent resolution)."""
-        game, p1, p2, spell, c1, c2, eq1, eq2 = self._board()
+        game, p1, p2, spell, c1, _c2, eq1, _eq2 = self._board()
         _cast_no_resolve(game, p1, spell, [c1, eq1])
-        eq1.attached_to = None                          # detached in response
+        eq1.attached_to = None  # detached in response
         resolve_top_of_stack(game)
-        assert game.get_battlefield(p2).contains(eq1)   # not exiled
+        assert game.get_battlefield(p2).contains(eq1)  # not exiled
         assert not game.get_exile(p2).contains(eq1)
-        assert c1.damage_marked == 5                    # creature still resolves
+        assert c1.damage_marked == 5  # creature still resolves
 
     def test_chosen_equipment_reattached_before_resolution_not_exiled(self):
         """The chosen Equipment reattaches to a different creature before
         resolution: no longer attached to *that creature*, so not exiled."""
-        game, p1, p2, spell, c1, c2, eq1, eq2 = self._board()
+        game, p1, p2, spell, c1, c2, eq1, _eq2 = self._board()
         _cast_no_resolve(game, p1, spell, [c1, eq1])
-        eq1.attached_to = c2                            # reattached elsewhere
+        eq1.attached_to = c2  # reattached elsewhere
         resolve_top_of_stack(game)
-        assert game.get_battlefield(p2).contains(eq1)   # not exiled
+        assert game.get_battlefield(p2).contains(eq1)  # not exiled
         assert c1.damage_marked == 5
 
     def test_equipment_leaves_and_returns_not_exiled(self):
@@ -122,28 +120,28 @@ class TestFieryAnnihilationTargets:
         (attached to that creature) would pass, but the spell's captured
         zone-stint rejects the returned object — it is not exiled. The creature
         target (unchanged stint) still takes 5."""
-        game, p1, p2, spell, c1, c2, eq1, eq2 = self._board()
+        game, p1, p2, spell, c1, _c2, eq1, _eq2 = self._board()
         _cast_no_resolve(game, p1, spell, [c1, eq1])
         move_to_zone(game, eq1, Zone.BATTLEFIELD, Zone.EXILE)
         move_to_zone(game, eq1, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
-        eq1.attached_to = c1                                   # predicate would pass
+        eq1.attached_to = c1  # predicate would pass
         resolve_top_of_stack(game)
-        assert game.get_battlefield(p2).contains(eq1)          # NOT exiled (stint)
+        assert game.get_battlefield(p2).contains(eq1)  # NOT exiled (stint)
         assert not game.get_exile(p2).contains(eq1)
-        assert c1.damage_marked == 5                           # creature still resolves
+        assert c1.damage_marked == 5  # creature still resolves
 
     def test_creature_leaves_and_returns_takes_no_damage(self):
         """The creature target leaves and returns before resolution: a new object,
         rejected by stint, so it takes no damage (and the Equipment, whose
         legality depends on that creature target, is not exiled either)."""
-        game, p1, p2, spell, c1, c2, eq1, eq2 = self._board()
+        game, p1, p2, spell, c1, _c2, eq1, _eq2 = self._board()
         _cast_no_resolve(game, p1, spell, [c1, eq1])
         move_to_zone(game, c1, Zone.BATTLEFIELD, Zone.EXILE)
-        move_to_zone(game, c1, Zone.EXILE, Zone.BATTLEFIELD)   # new stint
+        move_to_zone(game, c1, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
         eq1.attached_to = c1
         resolve_top_of_stack(game)
-        assert c1.damage_marked == 0                           # not damaged (stint)
-        assert game.get_battlefield(p2).contains(eq1)          # Equipment not exiled
+        assert c1.damage_marked == 0  # not damaged (stint)
+        assert game.get_battlefield(p2).contains(eq1)  # Equipment not exiled
 
     def test_zero_equipment_remains_legal(self):
         """No Equipment on the board: the spell is castable and exiles nothing,

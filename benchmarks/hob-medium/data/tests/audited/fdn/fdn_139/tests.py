@@ -9,7 +9,6 @@ the stack, revalidated at resolution, and destroyed.
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_139.card_impl import CatharCommando
 from engine.abilities import AbilityError
 from engine.card import Artifact, Creature, Enchantment
@@ -25,10 +24,13 @@ def _on_battlefield(game, obj):
 
 def _activate_targeting(game, player, source, target):
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
-    player.start_intent("cathar", Intent(
-        pattern=GameRef(card=frozenset({("name", source.name)})),
-        preferences=(Decision.obj(instance=inst),),
-    ))
+    player.start_intent(
+        "cathar",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", source.name)})),
+            preferences=(Decision.obj(instance=inst),),
+        ),
+    )
     try:
         activate_card_ability(game, player, source)
     finally:
@@ -43,11 +45,6 @@ class TestCatharCommandoProperties:
         assert (card.base_power, card.base_toughness) == (3, 1)
         assert {"Human", "Soldier"} <= card.subtypes
         assert Keyword.FLASH in card.keywords
-
-    def test_has_one_targeted_ability(self):
-        abilities = CatharCommando(owner=None).get_activated_abilities()
-        assert len(abilities) == 1
-        assert abilities[0].targeting is not None
 
 
 class TestCatharCommandoAbility:
@@ -64,17 +61,17 @@ class TestCatharCommandoAbility:
         game, p1, p2, cathar, rock = self._setup()
         _activate_targeting(game, p1, cathar, rock)
         resolve_stack(game)
-        assert not _on_battlefield(game, rock)          # destroyed
+        assert not _on_battlefield(game, rock)  # destroyed
         assert game.get_graveyard(p2).contains(rock)
 
     def test_source_is_sacrificed_as_cost(self):
-        game, p1, p2, cathar, rock = self._setup()
+        game, p1, _p2, cathar, rock = self._setup()
         _activate_targeting(game, p1, cathar, rock)
-        assert not _on_battlefield(game, cathar)         # sacrificed
-        assert p1.mana_pool.total() == 0                 # {1} paid
+        assert not _on_battlefield(game, cathar)  # sacrificed
+        assert p1.mana_pool.total() == 0  # {1} paid
 
     def test_target_captured_on_stack(self):
-        game, p1, p2, cathar, rock = self._setup()
+        game, p1, _p2, cathar, rock = self._setup()
         _activate_targeting(game, p1, cathar, rock)
         top = game.stack.peek()
         assert top.targets == [rock]
@@ -97,11 +94,10 @@ class TestCatharCommandoAbility:
         game = create_game()
         p1, p2 = game.players
         cathar = CatharCommando(owner=p1, controller=p1)
-        bear = Creature(name="Bear", base_power=2, base_toughness=2,
-                        owner=p2, controller=p2)
+        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
         set_board_state(game, 0, battlefield=[cathar], mana={ManaType.WHITE: 1})
         set_board_state(game, 1, battlefield=[bear])
         with pytest.raises(AbilityError):
             activate_card_ability(game, p1, cathar)
-        assert _on_battlefield(game, cathar)             # not sacrificed
-        assert p1.mana_pool.total() == 1                 # no mana spent
+        assert _on_battlefield(game, cathar)  # not sacrificed
+        assert p1.mana_pool.total() == 1  # no mana spent

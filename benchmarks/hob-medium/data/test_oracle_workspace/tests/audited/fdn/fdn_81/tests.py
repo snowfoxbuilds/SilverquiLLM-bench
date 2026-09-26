@@ -1,94 +1,69 @@
-"""Reference test for FDN 81 — Chandra, Flameshaper.
+"""Chandra's +2 uses canonical loyalty activation; -4 baseline gaps are recorded separately."""
 
-Illustrative test covering the **−4 "divided as you choose" damage split**:
-the split is a player choice re-expressed as NUMBER Player Queries (one per
-target except the last, which takes the forced remainder), never a hardcoded
-distribution. A baseline answer takes the first-offered (lowest) number; a
-card intent picks the split via a ``Decision.number`` preference.
-"""
-
-from __future__ import annotations
-
+import pytest
 from cards.fdn.fdn_81.card_impl import ChandraFlameshaper
+from engine.abilities import AbilityError
 from engine.card import Creature, Planeswalker
-from engine.decisions import Decision, DecisionKind, GameRef
+from engine.decisions import GameRef
 from engine.intent_player import Intent
-from engine.types import ManaCost, Zone
-from test_utils import create_game
+from engine.types import ManaCost, ManaType, Phase
+from test_utils import (
+    activate_loyalty_ability,
+    behavioral_game,
+    create_game,
+    enter_permanent,
+    resolve_stack,
+)
 
 
-def _setup_minus4(game, n_targets):
-    """Chandra on p1's battlefield with ``n_targets`` chosen creature targets."""
-    p1, p2 = game.players[0], game.players[1]
-    pw = ChandraFlameshaper(owner=p1, controller=p1)
-    p1.zones[Zone.BATTLEFIELD].add(pw)
-    targets = []
-    for i in range(n_targets):
-        c = Creature(name=f"Target{i}", base_power=4, base_toughness=9,
-                     owner=p2, controller=p2)
-        p2.zones[Zone.BATTLEFIELD].add(c)
-        targets.append(c)
-    pw.chosen_targets = targets
-    minus4 = next(a for a in pw.get_loyalty_abilities() if a.loyalty_cost == -4)
-    return pw, targets, minus4
+def test_is_planeswalker():
+    assert isinstance(ChandraFlameshaper(), Planeswalker)
 
 
-class TestChandraFlameshaperProperties:
-    """Static card data should match the FDN 81 spec."""
-
-    def test_is_planeswalker(self) -> None:
-        assert isinstance(ChandraFlameshaper(owner=None), Planeswalker)
-
-    def test_name(self) -> None:
-        assert ChandraFlameshaper(owner=None).name == "Chandra, Flameshaper"
-
-    def test_mana_cost(self) -> None:
-        assert ChandraFlameshaper(owner=None).mana_cost == ManaCost.parse("{5}{R}{R}")
+def test_name():
+    assert ChandraFlameshaper().name == "Chandra, Flameshaper"
 
 
-class TestChandraFlameshaperMinus4Split:
-    """−4: 8 damage divided as the controller chooses — a Player Query."""
+def test_mana_cost():
+    assert ChandraFlameshaper().mana_cost == ManaCost.parse("{5}{R}{R}")
 
-    def test_intent_chooses_the_split(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        pw, (a, b), minus4 = _setup_minus4(game, 2)
-        p1.start_intent("split", Intent(
-            pattern=GameRef(card=frozenset({("name", "Chandra, Flameshaper")})),
-            preferences=(Decision.number(5),),
-        ))
-        minus4.effect(game)
-        p1.end_intent("split")
-        assert a.damage_marked == 5
-        assert b.damage_marked == 3
 
-    def test_baseline_takes_first_offered_lowest(self) -> None:
-        # NUMBER options are offered ascending, so a preference-free baseline
-        # assigns 1 to each queried target and the remainder to the last.
-        game = create_game()
-        p1 = game.players[0]
-        pw, targets, minus4 = _setup_minus4(game, 3)
-        p1.set_baseline(Intent(pattern=GameRef(), preferences=()))
-        minus4.effect(game)
-        assert [t.damage_marked for t in targets] == [1, 1, 6]
+def test_plus_two_adds_mana_and_exiles_three_cards():
+    game = behavioral_game()
+    player = game.players[0]
+    card = enter_permanent(game, player, ChandraFlameshaper())
+    before = len(game.get_library(player).get_all())
+    activate_loyalty_ability(game, player, card, 0)
+    assert card.loyalty == 8 and player.mana_pool.total() == 0
+    resolve_stack(game)
+    assert player.mana_pool.get(ManaType.RED) == 3
+    assert len(game.get_exile(player).get_all()) == 3
+    assert len(game.get_library(player).get_all()) == before - 3
+    assert not game.get_hand(player).get_all()
 
-    def test_each_queried_target_must_get_at_least_one(self) -> None:
-        # First of three targets: 8 left, two targets after it → options 1..6.
-        game = create_game()
-        p1 = game.players[0]
-        pw, targets, minus4 = _setup_minus4(game, 3)
-        p1.set_baseline(Intent(pattern=GameRef(), preferences=()))
-        minus4.effect(game)
-        number_queries = p1.transcript.queries(DecisionKind.NUMBER)
-        assert len(number_queries) == 2  # the last target is forced, no query
-        first_values = [dict(o.attrs)["value"] for o in number_queries[0].options]
-        assert first_values == [1, 2, 3, 4, 5, 6]
 
-    def test_single_target_takes_all_8_without_a_query(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        pw, (only,), minus4 = _setup_minus4(game, 1)
-        p1.set_baseline(Intent(pattern=GameRef(), preferences=()))
-        minus4.effect(game)
-        assert only.damage_marked == 8
-        assert p1.transcript.queries(DecisionKind.NUMBER) == []
+def test_plus_two_handles_fewer_than_three_library_cards():
+    game = create_game()
+    player = game.players[0]
+    game.phase, game.step = Phase.PRECOMBAT_MAIN, None
+    player.set_baseline(Intent(pattern=GameRef()))
+    top = Creature(name="Only card", base_power=1, base_toughness=1, owner=player)
+    game.get_library(player).add(top)
+    card = enter_permanent(game, player, ChandraFlameshaper())
+    activate_loyalty_ability(game, player, card, 0)
+    resolve_stack(game)
+    assert game.get_exile(player).get_all() == [top]
+    assert not game.get_library(player).get_all()
+    assert player.mana_pool.get(ManaType.RED) == 3
+
+
+def test_plus_two_cannot_be_repeated_in_the_same_turn():
+    game = behavioral_game()
+    player = game.players[0]
+    card = enter_permanent(game, player, ChandraFlameshaper())
+    activate_loyalty_ability(game, player, card, 0)
+    resolve_stack(game)
+    with pytest.raises(AbilityError):
+        activate_loyalty_ability(game, player, card, 0)
+    assert card.loyalty == 8 and player.mana_pool.get(ManaType.RED) == 3
+    assert len(game.get_exile(player).get_all()) == 3

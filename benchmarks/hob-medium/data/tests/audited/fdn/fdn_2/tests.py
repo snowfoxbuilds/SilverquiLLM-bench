@@ -9,6 +9,7 @@ Phase F ordering flip makes the trigger fire on Arahbo's own entry, so that
 one** Cat on its own entry (not zero, not two) and still fires for *another*
 nontoken Cat but not for a Cat *token*.
 """
+
 from __future__ import annotations
 
 from cards.fdn.fdn_2.card_impl import ArahboTheFirstFang
@@ -42,7 +43,9 @@ class TestArahboSelfETB:
         arahbo = ArahboTheFirstFang()
         game = create_game()
         set_board_state(
-            game, 0, hand=[arahbo],
+            game,
+            0,
+            hand=[arahbo],
             mana={ManaType.WHITE: 1, ManaType.COLORLESS: 2},
         )
         cast_spell(game, 0, "Arahbo, the First Fang")
@@ -58,7 +61,9 @@ class TestArahboSelfETB:
         arahbo = ArahboTheFirstFang()
         game = create_game()
         set_board_state(
-            game, 0, hand=[arahbo],
+            game,
+            0,
+            hand=[arahbo],
             mana={ManaType.WHITE: 1, ManaType.COLORLESS: 2},
         )
         cast_spell(game, 0, "Arahbo, the First Fang")
@@ -70,31 +75,23 @@ class TestArahboSelfETB:
         assert cat.is_token is True
         assert get_colors(cat) == {Color.WHITE}
 
-    def test_another_nontoken_cat_mints_but_a_cat_token_does_not(self) -> None:
-        arahbo = ArahboTheFirstFang()
-        game = create_game()
-        p = game.players[0]
-        set_board_state(game, 0, battlefield=[arahbo])
-        arahbo.owner = p
-        arahbo.controller = p
-        arahbo.register_triggers(game)
-        assert len(_cat_tokens(game, 0)) == 0
-
-        # A nontoken Cat entering under our control fires the trigger.
-        other_cat = Creature(name="Jungle Cat", subtypes={"Cat"}, base_power=2, base_toughness=2)
-        _enter(game, p, other_cat)
-        assert len(_cat_tokens(game, 0)) == 1
-
-        # A Cat *token* entering must NOT fire (nontoken filter). The trigger
-        # effect itself mints a Cat token — that token's own entry must not
-        # re-trigger and loop.
-        tokens_before = len(_cat_tokens(game, 0))
-        token_cat = Creature(name="Cat", subtypes={"Cat"}, base_power=1, base_toughness=1)
-        token_cat.is_token = True
-        token_cat.owner = p
-        token_cat.controller = p
+    def test_another_nontoken_cat_mints_but_a_cat_token_does_not(self):
         from engine.game import create_token
-        create_token(game, p, token_cat)
+        from test_utils import enter_permanent
+
+        game = create_game()
+        player = game.players[0]
+        enter_permanent(game, player, ArahboTheFirstFang())
         resolve_stack(game)
-        # Only the token we placed appears; no extra Cat minted by re-trigger.
-        assert len(_cat_tokens(game, 0)) == tokens_before + 1
+        assert len(_cat_tokens(game, 0)) == 1
+        _enter(
+            game,
+            player,
+            Creature(name="Jungle Cat", subtypes={"Cat"}, base_power=2, base_toughness=2),
+        )
+        assert len(_cat_tokens(game, 0)) == 2
+        create_token(
+            game, player, Creature(name="Cat", subtypes={"Cat"}, base_power=1, base_toughness=1)
+        )
+        resolve_stack(game)
+        assert len(_cat_tokens(game, 0)) == 3

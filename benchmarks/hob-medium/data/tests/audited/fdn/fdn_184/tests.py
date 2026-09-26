@@ -8,6 +8,7 @@ trigger fire on the Demon's own entry, so the ``on_resolve`` self-tutor was
 removed — this test proves the tutor happens **exactly once** (a double-fire
 would empty a two-card library).
 """
+
 from __future__ import annotations
 
 from cards.fdn.fdn_184.card_impl import RuneScarredDemon
@@ -32,19 +33,23 @@ class TestRuneScarredDemonSelfETB:
             c.instance_id = game.refs.instance_id(c, Zone.LIBRARY.value)
 
         set_board_state(
-            game, 0, hand=[demon],
+            game,
+            0,
+            hand=[demon],
             mana={ManaType.BLACK: 2, ManaType.COLORLESS: 5},
         )
 
-        p.start_intent("tutor", Intent(
-            pattern=GameRef(card=frozenset({("name", "Rune-Scarred Demon")})),
-            preferences=(Decision.obj(instance=wanted.instance_id),),
-        ))
+        p.start_intent(
+            "tutor",
+            Intent(
+                pattern=GameRef(card=frozenset({("name", "Rune-Scarred Demon")})),
+                preferences=(Decision.obj(instance=wanted.instance_id),),
+            ),
+        )
         try:
             cast_spell(game, 0, "Rune-Scarred Demon")
         finally:
-            if "tutor" in p._intents:
-                p.end_intent("tutor")
+            p.end_intent("tutor")
 
         hand = p.zones[Zone.HAND]
         # The chosen card moved to hand; the other stays in the library —
@@ -53,9 +58,17 @@ class TestRuneScarredDemonSelfETB:
         assert library.contains(other)
         assert len(library.get_all()) == 1
 
-    def test_on_resolve_no_longer_self_tutors(self) -> None:
-        # The bespoke on_resolve workaround was removed; the base CardImpl
-        # on_resolve is a no-op, so resolving does not tutor on its own.
-        from engine.card import CardImpl
+    def test_reentry_tutors_once_again(self):
+        from engine.zones import move_to_zone
+        from test_utils import behavioral_game, enter_permanent, resolve_stack
 
-        assert RuneScarredDemon.on_resolve is CardImpl.on_resolve
+        game = behavioral_game()
+        player = game.players[0]
+        demon = enter_permanent(game, player, RuneScarredDemon())
+        resolve_stack(game)
+        assert len(game.get_hand(player).get_all()) == 1
+        move_to_zone(game, demon, Zone.BATTLEFIELD, Zone.EXILE)
+        move_to_zone(game, demon, Zone.EXILE, Zone.BATTLEFIELD)
+        resolve_stack(game)
+        assert len(game.get_hand(player).get_all()) == 2
+        assert len(game.get_library(player).get_all()) == 38
