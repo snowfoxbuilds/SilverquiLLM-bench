@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections import Counter
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -280,7 +281,9 @@ def load_token_id_map(
     reproducible via ``scripts/build_token_id_map.py``.
     """
     if path is None:
-        path = Path(__file__).parent.parent.parent / "data" / "replays" / "token_id_map.json"
+        data_root = os.environ.get("SILVERQUILLM_BENCH_ROOT")
+        root = Path(data_root) if data_root else Path(__file__).parent.parent.parent
+        path = root / "data" / "replays" / "token_id_map.json"
     else:
         path = Path(path)
     if not path.exists():

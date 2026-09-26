@@ -162,7 +162,6 @@ the executor's result shape.
 from __future__ import annotations
 
 import errno
-import fcntl
 import json
 import os
 import re
@@ -185,6 +184,13 @@ from silverquillm.candidate import CandidateBundle, load_candidate_bundle, redac
 from silverquillm.contract import RUNS_DIRNAME, candidate_label, container_name, new_run_name
 from silverquillm.jobdir import BenchmarkRef, load_benchmark
 from silverquillm.modes import BenchmarkMode, get_mode
+from silverquillm.queue_state import (
+    LockStatus,
+    SchedulerLock,
+    SchedulerLockedError,
+    _write_atomically,
+    lock_status,
+)
 from silverquillm.results_repo import (
     OZOLITH_SCHEME,
     CandidateIdentity,
@@ -369,10 +375,6 @@ class BatchError(Exception):
 class StateError(Exception):
     """A scheduler state file is unreadable, malformed, or of another schema
     version — the batch is blocked (fail closed)."""
-
-
-class SchedulerLockedError(Exception):
-    """Another scheduler holds ``batches/.scheduler.lock``."""
 
 
 class ReconciliationError(SchedulerError):
@@ -953,18 +955,6 @@ def save_state(batches_dir: Path, state: BatchState, *, now: datetime | None = N
     return path
 
 
-def _write_atomically(path: Path, payload: str, *, prefix: str) -> None:
-    fd, tmp = tempfile.mkstemp(prefix=prefix, suffix=".json", dir=path.parent)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(payload)
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
 
 
 # ---------------------------------------------------------------------------
@@ -1171,81 +1161,6 @@ def reconcile_container(runtime: ContainerRuntime, name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class LockStatus:
-    """Whether a scheduler holds the lock right now, and what the lock file
-    records about its holder (stale once the holder exits)."""
-
-    held: bool
-    holder: dict[str, Any] | None
-
-
-def _read_holder(path: Path) -> dict[str, Any] | None:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    return data if isinstance(data, dict) else None
-
-
-class SchedulerLock:
-    """``flock`` on ``batches/.scheduler.lock`` for the scheduler's lifetime."""
-
-    def __init__(self, batches_dir: Path) -> None:
-        self.batches_dir = Path(batches_dir)
-        self.path = self.batches_dir / LOCK_FILENAME
-        self._fd: int | None = None
-
-    def __enter__(self) -> Self:
-        self.batches_dir.mkdir(parents=True, exist_ok=True)
-        fd = os.open(self.path, os.O_RDWR | os.O_CREAT, 0o644)
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            os.close(fd)
-            holder = _read_holder(self.path) or {}
-            raise SchedulerLockedError(
-                f"another scheduler holds {self.path}"
-                + (
-                    f" (pid {holder.get('pid')} on {holder.get('hostname')} since {holder.get('started_at')})"
-                    if holder
-                    else ""
-                )
-                + " — one scheduler per batches directory; refusing to start a second"
-            ) from None
-        holder = {"pid": os.getpid(), "hostname": socket.gethostname(), "started_at": _stamp(_now())}
-        os.ftruncate(fd, 0)
-        os.write(fd, (json.dumps(holder, sort_keys=True) + "\n").encode("utf-8"))
-        self._fd = fd
-        return self
-
-    def __exit__(self, *exc_info: object) -> None:
-        if self._fd is not None:
-            fcntl.flock(self._fd, fcntl.LOCK_UN)
-            os.close(self._fd)
-            self._fd = None
-
-
-def lock_status(batches_dir: Path) -> LockStatus:
-    """Read-only probe: is the lock held?  Never takes the lock for longer
-    than the probe, never writes the file."""
-    path = Path(batches_dir) / LOCK_FILENAME
-    if not path.exists():
-        return LockStatus(held=False, holder=None)
-    holder = _read_holder(path)
-    try:
-        fd = os.open(path, os.O_RDONLY)
-    except OSError:
-        return LockStatus(held=False, holder=holder)
-    try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return LockStatus(held=True, holder=holder)
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        return LockStatus(held=False, holder=holder)
-    finally:
-        os.close(fd)
 
 
 # ---------------------------------------------------------------------------

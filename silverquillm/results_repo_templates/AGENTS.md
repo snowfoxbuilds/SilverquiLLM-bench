@@ -65,6 +65,24 @@ results/<candidate-hash>/<run-id>/scores.json
    run always consumes the entire set. The retired "workload" (card-subset) term
    does not appear in this repo.
 
+## Schema 2: Karn observations
+
+New Karn runs use `schema_version: 2` with candidate scheme `karn-v4`.
+The candidate object records `definition_version: 4`, `definition_id`, `definition_digest`, immutable `image`, and resolved `image_id`.
+Its directory key is the SHA-256 hex digest of that whole candidate object's canonical UTF-8 JSON (sorted keys, minimal separators, non-ASCII preserved).
+The manifest contains `run_id`, `candidate`, `candidate_hash`, `benchmark`, `budget_seconds`, `run_metadata`, and `artifact_pointers`; it contains no mode, proposal, or leaderboard eligibility field.
+
+`run_metadata` preserves the full selected definition, benchmark input identity, execution outcome, measurement observations, and grading-source provenance.
+Measurements retain response/tool components, token usage, versioned API-equivalent pricing, and completeness reasons.
+The three existing score-dimension names remain; an absent dimension uses `evaluated: false`, null counts/pass rate, and `missing_reasons`.
+Coverage distinguishes the complete reference population from cards with executed audited cases.
+A snapshot fallback names its selected source while retaining the final workspace separately.
+Host grading inputs have content fingerprints in `run_metadata.grading_inputs`.
+A later recovery observation can have its own record id while `recovery_of` and `execution_run_id` link it to the original model execution; the prior record remains unchanged, and the derived index exposes that link.
+
+The reader and derived index preserve both schemas without changing historical identities or interpreting new data through historical publication rules.
+The remaining schema details below describe schema 1 only.
+
 ## `manifest.json`
 
 ```json

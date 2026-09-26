@@ -39,7 +39,9 @@ IDENTITY_VECTORS = REPO / "docs" / "specs" / "bench-identity-vectors.json"
 
 def _pyproject_requirement(name: str = cv.WORKER_DISTRIBUTION) -> str:
     data = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
-    reqs = [r for r in data["project"]["dependencies"] if r.startswith(f"{name} ")]
+    runtime = [r for r in data["project"]["dependencies"] if r.startswith(f"{name} ")]
+    assert not runtime, "legacy packages must not be mandatory Karn runtime dependencies"
+    reqs = [r for r in data["project"]["optional-dependencies"]["legacy"] if r.startswith(f"{name} ")]
     assert len(reqs) == 1, reqs
     return reqs[0]
 

@@ -422,6 +422,8 @@ def candidate_hash(identity: CandidateIdentity) -> str:
     directory (:func:`candidate_dirname`).
     """
     identity.validate()
+    if identity.scheme == "karn-v4":
+        return identity.hash
     if identity.scheme == LEGACY_SCHEME:
         return identity.base_image_digest[len(f"{LEGACY_SCHEME}:") :]
     canonical = json.dumps(
@@ -819,6 +821,10 @@ def read_run_record(run_dir: Path) -> RunRecord:
     scores = _load_json(run_dir / SCORES_FILENAME)
     if not isinstance(manifest, dict) or not isinstance(scores, dict):
         raise InvalidRunRecordError(f"{run_dir}: manifest.json and scores.json must be objects")
+    if manifest.get("schema_version") == 2:
+        from silverquillm.karn.records import read_record
+
+        return read_record(run_dir)
     try:
         record = RunRecord.from_dicts(manifest, scores)
     except InvalidRunRecordError as exc:
@@ -879,6 +885,9 @@ def rebuild_index(repo_root: Path) -> list[dict[str, Any]]:
     repo_root = Path(repo_root)
     rows: list[dict[str, Any]] = []
     for run_dir, record in iter_run_records(repo_root):
+        if record.candidate.scheme == "karn-v4":
+            rows.append(record.index_row())
+            continue
         rows.append(
             {
                 "candidate_hash": run_dir.parent.name,

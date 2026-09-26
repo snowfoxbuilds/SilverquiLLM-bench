@@ -10,7 +10,7 @@ Each task is a small but real software-engineering job: read a spec, understand 
 
 SilverquiLLM-bench is designed to evaluate coding agents the way you'd evaluate a software contributor — by the quality of the code they ship, not by multiple-choice answers.
 
-- **Agent- and model-independent.** Agents run as black-box Docker containers. The image *is* the entire agent configuration — CLI, model, prompt, and strategy. The harness only supplies a workspace, API keys, and a timeout, so any agent that can edit files in a container can be benchmarked on equal footing: Claude Code, Copilot, custom harnesses, multi-pass reviewers, and more.
+- **Agent- and model-independent.** Agents run as black-box Docker containers. A Karn candidate pairs a prebuilt immutable image with its complete v4 Construct Definition. The benchmark supplies task data, a fresh workspace, an execution budget, and the selected local login.
 - **Full isolation.** Every run gets a fresh workspace in its own container. There is no shared state between runs, no network dependence on the grader, and no cross-agent leakage.
 - **Low contamination risk.** Targets come from a newly released MTG set that did not exist at training time, and the hidden test suite is never mounted into the container. Agents are scored on code they actually wrote against tasks they could not have memorized.
 - **Mimics a full engineering workflow.** Agents don't emit a single answer — they explore a real codebase, study reference implementations, extend a shared engine, and (optionally) write their own tests. Success requires reusable design and not breaking existing behavior, exactly like contributing to a live project.
@@ -31,9 +31,9 @@ Magic cards make good coding-benchmark tasks because they:
 
 ## Benchmark Set
 
-The current target set is **Secrets of Strixhaven (SOS)**, a recently released MTG set. The **Foundations (FDN)** set is fully implemented and ships alongside the targets as in-context **reference examples**, so agents can learn the engine's idioms before implementing new cards.
+The current integration workstream focuses on **hob-medium**, its five selected Hobbit cards, and its independent oracle. Historical SOS benchmarks remain available. The shipped **Foundations (FDN)** implementations provide in-context **reference examples**. The [coverage ledger](benchmarks/hob-medium/data/fdn_regression_coverage.json) records tested behavior and known baseline limitations.
 
-> **The exact cards used for benchmarking are subject to change.** The benchmark currently runs against a small subset (**10 SOS cards**) while the suite is tuned; this selection — and its size — will evolve over time. Treat the active card set as a moving target, not a fixed contract.
+> Each benchmark's `config.json` identifies its selected cards. `hob-medium` selects five HOB cards; historical SOS runs select ten SOS cards. Test coverage is reported with each run.
 
 ---
 
@@ -45,8 +45,8 @@ Stage Workspace → Run Agent Container → Snapshot progress → Harvest final 
 
 1. **Stage** — the harness builds a fresh workspace containing the engine source, reference cards, target templates, a rulebook, and the task prompt.
 2. **Run** — it launches a single agent container, which edits the engine and target card implementations in place.
-3. **Snapshot** — the full workspace is periodically committed to a host-side snapshot history for progress telemetry and recovery from a corrupted final state.
-4. **Harvest** — the final workspace is materialized as the official, immutable evaluation state.
+3. **Snapshot** — the runner retains workspace-only copies for recovery from an unusable final engine.
+4. **Harvest** — the final workspace is preserved. If its engine cannot load, a proven usable snapshot can supply grading; the record names both states and the fallback reason.
 5. **Evaluate** — scoring runs post-hoc against the harvested workspace using a hidden, audited test suite.
 
 ---
@@ -67,50 +67,24 @@ Audited tests are never visible to the agent. Agent-written tests are harvested 
 
 ## Quickstart
 
-### Prerequisites
+Use Python 3.13, Docker, Karn on the build host, and a host Codex CLI for subscription enrollment.
+Install the benchmark with `pip install -e .`.
+The benchmark package runs independently of Ozolith's daemon and builder packages.
 
-- Python ≥ 3.12
-- Docker
-- An agent image (see [Agent Images](#agent-images))
-
-### Install
+Build the bare Codex example explicitly before scheduling a run:
 
 ```bash
-git clone https://github.com/snowfoxbuilds/SilverquiLLM-bench.git
-cd SilverquiLLM-bench
-pip install -e ".[dev]"
+karn build examples/karn --worktree --out /tmp/bench-codex-build
+silverquillm karn login benchmark --build-output /tmp/bench-codex-build --construct bare-codex
+silverquillm karn run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --login benchmark --results-repo ./private-results
+silverquillm karn run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --login benchmark --results-repo ./private-results
 ```
 
-This installs the `silverquillm` CLI (also aliased as `benchmark`). API keys are read from the environment or a repo-root `.env` and passed through to the container.
+The example selects `gpt-6-astra` and the existing Codex login plugin, with no custom skills or polling controller.
+Each run records available grades, API-equivalent estimated cost, model responses, tool calls, and observation completeness.
+Failed and interrupted runs remain useful data; collection has no leaderboard eligibility gate.
 
-### Build and smoke-test an image
-
-```bash
-docker build -t my-agent:latest docker/my-agent/
-silverquillm smoke --image my-agent:latest
-```
-
-Smoke runs validate that a container starts and produces output — they use a tiny synthetic task and never enter benchmark results.
-
-### Run a benchmark
-
-```bash
-# A Candidate Bundle through TheOzolith's Run Contract (the current contract):
-silverquillm run --candidate candidates/vanilla-claude--4e8b75b6 --benchmark smoke --timeout 3600
-# The legacy entrypoint lineage (being phased out):
-silverquillm run --image my-agent:latest --timeout 7200
-```
-
-A **Candidate Bundle** (`candidates/README.md`) is the only input of a
-Contract Run: the bench verifies it through TheOzolith's verifier, recomputes
-its identity (never trusted from a recorded value), builds its derived image
-through the verified standalone build, launches it by image ID with the
-in-image harness as PID 1, and records the run under the recomputed identity.
-The bundle's `secret_slots` name the environment variables the bench binds
-(`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` for claude, `CODEX_AUTH_JSON`
-for codex). The current vanilla reference candidates ship under `candidates/`;
-they are examples, not a closed set — a further candidate is one more exported
-directory, with no adapter or model registry to update.
+See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retained artifacts, and historical commands.
 
 ---
 
@@ -118,6 +92,9 @@ directory, with no adapter or model registry to update.
 
 | Command | Purpose |
 | --- | --- |
+| `silverquillm karn run --build-output … --construct … --benchmark … --login …` | Execute a prebuilt Karn candidate and retain implementation and efficiency observations. |
+| `silverquillm karn scheduler --once --replay-without-state ID` | Execute due Karn batches through the same run lifecycle. |
+| `silverquillm karn queue` | Inspect Karn queue state and recorded outcomes. |
 | `silverquillm run --candidate <bundle> --benchmark … [--mode basic\|planned] [--results-repo …]` | Drive a Candidate Bundle through TheOzolith's implementer Run Contract: bundle verification + identity recomputation, vendored results-repo copy, verified image build, production job dir, gate over the jobs channel, post-exit proposal application, Audited Eval, RunRecord under the verified identity. |
 | `silverquillm run --image … --timeout …` | Launch a legacy entrypoint-lineage run (being phased out). |
 | `silverquillm smoke --image …` | Validate that an image starts and produces output. |
@@ -137,7 +114,12 @@ A `--cards` filter is available for development and pipeline validation, but fil
 
 ## Candidates, Batches, and Publishing
 
-The bench-side lifecycle of a candidate (`docs/specs/BENCHMARK-CANDIDATES.md`):
+The following historical Candidate Bundle commands require the optional `legacy` extra (`pip install -e ".[legacy]"`).
+The existing [legacy Docker examples](docker/) remain available for those historical image workflows.
+Their production proposal and publication behavior remains specific to those records.
+For new runs, use [Karn benchmarking](docs/KARN-BENCHMARKING.md).
+
+The historical bench-side lifecycle (`docs/specs/BENCHMARK-CANDIDATES.md`):
 
 1. **Promote.** `python scripts/promote_candidate.py <config-repo> <worker-type>`
    copies a worker-type definition from your private Config Repo into
@@ -216,3 +198,15 @@ The game engine is inspired by [XMage](https://github.com/magefree/mage), an ope
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
+
+## Local development checks
+
+The complete repository test suite includes historical Candidate Bundle tests and therefore uses both development and legacy test dependencies:
+
+```bash
+pip install -e ".[dev,legacy]"
+pytest tests/
+```
+
+The Karn runtime itself has no legacy dependency requirement.
+A clean wheel installation can run `silverquillm karn` and its direct/batch benchmarks independently of all Ozolith runtime and builder packages.

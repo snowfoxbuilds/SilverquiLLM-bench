@@ -549,6 +549,8 @@ def check_traceability(
 
 def validity_warnings(record: RunRecord) -> list[str]:
     """Every reason the run is not leaderboard-valid; empty means valid."""
+    if record.candidate.scheme == "karn-v4":
+        return []
     if record.leaderboard_valid:
         return []
     reasons = [f"leaderboard_valid is false for benchmark {record.benchmark!r}"]
@@ -602,6 +604,9 @@ def plan_publication(
         source_dir, record = find_run_record(results_repo, run_id)
         planned = PlannedRun(run_id=run_id, source_dir=source_dir, record=record, dest_dir=plan.dest / run_id)
         plan.runs.append(planned)
+        if record.candidate.scheme == "karn-v4":
+            planned.refusals.append("This legacy Candidate Bundle publication command does not handle Karn schema 2 records; the collected record remains available in the results repository.")
+            continue
         try:
             planned.traceability = check_traceability(
                 record.candidate, candidates_dir=candidates_dir, results_repo=results_repo

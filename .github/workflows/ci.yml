@@ -37,7 +37,7 @@ jobs:
       # measures with).
       - name: Install
         run: |
-          uv pip install --python .venv/bin/python -e ".[dev]"
+          uv pip install --python .venv/bin/python -e ".[dev,legacy]"
 
       - name: Show the installed contract pin
         run: |

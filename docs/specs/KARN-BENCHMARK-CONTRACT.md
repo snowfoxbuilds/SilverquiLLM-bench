@@ -44,7 +44,7 @@ The bench owns scheduling, Workspace staging, User Prompt delivery, run launch, 
 Karn configuration selects the container command, initializer, bootstrap, declared mounts and files, and required runtime facilities.
 The benchmark host honors that selection.
 
-Karn must allow an Automaton to omit a polling controller (grilling 2026-09-26).
+Karn allows an Automaton to omit a polling controller (grilling 2026-09-26).
 A controller is needed for automatic scheduling, not direct execution; controller-free execution requires no new wire-format field.
 Externally launched execution does not suppress authentication or other selected lifecycle hooks.
 
@@ -143,6 +143,22 @@ Completing hob-medium is part of this workstream, including its missing Test Ora
 [HOB Benchmarks](HOB-BENCHMARKS.md) owns the selected Card Pool, benchmark assets, instruction data, and oracle-first validation requirements.
 The existing smoke benchmark exercises the integration before hob-medium runs collect implementation and efficiency data.
 The workstream also covers the CLI and batch paths that retain those observations as Run Records.
+
+### Operator entrypoints and records
+
+`silverquillm karn run` and `silverquillm karn scheduler` share the same staging, execution, observation, harvesting, and grading lifecycle.
+The `karn login` command enrolls a named host-local Login Profile through the selected existing plugin.
+[Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
+
+New immutable Run Records use schema 2 and the `karn-v4` identity scheme.
+They retain the full selected definition, execution observations, three independent grading dimensions, measurement completeness, and artifact pointers.
+An unexecuted grading dimension has null counts and pass rate with a reason.
+Coverage names tested and uncovered cards, so an incomplete FDN suite does not imply full FDN coverage.
+
+Workspace snapshots contain only workspace files and exclude authentication state.
+Final evidence includes a Git bundle of available referenced commits, produced through a clean repository that excludes candidate hooks and credential configuration; an unavailable history is recorded explicitly.
+The runner preserves the final workspace even when its engine is unusable; fallback selects the newest retained snapshot whose engine passes the same viability check, and records the selected path and reason.
+A fallback grade describes that snapshot, while the execution outcome continues to describe the actual run.
 
 ### Historical evidence
 

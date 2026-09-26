@@ -1,0 +1,57 @@
+extends = "codex@1"
+mode = "automaton"
+model = "gpt-6-astra"
+
+[runtime]
+main = ["python3", "/opt/construct/entrypoint.py", "--adapter", "codex"]
+initializer = ["python3", "/opt/construct/init.py", "--adapter", "codex"]
+timeout_seconds = 86400
+
+[runtime.environment]
+CODEX_HOME = "/native"
+
+[runtime.egress]
+mode = "restricted"
+https_hosts = ["api.openai.com", "chatgpt.com", "auth.openai.com"]
+
+[[runtime.mounts]]
+name = "input"
+target = "/input"
+source = { kind = "runtime", value = "input" }
+persistent = false
+access = "read_only"
+purpose = "input"
+
+[[runtime.mounts]]
+name = "output"
+target = "/output"
+source = { kind = "runtime", value = "output" }
+persistent = false
+access = "read_write"
+purpose = "output"
+
+[[runtime.mounts]]
+name = "workspace"
+target = "/workspace"
+source = { kind = "runtime", value = "workspace" }
+persistent = false
+access = "read_write"
+purpose = "workspace"
+
+[[runtime.files]]
+name = "prompt"
+mount = "input"
+path = "prompt.md"
+direction = "input"
+schema = true
+
+[[runtime.files]]
+name = "result"
+mount = "output"
+path = "result.json"
+direction = "output"
+schema = { type = "object", required = ["contract_version", "outcome"], properties = { contract_version = { const = 0 }, outcome = { enum = ["completed", "failed", "invalid_input"] } } }
+
+[[runtime.plugins]]
+id = "karn-codex-login"
+version = "0.1.0"

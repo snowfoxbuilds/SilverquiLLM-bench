@@ -37,8 +37,6 @@ from silverquillm._bootstrap import ensure_workspace_on_path
 # resolve in the CLI process and in subprocesses that inherit our env.
 ensure_workspace_on_path()
 
-from theozolith_worker import api
-
 from silverquillm.card_loader import load_all_card_specs
 from silverquillm.card_names import build_card_name_map
 from silverquillm.replay.cli import validate as _replay_validate
@@ -990,6 +988,8 @@ def _run_candidate(
 ) -> None:
     """Drive a Candidate Bundle through TheOzolith's implementer Run Contract
     (the body of ``silverquillm run --candidate``)."""
+    from theozolith_worker import api
+
     from silverquillm.contract import (
         RUNS_DIRNAME,
         candidate_label,
@@ -1739,9 +1739,7 @@ _BATCHES_DIR_OPTION = click.option(
 
 
 def _batches_dir(value: Path | None) -> Path:
-    from silverquillm.scheduler import BATCHES_DIRNAME
-
-    return value if value is not None else _REPO_ROOT / BATCHES_DIRNAME
+    return value if value is not None else _REPO_ROOT / "batches"
 
 
 @main.command()
@@ -1856,6 +1854,14 @@ def queue_ls(batches_dir: Path | None) -> None:
     """One-shot table: every batch, its not_before, per-run specs and states, and
     whether it is blocked (missing committed state, unreadable state, a run
     left running). Read-only."""
+    from silverquillm.karn.batching import queue_rows
+
+    directory = _batches_dir(batches_dir)
+    rows = queue_rows(directory)
+    for row in rows:
+        click.echo(f"{row['batch']} [karn-v4]: {row['status']} ({row.get('started', 0)}/{row.get('total', 0)})")
+    if rows and len(rows) == len(list(directory.glob("*.toml"))):
+        return
     from silverquillm.queue_view import build_queue_view, render_queue
 
     for line in render_queue(build_queue_view(_batches_dir(batches_dir))):
@@ -1893,6 +1899,10 @@ def results_init(path: Path) -> None:
     for file_path in written:
         click.echo(f"wrote {file_path}")
 
+
+from silverquillm.karn.commands import karn as _karn_commands
+
+main.add_command(_karn_commands)
 
 if __name__ == "__main__":
     main()

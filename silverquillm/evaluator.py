@@ -40,6 +40,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -51,23 +52,24 @@ logger = logging.getLogger(__name__)
 
 # Repo root — resolved once at import time
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+_BENCHMARK_DATA_ROOT: ContextVar[Path | None] = ContextVar("benchmark_data_root", default=None)
 
 __all__ = [
     "CardResult",
-    "EngineResult",
     "EnginePatchError",
+    "EngineResult",
     "EvalPaths",
     "EvalResult",
     "FullEvalResult",
     "evaluate",
     "evaluate_run",
     "resolve_eval_paths",
-    "run_tests",
-    "run_self_eval",
-    "run_self_eval_flat",
-    "run_cross_eval",
     "run_audited_eval",
     "run_audited_eval_per_card",
+    "run_cross_eval",
+    "run_self_eval",
+    "run_self_eval_flat",
+    "run_tests",
 ]
 
 # ---------------------------------------------------------------------------
@@ -180,7 +182,7 @@ def _parse_pytest_output(output: str) -> tuple[int, int, int, list[str]]:
     # Collect individual failure/error lines
     for line in output.splitlines():
         stripped = line.strip()
-        if stripped.startswith("FAILED ") or stripped.startswith("ERROR "):
+        if stripped.startswith(("FAILED ", "ERROR ")):
             errors.append(stripped)
 
     # Find the short summary line produced by ``pytest -q``
@@ -724,6 +726,8 @@ def _run_pytest_with_pythonpath(
     pythonpath_parts: list[str],
     timeout: int = 60,
     capture_test_nodes: bool = False,
+    *,
+    isolated_workspace: Path | None = None,
 ) -> tuple[int, int, int, list[str]] | tuple[int, int, int, list[str], list[dict]]:
     """Run pytest on *test_path* with a custom PYTHONPATH.
 
@@ -732,9 +736,12 @@ def _run_pytest_with_pythonpath(
     outcome dicts: ``[{"test_node": "tests.py::test_x", "outcome": "pass"|"fail"}, ...]``.
     """
     env = dict(os.environ)
-    existing = env.get("PYTHONPATH", "")
+    data_root = _BENCHMARK_DATA_ROOT.get()
+    if data_root is not None:
+        env["SILVERQUILLM_BENCH_ROOT"] = str(data_root)
+    existing = env.get("PYTHONPATH", "") if isolated_workspace is None else ""
     parts = pythonpath_parts + ([existing] if existing else [])
-    env["PYTHONPATH"] = ":".join(parts)
+    env["PYTHONPATH"] = os.pathsep.join(parts)
 
     report_jsonl_path = None
     existing_conftest_backup = None
@@ -749,6 +756,12 @@ def _run_pytest_with_pythonpath(
         "-q",
         "--no-header",
     ]
+
+    if isolated_workspace is not None:
+        cmd.extend([
+            "-c", str(isolated_workspace / "pytest.ini"),
+            "--confcutdir", str(isolated_workspace),
+        ])
 
     if capture_test_nodes:
         # Write a report JSONL to a temp file; inject conftest into the test's
@@ -779,6 +792,8 @@ def _run_pytest_with_pythonpath(
                 text=True,
                 timeout=timeout,
                 env=env,
+                cwd=isolated_workspace,
+                check=False,
             )
             combined = result.stdout + "\n" + result.stderr
         except subprocess.TimeoutExpired:
@@ -984,40 +999,66 @@ def _eval_engine(
     timeout: int = 120,
     *,
     test_utils: Path | None = None,
+    cards_dir: Path | None = None,
 ) -> EngineResult:
-    """Dimension 3: Engine Regression.
+    """Run authoritative engine tests beside isolated copies of the selected code.
 
-    Run the host-authoritative engine tests against the agent's engine_work/.
-    When *test_utils* is given (the Contract Run path), the authoritative
-    ``test_utils.py`` is staged ahead of the candidate engine on ``PYTHONPATH``
-    so a candidate that tampered with its own ``test_utils`` cannot influence the
-    engine regression score; a missing authoritative copy fails visibly.  Legacy
-    callers pass ``None`` and keep the prior behavior.
+    The workspace-relative card checks and repository-relative replay fixtures
+    must see the same candidate packages as ordinary imports. Candidate pytest
+    configuration, tests and helper modules never enter the grading workspace.
+    Legacy engine-only staging supplies its reference cards explicitly.
     """
-    if not engine_tests_dir.exists():
+    if not engine_tests_dir.is_dir():
         return EngineResult(errors=[f"No engine tests at {engine_tests_dir}"])
+    authoritative_workspace = engine_tests_dir.parent
+    support = test_utils if test_utils is not None else authoritative_workspace / "test_utils.py"
+    if not support.is_file():
+        return EngineResult(errors=[f"authoritative test_utils.py not found at {support}"])
+    selected_cards = cards_dir if cards_dir is not None else engine_work.parent / "cards"
+    for source in (engine_work, selected_cards):
+        if not source.is_dir():
+            return EngineResult(errors=[f"selected grading code directory not found at {source}"])
 
-    support_dir: str | None = None
-    pp: list[str] = []
-    if test_utils is not None:
-        if not test_utils.is_file():
-            return EngineResult(
-                errors=[f"authoritative test_utils.py not found at {test_utils}"]
+    data_root = _BENCHMARK_DATA_ROOT.get() or Path(
+        os.environ.get("SILVERQUILLM_BENCH_ROOT", _REPO_ROOT)
+    )
+    with tempfile.TemporaryDirectory(prefix="eval_engine_") as directory:
+        root = Path(directory)
+        # Engine suites use parents[1] for workspace code and parents[4] for
+        # replay fixtures. Preserve that topology without retaining host code.
+        workspace = root / "benchmarks" / "selected" / "workspace"
+        workspace.mkdir(parents=True)
+        shutil.copytree(engine_work, workspace / "engine", ignore=_GRADING_IGNORE)
+        shutil.copytree(selected_cards, workspace / "cards", ignore=_GRADING_IGNORE)
+        staged_tests = workspace / "engine_tests"
+        shutil.copytree(engine_tests_dir, staged_tests, ignore=_GRADING_IGNORE)
+        shutil.copy2(support, workspace / "test_utils.py")
+        for name in ("conftest.py", "pytest.ini"):
+            source = authoritative_workspace / name
+            if source.is_file():
+                shutil.copy2(source, workspace / name)
+        if not (workspace / "pytest.ini").is_file():
+            (workspace / "pytest.ini").write_text(
+                "[pytest]\npython_files = test_*.py tests.py\naddopts = --import-mode=importlib\n"
             )
-        support_dir = tempfile.mkdtemp(prefix="eval_engine_support_")
-        shutil.copy2(test_utils, Path(support_dir) / "test_utils.py")
-        pp.append(support_dir)  # authoritative test_utils FIRST
-    if engine_work.exists():
-        pp.append(str(engine_work.parent))
-    pp.append(str(_REPO_ROOT))
 
-    try:
+        for relative in (
+            "data/replays/golden",
+            "data/replays/card_id_map.json",
+            "data/replays/token_id_map.json",
+            "scripts/triage_divergences.py",
+        ):
+            source, destination = data_root / relative, root / relative
+            if source.is_dir():
+                shutil.copytree(source, destination, ignore=_GRADING_IGNORE)
+            elif source.is_file():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+
         passed, failed, total, errors = _run_pytest_with_pythonpath(
-            engine_tests_dir, pp, timeout=timeout,
+            staged_tests, [str(workspace), str(_REPO_ROOT)], timeout=timeout,
+            isolated_workspace=workspace,
         )
-    finally:
-        if support_dir is not None:
-            shutil.rmtree(support_dir, ignore_errors=True)
     return EngineResult(
         tests_passed=passed,
         tests_failed=failed,
@@ -1087,6 +1128,7 @@ def _grade_audited_card(
     timeout: int,
     *,
     test_utils: Path | None,
+    card_set: str | None = None,
 ) -> CardResult:
     """Grade one card's authoritative audited suite against the agent's tree.
 
@@ -1121,7 +1163,26 @@ def _grade_audited_card(
         shutil.copy2(test_file, tmp / "tests.py")
         # Grading support FIRST, candidate overlay SECOND: the authoritative
         # test_utils wins; candidate cards/engine still resolve from the overlay.
-        pp = [str(tmp), str(overlay), str(_REPO_ROOT)]
+        card_set = card_set or card_id.split("_", 1)[0]
+        candidate_card = overlay / "cards" / card_set / card_id
+        qualified = f"cards.{card_set}.{card_id}.card_impl"
+        # Bind the file explicitly; a root card_impl or card-local engine must not change the grader's selection.
+        (tmp / "card_impl.py").write_text(
+            "import importlib as _importlib, importlib.util as _util, sys as _sys\n"
+            "import engine as _engine, cards as _cards\n"
+            + f"_sys.path.insert(1, {str(candidate_card)!r})\n"
+            + f"_parent = _importlib.import_module({qualified.rpartition('.')[0]!r})\n"
+            + f"_name = {qualified!r}\n"
+            + f"_path = {str(candidate_card / 'card_impl.py')!r}\n"
+            "_selected = _sys.modules.get(_name)\n"
+            "if _selected is None or getattr(_selected, '__file__', None) != _path:\n"
+            "    _spec = _util.spec_from_file_location(_name, _path)\n"
+            "    _selected = _util.module_from_spec(_spec)\n"
+            "    _sys.modules[_name] = _selected\n"
+            "    _spec.loader.exec_module(_selected)\n"
+            "_sys.modules[__name__] = _selected\n"
+        )
+        pp = [str(tmp), str(overlay), str(candidate_card), str(_REPO_ROOT)]
         passed, failed, total, errors, test_nodes = _run_pytest_with_pythonpath(
             tmp / "tests.py", pp, timeout=timeout, capture_test_nodes=True,
         )
@@ -1163,7 +1224,7 @@ def _eval_target_cards(
         card_id = _target_card_id(target_set, cn, audited_target)
         test_file = audited_target / card_id / "tests.py"
         results[card_id] = _grade_audited_card(
-            card_id, test_file, overlay, timeout, test_utils=test_utils
+            card_id, test_file, overlay, timeout, test_utils=test_utils, card_set=target_set
         )
     return results
 
@@ -1185,7 +1246,7 @@ def _eval_audited_dir(
         if not card_dir.is_dir() or not test_file.exists():
             continue
         results[card_dir.name] = _grade_audited_card(
-            card_dir.name, test_file, overlay, timeout, test_utils=test_utils,
+            card_dir.name, test_file, overlay, timeout, test_utils=test_utils, card_set=audited_dir.name,
         )
     return results
 
@@ -1194,6 +1255,8 @@ def evaluate_run(
     run_dir: Path,
     benchmark: BenchmarkRef,
     timeout: int = 60,
+    *,
+    workspace_source: Path | None = None,
 ) -> FullEvalResult:
     """Run the three-dimension Audited Eval for a Contract Run.
 
@@ -1208,7 +1271,7 @@ def evaluate_run(
     paths = resolve_eval_paths(benchmark.root, benchmark.target_set)
     result = FullEvalResult()
 
-    agent_ws = run_dir / "workspace_final"
+    agent_ws = Path(workspace_source) if workspace_source is not None else run_dir / "workspace_final"
     if not agent_ws.is_dir():
         result.engine_result = EngineResult(
             errors=[f"no harvested workspace_final/ at {agent_ws}"]
@@ -1218,6 +1281,7 @@ def evaluate_run(
 
     overlay_root = tempfile.mkdtemp(prefix="eval_overlay_")
     overlay = Path(overlay_root) / "workspace"
+    data_root_token = _BENCHMARK_DATA_ROOT.set(benchmark.root.parent.parent.resolve())
     try:
         shutil.copytree(agent_ws, overlay, ignore=_GRADING_IGNORE)
 
@@ -1237,6 +1301,7 @@ def evaluate_run(
         )
     finally:
         shutil.rmtree(overlay_root, ignore_errors=True)
+        _BENCHMARK_DATA_ROOT.reset(data_root_token)
 
     result.compute_aggregates()
     return result
@@ -1310,7 +1375,7 @@ def evaluate(
 
         # Dimension 3: Engine Regression
         result.engine_result = _eval_engine(
-            engine_work, engine_tests, timeout=timeout,
+            engine_work, engine_tests, timeout=timeout, cards_dir=cards_dir,
         )
         if engine_prep_error is not None:
             result.engine_result.errors.insert(0, engine_prep_error)
