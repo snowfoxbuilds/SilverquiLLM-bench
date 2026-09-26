@@ -273,7 +273,8 @@ _Avoid_: "tags" (working name)
 
 **Output Snapshot**
 
-Periodic runner-captured copy of the Workspace during an Agent Container run, roughly once per minute. Stored as host-side Git commits outside the container. Used for progress telemetry and as a fallback recovery point if final Workspace state is corrupted by timeout cutoff or broken engine edits.
+A periodic runner-retained copy of the Workspace during a Benchmark Run, used as progress evidence and a possible fallback for grading.
+Karn v4 retains copies with content digests and capture times under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records); historical image runs stored snapshots as host-side Git commits.
 
 _Avoid_: "checkpoint" (overloaded with spec checkpoints), "progress log" (that's `progress.jsonl`)
 
@@ -349,7 +350,7 @@ Extra lines the runner appends to the User Prompt when staging a Resume Leg. Alw
 
 _Avoid_: "resume notice", "resume header"
 
-**Run Manifest**
+**Run Manifest** *(historical image runs)*
 
 Minimal runtime facts written by the runner to `/workspace/run_manifest.json` immediately before container launch. Contains only `timeout_seconds` and `deadline_utc`; it is advisory to the Agent Container and does not configure agent behavior.
 
@@ -422,13 +423,17 @@ _Avoid_: "workload", "card subset", "filtered run"
 
 **Workspace**
 
-The per-benchmark directory at `benchmarks/<benchmark>/workspace/` in the bench repo (e.g. `benchmarks/sos/workspace/`, `benchmarks/hob-medium/workspace/`), copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + target-card stubs), test scaffolding (`conftest.py`, `test_utils.py`, `engine_tests/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The resume staging variant (see Resume Chain) skips `git init` and preserves the prior run's `workspace_final/` `.git` history instead. The agent has read-write access to the entire workspace.
+The agent-writable run copy of `benchmarks/<benchmark>/workspace/`, containing the engine, FDN reference cards, target-card stubs, test scaffolding, and agent-facing documentation.
+Karn v4 runs seed Git history from a trusted benchmark baseline and receive task input through declared file mounts under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#independent-execution).
+Historical image runs wrote `prompt.md` and `run_manifest.json` into the Workspace and preserved the previous run's `.git` when resuming.
 
 _Avoid_: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run), "staged from scratch" (deprecated — workspace is a pre-built directory copied wholesale)
 
 **Writable Engine**
 
-The engine source at `/workspace/engine/` inside the container. The agent modifies it in place throughout the run. The baseline engine remains on the host side, outside the container; after the run, the runner diffs the final or fallback Workspace engine against the host baseline to produce `engine_diff.patch`.
+The engine source in the Workspace that the agent may modify throughout a Benchmark Run.
+Karn v4 retains and grades the engine from the selected final or fallback Workspace under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records).
+Historical image runs also recorded differences from the host baseline as `engine_diff.patch`.
 
 _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumulation), "shared engine"
 
@@ -457,9 +462,9 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
 - Historical **Blind** and **Tested** modes varied test instructions. New Karn v4 runs take their guidance from the selected benchmark and have no independent mode selector.
 - SOS and FDN audited tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Engine tests are staged at `workspace/engine_tests/` per ADR-006 so agents can locally verify engine extensions; grading still uses host-repo copies for all three dimensions. FDN Reference Tests are colocated with the FDN card implementations at `workspace/cards/fdn/{collector_number}/tests.py` as additional reference for agents. Audited SOS grader tests live host-side only — there is no `workspace/tests/cards/` directory.
-- The runner is the hard timeout authority. Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
-- Output Snapshots are runner-owned, Workspace-only, and independent of Agent Container cooperation. The runner may use prior snapshot commits as fallback if final engine state is corrupted.
-- The runner writes the User Prompt to `/workspace/prompt.md`; Agent Containers bake System Prompts into their entrypoints.
+- The runner is the hard timeout authority. Historical Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
+- Output Snapshots are runner-owned, Workspace-only, and independent of candidate cooperation. The runner may use a prior snapshot as fallback if the final engine state is unusable.
+- Historical image runs write the User Prompt to `/workspace/prompt.md`; Karn v4 task input follows the Construct Definition's declared file mounts.
 - Hard Timeout and Hang Timeout are independent — either can trigger `docker stop -t 10` to end a benchmark run.
 - A Test Oracle Workspace has an engine independent of the corresponding benchmark's agent-visible baseline; mechanics needed by an oracle do not alter that baseline merely for oracle convenience.
 - Audited tests call only public APIs present in the canonical engine. Tests never depend on extensions present in the Test Oracle Workspace's engine but absent from canonical — otherwise correct agent impls using different primitives would fail tests for non-correctness reasons.
