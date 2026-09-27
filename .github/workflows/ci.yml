@@ -48,5 +48,7 @@ jobs:
           print("support errors:", cv.support_errors())
           EOF
 
+      # A job-private basetemp: the host's own pytest sessions share
+      # /tmp/pytest-of-<user> and prune each other's numbered directories.
       - name: Test
-        run: python -m pytest tests/ -q
+        run: python -m pytest tests/ -q --basetemp "$RUNNER_TEMP/pytest"
