@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import signal
+import subprocess
+import threading
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -14,6 +18,7 @@ from silverquillm import evaluator
 from silverquillm.cli import main
 from silverquillm.evaluator import CardResult, EngineResult, FullEvalResult
 from silverquillm.karn import grader as grader_module
+from silverquillm.karn.benchmark import load_benchmark
 from silverquillm.karn.definition import KarnError
 from silverquillm.karn.execution import run_benchmark
 from silverquillm.karn.grader import (
@@ -28,7 +33,7 @@ from silverquillm.karn.grader import (
 )
 
 from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker, local_grader
-from .test_karn_execution import options
+from .test_karn_execution import benchmark_data, options
 
 
 def mounts(run):
@@ -397,4 +402,94 @@ def test_counts_too_large_to_record_still_produce_a_record_without_scores(tmp_pa
     for score in record.scores.values():
         assert not score["evaluated"]
         assert score["missing_reasons"] == ["collection_failed:grading"]
+    assert (opts["results_dir"] / record.run_id / "run-record.json").is_file()
+
+
+# ---- interruption cleanup ------------------------------------------------------------------
+
+
+def started_clients(monkeypatch) -> list:
+    clients, popen = [], subprocess.Popen
+
+    def recording(*args, **kwargs):
+        clients.append(popen(*args, **kwargs))
+        return clients[-1]
+
+    monkeypatch.setattr(grader_module.subprocess, "Popen", recording)
+    return clients
+
+
+@pytest.mark.parametrize("stdout_limit", [0, 4096])
+def test_an_interrupted_runner_kills_and_reaps_its_client_and_releases_its_pipes(
+    tmp_path, monkeypatch, stdout_limit
+):
+    from silverquillm.karn.interruption import terminate_as_interrupt
+
+    fake_docker_client(tmp_path, monkeypatch, "exec sleep 600\n")
+    clients = started_clients(monkeypatch)
+    timer = threading.Timer(0.5, os.kill, (os.getpid(), signal.SIGTERM))
+    timer.start()
+    started = time.monotonic()
+    with pytest.raises(KeyboardInterrupt, match="signal"), terminate_as_interrupt():
+        REAL_RUN(grader_module.DockerRunner(), ["run"], timeout=600, stdout_limit=stdout_limit)
+    timer.join()
+    assert time.monotonic() - started < 30
+    [client] = clients
+    assert client.returncode is not None, "the client was reaped"
+    assert client.stderr.closed and (client.stdout is None or client.stdout.closed)
+    assert not [t for t in threading.enumerate() if "drain_" in t.name and t.is_alive()]
+
+
+class Interrupted(LocalDocker):
+    """The container named by ``--name`` is interrupted during probing or grading."""
+
+    def __init__(self, stage, *, removal_fails=False):
+        super().__init__()
+        self.stage, self.removal_fails, self.names = stage, removal_fails, []
+
+    def run(self, arguments, *, timeout, stdout_limit=0):
+        is_probe = grader_module.PROBE in arguments
+        if (self.stage == "probe") == is_probe:
+            self.names.append(arguments[arguments.index("--name") + 1])
+            raise KeyboardInterrupt("original interruption")
+        return super().run(arguments, timeout=timeout, stdout_limit=stdout_limit)
+
+    def remove(self, name):
+        super().remove(name)
+        if self.removal_fails:
+            raise KeyboardInterrupt("repeated interruption during cleanup")
+
+
+@pytest.mark.parametrize("removal_fails", [False, True])
+@pytest.mark.parametrize("stage", ["probe", "grading"])
+def test_an_interrupted_container_is_removed_by_name_and_the_interruption_kept(
+    tmp_path, stage, removal_fails
+):
+    root = benchmark_data(tmp_path / "data")
+    workspace = root / "benchmarks/example/workspace"
+    docker = Interrupted(stage, removal_fails=removal_fails)
+    grader = local_grader(docker=docker)
+    with pytest.raises(KeyboardInterrupt, match="original interruption"):
+        if stage == "probe":
+            grader.engine_health(workspace)
+        else:
+            grader.evaluate_run(
+                tmp_path, load_benchmark(root, "example"), workspace_source=workspace
+            )
+    [name] = docker.names
+    assert name.startswith("sq-grade-")
+    assert docker.removed == [name]
+
+
+@pytest.mark.parametrize("stage", ["probe", "grading"])
+def test_a_grader_interruption_still_writes_the_interrupted_record(tmp_path, stage):
+    docker = Interrupted(stage)
+    opts = options(tmp_path, grader=local_grader(docker=docker))
+    record = run_benchmark(**opts)
+    execution = record.run_metadata["execution"]
+    assert (execution["status"], execution["error"]) == ("interrupted", "operator_interruption")
+    assert execution["workspace_stopped"]
+    for score in record.scores.values():
+        assert score["missing_reasons"] == ["interrupted_before_grading"]
+    assert docker.removed == docker.names
     assert (opts["results_dir"] / record.run_id / "run-record.json").is_file()

@@ -10,6 +10,7 @@ pytest process that counts its results.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -46,6 +47,8 @@ MAX_EVALUATION_BYTES = 1024 * 1024
 MAX_STDERR_BYTES = 64 * 1024 * 1024
 MAX_TEST_COUNT = 10**9
 STDERR_TAIL_BYTES = 4096
+CLIENT_REAP_SECONDS = 10
+READER_JOIN_SECONDS = 5
 IMAGE_CONTEXT = Path(__file__).with_name("grader_image")
 PACKAGE_ROOT = "/opt/sq"
 GRADE_ROOT = "/grade"
@@ -149,13 +152,21 @@ class DockerRunner:
         for reader in readers:
             reader.start()
         try:
-            code = process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
-            code = None
-        for reader in readers:
-            reader.join(timeout=5)
+            try:
+                code = process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                code = None
+        except BaseException:
+            # An interruption must not leave the client running or its readers holding pipes.
+            with contextlib.suppress(BaseException):
+                process.kill()
+            with contextlib.suppress(BaseException):
+                process.wait(timeout=CLIENT_REAP_SECONDS)
+            _release(process, readers)
+            raise
+        _release(process, readers)
         text = b"".join(tail)[-STDERR_TAIL_BYTES:].decode(errors="replace")
         if overflow.is_set():
             return DockerRun(None, text, overflow=True)
@@ -193,6 +204,20 @@ class DockerRunner:
             ).returncode
         except (OSError, subprocess.TimeoutExpired):
             return 1
+
+
+def _release(process: subprocess.Popen, readers: list[threading.Thread]) -> None:
+    """Join the output readers, bounded, then close the pipes they no longer read."""
+    for reader in readers:
+        with contextlib.suppress(BaseException):
+            reader.join(timeout=READER_JOIN_SECONDS)
+    # Closing a pipe another thread is still blocked reading could hand its descriptor
+    # number to an unrelated file, so a pipe held by a live reader is left to that reader.
+    if not any(reader.is_alive() for reader in readers):
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                with contextlib.suppress(OSError):
+                    stream.close()
 
 
 def build_grader_image(
@@ -260,7 +285,14 @@ class ContainerGrader:
                 targets.add(target)
                 arguments += ["--mount", _mount(source, target, readonly)]
         arguments += [self.image_id, "python3", "-I", "-c", *command]
-        result = self.docker.run(arguments, timeout=timeout, stdout_limit=stdout_limit)
+        try:
+            result = self.docker.run(arguments, timeout=timeout, stdout_limit=stdout_limit)
+        except BaseException:
+            # The client is already reaped, so nothing can start the container after this;
+            # removal is bounded and never replaces the interruption being propagated.
+            with contextlib.suppress(BaseException):
+                self.docker.remove(name)
+            raise
         if result.code is None or result.code in DOCKER_FAILURES:
             # A killed client or failed start can leave the container behind.
             self.docker.remove(name)

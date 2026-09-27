@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import signal
+import subprocess
+import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -173,3 +177,88 @@ def test_grader_output_past_its_cap_is_refused(tmp_path, grader_image):
     with pytest.raises(GraderError) as refused:
         ContainerGrader(grader_image).evaluate_run(tmp_path, benchmark, workspace_source=workspace)
     assert refused.value.reason in {"output_too_large", "evaluation_not_framed"}
+
+
+INTERRUPTED_GRADER = r"""
+import sys
+from pathlib import Path
+
+from silverquillm.karn import grader as grader_module
+from silverquillm.karn.benchmark import load_benchmark
+from silverquillm.karn.interruption import terminate_as_interrupt
+
+stage, image, root, scratch = sys.argv[1:5]
+real_run = grader_module.DockerRunner.run
+
+
+def announcing(self, arguments, **options):
+    print(arguments[arguments.index("--name") + 1], flush=True)
+    return real_run(self, arguments, **options)
+
+
+grader_module.DockerRunner.run = announcing
+grader = grader_module.ContainerGrader(image)
+workspace = Path(root) / "benchmarks/example/workspace"
+try:
+    with terminate_as_interrupt():
+        if stage == "probe":
+            grader.engine_health(workspace)
+        else:
+            grader.evaluate_run(
+                Path(scratch), load_benchmark(Path(root), "example"), workspace_source=workspace
+            )
+except KeyboardInterrupt:
+    print("interrupted", flush=True)
+    sys.exit(130)
+print("finished", flush=True)
+"""
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "number", [signal.SIGINT, signal.SIGTERM, signal.SIGHUP], ids=["SIGINT", "SIGTERM", "SIGHUP"]
+)
+@pytest.mark.parametrize("stage", ["probe", "grading"])
+def test_an_interrupted_hanging_grader_leaves_no_client_or_container(
+    tmp_path, grader_image, stage, number
+):
+    root = benchmark_data(tmp_path / "data")
+    (root / "benchmarks/example/workspace/engine/__init__.py").write_text(
+        "import time\ntime.sleep(10**6)\n"
+    )
+    child = subprocess.Popen(
+        [sys.executable, "-c", INTERRUPTED_GRADER, stage, grader_image, str(root), str(tmp_path)],
+        cwd=REPO,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    name = child.stdout.readline().strip()
+    try:
+        assert name.startswith("sq-grade-"), child.stderr.read()
+        deadline = time.monotonic() + 60
+        while (
+            subprocess.run(
+                ["docker", "inspect", "-f", "{{.State.Running}}", name],
+                capture_output=True,
+                text=True,
+                check=False,
+            ).stdout.strip()
+            != "true"
+        ):
+            assert child.poll() is None and time.monotonic() < deadline
+            time.sleep(0.2)
+        child.send_signal(number)
+        output, errors = child.communicate(timeout=90)
+        assert child.returncode == 130, errors
+        assert output.strip() == "interrupted"
+        clients = subprocess.run(["pgrep", "-f", name], capture_output=True, check=False)
+        assert clients.returncode == 1, clients.stdout
+        gone = subprocess.run(["docker", "inspect", name], capture_output=True, check=False)
+        assert gone.returncode != 0, "the interrupted grader container was removed"
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+        if name.startswith("sq-grade-"):
+            subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
