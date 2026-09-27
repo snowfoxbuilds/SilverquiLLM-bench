@@ -25,7 +25,8 @@ from urllib.parse import urlsplit
 
 from .pricing import price_requests, price_table_metadata
 
-QUALIFIED_CODEX_VERSION = "0.153.4"
+# Versions whose journal and OTel streams were checked against each other on a real run.
+QUALIFIED_CODEX_VERSIONS = frozenset({"0.153.4", "0.157.1"})
 TOKEN_KEYS = (
     "input_tokens",
     "cached_input_tokens",
@@ -363,7 +364,7 @@ def summarize_events(
         reasons.append("native_journals_unavailable")
     if otel_threads - native_threads:
         reasons.append("native_journal_missing_for_observed_thread")
-    if versions != {QUALIFIED_CODEX_VERSION}:
+    if not versions or not versions <= QUALIFIED_CODEX_VERSIONS:
         reasons.append("native_version_not_qualified")
     opened = {e["turn_id"] for e in rows if e["kind"] == "task_started"}
     closed = {e["turn_id"] for e in rows if e["kind"] == "task_complete"}
@@ -583,7 +584,7 @@ class CodexTelemetryCollector:
             self.mark_incomplete("native_journals_unavailable")
 
     def finalize(self, *, exit_kind: str, native_version: str | None = None) -> dict[str, Any]:
-        if native_version is not None and native_version != QUALIFIED_CODEX_VERSION:
+        if native_version is not None and native_version not in QUALIFIED_CODEX_VERSIONS:
             self.mark_incomplete("native_version_not_qualified")
         self._stop_receiver()
         with self._lock:

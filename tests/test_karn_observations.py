@@ -10,6 +10,7 @@ from decimal import Decimal
 import pytest
 
 from silverquillm.karn.observations import (
+    QUALIFIED_CODEX_VERSIONS,
     CodexTelemetryCollector,
     normalize_otlp,
     normalize_rollout,
@@ -463,12 +464,16 @@ def test_streaming_fragments_are_not_retained_or_counted():
         "descendant",
     ],
 )
-def test_replay_actual_pinned_binary_qualification_matches_scripted_ground_truth(scenario):
+@pytest.mark.parametrize("fixture_name", ["karn_observations", "karn_observations_codex_0.157.1"])
+def test_replay_actual_pinned_binary_qualification_matches_scripted_ground_truth(
+    scenario, fixture_name
+):
     import hashlib
     from pathlib import Path
 
-    fixture = Path(__file__).parent / "fixtures/karn_observations"
+    fixture = Path(__file__).parent / "fixtures" / fixture_name
     proof = json.loads((fixture / "qualification.json").read_text())
+    assert proof["native_binary"].removeprefix("codex-cli ") in QUALIFIED_CODEX_VERSIONS
     expected = proof["scenarios"][scenario]
     raw = (fixture / (scenario + ".jsonl")).read_bytes()
     assert hashlib.sha256(raw).hexdigest() == expected["events_sha256"]
