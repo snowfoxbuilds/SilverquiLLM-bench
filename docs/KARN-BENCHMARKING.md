@@ -101,7 +101,7 @@ An optional timezone-aware `not_before` applies to a whole batch.
 Failed entries retain their data and the scheduler continues.
 
 A run left active by a crashed scheduler is recovered before further execution.
-Recovery confirms that its container has stopped, harvests pending authentication, removes only resources carrying that run's ownership label, preserves available measurements/workspace, and records the interrupted outcome without replaying the model task.
+Recovery confirms that its container has stopped, removes only resources carrying that run's ownership label, preserves available measurements/workspace, and records the interrupted outcome without replaying the model task.
 Keep both batch state and local run artifacts for this recovery.
 If an immutable record already exists but its writers were unconfirmed, successful reconciliation appends a linked recovery observation and preserves the original record bytes.
 The index and queue expose `recovery_of` and `execution_run_id` so this additional observation is distinguishable from another model execution.
@@ -111,8 +111,38 @@ A scheduler interrupted before a run wrote its `run-input.json` never launched t
 `silverquillm recover RUN_ID` recovers a direct run the same way, from its retained artifacts and without the candidate image.
 It refuses a run whose container is still running unless `--stop` is given, and refuses a run another process is still executing.
 Recovering an already recovered run returns the existing record.
-SIGTERM and SIGHUP interrupt `run`, `scheduler`, and `recover` like Ctrl-C, so the workload is stopped and the interrupted outcome recorded.
-Record writes wait up to 120 seconds for concurrent writers; on timeout the record stays in the run directory as `run-record.json`, and `recover` (or the scheduler's next start) writes it.
+SIGTERM and SIGHUP interrupt `run`, `scheduler`, and `recover` like Ctrl-C, so the workload is stopped and the interrupted outcome recorded; a grading or probe container in progress is killed and removed rather than left running.
+
+### Recovery guarantees
+
+- Recovery never runs the workload again, never needs the candidate image, and never changes a published record.
+- A record is retained in the run directory before it is published: `run-record.json`, or for a linked recovery `recovery-N/run-record.json`, which recovery finds by directory name and never through a path read from a file.
+  Record writes wait up to 120 seconds for concurrent writers; on timeout, `recover` or a later scheduler pass publishes that same retained record under the same id, without recovering or grading again.
+- Authentication is settled separately from the record.
+  A run whose login harvest failed (`login_harvest_failed` or `login_harvest_pending` in its execution) still owns the profile's pending login after its record is written.
+  Before `recover` returns any stopped record, it checks whether this run owns the pending login and, if so, settles it under the login lock with the exact plugin artifact retained in the run directory, preserving the run's native sessions into its own evidence first.
+- Recovery never settles or harvests another run's pending login: that run's container may still be live, and its native state belongs to that run's own evidence.
+  Recovering that run, or the login's next run, settles it.
+- Settlement never blocks publication.
+  If it fails for any reason, a busy login included, the record is still published and the pending login is kept; `recover` prints the final record and exits non-zero with `login_settlement_pending:<reason>`.
+  Run `recover` again once the cause is fixed.
+- In a batch, a recovered row keeps its execution status and recovery linkage, and is marked `record_write_pending` or `login_settlement_pending` until a later scheduler pass finishes publication or settlement.
+  These retries read only the batch state, so they continue after the batch file is removed, and the batch's other entries keep running.
+
+### Records affected by the former scheduler bug
+
+Before this fix, a scheduler that hit a busy results repository while recovering a running row marked that row `failed` with `recovery_failed:record_write_pending` and never published its record.
+To find affected rows:
+
+```bash
+grep -l 'recovery_failed:record_write_pending' batches/state/*.json
+```
+
+For each such row, run `silverquillm recover RUN_ID` with the same `--results-dir`, `--results-repo`, `--state-root`, and `--bench-root` the scheduler used.
+A plain recovery publishes the retained `run-record.json` unchanged.
+A linked recovery never wrote its link, so `recover` reconciles the run once more and publishes a single linked record; the earlier unpublished `recovery-N/` directory stays as evidence and is never published.
+Neither path replays the model task.
+The batch state row is not rewritten and still reads `failed`; the published record is authoritative for that run's outcome.
 
 ## Reading results
 
@@ -126,4 +156,5 @@ Schema 1 records and their identities, including `legacy` and `ozolith-v1`, keep
 The shared reader and index accept both schemas; new rows do not invent a historical mode or leaderboard flag.
 Candidate Bundles can no longer be run, promoted, or published; rebuild an old candidate as a Karn construct to run it again.
 Batch files and state in the Candidate Bundle format are shown as unsupported and never run or rewritten.
+`legacy resume` replaces a prior leg's `prompt.md` and `run_manifest.json` with fresh files instead of writing through links, and refuses a prior leg whose `prompt.md` is a link or whose `workspace_final` holds a FIFO, socket, or device.
 The historical `--image` lineage remains under `silverquillm legacy`; `legacy rescore` grades with the authoritative `test_utils` in an isolated copy, so re-grading an old run can change its numbers without touching stored records.
