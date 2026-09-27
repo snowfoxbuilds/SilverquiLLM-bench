@@ -19,7 +19,7 @@ import pytest
 from silverquillm.karn import recovery
 from silverquillm.karn.batching import KarnScheduler
 from silverquillm.karn.definition import KarnError, canonical, digest, load_candidate
-from silverquillm.karn.execution import run_benchmark
+from silverquillm.karn.execution import login_profile, run_benchmark
 from silverquillm.karn.grader import ContainerGrader
 from silverquillm.karn.host import DockerHost
 from silverquillm.karn.login import NATIVE_PRESERVED, LoginProfile
@@ -39,7 +39,9 @@ def _grade_without_docker(request, monkeypatch):
     if request.node.get_closest_marker("integration"):
         return
     monkeypatch.setattr(
-        ContainerGrader, "from_image", classmethod(lambda cls, reference=None, **kw: local_grader(**kw))
+        ContainerGrader,
+        "from_image",
+        classmethod(lambda cls, reference=None, **kw: local_grader(**kw)),
     )
 
 
@@ -109,12 +111,12 @@ def test_interrupt_before_run_input_fails_the_row_and_the_batch_continues(
 
 def test_login_contention_defers_the_batch_entry_instead_of_consuming_it(tmp_path):
     directory = batch(tmp_path / "batches", entries=1)
-    opts = options(tmp_path / "fixture")
-    profile = LoginProfile(tmp_path / "state/logins/shared", "shared")
+    opts = login_options(tmp_path / "fixture")
+    profile = LoginProfile(tmp_path / "state/logins/bare", "bare")
     (directory / "trial.toml").write_text(
         'format="karn-v4"\n[[runs]]\nbuild_output='
         + json.dumps(str(opts["build_output"]))
-        + '\nconstruct="bare"\nbenchmark="example"\nlogin="shared"\n'
+        + '\nconstruct="bare"\nbenchmark="example"\n'
     )
     runner = scheduler(
         opts["bench_root"],
@@ -134,11 +136,50 @@ def test_login_contention_defers_the_batch_entry_instead_of_consuming_it(tmp_pat
 
 
 def test_direct_run_refuses_a_busy_login_before_creating_evidence(tmp_path):
-    opts = options(tmp_path)
-    profile = LoginProfile(Path(opts["state_root"]).resolve() / "logins/shared", "shared")
+    opts = login_options(tmp_path)
+    profile = LoginProfile(Path(opts["state_root"]).resolve() / "logins/bare", "bare")
     with profile.exclusive(), pytest.raises(KarnError, match="login_in_use"):
-        run_benchmark(**opts, login="shared")
+        run_benchmark(**opts)
     assert not Path(opts["results_dir"]).exists()
+
+
+def test_each_construct_of_a_build_owns_a_separate_login(tmp_path):
+    opts = login_options(tmp_path)
+    constructs = Path(opts["build_output"]) / "constructs"
+    shutil.copytree(constructs / "bare", constructs / "other")
+    state = Path(opts["state_root"]).resolve()
+    bare, other = (login_profile(opts["state_root"], name) for name in ("bare", "other"))
+    assert (bare.directory, other.directory) == (state / "logins/bare", state / "logins/other")
+    with bare.exclusive():
+        with pytest.raises(KarnError, match="login_in_use"):
+            run_benchmark(**opts)
+        record = run_benchmark(**{**opts, "construct": "other", "host": FixtureHost()})
+        with other.exclusive():
+            pass
+    assert record.run_metadata["execution"]["status"] == "completed"
+    assert record.run_metadata["login_profile"] == "other"
+
+
+@pytest.mark.parametrize("construct", ["bare", "other"])
+def test_run_input_names_the_constructs_own_login(tmp_path, construct):
+    opts = login_options(tmp_path)
+    constructs = Path(opts["build_output"]) / "constructs"
+    shutil.copytree(constructs / "bare", constructs / "other")
+    record = run_benchmark(**{**opts, "construct": construct})
+    run_input = json.loads(
+        (Path(opts["results_dir"]) / record.run_id / "run-input.json").read_text()
+    )
+    assert run_input["login"] == record.run_metadata["login_profile"] == construct
+
+
+def test_a_construct_without_a_login_plugin_selects_no_login(tmp_path):
+    opts = options(tmp_path)
+    record = run_benchmark(**opts)
+    run_input = json.loads(
+        (Path(opts["results_dir"]) / record.run_id / "run-input.json").read_text()
+    )
+    assert run_input["login"] is None and record.run_metadata["login_profile"] is None
+    assert not (Path(opts["state_root"]) / "logins").exists()
 
 
 def test_record_write_times_out_and_the_scheduler_retries_it(tmp_path, monkeypatch):
@@ -218,7 +259,10 @@ def test_record_lock_leaves_no_file_in_the_results_repository(tmp_path):
 
 
 def login_candidate(tmp_path):
-    candidate = make_candidate(tmp_path)
+    return with_login_plugin(make_candidate(tmp_path))
+
+
+def with_login_plugin(candidate):
     shutil.copytree(FIXTURES / "login-build/plugins", candidate.build_output / "plugins")
     manifest = json.loads(
         (candidate.build_output / "plugins/karn-codex-login-0.1.0/install.json").read_text()
@@ -233,6 +277,15 @@ def login_candidate(tmp_path):
     ]
     candidate.definition_path.write_bytes(canonical(candidate.definition))
     return load_candidate(candidate.build_output, "bare", image_inspector=lambda ref: {"Id": ref})
+
+
+def login_options(tmp_path, **changes):
+    """Direct-run options whose construct carries the login plugin, so it selects its own login."""
+    opts = options(tmp_path, **changes)
+    with_login_plugin(
+        load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
+    )
+    return opts
 
 
 def enroll(profile):
@@ -309,7 +362,7 @@ def die_after_start(host):
 def test_recovery_never_attributes_another_runs_native_sessions(tmp_path, monkeypatch):
     candidate = login_candidate(tmp_path)
     state = (tmp_path / "state").resolve()
-    profile = LoginProfile(state / "logins/shared", "shared")
+    profile = LoginProfile(state / "logins/bare", "bare")
     enroll(profile)
     common = {
         "build_output": candidate.build_output,
@@ -319,7 +372,6 @@ def test_recovery_never_attributes_another_runs_native_sessions(tmp_path, monkey
         "results_dir": tmp_path / "runs",
         "results_repo": tmp_path / "records",
         "state_root": state,
-        "login": "shared",
     }
 
     def host():
@@ -367,7 +419,7 @@ def test_recovery_without_its_own_native_state_marks_the_other_runs_ownership(
 ):
     candidate = login_candidate(tmp_path)
     state = (tmp_path / "state").resolve()
-    profile = LoginProfile(state / "logins/shared", "shared")
+    profile = LoginProfile(state / "logins/bare", "bare")
     enroll(profile)
     common = {
         "build_output": candidate.build_output,
@@ -377,7 +429,6 @@ def test_recovery_without_its_own_native_state_marks_the_other_runs_ownership(
         "results_dir": tmp_path / "runs",
         "results_repo": tmp_path / "records",
         "state_root": state,
-        "login": "shared",
     }
     for run_id in ("run-a", "run-b"):
         with pytest.raises(SystemExit):
@@ -711,6 +762,18 @@ def test_native_telemetry_is_explicit_with_a_documented_codex_home_fallback(tmp_
         load_batch(path)
 
 
+def test_a_run_spec_cannot_name_a_login(tmp_path):
+    from silverquillm.karn.batching import load_batch
+
+    path = tmp_path / "login.toml"
+    path.write_text(
+        'format="karn-v4"\n[[runs]]\nbuild_output="b"\nconstruct="bare"\nbenchmark="example"\n'
+        'login="x"\n'
+    )
+    with pytest.raises(KarnError, match="^invalid_karn_run_spec:login.toml$"):
+        load_batch(path)
+
+
 def test_log_tail_redacts_a_secret_straddling_the_retention_boundary():
     from silverquillm.karn.docker import redacted_tail
 
@@ -735,13 +798,14 @@ def test_enrollment_resolves_a_symlinked_state_root(tmp_path, monkeypatch):
     real.mkdir()
     linked = tmp_path / "linked-state"
     linked.symlink_to(real)
-    caches = []
+    caches, profiles = [], []
 
     class Recorder:
         def __init__(self, *, plugin_cache):
             caches.append(plugin_cache)
 
         def enroll_login(self, profile, artifact):
+            profiles.append(profile)
             return 0
 
     monkeypatch.setattr(commands, "DockerHost", Recorder)
@@ -756,7 +820,6 @@ def test_enrollment_resolves_a_symlinked_state_root(tmp_path, monkeypatch):
         main,
         [
             "login",
-            "shared",
             "--build-output",
             str(candidate.build_output),
             "--construct",
@@ -767,6 +830,7 @@ def test_enrollment_resolves_a_symlinked_state_root(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert caches == [real.resolve() / "plugins"]
+    assert [(p.directory, p.name) for p in profiles] == [(real.resolve() / "logins/bare", "bare")]
 
 
 @pytest.fixture
@@ -811,7 +875,7 @@ def test_real_killed_direct_run_is_recovered_once_by_command(tmp_path, python_im
     ]
     candidate.definition_path.write_bytes(canonical(candidate.definition))
     state = (tmp_path / "state").resolve()
-    profile = LoginProfile(state / "logins/shared", "shared")
+    profile = LoginProfile(state / "logins/bare", "bare")
     enroll(profile)
     run_id = "killed-" + uuid.uuid4().hex[:12]
     name = "sq-run-" + run_id
@@ -828,7 +892,6 @@ def test_real_killed_direct_run_is_recovered_once_by_command(tmp_path, python_im
                 build_output=candidate.build_output,
                 construct="bare",
                 benchmark_id="example",
-                login="shared",
                 budget_seconds=300,
                 run_id=run_id,
                 host=die_after_start(
@@ -868,8 +931,8 @@ def test_real_killed_direct_run_is_recovered_once_by_command(tmp_path, python_im
 def test_login_is_released_before_grading(tmp_path):
     from silverquillm.evaluator import FullEvalResult
 
-    opts = options(tmp_path)
-    profile = LoginProfile(Path(opts["state_root"]).resolve() / "logins/shared", "shared")
+    opts = login_options(tmp_path)
+    profile = LoginProfile(Path(opts["state_root"]).resolve() / "logins/bare", "bare")
     acquired = []
 
     def evaluator(*args, **kwargs):
@@ -877,7 +940,7 @@ def test_login_is_released_before_grading(tmp_path):
             acquired.append(True)
         return FullEvalResult()
 
-    run_benchmark(**opts, login="shared", evaluator=evaluator)
+    run_benchmark(**opts, evaluator=evaluator)
     assert acquired == [True]
 
 
@@ -902,7 +965,9 @@ def test_an_unrecoverable_row_fails_and_the_scheduler_continues(tmp_path, failur
 
     assert scheduler(tmp_path, directory, executor=execute, recoverer=broken).run_until_idle() == 1
     state = json.loads((directory / "state/trial.json").read_text())
-    expected = "recovery_failed:" + (str(failure) if isinstance(failure, KarnError) else "RuntimeError")
+    expected = "recovery_failed:" + (
+        str(failure) if isinstance(failure, KarnError) else "RuntimeError"
+    )
     assert [(row["status"], row.get("error")) for row in state["runs"]] == [
         ("failed", expected),
         ("done", None),
@@ -962,7 +1027,7 @@ def harvest_failed_run(tmp_path, *, run_id="run-a", hold_records=False):
     """A completed, stopped run whose login harvest failed, leaving the profile pending."""
     candidate = login_candidate(tmp_path)
     state = (tmp_path / "state").resolve()
-    profile = LoginProfile(state / "logins/shared", "shared")
+    profile = LoginProfile(state / "logins/bare", "bare")
     enroll(profile)
     common = {
         "bench_root": benchmark_data(tmp_path / "data"),
@@ -977,7 +1042,6 @@ def harvest_failed_run(tmp_path, *, run_id="run-a", hold_records=False):
             build_output=candidate.build_output,
             construct="bare",
             benchmark_id="example",
-            login="shared",
             run_id=run_id,
             host=DockerHost(
                 docker=SessionDocker(), plugin_cache=state / "plugins", plugin_python=sys.executable
@@ -994,7 +1058,9 @@ def harvest_failed_run(tmp_path, *, run_id="run-a", hold_records=False):
 def recovery_docker(monkeypatch, state):
     docker = RecoveryDocker()
     monkeypatch.setattr(
-        recovery, "DockerHost", lambda **kwargs: DockerHost(docker=docker, plugin_cache=state / "plugins")
+        recovery,
+        "DockerHost",
+        lambda **kwargs: DockerHost(docker=docker, plugin_cache=state / "plugins"),
     )
     return docker
 
@@ -1039,7 +1105,7 @@ def test_recovery_settles_and_publishes_a_retained_only_record(tmp_path, monkeyp
             harvest_failed_run(tmp_path)
     finally:
         os.close(holder)
-    profile = LoginProfile((tmp_path / "state").resolve() / "logins/shared", "shared")
+    profile = LoginProfile((tmp_path / "state").resolve() / "logins/bare", "bare")
     assert profile.pending()["run_id"] == "run-a"
     assert not list(iter_run_records(tmp_path / "records"))
     recovery_docker(monkeypatch, (tmp_path / "state").resolve())
@@ -1103,9 +1169,7 @@ def test_a_failed_settlement_keeps_the_login_pending_and_is_reported(tmp_path, m
 
 
 @pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
-def test_a_busy_login_leaves_settlement_pending_without_changing_the_record(
-    tmp_path, monkeypatch
-):
+def test_a_busy_login_leaves_settlement_pending_without_changing_the_record(tmp_path, monkeypatch):
     run = harvest_failed_run(tmp_path)
     published = published_bytes(run.common["results_repo"])
     journal = run.profile.pending()
@@ -1129,7 +1193,7 @@ def test_any_settlement_failure_still_publishes_the_retained_record(
     with pytest.raises(RecordWritePendingError):
         harvest_failed_run(tmp_path)
     held_records.release()
-    profile = LoginProfile((tmp_path / "state").resolve() / "logins/shared", "shared")
+    profile = LoginProfile((tmp_path / "state").resolve() / "logins/bare", "bare")
     journal = profile.pending()
     recovery_docker(monkeypatch, (tmp_path / "state").resolve())
 
@@ -1177,7 +1241,6 @@ def test_recovery_leaves_another_runs_pending_login_alone(tmp_path, monkeypatch)
             build_output=run.candidate.build_output,
             construct="bare",
             benchmark_id="example",
-            login="shared",
             run_id="run-b",
             host=die_after_start(
                 DyingHost(

@@ -8,9 +8,11 @@ import contextlib
 import fcntl
 import hmac
 import os
+import posixpath
 import queue
 import secrets
 import shutil
+import signal
 import socketserver
 import stat
 import subprocess
@@ -29,6 +31,7 @@ MAX_MESSAGE = 1024 * 1024
 NATIVE_PRESERVED = "native-preserved"
 MAX_NATIVE_BYTES = 128 * 1024 * 1024
 MAX_NATIVE_FILES = 10_000
+MAX_PLUGIN_MOUNTS = 32
 
 
 class LoginInUseError(KarnError):
@@ -336,11 +339,14 @@ class PluginProcess:
             self.process.stdin.flush()
             raw = self.replies.get(timeout=timeout)
         except (OSError, queue.Empty):
+            self._kill()
             raise KarnError("login_plugin_unavailable") from None
-        if not raw or len(raw) > MAX_MESSAGE:
-            raise KarnError("login_plugin_invalid_reply")
-        reply = strict_json(raw)
+        try:
+            reply = strict_json(raw) if raw and len(raw) <= MAX_MESSAGE else None
+        except KarnError:
+            reply = None
         if not isinstance(reply, dict) or reply.get("id") != request_id:
+            self._kill()
             raise KarnError("login_plugin_invalid_reply")
         if "error" in reply:
             code = reply["error"]
@@ -348,6 +354,14 @@ class PluginProcess:
                 code = "hook_failed"
             raise KarnError("login_plugin:" + code)
         return reply.get("result")
+
+    def _kill(self):
+        """A late or unmatched reply would answer the next request, so end the process instead."""
+        # Once reaped, the pid may already name an unrelated process group.
+        if self.process.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(self.process.pid, signal.SIGKILL)
+        self.process.wait()
 
     def invoke(self, hook: str, run_id: str, mounts: list[dict]):
         return self.request(
@@ -394,7 +408,8 @@ class PluginProcess:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
-            self.process.stdin.close()
+            with contextlib.suppress(OSError):
+                self.process.stdin.close()
             self.process.stdout.close()
         if self.server is not None:
             self.server.shutdown()
@@ -402,6 +417,80 @@ class PluginProcess:
             self.server_thread.join(timeout=5)
         if self.socket_directory is not None:
             shutil.rmtree(self.socket_directory)
+
+
+def mount_spec_safe(path: str) -> bool:
+    """The docker CLI parses a --mount value as one CSV record, so a separator, a quote, or a
+    line break inside a path would change the mount Docker receives."""
+    return path.isprintable() and not any(c in path for c in ',"')
+
+
+def _overlaps(target: PurePosixPath, other: PurePosixPath) -> bool:
+    return target == other or other in target.parents or target in other.parents
+
+
+def admit_plugin_mounts(passed: list[dict], returned, state: Path) -> list[dict]:
+    """Accept a plugin's mounts only as an extension of those it was passed, as Karn's Node
+    Daemon does: each added bind must come from the plugin's own state directory, so the
+    plugin can never expose another host path to the candidate.
+    """
+
+    def refused(reason: str) -> KarnError:
+        return KarnError("plugin_mount_refused:" + reason)
+
+    if (
+        not isinstance(returned, list)
+        or returned[: len(passed)] != passed
+        or not len(passed) <= len(returned) <= len(passed) + MAX_PLUGIN_MOUNTS
+    ):
+        raise refused("mount_list_altered")
+    state = Path(state).resolve(strict=True)
+    taken = [PurePosixPath(row["Target"]) for row in passed]
+    accepted = list(passed)
+    for row in returned[len(passed) :]:
+        if (
+            not isinstance(row, dict)
+            or set(row) != {"Type", "Source", "Target", "ReadOnly"}
+            or row["Type"] != "bind"
+            or not isinstance(row["Source"], str)
+            or not isinstance(row["Target"], str)
+            or type(row["ReadOnly"]) is not bool
+            or not mount_spec_safe(row["Source"])
+            or not mount_spec_safe(row["Target"])
+        ):
+            raise refused("invalid_mount")
+        target = PurePosixPath(row["Target"])
+        # A leading "//" is a distinct POSIX root to pathlib but the same directory to
+        # Docker, so only a canonical target is comparable.
+        if (
+            row["Target"] != posixpath.normpath(row["Target"])
+            or row["Target"].startswith("//")
+            or not target.is_absolute()
+            or target == PurePosixPath("/")
+            or any(_overlaps(target, other) for other in taken)
+        ):
+            raise refused("target_conflict")
+        source = Path(row["Source"])
+        if not source.is_absolute():
+            raise refused("source_outside_state_dir")
+        try:
+            resolved = source.resolve(strict=True)
+        except OSError:
+            raise refused("source_missing") from None
+        if resolved != state and state not in resolved.parents:
+            raise refused("source_outside_state_dir")
+        if not mount_spec_safe(str(resolved)):
+            raise refused("invalid_mount")
+        taken.append(target)
+        accepted.append(
+            {
+                "Type": "bind",
+                "Source": str(resolved),
+                "Target": row["Target"],
+                "ReadOnly": row["ReadOnly"],
+            }
+        )
+    return accepted
 
 
 def _mounted_run(profile: LoginProfile) -> str | None:

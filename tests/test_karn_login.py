@@ -13,6 +13,7 @@ from silverquillm.karn.definition import KarnError, PluginArtifact, canonical, d
 from silverquillm.karn.login import (
     LoginProfile,
     PluginProcess,
+    admit_plugin_mounts,
     enroll_login,
     install_plugin,
     recover_login,
@@ -98,8 +99,11 @@ def test_real_plugin_projects_fresh_state_and_persists_refresh(tmp_path, artifac
     output.mkdir()
     mounts = [{"Type": "bind", "Source": str(output), "Target": "/output", "ReadOnly": False}]
     with profile.exclusive(), PluginProcess(artifact, plugin_python, profile) as plugin:
-        delivered = plugin.invoke("before_container_mount", "first", mounts)
+        delivered = admit_plugin_mounts(
+            mounts, plugin.invoke("before_container_mount", "first", mounts), profile.state
+        )
         native = Path(delivered[-1]["Source"])
+        assert delivered[-1]["Target"] == "/native" and delivered[-1]["ReadOnly"] is False
         assert {p.name for p in native.iterdir()} == {"auth.json"}
         assert stat.S_IMODE((native / "auth.json").stat().st_mode) == 0o600
         (native / "auth.json").write_bytes(login_bytes("refreshed"))
@@ -208,3 +212,133 @@ def test_setup_uses_same_plugin_with_isolated_native_home(
     saved = json.loads(profile.get_secret("login.research"))
     assert base64.b64decode(saved["files"]["auth.json"]) == login_bytes("enrolled")
     assert not list(profile.state.glob("setup-*"))
+
+
+def stalling_plugin(tmp_path, artifact):
+    """A stand-in plugin process that answers the handshake, then replies to its first
+    invocation only after the host has given up on it."""
+    identity = {key: artifact.manifest[key] for key in ("id", "version", "sdk_major", "hooks")}
+    script = tmp_path / "stalling-python"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys, time\n"
+        f"identity = {identity!r}\n"
+        "invocations = 0\n"
+        "for line in sys.stdin:\n"
+        "    request = json.loads(line)\n"
+        "    result = {'ready': True}\n"
+        "    if request['method'] == 'plugin.hello':\n"
+        "        result = identity\n"
+        "    elif request['method'] == 'plugin.invoke':\n"
+        "        invocations += 1\n"
+        "        if invocations == 1:\n"
+        "            time.sleep(1)\n"
+        "        result = []\n"
+        "    print(json.dumps({'id': request['id'], 'result': result}), flush=True)\n"
+    )
+    script.chmod(0o755)
+    return script
+
+
+def test_a_timed_out_plugin_is_killed_so_its_late_reply_answers_nothing(
+    tmp_path, artifact, monkeypatch
+):
+    profile = LoginProfile(tmp_path / "login", "research")
+    with PluginProcess(artifact, stalling_plugin(tmp_path, artifact), profile) as plugin:
+        with pytest.raises(KarnError, match="login_plugin_unavailable"):
+            plugin.request("plugin.invoke", {}, timeout=0.2)
+        assert plugin.process.poll() is not None
+        signalled = []
+        monkeypatch.setattr(os, "killpg", lambda *arguments: signalled.append(arguments))
+        with pytest.raises(KarnError, match="login_plugin_unavailable"):
+            plugin.request("plugin.invoke", {})
+        assert signalled == []
+
+
+def bind(source, target, read_only=False):
+    return {"Type": "bind", "Source": str(source), "Target": target, "ReadOnly": read_only}
+
+
+@pytest.fixture
+def plugin_state(tmp_path):
+    state = tmp_path / "login/plugin"
+    (state / "work").mkdir(parents=True)
+    return state
+
+
+def test_admitted_plugin_mounts_extend_the_passed_list_from_the_plugin_state(
+    tmp_path, plugin_state
+):
+    passed = [bind(tmp_path, "/output")]
+    returned = [*passed, bind(plugin_state / "work/../work", "/native")]
+    assert admit_plugin_mounts(passed, returned, plugin_state) == [
+        *passed,
+        bind((plugin_state / "work").resolve(), "/native"),
+    ]
+    assert admit_plugin_mounts(passed, list(passed), plugin_state) == passed
+
+
+@pytest.mark.parametrize(
+    "returned",
+    [
+        pytest.param(lambda passed, add: "not a list", id="not-a-list"),
+        pytest.param(lambda passed, add: [add], id="passed-mount-dropped"),
+        pytest.param(
+            lambda passed, add: [{**passed[0], "ReadOnly": True}, add], id="passed-mount-changed"
+        ),
+        pytest.param(lambda passed, add: [add, *passed], id="passed-mount-reordered"),
+        pytest.param(lambda passed, add: [*passed, *[add] * 33], id="too-many"),
+    ],
+)
+def test_a_plugin_may_not_alter_the_mounts_it_was_passed(tmp_path, plugin_state, returned):
+    passed = [bind(tmp_path, "/output")]
+    reply = returned(passed, bind(plugin_state / "work", "/native"))
+    with pytest.raises(KarnError, match="plugin_mount_refused:mount_list_altered"):
+        admit_plugin_mounts(passed, reply, plugin_state)
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        ({"Type": "volume"}, "invalid_mount"),
+        ({"ReadOnly": 0}, "invalid_mount"),
+        ({"Extra": True}, "invalid_mount"),
+        ({"Target": "/native,readonly=false"}, "invalid_mount"),
+        ({"Target": "/home\n/native"}, "invalid_mount"),
+        ({"Target": "/output\r"}, "invalid_mount"),
+        ({"Target": '/na"tive'}, "invalid_mount"),
+        ({"Target": "/"}, "target_conflict"),
+        ({"Target": "native"}, "target_conflict"),
+        ({"Target": "//output"}, "target_conflict"),
+        ({"Target": "/native/"}, "target_conflict"),
+        ({"Target": "/native/../output"}, "target_conflict"),
+        ({"Target": "/output"}, "target_conflict"),
+        ({"Target": "/output/nested"}, "target_conflict"),
+        ({"Target": "/native/./x"}, "target_conflict"),
+        ({"Source": "work"}, "source_outside_state_dir"),
+    ],
+)
+def test_a_malformed_or_overlapping_plugin_mount_is_refused(tmp_path, plugin_state, change, reason):
+    passed = [bind(tmp_path / "output", "/output")]
+    added = {**bind(plugin_state / "work", "/native"), **change}
+    with pytest.raises(KarnError, match="plugin_mount_refused:" + reason):
+        admit_plugin_mounts(passed, [*passed, added], plugin_state)
+
+
+def test_a_plugin_mount_may_only_expose_its_own_state(tmp_path, plugin_state):
+    passed = [bind(tmp_path / "output", "/output")]
+    outside = tmp_path / "home"
+    outside.mkdir()
+    (plugin_state / "escape").symlink_to(outside)
+    (tmp_path / "login/plugin-sibling").mkdir()
+    for source, reason in [
+        (outside, "source_outside_state_dir"),
+        (plugin_state / "escape", "source_outside_state_dir"),
+        (plugin_state / "work/../../plugin-sibling", "source_outside_state_dir"),
+        (plugin_state / "missing", "source_missing"),
+    ]:
+        with pytest.raises(KarnError, match="plugin_mount_refused:" + reason):
+            admit_plugin_mounts(passed, [*passed, bind(source, "/native")], plugin_state)
+    second = [*passed, bind(plugin_state / "work", "/native"), bind(plugin_state, "/native/x")]
+    with pytest.raises(KarnError, match="plugin_mount_refused:target_conflict"):
+        admit_plugin_mounts(passed, second, plugin_state)

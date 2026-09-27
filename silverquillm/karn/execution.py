@@ -196,7 +196,6 @@ def run_benchmark(
     results_dir: Path,
     results_repo: Path,
     state_root: Path,
-    login: str | None = None,
     budget_seconds: int = DEFAULT_BUDGET_SECONDS,
     run_id: str | None = None,
     snapshot_seconds: float = 60,
@@ -218,6 +217,8 @@ def run_benchmark(
         build_output, construct, **({"image_inspector": host.docker.inspect_image} if host else {})
     )
     benchmark = load_benchmark(bench_root, benchmark_id)
+    # Each construct owns its subscription login, as each Ozolith Stack does.
+    login = construct if candidate.plugins else None
     selected_login = login_profile(state_root, login)
     grader = grader or ContainerGrader.from_image(grader_image, timeout=grading_timeout)
     evaluator = evaluator or grader.evaluate_run

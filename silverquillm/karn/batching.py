@@ -35,7 +35,6 @@ def load_batch(path: Path) -> dict | None:
         "build_output",
         "construct",
         "benchmark",
-        "login",
         "budget_seconds",
         "native_telemetry",
     }
@@ -49,7 +48,6 @@ def load_batch(path: Path) -> dict | None:
             )
             or type(spec.get("budget_seconds", 86400)) is not int
             or spec.get("budget_seconds", 86400) < 1
-            or ("login" in spec and not isinstance(spec["login"], str))
             or spec.get("native_telemetry", "auto") not in NATIVE_TELEMETRY
         ):
             raise KarnError("invalid_karn_run_spec:" + path.name)
@@ -344,7 +342,6 @@ class KarnScheduler:
                         build_output=build,
                         construct=spec["construct"],
                         benchmark_id=spec["benchmark"],
-                        login=spec.get("login"),
                         budget_seconds=spec.get("budget_seconds", 86400),
                         native_telemetry=spec.get("native_telemetry", "auto"),
                         run_id=row["run_id"],

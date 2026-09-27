@@ -600,3 +600,21 @@ def test_real_orphan_recovery_removes_only_owned_run_resources(local_image):
         for name in (workload, proxy, unrelated):
             docker.remove(name)
         docker.command("network", "rm", network, check=False)
+
+
+@pytest.mark.parametrize(
+    ("stderr", "error"),
+    [
+        (b"Error response from daemon: No such image: sha256:abc", "image_not_available_locally"),
+        (b"permission denied while trying to connect to the docker API", "docker_unavailable"),
+    ],
+)
+def test_image_inspection_tells_a_missing_image_from_an_unreachable_docker(
+    monkeypatch, stderr, error
+):
+    monkeypatch.setattr(
+        "silverquillm.karn.definition.subprocess.run",
+        lambda *a, **kw: subprocess.CompletedProcess(a, 1, b"", stderr),
+    )
+    with pytest.raises(KarnError, match="^" + error + "$"):
+        inspect_image("sha256:" + "0" * 64)

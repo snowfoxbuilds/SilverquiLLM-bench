@@ -16,11 +16,17 @@ import sys
 import tempfile
 import threading
 import time
+import types
 from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# The candidate image lacks the bench's dependencies, so load only the stdlib-only
+# observations module without running silverquillm.karn's package imports.
+_karn = types.ModuleType("silverquillm.karn")
+_karn.__path__ = [str(Path(__file__).resolve().parents[1] / "silverquillm/karn")]
+sys.modules.setdefault("silverquillm.karn", _karn)
 from silverquillm.karn.observations import CodexTelemetryCollector
 
 IMAGE = "sha256:a8b10ff219d5d81870c1b17eae9dbe0eb7494db1c8bd08adcb174b927b569cd6"
@@ -411,6 +417,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--scenario", choices=SCENARIOS, action="append")
     parser.add_argument("--image", default=IMAGE)
+    parser.add_argument("--native-version", default="0.153.4")
     parser.add_argument("--inside", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     scenarios = args.scenario or list(SCENARIOS)
@@ -436,6 +443,8 @@ def main():
             "--inside",
             "--output",
             "/evidence",
+            "--native-version",
+            args.native_version,
         ]
         for scenario in scenarios:
             command += ["--scenario", scenario]
@@ -443,8 +452,8 @@ def main():
     native = subprocess.run(
         ["codex", "--version"], text=True, capture_output=True, check=True
     ).stdout.strip()
-    if native != "codex-cli 0.153.4":
-        raise RuntimeError("qualification requires codex-cli 0.153.4")
+    if native != "codex-cli " + args.native_version:
+        raise RuntimeError("qualification requires codex-cli " + args.native_version)
     results = [qualify_one(scenario, args.output / scenario) for scenario in scenarios]
     proof = {
         "binary": native,
