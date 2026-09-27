@@ -1,6 +1,6 @@
 extends = "codex@1"
 mode = "automaton"
-model = "gpt-5.6-luna"
+model = "gpt-6-luna"
 effort = "low"
 
 [runtime]
@@ -56,3 +56,7 @@ schema = { type = "object", required = ["contract_version", "outcome"], properti
 [[runtime.plugins]]
 id = "karn-codex-login"
 version = "0.1.0"
+
+[image.native_cli]
+version = "0.157.1"
+integrity = "sha512-Eac8XlC0nCXSeUjDU9l8yLJ6P9evv1mO+AnvILoNwlegBC7B3AVXqJ05QcMhQX7RcJ3Lk2618ykCb2X2ui8VAQ=="

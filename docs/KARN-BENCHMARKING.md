@@ -14,7 +14,8 @@ source .venv/bin/activate
 
 The checked-in [bare Codex example](../examples/karn/constructs/bare-codex/construct.toml) selects `gpt-6-astra`, Codex 0.153.4 through `codex@1`, and the stock Codex login plugin.
 It carries no custom skills or polling controller.
-[`bare-codex-luna`](../examples/karn/constructs/bare-codex-luna/construct.toml) is the same construct on `gpt-5.6-luna` with low reasoning effort, a cheap candidate for exercising the pipeline on `smoke`.
+[`bare-codex-luna`](../examples/karn/constructs/bare-codex-luna/construct.toml) is the same construct on `gpt-6-luna` with low reasoning effort, a cheap candidate for exercising the pipeline on `smoke`.
+It pins Codex 0.157.1 with its own `[image.native_cli]`, which needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
 
 ```bash
 karn build examples/karn --worktree --out /tmp/bench-codex-build
@@ -65,6 +66,7 @@ Each run retains its workspace, snapshots, stopped final workspace, grading-sour
 The immutable schema 2 record lives under `private-results/results/<candidate-hash>/<run-id>/`.
 Estimated cost is API-equivalent USD, not the subscription bill.
 Agent turns count model responses plus tool calls; missing measurements remain null with an explanation.
+Turns, usage, and cost are complete only for a Codex version whose journal and telemetry were qualified against scripted ground truth (0.153.4 and 0.157.1); qualify another offline, without credentials, with `scripts/qualify_codex_telemetry.py --image IMAGE --native-version VERSION --output DIR`.
 FDN coverage lists tested and uncovered cards explicitly.
 Run metadata fingerprints the actual host grading suites, test helpers, and replay identity maps; unavailable hashes remain explicit observations.
 
