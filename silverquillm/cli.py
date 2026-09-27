@@ -215,6 +215,22 @@ def _harvest_regular(workspace: Path, parts: tuple[str, ...], destination: Path)
     destination.write_bytes(content)
 
 
+def _read_prior_prompt(workspace_final: Path) -> str:
+    """The prior leg's prompt, refused if the agent left a link or special file in its place."""
+    try:
+        directory = open_directory(workspace_final)
+        try:
+            content = read_regular_at(directory, "prompt.md", HARVESTED_FILE_LIMIT)
+        finally:
+            os.close(directory)
+        return content.decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        raise click.ClickException(
+            "Prior workspace_final/prompt.md is not a readable regular file; "
+            "a Resume Leg never follows a prior leg's links"
+        ) from None
+
+
 def _harvest_results(
     workspace: Path,
     output: Path,
@@ -1282,7 +1298,7 @@ def resume(
         # filter-mismatch disclosures, etc., are based on the same prompt the
         # prior agent saw (resilient to changes in the canonical workspace
         # template between legs).
-        prior_prompt = (workspace_final / "prompt.md").read_text(encoding="utf-8")
+        prior_prompt = _read_prior_prompt(workspace_final)
         # Strip any prior Resume Preamble (legs of legs) so the new preamble
         # is the only one and points at the immediate prior leg.
         body = _strip_resume_preamble(prior_prompt)

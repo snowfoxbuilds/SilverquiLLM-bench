@@ -438,6 +438,29 @@ class TestResumeCommand:
         assert result.exit_code != 0
         assert "run_manifest.json" in result.output
 
+    @pytest.mark.parametrize("target", ["host-secret.txt", "missing.txt"])
+    def test_refuses_a_linked_prior_prompt_without_reading_through_it(
+        self, runner, tmp_path, monkeypatch, _patch_resume_deps, target
+    ):
+        from silverquillm import cli as cli_mod
+
+        prior = _make_prior_run(tmp_path)
+        secret = tmp_path / "host-secret.txt"
+        secret.write_text("operator-only secret")
+        prompt = prior / "workspace_final" / "prompt.md"
+        prompt.unlink()
+        prompt.symlink_to(tmp_path / target)
+        monkeypatch.setattr(cli_mod, "_REPO_ROOT", tmp_path)
+
+        result = runner.invoke(
+            main, ["legacy", "resume", prior.name, "--timeout", "60"]
+        )
+        assert result.exit_code != 0
+        assert "prompt.md is not a readable regular file" in result.output
+        assert "operator-only secret" not in result.output
+        assert not _patch_resume_deps.called
+        assert secret.read_text() == "operator-only secret"
+
     def test_e2e_resume_writes_manifest_and_preamble(
         self, runner, tmp_path, monkeypatch, _patch_resume_deps
     ):
