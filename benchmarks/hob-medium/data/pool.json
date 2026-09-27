@@ -1,0 +1,83 @@
+[
+  {
+    "name": "The Eagles Are Coming!",
+    "mana_cost": "{1}{W}",
+    "type_line": "Instant",
+    "oracle_text": "Kicker {2}{W}{W} (You may pay an additional {2}{W}{W} as you cast this spell.)\nChoose target creature you own. If this spell was kicked, instead choose any number of target creatures you own. Return each chosen creature to your hand. At the beginning of the next upkeep, create a 4/4 white Bird Soldier creature token with flying for each creature returned to your hand this way.",
+    "colors": [
+      "W"
+    ],
+    "keywords": [
+      "Kicker"
+    ],
+    "rarity": "rare",
+    "set": "hob",
+    "collector_number": "12",
+    "mana_cost_str": "{1}{W}"
+  },
+  {
+    "name": "Elrond, Moon-Reader",
+    "mana_cost": "{2}{U}",
+    "type_line": "Legendary Creature — Elf Noble",
+    "oracle_text": "Whenever you activate an ability of a creature, draw a card. This ability triggers only once each turn.\n{5}{U}{U}: Exile up to two other target nonland permanents you control. Return those cards to the battlefield under their owner's control at the beginning of the next end step.",
+    "colors": [
+      "U"
+    ],
+    "keywords": [],
+    "rarity": "mythic",
+    "set": "hob",
+    "collector_number": "36",
+    "power": "3",
+    "toughness": "3",
+    "mana_cost_str": "{2}{U}"
+  },
+  {
+    "name": "Gollum, Riddle Master",
+    "mana_cost": "{1}{B}",
+    "type_line": "Legendary Creature — Halfling Horror",
+    "oracle_text": "As Gollum enters, choose odd or even. (Zero is even.)\nWhenever an opponent casts a spell with mana value of the chosen quality, choose one that hasn't been chosen —\n• Put a +1/+1 counter on Gollum.\n• Each opponent loses 2 life and you gain 2 life.\n• Draw a card.",
+    "colors": [
+      "B"
+    ],
+    "keywords": [],
+    "rarity": "mythic",
+    "set": "hob",
+    "collector_number": "70",
+    "power": "3",
+    "toughness": "1",
+    "mana_cost_str": "{1}{B}"
+  },
+  {
+    "name": "The Notary Hobbits",
+    "mana_cost": "{3}{G}{G}",
+    "type_line": "Legendary Creature — Halfling Advisor",
+    "oracle_text": "When The Notary Hobbits enter, if they're not a token, create two tokens that are copies of them, except the tokens aren't legendary.\n{T}: Add {C} for each Halfling you control.",
+    "colors": [
+      "G"
+    ],
+    "keywords": [],
+    "rarity": "rare",
+    "set": "hob",
+    "collector_number": "131",
+    "power": "1",
+    "toughness": "1",
+    "mana_cost_str": "{3}{G}{G}"
+  },
+  {
+    "name": "Tom, Bert, and William",
+    "mana_cost": "{3}{B}{G}",
+    "type_line": "Legendary Creature — Troll",
+    "oracle_text": "{1}, Sacrifice another creature: Draw cards equal to the sacrificed creature's power, then discard a card.\nWhen Tom, Bert, and William die, if they were a creature, return them to the battlefield. They're an artifact. (They're no longer a creature.)",
+    "colors": [
+      "B",
+      "G"
+    ],
+    "keywords": [],
+    "rarity": "rare",
+    "set": "hob",
+    "collector_number": "169",
+    "power": "5",
+    "toughness": "5",
+    "mana_cost_str": "{3}{B}{G}"
+  }
+]

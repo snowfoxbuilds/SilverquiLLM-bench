@@ -1,0 +1,19 @@
+{
+  "name": "Uncharted Voyage",
+  "mana_cost": "{3}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Target creature's owner puts it on their choice of the top or bottom of their library.\nSurveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Surveil"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "53",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,61 @@
+{
+    "runtime" : {
+        "timeout_seconds" : 3600, 
+        "sudo" : false, 
+        "resources" : {
+            "pids" : null, 
+            "memory_bytes" : null, 
+            "cpus" : null
+        }, 
+        "plugins" : [
+            {
+                "version" : "1.0.0", 
+                "source" : "catalog", 
+                "id" : "coding-controller", 
+                "configuration" : {
+                    "trigger" : {
+                        "poll_seconds" : 60, 
+                        "labels" : [
+                            "plan_ready"
+                        ]
+                    }, 
+                    "repository" : "example/repo", 
+                    "prompt" : "Implement the claimed issue and open a pull request."
+                }, 
+                "artifact" : "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+        ], 
+        "network" : {
+            "mode" : "none", 
+            "https_hosts" : []
+        }, 
+        "mounts" : [], 
+        "main" : [
+            "/bin/true"
+        ], 
+        "logs" : {
+            "stdout" : {
+                "retention_seconds" : 604800, 
+                "max_bytes" : 1073741824, 
+                "directory" : null
+            }, 
+            "stderr" : {
+                "retention_seconds" : 604800, 
+                "max_bytes" : 1073741824, 
+                "directory" : null
+            }
+        }, 
+        "initializer_runner" : null, 
+        "initializer" : null, 
+        "files" : [], 
+        "environment" : {}, 
+        "credentials" : [], 
+        "bootstrap" : null, 
+        "backend" : "docker"
+    }, 
+    "name" : "coding-automaton", 
+    "mode" : "automaton", 
+    "image" : "sha256:1111111111111111111111111111111111111111111111111111111111111111", 
+    "definition_version" : 4, 
+    "definition_id" : "3f1c9a52-7d4e-4b8a-9c21-5e6f7a8b9c0d"
+}

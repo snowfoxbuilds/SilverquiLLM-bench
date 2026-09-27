@@ -1,0 +1,61 @@
+{
+  "definition_id": "3F1C9A52-7D4E-4B8A-9C21-5E6F7A8B9C0D",
+  "definition_version": 4,
+  "image": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "mode": "automaton",
+  "name": "coding-automaton",
+  "runtime": {
+    "backend": "docker",
+    "bootstrap": null,
+    "credentials": [],
+    "environment": {},
+    "files": [],
+    "initializer": null,
+    "initializer_runner": null,
+    "logs": {
+      "stderr": {
+        "directory": null,
+        "max_bytes": 1073741824,
+        "retention_seconds": 604800
+      },
+      "stdout": {
+        "directory": null,
+        "max_bytes": 1073741824,
+        "retention_seconds": 604800
+      }
+    },
+    "main": [
+      "/bin/true"
+    ],
+    "mounts": [],
+    "network": {
+      "https_hosts": [],
+      "mode": "none"
+    },
+    "plugins": [
+      {
+        "id": "coding-controller",
+        "version": "1.0.0",
+        "source": "catalog",
+        "artifact": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "configuration": {
+          "repository": "example/repo",
+          "trigger": {
+            "labels": [
+              "plan_ready"
+            ],
+            "poll_seconds": 60
+          },
+          "prompt": "Implement the claimed issue and open a pull request."
+        }
+      }
+    ],
+    "resources": {
+      "cpus": null,
+      "memory_bytes": null,
+      "pids": null
+    },
+    "sudo": false,
+    "timeout_seconds": 3600
+  }
+}

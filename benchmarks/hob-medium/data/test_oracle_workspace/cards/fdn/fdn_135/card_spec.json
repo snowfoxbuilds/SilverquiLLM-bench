@@ -1,0 +1,17 @@
+{
+  "name": "Ajani's Pridemate",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature — Cat Soldier",
+  "oracle_text": "Whenever you gain life, put a +1/+1 counter on this creature.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "135",
+  "complexity_tier": "medium"
+}

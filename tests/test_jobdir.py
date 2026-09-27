@@ -47,9 +47,20 @@ class TestLoadBenchmark:
         assert b.cards == ["129", "205", "232"]
         assert b.target_set == "fdn"
 
-    def test_hob_medium_empty_pool_refuses(self) -> None:
-        with pytest.raises(BenchmarkNotRunnableError):
-            load_benchmark("hob-medium")
+    def test_empty_pool_refuses(self, tmp_path: Path) -> None:
+        benchmark = tmp_path / "benchmarks" / "empty-pool"
+        benchmark.mkdir(parents=True)
+        (benchmark / "config.json").write_text(
+            json.dumps({"cards": [], "draft_set": {"primary_set_code": "HOB"}})
+        )
+        with pytest.raises(BenchmarkNotRunnableError, match="empty"):
+            load_benchmark("empty-pool", repo_root=tmp_path)
+
+    def test_hob_medium_loads_selected_pool(self) -> None:
+        benchmark = load_benchmark("hob-medium")
+        assert benchmark.id == "hob-medium"
+        assert benchmark.cards == ["12", "36", "70", "131", "169"]
+        assert benchmark.target_set == "hob"
 
     def test_unknown_id_lists_available(self) -> None:
         with pytest.raises(BenchmarkNotFoundError) as exc:

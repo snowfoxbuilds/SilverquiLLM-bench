@@ -1,0 +1,17 @@
+{
+  "name": "Lunar Insight",
+  "mana_cost": "{2}{U}",
+  "type_line": "Sorcery",
+  "oracle_text": "Draw a card for each different mana value among nonland permanents you control.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "46",
+  "complexity_tier": "medium"
+}

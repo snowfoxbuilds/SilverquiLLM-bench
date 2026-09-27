@@ -1,0 +1,553 @@
+{
+  "original_reference_suites": 86,
+  "original_reference_tests": 429,
+  "current_audited_suites": 82,
+  "current_audited_tests": 394,
+  "baseline_gaps": [
+    {
+      "card_id": "fdn_13",
+      "scope": "combat damage prevention only",
+      "expected": "The targeted 3/3 survives combat with a 4-power flyer.",
+      "observed": "The targeted creature is put into its graveyard; combat ignores the prevention flag.",
+      "retained": "Counter, flying, legal targeting and flying expiry.",
+      "diagnostic": "fdn_public_actions.py"
+    },
+    {
+      "card_id": "fdn_200",
+      "scope": "whole scored suite",
+      "expected": "A Tokens mode preference during casting creates two Goblins.",
+      "observed": "No mode query is raised; the unresolved mode causes the spell to create no tokens.",
+      "retained": null,
+      "diagnostic": "fdn_public_actions.py"
+    },
+    {
+      "card_id": "fdn_236",
+      "scope": "positive X-entry case",
+      "expected": "Choosing X=3 pays three additional mana and enters with three counters.",
+      "observed": "No X query/payment; three mana remains and the zero-counter creature dies.",
+      "retained": "X=0 consequence and real counter-synergy triggers.",
+      "diagnostic": "fdn_public_actions.py"
+    },
+    {
+      "card_id": "fdn_244",
+      "scope": "graveyard replacement case",
+      "expected": "Destroying Progenitus removes it from the battlefield and shuffles it into its library.",
+      "observed": "The same object is placed in the library while remaining on the battlefield.",
+      "retained": "Protection from damage plus supplemental printed characteristics.",
+      "diagnostic": "fdn_public_actions.py"
+    },
+    {
+      "card_id": "fdn_81",
+      "scope": "four -4 split-target cases",
+      "expected": "The -4 activation chooses targets and deals 8 divided damage, leaving 2 loyalty.",
+      "observed": "The descriptor has no targeting callback; loyalty becomes 2 but no damage is dealt.",
+      "retained": "+2 mana, library exile, small-library behavior and once-per-turn activation.",
+      "diagnostic": "fdn_81_94.py"
+    },
+    {
+      "card_id": "fdn_88",
+      "scope": "whole scored suite",
+      "expected": "Choosing X=4 spends four additional mana, kills a 2/2 and creates two Goblins.",
+      "observed": "No X query/payment; four mana remains, the target survives and no Goblins are created.",
+      "retained": null,
+      "diagnostic": "fdn_public_actions.py"
+    },
+    {
+      "card_id": "fdn_93",
+      "scope": "whole scored suite",
+      "expected": "A real attack enables a Goblin token at the controller's end step.",
+      "observed": "Combat does not maintain the history used by the card; no token is created.",
+      "retained": null,
+      "diagnostic": "fdn_public_actions.py"
+    },
+    {
+      "card_id": "fdn_94",
+      "scope": "whole scored suite",
+      "expected": "A creature dying enables end-step untap; ordinary untap leaves Cerberus tapped.",
+      "observed": "Death history is absent, so end-step untap fails; ordinary untap ignores the skip-untap flag.",
+      "retained": null,
+      "diagnostic": "fdn_81_94.py"
+    }
+  ],
+  "removed_or_replaced_cases": [
+    {
+      "original_nodeid": "fdn_106/tests.py::TestLootProperties::test_has_one_activated_ability",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_114/tests.py::TestTreetopSnarespinnerProperties::test_has_one_targeted_ability",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_12/tests.py::TestFelidarSaviorProperties::test_both_target_specs_optional",
+      "kind": "implementation_probe",
+      "reason": "Descriptor or subscription inspection removed; retained positive and negative public gameplay covers the printed behavior."
+    },
+    {
+      "original_nodeid": "fdn_126/tests.py::TestZimoneProperties::test_ability_signature_and_targeting",
+      "kind": "implementation_probe",
+      "reason": "Descriptor or subscription inspection removed; retained positive and negative public gameplay covers the printed behavior."
+    },
+    {
+      "original_nodeid": "fdn_126/tests.py::TestZimoneCombatTrigger::test_trigger_registered_with_targeting",
+      "kind": "implementation_probe",
+      "reason": "Descriptor or subscription inspection removed; retained positive and negative public gameplay covers the printed behavior."
+    },
+    {
+      "original_nodeid": "fdn_129/tests.py::TestLeylineAxeLifecycle::test_attach_buffs_then_detach_removes",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_129/tests.py::test_equip_buffs_then_equipment_departure_removes_buff",
+        "fdn_129/tests.py::test_creature_death_detaches_equipment",
+        "fdn_129/tests.py::test_equip_pays_before_attachment_resolves"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_129/tests.py::TestLeylineAxeLifecycle::test_sba_unattaches_when_creature_dies",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_129/tests.py::test_equip_buffs_then_equipment_departure_removes_buff",
+        "fdn_129/tests.py::test_creature_death_detaches_equipment",
+        "fdn_129/tests.py::test_equip_pays_before_attachment_resolves"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_129/tests.py::TestLeylineAxeEquipAbility::test_equip_ability_attaches_to_chosen_creature",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_129/tests.py::test_equip_buffs_then_equipment_departure_removes_buff",
+        "fdn_129/tests.py::test_creature_death_detaches_equipment",
+        "fdn_129/tests.py::test_equip_pays_before_attachment_resolves"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_13/tests.py::TestFleetingFlightTargeting::test_returns_single_target_requirement",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_13/tests.py::TestFleetingFlightTargeting::test_target_zone_is_battlefield",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_13/tests.py::TestFleetingFlightTargeting::test_target_filter_accepts_creature",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_13/tests.py::TestFleetingFlightTargeting::test_artifact_is_not_a_legal_creature_target",
+        "fdn_13/tests.py::TestFleetingFlightResolution::test_missing_required_target_rejects_before_payment"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_13/tests.py::TestFleetingFlightResolution::test_no_target_is_a_noop",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_13/tests.py::TestFleetingFlightTargeting::test_artifact_is_not_a_legal_creature_target",
+        "fdn_13/tests.py::TestFleetingFlightResolution::test_missing_required_target_rejects_before_payment"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_134/tests.py::TestAjaniProperties::test_loyalty_ability_targeting_shape",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_139/tests.py::TestCatharCommandoProperties::test_has_one_targeted_ability",
+      "kind": "implementation_probe",
+      "reason": "Descriptor or subscription inspection removed; retained positive and negative public gameplay covers the printed behavior."
+    },
+    {
+      "original_nodeid": "fdn_174/tests.py::TestFakeYourOwnDeathResolution::test_resolution_does_not_raise_and_applies_buff",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_174/tests.py::test_resolution_applies_buff_and_leaves_stack",
+        "fdn_174/tests.py::test_death_returns_tapped_and_creates_treasure",
+        "fdn_174/tests.py::test_departed_target_fizzles_without_buff_or_treasure",
+        "fdn_174/tests.py::test_cleanup_removes_buff_and_death_return"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_174/tests.py::TestFakeYourOwnDeathResolution::test_registers_death_and_eot_cleanup_triggers",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_174/tests.py::test_resolution_applies_buff_and_leaves_stack",
+        "fdn_174/tests.py::test_death_returns_tapped_and_creates_treasure",
+        "fdn_174/tests.py::test_departed_target_fizzles_without_buff_or_treasure",
+        "fdn_174/tests.py::test_cleanup_removes_buff_and_death_return"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_174/tests.py::TestFakeYourOwnDeathResolution::test_no_target_is_a_safe_noop",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_174/tests.py::test_resolution_applies_buff_and_leaves_stack",
+        "fdn_174/tests.py::test_death_returns_tapped_and_creates_treasure",
+        "fdn_174/tests.py::test_departed_target_fizzles_without_buff_or_treasure",
+        "fdn_174/tests.py::test_cleanup_removes_buff_and_death_return"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_174/tests.py::TestFakeYourOwnDeathThroughStack::test_cast_and_resolve_leaves_stack_and_registers_effects",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_174/tests.py::test_resolution_applies_buff_and_leaves_stack",
+        "fdn_174/tests.py::test_death_returns_tapped_and_creates_treasure",
+        "fdn_174/tests.py::test_departed_target_fizzles_without_buff_or_treasure",
+        "fdn_174/tests.py::test_cleanup_removes_buff_and_death_return"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_177/tests.py::TestMacabreWaltzProperties::test_two_optional_graveyard_specs",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_184/tests.py::TestRuneScarredDemonSelfETB::test_on_resolve_no_longer_self_tutors",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_184/tests.py::TestRuneScarredDemonSelfETB::test_reentry_tutors_once_again"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_189/tests.py::TestAxgardCavalryProperties::test_has_one_targeted_ability",
+      "kind": "implementation_probe",
+      "reason": "Descriptor or subscription inspection removed; retained positive and negative public gameplay covers the printed behavior."
+    },
+    {
+      "original_nodeid": "fdn_195/tests.py::TestFanaticalFirebrandProperties::test_has_one_targeted_ability",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_200/tests.py::TestGoblinSurpriseMint::test_token_mode_mints_two_11_red_goblin_tokens",
+      "kind": "baseline_gap",
+      "reason": "No mode query is raised; the unresolved mode causes the spell to create no tokens."
+    },
+    {
+      "original_nodeid": "fdn_201/tests.py::TestHeartfireImmolatorProperties::test_has_one_targeted_ability",
+      "kind": "implementation_probe",
+      "reason": "Descriptor or subscription inspection removed; retained positive and negative public gameplay covers the printed behavior."
+    },
+    {
+      "original_nodeid": "fdn_205/tests.py::TestSeismicRuptureProperties::test_takes_no_targets",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_219/tests.py::TestElvishArchdruidLord::test_register_triggers_adds_pt_effect",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_232/tests.py::TestScavengingOozeProperties::test_has_targeted_ability",
+      "kind": "implementation_probe",
+      "reason": "Descriptor or subscription inspection removed; retained positive and negative public gameplay covers the printed behavior."
+    },
+    {
+      "original_nodeid": "fdn_234/tests.py::TestVivienProperties::test_only_minus_three_is_targeted",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_236/tests.py::TestWildwoodScourgeProperties::test_enters_with_x_counters",
+      "kind": "baseline_gap",
+      "reason": "No X query/payment; three mana remains and the zero-counter creature dies."
+    },
+    {
+      "original_nodeid": "fdn_236/tests.py::TestWildwoodScourgeTriggerRegistration::test_register_triggers_does_not_raise_and_subscribes",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_236/tests.py::TestWildwoodScourgeThroughBattlefieldEntry::test_battlefield_entry_registers_counter_trigger",
+      "kind": "implementation_probe",
+      "reason": "Subscription-table inspection is replaced by the real counter-synergy case, which enters through the canonical zone path."
+    },
+    {
+      "original_nodeid": "fdn_244/tests.py::TestProgenitusReplacementRegistration::test_registers_one_replacement_effect",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_244/tests.py::TestProgenitusReplacementRegistration::test_registered_replacement_uses_typed_event_class",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_244/tests.py::TestProgenitusGraveyardReplacement::test_replacement_redirects_to_library_and_prevents",
+      "kind": "baseline_gap",
+      "reason": "The same object is placed in the library while remaining on the battlefield."
+    },
+    {
+      "original_nodeid": "fdn_31/tests.py::TestBigfinBouncerProperties::test_get_targets_is_a_requirement_not_objects",
+      "kind": "implementation_probe",
+      "reason": "Descriptor or subscription inspection removed; retained positive and negative public gameplay covers the printed behavior."
+    },
+    {
+      "original_nodeid": "fdn_38/tests.py::TestFaebloomTrickProperties::test_target_is_optional_requirement",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_44/tests.py::TestKaitoProperties::test_only_plus_one_is_targeted",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_5/tests.py::TestCelestialArmorBehaviour::test_static_buff",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_5/tests.py::test_static_buff_after_paid_equip",
+        "fdn_5/tests.py::test_etb_attach_grants_protection_until_cleanup"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_5/tests.py::TestCelestialArmorBehaviour::test_etb_attach_grants_protection_until_eot",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_5/tests.py::test_static_buff_after_paid_equip",
+        "fdn_5/tests.py::test_etb_attach_grants_protection_until_cleanup"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_69/tests.py::TestSeekersFollyModes::test_option_set_mode0_targets_only_opponents",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_69/tests.py::TestSeekersFollyModes::test_discard_mode_cannot_target_the_caster_or_a_creature"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_75/tests.py::TestVampireSoulcallerProperties::test_declares_a_single_required_target",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_intent_chooses_the_split",
+      "kind": "baseline_gap",
+      "reason": "The descriptor has no targeting callback; loyalty becomes 2 but no damage is dealt."
+    },
+    {
+      "original_nodeid": "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_baseline_takes_first_offered_lowest",
+      "kind": "baseline_gap",
+      "reason": "The descriptor has no targeting callback; loyalty becomes 2 but no damage is dealt."
+    },
+    {
+      "original_nodeid": "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_each_queried_target_must_get_at_least_one",
+      "kind": "baseline_gap",
+      "reason": "The descriptor has no targeting callback; loyalty becomes 2 but no damage is dealt."
+    },
+    {
+      "original_nodeid": "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_single_target_takes_all_8_without_a_query",
+      "kind": "baseline_gap",
+      "reason": "The descriptor has no targeting callback; loyalty becomes 2 but no damage is dealt."
+    },
+    {
+      "original_nodeid": "fdn_86/tests.py::TestFieryAnnihilationTargets::test_dependent_filter_only_accepts_equipment_on_chosen_creature",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_86/tests.py::TestFieryAnnihilationTargets::test_second_creatures_equipment_is_selected_independently"
+      ]
+    },
+    {
+      "original_nodeid": "fdn_88/tests.py::TestGoblinNegotiationMint::test_excess_damage_mints_11_red_goblin_tokens",
+      "kind": "baseline_gap",
+      "reason": "No X query/payment; four mana remains, the target survives and no Goblins are created."
+    },
+    {
+      "original_nodeid": "fdn_93/tests.py::TestSearslicerGoblinMint::test_raid_end_step_mints_11_red_goblin_token",
+      "kind": "baseline_gap",
+      "reason": "Combat does not maintain the history used by the card; no token is created."
+    },
+    {
+      "original_nodeid": "fdn_94/tests.py::TestSlumberingCerberusProperties::test_static_data",
+      "kind": "baseline_gap",
+      "reason": "Death history is absent, so end-step untap fails; ordinary untap ignores the skip-untap flag."
+    },
+    {
+      "original_nodeid": "fdn_94/tests.py::TestSlumberingCerberusMorbid::test_untaps_when_a_creature_died_this_turn",
+      "kind": "baseline_gap",
+      "reason": "Death history is absent, so end-step untap fails; ordinary untap ignores the skip-untap flag."
+    },
+    {
+      "original_nodeid": "fdn_94/tests.py::TestSlumberingCerberusMorbid::test_stays_tapped_when_no_creature_died",
+      "kind": "baseline_gap",
+      "reason": "Death history is absent, so end-step untap fails; ordinary untap ignores the skip-untap flag."
+    },
+    {
+      "original_nodeid": "fdn_95/tests.py::TestSowerOfChaosProperties::test_has_one_activated_ability",
+      "kind": "implementation_probe",
+      "reason": "Internal descriptor/registration shape; gameplay outcomes remain covered by the retained cases."
+    },
+    {
+      "original_nodeid": "fdn_98/tests.py::TestAmbushWolfProperties::test_target_is_optional",
+      "kind": "implementation_probe",
+      "reason": "Descriptor or subscription inspection removed; retained positive and negative public gameplay covers the printed behavior."
+    },
+    {
+      "original_nodeid": "fdn_98/tests.py::TestAmbushWolfETB::test_option_set_only_graveyard_cards",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "fdn_98/tests.py::TestAmbushWolfETB::test_only_graveyard_cards_can_be_exiled"
+      ]
+    },
+    {
+      "original_nodeid": "spg_77/tests.py::TestEmbercleaveBehaviour::test_static_buff",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "spg_77/tests.py::test_static_buff_after_paid_equip",
+        "spg_77/tests.py::test_cast_entry_attaches_to_the_chosen_creature"
+      ]
+    },
+    {
+      "original_nodeid": "spg_77/tests.py::TestEmbercleaveBehaviour::test_etb_attaches_to_chosen_creature",
+      "kind": "public_behavior_replacement",
+      "replacement_nodeids": [
+        "spg_77/tests.py::test_static_buff_after_paid_equip",
+        "spg_77/tests.py::test_cast_entry_attaches_to_the_chosen_creature"
+      ]
+    }
+  ],
+  "added_or_renamed_cases": [
+    "fdn_129/tests.py::test_creature_death_detaches_equipment",
+    "fdn_129/tests.py::test_equip_buffs_then_equipment_departure_removes_buff",
+    "fdn_129/tests.py::test_equip_pays_before_attachment_resolves",
+    "fdn_13/tests.py::TestFleetingFlightResolution::test_missing_required_target_rejects_before_payment",
+    "fdn_13/tests.py::TestFleetingFlightTargeting::test_artifact_is_not_a_legal_creature_target",
+    "fdn_174/tests.py::test_cleanup_removes_buff_and_death_return",
+    "fdn_174/tests.py::test_death_returns_tapped_and_creates_treasure",
+    "fdn_174/tests.py::test_departed_target_fizzles_without_buff_or_treasure",
+    "fdn_174/tests.py::test_resolution_applies_buff_and_leaves_stack",
+    "fdn_184/tests.py::TestRuneScarredDemonSelfETB::test_reentry_tutors_once_again",
+    "fdn_244/tests.py::test_protection_from_everything_prevents_damage",
+    "fdn_5/tests.py::test_etb_attach_grants_protection_until_cleanup",
+    "fdn_5/tests.py::test_static_buff_after_paid_equip",
+    "fdn_69/tests.py::TestSeekersFollyModes::test_discard_mode_cannot_target_the_caster_or_a_creature",
+    "fdn_81/tests.py::test_plus_two_adds_mana_and_exiles_three_cards",
+    "fdn_81/tests.py::test_plus_two_cannot_be_repeated_in_the_same_turn",
+    "fdn_81/tests.py::test_plus_two_handles_fewer_than_three_library_cards",
+    "fdn_86/tests.py::TestFieryAnnihilationTargets::test_second_creatures_equipment_is_selected_independently",
+    "fdn_98/tests.py::TestAmbushWolfETB::test_only_graveyard_cards_can_be_exiled",
+    "spg_77/tests.py::test_cast_entry_attaches_to_the_chosen_creature",
+    "spg_77/tests.py::test_static_buff_after_paid_equip"
+  ],
+  "removed_assertions": [
+    {
+      "card_id": "fdn_188",
+      "scope": "get_modes assertion in test_static_data",
+      "kind": "implementation_probe",
+      "reason": "Removed descriptor enumeration; actual mode effects are exercised through casting."
+    },
+    {
+      "card_id": "fdn_215",
+      "scope": "get_modes assertion in test_static_data",
+      "kind": "implementation_probe",
+      "reason": "Removed descriptor enumeration; actual mode effects are exercised through casting."
+    },
+    {
+      "card_id": "fdn_99",
+      "scope": "get_modes assertion in test_static_data",
+      "kind": "implementation_probe",
+      "reason": "Removed descriptor enumeration; actual mode effects are exercised through casting."
+    }
+  ],
+  "retained_partial_case_exclusions": [
+    {
+      "card_id": "fdn_13",
+      "original_nodeid": "tests.py::TestFleetingFlightResolution::test_chosen_target_receives_counter_and_flying",
+      "scope": "combat-prevention facet",
+      "kind": "baseline_gap",
+      "reason": "Canonical combat ignores combat_damage_prevented: a protected 3/3 still dies blocking/blocked by a4-power flyer. Counter, flying and expiry outcomes remain scored."
+    }
+  ],
+  "supplemental_integrity_nodeids": [
+    "fdn_104/tests.py::TestElvishRegrowerProperties::test_static_data",
+    "fdn_106/tests.py::TestLootProperties::test_static_data",
+    "fdn_107/tests.py::TestMossbornHydraProperties::test_name_and_cost",
+    "fdn_114/tests.py::TestTreetopSnarespinnerProperties::test_static_data",
+    "fdn_12/tests.py::TestFelidarSaviorProperties::test_static_data",
+    "fdn_122/tests.py::TestKykarProperties::test_mana_cost",
+    "fdn_122/tests.py::TestKykarProperties::test_name",
+    "fdn_126/tests.py::TestZimoneProperties::test_static_data",
+    "fdn_129/tests.py::test_static_data",
+    "fdn_13/tests.py::TestFleetingFlightProperties::test_is_instant",
+    "fdn_13/tests.py::TestFleetingFlightProperties::test_mana_cost",
+    "fdn_13/tests.py::TestFleetingFlightProperties::test_name",
+    "fdn_130/tests.py::TestQuickDrawKatanaProperties::test_static_data",
+    "fdn_134/tests.py::TestAjaniProperties::test_static_data",
+    "fdn_136/tests.py::TestAngelOfFinalityProperties::test_static_data",
+    "fdn_139/tests.py::TestCatharCommandoProperties::test_static_data",
+    "fdn_141/tests.py::TestGiadaProperties::test_name_and_cost",
+    "fdn_142/tests.py::TestHealersHawkProperties::test_has_flying_and_lifelink",
+    "fdn_142/tests.py::TestHealersHawkProperties::test_is_creature",
+    "fdn_142/tests.py::TestHealersHawkProperties::test_mana_cost",
+    "fdn_142/tests.py::TestHealersHawkProperties::test_name",
+    "fdn_142/tests.py::TestHealersHawkProperties::test_power_toughness",
+    "fdn_144/tests.py::TestMischievousPupProperties::test_static_data",
+    "fdn_15/tests.py::TestHareApparentProperties::test_is_creature",
+    "fdn_15/tests.py::TestHareApparentProperties::test_mana_cost",
+    "fdn_15/tests.py::TestHareApparentProperties::test_name",
+    "fdn_15/tests.py::TestHareApparentProperties::test_power_toughness",
+    "fdn_15/tests.py::TestHareApparentProperties::test_subtypes",
+    "fdn_153/tests.py::TestEssenceScatterProperties::test_is_instant",
+    "fdn_153/tests.py::TestEssenceScatterProperties::test_mana_cost",
+    "fdn_154/tests.py::TestExtravagantReplicationProperties::test_is_enchantment",
+    "fdn_154/tests.py::TestExtravagantReplicationProperties::test_mana_cost",
+    "fdn_159/tests.py::TestMockingSpriteProperties::test_has_flying",
+    "fdn_159/tests.py::TestMockingSpriteProperties::test_name_and_cost",
+    "fdn_160/tests.py::TestAnOfferProperties::test_is_instant",
+    "fdn_160/tests.py::TestAnOfferProperties::test_mana_cost",
+    "fdn_163/tests.py::TestSelfReflectionProperties::test_is_sorcery",
+    "fdn_163/tests.py::TestSelfReflectionProperties::test_mana_and_flashback_cost",
+    "fdn_165/tests.py::TestThinkTwiceProperties::test_flashback_cost",
+    "fdn_165/tests.py::TestThinkTwiceProperties::test_is_instant",
+    "fdn_174/tests.py::test_mana_cost",
+    "fdn_177/tests.py::TestMacabreWaltzProperties::test_static_data",
+    "fdn_188/tests.py::TestAbradeProperties::test_static_data",
+    "fdn_189/tests.py::TestAxgardCavalryProperties::test_static_data",
+    "fdn_195/tests.py::TestFanaticalFirebrandProperties::test_static_data",
+    "fdn_201/tests.py::TestHeartfireImmolatorProperties::test_static_data",
+    "fdn_205/tests.py::TestSeismicRuptureProperties::test_is_sorcery",
+    "fdn_205/tests.py::TestSeismicRuptureProperties::test_mana_cost",
+    "fdn_205/tests.py::TestSeismicRuptureProperties::test_name",
+    "fdn_215/tests.py::TestBushwhackProperties::test_static_data",
+    "fdn_219/tests.py::TestElvishArchdruidProperties::test_name_and_cost",
+    "fdn_224/tests.py::TestGnarlidColonyProperties::test_name_and_cost",
+    "fdn_231/tests.py::TestReclamationSageProperties::test_static_data",
+    "fdn_232/tests.py::TestScavengingOozeProperties::test_static_data",
+    "fdn_234/tests.py::TestVivienProperties::test_static_data",
+    "fdn_236/tests.py::TestWildwoodScourgeProperties::test_name_and_cost",
+    "fdn_244/tests.py::TestProgenitusProperties::test_legendary_hydra_avatar",
+    "fdn_244/tests.py::TestProgenitusProperties::test_mana_cost",
+    "fdn_244/tests.py::TestProgenitusProperties::test_name",
+    "fdn_248/tests.py::TestThousandYearStormProperties::test_static_data",
+    "fdn_249/tests.py::TestAdventuringGearProperties::test_static_data",
+    "fdn_250/tests.py::TestBurnishedHartProperties::test_static_data",
+    "fdn_253/tests.py::test_static_data",
+    "fdn_256/tests.py::TestMeteorGolemProperties::test_static_data",
+    "fdn_258/tests.py::TestSwiftfootBootsProperties::test_static_data",
+    "fdn_31/tests.py::TestBigfinBouncerProperties::test_static_data",
+    "fdn_38/tests.py::TestFaebloomTrickProperties::test_static_data",
+    "fdn_39/tests.py::TestGrapplingKrakenProperties::test_static_data",
+    "fdn_44/tests.py::TestKaitoProperties::test_static_data",
+    "fdn_48/tests.py::TestRefuteProperties::test_is_instant",
+    "fdn_48/tests.py::TestRefuteProperties::test_mana_cost",
+    "fdn_5/tests.py::test_static_data",
+    "fdn_62/tests.py::TestHungryGhoulProperties::test_static_data",
+    "fdn_64/tests.py::TestInfestationSageProperties::test_static_data",
+    "fdn_66/tests.py::TestNineLivesProperties::test_name_and_cost",
+    "fdn_67/tests.py::TestRevengeOfTheRatsProperties::test_static_data",
+    "fdn_69/tests.py::TestSeekersFollyProperties::test_static_data",
+    "fdn_75/tests.py::TestVampireSoulcallerProperties::test_static_data",
+    "fdn_81/tests.py::test_mana_cost",
+    "fdn_81/tests.py::test_name",
+    "fdn_87/tests.py::TestGoblinBoardersProperties::test_name_and_cost",
+    "fdn_92/tests.py::TestRiteOfTheDragoncallerProperties::test_static_data",
+    "fdn_95/tests.py::TestSowerOfChaosProperties::test_static_data",
+    "fdn_98/tests.py::TestAmbushWolfProperties::test_static_data",
+    "fdn_99/tests.py::TestApothecaryStomperProperties::test_static_data",
+    "spg_74/tests.py::TestCondemnProperties::test_static_data",
+    "spg_77/tests.py::test_static_data"
+  ]
+}

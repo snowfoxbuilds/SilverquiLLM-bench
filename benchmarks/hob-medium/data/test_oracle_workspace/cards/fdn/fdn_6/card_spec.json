@@ -1,0 +1,19 @@
+{
+  "name": "Claws Out",
+  "mana_cost": "{3}{W}{W}",
+  "type_line": "Instant",
+  "oracle_text": "Affinity for Cats (This spell costs {1} less to cast for each Cat you control.)\nCreatures you control get +2/+2 until end of turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Affinity"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "6",
+  "complexity_tier": "medium"
+}

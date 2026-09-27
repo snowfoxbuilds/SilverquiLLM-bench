@@ -10,32 +10,33 @@ The original benchmark harness used Python agent adapters, per-card workspaces, 
 
 ## Decision
 
-Use Docker-based Agent Containers as the canonical v1 benchmark architecture.
+Use isolated Docker containers as the execution boundary for Benchmark Candidates (amended 2026-09-26).
 
-Each Docker image is the full agent configuration: agent CLI, benchmark mode, strategy variant, model selection, and prompt behavior. The host runner does not know agent internals. The runner only stages a Workspace, launches the selected image, waits for the container to exit, harvests file-based outputs, and runs post-run evaluation.
+A Karn Benchmark Candidate pairs an immutable Docker image with the Construct Definition selecting its runtime behavior (amended 2026-09-26).
+The benchmark supplies its own task and instruction data, without a separate basic/planned mode selector.
+The host does not orchestrate the agent's reasoning or iteration: it stages a Workspace, supplies the declared runtime facilities, launches the candidate, harvests outputs and observations, and evaluates the implementation.
 
 The file-based contract is:
 
-- Input Workspace mounted at `/workspace/`
-- Output directory mounted at `/output/`
-- API credentials passed as environment variables
-- Agent implementations harvested from `/workspace/cards/sos/*/card_impl.py`
-- Agent tests harvested from `/workspace/cards/sos/*/tests.py`
+- Input Workspace supplied through the definition's declared workspace mount
+- Output files supplied and collected through the declared file interface
+- Authentication supplied through the selected runtime facilities, including Karn login lifecycle hooks (amended 2026-09-26)
+- Implementations and agent-written tests harvested from the benchmark's target card directories
 - Agent engine modifications harvested from `/workspace/engine/`, which the agent edits in place — there is no separate `engine_work/` (amended 2026-09-03)
-- Progress and logs harvested from `/output/`
+- Declared output artifacts, container logs, and available native telemetry retained as observations
 Python adapters, per-card workspaces, strategy classes, harness-managed rounds, and application-level contamination checking are legacy implementation details to remove or migrate away from. Agent-internal iteration belongs inside the container entrypoint or the agent itself, not the host runner.
 
 ## Consequences
 
 - **Positive**: Isolation is structural. Audited tests, harness source, prior results, and reference SOS implementations are not mounted into the container.
 - **Positive**: The runner becomes simpler and more reliable: stage, launch, harvest, evaluate.
-- **Positive**: New agents can be added by building new Docker images rather than writing Python adapter classes.
+- **Positive**: New agents enter through Karn images and definitions without host-side Python classes orchestrating their behavior.
 - **Positive**: Full-set, long-running workloads test planning, self-pacing, knowledge accumulation, and long-context endurance.
-- **Positive**: Agent mode comparisons are clean: Blind Mode and Tested Mode are separate images and separate runs.
+- **Positive**: Task guidance is explicit benchmark data and candidate behavior remains independently identifiable.
 - **Negative**: The runner has less fine-grained insight into what the agent is doing mid-run.
 - **Negative**: Per-card timeout and rollback semantics are weaker; partial results are harvested after whole-container timeout.
 - **Negative**: Debugging agent behavior depends on progress logs, stdout, stderr, and harvested files rather than adapter-level structured callbacks.
-- **Neutral**: Docker image naming becomes part of the benchmark identity, for example `silverquillm-pi-blind:latest`.
+- **Neutral**: Karn candidate identity binds the immutable image and selected definition; an image name alone is not that identity (amended 2026-09-26).
 - **Neutral**: Agent tests remain artifacts in v1. Scoring uses audited tests only.
 ## Alternatives Considered
 
@@ -47,3 +48,4 @@ Python adapters, per-card workspaces, strategy classes, harness-managed rounds, 
 ## Amendments
 
 - **2026-09-03**: Clarified that the agent's engine modifications are harvested from `/workspace/engine/`, edited in place — there is no separate `engine_work/` directory (aligns with ADR-005).
+- **2026-09-26**: Applied the Karn image/definition boundary and selected authentication facilities, with benchmark-owned instruction data. Container isolation and implementation harvesting remain; [ADR-0012](ADR-0012-independent-host-for-karn-benchmark-candidates.md) records the independent v4 host decision.

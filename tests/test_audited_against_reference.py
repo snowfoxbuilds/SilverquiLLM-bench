@@ -11,8 +11,8 @@ The oracle impl is copied as card_impl.py into a temp dir on PYTHONPATH so
 that the audited conftest's _has_explicit_card_impl() returns True and skips
 synthetic injection.
 
-With empty stubs (no real oracle implementations), no tests are generated
-and pytest exits 0.
+Historical SOS discovery keeps its staged authoring behavior. Every selected
+HOB card is always validated; a missing implementation or suite is a failure.
 """
 
 from __future__ import annotations
@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from scripts.oracle_support import load_layout, readiness_errors
+
 # Paths relative to repo root
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BENCHMARK_DIR = _REPO_ROOT / "benchmarks" / "sos"
@@ -34,8 +36,16 @@ _ORACLE_CARDS_DIR = _ORACLE_WORKSPACE / "cards" / "sos"
 
 # The 10 audited cards for this phase
 _AUDITED_CARDS = [
-    "sos_1", "sos_4", "sos_13", "sos_57", "sos_97",
-    "sos_120", "sos_201", "sos_226", "sos_245", "sos_257",
+    "sos_1",
+    "sos_4",
+    "sos_13",
+    "sos_57",
+    "sos_97",
+    "sos_120",
+    "sos_201",
+    "sos_226",
+    "sos_245",
+    "sos_257",
 ]
 
 
@@ -62,9 +72,10 @@ def _is_stub_impl(impl_path: Path) -> bool:
             continue
         # Check if this class defines any non-dunder method
         for item in node.body:
-            if isinstance(item, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
-                if not item.name.startswith("__"):
-                    return False  # Has a real game-logic method
+            if isinstance(
+                item, (_ast.FunctionDef, _ast.AsyncFunctionDef)
+            ) and not item.name.startswith("__"):
+                return False  # Has a real game-logic method
 
     return True
 
@@ -80,13 +91,22 @@ def _discover_oracle_cards() -> list[str]:
     return cards
 
 
-def _run_audited_tests_against_oracle(cn: str) -> tuple[int, str, str]:
+def _run_audited_tests_against_oracle(cn: str, benchmark: str = "sos") -> tuple[int, str, str]:
     """Run audited tests for a card against its oracle impl.
 
     Returns (returncode, stdout, stderr).
     """
-    impl_path = _ORACLE_CARDS_DIR / cn / "card_impl.py"
-    tests_path = _AUDITED_DIR / cn / "tests.py"
+    if benchmark == "sos":
+        oracle_workspace, audited_dir = _ORACLE_WORKSPACE, _AUDITED_DIR
+        impl_path = _ORACLE_CARDS_DIR / cn / "card_impl.py"
+        tests_path = audited_dir / cn / "tests.py"
+    else:
+        layout = load_layout(_REPO_ROOT, benchmark, require_cards=True)
+        errors = readiness_errors(layout, cn)
+        if errors:
+            return 1, "\n".join(errors), ""
+        oracle_workspace, audited_dir = layout.oracle, layout.audited
+        impl_path, tests_path = layout.implementation(cn), layout.suite(cn)
 
     tmp_dir = tempfile.mkdtemp(prefix=f"oracle_{cn}_")
     try:
@@ -96,7 +116,7 @@ def _run_audited_tests_against_oracle(cn: str) -> tuple[int, str, str]:
         shutil.copy2(impl_path, tmp / "card_impl.py")
 
         # Copy test_utils.py from oracle workspace
-        oracle_test_utils = _ORACLE_WORKSPACE / "test_utils.py"
+        oracle_test_utils = oracle_workspace / "test_utils.py"
         if oracle_test_utils.exists():
             shutil.copy2(oracle_test_utils, tmp / "test_utils.py")
 
@@ -104,13 +124,13 @@ def _run_audited_tests_against_oracle(cn: str) -> tuple[int, str, str]:
         shutil.copy2(tests_path, tmp / "tests.py")
 
         # Copy conftest from audited dir
-        conftest = _AUDITED_DIR / "conftest.py"
+        conftest = audited_dir / "conftest.py"
         if conftest.exists():
             shutil.copy2(conftest, tmp / "conftest.py")
 
         # Build PYTHONPATH: tmp first (card_impl.py), then oracle engine parent,
         # then repo root
-        engine_parent = str(_ORACLE_WORKSPACE)
+        engine_parent = str(oracle_workspace)
         env = dict(__import__("os").environ)
         existing = env.get("PYTHONPATH", "")
         parts = [str(tmp), engine_parent, str(_REPO_ROOT)]
@@ -119,13 +139,18 @@ def _run_audited_tests_against_oracle(cn: str) -> tuple[int, str, str]:
         env["PYTHONPATH"] = ":".join(parts)
 
         cmd = [
-            sys.executable, "-m", "pytest",
+            sys.executable,
+            "-m",
+            "pytest",
             str(tmp / "tests.py"),
-            "--tb=short", "-q", "--no-header",
+            "--tb=short",
+            "-q",
+            "--no-header",
         ]
 
         result = subprocess.run(
             cmd,
+            check=False,
             capture_output=True,
             text=True,
             timeout=120,
@@ -141,19 +166,18 @@ def _run_audited_tests_against_oracle(cn: str) -> tuple[int, str, str]:
 # ---------------------------------------------------------------------------
 
 _oracle_cards = _discover_oracle_cards()
+_hob_layout = load_layout(_REPO_ROOT, "hob-medium", require_cards=True)
+_cases = [pytest.param("sos", card, id=f"sos/{card}") for card in _oracle_cards]
+_cases += [pytest.param("hob-medium", card, id=f"hob-medium/{card}") for card in _hob_layout.cards]
 
 
-@pytest.mark.parametrize("cn", _oracle_cards if _oracle_cards else [pytest.param("_skip_", marks=pytest.mark.skip(reason="No oracle impls ready yet"))])
-def test_oracle_impl_passes_audited_tests(cn: str) -> None:
-    """Run audited tests against the oracle impl for card {cn}."""
-    if cn == "_skip_":
-        return
+@pytest.mark.parametrize("benchmark,cn", _cases)
+def test_oracle_impl_passes_audited_tests(benchmark: str, cn: str) -> None:
+    """Every selected HOB card is checked, including missing/stub/empty cases."""
+    returncode, stdout, stderr = _run_audited_tests_against_oracle(cn, benchmark)
+    assert returncode == 0, f"Oracle {benchmark}/{cn} failed:\n{stdout}\n{stderr}"
 
-    returncode, stdout, stderr = _run_audited_tests_against_oracle(cn)
-    if returncode != 0:
-        msg = (
-            f"Audited tests FAILED for oracle impl {cn}.\n"
-            f"--- stdout ---\n{stdout}\n"
-            f"--- stderr ---\n{stderr}\n"
-        )
-        pytest.fail(msg)
+
+def test_hob_oracle_cases_cover_the_selected_pool() -> None:
+    assert len(_hob_layout.cards) == len(set(_hob_layout.cards))
+    assert set(_hob_layout.cards) == {"hob_12", "hob_36", "hob_70", "hob_131", "hob_169"}

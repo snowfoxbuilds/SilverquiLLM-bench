@@ -1,0 +1,16 @@
+{
+  "name": "Gollum, Riddle Master",
+  "mana_cost": "{1}{B}",
+  "type_line": "Legendary Creature — Halfling Horror",
+  "oracle_text": "As Gollum enters, choose odd or even. (Zero is even.)\nWhenever an opponent casts a spell with mana value of the chosen quality, choose one that hasn't been chosen —\n• Put a +1/+1 counter on Gollum.\n• Each opponent loses 2 life and you gain 2 life.\n• Draw a card.",
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set": "hob",
+  "collector_number": "70",
+  "power": "3",
+  "toughness": "1",
+  "mana_cost_str": "{1}{B}"
+}

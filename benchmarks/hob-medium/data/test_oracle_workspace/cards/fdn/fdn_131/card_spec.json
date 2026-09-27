@@ -1,0 +1,15 @@
+{
+  "name": "Ravenous Amulet",
+  "mana_cost": "{2}",
+  "type_line": "Artifact",
+  "oracle_text": "{1}, {T}, Sacrifice a creature: Draw a card and put a soul counter on this artifact. Activate only as a sorcery.\n{4}, {T}, Sacrifice this artifact: Each opponent loses life equal to the number of soul counters on this artifact.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "131",
+  "complexity_tier": "medium"
+}

@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-09-02
+Last updated: 2026-09-26
 
 # HOB Benchmarks
 
@@ -85,7 +85,10 @@ Deliberately excluded from every pool: Sagas and Vehicles (each a whole new subs
 - A Benchmark Run is one container session consuming the benchmark's **entire** problem set in a single Workspace. There is no card-subset ("workload") notion — that term is retired (CONTEXT.md) *(grilling 2026-08-27)*.
 - Cheap pipeline validation / candidate calibration uses a dedicated **smoke benchmark**: its own small problem set of already-validated FDN cards (known-good oracles and audited tests), never leaderboard-published, run like any other benchmark.
 - Checkpoints are retired (the MSH-CHECKPOINTS.md design page is deleted; see git history); resume legs cover crash recovery instead *(grilling 2026-08-27)*.
-- Runs happen under the worker-type candidate contract (issue #39): run spec = candidate + mode + benchmark + budget. Candidates enter as self-contained Candidate Bundles (adapter-agnostic — claude and codex today, Pi later); identity is independently recomputed; the bench driver imitates the substrate job-dir contract at full fidelity (synthetic-issue task file, `input/` tree, `output/proposal.json` applied post-exit). **No scored HOB run happens on the legacy entrypoint lineage** — the first scored HOB run is the new contract's first consumer *(grilling 2026-08-27)*.
+- Runs use [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md): run spec = candidate + benchmark + budget (grilling 2026-09-26).
+  Karn builds the immutable image and v4 Construct Definition before the run; the bench launches the candidate independently and grades its harvested implementation.
+  No PR metadata, Implementer proposal, or production test/docs/lint gate is required.
+  The first scored HOB run uses this contract; the legacy entrypoint lineage remains ineligible.
 
 ## Repo layout
 
@@ -104,6 +107,26 @@ Deliberately excluded from every pool: Sagas and Vehicles (each a whole new subs
 - Pitfalls are **discovered, not invented**: authored from what the oracle implementation actually surfaced (oracle-first workflow; the oracle iterates while benchmarks run).
 - Instruction docs shape difficulty as much as the pool does: they are locked benchmark data, frozen with the tier at Benchmarking; changing them afterward is a benchmark-version event.
 - Per tier: hob-easy clear, hob-medium detailed, hob-hard none.
+- Planning and task guidance are part of each benchmark's instruction data; the Karn integration adds no independent basic/planned selector (grilling 2026-09-26).
+
+## hob-medium benchmark assets
+
+hob-medium is the HOB benchmark completed in the Karn v4 integration workstream, including its oracle (grilling 2026-09-26).
+Its Card Pool is the five already-selected entries in the Pools section; no new card selection is required.
+The agent-visible Workspace contains the V2 engine and FDN baseline, the selected HOB Card Specs and behavior-free candidate stubs, and the benchmark's instruction documents.
+
+The host-only Test Oracle Workspace mirrors that baseline and holds a Test Oracle Impl for every selected card.
+Oracle mechanics that require engine additions live in its independent engine, not in the candidate baseline merely to make the oracle work.
+Audited Tests exercise observable behavior through the canonical public API and pass against the matching oracle.
+Each card has at most 30 Audited Tests, following the project testing conventions.
+
+Benchmark validation accounts for every selected card and reports missing or stub oracle implementations and missing tests; silently skipping them does not establish completeness.
+The target card set is hob, while the benchmark is hob-medium; validation and promotion resolve those identities separately.
+All three evaluation dimensions have explicit test coverage, including an FDN regression suite validated against the V2 baseline.
+Existing SOS tests can supply source material, but copying them alone does not establish V2 compatibility.
+Medium's instructions and pitfalls are derived from the oracle work and follow the existing Benchmark Tier locking rules.
+
+Development runs and incomplete observations remain useful data; the integration retains their evidence without a leaderboard eligibility gate (grilling 2026-09-26).
 
 ## Evaluation
 
@@ -115,4 +138,6 @@ Oracle-first audited tests are the sole scored method for all three tiers (Audit
 |---|---|
 | [ADR-008](../adr/ADR-008-resume-legs-are-independent-benchmark-runs.md) | Resume Legs Are Independent Benchmark Runs |
 | [ADR-009](../adr/ADR-009-resume-reads-prefer-run-time-artifacts-over-harvest-time-artifacts.md) | Resume Reads Prefer Run-Time Artifacts Over Harvest-Time Artifacts |
+| [ADR-010](../adr/ADR-010-test-oracle-workspace-uses-independent-engine.md) | Oracle mechanics use an independent engine while tests remain portable across implementations |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |
+| [ADR-0012](../adr/ADR-0012-independent-host-for-karn-benchmark-candidates.md) | Independent execution of prebuilt Karn candidates |

@@ -1,0 +1,17 @@
+{
+  "name": "Marauding Blight-Priest",
+  "mana_cost": "{2}{B}",
+  "type_line": "Creature — Vampire Cleric",
+  "oracle_text": "Whenever you gain life, each opponent loses 1 life.",
+  "power": "3",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "178",
+  "complexity_tier": "simple"
+}

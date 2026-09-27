@@ -42,13 +42,14 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Repo root (when run as a script)
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -103,7 +104,10 @@ def check_tier(repo_root: Path, bench: str = "sos") -> tuple[bool, str]:
     if tier_lower in _ALLOWED_TIERS:
         return True, f"Tier '{tier}' allows promotion"
     else:
-        return False, f"Tier '{tier}' does not allow promotion (only {sorted(_ALLOWED_TIERS)} are permitted)"
+        return (
+            False,
+            f"Tier '{tier}' does not allow promotion (only {sorted(_ALLOWED_TIERS)} are permitted)",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -173,9 +177,10 @@ def _collect_module_symbols(tree: ast.AST, symbols: set[str]) -> None:
     """
     for node in ast.walk(tree):
         # def / class / method / property / nested-class names
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if _is_public(node.name):
-                symbols.add(node.name)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and _is_public(
+            node.name
+        ):
+            symbols.add(node.name)
 
         # Class-body attributes (class vars, dataclass fields)
         if isinstance(node, ast.ClassDef):
@@ -304,6 +309,18 @@ def check_canonical_api(
             f"{sorted(violations)}"
         )
 
+    if bench.startswith("hob-"):
+        from scripts.oracle_support import check_v2_api, load_layout
+
+        try:
+            layout = load_layout(repo_root, bench)
+            findings = check_v2_api(candidate_path, layout)
+            findings.extend(check_v2_api(layout.oracle / "test_utils.py", layout, helper=True))
+        except (OSError, SyntaxError, ValueError) as error:
+            return False, f"Cannot validate V2 test API: {error}"
+        if findings:
+            return False, "V2 audited API violations: " + "; ".join(findings)
+
     return True, "Candidate uses only canonical engine APIs (or non-engine symbols)"
 
 
@@ -326,8 +343,14 @@ def check_oracle_gate(
     Fail-closed: subprocess errors or missing oracle files result in rejection.
     """
     oracle_workspace = repo_root / "benchmarks" / bench / "data" / "test_oracle_workspace"
-    oracle_cards_dir = oracle_workspace / "cards" / bench
-    audited_dir = repo_root / "benchmarks" / bench / "data" / "tests" / "audited" / bench
+    config_path = repo_root / "benchmarks" / bench / "config.json"
+    try:
+        config = json.loads(config_path.read_text()) if config_path.is_file() else {}
+        target_set = config.get("draft_set", {}).get("primary_set_code", bench).lower()
+    except (OSError, ValueError, AttributeError) as error:
+        return False, f"Cannot resolve benchmark target set: {error}"
+    oracle_cards_dir = oracle_workspace / "cards" / target_set
+    audited_dir = repo_root / "benchmarks" / bench / "data" / "tests" / "audited" / target_set
 
     # Locate oracle card_impl.py
     oracle_impl = oracle_cards_dir / card / "card_impl.py"
@@ -367,13 +390,18 @@ def check_oracle_gate(
         env["PYTHONPATH"] = os.pathsep.join(parts)
 
         cmd = [
-            sys.executable, "-m", "pytest",
+            sys.executable,
+            "-m",
+            "pytest",
             str(tmp / "tests.py"),
-            "--tb=short", "-q", "--no-header",
+            "--tb=short",
+            "-q",
+            "--no-header",
         ]
 
         result = subprocess.run(
             cmd,
+            check=False,
             capture_output=True,
             text=True,
             timeout=120,
@@ -471,8 +499,7 @@ def _build_parser() -> argparse.ArgumentParser:
         description=(
             "Promotion bar gate: run tier, canonical-API, and oracle checks "
             "on a single candidate test before human merge.  "
-            "Never edits, commits, or promotes anything.\n\n"
-            + _MAINTAINER_NOTE
+            "Never edits, commits, or promotes anything.\n\n" + _MAINTAINER_NOTE
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -494,7 +521,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(*, repo_root: Optional[Path] = None) -> None:
+def main(*, repo_root: Path | None = None) -> None:
     """Entry point for CLI invocation."""
     if repo_root is None:
         repo_root = REPO_ROOT

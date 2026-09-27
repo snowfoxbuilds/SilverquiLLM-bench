@@ -1,0 +1,20 @@
+{
+  "name": "Skyship Buccaneer",
+  "mana_cost": "{3}{U}{U}",
+  "type_line": "Creature — Human Pirate",
+  "oracle_text": "Flying\nRaid — When this creature enters, if you attacked this turn, draw a card.",
+  "power": "4",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Raid"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "50",
+  "complexity_tier": "medium"
+}

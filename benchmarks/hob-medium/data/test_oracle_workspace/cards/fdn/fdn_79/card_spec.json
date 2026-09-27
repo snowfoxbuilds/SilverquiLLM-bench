@@ -1,0 +1,17 @@
+{
+  "name": "Boltwave",
+  "mana_cost": "{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Boltwave deals 3 damage to each opponent.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "79",
+  "complexity_tier": "simple"
+}

@@ -1,0 +1,23 @@
+{
+  "locations": {
+    "karn_codex_login-0.1.0-py3-none-any.whl": "karn_codex_login-0.1.0-py3-none-any.whl",
+    "ozolith_plugin_sdk-1.3.0-py3-none-any.whl": "ozolith_plugin_sdk-1.3.0-py3-none-any.whl"
+  },
+  "manifest": {
+    "hooks": [
+      "on_setup",
+      "before_container_mount",
+      "after_container_exit",
+      "on_render_status"
+    ],
+    "id": "karn-codex-login",
+    "module": "karn_codex_login",
+    "python": "3.13",
+    "sdk_major": 1,
+    "version": "0.1.0",
+    "wheels": {
+      "karn_codex_login-0.1.0-py3-none-any.whl": "sha256:ba702128e4b87cf76cfac187e89ed075099219a5a6cc8104a79dd452d320bbff",
+      "ozolith_plugin_sdk-1.3.0-py3-none-any.whl": "sha256:763b3eb9425b76dd2c0ca59822361b6c4a5b75bceec95ca87e5fa5c17f259e9c"
+    }
+  }
+}
