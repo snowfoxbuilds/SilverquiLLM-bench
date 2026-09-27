@@ -408,6 +408,17 @@ def test_recovery_without_its_own_native_state_marks_the_other_runs_ownership(
     events = (tmp_path / "runs/run-a/recovery-0/observations.events.jsonl").read_text()
     assert "thread-run-b" not in events
     assert "native_state_belongs_to_other_run" in json.dumps(record.run_metadata["measurements"])
+    # B's login and native state stay B's: A's recovery neither settles nor preserves them.
+    assert profile.pending()["run_id"] == "run-b"
+    assert not (tmp_path / "runs/run-b/host" / NATIVE_PRESERVED).exists()
+    assert (profile.state / "work/sessions/rollout-run-b.jsonl").is_file()
+    recovery.recover_benchmark(
+        run_id="run-b",
+        spec={},
+        state_root=state,
+        **{key: common[key] for key in ("bench_root", "results_dir", "results_repo")},
+    )
+    assert profile.pending() is None
     assert (tmp_path / "runs/run-b/host" / NATIVE_PRESERVED / "sessions").is_dir()
 
 
@@ -911,3 +922,226 @@ def test_a_recoverer_interrupt_still_propagates(tmp_path):
         scheduler(tmp_path, directory, recoverer=interrupted).run_until_idle()
     state = json.loads((directory / "state/trial.json").read_text())
     assert [row["status"] for row in state["runs"]] == ["running"]
+
+
+# ---- authentication settlement on recovery ------------------------------------------------
+
+
+def published_bytes(results_repo: Path) -> dict:
+    return {
+        str(path.relative_to(results_repo)): path.read_bytes()
+        for path in sorted(Path(results_repo).rglob("*.json"))
+    }
+
+
+class RecoveryDocker(FakeDocker):
+    """Recovery must never launch a workload or need the candidate image."""
+
+    def inspect_image(self, reference):
+        raise AssertionError("recovery inspected the candidate image")
+
+    def stop_and_confirm(self, name, run_id):
+        self.commands.append(("stop", name, run_id))
+        super().stop_and_confirm(name, run_id)
+
+
+def failing_harvest(monkeypatch):
+    from silverquillm.karn import login as login_module
+
+    original = login_module.PluginProcess.invoke
+
+    def invoke(self, hook, *args):
+        if hook == "after_container_exit":
+            raise KarnError("plugin_harvest_failed")
+        return original(self, hook, *args)
+
+    monkeypatch.setattr(login_module.PluginProcess, "invoke", invoke)
+
+
+def harvest_failed_run(tmp_path, *, run_id="run-a", hold_records=False):
+    """A completed, stopped run whose login harvest failed, leaving the profile pending."""
+    candidate = login_candidate(tmp_path)
+    state = (tmp_path / "state").resolve()
+    profile = LoginProfile(state / "logins/shared", "shared")
+    enroll(profile)
+    common = {
+        "bench_root": benchmark_data(tmp_path / "data"),
+        "results_dir": tmp_path / "runs",
+        "results_repo": tmp_path / "records",
+        "state_root": state,
+    }
+    with pytest.MonkeyPatch.context() as patch:
+        failing_harvest(patch)
+        record = run_benchmark(
+            **common,
+            build_output=candidate.build_output,
+            construct="bare",
+            benchmark_id="example",
+            login="shared",
+            run_id=run_id,
+            host=DockerHost(
+                docker=SessionDocker(), plugin_cache=state / "plugins", plugin_python=sys.executable
+            ),
+        )
+    assert record.run_metadata["execution"]["workspace_stopped"]
+    assert "login_harvest_failed" in record.run_metadata["execution"]["observation_errors"]
+    assert profile.pending()["run_id"] == run_id
+    return SimpleNamespace(
+        candidate=candidate, profile=profile, common=common, record=record, run_id=run_id
+    )
+
+
+def recovery_docker(monkeypatch, state):
+    docker = RecoveryDocker()
+    monkeypatch.setattr(
+        recovery, "DockerHost", lambda **kwargs: DockerHost(docker=docker, plugin_cache=state / "plugins")
+    )
+    return docker
+
+
+def recover_run_id(run, run_id=None):
+    return recovery.recover_benchmark(run_id=run_id or run.run_id, spec={}, **run.common)
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
+def test_recovery_settles_a_published_runs_failed_harvest_once_without_replay(
+    tmp_path, monkeypatch
+):
+    run = harvest_failed_run(tmp_path)
+    published = published_bytes(run.common["results_repo"])
+    docker = recovery_docker(monkeypatch, run.common["state_root"])
+    first = recover_run_id(run)
+    assert first.run_id == run.run_id and first.manifest == run.record.manifest
+    assert run.profile.pending() is None
+    assert not (run.profile.state / "work").exists()
+    preserved = tmp_path / "runs" / run.run_id / "host" / NATIVE_PRESERVED
+    assert (preserved / f"sessions/rollout-{run.run_id}.jsonl").is_file()
+    assert published_bytes(run.common["results_repo"]) == published
+    assert not {"create", "start"} & {command[0] for command in docker.commands}
+    second = recover_run_id(run)
+    assert second.manifest == first.manifest
+    assert published_bytes(run.common["results_repo"]) == published
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
+def test_recovery_settles_and_publishes_a_retained_only_record(tmp_path, monkeypatch):
+    import fcntl
+
+    from silverquillm.karn import records
+
+    monkeypatch.setattr(records.write_record, "__kwdefaults__", {"lock_seconds": 0.2})
+    results = tmp_path / "records/results"
+    results.mkdir(parents=True)
+    holder = os.open(results, os.O_RDONLY | os.O_DIRECTORY)
+    fcntl.flock(holder, fcntl.LOCK_EX)
+    try:
+        with pytest.raises(RecordWritePendingError):
+            harvest_failed_run(tmp_path)
+    finally:
+        os.close(holder)
+    profile = LoginProfile((tmp_path / "state").resolve() / "logins/shared", "shared")
+    assert profile.pending()["run_id"] == "run-a"
+    assert not list(iter_run_records(tmp_path / "records"))
+    recovery_docker(monkeypatch, (tmp_path / "state").resolve())
+    retained = json.loads((tmp_path / "runs/run-a/run-record.json").read_text())
+    record = recovery.recover_benchmark(
+        run_id="run-a",
+        spec={},
+        bench_root=tmp_path / "data",
+        results_dir=tmp_path / "runs",
+        results_repo=tmp_path / "records",
+        state_root=tmp_path / "state",
+    )
+    assert record.manifest == retained["manifest"]
+    assert [r.run_id for _, r in iter_run_records(tmp_path / "records")] == ["run-a"]
+    assert profile.pending() is None
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
+def test_recovery_uses_the_retained_plugin_after_the_build_and_cache_change(tmp_path, monkeypatch):
+    run = harvest_failed_run(tmp_path)
+    shutil.rmtree(run.candidate.build_output / "plugins")
+    shutil.rmtree(run.common["state_root"] / "plugins")
+    recovery_docker(monkeypatch, run.common["state_root"])
+    recover_run_id(run)
+    assert run.profile.pending() is None
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
+def test_a_failed_settlement_keeps_the_login_pending_and_is_reported(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    from silverquillm.cli import main
+
+    run = harvest_failed_run(tmp_path)
+    published = published_bytes(run.common["results_repo"])
+    journal = run.profile.pending()
+    recovery_docker(monkeypatch, run.common["state_root"])
+    with pytest.MonkeyPatch.context() as patch:
+        failing_harvest(patch)
+        with pytest.raises(recovery.LoginSettlementPendingError) as pending:
+            recover_run_id(run)
+        arguments = ["recover", run.run_id]
+        for key, value in run.common.items():
+            arguments += ["--" + key.replace("_", "-"), str(value)]
+        reported = CliRunner().invoke(main, arguments)
+    assert pending.value.record.manifest == run.record.manifest
+    assert "login_harvest_pending" in str(pending.value) or "plugin_harvest_failed" in str(
+        pending.value
+    )
+    assert reported.exit_code == 1 and "login_settlement_pending" in reported.output
+    assert run.profile.pending() == journal
+    assert published_bytes(run.common["results_repo"]) == published
+    # A plugin other than the one this run used is refused, never substituted.
+    run.profile.journal({**journal, "plugin_artifact": "sha256:" + "0" * 64})
+    with pytest.raises(recovery.LoginSettlementPendingError, match="requires_previous_plugin"):
+        recover_run_id(run)
+    run.profile.journal(journal)
+    recover_run_id(run)
+    assert run.profile.pending() is None
+    assert published_bytes(run.common["results_repo"]) == published
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
+def test_settlement_waits_for_a_busy_login_without_changing_anything(tmp_path, monkeypatch):
+    run = harvest_failed_run(tmp_path)
+    published = published_bytes(run.common["results_repo"])
+    journal = run.profile.pending()
+    recovery_docker(monkeypatch, run.common["state_root"])
+    with run.profile.exclusive(), pytest.raises(KarnError, match="login_in_use"):
+        recover_run_id(run)
+    assert run.profile.pending() == journal
+    assert published_bytes(run.common["results_repo"]) == published
+    recover_run_id(run)
+    assert run.profile.pending() is None
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
+def test_recovery_leaves_another_runs_pending_login_alone(tmp_path, monkeypatch):
+    run = harvest_failed_run(tmp_path)
+    recovery_docker(monkeypatch, run.common["state_root"])
+    recover_run_id(run)
+    with pytest.raises(SystemExit):
+        run_benchmark(
+            **run.common,
+            build_output=run.candidate.build_output,
+            construct="bare",
+            benchmark_id="example",
+            login="shared",
+            run_id="run-b",
+            host=die_after_start(
+                DyingHost(
+                    docker=SessionDocker(),
+                    plugin_cache=run.common["state_root"] / "plugins",
+                    plugin_python=sys.executable,
+                )
+            ),
+        )
+    journal = run.profile.pending()
+    assert journal["run_id"] == "run-b"
+    docker = recovery_docker(monkeypatch, run.common["state_root"])
+    recover_run_id(run)
+    assert run.profile.pending() == journal
+    assert not (tmp_path / "runs/run-b/host" / NATIVE_PRESERVED).exists()
+    assert (run.profile.state / "work/sessions/rollout-run-b.jsonl").is_file()
+    assert not any(command[1:] == ("sq-run-run-b", "run-b") for command in docker.commands)

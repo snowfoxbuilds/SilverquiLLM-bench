@@ -25,6 +25,7 @@ from .grading_inputs import grading_inputs
 from .host import DockerHost, HostResult
 from .login import (
     NATIVE_PRESERVED,
+    LoginInUseError,
     PluginProcess,
     install_plugin,
     preserve_pending_native,
@@ -39,6 +40,18 @@ class RunNeverLaunchedError(KarnError):
 
     def __init__(self):
         super().__init__("interrupted_before_launch")
+
+
+class LoginSettlementPendingError(KarnError):
+    """The run's record is final, but its own authentication is still pending on the profile.
+
+    The login journal is left intact, so another ``recover`` (or the profile's next run)
+    settles it; ``record`` is the run's final record.
+    """
+
+    def __init__(self, reason: str, record: KarnRunRecord):
+        super().__init__("login_settlement_pending:" + reason)
+        self.record = record
 
 
 def recover_run(
@@ -110,6 +123,128 @@ def recover_benchmark(
         )
 
 
+def _stopped(record: KarnRunRecord) -> bool:
+    return bool(record.run_metadata["execution"]["workspace_stopped"])
+
+
+def _read_retained(path: Path) -> KarnRunRecord:
+    retained = json.loads(path.read_text())
+    record = KarnRunRecord(retained["manifest"], retained["scores"])
+    record.validate()
+    return record
+
+
+def _retain(path: Path, record: KarnRunRecord) -> None:
+    _write_atomically(
+        path,
+        canonical({"manifest": record.manifest, "scores": record.scores}).decode() + "\n",
+        prefix="." + path.stem + "-",
+    )
+
+
+def _finalized_record(run_id, run_dir, results_repo) -> tuple[KarnRunRecord, bool] | None:
+    """This run's stopped record, retained or published, and whether it still needs publishing."""
+    link_path = run_dir / "recovery-record.json"
+    if link_path.is_file():
+        link = json.loads(link_path.read_text())
+        linked = Path(results_repo) / "results" / link["candidate_hash"] / link["run_id"]
+        if linked.is_dir():
+            recovered = read_record(linked)
+            if recovered.run_metadata.get("recovery_of") == run_id and _stopped(recovered):
+                return recovered, False
+    retained_record = run_dir / "run-record.json"
+    if retained_record.is_file():
+        completed = _read_retained(retained_record)
+        if completed.run_id != run_id:
+            raise KarnError("recovery_run_identity_mismatch")
+        if _stopped(completed):
+            destination = Path(results_repo) / "results" / completed.candidate.hash / run_id
+            if destination.is_dir():
+                return read_record(destination), False
+            return completed, True
+    existing = list((Path(results_repo) / "results").glob("*/" + run_id))
+    if len(existing) > 1:
+        raise KarnError("ambiguous_interrupted_run_record")
+    if existing:
+        published = read_record(existing[0])
+        if _stopped(published):
+            return published, False
+    return None
+
+
+def _retained_candidate(run_dir: Path, inputs: dict, identity: KarnIdentity):
+    # Recovery never runs the image, so it verifies the retained definition against the
+    # recorded image identity instead of requiring the image to still be present locally.
+    return load_candidate(
+        run_dir / "candidate",
+        inputs["construct"],
+        image_inspector=lambda reference: {"Id": identity.image_id, "RepoDigests": [reference]},
+    )
+
+
+def _owns_pending_login(profile, run_id: str) -> bool:
+    pending = profile.pending()
+    return pending is not None and pending.get("run_id") == run_id
+
+
+def _settle_own_login(run_id, profile, host, candidate) -> list[dict] | None:
+    """Settle this run's pending authentication with the plugin artifact the run retained.
+
+    Another run's pending login is never settled or harvested here: its container may still
+    be live, and its native state belongs to that run's own evidence. Returns the plugin
+    status once settled, or None when this run owns nothing pending. On failure the journal
+    stays intact, so a later recovery or the profile's next run retries.
+    """
+    if profile is None or not _owns_pending_login(profile, run_id):
+        return None
+    with profile.exclusive():
+        if not _owns_pending_login(profile, run_id):
+            return None
+        pending = profile.pending()
+        artifact = next(
+            (p for p in candidate().plugins if p.row["artifact"] == pending.get("plugin_artifact")),
+            None,
+        )
+        if artifact is None:
+            raise KarnError("login_recovery_requires_previous_plugin")
+        python = install_plugin(artifact, host.plugin_cache)
+        with PluginProcess(artifact, python, profile) as plugin:
+            preserve_pending_native(profile, host.docker.stop_and_confirm)
+            recover_login(
+                profile, plugin, host.docker.stop_and_confirm, cleanup=host.docker.cleanup_run
+            )
+            return plugin.status()
+
+
+def _conclude(record, publish, *, run_id, run_dir, results_repo, state_root, host):
+    """Settle the run's own login before returning a final record, then publish if needed."""
+    failure = None
+    try:
+        inputs = json.loads((run_dir / "run-input.json").read_text())
+        login = inputs.get("login")
+    except (OSError, ValueError):
+        inputs, login = None, record.run_metadata.get("login_profile")
+    profile = login_profile(state_root, login)
+    try:
+        if inputs is None and profile is not None and _owns_pending_login(profile, run_id):
+            raise KarnError("login_recovery_input_unavailable")
+        _settle_own_login(
+            run_id,
+            profile,
+            host,
+            lambda: _retained_candidate(run_dir, inputs, record.candidate),
+        )
+    except LoginInUseError:
+        raise
+    except KarnError as error:
+        failure = error
+    if publish:
+        write_record(results_repo, record)
+    if failure is not None:
+        raise LoginSettlementPendingError(str(failure), record)
+    return record
+
+
 def _recover(
     *,
     run_id,
@@ -123,41 +258,25 @@ def _recover(
 ) -> KarnRunRecord:
     from .observations import CodexTelemetryCollector, summarize_events
 
+    host = DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
+    finalized = _finalized_record(run_id, run_dir, results_repo)
+    if finalized is not None:
+        record, publish = finalized
+        return _conclude(
+            record,
+            publish,
+            run_id=run_id,
+            run_dir=run_dir,
+            results_repo=results_repo,
+            state_root=state_root,
+            host=host,
+        )
     previous_record = None
     previous_path = None
-    recovery_link = run_dir / "recovery-record.json"
-    if recovery_link.is_file():
-        link = json.loads(recovery_link.read_text())
-        linked = Path(results_repo) / "results" / link["candidate_hash"] / link["run_id"]
-        if linked.is_dir():
-            recovered = read_record(linked)
-            if (
-                recovered.run_metadata.get("recovery_of") == run_id
-                and recovered.run_metadata["execution"]["workspace_stopped"]
-            ):
-                return recovered
-    retained_record = run_dir / "run-record.json"
-    if retained_record.is_file():
-        retained = json.loads(retained_record.read_text())
-        completed = KarnRunRecord(retained["manifest"], retained["scores"])
-        completed.validate()
-        if completed.run_id != run_id:
-            raise KarnError("recovery_run_identity_mismatch")
-        destination = Path(results_repo) / "results" / completed.candidate.hash / run_id
-        if completed.run_metadata["execution"]["workspace_stopped"]:
-            if destination.is_dir():
-                return read_record(destination)
-            write_record(results_repo, completed)
-            return completed
     existing = list((Path(results_repo) / "results").glob("*/" + run_id))
-    if len(existing) > 1:
-        raise KarnError("ambiguous_interrupted_run_record")
     if existing:
         previous_path = existing[0]
         previous_record = read_record(previous_path)
-        if previous_record.run_metadata["execution"]["workspace_stopped"]:
-            return previous_record
-    host = DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     try:
         inputs = json.loads((run_dir / "run-input.json").read_text())
     except FileNotFoundError:
@@ -172,13 +291,7 @@ def _recover(
     if original is None:
         raise KarnError("original_candidate_identity_unavailable")
     identity = KarnIdentity.from_dict(original)
-    # Recovery never runs the image, so it verifies the retained definition against the
-    # recorded image identity instead of requiring the image to still be present locally.
-    candidate = load_candidate(
-        run_dir / "candidate",
-        inputs["construct"],
-        image_inspector=lambda reference: {"Id": identity.image_id, "RepoDigests": [reference]},
-    )
+    candidate = _retained_candidate(run_dir, inputs, identity)
     retained_identity = KarnIdentity.from_dict({"scheme": "karn-v4", **candidate.identity()})
     if retained_identity != identity or (
         previous_record is not None and previous_record.candidate != identity
@@ -211,35 +324,32 @@ def _recover(
     with observation_session(
         CodexTelemetryCollector, recovery_directory, observation_problems
     ) as collector:
+        other_run_pending = (
+            profile is not None
+            and profile.pending() is not None
+            and not _owns_pending_login(profile, run_id)
+        )
+        host.docker.stop_and_confirm(observed.container_name, run_id)
+        settlement_failure = None
+        try:
+            login_state = _settle_own_login(run_id, profile, host, lambda: candidate)
+        except LoginInUseError:
+            raise
+        except KarnError as error:
+            settlement_failure = error
+            observed.observation_errors.append("login_settlement_pending")
+        else:
+            if login_state is not None:
+                observed.login_state = login_state
+        host.docker.cleanup_run(observed.container_name, run_id)
         if profile:
-            with profile.exclusive():
-                host.docker.stop_and_confirm(observed.container_name, run_id)
-                artifact = next(
-                    (p for p in candidate.plugins if p.row["id"] == "karn-codex-login"), None
-                )
-                if artifact is None:
-                    raise KarnError("recovery_login_plugin_missing")
-                python = install_plugin(artifact, host.plugin_cache)
-                with PluginProcess(artifact, python, profile) as plugin:
-                    stale = preserve_pending_native(profile, host.docker.stop_and_confirm)
-                    recover_login(
-                        profile,
-                        plugin,
-                        host.docker.stop_and_confirm,
-                        cleanup=host.docker.cleanup_run,
-                    )
-                    observed.login_state = plugin.status()
-                host.docker.cleanup_run(observed.container_name, run_id)
-            # Only journals attributed to this run are read: another run's live native state
-            # is preserved into that run's own evidence, never harvested here.
+            # Only journals attributed to this run are read: another run's native state
+            # belongs to that run's own evidence, never harvested here.
             preserved = run_dir / "host" / NATIVE_PRESERVED
             if preserved.is_dir():
                 collector.harvest_native(preserved)
-            elif stale is not None and stale["run_id"] != run_id:
+            elif other_run_pending:
                 collector.mark_incomplete("native_state_belongs_to_other_run")
-        else:
-            host.docker.stop_and_confirm(observed.container_name, run_id)
-            host.docker.cleanup_run(observed.container_name, run_id)
         observed.workspace_stopped = True
         try:
             collector.finalize(exit_kind="interrupted")
@@ -336,19 +446,17 @@ def _recover(
     )
     record.validate()
     if previous_record is None:
-        _write_atomically(
-            run_dir / "run-record.json",
-            canonical({"manifest": record.manifest, "scores": scores}).decode() + "\n",
-            prefix=".run-record-",
-        )
+        _retain(run_dir / "run-record.json", record)
     write_record(results_repo, record)
     if previous_record is not None:
         _write_atomically(
-            recovery_link,
+            run_dir / "recovery-record.json",
             canonical(
                 {"run_id": record_id, "candidate_hash": identity.hash, "recovery_of": run_id}
             ).decode()
             + "\n",
             prefix=".recovery-record-",
         )
+    if settlement_failure is not None:
+        raise LoginSettlementPendingError(str(settlement_failure), record)
     return record

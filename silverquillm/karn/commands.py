@@ -195,11 +195,16 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, **options):
 @common_options
 def recover(run_id, stop, **options):
     """Settle an interrupted run: stop its workload, harvest, grade, and write its record."""
-    from .recovery import RunNeverLaunchedError, recover_run
+    from .recovery import LoginSettlementPendingError, RunNeverLaunchedError, recover_run
 
     try:
         with terminate_as_interrupt():
             record = recover_run(run_id=run_id, stop=stop, **options)
+    except LoginSettlementPendingError as error:
+        _report(error.record, exit_on_status=False)
+        raise click.ClickException(
+            f"{error}: the record is final; run `silverquillm recover {run_id}` again to settle"
+        ) from None
     except RunNeverLaunchedError as error:
         click.echo(json.dumps({"run_id": run_id, "execution": str(error)}, sort_keys=True))
         raise click.exceptions.Exit(1) from None
