@@ -55,7 +55,7 @@ _Avoid_: "foundation cards" (use "Foundations cards" or "base set")
 
 **Batch**
 
-One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (Karn build output + construct + benchmark, with an optional Login Profile and budget). Historical Candidate Bundle batches (candidate ref + mode) are unsupported and never run. Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
+One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (Karn build output + construct + benchmark, with an optional budget). Historical Candidate Bundle batches (candidate ref + mode) are unsupported and never run. Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
 
 _Avoid_: "job" (the substrate's job dir is a different concept), "queue entry" for the file (a Batch holds several runs)
 
@@ -266,8 +266,8 @@ _Avoid_: "ability word" (distinct concept — see Ability Word)
 
 **Login Profile**
 
-A named host-local binding through which a runner selects subscription authentication, independently of Benchmark Candidate identity.
-A profile reuses the existing local login binding across candidate variants and batches, with only one runner using that login at a time on the host (grilling 2026-09-26).
+A construct's own host-local subscription authentication, named by the construct and kept across its rebuilds, runs and batches, as each Ozolith Stack owns its login.
+Constructs never share a profile, so each has its own session and refresh chain, and only one runner uses a profile at a time on the host (grilling 2026-09-27).
 
 _Avoid_: "candidate credential" (authentication is not candidate identity)
 

@@ -90,7 +90,9 @@ Authentication values stay outside candidate identity and published results.
 Cleanup retains authentication that has not been persisted until persistence succeeds or the operator explicitly abandons it, following Karn's [Login Plugins](https://github.com/snowfoxbuilds/ozolith/blob/main/docs/specs/LOGIN-PLUGINS.md) contract.
 Authentication storage is distinct from the Workspace and from retained benchmark evidence.
 
-A named Login Profile selects subscription authentication independently of candidate identity and can be reused across candidate variants and batches (grilling 2026-09-26).
+Each construct owns its Login Profile, named by the construct and kept across its rebuilds, direct runs, and batches, as each Ozolith Stack owns its login (grilling 2026-09-27).
+A run selects no login: the construct's profile is used, and two constructs never share a session or refresh chain, so they can run concurrently.
+Authentication is still not candidate identity: rebuilding a construct keeps its login.
 A profile is enrolled through a fresh device-authorization session, so it holds its own session and refresh chain, separate from the operator's own Codex login, whose files are never copied into it (grilling 2026-09-26).
 Each run starts with fresh native state; only authentication persists between runs.
 At most one runner on the host may use a login at a time because concurrent token refresh can invalidate the shared authentication (grilling 2026-09-26).
@@ -158,7 +160,7 @@ The workstream also covers the CLI and batch paths that retain those observation
 ### Operator entrypoints and records
 
 `silverquillm run` and `silverquillm scheduler` share the same staging, execution, observation, harvesting, and grading lifecycle, and `silverquillm recover` settles an interrupted run from its retained evidence without rerunning work.
-The `login` command enrolls a named host-local Login Profile through the selected existing plugin.
+The `login` command enrolls the selected construct's Login Profile through that construct's existing plugin.
 SilverquiLLM runs a completed Karn build by itself; the vendored v4 construct contract is the only thing it takes from Karn, and no Ozolith package is involved.
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
 
