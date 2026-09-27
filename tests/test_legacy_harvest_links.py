@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 from pathlib import Path
+
+import pytest
 
 from silverquillm.cli import _harvest_results
 from silverquillm.evaluator import _prepare_engine_work
-from silverquillm.workspace import stage_workspace_from_prior_run
+from silverquillm.workspace import UnsupportedWorkspaceEntryError, stage_workspace_from_prior_run
 
 SECRET = "host-only-secret-7f3a"
 
@@ -91,3 +94,61 @@ def test_resume_staging_does_not_dereference_a_prior_legs_links(tmp_path):
     assert (workspace / "engine/leak.py").is_symlink()
     assert SECRET not in regular_file_contents(workspace)
     assert json.loads((workspace / "run_manifest.json").read_text()) == {"leg": 2}
+
+
+def prior_leg(tmp_path: Path) -> Path:
+    final = tmp_path / "prior" / "workspace_final"
+    (final / ".git").mkdir(parents=True)
+    (final / "engine").mkdir()
+    return final
+
+
+def stage_leg_two(tmp_path: Path) -> Path:
+    workspace, _ = stage_workspace_from_prior_run(
+        tmp_path / "leg2", tmp_path / "prior", prompt_text="resume leg two", run_manifest={"leg": 2}
+    )
+    return workspace
+
+
+REFRESHED = {"prompt.md": "resume leg two", "run_manifest.json": '{\n  "leg": 2\n}\n'}
+
+
+@pytest.mark.parametrize("name", sorted(REFRESHED))
+@pytest.mark.parametrize("link", ["absolute", "escaping-relative", "dangling"])
+def test_resume_replaces_a_linked_per_run_file_without_writing_through_it(tmp_path, name, link):
+    secret, _ = host_secret(tmp_path)
+    final = prior_leg(tmp_path)
+    (final / "engine/leak.py").symlink_to(secret)
+    missing = tmp_path / "host" / "created-by-resume"
+    target = {
+        "absolute": secret,
+        "escaping-relative": Path(os.path.relpath(secret, final)),
+        "dangling": missing,
+    }[link]
+    (final / name).symlink_to(target)
+    workspace = stage_leg_two(tmp_path)
+    assert secret.read_text() == SECRET
+    assert not missing.exists()
+    refreshed = workspace / name
+    assert stat.S_ISREG(refreshed.lstat().st_mode)
+    assert refreshed.read_text() == REFRESHED[name]
+    assert (workspace / "engine/leak.py").is_symlink()
+    assert not [path for path in workspace.iterdir() if path.name.startswith(f".{name}-")]
+
+
+def test_resume_refuses_a_directory_at_a_per_run_file(tmp_path):
+    (prior_leg(tmp_path) / "prompt.md").mkdir()
+    with pytest.raises(UnsupportedWorkspaceEntryError, match="prompt.md is a directory"):
+        stage_leg_two(tmp_path)
+
+
+@pytest.mark.timeout(10)
+def test_resume_refuses_a_fifo_before_touching_the_staged_workspace(tmp_path):
+    final = prior_leg(tmp_path)
+    os.mkfifo(final / "engine/pipe")
+    staged = tmp_path / "leg2" / "workspace"
+    staged.mkdir(parents=True)
+    (staged / "kept.txt").write_text("staged earlier")
+    with pytest.raises(UnsupportedWorkspaceEntryError, match="engine/pipe is not a regular file"):
+        stage_leg_two(tmp_path)
+    assert (staged / "kept.txt").read_text() == "staged earlier"
