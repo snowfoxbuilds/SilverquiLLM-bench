@@ -140,10 +140,16 @@ def _recovered(row: dict, record) -> None:
         status="done" if status == "completed" else "failed",
         execution_status=status,
         candidate=record.candidate.to_dict(),
-        recovered_at=datetime.now(UTC).isoformat(),
     )
+    row.setdefault("recovered_at", datetime.now(UTC).isoformat())
     if status != "completed":
         row["error"] = "prior_runner_interrupted"
+
+
+def _link_recovery(row: dict, record) -> None:
+    """Record a linked recovery of the row's own observation; the original row stays as it was."""
+    if record is not None and record.run_id != row["run_id"]:
+        _recovered(row, record)
 
 
 def _published(row: dict) -> None:
@@ -216,10 +222,15 @@ class KarnScheduler:
         from .recovery import LoginSettlementPendingError
 
         try:
-            self.recoverer(run_id=row["run_id"], spec=row["spec"], **self.options)
-        except RecordWritePendingError:
+            record = self.recoverer(run_id=row["run_id"], spec=row["spec"], **self.options)
+        except RecordWritePendingError as error:
+            # An unconfirmed observation may have gained a retained linked recovery meanwhile.
+            _link_recovery(row, error.record)
+            row["record_write_pending"] = True
+            self._save(state_path, state)
             return
         except LoginSettlementPendingError as error:
+            _link_recovery(row, error.record)
             _published(row)
             row["login_settlement_pending"] = str(error)
             self._save(state_path, state)
@@ -227,6 +238,7 @@ class KarnScheduler:
         except Exception as error:  # noqa: BLE001 -- one unrecoverable row must not stop every scheduler start.
             self._warn(f"{state_path.stem}: pending retry failed: {_failure_reason(error)}")
             return
+        _link_recovery(row, record)
         _published(row)
         row.pop("login_settlement_pending", None)
         self._save(state_path, state)

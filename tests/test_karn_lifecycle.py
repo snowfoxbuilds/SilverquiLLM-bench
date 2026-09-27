@@ -23,7 +23,7 @@ from silverquillm.karn.execution import run_benchmark
 from silverquillm.karn.grader import ContainerGrader
 from silverquillm.karn.host import DockerHost
 from silverquillm.karn.login import NATIVE_PRESERVED, LoginProfile
-from silverquillm.karn.records import RecordWritePendingError, write_record
+from silverquillm.karn.records import KarnRunRecord, RecordWritePendingError, write_record
 from silverquillm.results_repo import RunRecordExistsError, iter_run_records
 
 from .grader_fixtures import local_grader
@@ -1440,3 +1440,207 @@ def test_a_tampered_recovery_link_is_never_followed(tmp_path, monkeypatch):
     record = recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
     assert record.run_id == genuine.run_id
     assert "forged" not in {r.run_id for _, r in iter_run_records(tmp_path / "records")}
+
+
+def test_a_recovery_link_cannot_name_a_record_outside_the_results_repository(tmp_path, monkeypatch):
+    opts = options(tmp_path)
+    run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
+    recovering_without_workloads(monkeypatch)
+    common = {key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")}
+    genuine = recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
+    forged = KarnRunRecord({**genuine.manifest, "run_id": "forged"}, genuine.scores)
+    write_record(tmp_path / "outside", forged)
+    (tmp_path / "runs/unstopped/recovery-record.json").write_text(
+        json.dumps(
+            {
+                "run_id": "forged",
+                "candidate_hash": "../../outside/results/" + genuine.candidate.hash,
+                "recovery_of": "unstopped",
+            }
+        )
+    )
+    assert recovery.recover_benchmark(run_id="unstopped", spec={}, **common) == genuine
+
+
+def test_a_published_recovery_is_returned_without_rereading_the_original(tmp_path, monkeypatch):
+    opts = options(tmp_path)
+    run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
+    recovering_without_workloads(monkeypatch)
+    common = {key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")}
+    genuine = recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
+    (tmp_path / "runs/unstopped/run-record.json").write_text("{not json")
+    assert recovery.recover_benchmark(run_id="unstopped", spec={}, **common) == genuine
+
+
+# ---- unconfirmed observations whose first publication was blocked ------------------------
+
+
+def graded_runs(monkeypatch) -> list:
+    """The run directory of every grading, whether by a run, a recovery or a scheduler."""
+    graded = []
+    evaluate = ContainerGrader.evaluate_run
+
+    def counted(self, run_dir, *args, **kwargs):
+        graded.append(Path(run_dir).name)
+        return evaluate(self, run_dir, *args, **kwargs)
+
+    monkeypatch.setattr(ContainerGrader, "evaluate_run", counted)
+    return graded
+
+
+def recovering_without_workloads(monkeypatch):
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: SimpleNamespace(docker=RecoveryDocker(), plugin_cache=None),
+    )
+
+
+def unstopped_behind_a_held_lock(tmp_path, monkeypatch, held_records):
+    """Run an UnstoppedHost execution whose very first publication finds the results locked."""
+    opts = options(tmp_path)
+    held_records.hold()
+    with pytest.raises(RecordWritePendingError) as blocked:
+        run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
+    assert blocked.value.record.run_id == "unstopped"
+    assert not list(iter_run_records(tmp_path / "records"))
+    recovering_without_workloads(monkeypatch)
+    common = {key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")}
+    return (tmp_path / "runs/unstopped/run-record.json").read_bytes(), common
+
+
+def assert_original_published_unchanged(tmp_path, original: bytes, published: dict):
+    retained = json.loads(original)
+    assert (tmp_path / "runs/unstopped/run-record.json").read_bytes() == original
+    record = published["unstopped"]
+    assert (record.manifest, record.scores) == (retained["manifest"], retained["scores"])
+    execution = record.run_metadata["execution"]
+    assert (execution["status"], execution["workspace_stopped"]) == ("host_failed", False)
+    assert {reason for score in record.scores.values() for reason in score["missing_reasons"]} == {
+        "workspace_writers_not_confirmed_stopped"
+    }
+    location = tmp_path / "records/results" / record.candidate.hash / "unstopped"
+    assert (location / "manifest.json").read_bytes() == canonical(retained["manifest"]) + b"\n"
+
+
+def test_an_unconfirmed_blocked_observation_is_kept_and_reconciled_by_one_linked_recovery(
+    tmp_path, monkeypatch, held_records
+):
+    graded = graded_runs(monkeypatch)
+    original, common = unstopped_behind_a_held_lock(tmp_path, monkeypatch, held_records)
+    linked = set()
+    for _ in range(2):  # recovery contends, then a retry contends again
+        with pytest.raises(RecordWritePendingError) as blocked:
+            recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
+        assert blocked.value.record.run_metadata["recovery_of"] == "unstopped"
+        linked.add(blocked.value.record.run_id)
+        assert (tmp_path / "runs/unstopped/run-record.json").read_bytes() == original
+        assert not list(iter_run_records(tmp_path / "records"))
+    held_records.release()
+    record = recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
+    assert {record.run_id} == linked and record.run_id != "unstopped"
+    assert record.run_metadata["execution_run_id"] == "unstopped"
+    assert record.run_metadata["execution"]["workspace_stopped"] is True
+    assert any(score["evaluated"] for score in record.scores.values())
+    published = {r.run_id: r for _, r in iter_run_records(tmp_path / "records")}
+    assert set(published) == {"unstopped", record.run_id}
+    assert published[record.run_id] == record
+    assert_original_published_unchanged(tmp_path, original, published)
+    assert recovery.recover_benchmark(run_id="unstopped", spec={}, **common) == record
+    assert len(list((tmp_path / "runs/unstopped").glob("recovery-*/run-record.json"))) == 1
+    assert graded == ["unstopped"]
+
+
+@pytest.mark.parametrize("interrupted_at", ["link", "original", "recovery"])
+def test_an_interrupted_reconciliation_resumes_without_new_ids_or_grading(
+    tmp_path, monkeypatch, held_records, interrupted_at
+):
+    graded = graded_runs(monkeypatch)
+    original, common = unstopped_behind_a_held_lock(tmp_path, monkeypatch, held_records)
+    held_records.release()
+    written, publish = recovery._write_atomically, recovery.write_record
+
+    def crash_on_link(path, *args, **kwargs):
+        if Path(path).name == "recovery-record.json":
+            raise KeyboardInterrupt
+        return written(path, *args, **kwargs)
+
+    def crash_publishing(repo, record, **kwargs):
+        if (record.run_id == "unstopped") == (interrupted_at == "original"):
+            raise KeyboardInterrupt
+        return publish(repo, record, **kwargs)
+
+    if interrupted_at == "link":
+        monkeypatch.setattr(recovery, "_write_atomically", crash_on_link)
+    else:
+        monkeypatch.setattr(recovery, "write_record", crash_publishing)
+    with pytest.raises(KeyboardInterrupt):
+        recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
+    monkeypatch.setattr(recovery, "_write_atomically", written)
+    monkeypatch.setattr(recovery, "write_record", publish)
+    [retained] = (tmp_path / "runs/unstopped").glob("recovery-*/run-record.json")
+    retained_bytes = retained.read_bytes()
+    before = {r.run_id for _, r in iter_run_records(tmp_path / "records")}
+    assert before == ({"unstopped"} if interrupted_at == "recovery" else set())
+    record = recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
+    assert record.run_id == json.loads(retained_bytes)["manifest"]["run_id"]
+    assert retained.read_bytes() == retained_bytes
+    published = {r.run_id: r for _, r in iter_run_records(tmp_path / "records")}
+    assert set(published) == {"unstopped", record.run_id}
+    assert_original_published_unchanged(tmp_path, original, published)
+    assert graded == ["unstopped"]
+
+
+def test_scheduler_reconciles_an_unconfirmed_blocked_run_once_and_keeps_the_batch_moving(
+    tmp_path, monkeypatch, held_records
+):
+    opts = options(tmp_path)
+    directory = batch_with(tmp_path, opts["build_output"])
+    graded = graded_runs(monkeypatch)
+    executed = []
+
+    def execute(**kwargs):
+        executed.append(kwargs["run_id"])
+        host = UnstoppedHost() if len(executed) == 1 else FixtureHost()
+        return run_benchmark(**kwargs, host=host)
+
+    held_records.hold()
+    batch_scheduler(tmp_path, directory, execute).run_until_idle()
+    state_path = directory / "state/trial.json"
+    first, second = json.loads(state_path.read_text())["runs"]
+    assert (first["status"], first["execution_status"]) == ("failed", "host_failed")
+    assert first["error"] == "record_write_pending" and first["record_write_pending"] is True
+    assert "recovery_record" not in first
+    assert (second["status"], second["record_write_pending"]) == ("done", True)
+    original = (tmp_path / "runs" / first["run_id"] / "run-record.json").read_bytes()
+    recovering_without_workloads(monkeypatch)
+    seen = []
+    for _ in range(2):  # the recovery is retained but blocked, then a retry is blocked again
+        batch_scheduler(tmp_path, directory, execute).run_until_idle()
+        rows = json.loads(state_path.read_text())["runs"]
+        assert rows[0]["record_write_pending"] is True and rows[1]["record_write_pending"] is True
+        assert (rows[0]["status"], rows[0]["execution_status"]) == ("failed", "interrupted")
+        assert rows[0]["error"] == "prior_runner_interrupted"
+        assert rows[0]["recovery_of"] == rows[0]["execution_run_id"] == first["run_id"]
+        assert rows[0]["recovery_record"] != first["run_id"]
+        seen.append(rows[0])
+    assert seen[0] == seen[1]
+    held_records.release()
+    (directory / "trial.toml").unlink()  # retries never need the batch file
+    batch_scheduler(tmp_path, directory, execute).run_until_idle()
+    rows = json.loads(state_path.read_text())["runs"]
+    assert not any("record_write_pending" in row for row in rows)
+    assert rows[0] == {
+        key: value for key, value in seen[0].items() if key != "record_write_pending"
+    }
+    assert "error" not in rows[1]
+    published = {r.run_id: r for _, r in iter_run_records(tmp_path / "records")}
+    linked = published[rows[0]["recovery_record"]]
+    assert set(published) == {first["run_id"], linked.run_id, second["run_id"]}
+    assert linked.run_metadata["recovery_of"] == first["run_id"]
+    retained = json.loads(original)
+    assert (tmp_path / "runs" / first["run_id"] / "run-record.json").read_bytes() == original
+    assert published[first["run_id"]].manifest == retained["manifest"]
+    assert published[first["run_id"]].scores == retained["scores"]
+    assert executed == [first["run_id"], second["run_id"]]
+    assert graded == [second["run_id"], first["run_id"]]

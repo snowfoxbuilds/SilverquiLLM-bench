@@ -31,7 +31,14 @@ from .login import (
     preserve_pending_native,
     recover_login,
 )
-from .records import KarnIdentity, KarnRunRecord, missing_scores, read_record, write_record
+from .records import (
+    KarnIdentity,
+    KarnRunRecord,
+    RecordWritePendingError,
+    missing_scores,
+    read_record,
+    write_record,
+)
 from .snapshots import WorkspaceSnapshots, retain_git_history
 
 
@@ -68,7 +75,7 @@ def recover_run(
     grader: ContainerGrader | None = None,
 ) -> KarnRunRecord:
     """Recover one direct or batch run by id; a live workload is stopped only on request."""
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", run_id):
+    if not RUN_ID.fullmatch(run_id):
         raise KarnError("invalid_run_id")
     if not (Path(results_dir).resolve() / run_id).is_dir():
         raise KarnError("run_not_found:" + run_id)
@@ -143,6 +150,8 @@ def _retain(path: Path, record: KarnRunRecord) -> None:
 
 
 RECOVERY_DIRECTORY = re.compile(r"recovery-[0-9]+")
+RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+CANDIDATE_HASH = re.compile(r"[0-9a-f]{64}")
 
 
 def _retained_recoveries(run_dir: Path, run_id: str) -> list[KarnRunRecord]:
@@ -168,43 +177,80 @@ def _retained_recoveries(run_dir: Path, run_id: str) -> list[KarnRunRecord]:
     return found
 
 
-def _finalized_record(run_id, run_dir, results_repo) -> tuple[KarnRunRecord, bool] | None:
-    """This run's stopped record, retained or published, and whether it still needs publishing."""
+def _destination(results_repo: Path, record: KarnRunRecord) -> Path:
+    return Path(results_repo) / "results" / record.candidate.hash / record.run_id
+
+
+def _unpublished(results_repo, records) -> list[KarnRunRecord]:
+    return [record for record in records if not _destination(results_repo, record).is_dir()]
+
+
+def _retained_original(run_dir: Path, run_id: str) -> KarnRunRecord | None:
+    """The record retained under the run's own id, whether or not its workspace was stopped.
+
+    It is never rewritten: an unconfirmed observation stays evidence, and its reconciliation
+    is a separate linked recovery.
+    """
+    path = run_dir / "run-record.json"
+    if not path.is_file():
+        return None
+    original = _read_retained(path)
+    if original.run_id != run_id:
+        raise KarnError("recovery_run_identity_mismatch")
+    return original
+
+
+def _finalized_record(run_id, run_dir, results_repo) -> tuple[KarnRunRecord, list] | None:
+    """This run's stopped record and, in publication order, whichever of its records are unpublished.
+
+    A retained original precedes its linked recovery, so a published recovery never points
+    at an observation that is not published yet.
+    """
     link_path = run_dir / "recovery-record.json"
     if link_path.is_file():
         link = json.loads(link_path.read_text())
-        linked = Path(results_repo) / "results" / link["candidate_hash"] / link["run_id"]
-        if linked.is_dir():
-            recovered = read_record(linked)
-            if recovered.run_metadata.get("recovery_of") == run_id and _stopped(recovered):
-                return recovered, False
+        # The link names a record only by id; anything else could escape the results repository.
+        if RUN_ID.fullmatch(str(link.get("run_id"))) and CANDIDATE_HASH.fullmatch(
+            str(link.get("candidate_hash"))
+        ):
+            linked = Path(results_repo) / "results" / link["candidate_hash"] / link["run_id"]
+            if linked.is_dir():
+                recovered = read_record(linked)
+                if recovered.run_metadata.get("recovery_of") == run_id and _stopped(recovered):
+                    # The original is always published before its linked recovery.
+                    return recovered, []
+    original = _retained_original(run_dir, run_id)
+    prior = [original] if original is not None else []
     retained = _retained_recoveries(run_dir, run_id)
     if len(retained) > 1:
         raise KarnError("ambiguous_retained_recovery")
     if retained:
         [recovered] = retained
-        destination = Path(results_repo) / "results" / recovered.candidate.hash / recovered.run_id
+        destination = _destination(results_repo, recovered)
+        final = read_record(destination) if destination.is_dir() else recovered
+        return final, _unpublished(results_repo, [*prior, recovered])
+    if original is not None and _stopped(original):
+        destination = _destination(results_repo, original)
         if destination.is_dir():
-            return read_record(destination), False
-        return recovered, True
-    retained_record = run_dir / "run-record.json"
-    if retained_record.is_file():
-        completed = _read_retained(retained_record)
-        if completed.run_id != run_id:
-            raise KarnError("recovery_run_identity_mismatch")
-        if _stopped(completed):
-            destination = Path(results_repo) / "results" / completed.candidate.hash / run_id
-            if destination.is_dir():
-                return read_record(destination), False
-            return completed, True
+            return read_record(destination), []
+        return original, [original]
     existing = list((Path(results_repo) / "results").glob("*/" + run_id))
     if len(existing) > 1:
         raise KarnError("ambiguous_interrupted_run_record")
     if existing:
         published = read_record(existing[0])
         if _stopped(published):
-            return published, False
+            return published, []
     return None
+
+
+def _publish(results_repo, records, final: KarnRunRecord) -> None:
+    """Publish each record not yet published, in order; a blocked write carries the final record."""
+    try:
+        for record in _unpublished(results_repo, records):
+            write_record(results_repo, record)
+    except RecordWritePendingError:
+        raise RecordWritePendingError(final) from None
 
 
 def _retained_candidate(run_dir: Path, inputs: dict, identity: KarnIdentity):
@@ -260,7 +306,7 @@ def _failure_reason(error: Exception) -> str:
     return str(error) if isinstance(error, KarnError) else type(error).__name__
 
 
-def _conclude(record, publish, *, run_id, run_dir, results_repo, state_root, host):
+def _conclude(record, unpublished, *, run_id, run_dir, results_repo, state_root, host):
     """Publish a final record if needed, reporting the run's own login settlement separately.
 
     Settlement never blocks publication: whatever it hits, including a busy login, the
@@ -284,8 +330,7 @@ def _conclude(record, publish, *, run_id, run_dir, results_repo, state_root, hos
         )
     except Exception as error:  # noqa: BLE001 -- a final record is published whatever settlement hits.
         failure = error
-    if publish:
-        write_record(results_repo, record)
+    _publish(results_repo, unpublished, record)
     if failure is not None:
         raise LoginSettlementPendingError(_failure_reason(failure), record)
     return record
@@ -307,22 +352,25 @@ def _recover(
     host = DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     finalized = _finalized_record(run_id, run_dir, results_repo)
     if finalized is not None:
-        record, publish = finalized
+        record, unpublished = finalized
         return _conclude(
             record,
-            publish,
+            unpublished,
             run_id=run_id,
             run_dir=run_dir,
             results_repo=results_repo,
             state_root=state_root,
             host=host,
         )
-    previous_record = None
+    previous_record = _retained_original(run_dir, run_id)
     previous_path = None
     existing = list((Path(results_repo) / "results").glob("*/" + run_id))
     if existing:
         previous_path = existing[0]
         previous_record = read_record(previous_path)
+    elif previous_record is not None:
+        # An unconfirmed observation whose publication was blocked is still the prior record.
+        previous_path = _destination(results_repo, previous_record)
     try:
         inputs = json.loads((run_dir / "run-input.json").read_text())
     except FileNotFoundError:
@@ -494,6 +542,7 @@ def _recover(
     # Retain before publishing, so a retry publishes this same record instead of recovering again.
     if previous_record is None:
         _retain(run_dir / "run-record.json", record)
+        unpublished = [record]
     else:
         recovery_directory.mkdir(exist_ok=True)
         _retain(recovery_directory / "run-record.json", record)
@@ -510,7 +559,8 @@ def _recover(
             + "\n",
             prefix=".recovery-record-",
         )
-    write_record(results_repo, record)
+        unpublished = [previous_record, record]
+    _publish(results_repo, unpublished, record)
     if settlement_failure is not None:
         raise LoginSettlementPendingError(_failure_reason(settlement_failure), record)
     return record
