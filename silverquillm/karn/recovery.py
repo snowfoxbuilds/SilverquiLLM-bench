@@ -142,6 +142,32 @@ def _retain(path: Path, record: KarnRunRecord) -> None:
     )
 
 
+RECOVERY_DIRECTORY = re.compile(r"recovery-[0-9]+")
+
+
+def _retained_recoveries(run_dir: Path, run_id: str) -> list[KarnRunRecord]:
+    """Stopped linked recoveries retained under the host-named ``recovery-N`` directories.
+
+    Found by name rather than through ``recovery-record.json``, so a crash between retaining
+    the record and writing its link still republishes the same record, and no path taken
+    from a file is ever followed.
+    """
+    found = []
+    for directory in sorted(run_dir.glob("recovery-*")):
+        path = directory / "run-record.json"
+        if (
+            not RECOVERY_DIRECTORY.fullmatch(directory.name)
+            or directory.is_symlink()
+            or path.is_symlink()
+            or not path.is_file()
+        ):
+            continue
+        record = _read_retained(path)
+        if record.run_metadata.get("recovery_of") == run_id and _stopped(record):
+            found.append(record)
+    return found
+
+
 def _finalized_record(run_id, run_dir, results_repo) -> tuple[KarnRunRecord, bool] | None:
     """This run's stopped record, retained or published, and whether it still needs publishing."""
     link_path = run_dir / "recovery-record.json"
@@ -152,15 +178,15 @@ def _finalized_record(run_id, run_dir, results_repo) -> tuple[KarnRunRecord, boo
             recovered = read_record(linked)
             if recovered.run_metadata.get("recovery_of") == run_id and _stopped(recovered):
                 return recovered, False
-        if "retained" in link:
-            recovered = _read_retained(run_dir / link["retained"])
-            if (
-                recovered.run_id != link["run_id"]
-                or recovered.run_metadata.get("recovery_of") != run_id
-            ):
-                raise KarnError("recovery_run_identity_mismatch")
-            if _stopped(recovered):
-                return recovered, True
+    retained = _retained_recoveries(run_dir, run_id)
+    if len(retained) > 1:
+        raise KarnError("ambiguous_retained_recovery")
+    if retained:
+        [recovered] = retained
+        destination = Path(results_repo) / "results" / recovered.candidate.hash / recovered.run_id
+        if destination.is_dir():
+            return read_record(destination), False
+        return recovered, True
     retained_record = run_dir / "run-record.json"
     if retained_record.is_file():
         completed = _read_retained(retained_record)
@@ -222,19 +248,32 @@ def _settle_own_login(run_id, profile, host, candidate) -> list[dict] | None:
             recover_login(
                 profile, plugin, host.docker.stop_and_confirm, cleanup=host.docker.cleanup_run
             )
-            return plugin.status()
+            try:
+                return plugin.status()
+            except KarnError:
+                # The login is settled; only its informational status is unavailable.
+                return []
+
+
+def _failure_reason(error: Exception) -> str:
+    """A KarnError's code, else only the exception type: messages can carry paths or secrets."""
+    return str(error) if isinstance(error, KarnError) else type(error).__name__
 
 
 def _conclude(record, publish, *, run_id, run_dir, results_repo, state_root, host):
-    """Settle the run's own login before returning a final record, then publish if needed."""
+    """Publish a final record if needed, reporting the run's own login settlement separately.
+
+    Settlement never blocks publication: whatever it hits, including a busy login, the
+    record is published and a LoginSettlementPendingError carries it back.
+    """
     failure = None
     try:
-        inputs = json.loads((run_dir / "run-input.json").read_text())
-        login = inputs.get("login")
-    except (OSError, ValueError):
-        inputs, login = None, record.run_metadata.get("login_profile")
-    profile = login_profile(state_root, login)
-    try:
+        try:
+            inputs = json.loads((run_dir / "run-input.json").read_text())
+            login = inputs.get("login")
+        except (OSError, ValueError):
+            inputs, login = None, record.run_metadata.get("login_profile")
+        profile = login_profile(state_root, login)
         if inputs is None and profile is not None and _owns_pending_login(profile, run_id):
             raise KarnError("login_recovery_input_unavailable")
         _settle_own_login(
@@ -243,14 +282,12 @@ def _conclude(record, publish, *, run_id, run_dir, results_repo, state_root, hos
             host,
             lambda: _retained_candidate(run_dir, inputs, record.candidate),
         )
-    except LoginInUseError:
-        raise
-    except KarnError as error:
+    except Exception as error:  # noqa: BLE001 -- a final record is published whatever settlement hits.
         failure = error
     if publish:
         write_record(results_repo, record)
     if failure is not None:
-        raise LoginSettlementPendingError(str(failure), record)
+        raise LoginSettlementPendingError(_failure_reason(failure), record)
     return record
 
 
@@ -344,7 +381,7 @@ def _recover(
             login_state = _settle_own_login(run_id, profile, host, lambda: candidate)
         except LoginInUseError:
             raise
-        except KarnError as error:
+        except Exception as error:  # noqa: BLE001 -- the recovered record is still retained and published.
             settlement_failure = error
             observed.observation_errors.append("login_settlement_pending")
         else:
@@ -475,5 +512,5 @@ def _recover(
         )
     write_record(results_repo, record)
     if settlement_failure is not None:
-        raise LoginSettlementPendingError(str(settlement_failure), record)
+        raise LoginSettlementPendingError(_failure_reason(settlement_failure), record)
     return record

@@ -1103,15 +1103,65 @@ def test_a_failed_settlement_keeps_the_login_pending_and_is_reported(tmp_path, m
 
 
 @pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
-def test_settlement_waits_for_a_busy_login_without_changing_anything(tmp_path, monkeypatch):
+def test_a_busy_login_leaves_settlement_pending_without_changing_the_record(
+    tmp_path, monkeypatch
+):
     run = harvest_failed_run(tmp_path)
     published = published_bytes(run.common["results_repo"])
     journal = run.profile.pending()
     recovery_docker(monkeypatch, run.common["state_root"])
-    with run.profile.exclusive(), pytest.raises(KarnError, match="login_in_use"):
+    with (
+        run.profile.exclusive(),
+        pytest.raises(recovery.LoginSettlementPendingError, match="login_in_use"),
+    ):
         recover_run_id(run)
     assert run.profile.pending() == journal
     assert published_bytes(run.common["results_repo"]) == published
+    recover_run_id(run)
+    assert run.profile.pending() is None
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
+def test_any_settlement_failure_still_publishes_the_retained_record(
+    tmp_path, monkeypatch, held_records
+):
+    held_records.hold()
+    with pytest.raises(RecordWritePendingError):
+        harvest_failed_run(tmp_path)
+    held_records.release()
+    profile = LoginProfile((tmp_path / "state").resolve() / "logins/shared", "shared")
+    journal = profile.pending()
+    recovery_docker(monkeypatch, (tmp_path / "state").resolve())
+
+    def timed_out(*args, **kwargs):
+        raise subprocess.TimeoutExpired("pip", 180)
+
+    monkeypatch.setattr(recovery, "install_plugin", timed_out)
+    with pytest.raises(recovery.LoginSettlementPendingError, match="TimeoutExpired") as pending:
+        recovery.recover_benchmark(
+            run_id="run-a",
+            spec={},
+            bench_root=tmp_path / "data",
+            results_dir=tmp_path / "runs",
+            results_repo=tmp_path / "records",
+            state_root=tmp_path / "state",
+        )
+    assert [r.run_id for _, r in iter_run_records(tmp_path / "records")] == ["run-a"]
+    assert pending.value.record.run_id == "run-a"
+    assert profile.pending() == journal
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
+def test_a_status_failure_after_settlement_is_not_reported_as_pending(tmp_path, monkeypatch):
+    from silverquillm.karn import login as login_module
+
+    run = harvest_failed_run(tmp_path)
+    recovery_docker(monkeypatch, run.common["state_root"])
+
+    def unavailable(self):
+        raise KarnError("plugin_status_unavailable")
+
+    monkeypatch.setattr(login_module.PluginProcess, "status", unavailable)
     recover_run_id(run)
     assert run.profile.pending() is None
 
@@ -1328,3 +1378,65 @@ def test_scheduler_retries_login_settlement_without_replay(tmp_path):
     state = json.loads((directory / "state/trial.json").read_text())
     assert "login_settlement_pending" not in state["runs"][0]
     assert settled == [state["runs"][0]["run_id"]] and len(executed) == 1
+
+
+def test_a_crash_between_retaining_and_linking_republishes_the_same_record(
+    tmp_path, monkeypatch, held_records
+):
+    opts = options(tmp_path)
+    run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: SimpleNamespace(docker=FakeDocker(), plugin_cache=None),
+    )
+    common = {key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")}
+    written = recovery._write_atomically
+
+    def crash_on_link(path, *args, **kwargs):
+        if Path(path).name == "recovery-record.json":
+            raise KeyboardInterrupt
+        return written(path, *args, **kwargs)
+
+    monkeypatch.setattr(recovery, "_write_atomically", crash_on_link)
+    with pytest.raises(KeyboardInterrupt):
+        recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
+    monkeypatch.setattr(recovery, "_write_atomically", written)
+    [retained] = (tmp_path / "runs/unstopped").glob("recovery-*/run-record.json")
+    retained_id = json.loads(retained.read_text())["manifest"]["run_id"]
+    record = recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
+    assert record.run_id == retained_id
+    assert len(list((tmp_path / "runs/unstopped").glob("recovery-*/run-record.json"))) == 1
+    assert recovery.recover_benchmark(run_id="unstopped", spec={}, **common).run_id == retained_id
+
+
+def test_a_tampered_recovery_link_is_never_followed(tmp_path, monkeypatch):
+    opts = options(tmp_path)
+    run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: SimpleNamespace(docker=FakeDocker(), plugin_cache=None),
+    )
+    common = {key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")}
+    genuine = recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
+    run_dir = tmp_path / "runs/unstopped"
+    [retained] = run_dir.glob("recovery-*/run-record.json")
+    forged = json.loads(retained.read_text())
+    forged["manifest"]["run_id"] = "forged"
+    outside = tmp_path / "outside.json"
+    outside.write_text(json.dumps(forged))
+    (run_dir / "recovery-record.json").write_text(
+        json.dumps(
+            {
+                "run_id": "forged",
+                "candidate_hash": genuine.candidate.hash,
+                "recovery_of": "unstopped",
+                "retained": str(outside),
+            }
+        )
+    )
+    shutil.rmtree(tmp_path / "records/results" / genuine.candidate.hash / genuine.run_id)
+    record = recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
+    assert record.run_id == genuine.run_id
+    assert "forged" not in {r.run_id for _, r in iter_run_records(tmp_path / "records")}
