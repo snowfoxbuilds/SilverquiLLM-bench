@@ -440,6 +440,18 @@ def test_an_interrupted_runner_kills_and_reaps_its_client_and_releases_its_pipes
     assert not [t for t in threading.enumerate() if "drain_" in t.name and t.is_alive()]
 
 
+def test_an_interruption_while_readers_drain_after_exit_still_propagates(tmp_path, monkeypatch):
+    """A client that exited can leave a child holding its pipes; SIGTERM then must not vanish."""
+    from silverquillm.karn.interruption import terminate_as_interrupt
+
+    fake_docker_client(tmp_path, monkeypatch, "sleep 3 &\nexit 0\n")
+    timer = threading.Timer(0.5, os.kill, (os.getpid(), signal.SIGTERM))
+    timer.start()
+    with pytest.raises(KeyboardInterrupt, match="signal"), terminate_as_interrupt():
+        REAL_RUN(grader_module.DockerRunner(), ["run"], timeout=30)
+    timer.join()
+
+
 class Interrupted(LocalDocker):
     """The container named by ``--name`` is interrupted during probing or grading."""
 

@@ -164,8 +164,10 @@ class DockerRunner:
                 process.kill()
             with contextlib.suppress(BaseException):
                 process.wait(timeout=CLIENT_REAP_SECONDS)
-            _release(process, readers)
+            with contextlib.suppress(BaseException):
+                _release(process, readers)
             raise
+        # Unguarded: a SIGTERM delivered here is the only one terminate_as_interrupt raises.
         _release(process, readers)
         text = b"".join(tail)[-STDERR_TAIL_BYTES:].decode(errors="replace")
         if overflow.is_set():
@@ -209,8 +211,7 @@ class DockerRunner:
 def _release(process: subprocess.Popen, readers: list[threading.Thread]) -> None:
     """Join the output readers, bounded, then close the pipes they no longer read."""
     for reader in readers:
-        with contextlib.suppress(BaseException):
-            reader.join(timeout=READER_JOIN_SECONDS)
+        reader.join(timeout=READER_JOIN_SECONDS)
     # Closing a pipe another thread is still blocked reading could hand its descriptor
     # number to an unrelated file, so a pipe held by a live reader is left to that reader.
     if not any(reader.is_alive() for reader in readers):
