@@ -29,8 +29,10 @@ from .docker import RUN_LABEL, Docker, Network
 from .login import (
     LoginProfile,
     PluginProcess,
+    admit_plugin_mounts,
     enroll_login,
     install_plugin,
+    mount_spec_safe,
     preserve_pending_native,
     recover_login,
 )
@@ -268,7 +270,7 @@ class DockerHost:
                 or not isinstance(mount.get("Target"), str)
                 or not mount["Target"].startswith("/")
                 or mount["Target"] in seen
-                or any("," in mount[key] or "\0" in mount[key] for key in ("Source", "Target"))
+                or not all(mount_spec_safe(mount[key]) for key in ("Source", "Target"))
             ):
                 raise KarnError("invalid_container_mount")
             seen.add(mount["Target"])
@@ -444,9 +446,11 @@ class DockerHost:
                                 "mounts": mounts,
                             }
                         )
-                        mounts = plugin.invoke("before_container_mount", run_id, mounts)
-                        if not isinstance(mounts, list):
-                            raise KarnError("invalid_plugin_mount_reply")
+                        mounts = admit_plugin_mounts(
+                            mounts,
+                            plugin.invoke("before_container_mount", run_id, mounts),
+                            login_profile.state,
+                        )
                         login_profile.journal(
                             {
                                 "run_id": run_id,
