@@ -76,9 +76,9 @@ Build the bare Codex example and the grader image explicitly before running:
 ```bash
 karn build examples/karn --worktree --out /tmp/bench-codex-build
 silverquillm grader build
-silverquillm login benchmark --build-output /tmp/bench-codex-build --construct bare-codex
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --login benchmark --results-repo ./private-results
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --login benchmark --results-repo ./private-results
+silverquillm login --build-output /tmp/bench-codex-build --construct bare-codex
+silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --results-repo ./private-results
+silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --results-repo ./private-results
 ```
 
 Grading runs the agent's code only inside the grader container: no network, no access to your home directory, environment, or login.
@@ -95,12 +95,12 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 
 | Command | Purpose |
 | --- | --- |
-| `silverquillm run --build-output … --construct … --benchmark … --login …` | Execute a prebuilt Karn construct, grade its work in the grader container, and retain implementation and efficiency observations. |
+| `silverquillm run --build-output … --construct … --benchmark …` | Execute a prebuilt Karn construct, grade its work in the grader container, and retain implementation and efficiency observations. |
 | `silverquillm scheduler [--once] [--replay-without-state ID]` | Execute due Karn batches in `batches/*.toml` through the same run lifecycle. |
 | `silverquillm recover RUN_ID [--stop]` | Settle an interrupted or killed run from its retained evidence and write its record, without rerunning work. |
 | `silverquillm queue ls [--json]` | One-shot, read-only view of the batch queue, including interrupted, partially observed, and unsupported batches. |
 | `silverquillm top` | Live, read-only view of the batch queue (`q` quits). |
-| `silverquillm login PROFILE --build-output … --construct …` | Enroll subscription authentication through the construct's login plugin. |
+| `silverquillm login --build-output … --construct …` | Enroll the construct's own subscription login through its login plugin. |
 | `silverquillm grader build` | Build the pinned, network-less grader image that runs every grading pass. |
 | `silverquillm results-init PATH` | Lay out an empty private results repository. |
 | `silverquillm validate …` | Validate 17lands replays against the engine. |

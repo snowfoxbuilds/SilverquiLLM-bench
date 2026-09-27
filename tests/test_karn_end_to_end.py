@@ -224,7 +224,7 @@ with urllib.request.urlopen(request,timeout=5) as response:
     candidate.definition_path.write_bytes(canonical(candidate.definition))
     candidate = load_candidate(candidate.build_output, "bare")
     state = tmp_path / "state"
-    profile = LoginProfile(state / "logins/example", "example")
+    profile = LoginProfile(state / "logins/bare", "bare")
     auth = canonical(
         {
             "tokens": {
@@ -234,7 +234,7 @@ with urllib.request.urlopen(request,timeout=5) as response:
         }
     )
     profile.set_secret(
-        "login.example",
+        "login.bare",
         canonical(
             {
                 "format": 1,
@@ -251,7 +251,6 @@ with urllib.request.urlopen(request,timeout=5) as response:
         results_dir=tmp_path / "runs",
         results_repo=tmp_path / "records",
         state_root=state,
-        login="example",
         budget_seconds=20,
     )
     assert result.run_metadata["execution"]["status"] == "completed", result.run_metadata
@@ -262,7 +261,7 @@ with urllib.request.urlopen(request,timeout=5) as response:
     assert float(observations["estimated_cost"]["value"]) > 0
     assert observations["coverage"]["observed_threads"] == 1
     assert not (profile.state / "work").exists()
-    assert json.loads(profile.get_secret("login.example"))["revision"] != "a" * 32
+    assert json.loads(profile.get_secret("login.bare"))["revision"] != "a" * 32
     assert all(score["evaluated"] for score in result.scores.values())
 
 

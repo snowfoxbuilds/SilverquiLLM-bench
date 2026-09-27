@@ -14,22 +14,24 @@ source .venv/bin/activate
 
 The checked-in [bare Codex example](../examples/karn/constructs/bare-codex/construct.toml) selects `gpt-6-astra`, Codex 0.153.4 through `codex@1`, and the stock Codex login plugin.
 It carries no custom skills or polling controller.
+[`bare-codex-luna`](../examples/karn/constructs/bare-codex-luna/construct.toml) is the same construct on `gpt-6-luna` with low reasoning effort, a cheap candidate for exercising the pipeline on `smoke`.
 
 ```bash
 karn build examples/karn --worktree --out /tmp/bench-codex-build
-silverquillm login benchmark --build-output /tmp/bench-codex-build --construct bare-codex
+silverquillm login --build-output /tmp/bench-codex-build --construct bare-codex
 ```
 
 `--worktree` explicitly builds the supplied example files and records the producer's dirty-source provenance.
 For committed Config Repo builds, point Karn at that repository without `--worktree`.
 Build output and the exact local image must remain available; queued execution never rebuilds or pulls an image.
 Enrollment uses the host's Codex CLI in an isolated home, through Karn's existing plugin.
-Use the same profile name and state root for direct runs and batches; a host-local lock prevents simultaneous refreshes of that login.
+Each construct has its own login in `<state-root>/logins/<construct>`, enrolled once and kept across rebuilds of that construct; enroll every construct you run, and use the same state root for direct runs and batches.
+Constructs never share a login, so they can run at the same time, while a host-local lock prevents simultaneous refreshes of any one construct's login.
 A direct run refuses a login another runner holds (`login_in_use`) without creating a run; a batch leaves that entry pending and retries it on its next pass.
 
 A run interrupted while its login was mounted leaves a pending refresh that only the plugin artifact which mounted it may settle.
 Switching to a build with a different login plugin then fails with `login_recovery_requires_previous_plugin`.
-Settle it first with `silverquillm recover RUN_ID`, naming the run in `<state-root>/logins/<profile>/active.json`; recovery uses that run's retained plugin artifact.
+Settle it first with `silverquillm recover RUN_ID`, naming the run in `<state-root>/logins/<construct>/active.json`; recovery uses that run's retained plugin artifact.
 
 ## Build the grader
 
@@ -46,8 +48,8 @@ Isolation protects the host, not score integrity: candidate code shares the pyte
 ## Run and inspect
 
 ```bash
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --login benchmark --results-repo ./private-results
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --login benchmark --results-repo ./private-results
+silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --results-repo ./private-results
+silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --results-repo ./private-results
 ```
 
 Use `--bench-root` when launching outside the benchmark checkout.
@@ -90,7 +92,6 @@ format = "karn-v4"
 build_output = "/tmp/bench-codex-build"
 construct = "bare-codex"
 benchmark = "hob-medium"
-login = "benchmark"
 budget_seconds = 86400
 ```
 

@@ -299,6 +299,23 @@ def test_new_run_command_has_no_mode_or_proposal_options():
     assert "--mode" not in result.output and "--proposal" not in result.output
 
 
+def test_the_login_is_the_constructs_and_cannot_be_named(tmp_path):
+    run = CliRunner().invoke(main, ["run", "--help"])
+    assert run.exit_code == 0 and "--login" not in run.output
+    login = CliRunner().invoke(main, ["login", "--help"])
+    assert login.exit_code == 0 and "--construct" in login.output
+    assert "PROFILE" not in login.output
+    build = make_candidate(tmp_path).build_output
+    arguments = ["--build-output", str(build), "--construct", "bare"]
+    named = CliRunner().invoke(
+        main, ["login", "shared", *arguments, "--state-root", str(tmp_path / "state")]
+    )
+    assert named.exit_code == 2 and "unexpected extra argument" in named.output.lower()
+    flagged = CliRunner().invoke(main, ["run", *arguments, "--benchmark", "x", "--login", "shared"])
+    assert flagged.exit_code == 2 and "no such option" in flagged.output.lower()
+    assert not (tmp_path / "state").exists()
+
+
 def test_measurement_finalization_failure_does_not_suppress_grading(tmp_path):
     from silverquillm.karn.observations import CodexTelemetryCollector
 

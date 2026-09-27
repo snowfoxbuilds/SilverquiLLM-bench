@@ -77,7 +77,6 @@ def common_options(function):
 )
 @click.option("--construct", required=True)
 @click.option("--benchmark", "benchmark_id", required=True)
-@click.option("--login", default=None, help="Named local subscription login profile.")
 @click.option("--budget-seconds", type=click.IntRange(min=1), default=86400, show_default=True)
 @click.option("--snapshot-seconds", type=click.FloatRange(min=0.1), default=60, show_default=True)
 @click.option(
@@ -124,7 +123,6 @@ def _report(record, *, exit_on_status=True):
 
 
 @click.command("login")
-@click.argument("profile")
 @click.option(
     "--build-output", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path)
 )
@@ -134,8 +132,8 @@ def _report(record, *, exit_on_status=True):
     type=click.Path(file_okay=False, path_type=Path),
     default=lambda: Path.home() / ".local/state/silverquillm",
 )
-def enroll(profile, build_output, construct, state_root):
-    """Enroll subscription authentication through the selected Karn login plugin."""
+def enroll(build_output, construct, state_root):
+    """Enroll the construct's own subscription login through its Karn login plugin."""
     from .execution import login_profile
 
     try:
@@ -146,7 +144,7 @@ def enroll(profile, build_output, construct, state_root):
         if len(artifacts) != 1:
             raise KarnError("candidate_requires_codex_login_plugin")
         status = DockerHost(plugin_cache=state_root.resolve() / "plugins").enroll_login(
-            login_profile(state_root, profile), artifacts[0]
+            login_profile(state_root, construct), artifacts[0]
         )
     except (KarnError, OSError, ValueError) as error:
         raise click.ClickException(str(error)) from None
