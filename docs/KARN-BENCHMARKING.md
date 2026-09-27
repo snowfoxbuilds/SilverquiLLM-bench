@@ -1,8 +1,14 @@
 # Karn benchmarking
 
 Build once, select a local subscription login, and collect benchmark data with the `silverquillm` commands.
-Python 3.13 is required by the current stock login-plugin wheel closure.
 The installed benchmark package needs Docker and its own Python dependencies; Karn is used separately to build the candidate, and no Ozolith package is involved.
+Run `silverquillm` from a Python 3.13 environment: the stock login plugin's wheel closure needs CPython 3.13, and the plugin is installed with the interpreter `silverquillm` itself runs on (or a `python3.13` on `PATH`).
+
+```bash
+uv venv --python 3.13 .venv
+uv pip install --python .venv/bin/python -e .
+source .venv/bin/activate
+```
 
 ## Build and enroll
 
