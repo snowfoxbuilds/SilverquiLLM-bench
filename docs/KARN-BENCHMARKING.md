@@ -14,7 +14,7 @@ source .venv/bin/activate
 
 The checked-in [bare Codex example](../examples/karn/constructs/bare-codex/construct.toml) selects `gpt-6-astra`, Codex 0.153.4 through `codex@1`, and the stock Codex login plugin.
 It carries no custom skills or polling controller.
-[`bare-codex-luna`](../examples/karn/constructs/bare-codex-luna/construct.toml) is the same construct on `gpt-6-luna` with low reasoning effort, a cheap candidate for exercising the pipeline on `smoke`.
+[`bare-codex-luna`](../examples/karn/constructs/bare-codex-luna/construct.toml) is the same construct on `gpt-5.6-luna` with low reasoning effort, a cheap candidate for exercising the pipeline on `smoke`.
 
 ```bash
 karn build examples/karn --worktree --out /tmp/bench-codex-build
