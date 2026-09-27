@@ -280,7 +280,11 @@ def inspect_image(reference: str) -> dict:
             ["docker", "image", "inspect", reference], capture_output=True, check=False, timeout=30
         )
         if result.returncode:
-            raise KarnError("image_not_available_locally")
+            # Any other failure, such as no permission on the Docker socket, says nothing
+            # about whether the image exists.
+            if b"no such image" in result.stderr.lower():
+                raise KarnError("image_not_available_locally")
+            raise KarnError("docker_unavailable")
         rows = strict_json(result.stdout)
         if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
             raise KarnError("invalid_image_inspection")
