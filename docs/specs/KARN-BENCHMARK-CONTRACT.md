@@ -83,12 +83,15 @@ The first usable integration supports Codex subscription authentication (grillin
 Resuming benchmarking does not require switching the Reference Candidate to separately billed API-key authentication.
 The benchmark host reuses the existing Karn login plugin for preparing authentication before launch and persisting refreshed authentication after container stop (grilling 2026-09-26).
 The bench supplies its host integration and does not replace the plugin's authentication parsing, refresh persistence, or recovery behavior.
+The first real run validates this integration with a real device-authorization enrollment; the bench does not further replicate Karn's Node Daemon secret store, setup marker, or process environment, none of which the plugin relies on (grilling 2026-09-26).
+As the Node Daemon does, the host kills a plugin process whose request timed out rather than reading its late reply, and admits the plugin's returned mounts only as an extension of those it passed: the passed mounts unchanged, each new source inside that plugin's own state directory, and no target overlapping another (grilling 2026-09-26).
 
 Authentication values stay outside candidate identity and published results.
 Cleanup retains authentication that has not been persisted until persistence succeeds or the operator explicitly abandons it, following Karn's [Login Plugins](https://github.com/snowfoxbuilds/ozolith/blob/main/docs/specs/LOGIN-PLUGINS.md) contract.
 Authentication storage is distinct from the Workspace and from retained benchmark evidence.
 
 A named Login Profile selects subscription authentication independently of candidate identity and can be reused across candidate variants and batches (grilling 2026-09-26).
+A profile is enrolled through a fresh device-authorization session, so it holds its own session and refresh chain, separate from the operator's own Codex login, whose files are never copied into it (grilling 2026-09-26).
 Each run starts with fresh native state; only authentication persists between runs.
 At most one runner on the host may use a login at a time because concurrent token refresh can invalidate the shared authentication (grilling 2026-09-26).
 Use the existing local login binding and a host-local exclusive runner lock, shared by direct runs, scheduler execution, and enrollment.
