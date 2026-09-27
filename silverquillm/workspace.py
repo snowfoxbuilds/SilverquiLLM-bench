@@ -12,16 +12,20 @@ Public API
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import stat
 import subprocess
+import tempfile
 from pathlib import Path
 
 import click
 
 __all__ = [
+    "UnsupportedWorkspaceEntryError",
+    "build_resume_preamble",
     "stage_workspace",
     "stage_workspace_from_prior_run",
-    "build_resume_preamble",
 ]
 
 # ---------------------------------------------------------------------------
@@ -170,6 +174,8 @@ def stage_workspace_from_prior_run(
             f"Prior workspace_final/ has no .git history at {src}"
         )
 
+    _reject_unsupported_entries(src)
+
     workspace = output_dir / "workspace"
     output = output_dir / "output"
 
@@ -180,18 +186,64 @@ def stage_workspace_from_prior_run(
 
     # copytree preserves .git/ and every tracking file the prior run
     # accumulated. No ignore patterns — we want byte-for-byte continuity.
-    shutil.copytree(src, workspace)
+    # symlinks=True: a prior leg's links are copied as links, never dereferenced on the host.
+    shutil.copytree(src, workspace, symlinks=True)
     output.mkdir(parents=True, exist_ok=True)
 
     # Refresh per-run files only. Do NOT touch agent-prompt-layer tracking
     # files (KEY_DECISIONS.md, MODEL_AUDIT.jsonl, FILES_MODIFIED.json,
     # RUN_DECISIONS.md); they hold prior-session state.
-    (workspace / "prompt.md").write_text(prompt_text, encoding="utf-8")
-    (workspace / "run_manifest.json").write_text(
-        json.dumps(run_manifest, indent=2) + "\n", encoding="utf-8"
+    _replace_with_regular_file(workspace / "prompt.md", prompt_text)
+    _replace_with_regular_file(
+        workspace / "run_manifest.json", json.dumps(run_manifest, indent=2) + "\n"
     )
 
     return workspace, output
+
+
+_REFRESHED_FILES = ("prompt.md", "run_manifest.json")
+
+
+class UnsupportedWorkspaceEntryError(click.ClickException):
+    """A prior leg's ``workspace_final/`` holds an entry a Resume Leg cannot stage."""
+
+
+def _reject_unsupported_entries(src: Path) -> None:
+    """Refuse special files and directories at refreshed names before anything is removed.
+
+    copytree would block on a FIFO or fail opaquely on a socket or device, and a directory
+    cannot be replaced by a fresh ``prompt.md`` or ``run_manifest.json``.
+    """
+    for name in _REFRESHED_FILES:
+        if (src / name).is_dir() and not (src / name).is_symlink():
+            raise UnsupportedWorkspaceEntryError(
+                f"Prior workspace_final/{name} is a directory; a Resume Leg needs to replace it"
+            )
+    for directory, subdirectories, files in os.walk(src, followlinks=False):
+        for name in [*subdirectories, *files]:
+            path = Path(directory) / name
+            mode = path.lstat().st_mode
+            if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode) or stat.S_ISLNK(mode)):
+                raise UnsupportedWorkspaceEntryError(
+                    f"Prior workspace_final/{path.relative_to(src)} is not a regular file, "
+                    "directory, or link"
+                )
+
+
+def _replace_with_regular_file(destination: Path, text: str) -> None:
+    """Write *text* as a new regular file at *destination*, replacing a link rather than its target."""
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{destination.name}-", dir=destination.parent
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            # mkstemp creates 0600; the agent container may read the file as another UID.
+            os.fchmod(stream.fileno(), 0o644)
+            stream.write(text)
+        os.replace(temporary, destination)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
 
 
 # ---------------------------------------------------------------------------

@@ -54,7 +54,7 @@ class TestHangTimeoutOption:
     """The run command must accept --hang-timeout with default 900."""
 
     def test_run_help_shows_hang_timeout(self, runner):
-        result = runner.invoke(main, ["run", "--help"])
+        result = runner.invoke(main, ["legacy", "run-image", "--help"])
         assert result.exit_code == 0
         assert "--hang-timeout" in result.output
 
@@ -69,7 +69,7 @@ class TestHangTimeoutOption:
         mock_stage.return_value = (workspace, output)
         mock_cls.return_value = _make_lifecycle_mock()
 
-        runner.invoke(main, ["run", "--image", "img"])
+        runner.invoke(main, ["legacy", "run-image", "--image", "img"])
         call_kwargs = mock_cls.call_args
         assert call_kwargs.kwargs.get("hang_timeout") == 900
 
@@ -84,7 +84,7 @@ class TestHangTimeoutOption:
         mock_stage.return_value = (workspace, output)
         mock_cls.return_value = _make_lifecycle_mock()
 
-        runner.invoke(main, ["run", "--image", "img", "--hang-timeout", "300"])
+        runner.invoke(main, ["legacy", "run-image", "--image", "img", "--hang-timeout", "300"])
         call_kwargs = mock_cls.call_args
         assert call_kwargs.kwargs.get("hang_timeout") == 300
 
@@ -100,14 +100,14 @@ class TestSmokeLifecycleArgs:
     @patch("silverquillm.cli.ContainerLifecycle")
     def test_smoke_hard_timeout_120(self, mock_cls, runner):
         mock_cls.return_value = _make_lifecycle_mock()
-        runner.invoke(main, ["smoke", "--image", "img"])
+        runner.invoke(main, ["legacy", "smoke", "--image", "img"])
         call_kwargs = mock_cls.call_args
         assert call_kwargs.kwargs.get("hard_timeout") == 120
 
     @patch("silverquillm.cli.ContainerLifecycle")
     def test_smoke_hang_timeout_60(self, mock_cls, runner):
         mock_cls.return_value = _make_lifecycle_mock()
-        runner.invoke(main, ["smoke", "--image", "img"])
+        runner.invoke(main, ["legacy", "smoke", "--image", "img"])
         call_kwargs = mock_cls.call_args
         assert call_kwargs.kwargs.get("hang_timeout") == 60
 
@@ -115,7 +115,7 @@ class TestSmokeLifecycleArgs:
     def test_smoke_container_name_pattern(self, mock_cls, runner):
         """Container name should be sqm-smoke-{pid}."""
         mock_cls.return_value = _make_lifecycle_mock()
-        runner.invoke(main, ["smoke", "--image", "img"])
+        runner.invoke(main, ["legacy", "smoke", "--image", "img"])
         call_kwargs = mock_cls.call_args
         name = call_kwargs.kwargs.get("container_name")
         assert name is not None
@@ -130,7 +130,7 @@ class TestSmokeLifecycleArgs:
         mock_cls.return_value = _make_lifecycle_mock(
             exit_code=None, timed_out=True, timeout_reason="hard_timeout"
         )
-        result = runner.invoke(main, ["smoke", "--image", "img"])
+        result = runner.invoke(main, ["legacy", "smoke", "--image", "img"])
         assert result.exit_code != 0
         assert "FAIL" in result.output
 
@@ -286,7 +286,7 @@ class TestRunUsesLifecycle:
         mock_stage.return_value = (workspace, output)
         mock_cls.return_value = _make_lifecycle_mock()
 
-        runner.invoke(main, ["run", "--image", "img"])
+        runner.invoke(main, ["legacy", "run-image", "--image", "img"])
         mock_cls.return_value.run.assert_called_once()
 
     @patch("silverquillm.cli.ContainerLifecycle")
@@ -300,7 +300,7 @@ class TestRunUsesLifecycle:
         mock_stage.return_value = (workspace, output)
         mock_cls.return_value = _make_lifecycle_mock(exit_code=42)
 
-        result = runner.invoke(main, ["run", "--image", "img"])
+        result = runner.invoke(main, ["legacy", "run-image", "--image", "img"])
         assert "42" in result.output or "exit code" in result.output.lower()
 
     @patch("silverquillm.cli.ContainerLifecycle")
@@ -316,5 +316,5 @@ class TestRunUsesLifecycle:
             exit_code=None, timed_out=True, timeout_reason="hang_timeout"
         )
 
-        result = runner.invoke(main, ["run", "--image", "img"])
+        result = runner.invoke(main, ["legacy", "run-image", "--image", "img"])
         assert "hang_timeout" in result.output.lower() or "timed out" in result.output.lower()

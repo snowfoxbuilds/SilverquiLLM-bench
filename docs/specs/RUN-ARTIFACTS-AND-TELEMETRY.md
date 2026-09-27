@@ -154,7 +154,7 @@ Stream them live to the terminal while saving.
 
 Pipe-reader threads write `docker_stdout.log` and `docker_stderr.log` directly into `run_dir` in append mode. There is no `.tmp` intermediate and no post-run copy step; harvest reads the files in place.
 
-Live terminal output is labeled, colorized by type, and mirrored to a per-channel append-only file under the run directory. The tabbed viewer (`silverquillm logs --run`) reads from these files in both live (tail) and archived (static) modes.
+Live terminal output is labeled, colorized by type, and mirrored to a per-channel append-only file under the run directory. The tabbed viewer (`silverquillm legacy logs --run`) reads from these files in both live (tail) and archived (static) modes.
 
 | Channel | Backing file | Source |
 | --- | --- | --- |
@@ -175,7 +175,7 @@ Color behavior:
 - `--color never`
 Saved log files remain plain split-stream logs.
 
-v1 ships a `silverquillm logs --run` tabbed log viewer over the per-channel files above, lifted into v1 once the runner stabilized and a run surfaced concrete triage pain (grilling 2026-05-23). Live labeled streaming remains the default; the viewer is opt-in for both live (tail) and archived (static) inspection.
+v1 ships a `silverquillm legacy logs --run` tabbed log viewer over the per-channel files above, lifted into v1 once the runner stabilized and a run surfaced concrete triage pain (grilling 2026-05-23). Live labeled streaming remains the default; the viewer is opt-in for both live (tail) and archived (static) inspection.
 
 ### Run summary
 
@@ -197,7 +197,7 @@ v1 ships a `silverquillm logs --run` tabbed log viewer over the per-channel file
 - `resumed_image_changed` (Resume Leg only — true when `--image` differs from prior leg's `docker_image`)
 - three evaluation dimensions
 - telemetry/log artifact paths
-Resume Legs (Benchmark Runs with `resumed_from` set) are linked into a Resume Chain via `resumed_from`. Chain traversal is by repeated lookup; the runner does not aggregate results across legs. The `silverquillm chain <run-id>` reader ships alongside `silverquillm resume` so `resumed_from` always has at least one consumer. Resume Legs are never leaderboard-valid: any run with `resumed_from` set has `leaderboard_valid = false`.
+Resume Legs (Benchmark Runs with `resumed_from` set) are linked into a Resume Chain via `resumed_from`. Chain traversal is by repeated lookup; the runner does not aggregate results across legs. The `silverquillm legacy chain <run-id>` reader ships alongside `silverquillm legacy resume` so `resumed_from` always has at least one consumer. Resume Legs are never leaderboard-valid: any run with `resumed_from` set has `leaderboard_valid = false`.
 
 When a resume needs information about the prior run, the runner prefers artifacts written *during* the run (manifest at staging, snapshot ledger during execution) over artifacts written *at harvest* (`run_summary.json`). The manifest is the source of truth for input fields (image, timeout); the snapshot ledger is the source of truth for snapshot-fallback detection. `run_summary.json` is used only for fields it uniquely owns (notably `run_status`), and missing-summary handling is explicit per [BENCHMARK-RUNNER.md](BENCHMARK-RUNNER.md) → Resume.
 
@@ -222,7 +222,7 @@ The superseded contract, retained only for the SOS (V1) legacy lineage:
 
 Two distinct things share the word "smoke" — do not conflate them:
 
-- **The `silverquillm smoke` command** — container-boot validation only, not
+- **The `silverquillm legacy smoke` command** — container-boot validation only, not
   benchmark evaluation. A tiny synthetic Workspace, no real cards; validates
   image boot, volume mounts, basic file writing, and auth/model reachability.
   Never enters leaderboard or benchmark summaries.
@@ -232,7 +232,7 @@ Two distinct things share the word "smoke" — do not conflate them:
   problem set, one Workspace) but is never leaderboard-published
   (`leaderboard.eligible: false`). See HOB-BENCHMARKS.md → Run shape.
 
-Rules for the `silverquillm smoke` command:
+Rules for the `silverquillm legacy smoke` command:
 
 - Use a tiny synthetic Workspace.
 - Do not use real SOS cards.
@@ -245,4 +245,4 @@ Rules for the `silverquillm smoke` command:
 | --- | --- |
 | [ADR-008](../adr/ADR-008-resume-legs-are-independent-benchmark-runs.md) | Resume Legs Are Independent Benchmark Runs |
 | [ADR-009](../adr/ADR-009-resume-reads-prefer-run-time-artifacts-over-harvest-time-artifacts.md) | Resume Reads Prefer Run-Time Artifacts Over Harvest-Time Artifacts |
-| [ADR-0012](../adr/ADR-0012-independent-host-for-karn-benchmark-candidates.md) | Karn v4 execution and observations have an independent consumer contract |
+| [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Karn v4 execution and observations have an independent consumer contract |

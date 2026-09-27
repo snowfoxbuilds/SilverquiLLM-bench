@@ -7,28 +7,14 @@ name = "silverquillm-bench"
 version = "0.1.0"
 description = "SilverquiLLM MTG game engine benchmark"
 license = "MIT"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "requests",
     "pyyaml",
     "click",
     "jsonschema>=4.18",
-    # TheOzolith's published packages: the bench CONSUMES its Run Contract
-    # entry points (theozolith_worker.api) and its Candidate Bundle verifier
-    # (theozolith_control.candidate — export, verify_bundle, the verified
-    # build, over theozolith_nodedaemon's Dockerfile codegen and tree hash and
-    # theozolith_knowledge's compiler) rather than reimplementing them, and
-    # pins EVERY one of them to the EXACT immutable revision
-    # docs/specs/BENCH-CONTRACT.md is vendored from (the packages are not on
-    # PyPI and the-ozolith publishes no release tags).
-    # silverquillm/contract_version.py states the same revision plus each
-    # package's tree digest and the driver refuses any other;
-    # tests/test_contract_pin.py keeps the sources in agreement. Re-sync the
-    # vendored contract and vectors when moving this pin.
-    "theozolith-worker @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=worker",
-    "theozolith-control @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=control",
-    "theozolith-nodedaemon @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=nodedaemon",
-    "theozolith-knowledge @ git+https://github.com/snowfoxbuilds/the-ozolith.git@19118cae6dc4faf0543bd9bf18aa54621c971358#subdirectory=knowledge",
+    "referencing>=0.30",
+    "pytest>=8",
 ]
 
 [project.scripts]
@@ -54,7 +40,7 @@ include = ["silverquillm*"]
 # job dir's input/prompt.md now comes from the production prompt renderer, so
 # there are no bench-side task templates to package.)
 silverquillm = ["results_repo_templates/*.md"]
-"silverquillm.karn" = ["*.json"]
+"silverquillm.karn" = ["*.json", "grader_image/Dockerfile", "grader_image/requirements.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -66,7 +52,7 @@ markers = ["integration: requires Docker daemon"]
 timeout = 300
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 strict = true
 # `engine` and `cards` live under benchmarks/sos/workspace/ — put that on
 # the mypy module search path so the unqualified names resolve.

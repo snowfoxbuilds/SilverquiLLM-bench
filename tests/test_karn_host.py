@@ -165,6 +165,9 @@ class FakeDocker:
     def remove(self, name):
         self.removed = True
 
+    def cleanup_run(self, container_name, run_id):
+        self.commands.append(("cleanup", container_name, run_id))
+
 
 def test_budget_default_is_large_and_shorter_definition_refuses_before_launch(tmp_path):
     candidate = make_candidate(tmp_path, timeout=60)

@@ -423,9 +423,11 @@ class TestEvaluateEngine:
         (run_dir / "status.json").write_text("{}")
 
         cards_dir = _setup_cards_dir(tmp_path, [])
+        cards_dir.mkdir(exist_ok=True)
         engine_dir = tmp_path / "engine"
         engine_dir.mkdir()
-        _setup_engine_tests(tmp_path)
+        engine_tests = _setup_engine_tests(tmp_path)
+        (engine_tests.parent / "test_utils.py").write_text("")
 
         mock_run.return_value = _make_pytest_result(passed=9, failed=1)
 

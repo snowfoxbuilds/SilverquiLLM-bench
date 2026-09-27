@@ -41,10 +41,10 @@ Rules the module enforces:
   a pointer can never select another candidate's artifacts.
 - **Candidate identity is never trusted from a recorded value.**  A ``legacy``
   identity is a label and records ``verified: false``.  An ``ozolith-v1``
-  identity exists only as the output of recomputation from a Candidate Bundle
-  (:mod:`silverquillm.candidate`, over TheOzolith's verifier) and records
-  ``verified: true``; any other combination is malformed and refused on write
-  and on read.
+  identity was only ever produced by recomputation from a Candidate Bundle
+  (the retired Candidate Bundle path, over TheOzolith's verifier; see ADR-014)
+  and records ``verified: true``; any other combination is malformed and
+  refused on write and on read.
 - **Candidate keys are injective.** A legacy image dir must already be one
   safe path segment (the same rule run ids obey) and is used unchanged as the
   ``results/<candidate-hash>/`` key — nothing is sanitized, so two distinct
@@ -254,9 +254,9 @@ class CandidateIdentity:
         cls, base_image_digest: str, instruction_hash: str, adapter_identity: str
     ) -> CandidateIdentity:
         """The ``ozolith-v1`` identity of a Candidate Bundle *as recomputed by
-        TheOzolith's verifier* — :mod:`silverquillm.candidate` is the one
-        caller, after ``verify_bundle`` returned the triple.  Never build one
-        from a recorded manifest value."""
+        TheOzolith's verifier*.  The retired Candidate Bundle path was the one
+        caller (ADR-014); historical records keep this identity.  Never build
+        one from a recorded manifest value."""
         identity = cls(
             base_image_digest=base_image_digest,
             instruction_hash=instruction_hash,
@@ -422,6 +422,8 @@ def candidate_hash(identity: CandidateIdentity) -> str:
     directory (:func:`candidate_dirname`).
     """
     identity.validate()
+    if identity.scheme == "karn-v4":
+        return identity.hash
     if identity.scheme == LEGACY_SCHEME:
         return identity.base_image_digest[len(f"{LEGACY_SCHEME}:") :]
     canonical = json.dumps(
@@ -819,6 +821,10 @@ def read_run_record(run_dir: Path) -> RunRecord:
     scores = _load_json(run_dir / SCORES_FILENAME)
     if not isinstance(manifest, dict) or not isinstance(scores, dict):
         raise InvalidRunRecordError(f"{run_dir}: manifest.json and scores.json must be objects")
+    if manifest.get("schema_version") == 2:
+        from silverquillm.karn.records import read_record
+
+        return read_record(run_dir)
     try:
         record = RunRecord.from_dicts(manifest, scores)
     except InvalidRunRecordError as exc:
@@ -879,6 +885,9 @@ def rebuild_index(repo_root: Path) -> list[dict[str, Any]]:
     repo_root = Path(repo_root)
     rows: list[dict[str, Any]] = []
     for run_dir, record in iter_run_records(repo_root):
+        if record.candidate.scheme == "karn-v4":
+            rows.append(record.index_row())
+            continue
         rows.append(
             {
                 "candidate_hash": run_dir.parent.name,

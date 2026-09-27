@@ -15,7 +15,8 @@ python -m pytest tests/ -q
 
 # Audited SOS/FDN grading is not a direct pytest target — it runs through the
 # evaluator/validation harness. See the Validation and Test Validation sections
-# below (silverquillm run / silverquillm rescore).
+# below (silverquillm legacy run-image / silverquillm legacy rescore); Karn runs
+# grade through `silverquillm run` (docs/KARN-BENCHMARKING.md).
 
 # Docker
 docker build -t silverquillm-local-pi-blind:latest docker/local-pi-blind/
@@ -25,30 +26,30 @@ docker build -t silverquillm-cc-opus-48-bare-xhigh-planned:latest docker/cc-opus
 docker build -t silverquillm-cc-fable-5-bare-xhigh-planned:latest docker/cc-fable-5-bare-xhigh-planned/
 
 # Smoke
-silverquillm smoke --image silverquillm-local-pi-blind:latest
-silverquillm smoke --image silverquillm-copilot-gpt-4.1:latest
-silverquillm smoke --image silverquillm-cc-sonnet-single:latest
+silverquillm legacy smoke --image silverquillm-local-pi-blind:latest
+silverquillm legacy smoke --image silverquillm-copilot-gpt-4.1:latest
+silverquillm legacy smoke --image silverquillm-cc-sonnet-single:latest
 
 # Validation
-silverquillm run --image silverquillm-cc-opus-48-plan-tdd-v2-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
+silverquillm legacy run-image --image silverquillm-cc-opus-48-plan-tdd-v2-xhigh:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
 
-silverquillm run --image silverquillm-cc-opus-48-bare-xhigh-planned:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
-silverquillm run --image silverquillm-cc-fable-5-bare-xhigh-planned:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
+silverquillm legacy run-image --image silverquillm-cc-opus-48-bare-xhigh-planned:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000;\
+silverquillm legacy run-image --image silverquillm-cc-fable-5-bare-xhigh-planned:latest --cards 1,4,13,57,97,120,201,226,245,257  --timeout 360000
 
-silverquillm run \
+silverquillm legacy run-image \
   --image silverquillm-local-pi-blind:latest \
   --timeout 600 
 
 # Resume
 
-silverquillm resume sos-copilot-claude-opus-4.6-2026-05-25T22-52 --timeout 360000
+silverquillm legacy resume sos-copilot-claude-opus-4.6-2026-05-25T22-52 --timeout 360000
 
 # Difficult cards
 --cards 1,4,13,57,97,120,201,226,245,257
 
 # TUI
 
-silverquillm logs --run sos-copilot-gpt-4.1-2026-05-24T06-51 
+silverquillm legacy logs --run sos-copilot-gpt-4.1-2026-05-24T06-51 
 
 # Workspace setup
 rm -rf /tmp/test-staging && mkdir /tmp/test-staging 
@@ -80,11 +81,11 @@ rm -rf docker/*/validated_results/*/workspace_final/.git
 python3 scripts/validated_results_to_csv.py   --output aggregated_results.csv
 
 # Rerun results
-silverquillm rescore docker/copilot-sonnet-single/results/sos-copilot-sonnet-single-2026-05-26T19-33
+silverquillm legacy rescore docker/copilot-sonnet-single/results/sos-copilot-sonnet-single-2026-05-26T19-33
 
 ls -d docker/*/validated_results/*/ \
   | xargs -P 12 -I {} sh -c \
-    'silverquillm rescore "{}" >"{}/rescore.log" 2>&1 || echo "FAILED: {}"'
+    'silverquillm legacy rescore "{}" >"{}/rescore.log" 2>&1 || echo "FAILED: {}"'
 
 
 # Test Validation

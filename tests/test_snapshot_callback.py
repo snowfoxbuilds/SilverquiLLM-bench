@@ -108,7 +108,7 @@ def _invoke_run_and_capture_callback(tmp_path: Path) -> tuple:
 
         runner = CliRunner()
         result = runner.invoke(main, [
-            "run",
+            "legacy", "run-image",
             "--image", "test-image:latest",
             "--timeout", "60",
             "--results-dir", str(results_dir),
@@ -298,7 +298,7 @@ class TestSnapshotCallbackEmitSnapshot:
 
             runner = CliRunner()
             result = runner.invoke(main, [
-                "run",
+                "legacy", "run-image",
                 "--image", "test-image:latest",
                 "--timeout", "60",
                 "--results-dir", str(results_dir),

@@ -42,7 +42,7 @@ def test_smoke_container_lifecycle(smoke_image: str) -> None:
     """Smoke test pipeline with minimal alpine container (no real agent)."""
     # Run smoke via CLI
     result = subprocess.run(
-        [sys.executable, "-m", "silverquillm.cli", "smoke", "--image", smoke_image],
+        [sys.executable, "-m", "silverquillm.cli", "legacy", "smoke", "--image", smoke_image],
         capture_output=True, timeout=60,
     )
     assert result.returncode == 0, result.stderr.decode()

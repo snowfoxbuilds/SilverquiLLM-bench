@@ -17,6 +17,26 @@ from .definition import KarnError, inspect_image, strict_json
 RUN_LABEL = "org.silverquillm.run"
 
 
+def redacted_tail(payload: bytes, maximum: int, redactions) -> bytes:
+    """Keep at most *maximum* bytes of the tail, redacting before the cut.
+
+    *payload* carries a margin of the longest secret's length, so a secret straddling the
+    retention boundary is wholly visible here; the cut moves past it rather than keeping
+    its suffix as an unredacted fragment.
+    """
+    cut, moved = max(0, len(payload) - maximum), True
+    while moved:
+        moved = False
+        for secret in redactions:
+            start = payload.find(secret, max(0, cut - len(secret) + 1))
+            if start != -1 and start < cut:
+                cut, moved = start + len(secret), True
+    tail = payload[cut:]
+    for secret in sorted(redactions, key=len, reverse=True):
+        tail = tail.replace(secret, b"[REDACTED]")
+    return tail[-maximum:] if maximum else b""
+
+
 class Docker:
     def command(self, *arguments: str, timeout: float = 30, check: bool = True):
         try:
@@ -89,6 +109,7 @@ class Docker:
             ["docker", "logs", name], stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         failures = []
+        margin = max((len(secret) for secret in redactions), default=0)
 
         def retain_tail(stream, target, maximum):
             chunks, size = deque(), 0
@@ -96,18 +117,15 @@ class Docker:
                 while chunk := stream.read(65536):
                     chunks.append(chunk)
                     size += len(chunk)
-                    while size > maximum and chunks:
-                        excess = size - maximum
+                    while size > maximum + margin and chunks:
+                        excess = size - maximum - margin
                         first = chunks.popleft()
                         if len(first) > excess:
                             chunks.appendleft(first[excess:])
                             size -= excess
                         else:
                             size -= len(first)
-                payload = b"".join(chunks)
-                for secret in sorted(redactions, key=len, reverse=True):
-                    payload = payload.replace(secret, b"[REDACTED]")
-                target.write_bytes(payload)
+                target.write_bytes(redacted_tail(b"".join(chunks), maximum, redactions))
             except OSError:
                 failures.append("log_retention_failed")
             finally:

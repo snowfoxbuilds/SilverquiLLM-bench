@@ -8,7 +8,7 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 - Engine: Python port of XMage (Java, MIT)
 - Base set: FDN Draft Set (301 cards: FDN 001–291 + SPG 074–083) — used as in-context examples
 - Benchmark set: SOS Draft Set (271 cards: SOS 001–271, released 2026-04-24) — benchmark targets
-- Agents: Karn-built images paired with v4 Construct Definitions, executed by an independent benchmark host
+- Agents: Karn-built images paired with v4 Construct Definitions, executed by SilverquiLLM's own benchmark host with no Ozolith dependency; candidate code is graded only in a network-less grader container
 - License: MIT (matching XMage)
 - Card implementations: one class per card, subclassing `CardImpl`
 - Tests: pytest with `test_utils` helpers, max 30 per card. Audited grader tests are host-side only, not run from the agent workspace.
@@ -31,7 +31,7 @@ All specs, code, and agent instructions use these terms exactly.
 | `CARD-INTERFACE.md` | Card class hierarchy, hook methods, and supporting types |
 | `AUDITED-TEST-SUITE.md` | Test structure, test utilities API, audited test path, test harvester (v2) |
 | `AUDITED-TEST-API.md` | The sanctioned test-only engine interface for audited tests: set up, host-side `priority_loop` / `advance_to_phase`, `DeterministicPlayer` directives, assertions; canonical-only, composes/duplicates canonical behavior, no workspace-engine changes |
-| `BENCHMARK-RUNNER.md` | Legacy runner behavior and reusable workspace/harvesting reference; the Karn v4 target is in KARN-BENCHMARK-CONTRACT.md |
+| `BENCHMARK-RUNNER.md` | The historical `--image` lineage (`silverquillm legacy`) and reusable workspace/harvesting reference; Karn v4 execution is in KARN-BENCHMARK-CONTRACT.md |
 | `SCORING.md` | Three evaluation dimensions, complexity weighting, leaderboard format |
 | `AGENT-CONTAINERS.md` | Docker black-box architecture, file-based contract, entrypoint design, isolation guarantees |
 | `WORKSPACE-CONTRACT.md` | Workspace layout, card directory invariant, Run Manifest, writable engine, FDN/SOS structure |
@@ -41,9 +41,9 @@ All specs, code, and agent instructions use these terms exactly.
 | `AUDITED-TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
 | `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): picked pools (23/5/5, selective subsets of the HOB set), run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |
 | `DECISION-MODEL.md` | V2 engine Player Query / Player Decision protocol, Game Symbols/Refs, Intents, DeterministicPlayer (V2) — engine-level, pool-neutral |
-| `BENCHMARK-CANDIDATES.md` | Existing Candidate Bundle curation, batch queue, and publication behavior; historical publication rules do not gate Karn v4 data collection |
+| `BENCHMARK-CANDIDATES.md` | Retired: the removed Candidate Bundle promotion, batch, and publication pipeline, and what of it remains readable |
 | `BENCH-CONTRACT.md` | Historical Candidate Bundle and production Implementer Run contract (vendored read-only from the-ozolith); reference for legacy candidates |
-| `KARN-BENCHMARK-CONTRACT.md` | The bench-owned Karn v4 consumer contract: explicit builds, independent execution, implementation-only tasks, and subscription authentication |
+| `KARN-BENCHMARK-CONTRACT.md` | The bench-owned Karn v4 consumer contract: explicit builds, independent execution, grading isolation, implementation-only tasks, and subscription authentication |
 | `KNOWN-ISSUES.md` | Known issues encountered during benchmark-runner development, with the fixes applied |
 
 Each spec's own **Relevant ADRs** appendix links the architectural decisions behind it; there is no separate ADR index here.

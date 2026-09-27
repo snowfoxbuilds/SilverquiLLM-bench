@@ -6,7 +6,7 @@ Date: 2026-05-25
 
 ## Context
 
-`silverquillm resume <prior-run-id>` must read several fields from the prior Benchmark Run at staging time — `workspace_final/` existence, `docker_image`, snapshot-fallback state (`snapshot_utc`), prior `--timeout` and wall-clock-used, and `run_status`. Those fields live in different artifacts written at different times. The naive pattern of always reading `run_summary.json` (the canonical post-run report) silently breaks under harvester failure: the workspace and snapshot ledger may be intact while the summary is missing or truncated — and resume is precisely the feature that must recover from partially-failed runs.
+`silverquillm legacy resume <prior-run-id>` must read several fields from the prior Benchmark Run at staging time — `workspace_final/` existence, `docker_image`, snapshot-fallback state (`snapshot_utc`), prior `--timeout` and wall-clock-used, and `run_status`. Those fields live in different artifacts written at different times. The naive pattern of always reading `run_summary.json` (the canonical post-run report) silently breaks under harvester failure: the workspace and snapshot ledger may be intact while the summary is missing or truncated — and resume is precisely the feature that must recover from partially-failed runs.
 
 ## Decision
 
@@ -41,7 +41,7 @@ This makes resume staging resilient to the harvester-failed-but-workspace-is-fin
 - Resume staging knows about lower-level artifacts (manifest, ledger) rather than reading only the high-level summary. Slight layering violation, but the reliability gain is worth it.
 **Neutral:**
 
-- `run_summary.json` retains its role as the canonical post-run report for downstream tools (leaderboard scoring, `silverquillm chain` reader). Only resume *staging* has the read-source preference; everything else reads the summary as before.
+- `run_summary.json` retains its role as the canonical post-run report for downstream tools (leaderboard scoring, `silverquillm legacy chain` reader). Only resume *staging* has the read-source preference; everything else reads the summary as before.
 ## Alternatives Considered
 
 **Trust ****`run_summary.json`**** first.** Read all resume-time fields from `run_summary.json` as the canonical source. Rejected because harvester failure (OOM, crash, partial write) silently breaks resume — workspace and ledger may be intact but resume refuses to start because summary is missing. The whole point of resuming a partially-failed run is precisely that the run was partial.
@@ -53,3 +53,11 @@ This makes resume staging resilient to the harvester-failed-but-workspace-is-fin
 **Read only from ****`<image-dir>`**** component for ****`docker_image`****.** The resolved path already encodes the image directory. Rejected because the `<image-dir>` is derived from `--image` via string stripping (`silverquillm-` prefix, `:tag` suffix); the inverse mapping is not bijective for all possible `--image` values, and we'd lose the cross-check that catches corrupted run dirs.
 
 **No cross-check; first available source wins.** Read `run_manifest.json.docker_image`, return it, done. Rejected because it doesn't catch the case where a run dir was reconstructed by hand or copied between machines and the path no longer matches the manifest — exactly the situations where audit-trail integrity matters most.
+
+## Amendments
+
+- **2026-09-26 (#85)**: The resume and chain commands moved under `silverquillm legacy` with the rest of the `--image` lineage (ADR-014); the decision is unchanged.
+
+## Relevant PRs
+
+- #85 — Moves the `--image` lineage commands under `silverquillm legacy`.

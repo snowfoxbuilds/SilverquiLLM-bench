@@ -7,6 +7,7 @@ reconstruction, action extraction, and card name resolution.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +34,9 @@ def load_card_id_map(path: str | Path | None = None) -> dict[int, str]:
         Dict mapping grpId (int) to card name (str).
     """
     if path is None:
-        path = Path(__file__).parent.parent.parent / "data" / "replays" / "card_id_map.json"
+        data_root = os.environ.get("SILVERQUILLM_BENCH_ROOT")
+        root = Path(data_root) if data_root else Path(__file__).parent.parent.parent
+        path = root / "data" / "replays" / "card_id_map.json"
     else:
         path = Path(path)
 

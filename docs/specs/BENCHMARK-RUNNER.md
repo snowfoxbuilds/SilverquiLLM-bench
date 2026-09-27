@@ -1,10 +1,12 @@
 Status: DRAFT (rewritten for container architecture)
 
-Last updated: 2026-05-30
+Last updated: 2026-09-26
 
 # Benchmark Runner
 
 Orchestration harness for the end-to-end benchmark. The runner stages a workspace, launches an agent container, harvests results, and runs evaluation. It has no knowledge of agent internals.
+
+This page describes the historical `--image` entrypoint lineage, run with `silverquillm legacy`; its grading runs in the grader container. Karn v4 execution is governed by [KARN-BENCHMARK-CONTRACT.md](KARN-BENCHMARK-CONTRACT.md).
 
 **Run shape**: a Benchmark Run is one container session that consumes the benchmark's **entire** problem set in a single Workspace (run spec = candidate + mode + benchmark + budget, per #39). Card-subset ("workload") runs are retired (Grilling 2026-08-27); cheap validation uses the dedicated smoke benchmark (`benchmarks/smoke/`).
 
@@ -15,7 +17,7 @@ The runner is the host-side orchestrator. It prepares everything the agent needs
 Detailed contracts are split into focused specs:
 
 - [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) defines the Workspace layout, Run Manifest, card directory invariant, and in-place engine editing model.
-- [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) defines `workspace_final/`, snapshot fallback, telemetry, Docker logs, and smoke runs (the `silverquillm smoke` command vs. the smoke benchmark).
+- [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) defines `workspace_final/`, snapshot fallback, telemetry, Docker logs, and smoke runs (the `silverquillm legacy smoke` command vs. the smoke benchmark).
 ## Architecture
 
 ```mermaid
@@ -33,7 +35,7 @@ The Docker image *is* the full agent configuration — it bakes in the agent CLI
 Two benchmark modes exist — blind (implementation only) and tested (implementation plus tests) — each baked into a separate Docker image, and modes are compared across separate runs. Both modes produce `card_impl.py`; in blind mode the agent devises its own testing approach.
 
 ```bash
-python -m silverquillm run \
+python -m silverquillm legacy run-image \
   --image silverquillm-pi-blind:latest \
   --timeout 7200 \
   --hang-timeout 900 \
@@ -108,10 +110,10 @@ The source-of-truth layout lives in the bench repo at `benchmarks/sos/workspace/
 
 ## Resume
 
-`silverquillm resume <prior-run-id>` creates a fresh Benchmark Run that stages from a prior run's `workspace_final/` instead of `benchmarks/sos/workspace/`. The resume is a separate Benchmark Run with its own `run_name`, results directory, Hard Timeout, snapshots, and evaluation — not a continuation of the prior run (grilling 2026-05-30). Legs are linked via `run_summary.json.resumed_from`; the sequence is a Resume Chain.
+`silverquillm legacy resume <prior-run-id>` creates a fresh Benchmark Run that stages from a prior run's `workspace_final/` instead of `benchmarks/sos/workspace/`. The resume is a separate Benchmark Run with its own `run_name`, results directory, Hard Timeout, snapshots, and evaluation — not a continuation of the prior run (grilling 2026-05-30). Legs are linked via `run_summary.json.resumed_from`; the sequence is a Resume Chain.
 
 ```bash
-python -m silverquillm resume sos-2026-05-16T19-49 \
+python -m silverquillm legacy resume sos-2026-05-16T19-49 \
   --timeout 7200 \
   [--image silverquillm-pi-blind:latest] \
   [--card-filter ...] \
@@ -148,7 +150,7 @@ Tiered handling:
 - Image read-order is `run_manifest.json.docker_image` first, then the resolved path's `<image-dir>` component, then `run_summary.json.docker_image` if present; all three are cross-checked.
 ### Resume Chain reader
 
-`silverquillm chain <run-id>` (also accepting a path, per the same resolver) walks the `resumed_from` linked list and prints a one-screen table of legs in oldest-first order: `run_name`, `docker_image`, `--timeout`, wall-clock-used, `run_status`, `resumed_from`. Cycle detection errors with "cycle detected at `<run-id>`" (defensive against future bugs writing circular `resumed_from`). The reader exists to give `resumed_from` at least one consumer from day one — telemetry fields without readers tend to drift. Per-leg `git log --oneline` rendering and chain-level aggregation are deliberately out of scope for v1.
+`silverquillm legacy chain <run-id>` (also accepting a path, per the same resolver) walks the `resumed_from` linked list and prints a one-screen table of legs in oldest-first order: `run_name`, `docker_image`, `--timeout`, wall-clock-used, `run_status`, `resumed_from`. Cycle detection errors with "cycle detected at `<run-id>`" (defensive against future bugs writing circular `resumed_from`). The reader exists to give `resumed_from` at least one consumer from day one — telemetry fields without readers tend to drift. Per-leg `git log --oneline` rendering and chain-level aggregation are deliberately out of scope for v1.
 
 ### Chain depth and forks
 
@@ -162,7 +164,7 @@ When `--image` differs from the prior leg, the runner prints a stderr warning at
 
 ### `--cards` filter
 
-`--cards` on resume defaults to none (full set), exactly like `silverquillm run`. There is no inheritance from the prior leg's `card_filter` — each Resume Leg's scope is an independent, deliberate choice (mirrors the `--timeout` policy). When this leg's filter differs from the prior leg's, the Resume Preamble gains a conditional line disclosing that prior-implemented cards outside the new filter are inherited workspace state, not part of this leg's scope.
+`--cards` on resume defaults to none (full set), exactly like `silverquillm legacy run-image`. There is no inheritance from the prior leg's `card_filter` — each Resume Leg's scope is an independent, deliberate choice (mirrors the `--timeout` policy). When this leg's filter differs from the prior leg's, the Resume Preamble gains a conditional line disclosing that prior-implemented cards outside the new filter are inherited workspace state, not part of this leg's scope.
 
 ### Resume Preamble structure
 
@@ -190,7 +192,7 @@ On timeout, the runner still harvests partial results and the latest usable Outp
 
 The runner uses a pipe-readers + poll-loop architecture: two dedicated threads drain the Docker stdout/stderr pipes to host files, while the main thread polls all monitored files (Docker log dumps, `/output/` files) on a roughly 1-second interval to produce colorized terminal output, check timeouts, and run snapshots. This avoids pipe-buffer deadlock while keeping the main loop single-threaded and simple.
 
-The runner streams Docker stdout/stderr live to the terminal while also saving them as `docker_stdout.log` and `docker_stderr.log` in the run results, supporting long-run monitoring and post-run debugging without container cooperation. Live lines are prefixed with stream labels and colorized by output type (colorization follows `--color`, default `auto`); the saved log files stay split by stream and carry no ANSI color codes. v1 also ships a tabbed post-run log viewer, `silverquillm logs --run`, with tabs over the per-channel files (see [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) → Terminal channels); live labeled streaming remains the default, and the originally deferred viewer was lifted once the runner stabilized and a run surfaced concrete triage pain (grilling 2026-05-23).
+The runner streams Docker stdout/stderr live to the terminal while also saving them as `docker_stdout.log` and `docker_stderr.log` in the run results, supporting long-run monitoring and post-run debugging without container cooperation. Live lines are prefixed with stream labels and colorized by output type (colorization follows `--color`, default `auto`); the saved log files stay split by stream and carry no ANSI color codes. v1 also ships a tabbed post-run log viewer, `silverquillm legacy logs --run`, with tabs over the per-channel files (see [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) → Terminal channels); live labeled streaming remains the default, and the originally deferred viewer was lifted once the runner stabilized and a run surfaced concrete triage pain (grilling 2026-05-23).
 
 ## Result Harvesting
 
@@ -382,3 +384,5 @@ The runner tracks per-run metrics (not per-card, since the agent manages its own
 | [ADR-008](../adr/ADR-008-resume-legs-are-independent-benchmark-runs.md) | Resume Legs Are Independent Benchmark Runs |
 | [ADR-009](../adr/ADR-009-resume-reads-prefer-run-time-artifacts-over-harvest-time-artifacts.md) | Resume Reads Prefer Run-Time Artifacts Over Harvest-Time Artifacts |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |
+| [ADR-013](../adr/ADR-013-grading-runs-in-a-network-less-grader-container.md) | Grading Runs in a Network-less Grader Container |
+| [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | The `--image` lineage moves under `silverquillm legacy` |

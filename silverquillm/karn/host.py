@@ -26,9 +26,18 @@ from .definition import (
     strict_json,
 )
 from .docker import RUN_LABEL, Docker, Network
-from .login import LoginProfile, PluginProcess, enroll_login, install_plugin, recover_login
+from .login import (
+    LoginProfile,
+    PluginProcess,
+    enroll_login,
+    install_plugin,
+    preserve_pending_native,
+    recover_login,
+)
 
 DEFAULT_BUDGET_SECONDS = 24 * 60 * 60
+# The standard-library modules proxy.py imports inside the candidate image.
+PROXY_PROBE = "import ipaddress, json, os, select, socket, socketserver, urllib.request"
 
 
 def validate_budget(candidate: KarnCandidate, budget_seconds: int) -> None:
@@ -99,6 +108,38 @@ class DockerHost:
         self.plugin_cache = plugin_cache or Path.home() / ".local/state/silverquillm/karn/plugins"
         self.plugin_python = plugin_python
         self.poll_interval = poll_interval
+
+    def preflight(self, candidate: KarnCandidate, budget_seconds: int) -> None:
+        """Refuse before any run directory exists when the host cannot honor the definition."""
+        validate_budget(candidate, budget_seconds)
+        if candidate.runtime["network"]["mode"] != "restricted":
+            return
+        # The egress proxy sidecar runs the candidate image's own python3 (see docker.Network).
+        probe = self.docker.command(
+            "run",
+            "--rm",
+            "--pull",
+            "never",
+            "--network",
+            "none",
+            "--user",
+            f"{os.getuid()}:{os.getgid()}",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--entrypoint",
+            "python3",
+            candidate.image_id,
+            "-I",
+            "-c",
+            PROXY_PROBE,
+            timeout=60,
+            check=False,
+        )
+        if probe.returncode:
+            raise KarnError("restricted_network_requires_python3")
 
     def enroll_login(self, profile: LoginProfile, artifact) -> int:
         return enroll_login(
@@ -263,6 +304,7 @@ class DockerHost:
         runtime_config: str | Callable[[Network], str] | None = None,
         after_stop: Callable[[HostResult, Path | None], None] | None = None,
         collector_endpoint: str | None = None,
+        login_lock_held: bool = False,
     ) -> HostResult:
         validate_budget(candidate, budget_seconds)
         candidate.verify(self.docker.inspect_image)
@@ -332,7 +374,11 @@ class DockerHost:
         named = {}
         native = None
         handoff = None
-        lock = login_profile.exclusive() if login_profile else contextlib.nullcontext()
+        lock = (
+            login_profile.exclusive()
+            if login_profile and not login_lock_held
+            else contextlib.nullcontext()
+        )
         try:
             with lock, contextlib.ExitStack() as lifecycle:
                 if candidate.runtime["backend"] != "docker":
@@ -353,6 +399,14 @@ class DockerHost:
                     plugin = lifecycle.enter_context(
                         PluginProcess(artifact, executable, login_profile)
                     )
+                    stale = preserve_pending_native(login_profile, self.docker.stop_and_confirm)
+                    if stale is not None and stale["reason"] not in (
+                        None,
+                        "native_state_unavailable",
+                    ):
+                        result.observation_errors.append(
+                            f"stale_login_native_state_lost:{stale['run_id']}:{stale['reason']}"
+                        )
                     recover_login(
                         login_profile,
                         plugin,
@@ -385,6 +439,7 @@ class DockerHost:
                             {
                                 "run_id": run_id,
                                 "container_name": result.container_name,
+                                "evidence_dir": str(evidence),
                                 "plugin_artifact": artifact.row["artifact"],
                                 "mounts": mounts,
                             }
@@ -396,6 +451,7 @@ class DockerHost:
                             {
                                 "run_id": run_id,
                                 "container_name": result.container_name,
+                                "evidence_dir": str(evidence),
                                 "plugin_artifact": artifact.row["artifact"],
                                 "mounts": mounts,
                             }

@@ -23,7 +23,6 @@ Missing measurements are explained; they do not become zero and do not cause the
 
 The analyst chooses comparisons and filters appropriate to the question being investigated.
 Collection and retention do not depend on a publication or leaderboard gate.
-Historical publication behavior remains documented in [Benchmark Candidates](BENCHMARK-CANDIDATES.md); it does not govern collection of new v4 run data.
 For Karn v4 execution and observations, this page takes precedence over the older entrypoint-specific runner and telemetry descriptions.
 
 ### Candidate and build boundary
@@ -44,7 +43,7 @@ The bench owns scheduling, Workspace staging, User Prompt delivery, run launch, 
 Karn configuration selects the container command, initializer, bootstrap, declared mounts and files, and required runtime facilities.
 The benchmark host honors that selection.
 
-Karn must allow an Automaton to omit a polling controller (grilling 2026-09-26).
+Karn allows an Automaton to omit a polling controller (grilling 2026-09-26).
 A controller is needed for automatic scheduling, not direct execution; controller-free execution requires no new wire-format field.
 Externally launched execution does not suppress authentication or other selected lifecycle hooks.
 
@@ -64,6 +63,15 @@ Audited Eval grades the harvested Workspace against the host-side grading suites
 Candidate-written tests are artifacts and do not replace the grading suites.
 The candidate may run available tests while implementing; iteration remains the candidate's responsibility.
 Container termination and declared result files describe execution, while Audited Eval describes implementation correctness.
+
+### Grading isolation
+
+Grading imports and runs code the candidate wrote, so it never executes on the benchmark host.
+Every engine-viability probe and grading pass runs in a bench-owned grader image, built explicitly and referenced by image ID, with no network, the operator's UID, a read-only root, dropped capabilities, resource limits, an allowlisted environment, and read-only mounts of only the selected Workspace, SilverquiLLM, and the grading inputs.
+A run refuses before launch when the grader image is missing; it never builds or pulls it.
+Nothing is mounted writable: the result returns as one size-capped, framed line on the container's stdout and is untrusted data, accepted only in the exact evaluation shape with bounded counts; a timeout, failure, oversized or rejected output records absent grades with the reason.
+Each Run Record states its grading isolation and grader image ID.
+Isolation protects the host's files, credentials, and network; it does not make scores tamper-proof, because candidate code shares the process that counts its results.
 
 Planning and task guidance belong to each benchmark's instruction data, including the distinct hob-easy, hob-medium, and hob-hard benchmarks (grilling 2026-09-26).
 New Karn runs have no separate basic/planned task-variation selector.
@@ -144,11 +152,29 @@ Completing hob-medium is part of this workstream, including its missing Test Ora
 The existing smoke benchmark exercises the integration before hob-medium runs collect implementation and efficiency data.
 The workstream also covers the CLI and batch paths that retain those observations as Run Records.
 
+### Operator entrypoints and records
+
+`silverquillm run` and `silverquillm scheduler` share the same staging, execution, observation, harvesting, and grading lifecycle, and `silverquillm recover` settles an interrupted run from its retained evidence without rerunning work.
+The `login` command enrolls a named host-local Login Profile through the selected existing plugin.
+SilverquiLLM runs a completed Karn build by itself; the vendored v4 construct contract is the only thing it takes from Karn, and no Ozolith package is involved.
+[Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
+
+New immutable Run Records use schema 2 and the `karn-v4` identity scheme.
+They retain the full selected definition, execution observations, three independent grading dimensions, measurement completeness, and artifact pointers.
+An unexecuted grading dimension has null counts and pass rate with a reason.
+Coverage names tested and uncovered cards, so an incomplete FDN suite does not imply full FDN coverage.
+
+Workspace snapshots contain only workspace files and exclude authentication state.
+Final evidence includes a Git bundle of available referenced commits, produced through a clean repository that excludes candidate hooks and credential configuration; an unavailable history is recorded explicitly.
+The runner preserves the final workspace even when its engine is unusable; fallback selects the newest retained snapshot whose engine passes the same viability check, and records the selected path and reason.
+A fallback grade describes that snapshot, while the execution outcome continues to describe the actual run.
+
 ### Historical evidence
 
 Existing Run Records retain their original identities and interpretation.
 A historical Candidate Bundle does not become a Karn v4 Construct Definition by relabeling it.
 The vendored [Bench Contract](BENCH-CONTRACT.md) remains the reference for the legacy Candidate Bundle API.
+Candidate Bundles can no longer be executed; their records stay readable without Ozolith.
 This consumer contract governs Karn v4 execution.
 
 ## Relevant ADRs
@@ -157,4 +183,6 @@ This consumer contract governs Karn v4 execution.
 | --- | --- |
 | [ADR-004](../adr/ADR-004-docker-agent-containers-replace-python-adapters.md) | The host stages, launches, harvests, and evaluates isolated candidates |
 | [ADR-005](../adr/ADR-005-in-place-workspace-engine-with-snapshot-fallback.md) | Preserve final Workspace and snapshot/fallback evidence |
-| [ADR-0012](../adr/ADR-0012-independent-host-for-karn-benchmark-candidates.md) | Karn builds candidates and an independent bench host executes their declared contract |
+| [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Karn builds candidates and an independent bench host executes their declared contract |
+| [ADR-013](../adr/ADR-013-grading-runs-in-a-network-less-grader-container.md) | Candidate code executes only in a network-less grader container |
+| [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | SilverquiLLM runs Karn constructs without Ozolith; Candidate Bundle execution is removed |

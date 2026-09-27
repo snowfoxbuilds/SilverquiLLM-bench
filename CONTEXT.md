@@ -55,7 +55,7 @@ _Avoid_: "foundation cards" (use "Foundations cards" or "base set")
 
 **Batch**
 
-One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (candidate ref + benchmark + budget; historical batches also select a mode). Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
+One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (Karn build output + construct + benchmark, with an optional Login Profile and budget). Historical Candidate Bundle batches (candidate ref + mode) are unsupported and never run. Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
 
 _Avoid_: "job" (the substrate's job dir is a different concept), "queue entry" for the file (a Batch holds several runs)
 
@@ -95,7 +95,7 @@ _Avoid_: "blind implementation" as a noun (deprecated — was `blind_impl.py`)
 
 **Candidate Bundle** *(legacy interchange format)*
 
-The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling (`theozolith candidate export`: `candidate.json` + generated `Dockerfile` + compiled knowledge tree + baked policy tree; `docs/specs/BENCH-CONTRACT.md`, `bundle_format_version` 2); the only thing `silverquillm run --candidate <path>` accepts (a bundle directory, or a checked-in `candidates/<slug>--<hash8>/` directory wrapping one under `bundle/`). Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle by TheOzolith's verifier (`silverquillm.candidate` consumes `verify_bundle`; the bench never reimplements the hash) — never trusted from a recorded value: a bundle whose recorded identity, or whose directory-name suffix, disagrees with the recomputed one is a hard refusal, as is a bundle carrying a secret value (#65). Adapter-agnostic by contract: the format never hardcodes the adapter set, and neither does the bench.
+The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling (`theozolith candidate export`: `candidate.json` + generated `Dockerfile` + compiled knowledge tree + baked policy tree; `docs/specs/BENCH-CONTRACT.md`, `bundle_format_version` 2); historically the only thing the removed Candidate Bundle run path accepted. Candidate Bundles are no longer executed; each historical `ozolith-v1` Run Record carries its vendored bundle. Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle by TheOzolith's verifier (`silverquillm.candidate` consumes `verify_bundle`; the bench never reimplements the hash) — never trusted from a recorded value: a bundle whose recorded identity, or whose directory-name suffix, disagrees with the recomputed one is a hard refusal, as is a bundle carrying a secret value (#65). Adapter-agnostic by contract: the format never hardcodes the adapter set, and neither does the bench.
 
 _Avoid_: "worker-type TOML" as the candidate input (a bare TOML is not self-contained — it references Config Repo siblings), "candidate config"
 
@@ -209,6 +209,11 @@ The immutable, benchmark-owned vocabulary of Player Decision kinds and attribute
 
 _Avoid_: "symbol" alone (collides with MTG mana symbols), "symbol set"
 
+**Grader Container**
+
+The network-less, bench-owned container in which every grading pass and engine-viability probe runs the candidate's code, so candidate code never executes on the benchmark host.
+It protects the host, not the integrity of the candidate's own score.
+
 **Hang Timeout**
 
 Secondary timeout that triggers when no monitored file activity (Docker pipe output, `/output/` files) occurs for a configurable period during a benchmark run. Catches catastrophic agent failures (process death, API outage, infinite loops) without false-positiving on long thinking pauses. CLI flag: `--hang-timeout`.
@@ -249,6 +254,7 @@ _Avoid_: "goal" / "policy" (rejected names), "answer script" (the V1 FIFO model 
 
 The builder that resolves Construct recipes and produces the images, Construct Definitions, and plugins used by a Benchmark Candidate.
 Karn is independent of Ozolith's runtime manager.
+SilverquiLLM takes only the construct contract from Karn and runs a completed build by itself.
 
 _Avoid_: "Ozolith" when referring to candidate building
 
@@ -273,7 +279,8 @@ _Avoid_: "tags" (working name)
 
 **Output Snapshot**
 
-Periodic runner-captured copy of the Workspace during an Agent Container run, roughly once per minute. Stored as host-side Git commits outside the container. Used for progress telemetry and as a fallback recovery point if final Workspace state is corrupted by timeout cutoff or broken engine edits.
+A periodic runner-retained copy of the Workspace during a Benchmark Run, used as progress evidence and a possible fallback for grading.
+Karn v4 retains copies with content digests and capture times under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records); historical image runs stored snapshots as host-side Git commits.
 
 _Avoid_: "checkpoint" (overloaded with spec checkpoints), "progress log" (that's `progress.jsonl`)
 
@@ -301,19 +308,19 @@ A question an engine raises to a player: source (set of Player Decisions identif
 
 _Avoid_: "Question" (working name), "prompt" alone (one field of a query)
 
-**Promoted Candidate**
+**Promoted Candidate** *(historical)*
 
-A Benchmark Candidate checked into the bench repo's `candidates/<slug>--<hash8>/` by the promote script from the operator's private Config Repo: the worker-type definition with its base pinned by digest, the referenced knowledge and Agent Policy source trees vendored whole, the exported Candidate Bundle, and a README the operator completes (what the candidate varies). Vendor-at-promote is strict (#39 §4, the-ozolith ADR-0048): a referenced knowledge tree must exist and be declared publishable (a `PUBLISHABLE` marker at its root) or the candidate cannot be promoted and its results cannot be published. The Reference Candidates are the promoted candidates that vary nothing.
+A Benchmark Candidate checked into the bench repo's `candidates/<slug>--<hash8>/` by the promote script from the operator's private Config Repo: the worker-type definition with its base pinned by digest, the referenced knowledge and Agent Policy source trees vendored whole, the exported Candidate Bundle, and a README the operator completes (what the candidate varies). Vendor-at-promote is strict (#39 §4, the-ozolith ADR-0048): a referenced knowledge tree must exist and be declared publishable (a `PUBLISHABLE` marker at its root) or the candidate cannot be promoted and its results cannot be published. The Reference Candidates are the promoted candidates that vary nothing. Promotion and the `candidates/` tree were removed with Candidate Bundle execution.
 
 _Avoid_: "imported candidate", "registered candidate" (nothing is registered — the directory is discovered)
 
-**Published Result**
+**Published Result** *(historical)*
 
-A Run Record (`manifest.json` + `scores.json`, byte for byte) ported from the private Results Repo into the bench repo's public `published/` tree by the publish script — as one transaction: all requested records appear or none — and committed by the operator — the commit is the approval stamp. Publishable only when traceable: its candidate identity is a Promoted Candidate that verifies by recomputation (hard refusal otherwise). A record with `leaderboard_valid: false` may be published at the operator's discretion (warning, `--allow-invalid`) and can never enter a leaderboard, because tooling filters on the flag. Discovered by manifest, never by path convention; the organization of `published/` is manual.
+A Run Record (`manifest.json` + `scores.json`, byte for byte) ported from the private Results Repo into the bench repo's public `published/` tree by the publish script — as one transaction: all requested records appear or none — and committed by the operator — the commit is the approval stamp. Publishable only when traceable: its candidate identity is a Promoted Candidate that verifies by recomputation (hard refusal otherwise). A record with `leaderboard_valid: false` may be published at the operator's discretion (warning, `--allow-invalid`) and can never enter a leaderboard, because tooling filters on the flag. Discovered by manifest, never by path convention; the organization of `published/` is manual. The publish path was removed with Candidate Bundle execution before any result was published.
 
 _Avoid_: "leaderboard entry" (a leaderboard is a derivation over Published Results, future work), "exported result"
 
-**Reference Candidate**
+**Reference Candidate** *(historical)*
 
 One of the public vanilla candidates checked in under `candidates/` (#65): `vanilla-claude` and `vanilla-codex` — the stock TheOzolith run image for the adapter, no setup, no knowledge, no Agent Policy, the adapter's default model spelled as its most-pinned provider ID, the model's default effort. They vary nothing: the fixed points every operator can run (smoke, calibration, Pipeline Validation Runs) and compare against. Pi joins when its adapter exists.
 
@@ -349,7 +356,7 @@ Extra lines the runner appends to the User Prompt when staging a Resume Leg. Alw
 
 _Avoid_: "resume notice", "resume header"
 
-**Run Manifest**
+**Run Manifest** *(historical image runs)*
 
 Minimal runtime facts written by the runner to `/workspace/run_manifest.json` immediately before container launch. Contains only `timeout_seconds` and `deadline_utc`; it is advisory to the Agent Container and does not configure agent behavior.
 
@@ -422,13 +429,17 @@ _Avoid_: "workload", "card subset", "filtered run"
 
 **Workspace**
 
-The per-benchmark directory at `benchmarks/<benchmark>/workspace/` in the bench repo (e.g. `benchmarks/sos/workspace/`, `benchmarks/hob-medium/workspace/`), copied wholesale to a per-run tmp path and mounted into the agent container at `/workspace/`. Contains the engine (canonical single copy, shared with bench tooling), all cards (FDN reference implementations + target-card stubs), test scaffolding (`conftest.py`, `test_utils.py`, `engine_tests/`), agent-facing documentation (`AGENTS.md`, `PROJECT_MAP.md`, `rulebook.txt`), and supporting files (`pytest.ini`, `.gitignore`). Per-run files (`prompt.md`, `run_manifest.json`) are written into the copy at stage time, followed by an initial `git init && git commit` so the agent has clean version-control state. The resume staging variant (see Resume Chain) skips `git init` and preserves the prior run's `workspace_final/` `.git` history instead. The agent has read-write access to the entire workspace.
+The agent-writable run copy of `benchmarks/<benchmark>/workspace/`, containing the engine, FDN reference cards, target-card stubs, test scaffolding, and agent-facing documentation.
+Karn v4 runs seed Git history from a trusted benchmark baseline and receive task input through declared file mounts under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#independent-execution).
+Historical image runs wrote `prompt.md` and `run_manifest.json` into the Workspace and preserved the previous run's `.git` when resuming.
 
 _Avoid_: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run), "staged from scratch" (deprecated — workspace is a pre-built directory copied wholesale)
 
 **Writable Engine**
 
-The engine source at `/workspace/engine/` inside the container. The agent modifies it in place throughout the run. The baseline engine remains on the host side, outside the container; after the run, the runner diffs the final or fallback Workspace engine against the host baseline to produce `engine_diff.patch`.
+The engine source in the Workspace that the agent may modify throughout a Benchmark Run.
+Karn v4 retains and grades the engine from the selected final or fallback Workspace under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records).
+Historical image runs also recorded differences from the host baseline as `engine_diff.patch`.
 
 _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumulation), "shared engine"
 
@@ -457,9 +468,9 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
 - Historical **Blind** and **Tested** modes varied test instructions. New Karn v4 runs take their guidance from the selected benchmark and have no independent mode selector.
 - SOS and FDN audited tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Engine tests are staged at `workspace/engine_tests/` per ADR-006 so agents can locally verify engine extensions; grading still uses host-repo copies for all three dimensions. FDN Reference Tests are colocated with the FDN card implementations at `workspace/cards/fdn/{collector_number}/tests.py` as additional reference for agents. Audited SOS grader tests live host-side only — there is no `workspace/tests/cards/` directory.
-- The runner is the hard timeout authority. Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
-- Output Snapshots are runner-owned, Workspace-only, and independent of Agent Container cooperation. The runner may use prior snapshot commits as fallback if final engine state is corrupted.
-- The runner writes the User Prompt to `/workspace/prompt.md`; Agent Containers bake System Prompts into their entrypoints.
+- The runner is the hard timeout authority. Historical Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
+- Output Snapshots are runner-owned, Workspace-only, and independent of candidate cooperation. The runner may use a prior snapshot as fallback if the final engine state is unusable.
+- Historical image runs write the User Prompt to `/workspace/prompt.md`; Karn v4 task input follows the Construct Definition's declared file mounts.
 - Hard Timeout and Hang Timeout are independent — either can trigger `docker stop -t 10` to end a benchmark run.
 - A Test Oracle Workspace has an engine independent of the corresponding benchmark's agent-visible baseline; mechanics needed by an oracle do not alter that baseline merely for oracle convenience.
 - Audited tests call only public APIs present in the canonical engine. Tests never depend on extensions present in the Test Oracle Workspace's engine but absent from canonical — otherwise correct agent impls using different primitives would fail tests for non-correctness reasons.

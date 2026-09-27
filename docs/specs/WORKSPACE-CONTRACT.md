@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-05-24
+Last updated: 2026-09-26
 
 # Workspace Contract
 
@@ -24,7 +24,7 @@ Each benchmark set is fully self-contained: `benchmarks/{target_set}/` is the un
 
 ### Resume staging variant
 
-`silverquillm resume <prior-run-id>` uses a staging variant that copies the prior run's `workspace_final/` wholesale into the per-run tmp directory, then overwrites only `prompt.md` and `run_manifest.json`. No `git init` — the prior `.git` history (host snapshots and any agent commits) is preserved as the new run's `.git`. The Workspace Contract itself (layout, card directory invariant, the SOS (V1) additive-only engine rule) is unchanged: the resumed agent inherits the prior run's compliance state. Resume staging is otherwise identical to fresh staging — mount the copy at `/workspace/`, same volumes, same `/output/` channel. See [BENCHMARK-RUNNER.md](BENCHMARK-RUNNER.md) → Resume for the runner-side CLI, refuse conditions, and Resume Preamble.
+`silverquillm legacy resume <prior-run-id>` uses a staging variant that copies the prior run's `workspace_final/` wholesale into the per-run tmp directory, then overwrites only `prompt.md` and `run_manifest.json`. No `git init` — the prior `.git` history (host snapshots and any agent commits) is preserved as the new run's `.git`. The Workspace Contract itself (layout, card directory invariant, the SOS (V1) additive-only engine rule) is unchanged: the resumed agent inherits the prior run's compliance state. Resume staging is otherwise identical to fresh staging — mount the copy at `/workspace/`, same volumes, same `/output/` channel. See [BENCHMARK-RUNNER.md](BENCHMARK-RUNNER.md) → Resume for the runner-side CLI, refuse conditions, and Resume Preamble.
 
 ### Workspace layout
 
