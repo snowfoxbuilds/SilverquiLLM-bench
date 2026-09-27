@@ -118,6 +118,13 @@ SIGTERM and SIGHUP interrupt `run`, `scheduler`, and `recover` like Ctrl-C, so t
 - Recovery never runs the workload again, never needs the candidate image, and never changes a published record.
 - A record is retained in the run directory before it is published: `run-record.json`, or for a linked recovery `recovery-N/run-record.json`, which recovery finds by directory name and never through a path read from a file.
   Record writes wait up to 120 seconds for concurrent writers; on timeout, `recover` or a later scheduler pass publishes that same retained record under the same id, without recovering or grading again.
+  A retained record is never rewritten.
+- A stopped record, one whose workspace writers were confirmed stopped, is final: recovery only publishes it if it is not published yet.
+- An unconfirmed record, one with `workspace_stopped: false`, stays the run's original observation whether or not it was published.
+  Recovery stops the workload, settles the run's own login, and grades once, all before it needs the results lock.
+  It then retains a single linked recovery under its own stable id, with `recovery_of` and `execution_run_id` naming the original run, and publishes the original unchanged before the linked recovery.
+  If either publication is blocked, or recovery is interrupted anywhere after the linked recovery is retained, the next `recover` or scheduler pass publishes whichever of the two is still unpublished, with the same ids and without grading again.
+  An interruption before the linked recovery is retained leaves nothing to reuse, so the next recovery grades again.
 - Authentication is settled separately from the record.
   A run whose login harvest failed (`login_harvest_failed` or `login_harvest_pending` in its execution) still owns the profile's pending login after its record is written.
   Before `recover` returns any stopped record, it checks whether this run owns the pending login and, if so, settles it under the login lock with the exact plugin artifact retained in the run directory, preserving the run's native sessions into its own evidence first.
@@ -126,7 +133,7 @@ SIGTERM and SIGHUP interrupt `run`, `scheduler`, and `recover` like Ctrl-C, so t
 - Settlement never blocks publication.
   If it fails for any reason, a busy login included, the record is still published and the pending login is kept; `recover` prints the final record and exits non-zero with `login_settlement_pending:<reason>`.
   Run `recover` again once the cause is fixed.
-- In a batch, a recovered row keeps its execution status and recovery linkage, and is marked `record_write_pending` or `login_settlement_pending` until a later scheduler pass finishes publication or settlement.
+- In a batch, a recovered row takes its execution status and recovery linkage (`recovery_record`, `recovery_of`, `execution_run_id`) from the linked recovery as soon as it is retained, even while publication is still blocked, and is marked `record_write_pending` or `login_settlement_pending` until a later scheduler pass finishes publication or settlement.
   These retries read only the batch state, so they continue after the batch file is removed, and the batch's other entries keep running.
 
 ### Records affected by the former scheduler bug
