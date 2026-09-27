@@ -50,5 +50,9 @@ jobs:
 
       # A job-private basetemp: the host's own pytest sessions share
       # /tmp/pytest-of-<user> and prune each other's numbered directories.
+      # It stays under the system temp dir, which redaction tests expect.
       - name: Test
-        run: python -m pytest tests/ -q --basetemp "$RUNNER_TEMP/pytest"
+        run: |
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          python -m pytest tests/ -q --basetemp "$tmp/pytest"
