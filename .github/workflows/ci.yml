@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -12,14 +15,20 @@ concurrency:
 jobs:
   test:
     name: pytest (Python 3.13)
-    runs-on: ubuntu-latest
+    # The runner is a developer host and the repository is public: fork
+    # pull requests must never execute on it.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Create the Python 3.13 environment
+        run: |
+          uv venv --python 3.13 .venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       # Installs the exact the-ozolith revision pyproject.toml pins for every
       # package the bench consumes (git direct references, so each install
@@ -28,8 +37,7 @@ jobs:
       # measures with).
       - name: Install
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          uv pip install --python .venv/bin/python -e ".[dev]"
 
       - name: Show the installed contract pin
         run: |
