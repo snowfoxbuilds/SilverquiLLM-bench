@@ -1145,3 +1145,186 @@ def test_recovery_leaves_another_runs_pending_login_alone(tmp_path, monkeypatch)
     assert not (tmp_path / "runs/run-b/host" / NATIVE_PRESERVED).exists()
     assert (run.profile.state / "work/sessions/rollout-run-b.jsonl").is_file()
     assert not any(command[1:] == ("sq-run-run-b", "run-b") for command in docker.commands)
+
+
+# ---- scheduler publication retries --------------------------------------------------------
+
+
+@pytest.fixture
+def held_records(tmp_path, monkeypatch):
+    """Take the results lock, as a concurrent writer would, until the test releases it."""
+    import fcntl
+
+    from silverquillm.karn import records
+
+    monkeypatch.setattr(records.write_record, "__kwdefaults__", {"lock_seconds": 0.2})
+    results = tmp_path / "records/results"
+    held = []
+
+    def hold():
+        results.mkdir(parents=True, exist_ok=True)
+        held.append(os.open(results, os.O_RDONLY | os.O_DIRECTORY))
+        fcntl.flock(held[-1], fcntl.LOCK_EX)
+
+    def release():
+        os.close(held.pop())
+
+    yield SimpleNamespace(hold=hold, release=release)
+    for descriptor in held:
+        os.close(descriptor)
+
+
+class UnstoppedHost(FixtureHost):
+    """The workload's writers could not be confirmed stopped, so its record is not final."""
+
+    def run(self, *args, **kwargs):
+        result = super().run(*args, **kwargs)
+        result.status, result.workspace_stopped = "host_failed", False
+        return result
+
+
+def batch_with(tmp_path, build_output: Path, entries: int = 2) -> Path:
+    directory = tmp_path / "batches"
+    directory.mkdir()
+    spec = (
+        "[[runs]]\nbuild_output="
+        + json.dumps(str(build_output))
+        + '\nconstruct="bare"\nbenchmark="example"\n'
+    )
+    (directory / "trial.toml").write_text('format="karn-v4"\n' + spec * entries)
+    return directory
+
+
+def batch_scheduler(tmp_path, directory, executor):
+    return KarnScheduler(
+        directory,
+        bench_root=tmp_path / "data",
+        results_dir=tmp_path / "runs",
+        results_repo=tmp_path / "records",
+        state_root=tmp_path / "state",
+        replay_without_state=["trial"],
+        executor=executor,
+    )
+
+
+def dying_first_entry(host):
+    """The first entry's runner dies mid-run, leaving its row running."""
+
+    def execute(**kwargs):
+        run_benchmark(**kwargs, host=host)
+        raise SystemExit(137)
+
+    return execute
+
+
+class Killed(FixtureHost):
+    def run(self, *args, **kwargs):
+        raise SystemExit(137)
+
+
+@pytest.mark.parametrize("host", [Killed, UnstoppedHost])
+def test_scheduler_recovery_under_record_contention_publishes_later_without_replay(
+    tmp_path, monkeypatch, held_records, host
+):
+    opts = options(tmp_path)
+    directory = batch_with(tmp_path, opts["build_output"])
+    with pytest.raises(SystemExit):
+        batch_scheduler(tmp_path, directory, dying_first_entry(host())).run_until_idle()
+    state_path = directory / "state/trial.json"
+    first = json.loads(state_path.read_text())["runs"][0]
+    assert first["status"] == "running"
+    held_records.hold()
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: SimpleNamespace(docker=FakeDocker(), plugin_cache=None),
+    )
+    executed = []
+
+    def execute(**kwargs):
+        executed.append(kwargs["run_id"])
+        return run_benchmark(**kwargs, host=FixtureHost())
+
+    snapshots = []
+    for _ in range(2):  # recovery itself contends, then a later retry fails again
+        batch_scheduler(tmp_path, directory, execute).run_until_idle()
+        rows = json.loads(state_path.read_text())["runs"]
+        assert rows[0]["record_write_pending"] is True
+        assert (rows[0]["status"], rows[0]["execution_status"]) == ("failed", "interrupted")
+        assert rows[0]["error"] == "prior_runner_interrupted"
+        assert rows[0]["execution_run_id"] == first["run_id"]
+        snapshots.append(
+            (
+                rows[0].get("recovery_record"),
+                sorted(
+                    path.read_bytes()
+                    for path in (tmp_path / "runs" / first["run_id"]).rglob("run-record.json")
+                ),
+            )
+        )
+    assert snapshots[0] == snapshots[1]
+    assert len(executed) == 1 and first["run_id"] not in executed
+    assert rows[1]["record_write_pending"] is True
+    if host is UnstoppedHost:
+        assert rows[0]["recovery_of"] == first["run_id"]
+        assert rows[0]["recovery_record"] != first["run_id"]
+    before = published_bytes(tmp_path / "records")
+    held_records.release()
+    (directory / "trial.toml").unlink()  # retries never need the batch file
+    batch_scheduler(tmp_path, directory, execute).run_until_idle()
+    rows = json.loads(state_path.read_text())["runs"]
+    assert not any("record_write_pending" in row for row in rows)
+    assert rows[0]["error"] == "prior_runner_interrupted" and "error" not in rows[1]
+    assert len(executed) == 1
+    published = {r.run_id: r for _, r in iter_run_records(tmp_path / "records")}
+    recovered = published[rows[0].get("recovery_record", first["run_id"])]
+    assert recovered.run_metadata["execution"]["status"] == "interrupted"
+    assert rows[1]["run_id"] in published
+    retained = [
+        json.loads(path.read_text())["manifest"]
+        for path in (tmp_path / "runs" / first["run_id"]).rglob("run-record.json")
+        if json.loads(path.read_text())["manifest"]["run_id"] == recovered.run_id
+    ]
+    assert retained == [recovered.manifest]
+    after = published_bytes(tmp_path / "records")
+    assert all(after[key] == value for key, value in before.items())
+
+
+def test_scheduler_retries_login_settlement_without_replay(tmp_path):
+    directory = batch(tmp_path / "batches", entries=1)
+    harvest_failed = SimpleNamespace(
+        run_id="x",
+        run_metadata={
+            "execution": {"status": "completed", "observation_errors": ["login_harvest_failed"]}
+        },
+        candidate=SimpleNamespace(to_dict=dict),
+    )
+    executed = []
+
+    def execute(**kwargs):
+        executed.append(kwargs["run_id"])
+        return harvest_failed
+
+    scheduler(tmp_path, directory, executor=execute).run_until_idle()
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert state["runs"][0]["login_settlement_pending"] == "login_harvest_failed"
+    assert state["runs"][0]["status"] == "done"
+
+    def still_pending(**kwargs):
+        raise recovery.LoginSettlementPendingError("login_harvest_pending", harvest_failed)
+
+    scheduler(tmp_path, directory, executor=execute, recoverer=still_pending).run_until_idle()
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert state["runs"][0]["login_settlement_pending"] == (
+        "login_settlement_pending:login_harvest_pending"
+    )
+    settled = []
+    scheduler(
+        tmp_path,
+        directory,
+        executor=execute,
+        recoverer=lambda **kwargs: settled.append(kwargs["run_id"]),
+    ).run_until_idle()
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert "login_settlement_pending" not in state["runs"][0]
+    assert settled == [state["runs"][0]["run_id"]] and len(executed) == 1

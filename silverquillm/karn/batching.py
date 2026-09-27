@@ -129,6 +129,37 @@ def _failure_reason(error: Exception) -> str:
     return str(error) if isinstance(error, KarnError) else type(error).__name__
 
 
+def _recovered(row: dict, record) -> None:
+    """Close a running row from its recovery record, keeping the link to the original execution."""
+    status = record.run_metadata["execution"]["status"]
+    if record.run_id != row["run_id"]:
+        row["recovery_record"] = record.run_id
+    row["execution_run_id"] = record.run_metadata.get("execution_run_id", row["run_id"])
+    row["recovery_of"] = record.run_metadata.get("recovery_of")
+    row.update(
+        status="done" if status == "completed" else "failed",
+        execution_status=status,
+        candidate=record.candidate.to_dict(),
+        recovered_at=datetime.now(UTC).isoformat(),
+    )
+    if status != "completed":
+        row["error"] = "prior_runner_interrupted"
+
+
+def _published(row: dict) -> None:
+    row.pop("record_write_pending", None)
+    if row.get("error") == "record_write_pending":
+        del row["error"]
+
+
+def _flag_unsettled_login(row: dict, record) -> None:
+    """A harvest the host could not finish is settled by a later pass or the login's next run."""
+    errors = record.run_metadata["execution"].get("observation_errors", [])
+    unsettled = sorted({"login_harvest_failed", "login_harvest_pending"}.intersection(errors))
+    if unsettled:
+        row["login_settlement_pending"] = ",".join(unsettled)
+
+
 class KarnScheduler:
     def __init__(
         self,
@@ -180,8 +211,28 @@ class KarnScheduler:
             self.warnings.append(message)
             logging.getLogger(__name__).warning("%s", message)
 
+    def _retry_pending(self, state_path: Path, state: dict, row: dict) -> None:
+        """Publish a retained record or settle the run's login; never execute the task again."""
+        from .recovery import LoginSettlementPendingError
+
+        try:
+            self.recoverer(run_id=row["run_id"], spec=row["spec"], **self.options)
+        except RecordWritePendingError:
+            return
+        except LoginSettlementPendingError as error:
+            _published(row)
+            row["login_settlement_pending"] = str(error)
+            self._save(state_path, state)
+            return
+        except Exception as error:  # noqa: BLE001 -- one unrecoverable row must not stop every scheduler start.
+            self._warn(f"{state_path.stem}: pending retry failed: {_failure_reason(error)}")
+            return
+        _published(row)
+        row.pop("login_settlement_pending", None)
+        self._save(state_path, state)
+
     def _recover_running_states(self):
-        from .recovery import RunNeverLaunchedError
+        from .recovery import LoginSettlementPendingError, RunNeverLaunchedError
 
         for state_path in sorted((self.directory / "state").glob("*.json")):
             try:
@@ -197,17 +248,8 @@ class KarnScheduler:
 
                 self.recoverer = recover_benchmark
             for row in state["runs"]:
-                if row.get("record_write_pending"):
-                    try:
-                        self.recoverer(run_id=row["run_id"], spec=row["spec"], **self.options)
-                    except RecordWritePendingError:
-                        continue
-                    except Exception as error:  # noqa: BLE001 -- one unrecoverable row must not stop every scheduler start.
-                        self._warn(f"{state_path.stem}: record retry failed: {_failure_reason(error)}")
-                        continue
-                    del row["record_write_pending"]
-                    row.pop("error", None)
-                    self._save(state_path, state)
+                if row.get("record_write_pending") or row.get("login_settlement_pending"):
+                    self._retry_pending(state_path, state, row)
             if not state["runs"] or state["runs"][-1]["status"] != "running":
                 continue
             row = state["runs"][-1]
@@ -224,27 +266,21 @@ class KarnScheduler:
             except LoginInUseError:
                 self._warn(f"{state_path.stem}: login_in_use; recovery deferred")
                 continue
+            except RecordWritePendingError as error:
+                # The recovered record is retained; later passes publish that same record.
+                _recovered(row, error.record)
+                row["record_write_pending"] = True
+            except LoginSettlementPendingError as error:
+                _recovered(row, error.record)
+                row["login_settlement_pending"] = str(error)
             except Exception as error:  # noqa: BLE001 -- one unrecoverable row must not stop every scheduler start.
                 row.update(
                     status="failed",
                     error="recovery_failed:" + _failure_reason(error),
                     recovered_at=datetime.now(UTC).isoformat(),
                 )
-                self._save(state_path, state)
-                continue
-            status = record.run_metadata["execution"]["status"]
-            if record.run_id != row["run_id"]:
-                row["recovery_record"] = record.run_id
-            row["execution_run_id"] = record.run_metadata.get("execution_run_id", row["run_id"])
-            row["recovery_of"] = record.run_metadata.get("recovery_of")
-            row.update(
-                status="done" if status == "completed" else "failed",
-                execution_status=status,
-                candidate=record.candidate.to_dict(),
-                recovered_at=datetime.now(UTC).isoformat(),
-            )
-            if status != "completed":
-                row["error"] = "prior_runner_interrupted"
+            else:
+                _recovered(row, record)
             self._save(state_path, state)
 
     def _run_locked(self) -> int:
@@ -308,6 +344,7 @@ class KarnScheduler:
                         execution_status=status,
                         candidate=record.candidate.to_dict(),
                     )
+                    _flag_unsettled_login(row, record)
                 except LoginInUseError:
                     # Nothing was created; the entry stays pending for the next pass.
                     state["runs"].pop()
@@ -323,6 +360,7 @@ class KarnScheduler:
                         record_write_pending=True,
                         error=str(error),
                     )
+                    _flag_unsettled_login(row, error.record)
                 except Exception as error:  # noqa: BLE001 -- one failed run does not discard the rest of a batch.
                     row.update(
                         status="failed",

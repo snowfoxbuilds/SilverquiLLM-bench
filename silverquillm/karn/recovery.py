@@ -152,6 +152,15 @@ def _finalized_record(run_id, run_dir, results_repo) -> tuple[KarnRunRecord, boo
             recovered = read_record(linked)
             if recovered.run_metadata.get("recovery_of") == run_id and _stopped(recovered):
                 return recovered, False
+        if "retained" in link:
+            recovered = _read_retained(run_dir / link["retained"])
+            if (
+                recovered.run_id != link["run_id"]
+                or recovered.run_metadata.get("recovery_of") != run_id
+            ):
+                raise KarnError("recovery_run_identity_mismatch")
+            if _stopped(recovered):
+                return recovered, True
     retained_record = run_dir / "run-record.json"
     if retained_record.is_file():
         completed = _read_retained(retained_record)
@@ -445,18 +454,26 @@ def _recover(
         scores,
     )
     record.validate()
+    # Retain before publishing, so a retry publishes this same record instead of recovering again.
     if previous_record is None:
         _retain(run_dir / "run-record.json", record)
-    write_record(results_repo, record)
-    if previous_record is not None:
+    else:
+        recovery_directory.mkdir(exist_ok=True)
+        _retain(recovery_directory / "run-record.json", record)
         _write_atomically(
             run_dir / "recovery-record.json",
             canonical(
-                {"run_id": record_id, "candidate_hash": identity.hash, "recovery_of": run_id}
+                {
+                    "run_id": record_id,
+                    "candidate_hash": identity.hash,
+                    "recovery_of": run_id,
+                    "retained": recovery_directory.name + "/run-record.json",
+                }
             ).decode()
             + "\n",
             prefix=".recovery-record-",
         )
+    write_record(results_repo, record)
     if settlement_failure is not None:
         raise LoginSettlementPendingError(str(settlement_failure), record)
     return record
