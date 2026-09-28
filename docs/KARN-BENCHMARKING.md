@@ -50,6 +50,7 @@ Runs never build or pull a grader.
 `recover` grades on the version recorded when the run launched and never runs the candidate image; a run launched before versions were recorded is graded on the 3.13 grader.
 
 `--grader-image` (or `SILVERQUILLM_GRADER_IMAGE`) names another local grader; it must still be one `grader build` made for the candidate's version, or the run is refused with `grader_python_mismatch`.
+Every grader, including the 3.13 grader that legacy recovery and the `--image` lineage use, must carry the version label `grader build` sets; an older unlabeled `silverquillm-grader:local` is refused until you rebuild.
 `--grading-timeout` (default 3600 seconds) bounds a grading pass.
 A timed-out or failed grading pass records absent scores with `grading_container_failed:<reason>`, never zero.
 Each record's `grading_isolation` names the grader image ID, the candidate's `candidate_python`, and the `grader_python` it was graded on.

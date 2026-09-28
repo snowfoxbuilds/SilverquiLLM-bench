@@ -22,12 +22,11 @@ from .execution import (
 )
 from .grader import (
     DEFAULT_GRADING_TIMEOUT,
-    LEGACY_PYTHON,
     PYTHON_VERSION,
     ContainerGrader,
     GraderError,
     grader_for,
-    grader_tag,
+    legacy_grader,
 )
 from .grading_inputs import grading_inputs
 from .host import DockerHost, HostResult
@@ -278,9 +277,9 @@ def _recovery_grader(inputs: dict, reference: str | None, timeout: int) -> Conta
     of the launch. A run launched before versions were recorded keeps the 3.13 grader
     it would have had, and its record states no candidate version.
     """
-    python = inputs.get("candidate_python")
-    if python is None:
-        return ContainerGrader.from_image(reference or grader_tag(LEGACY_PYTHON), timeout=timeout)
+    if "candidate_python" not in inputs:
+        return legacy_grader(reference, timeout=timeout)
+    python = inputs["candidate_python"]
     if not isinstance(python, str) or not PYTHON_VERSION.fullmatch(python + "\n"):
         raise KarnError("interrupted_run_input_invalid:candidate_python")
     return grader_for(python, reference, timeout=timeout)

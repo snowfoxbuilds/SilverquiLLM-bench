@@ -189,9 +189,11 @@ class DockerRunner:
         return DockerRun(code, text, bytes(stdout))
 
     def remove(self, name: str) -> None:
+        # -v: a candidate image's declared VOLUMEs become anonymous volumes, which a forced
+        # removal would otherwise leave behind with whatever the container wrote to them.
         try:
             subprocess.run(
-                ["docker", "rm", "-f", name], capture_output=True, timeout=60, check=False
+                ["docker", "rm", "-f", "-v", name], capture_output=True, timeout=60, check=False
             )
         except (OSError, subprocess.TimeoutExpired):
             pass
@@ -274,7 +276,8 @@ def candidate_python(image_id: str, docker: DockerRunner | None = None) -> str:
     arguments = [
         "run", "--rm", "--pull", "never", "--name", name, "--label", GRADER_LABEL + "=1",
         "--network", "none", "--user", f"{os.getuid()}:{os.getgid()}", "--read-only",
-        "--cap-drop", "ALL", "--security-opt", "no-new-privileges", *PYTHON_PROBE_LIMITS,
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--no-healthcheck",
+        *PYTHON_PROBE_LIMITS,
         "--tmpfs", "/tmp:rw,nosuid,nodev,size=16m,mode=1777", "--workdir", "/tmp",
         *LOG_OPTIONS, "--entrypoint", "python3", image_id, "-I", "-S", "-c", PYTHON_PROBE,
     ]  # fmt: skip
@@ -319,6 +322,23 @@ def grader_for(
     if docker.image_python(image_id) != minor:
         raise GraderError("grader_python_mismatch")
     return ContainerGrader(image_id, docker=docker, candidate_python=python, **options)
+
+
+def legacy_grader(
+    reference: str | None = None, *, docker: DockerRunner | None = None, **options
+) -> ContainerGrader:
+    """The 3.13 grader for work that predates grading on the candidate's Python.
+
+    Like every grader it must carry its build label, so an image built before graders
+    were labeled is refused until `grader build` rebuilds it.
+    """
+    docker = docker or DockerRunner()
+    image_id = docker.image_id(reference or grader_tag(LEGACY_PYTHON))
+    if image_id is None:
+        raise GraderError("grader_image_unavailable")
+    if docker.image_python(image_id) != LEGACY_PYTHON:
+        raise GraderError("grader_python_mismatch")
+    return ContainerGrader(image_id, docker=docker, **options)
 
 
 def select_grader(
@@ -634,7 +654,5 @@ def evaluation_from_json(raw: bytes) -> FullEvalResult:
 
 def evaluate_legacy(run_dir: Path, cards_dir: Path, engine_dir: Path) -> FullEvalResult:
     # The --image lineage predates grading on the candidate's Python and keeps 3.13.
-    grader = ContainerGrader.from_image(
-        os.environ.get("SILVERQUILLM_GRADER_IMAGE") or grader_tag(LEGACY_PYTHON)
-    )
+    grader = legacy_grader(os.environ.get("SILVERQUILLM_GRADER_IMAGE") or None)
     return grader.evaluate_legacy(run_dir, cards_dir, engine_dir)

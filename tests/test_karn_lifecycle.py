@@ -46,6 +46,7 @@ def _grade_without_docker(request, monkeypatch):
     monkeypatch.setattr(
         execution, "select_grader", lambda image_id, reference=None, **kw: local_grader(**kw)
     )
+    monkeypatch.setattr(recovery, "legacy_grader", lambda reference=None, **kw: local_grader(**kw))
 
 
 def batch(directory: Path, entries: int = 2) -> Path:
@@ -230,20 +231,57 @@ def test_recovery_of_a_run_launched_before_versions_were_recorded_keeps_the_313_
     )
     references = []
     monkeypatch.setattr(
-        ContainerGrader,
-        "from_image",
-        classmethod(lambda cls, reference, **kw: references.append(reference) or local_grader(**kw)),
+        recovery,
+        "legacy_grader",
+        lambda reference=None, **kw: references.append(reference) or local_grader(**kw),
     )
     record = recovery.recover_benchmark(
         run_id="killed",
         spec={},
+        grader_image="custom-grader",
         **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
     )
-    assert references == ["silverquillm-grader:py3.13"]
+    assert references == ["custom-grader"]
     assert "candidate_python" not in record.run_metadata["grading_isolation"]
 
 
-@pytest.mark.parametrize("recorded", ["3.14", "3.14.4\n", 3.14, "3.14.4; rm"])
+@pytest.mark.parametrize(("label", "accepted"), [("3.13", True), ("3.14", False), (None, False)])
+def test_legacy_recovery_requires_a_grader_labeled_313(tmp_path, monkeypatch, label, accepted):
+    from silverquillm.karn import grader as grader_module
+    from silverquillm.karn.grader import GraderError
+
+    from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
+
+    opts = killed_direct_run(tmp_path)
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: SimpleNamespace(docker=ContainerDocker(running=False), plugin_cache=None),
+    )
+
+    class Labeled(LocalDocker):
+        def image_python(self, reference):
+            assert reference == FIXTURE_IMAGE_ID
+            return label
+
+    monkeypatch.setattr(grader_module, "DockerRunner", Labeled)
+    monkeypatch.setattr(recovery, "legacy_grader", grader_module.legacy_grader)
+    def recover():
+        return recovery.recover_benchmark(
+            run_id="killed",
+            spec={},
+            **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+        )
+
+    if accepted:
+        record = recover()
+        assert record.run_metadata["grading_isolation"]["grader_image_id"] == FIXTURE_IMAGE_ID
+    else:
+        with pytest.raises(GraderError, match="grader_python_mismatch"):
+            recover()
+
+
+@pytest.mark.parametrize("recorded", ["3.14", "3.14.4\n", 3.14, "3.14.4; rm", None])
 def test_recovery_refuses_a_malformed_recorded_python(tmp_path, monkeypatch, recorded):
     opts = killed_direct_run(tmp_path)
     path = opts["results_dir"] / "killed/run-input.json"

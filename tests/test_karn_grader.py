@@ -211,6 +211,7 @@ def test_candidate_prints_during_grading_do_not_reach_the_result_line(tmp_path):
 REAL_RUN = grader_module.DockerRunner.run
 REAL_BUILD = grader_module.DockerRunner.build
 REAL_IMAGE_PYTHON = grader_module.DockerRunner.image_python
+REAL_REMOVE = grader_module.DockerRunner.remove
 
 
 def fake_docker_client(tmp_path, monkeypatch, script: str):
@@ -342,6 +343,7 @@ def test_the_python_probe_runs_the_candidate_image_sandboxed_and_reads_only_a_ve
     assert options["--user"] == f"{os.getuid()}:{os.getgid()}"
     assert "--read-only" in arguments and options["--cap-drop"] == "ALL"
     assert options["--security-opt"] == "no-new-privileges"
+    assert "--no-healthcheck" in arguments
     assert options["--memory"] == options["--memory-swap"] and options["--pids-limit"]
     assert "--mount" not in arguments and "--env" not in arguments and "-v" not in arguments
     assert options["--entrypoint"] == "python3"
@@ -538,6 +540,40 @@ def test_grader_build_builds_every_pinned_version_with_its_label(monkeypatch):
     assert "--require-hashes" in dockerfile and "FROM ${BASE}" in dockerfile
 
 
+@pytest.mark.parametrize(
+    ("variable", "graders", "reason"),
+    [
+        (None, {"silverquillm-grader:py3.13": "3.13"}, None),
+        ("custom", {"custom": "3.13"}, None),
+        # An unlabeled image, such as the old silverquillm-grader:local or alpine, is refused.
+        ("alpine:latest", {"alpine:latest": None}, "grader_python_mismatch"),
+        ("custom", {"custom": "3.14"}, "grader_python_mismatch"),
+        (None, {}, "grader_image_unavailable"),
+    ],
+)
+def test_the_legacy_lineage_grades_only_on_a_grader_labeled_313(
+    tmp_path, monkeypatch, variable, graders, reason
+):
+    docker = ProbedDocker(graders=graders)
+    docker.run = lambda arguments, *, timeout, stdout_limit=0: DockerRun(
+        0, "", EVALUATION_SENTINEL + json.dumps(valid_evaluation()).encode() + b"\n"
+    )
+    monkeypatch.setattr(grader_module, "DockerRunner", lambda: docker)
+    if variable is None:
+        monkeypatch.delenv("SILVERQUILLM_GRADER_IMAGE", raising=False)
+    else:
+        monkeypatch.setenv("SILVERQUILLM_GRADER_IMAGE", variable)
+    cards, engine = tmp_path / "cards", tmp_path / "engine"
+    cards.mkdir()
+    engine.mkdir()
+    if reason is None:
+        result = grader_module.evaluate_legacy(tmp_path, cards, engine)
+        assert result.engine_result.tests_total == valid_evaluation()["engine_result"]["tests_total"]
+    else:
+        with pytest.raises(GraderError, match=reason):
+            grader_module.evaluate_legacy(tmp_path, cards, engine)
+
+
 def test_grader_build_takes_one_version_and_an_optional_tag(monkeypatch):
     built = []
     monkeypatch.setattr(
@@ -582,6 +618,15 @@ def test_the_docker_runner_builds_with_the_pinned_base_and_version_label(monkeyp
         "docker", "build", "--pull=false", "--build-arg", "BASE=python:x@sha256:1",
         "--label", "org.silverquillm.grader.python=3.14", "-t", "tag", "/context",
     ]  # fmt: skip
+
+
+def test_a_removed_container_takes_its_anonymous_volumes_with_it(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        grader_module.subprocess, "run", lambda arguments, **kwargs: calls.append(arguments)
+    )
+    REAL_REMOVE(grader_module.DockerRunner(), "sq-probe-x")
+    assert calls == [["docker", "rm", "-f", "-v", "sq-probe-x"]]
 
 
 class CannedOutput(LocalDocker):
