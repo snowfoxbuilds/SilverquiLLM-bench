@@ -6,7 +6,7 @@ from test_utils import (
     activate_card_ability,
     behavioral_game,
     enter_permanent,
-    object_preference,
+    payment_preference,
     prefer,
     put_on_battlefield,
     resolve_stack,
@@ -108,7 +108,7 @@ def test_mana_ability_can_pay_for_another_spell():
     card.summoning_sick = False
     spell = Instant(name="Payment probe", mana_cost=ManaCost(generic=3), owner=p)
     game.get_hand(p).add(spell)
-    prefer(p, object_preference(game, card))
+    prefer(p, *payment_preference(game, card))
     cast(game, p, spell)
     assert card.is_tapped and p.mana_pool.total() == 0
     assert len(game.stack) == 1 and game.stack.peek().source is spell
