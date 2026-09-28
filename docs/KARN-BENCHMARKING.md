@@ -30,6 +30,20 @@ Each construct has its own login in `<state-root>/logins/<construct>`, enrolled 
 Constructs never share a login, so they can run at the same time, while a host-local lock prevents simultaneous refreshes of any one construct's login.
 A direct run refuses a login another runner holds (`login_in_use`) without creating a run; a batch leaves that entry pending and retries it on its next pass.
 
+### Claude constructs
+
+Three constructs run Claude Code 2.1.284 through `claude@1` on a Claude subscription, with the stock `karn-claude-login` plugin:
+[`bare-claude-opus`](../examples/karn/constructs/bare-claude-opus/construct.toml) on `claude-opus-5-5` and [`bare-claude-sonnet`](../examples/karn/constructs/bare-claude-sonnet/construct.toml) on `claude-sonnet-5-5`, both at `max` effort, and [`bare-claude-haiku`](../examples/karn/constructs/bare-claude-haiku/construct.toml) on `claude-haiku-4-5`, the cheap construct for `smoke`, which takes no effort setting.
+Their egress allows `api.anthropic.com` for inference and `platform.claude.com`, where Claude Code refreshes its subscription token, and they set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
+
+```bash
+silverquillm login --build-output /tmp/bench-build --construct bare-claude-haiku
+```
+
+Enrollment runs the host's `claude auth login` in an isolated config directory, so the login is separate from your own Claude Code session and your `~/.claude` is never copied.
+Sign in with the subscription account; on a host without a browser, open the printed URL elsewhere and paste the code back.
+The host runs exactly one of `karn-codex-login` or `karn-claude-login` per candidate and refuses any other plugin; `login` refuses a construct without one (`candidate_requires_login_plugin`).
+
 A run interrupted while its login was mounted leaves a pending refresh that only the plugin artifact which mounted it may settle.
 Switching to a build with a different login plugin then fails with `login_recovery_requires_previous_plugin`.
 Settle it first with `silverquillm recover RUN_ID`, naming the run in `<state-root>/logins/<construct>/active.json`; recovery uses that run's retained plugin artifact.
@@ -72,15 +86,20 @@ Use `--bench-root` when launching outside the benchmark checkout.
 The budget begins at container start, including initialization.
 There is no `basic`/`planned` option: benchmark files supply task and planning guidance.
 The selected cards and any engine changes are the requested implementation.
-`--native-telemetry codex` requires native Codex journals and the OTel relay, and refuses a definition without `CODEX_HOME`; `none` disables them.
-The default `auto` enables them when the definition declares `CODEX_HOME`, because the v4 definition has no telemetry field; batch entries accept the same `native_telemetry` key.
+`--native-telemetry codex` requires native Codex journals and the OTel relay, and refuses a definition without `CODEX_HOME`; `claude` does the same for Claude Code and `CLAUDE_CONFIG_DIR`; `none` disables the relay.
+The default `auto` enables them for whichever of `CODEX_HOME` or `CLAUDE_CONFIG_DIR` the definition declares, because the v4 definition has no telemetry field; batch entries accept the same `native_telemetry` key.
+For Claude Code the relay is configured through the environment (`CLAUDE_CODE_ENABLE_TELEMETRY` and the `OTEL_*` exporter variables, prompts and tool details never logged), since Claude Code reads its exporter nowhere else; the host sets only those variables, and records them.
 A `restricted` network runs its egress proxy with the candidate image's own `python3`; an image without it is refused before launch with `restricted_network_requires_python3`.
 
 Each run retains its workspace, snapshots, stopped final workspace, grading-source decision, selected definition and plugin artifacts, sanitized observations, and independent grades under `runs/karn/<run-id>/` by default.
 The immutable schema 2 record lives under `private-results/results/<candidate-hash>/<run-id>/`.
 Estimated cost is API-equivalent USD, not the subscription bill.
+`cost_breakdown` beside it tallies tokens and USD by type: uncached input, cache reads, cache writes, 1-hour cache writes (Anthropic prices them above the 5-minute ones), and output.
 Agent turns count model responses plus tool calls; missing measurements remain null with an explanation.
 Turns, usage, and cost are complete only for a Codex version whose journal and telemetry were qualified against scripted ground truth (0.153.4 and 0.157.1); qualify another offline, without credentials, with `scripts/qualify_codex_telemetry.py --image IMAGE --native-version VERSION --output DIR`.
+Claude Code runs are read from its session transcripts, subagents included, with the OTel stream as a cross-check; a compaction's own request appears only in OTel.
+No Claude Code version is qualified yet, so Claude measurements are marked partial with `native_version_not_qualified`.
+Qualify a version from a real run whose relay was on: `scripts/qualify_claude_telemetry.py runs/karn/RUN_ID --out proof.json` checks that both streams agree request by request; commit a qualifying proof with that run's `observations.events.jsonl` under `tests/fixtures/karn_observations_claude_<version>/` and add the version to `QUALIFIED_CLAUDE_VERSIONS`.
 FDN coverage lists tested and uncovered cards explicitly.
 Run metadata fingerprints the actual host grading suites, test helpers, and replay identity maps; unavailable hashes remain explicit observations.
 

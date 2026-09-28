@@ -67,7 +67,7 @@ Audited tests are never visible to the agent. Agent-written tests are harvested 
 
 ## Quickstart
 
-Use Python 3.13, Docker, Karn on the build host, and a host Codex CLI for subscription enrollment.
+Use Python 3.13, Docker, Karn on the build host, and a host Codex or Claude Code CLI for subscription enrollment.
 Install the benchmark with `pip install -e .`.
 SilverquiLLM runs a completed Karn build by itself; it needs no Ozolith package.
 
@@ -84,7 +84,8 @@ silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --
 Grading runs the agent's code only inside the grader container: no network, no access to your home directory, environment, or login.
 
 The example selects `gpt-6-astra` and the existing Codex login plugin, with no custom skills or polling controller.
-Each run records available grades, API-equivalent estimated cost, model responses, tool calls, and observation completeness.
+The Claude examples (`bare-claude-opus`, `bare-claude-sonnet`, and the cheap `bare-claude-haiku`) run Claude Code on a Claude subscription through Karn's Claude login plugin, enrolled the same way with `--construct bare-claude-haiku`.
+Each run records available grades, API-equivalent estimated cost with its per-type breakdown, model responses, tool calls, and observation completeness.
 Failed and interrupted runs remain useful data; collection has no leaderboard eligibility gate.
 
 See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retained artifacts, and historical commands.

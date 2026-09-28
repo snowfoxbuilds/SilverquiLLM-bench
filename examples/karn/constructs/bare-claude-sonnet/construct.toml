@@ -1,0 +1,65 @@
+extends = "claude@1"
+mode = "automaton"
+model = "claude-sonnet-5-5"
+effort = "max"
+
+[runtime]
+main = ["python3", "/opt/construct/entrypoint.py", "--adapter", "claude"]
+initializer = ["python3", "/opt/construct/init.py", "--adapter", "claude"]
+timeout_seconds = 86400
+
+[runtime.environment]
+CLAUDE_CONFIG_DIR = "/native"
+# No telemetry, error reporting or update checks to hosts outside the egress list.
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+
+# Inference, and the subscription token refresh (Claude Code's OAuth TOKEN_URL).
+[runtime.egress]
+mode = "restricted"
+https_hosts = ["api.anthropic.com", "platform.claude.com"]
+
+[[runtime.mounts]]
+name = "input"
+target = "/input"
+source = { kind = "runtime", value = "input" }
+persistent = false
+access = "read_only"
+purpose = "input"
+
+[[runtime.mounts]]
+name = "output"
+target = "/output"
+source = { kind = "runtime", value = "output" }
+persistent = false
+access = "read_write"
+purpose = "output"
+
+[[runtime.mounts]]
+name = "workspace"
+target = "/workspace"
+source = { kind = "runtime", value = "workspace" }
+persistent = false
+access = "read_write"
+purpose = "workspace"
+
+[[runtime.files]]
+name = "prompt"
+mount = "input"
+path = "prompt.md"
+direction = "input"
+schema = true
+
+[[runtime.files]]
+name = "result"
+mount = "output"
+path = "result.json"
+direction = "output"
+schema = { type = "object", required = ["contract_version", "outcome"], properties = { contract_version = { const = 0 }, outcome = { enum = ["completed", "failed", "invalid_input"] } } }
+
+[[runtime.plugins]]
+id = "karn-claude-login"
+version = "0.1.0"
+
+[image.native_cli]
+version = "2.1.284"
+integrity = "sha512-hjjPgN4u8DvnzZqWDYnU5xxQkykuUrkUoVeeutVLXjrhx4qeRPmwgZ69BFAHmV42FBRdiRwbLbiDE9nkQdAE8g=="
