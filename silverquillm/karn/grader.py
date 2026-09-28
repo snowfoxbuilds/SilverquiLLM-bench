@@ -38,7 +38,15 @@ from silverquillm.grade_worker import EVALUATION_SENTINEL
 
 from .definition import KarnError, strict_json
 
-DEFAULT_GRADER_IMAGE = "silverquillm-grader:local"
+# One pinned base per graded Python minor version: grading runs on the candidate's own
+# minor version, never the bench's (KARN-BENCHMARK-CONTRACT.md, Grading isolation).
+GRADER_BASES = {
+    "3.13": "python:3.13-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285",
+    "3.14": "python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d",
+}
+# SilverquiLLM itself runs inside the grader, so no candidate can be older than it requires.
+MINIMUM_PYTHON = (3, 13)
+LEGACY_PYTHON = "3.13"
 DEFAULT_GRADING_TIMEOUT = 3600
 PROBE_TIMEOUT = 60
 SUITE_TIMEOUT = 60
@@ -53,6 +61,7 @@ IMAGE_CONTEXT = Path(__file__).with_name("grader_image")
 PACKAGE_ROOT = "/opt/sq"
 GRADE_ROOT = "/grade"
 GRADER_LABEL = "org.silverquillm.grader"
+GRADER_PYTHON_LABEL = GRADER_LABEL + ".python"
 DOCKER_FAILURES = {125, 126, 127}
 # Attached output still reaches the daemon's log driver; cap what it keeps on disk.
 LOG_OPTIONS = ("--log-driver", "json-file", "--log-opt", "max-size=1m", "--log-opt", "max-file=1")
@@ -73,6 +82,11 @@ WORKER = (
     "import sys; sys.path.insert(0, sys.argv[1]); "
     "from silverquillm.grade_worker import main; sys.exit(main(sys.argv[1], sys.argv[2]))"
 )
+# Reads only the interpreter's own version: -S skips site, so no candidate module is imported.
+PYTHON_PROBE = "import sys; sys.stdout.write('%d.%d.%d\\n' % sys.version_info[:3])"
+PYTHON_PROBE_BYTES = 64
+PYTHON_PROBE_LIMITS = ("--pids-limit", "16", "--memory", "256m", "--memory-swap", "256m")
+PYTHON_VERSION = re.compile(r"(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\n")
 # Candidate output is discarded before its first import; only the exit code counts.
 PROBE = (
     "import os, sys; quiet = os.open(os.devnull, os.O_WRONLY); os.dup2(quiet, 1); os.dup2(quiet, 2); "
@@ -175,35 +189,42 @@ class DockerRunner:
         return DockerRun(code, text, bytes(stdout))
 
     def remove(self, name: str) -> None:
+        # -v: a candidate image's declared VOLUMEs become anonymous volumes, which a forced
+        # removal would otherwise leave behind with whatever the container wrote to them.
         try:
             subprocess.run(
-                ["docker", "rm", "-f", name], capture_output=True, timeout=60, check=False
+                ["docker", "rm", "-f", "-v", name], capture_output=True, timeout=60, check=False
             )
         except (OSError, subprocess.TimeoutExpired):
             pass
 
-    def image_id(self, reference: str) -> str | None:
+    def _inspect(self, reference: str, template: str) -> str | None:
         try:
             result = subprocess.run(
-                ["docker", "image", "inspect", "--format", "{{.Id}}", reference],
+                ["docker", "image", "inspect", "--format", template, reference],
                 capture_output=True,
                 timeout=30,
                 check=False,
             )
         except (OSError, subprocess.TimeoutExpired):
             return None
-        value = result.stdout.decode(errors="replace").strip()
-        return (
-            value if not result.returncode and re.fullmatch(r"sha256:[0-9a-f]{64}", value) else None
-        )
+        return None if result.returncode else result.stdout.decode(errors="replace").strip()
 
-    def build(self, tag: str, context: Path) -> int:
+    def image_id(self, reference: str) -> str | None:
+        value = self._inspect(reference, "{{.Id}}")
+        return value if value and re.fullmatch(r"sha256:[0-9a-f]{64}", value) else None
+
+    def image_python(self, reference: str) -> str | None:
+        """The minor version a grader image was built for, from its build label."""
+        return self._inspect(reference, f'{{{{index .Config.Labels "{GRADER_PYTHON_LABEL}"}}}}')
+
+    def build(self, tag: str, context: Path, *, base: str, python: str) -> int:
+        arguments = [
+            "docker", "build", "--pull=false", "--build-arg", f"BASE={base}",
+            "--label", f"{GRADER_PYTHON_LABEL}={python}", "-t", tag, str(context),
+        ]  # fmt: skip
         try:
-            return subprocess.run(
-                ["docker", "build", "--pull=false", "-t", tag, str(context)],
-                timeout=1800,
-                check=False,
-            ).returncode
+            return subprocess.run(arguments, timeout=1800, check=False).returncode
         except (OSError, subprocess.TimeoutExpired):
             return 1
 
@@ -221,17 +242,116 @@ def _release(process: subprocess.Popen, readers: list[threading.Thread]) -> None
                     stream.close()
 
 
+def grader_tag(python: str) -> str:
+    return f"silverquillm-grader:py{python}"
+
+
 def build_grader_image(
-    tag: str = DEFAULT_GRADER_IMAGE, *, docker: DockerRunner | None = None
+    python: str, tag: str | None = None, *, docker: DockerRunner | None = None
 ) -> str:
-    """Build the pinned grader image explicitly; runs never build it implicitly."""
+    """Build the grader for one Python minor version explicitly; runs never build it."""
+    if python not in GRADER_BASES:
+        raise GraderError("grader_python_unsupported")
     docker = docker or DockerRunner()
-    if docker.build(tag, IMAGE_CONTEXT):
+    tag = tag or grader_tag(python)
+    if docker.build(tag, IMAGE_CONTEXT, base=GRADER_BASES[python], python=python):
         raise GraderError("grader_image_build_failed")
     image_id = docker.image_id(tag)
     if image_id is None:
         raise GraderError("grader_image_unavailable")
     return image_id
+
+
+def candidate_python(image_id: str, docker: DockerRunner | None = None) -> str:
+    """The version of ``python3`` on the candidate image's default PATH, as ``X.Y.Z``.
+
+    The image is candidate-supplied, so the probe is sandboxed like a grading container,
+    with no mounts and a few bytes of accepted output. A wrong answer can only misgrade
+    the candidate that gave it: it selects among bench-built graders, nothing else.
+    """
+    docker = docker or DockerRunner()
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+        raise GraderError("candidate_image_id_invalid")
+    name = "sq-probe-" + uuid.uuid4().hex
+    arguments = [
+        "run", "--rm", "--pull", "never", "--name", name, "--label", GRADER_LABEL + "=1",
+        "--network", "none", "--user", f"{os.getuid()}:{os.getgid()}", "--read-only",
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--no-healthcheck",
+        *PYTHON_PROBE_LIMITS,
+        "--tmpfs", "/tmp:rw,nosuid,nodev,size=16m,mode=1777", "--workdir", "/tmp",
+        *LOG_OPTIONS, "--entrypoint", "python3", image_id, "-I", "-S", "-c", PYTHON_PROBE,
+    ]  # fmt: skip
+    try:
+        result = docker.run(arguments, timeout=PROBE_TIMEOUT, stdout_limit=PYTHON_PROBE_BYTES)
+    except BaseException:
+        with contextlib.suppress(BaseException):
+            docker.remove(name)
+        raise
+    if result.code is None or result.code in DOCKER_FAILURES:
+        docker.remove(name)
+    if result.code == 125:
+        # Docker itself failed before running anything; that is not the candidate's answer.
+        raise GraderError("python_probe_container_failed", result.stderr_tail)
+    match = PYTHON_VERSION.fullmatch(result.stdout.decode("ascii", errors="replace"))
+    if result.code != 0 or match is None:
+        raise GraderError("candidate_python_unsupported", result.stderr_tail)
+    version = tuple(int(part) for part in match.groups())
+    if version[:2] < MINIMUM_PYTHON:
+        raise GraderError("candidate_python_unsupported")
+    return ".".join(map(str, version))
+
+
+def grader_for(
+    python: str,
+    reference: str | None = None,
+    *,
+    docker: DockerRunner | None = None,
+    **options,
+) -> ContainerGrader:
+    """The local grader built for ``python``'s minor version; ``reference`` overrides its tag.
+
+    An override must still be a grader built for that minor version.
+    """
+    docker = docker or DockerRunner()
+    minor = python.rpartition(".")[0]
+    if reference is None and minor not in GRADER_BASES:
+        raise GraderError("grader_image_unavailable")
+    image_id = docker.image_id(reference or grader_tag(minor))
+    if image_id is None:
+        raise GraderError("grader_image_unavailable")
+    if docker.image_python(image_id) != minor:
+        raise GraderError("grader_python_mismatch")
+    return ContainerGrader(image_id, docker=docker, candidate_python=python, **options)
+
+
+def legacy_grader(
+    reference: str | None = None, *, docker: DockerRunner | None = None, **options
+) -> ContainerGrader:
+    """The 3.13 grader for work that predates grading on the candidate's Python.
+
+    Like every grader it must carry its build label, so an image built before graders
+    were labeled is refused until `grader build` rebuilds it.
+    """
+    docker = docker or DockerRunner()
+    image_id = docker.image_id(reference or grader_tag(LEGACY_PYTHON))
+    if image_id is None:
+        raise GraderError("grader_image_unavailable")
+    if docker.image_python(image_id) != LEGACY_PYTHON:
+        raise GraderError("grader_python_mismatch")
+    return ContainerGrader(image_id, docker=docker, **options)
+
+
+def select_grader(
+    candidate_image_id: str,
+    reference: str | None = None,
+    *,
+    docker: DockerRunner | None = None,
+    **options,
+) -> ContainerGrader:
+    """Refuse before launch unless a grader exists for the candidate's own Python."""
+    docker = docker or DockerRunner()
+    python = candidate_python(candidate_image_id, docker)
+    return grader_for(python, reference, docker=docker, **options)
 
 
 def _mount(source: Path, target: str, readonly: bool) -> str:
@@ -249,13 +369,15 @@ class ContainerGrader:
         timeout: int = DEFAULT_GRADING_TIMEOUT,
         limits: GraderLimits | None = None,
         docker: DockerRunner | None = None,
+        candidate_python: str | None = None,
     ):
         self.image_id, self.timeout = image_id, timeout
+        self.candidate_python = candidate_python
         self.limits = limits or GraderLimits()
         self.docker = docker or DockerRunner()
 
     @classmethod
-    def from_image(cls, reference: str = DEFAULT_GRADER_IMAGE, **options) -> ContainerGrader:
+    def from_image(cls, reference: str, **options) -> ContainerGrader:
         docker = options.pop("docker", None) or DockerRunner()
         image_id = docker.image_id(reference)
         if image_id is None:
@@ -263,7 +385,11 @@ class ContainerGrader:
         return cls(image_id, docker=docker, **options)
 
     def isolation(self) -> dict:
-        return {"mode": "container", "grader_image_id": self.image_id, "network": "none"}
+        isolation = {"mode": "container", "grader_image_id": self.image_id, "network": "none"}
+        if self.candidate_python is not None:
+            isolation["candidate_python"] = self.candidate_python
+            isolation["grader_python"] = self.candidate_python.rpartition(".")[0]
+        return isolation
 
     def _container(
         self, mounts, command: list[str], timeout: float, *, stdout_limit: int = 0
@@ -527,7 +653,6 @@ def evaluation_from_json(raw: bytes) -> FullEvalResult:
 
 
 def evaluate_legacy(run_dir: Path, cards_dir: Path, engine_dir: Path) -> FullEvalResult:
-    grader = ContainerGrader.from_image(
-        os.environ.get("SILVERQUILLM_GRADER_IMAGE", DEFAULT_GRADER_IMAGE)
-    )
+    # The --image lineage predates grading on the candidate's Python and keeps 3.13.
+    grader = legacy_grader(os.environ.get("SILVERQUILLM_GRADER_IMAGE") or None)
     return grader.evaluate_legacy(run_dir, cards_dir, engine_dir)

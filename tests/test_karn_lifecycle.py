@@ -16,7 +16,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from silverquillm.karn import recovery
+from silverquillm.karn import execution, recovery
 from silverquillm.karn.batching import KarnScheduler
 from silverquillm.karn.definition import KarnError, canonical, digest, load_candidate
 from silverquillm.karn.execution import login_profile, run_benchmark
@@ -43,6 +43,10 @@ def _grade_without_docker(request, monkeypatch):
         "from_image",
         classmethod(lambda cls, reference=None, **kw: local_grader(**kw)),
     )
+    monkeypatch.setattr(
+        execution, "select_grader", lambda image_id, reference=None, **kw: local_grader(**kw)
+    )
+    monkeypatch.setattr(recovery, "legacy_grader", lambda reference=None, **kw: local_grader(**kw))
 
 
 def batch(directory: Path, entries: int = 2) -> Path:
@@ -133,6 +137,166 @@ def test_login_contention_defers_the_batch_entry_instead_of_consuming_it(tmp_pat
     assert runner.run_until_idle() == 1
     state = json.loads((directory / "state/trial.json").read_text())
     assert [row["status"] for row in state["runs"]] == ["done"]
+
+
+def test_batch_entries_select_their_grader_by_the_candidates_python(tmp_path, monkeypatch):
+    from silverquillm.karn.grader import GraderError
+
+    directory = batch(tmp_path / "batches", entries=2)
+    opts = options(tmp_path / "fixture")
+    (directory / "trial.toml").write_text(
+        'format="karn-v4"\n'
+        + (
+            "[[runs]]\nbuild_output="
+            + json.dumps(str(opts["build_output"]))
+            + '\nconstruct="bare"\nbenchmark="example"\n'
+        )
+        * 2
+    )
+    selections = []
+
+    def select(image_id, reference=None, **kwargs):
+        selections.append((image_id, reference))
+        if len(selections) == 1:
+            raise GraderError("candidate_python_unsupported")
+        return local_grader(candidate_python="3.14.4", **kwargs)
+
+    monkeypatch.setattr(execution, "select_grader", select)
+    runner = scheduler(
+        opts["bench_root"],
+        directory,
+        executor=lambda **kwargs: run_benchmark(**kwargs, host=FixtureHost()),
+        grader_image="custom-grader",
+    )
+    assert runner.run_until_idle() == 2
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert [(row["status"], row.get("error")) for row in state["runs"]] == [
+        ("failed", "candidate_python_unsupported"),
+        ("done", None),
+    ]
+    assert not (opts["bench_root"] / "runs" / state["runs"][0]["run_id"]).exists()
+    candidate = load_candidate(opts["build_output"], "bare", image_inspector=lambda r: {"Id": r})
+    assert selections == [(candidate.image_id, "custom-grader")] * 2
+    [(_, record)] = list(iter_run_records(opts["bench_root"] / "records"))
+    assert record.run_metadata["grading_isolation"]["candidate_python"] == "3.14.4"
+
+
+def test_recovery_grades_on_the_recorded_python_without_running_the_image(tmp_path, monkeypatch):
+    from silverquillm.karn import grader as grader_module
+
+    opts = options(tmp_path, grader=local_grader(candidate_python="3.14.4"))
+
+    class Killed(FixtureHost):
+        def run(self, *args, **kwargs):
+            raise SystemExit(137)
+
+    with pytest.raises(SystemExit):
+        run_benchmark(**{**opts, "host": Killed()}, run_id="killed")
+    inputs = json.loads((opts["results_dir"] / "killed/run-input.json").read_text())
+    assert inputs["candidate_python"] == "3.14.4"
+    docker = ContainerDocker(running=False)
+    monkeypatch.setattr(
+        recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
+    )
+    monkeypatch.setattr(
+        grader_module, "candidate_python", lambda *a, **k: pytest.fail("recovery probed the image")
+    )
+    chosen = []
+
+    def grader_for(python, reference=None, **kwargs):
+        chosen.append((python, reference))
+        return local_grader(candidate_python=python, **kwargs)
+
+    monkeypatch.setattr(recovery, "grader_for", grader_for)
+    record = recovery.recover_benchmark(
+        run_id="killed",
+        spec={},
+        grader_image="custom-grader",
+        **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+    )
+    assert chosen == [("3.14.4", "custom-grader")]
+    assert record.run_metadata["grading_isolation"]["candidate_python"] == "3.14.4"
+    assert record.run_metadata["grading_isolation"]["grader_python"] == "3.14"
+
+
+def test_recovery_of_a_run_launched_before_versions_were_recorded_keeps_the_313_grader(
+    tmp_path, monkeypatch
+):
+    opts = killed_direct_run(tmp_path)
+    inputs = json.loads((opts["results_dir"] / "killed/run-input.json").read_text())
+    assert "candidate_python" not in inputs
+    docker = ContainerDocker(running=False)
+    monkeypatch.setattr(
+        recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
+    )
+    references = []
+    monkeypatch.setattr(
+        recovery,
+        "legacy_grader",
+        lambda reference=None, **kw: references.append(reference) or local_grader(**kw),
+    )
+    record = recovery.recover_benchmark(
+        run_id="killed",
+        spec={},
+        grader_image="custom-grader",
+        **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+    )
+    assert references == ["custom-grader"]
+    assert "candidate_python" not in record.run_metadata["grading_isolation"]
+
+
+@pytest.mark.parametrize(("label", "accepted"), [("3.13", True), ("3.14", False), (None, False)])
+def test_legacy_recovery_requires_a_grader_labeled_313(tmp_path, monkeypatch, label, accepted):
+    from silverquillm.karn import grader as grader_module
+    from silverquillm.karn.grader import GraderError
+
+    from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
+
+    opts = killed_direct_run(tmp_path)
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: SimpleNamespace(docker=ContainerDocker(running=False), plugin_cache=None),
+    )
+
+    class Labeled(LocalDocker):
+        def image_python(self, reference):
+            assert reference == FIXTURE_IMAGE_ID
+            return label
+
+    monkeypatch.setattr(grader_module, "DockerRunner", Labeled)
+    monkeypatch.setattr(recovery, "legacy_grader", grader_module.legacy_grader)
+    def recover():
+        return recovery.recover_benchmark(
+            run_id="killed",
+            spec={},
+            **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+        )
+
+    if accepted:
+        record = recover()
+        assert record.run_metadata["grading_isolation"]["grader_image_id"] == FIXTURE_IMAGE_ID
+    else:
+        with pytest.raises(GraderError, match="grader_python_mismatch"):
+            recover()
+
+
+@pytest.mark.parametrize("recorded", ["3.14", "3.14.4\n", 3.14, "3.14.4; rm", None])
+def test_recovery_refuses_a_malformed_recorded_python(tmp_path, monkeypatch, recorded):
+    opts = killed_direct_run(tmp_path)
+    path = opts["results_dir"] / "killed/run-input.json"
+    inputs = json.loads(path.read_text())
+    path.write_text(json.dumps({**inputs, "candidate_python": recorded}))
+    docker = ContainerDocker(running=False)
+    monkeypatch.setattr(
+        recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
+    )
+    with pytest.raises(KarnError, match="interrupted_run_input_invalid:candidate_python"):
+        recovery.recover_benchmark(
+            run_id="killed",
+            spec={},
+            **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+        )
 
 
 def test_direct_run_refuses_a_busy_login_before_creating_evidence(tmp_path):
@@ -620,9 +784,7 @@ SIGNAL_RUNNER = textwrap.dedent(
 
     execution.DockerHost = lambda **kwargs: BlockingHost()
     from tests.grader_fixtures import local_grader
-    execution.ContainerGrader.from_image = classmethod(
-        lambda cls, reference=None, **kwargs: local_grader(**kwargs)
-    )
+    execution.select_grader = lambda image_id, reference=None, **kwargs: local_grader(**kwargs)
     load = execution.load_candidate
     execution.load_candidate = lambda path, construct, **kwargs: load(
         path, construct, image_inspector=lambda reference: {"Id": reference}

@@ -62,6 +62,8 @@ The bench imposes no production test, documentation, or lint workflow gate befor
 Audited Eval grades the harvested Workspace against the host-side grading suites.
 Candidate-written tests are artifacts and do not replace the grading suites.
 The candidate may run available tests while implementing; iteration remains the candidate's responsibility.
+The bench mounts a read-only test toolchain into every candidate container and adds it to `PYTHONPATH`: pinned, hash-checked pure-Python wheels of pytest and pytest-timeout vendored in the repo, so `python3 -m pytest` works on whatever Python the candidate image provides (grilling 2026-09-28).
+Candidates stay generic: the bench never requires a construct to bake its test tooling.
 Container termination and declared result files describe execution, while Audited Eval describes implementation correctness.
 
 ### Grading isolation
@@ -69,6 +71,10 @@ Container termination and declared result files describe execution, while Audite
 Grading imports and runs code the candidate wrote, so it never executes on the benchmark host.
 Every engine-viability probe and grading pass runs in a bench-owned grader image, built explicitly and referenced by image ID, with no network, the operator's UID, a read-only root, dropped capabilities, resource limits, an allowlisted environment, and read-only mounts of only the selected Workspace, SilverquiLLM, and the grading inputs.
 A run refuses before launch when the grader image is missing; it never builds or pulls it.
+Grading runs on the candidate's own Python minor version (grilling 2026-09-28).
+Before launch the bench reads the version of `python3` on the candidate image's default `PATH`, in a container locked down like the grader, and selects the grader image built for that minor version from a pinned base.
+A candidate without `python3`, or older than 3.13 (the floor SilverquiLLM itself requires), is refused as `candidate_python_unsupported`; a supported version without a built grader is refused as `grader_image_unavailable`.
+The Run Record states the candidate's Python version, and SilverquiLLM's tests run on every minor version that has a grader.
 Nothing is mounted writable: the result returns as one size-capped, framed line on the container's stdout and is untrusted data, accepted only in the exact evaluation shape with bounded counts; a timeout, failure, oversized or rejected output records absent grades with the reason.
 Each Run Record states its grading isolation and grader image ID.
 Isolation protects the host's files, credentials, and network; it does not make scores tamper-proof, because candidate code shares the process that counts its results.

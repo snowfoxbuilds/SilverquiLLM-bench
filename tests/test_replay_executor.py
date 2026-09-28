@@ -1800,7 +1800,7 @@ class TestNoncastZoneCastEngineCompat:
         # Engine-agnostic: an engine without cast modes stamps no disposition;
         # an engine with them would only do so under an explicit FLASHBACK
         # mode, which this executor path selects only when the engine offers
-        # it (covered on the hob-medium side in engine_tests/test_replay_simulate.py).
+        # it (covered in benchmarks/hob-medium/replay_tests/test_replay_simulate.py).
         assert getattr(so, "departure_zone", None) in (None, Zone.EXILE)
 
 

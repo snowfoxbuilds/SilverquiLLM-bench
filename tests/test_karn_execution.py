@@ -65,6 +65,7 @@ class FixtureHost:
     def run(self, candidate, workspace, evidence_dir, prompt, **kwargs):
         evidence_dir.mkdir(parents=True)
         assert "PR title" not in prompt and "proposal.json" not in prompt
+        self.test_toolchain = kwargs["test_toolchain"]
         if self.corrupt:
             (workspace / "engine/card.py").write_text("this is not valid python !!!")
         result = HostResult(
@@ -118,6 +119,7 @@ def test_direct_run_records_three_dimensions_and_explicit_missing_measurements(t
     assert record.run_metadata["benchmark_input"]["baseline_commit"]
     assert record.run_metadata["git_history"]["captured"]
     assert len(record.run_metadata["git_history"]["commits"]) == 1
+    assert record.run_metadata["test_toolchain"] == opts["host"].test_toolchain.to_dict()
     with pytest.raises(RunRecordExistsError):
         write_record(opts["results_repo"], record)
 
@@ -343,6 +345,19 @@ def test_schema2_rejects_impossible_or_absent_score_numbers(tmp_path):
         damaged = copy.deepcopy(result)
         damaged.scores["card_correctness"].update(change)
         with pytest.raises(InvalidRunRecordError):
+            damaged.validate()
+    good = result.run_metadata["test_toolchain"]
+    for toolchain in (
+        None,
+        {"digest": "sha256:short", "target": good["target"]},
+        {"digest": None},
+        {**good, "target": "run/silverquillm/test-toolchain"},
+        {**good, "target": "/opt/test-toolchain"},
+        {**good, "target": "/run/silverquillm/x/../../etc"},
+    ):
+        damaged = copy.deepcopy(result)
+        damaged.manifest["run_metadata"]["test_toolchain"] = toolchain
+        with pytest.raises(InvalidRunRecordError, match="test toolchain"):
             damaged.validate()
     result.manifest["run_metadata"]["run_date"] = 7
     with pytest.raises(InvalidRunRecordError, match="run_date"):
@@ -647,6 +662,7 @@ def test_recovery_of_uncertain_record_stops_writers_and_appends_linked_evidence(
     assert recovered.run_metadata["recovery_of"] == original.run_id
     assert recovered.run_metadata["benchmark_input"] == original.run_metadata["benchmark_input"]
     assert recovered.candidate == original.candidate
+    assert recovered.run_metadata["test_toolchain"] == original.run_metadata["test_toolchain"]
     assert all(score["tests_passed"] == 0 for score in recovered.scores.values())
     assert (run_dir / "workspace_final/engine/card.py").read_text() == "value = 1\n"
     assert recovered.run_metadata["grading_source"]["selected"] != "workspace_final"

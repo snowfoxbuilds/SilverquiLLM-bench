@@ -20,7 +20,14 @@ from .execution import (
     observation_session,
     run_lock,
 )
-from .grader import DEFAULT_GRADER_IMAGE, DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError
+from .grader import (
+    DEFAULT_GRADING_TIMEOUT,
+    PYTHON_VERSION,
+    ContainerGrader,
+    GraderError,
+    grader_for,
+    legacy_grader,
+)
 from .grading_inputs import grading_inputs
 from .host import DockerHost, HostResult
 from .login import (
@@ -70,7 +77,7 @@ def recover_run(
     results_repo: Path,
     state_root: Path,
     collector_host=None,
-    grader_image: str = DEFAULT_GRADER_IMAGE,
+    grader_image: str | None = None,
     grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
     grader: ContainerGrader | None = None,
 ) -> KarnRunRecord:
@@ -106,7 +113,7 @@ def recover_benchmark(
     results_repo: Path,
     state_root: Path,
     collector_host=None,
-    grader_image: str = DEFAULT_GRADER_IMAGE,
+    grader_image: str | None = None,
     grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
     grader: ContainerGrader | None = None,
 ) -> KarnRunRecord:
@@ -263,6 +270,21 @@ def _retained_candidate(run_dir: Path, inputs: dict, identity: KarnIdentity):
     )
 
 
+def _recovery_grader(inputs: dict, reference: str | None, timeout: int) -> ContainerGrader:
+    """Grade on the Python version the run was launched with, never a fresh probe.
+
+    Recovery never runs the candidate image, which may be gone; the version is a fact
+    of the launch. A run launched before versions were recorded keeps the 3.13 grader
+    it would have had, and its record states no candidate version.
+    """
+    if "candidate_python" not in inputs:
+        return legacy_grader(reference, timeout=timeout)
+    python = inputs["candidate_python"]
+    if not isinstance(python, str) or not PYTHON_VERSION.fullmatch(python + "\n"):
+        raise KarnError("interrupted_run_input_invalid:candidate_python")
+    return grader_for(python, reference, timeout=timeout)
+
+
 def _owns_pending_login(profile, run_id: str) -> bool:
     pending = profile.pending()
     return pending is not None and pending.get("run_id") == run_id
@@ -392,7 +414,7 @@ def _recover(
     ):
         raise KarnError("retained_definition_identity_mismatch")
     benchmark = load_benchmark(bench_root, inputs["benchmark"])
-    grader = grader or ContainerGrader.from_image(grader_image, timeout=grading_timeout)
+    grader = grader or _recovery_grader(inputs, grader_image, grading_timeout)
     profile = login_profile(state_root, inputs["login"])
     observed = HostResult(
         run_id,
@@ -500,6 +522,9 @@ def _recover(
         "measurements": measurements,
         "git_history": retain_git_history(run_dir / "workspace", run_dir),
     }
+    if "test_toolchain" in inputs:
+        # Recovery never relaunches the candidate; the toolchain is the one the run started with.
+        metadata["test_toolchain"] = inputs["test_toolchain"]
     if benchmark.identity != inputs["benchmark_identity"]:
         scores = missing_scores("benchmark_changed_since_run_started")
     elif selection and selection["selected"]:

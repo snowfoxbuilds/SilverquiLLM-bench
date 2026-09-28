@@ -35,7 +35,7 @@ from silverquillm.replay.types import (
     Zone,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # Stable FDN grpIds (from data/replays/card_id_map.json).
 PLAINS, ISLAND, FOREST = 95192, 95194, 95200

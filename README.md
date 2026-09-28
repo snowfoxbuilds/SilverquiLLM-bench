@@ -101,7 +101,7 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | `silverquillm queue ls [--json]` | One-shot, read-only view of the batch queue, including interrupted, partially observed, and unsupported batches. |
 | `silverquillm top` | Live, read-only view of the batch queue (`q` quits). |
 | `silverquillm login --build-output … --construct …` | Enroll the construct's own subscription login through its login plugin. |
-| `silverquillm grader build` | Build the pinned, network-less grader image that runs every grading pass. |
+| `silverquillm grader build [--python X.Y]` | Build the pinned, network-less grader images, one per graded Python version; each run is graded on its candidate's version. |
 | `silverquillm results-init PATH` | Lay out an empty private results repository. |
 | `silverquillm validate …` | Validate 17lands replays against the engine. |
 | `silverquillm legacy run-image\|smoke\|resume\|chain\|rescore\|logs …` | The historical `--image` entrypoint lineage and its run directories. |

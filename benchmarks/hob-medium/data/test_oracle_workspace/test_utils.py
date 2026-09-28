@@ -39,8 +39,6 @@ def card_colors(card: Any) -> set[str]:
 
     Hybrid pips contribute both options. {C} and {X} contribute nothing.
     Returns an empty set for cards with no mana cost or only colorless/X pips.
-    Used by audited tests that previously asserted against a non-existent
-    ``card.colors`` attribute.
     """
     colors: set[str] = set()
     cost = getattr(card, "mana_cost", None)
@@ -339,14 +337,24 @@ def resolve_stack(game: GameState) -> None:
     _resolve_top_of_stack(game)
 
 
+def card_abilities(card: Any) -> list:
+    """``card``'s activated abilities, followed by any mana abilities it lists
+    only in ``get_mana_abilities()``, so either placement of a mana ability
+    can be activated by index."""
+    abilities = list(card.get_activated_abilities())
+    mana = getattr(card, "get_mana_abilities", lambda: [])()
+    return abilities + [ability for ability in mana if not any(ability is a for a in abilities)]
+
+
 def activate_card_ability(
     game: GameState,
     player: Any,
     source_card: Any,
     index: int = 0,
 ) -> None:
-    """Activate ``source_card``'s activated ability ``index`` through the real
-    engine path — the same bridge the replay executor uses.
+    """Activate ability ``index`` of :func:`card_abilities` (``source_card``'s
+    activated abilities, then its other mana abilities) through the real engine
+    path.
 
     Builds an :class:`~engine.abilities.ActivatedAbilityInstance` from the
     card's :class:`~engine.card.ActivatedAbility` (threading its ``targeting``
@@ -362,7 +370,7 @@ def activate_card_ability(
     from engine.abilities import ActivatedAbilityInstance, activate_ability
     from engine.card import ManaAbility
 
-    ability = source_card.get_activated_abilities()[index]
+    ability = card_abilities(source_card)[index]
     is_mana = isinstance(ability, ManaAbility)
     instance = ActivatedAbilityInstance(
         source=source_card,
@@ -668,6 +676,22 @@ def prefer(player, *decisions):
     player.set_baseline(Intent(pattern=GameRef(), preferences=tuple(decisions)))
 
 
+def payment_preference(game, source):
+    """Preferences that activate ``source``'s mana ability during payment,
+    whether the engine asks for the permanent or for one of its abilities."""
+    from engine.stack import object_current_zone
+
+    zone = object_current_zone(game, source)
+    if zone is None:
+        raise TestSetupError("Mana source has not been placed in a zone")
+    instance = game.refs.instance_id(source, zone)
+    return (
+        Decision.obj(instance=instance),
+        Decision.ability(source=instance),
+        Decision.ability(instance=instance),
+    )
+
+
 def object_preference(game, card):
     from engine.stack import object_current_zone
 
@@ -695,7 +719,7 @@ def ability_instance(game, player, source, index=0):
     from engine.abilities import ActivatedAbilityInstance
     from engine.card import ManaAbility
 
-    descriptor = source.get_activated_abilities()[index]
+    descriptor = card_abilities(source)[index]
     is_mana = isinstance(descriptor, ManaAbility)
     return ActivatedAbilityInstance(
         source=source,

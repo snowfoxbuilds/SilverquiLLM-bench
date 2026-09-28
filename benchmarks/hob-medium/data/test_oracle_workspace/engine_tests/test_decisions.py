@@ -120,7 +120,7 @@ class TestMalformedAttrs:
 
 class TestSurplusAttrTolerance:
     def test_engine_surplus_attr_does_not_break_satisfies(self):
-        # Intent / oracle (general) uses only blessed attrs via the smart
+        # An Intent (general) uses only blessed attrs via the smart
         # constructor; engine (specific) may carry surplus attrs (extra facts
         # the engine knows but the intent never constrains on). The general
         # still subsumes the specific — surplus is inert for matching.

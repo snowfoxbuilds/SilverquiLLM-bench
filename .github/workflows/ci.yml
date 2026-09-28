@@ -44,3 +44,32 @@ jobs:
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
           python -m pytest tests/ -q --basetemp "$tmp/pytest"
+
+  test-py314:
+    # Grading runs on the candidate's own Python minor version, so SilverquiLLM,
+    # which runs inside each pinned grader, is tested on every graded version.
+    # The login-plugin tests skip here: the plugin host stays on 3.13.
+    name: pytest (Python 3.14)
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    needs: test
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Create the Python 3.14 environment
+        run: |
+          uv venv --python 3.14 .venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install
+        run: |
+          uv pip install --python .venv/bin/python -e ".[dev]"
+
+      - name: Test
+        run: |
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          python -m pytest tests/ -q --basetemp "$tmp/pytest"

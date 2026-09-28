@@ -11,7 +11,7 @@ from pathlib import Path
 import click
 
 from .definition import KarnError, load_candidate
-from .grader import DEFAULT_GRADER_IMAGE, DEFAULT_GRADING_TIMEOUT
+from .grader import DEFAULT_GRADING_TIMEOUT, GRADER_BASES
 from .host import DockerHost
 from .interruption import terminate_as_interrupt
 
@@ -53,10 +53,13 @@ def common_options(function):
             ),
             click.option(
                 "--grader-image",
-                default=DEFAULT_GRADER_IMAGE,
-                show_default=True,
+                default=None,
                 envvar="SILVERQUILLM_GRADER_IMAGE",
-                help="Local grader image built by `grader build`; never pulled or built by a run.",
+                help=(
+                    "Local grader image to use instead of the one built for the candidate's "
+                    "Python; it must still be built for that version. Never pulled or built "
+                    "by a run."
+                ),
             ),
             click.option(
                 "--grading-timeout",
@@ -166,7 +169,9 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, **options):
 
     runner = KarnScheduler(batches_dir, replay_without_state=replay_without_state, **options)
     try:
-        ContainerGrader.from_image(options["grader_image"])
+        # Without an override the grader depends on each entry's candidate, checked per run.
+        if options["grader_image"] is not None:
+            ContainerGrader.from_image(options["grader_image"])
         if once:
             with terminate_as_interrupt():
                 executed = runner.run_until_idle()
@@ -254,13 +259,25 @@ def grader():
 
 
 @grader.command("build")
-@click.option("--tag", default=DEFAULT_GRADER_IMAGE, show_default=True)
-def grader_build(tag):
-    """Build the pinned grader image and print its image ID."""
-    from .grader import build_grader_image
+@click.option(
+    "--python",
+    "versions",
+    multiple=True,
+    type=click.Choice(sorted(GRADER_BASES)),
+    help="Python minor version to build a grader for; repeatable. Default: every version.",
+)
+@click.option("--tag", default=None, help="Tag other than silverquillm-grader:pyX.Y; one --python only.")
+def grader_build(versions, tag):
+    """Build pinned grader images and print each one's tag and image ID."""
+    from .grader import build_grader_image, grader_tag
 
+    versions = versions or tuple(sorted(GRADER_BASES))
+    if tag is not None and len(versions) != 1:
+        raise click.UsageError("--tag needs exactly one --python")
     try:
-        click.echo(build_grader_image(tag))
+        for version in versions:
+            image_id = build_grader_image(version, tag)
+            click.echo(f"{tag or grader_tag(version)} {image_id}")
     except KarnError as error:
         raise click.ClickException(str(error)) from None
 

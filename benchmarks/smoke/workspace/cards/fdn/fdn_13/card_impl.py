@@ -70,7 +70,6 @@ class FleetingFlight(Instant):
         from engine.game import add_counter
 
         add_counter(game, target, "+1/+1", 1)
-        # Sync original counters per KEY_DECISIONS
 
         # Flying until end of turn
         creature_ref = target

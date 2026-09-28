@@ -23,5 +23,5 @@ def _grader_docker_is_integration_only(request, monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError("unit test reached the grader's Docker client; inject local_grader()")
 
-    for name in ("run", "image_id", "build", "remove"):
+    for name in ("run", "image_id", "image_python", "build", "remove"):
         monkeypatch.setattr(grader.DockerRunner, name, refuse)
