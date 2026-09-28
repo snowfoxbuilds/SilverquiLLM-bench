@@ -41,9 +41,18 @@ silverquillm grader build
 ```
 
 Grading imports and runs the agent's engine and cards, so it happens only in this bench-owned image: pinned base image and hashed pytest requirements, no network, your UID, a read-only root, dropped capabilities, memory and process limits, and read-only mounts of only the selected workspace, SilverquiLLM, and the grading inputs.
-`run`, `scheduler`, and `recover` refuse before launch with `grader_image_unavailable` when the image is missing; they never build or pull it.
-`--grader-image` (or `SILVERQUILLM_GRADER_IMAGE`) selects another local tag, and `--grading-timeout` (default 3600 seconds) bounds a grading pass.
-A timed-out or failed grading pass records absent scores with `grading_container_failed:<reason>`, never zero, and each record's `grading_isolation` names the grader image ID.
+
+Grading runs on the candidate's own Python minor version.
+`grader build` builds one image per pinned version, tagged `silverquillm-grader:py3.13` and `silverquillm-grader:py3.14`; `--python 3.14` builds just one.
+Before launch, `run` and each batch entry read the version of `python3` in the candidate image, in a sandboxed container with no network or mounts, and select the grader built for that version.
+A candidate without `python3` or older than 3.13 is refused with `candidate_python_unsupported`, and a version with no built grader with `grader_image_unavailable`; neither creates a run.
+Runs never build or pull a grader.
+`recover` grades on the version recorded when the run launched and never runs the candidate image; a run launched before versions were recorded is graded on the 3.13 grader.
+
+`--grader-image` (or `SILVERQUILLM_GRADER_IMAGE`) names another local grader; it must still be one `grader build` made for the candidate's version, or the run is refused with `grader_python_mismatch`.
+`--grading-timeout` (default 3600 seconds) bounds a grading pass.
+A timed-out or failed grading pass records absent scores with `grading_container_failed:<reason>`, never zero.
+Each record's `grading_isolation` names the grader image ID, the candidate's `candidate_python`, and the `grader_python` it was graded on.
 Isolation protects the host, not score integrity: candidate code shares the pytest process that counts its results.
 
 ## Run and inspect

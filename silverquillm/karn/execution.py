@@ -21,7 +21,7 @@ from silverquillm.queue_state import _write_atomically
 
 from .benchmark import load_benchmark, stage_benchmark
 from .definition import KarnError, canonical, load_candidate
-from .grader import DEFAULT_GRADER_IMAGE, DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError
+from .grader import DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError, select_grader
 from .grading_inputs import grading_inputs
 from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
 from .login import LoginProfile
@@ -202,7 +202,7 @@ def run_benchmark(
     collector_host: str | None = None,
     host: DockerHost | None = None,
     collector_factory=None,
-    grader_image: str = DEFAULT_GRADER_IMAGE,
+    grader_image: str | None = None,
     grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
     grader: ContainerGrader | None = None,
     evaluator=None,
@@ -220,7 +220,7 @@ def run_benchmark(
     # Each construct owns its subscription login, as each Ozolith Stack does.
     login = construct if candidate.plugins else None
     selected_login = login_profile(state_root, login)
-    grader = grader or ContainerGrader.from_image(grader_image, timeout=grading_timeout)
+    grader = grader or select_grader(candidate.image_id, grader_image, timeout=grading_timeout)
     evaluator = evaluator or grader.evaluate_run
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     telemetry = select_native_telemetry(candidate, native_telemetry)
@@ -299,6 +299,9 @@ def _collect(
         "native_telemetry": telemetry,
         "started_at": start,
     }
+    if grader.candidate_python is not None:
+        # Recovery grades on this version; it never runs the candidate image again.
+        run_input["candidate_python"] = grader.candidate_python
     _write_atomically(
         run_dir / "run-input.json", canonical(run_input).decode() + "\n", prefix=".run-input-"
     )

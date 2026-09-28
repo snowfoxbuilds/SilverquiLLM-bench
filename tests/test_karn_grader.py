@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
+import re
 import signal
 import subprocess
 import threading
 import time
 from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
@@ -31,6 +34,7 @@ from silverquillm.karn.grader import (
     _evaluation_payload,
     evaluation_from_json,
 )
+from silverquillm.results_repo import InvalidRunRecordError
 
 from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker, local_grader
 from .test_karn_execution import benchmark_data, options
@@ -205,6 +209,8 @@ def test_candidate_prints_during_grading_do_not_reach_the_result_line(tmp_path):
 
 
 REAL_RUN = grader_module.DockerRunner.run
+REAL_BUILD = grader_module.DockerRunner.build
+REAL_IMAGE_PYTHON = grader_module.DockerRunner.image_python
 
 
 def fake_docker_client(tmp_path, monkeypatch, script: str):
@@ -299,16 +305,187 @@ def test_probe_timeout_marks_engine_unusable_and_docker_failure_is_not_blamed_on
     }
 
 
-def test_missing_grader_image_refuses_before_any_run_directory(tmp_path, monkeypatch):
-    monkeypatch.setattr(grader_module.DockerRunner, "image_id", lambda self, reference: None)
+CANDIDATE_IMAGE_ID = "sha256:" + "c" * 64
+PYTHON_3_14 = DockerRun(0, "", b"3.14.4\n")
+
+
+class ProbedDocker(LocalDocker):
+    """Answers the candidate-Python probe and labels each grader image with its version."""
+
+    def __init__(self, answer=PYTHON_3_14, graders=None, **kwargs):
+        super().__init__(**kwargs)
+        self.answer, self.probes = answer, []
+        self.graders = {"silverquillm-grader:py3.14": "3.14"} if graders is None else graders
+
+    def image_id(self, reference):
+        return FIXTURE_IMAGE_ID if reference in self.graders else None
+
+    def image_python(self, reference):
+        assert reference == FIXTURE_IMAGE_ID
+        return next(iter(self.graders.values()))
+
+    def run(self, arguments, *, timeout, stdout_limit=0):
+        if "--entrypoint" in arguments:
+            self.probes.append({"arguments": arguments, "timeout": timeout, "limit": stdout_limit})
+            return self.answer
+        return super().run(arguments, timeout=timeout, stdout_limit=stdout_limit)
+
+
+def test_the_python_probe_runs_the_candidate_image_sandboxed_and_reads_only_a_version():
+    docker = ProbedDocker()
+    assert grader_module.candidate_python(CANDIDATE_IMAGE_ID, docker) == "3.14.4"
+    [probe] = docker.probes
+    arguments = probe["arguments"]
+    options = dict(itertools.pairwise(arguments))
+    assert arguments[:2] == ["run", "--rm"]
+    assert options["--pull"] == "never" and options["--network"] == "none"
+    assert options["--user"] == f"{os.getuid()}:{os.getgid()}"
+    assert "--read-only" in arguments and options["--cap-drop"] == "ALL"
+    assert options["--security-opt"] == "no-new-privileges"
+    assert options["--memory"] == options["--memory-swap"] and options["--pids-limit"]
+    assert "--mount" not in arguments and "--env" not in arguments and "-v" not in arguments
+    assert options["--entrypoint"] == "python3"
+    assert arguments[arguments.index(CANDIDATE_IMAGE_ID) + 1 :] == [
+        "-I", "-S", "-c", grader_module.PYTHON_PROBE,
+    ]  # fmt: skip
+    assert probe["limit"] == grader_module.PYTHON_PROBE_BYTES
+    assert probe["timeout"] == grader_module.PROBE_TIMEOUT
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        b"3.12.9\n", b"2.7.18\n", b"3.14\n", b"3.14.4", b"3.14.4\n\n", b" 3.14.4\n",
+        b"03.14.4\n", b"3.14.4rc1\n", b"3.14.4\r\n", b"", b"\xff\n", b"3.1414.4\n",
+    ],
+)  # fmt: skip
+def test_any_answer_but_a_supported_release_refuses_the_candidate(stdout):
+    docker = ProbedDocker(answer=DockerRun(0, "", stdout))
+    with pytest.raises(GraderError, match="candidate_python_unsupported"):
+        grader_module.candidate_python(CANDIDATE_IMAGE_ID, docker)
+
+
+@pytest.mark.parametrize(
+    ("answer", "reason", "removed"),
+    [
+        (DockerRun(127, "python3: executable file not found"), "candidate_python_unsupported", True),
+        (DockerRun(1, "Traceback"), "candidate_python_unsupported", False),
+        (DockerRun(None, "", overflow=True), "candidate_python_unsupported", True),
+        (DockerRun(None, ""), "candidate_python_unsupported", True),
+        (DockerRun(125, "daemon error"), "python_probe_container_failed", True),
+    ],
+)
+def test_a_failed_probe_refuses_and_removes_a_container_it_may_leave(answer, reason, removed):
+    docker = ProbedDocker(answer=answer)
+    with pytest.raises(GraderError, match=reason):
+        grader_module.candidate_python(CANDIDATE_IMAGE_ID, docker)
+    assert bool(docker.removed) == removed
+    assert all(name.startswith("sq-probe-") for name in docker.removed)
+
+
+def test_the_probe_names_only_an_image_id():
+    with pytest.raises(GraderError, match="candidate_image_id_invalid"):
+        grader_module.candidate_python("python:3.14-slim", ProbedDocker())
+    with pytest.raises(GraderError, match="candidate_image_id_invalid"):
+        grader_module.candidate_python("--privileged", ProbedDocker())
+
+
+def test_the_grader_is_the_one_built_for_the_candidates_minor_version():
+    docker = ProbedDocker(graders={"silverquillm-grader:py3.14": "3.14"})
+    grader = grader_module.select_grader(CANDIDATE_IMAGE_ID, docker=docker, timeout=7)
+    assert grader.image_id == FIXTURE_IMAGE_ID and grader.timeout == 7
+    assert grader.isolation() == {
+        "mode": "container",
+        "grader_image_id": FIXTURE_IMAGE_ID,
+        "network": "none",
+        "candidate_python": "3.14.4",
+        "grader_python": "3.14",
+    }
+
+
+@pytest.mark.parametrize(
+    ("answer", "graders", "reference", "reason"),
+    [
+        # A supported version whose grader was never built.
+        (b"3.13.7\n", {"silverquillm-grader:py3.14": "3.14"}, None, "grader_image_unavailable"),
+        # A version newer than every pinned base.
+        (b"3.15.0\n", {"silverquillm-grader:py3.15": "3.15"}, None, "grader_image_unavailable"),
+        # An override must exist and still be built for the candidate's version.
+        (b"3.14.4\n", {"custom": "3.14"}, "missing", "grader_image_unavailable"),
+        (b"3.14.4\n", {"custom": "3.13"}, "custom", "grader_python_mismatch"),
+        # A tag that was retagged onto another version's grader is refused, not trusted.
+        (b"3.14.4\n", {"silverquillm-grader:py3.14": "3.13"}, None, "grader_python_mismatch"),
+        (b"3.14.4\n", {"silverquillm-grader:py3.14": None}, None, "grader_python_mismatch"),
+    ],
+)
+def test_a_missing_or_mismatched_grader_refuses(answer, graders, reference, reason):
+    docker = ProbedDocker(answer=DockerRun(0, "", answer), graders=graders)
+    with pytest.raises(GraderError, match=reason):
+        grader_module.select_grader(CANDIDATE_IMAGE_ID, reference, docker=docker)
+
+
+def test_an_override_built_for_the_candidates_version_is_used():
+    docker = ProbedDocker(graders={"custom": "3.14"})
+    grader = grader_module.select_grader(CANDIDATE_IMAGE_ID, "custom", docker=docker)
+    assert grader.isolation()["grader_python"] == "3.14"
+
+
+def test_a_direct_run_grades_on_the_probed_version_and_records_it(tmp_path, monkeypatch):
+    docker = ProbedDocker()
+    monkeypatch.setattr(grader_module, "DockerRunner", lambda: docker)
     opts = options(tmp_path)
     opts.pop("grader")
-    with pytest.raises(KarnError, match="grader_image_unavailable"):
-        run_benchmark(**opts, grader_image="silverquillm-grader:missing")
+    record = run_benchmark(**opts)
+    assert len(docker.probes) == 1
+    assert record.run_metadata["grading_isolation"]["candidate_python"] == "3.14.4"
+    assert record.run_metadata["grading_isolation"]["grader_python"] == "3.14"
+    assert all(score["tests_passed"] == 1 for score in record.scores.values())
+    run_input = json.loads((opts["results_dir"] / record.run_id / "run-input.json").read_text())
+    assert run_input["candidate_python"] == "3.14.4"
+
+
+@pytest.mark.parametrize(
+    ("answer", "graders", "reason"),
+    [
+        (DockerRun(0, "", b"3.12.3\n"), None, "candidate_python_unsupported"),
+        (DockerRun(127, ""), None, "candidate_python_unsupported"),
+        (DockerRun(0, "", b"3.14.4\n"), {}, "grader_image_unavailable"),
+    ],
+)
+def test_a_direct_run_refuses_before_any_run_directory(tmp_path, monkeypatch, answer, graders, reason):
+    docker = ProbedDocker(answer=answer, graders=graders)
+    monkeypatch.setattr(grader_module, "DockerRunner", lambda: docker)
+    opts = options(tmp_path)
+    opts.pop("grader")
+    with pytest.raises(KarnError, match=reason):
+        run_benchmark(**opts)
     assert not opts["results_dir"].exists()
 
 
-def test_scheduler_refuses_to_start_without_the_grader_image(tmp_path, monkeypatch):
+def test_recorded_versions_must_agree_and_older_records_stay_valid(tmp_path):
+    record = run_benchmark(**options(tmp_path))
+    assert set(record.run_metadata["grading_isolation"]) == {"mode", "grader_image_id", "network"}
+    record.validate()
+    isolation = record.run_metadata["grading_isolation"]
+    isolation.update(candidate_python="3.14.4", grader_python="3.14")
+    record.validate()
+    for bad in (
+        {"grader_python": "3.13"},
+        {"candidate_python": "3.14"},
+        {"candidate_python": 3.14},
+        {"candidate_python": "3.14.4 "},
+    ):
+        record.run_metadata["grading_isolation"] = {**isolation, **bad}
+        with pytest.raises(InvalidRunRecordError, match="invalid grading isolation"):
+            record.validate()
+    record.run_metadata["grading_isolation"] = {
+        key: value for key, value in isolation.items() if key != "grader_python"
+    }
+    with pytest.raises(InvalidRunRecordError, match="invalid grading isolation"):
+        record.validate()
+
+
+def test_scheduler_refuses_to_start_without_an_explicit_grader_image(tmp_path, monkeypatch):
     monkeypatch.setattr(grader_module.DockerRunner, "image_id", lambda self, reference: None)
     (tmp_path / "batches").mkdir()
     result = CliRunner().invoke(
@@ -326,28 +503,85 @@ def test_scheduler_refuses_to_start_without_the_grader_image(tmp_path, monkeypat
             str(tmp_path / "records"),
             "--state-root",
             str(tmp_path / "state"),
+            "--grader-image",
+            "silverquillm-grader:missing",
         ],
     )
     assert result.exit_code != 0
     assert "grader_image_unavailable" in result.output
 
 
-def test_grader_build_command_prints_the_built_image_id(monkeypatch):
+def test_grader_build_builds_every_pinned_version_with_its_label(monkeypatch):
     built = []
     monkeypatch.setattr(
         grader_module.DockerRunner,
         "build",
-        lambda self, tag, context: built.append((tag, context)) or 0,
+        lambda self, tag, context, *, base, python: built.append((tag, context, base, python))
+        or 0,
     )
     monkeypatch.setattr(
         grader_module.DockerRunner, "image_id", lambda self, reference: FIXTURE_IMAGE_ID
     )
-    result = CliRunner().invoke(main, ["grader", "build", "--tag", "sq-grader:test"])
+    result = CliRunner().invoke(main, ["grader", "build"])
     assert result.exit_code == 0, result.output
-    assert result.output.strip() == FIXTURE_IMAGE_ID
-    assert built == [("sq-grader:test", grader_module.IMAGE_CONTEXT)]
-    assert (grader_module.IMAGE_CONTEXT / "Dockerfile").is_file()
-    assert "--require-hashes" in (grader_module.IMAGE_CONTEXT / "Dockerfile").read_text()
+    assert result.output.splitlines() == [
+        f"silverquillm-grader:py3.13 {FIXTURE_IMAGE_ID}",
+        f"silverquillm-grader:py3.14 {FIXTURE_IMAGE_ID}",
+    ]
+    assert built == [
+        (f"silverquillm-grader:py{version}", grader_module.IMAGE_CONTEXT, base, version)
+        for version, base in sorted(grader_module.GRADER_BASES.items())
+    ]
+    for base in grader_module.GRADER_BASES.values():
+        assert re.fullmatch(r"python:3\.[0-9]+-slim@sha256:[0-9a-f]{64}", base)
+    dockerfile = (grader_module.IMAGE_CONTEXT / "Dockerfile").read_text()
+    assert "--require-hashes" in dockerfile and "FROM ${BASE}" in dockerfile
+
+
+def test_grader_build_takes_one_version_and_an_optional_tag(monkeypatch):
+    built = []
+    monkeypatch.setattr(
+        grader_module.DockerRunner,
+        "build",
+        lambda self, tag, context, *, base, python: built.append((tag, python)) or 0,
+    )
+    monkeypatch.setattr(
+        grader_module.DockerRunner, "image_id", lambda self, reference: FIXTURE_IMAGE_ID
+    )
+    result = CliRunner().invoke(main, ["grader", "build", "--python", "3.14", "--tag", "sq:t"])
+    assert result.exit_code == 0, result.output
+    assert built == [("sq:t", "3.14")]
+    refused = CliRunner().invoke(main, ["grader", "build", "--tag", "sq:t"])
+    assert refused.exit_code != 0 and "--tag needs exactly one --python" in refused.output
+    unknown = CliRunner().invoke(main, ["grader", "build", "--python", "3.12"])
+    assert unknown.exit_code != 0
+
+
+def test_the_docker_runner_builds_with_the_pinned_base_and_version_label(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        grader_module.subprocess,
+        "run",
+        lambda arguments, **kwargs: calls.append(arguments) or SimpleNamespace(returncode=0),
+    )
+    REAL_BUILD(
+        grader_module.DockerRunner(), "tag", Path("/context"), base="python:x@sha256:1", python="3.14"
+    )
+    monkeypatch.setattr(
+        grader_module.subprocess,
+        "run",
+        lambda arguments, **kwargs: calls.append(arguments)
+        or SimpleNamespace(returncode=0, stdout=b"3.14\n"),
+    )
+    assert REAL_IMAGE_PYTHON(grader_module.DockerRunner(), FIXTURE_IMAGE_ID) == "3.14"
+    assert calls[-1] == [
+        "docker", "image", "inspect", "--format",
+        '{{index .Config.Labels "org.silverquillm.grader.python"}}', FIXTURE_IMAGE_ID,
+    ]  # fmt: skip
+    assert calls[0] == [
+        "docker", "build", "--pull=false", "--build-arg", "BASE=python:x@sha256:1",
+        "--label", "org.silverquillm.grader.python=3.14", "-t", "tag", "/context",
+    ]  # fmt: skip
 
 
 class CannedOutput(LocalDocker):

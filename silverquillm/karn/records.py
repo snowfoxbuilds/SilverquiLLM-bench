@@ -23,6 +23,24 @@ from .definition import DIGEST, KarnError, canonical, decode_definition, digest
 SCHEMA_VERSION = 2
 DIMENSIONS = ("card_correctness", "fdn_regression", "engine_regression")
 RECORD_LOCK_SECONDS = 120
+# Records from before grading followed the candidate's Python carry no versions.
+ISOLATION_FIELDS = (
+    {"mode", "grader_image_id", "network"},
+    {"mode", "grader_image_id", "network", "candidate_python", "grader_python"},
+)
+PYTHON_RELEASE = re.compile(r"(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})")
+
+
+def _graded_python(isolation: dict) -> bool:
+    """A recorded candidate version is a release, and its grader shares its minor version."""
+    if "candidate_python" not in isolation:
+        return True
+    python, grader = isolation["candidate_python"], isolation["grader_python"]
+    return (
+        isinstance(python, str)
+        and bool(PYTHON_RELEASE.fullmatch(python))
+        and grader == python.rpartition(".")[0]
+    )
 
 
 class RecordWritePendingError(KarnError):
@@ -184,10 +202,11 @@ class KarnRunRecord:
         isolation = self.run_metadata.get("grading_isolation")
         if isolation is not None and (
             not isinstance(isolation, dict)
-            or set(isolation) != {"mode", "grader_image_id", "network"}
+            or set(isolation) not in ISOLATION_FIELDS
             or isolation["mode"] != "container"
             or isolation["network"] != "none"
             or not DIGEST.fullmatch(str(isolation["grader_image_id"]))
+            or not _graded_python(isolation)
         ):
             raise InvalidRunRecordError("invalid grading isolation")
         failure = self.run_metadata.get("grading_failure")
