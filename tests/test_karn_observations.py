@@ -489,3 +489,79 @@ def test_replay_actual_pinned_binary_qualification_matches_scripted_ground_truth
             {"prompt", "arguments", "output", "user.email", "authorization"}
             & set(event.get("attributes", {}))
         )
+
+
+def test_cost_breakdown_tallies_each_input_type_and_sums_to_the_request_price():
+    rows = price_requests(
+        [
+            {
+                "response_id": "r",
+                "model": "gpt-6-astra",
+                "usage": {
+                    "input_tokens": 100,
+                    "cached_input_tokens": 20,
+                    "cache_write_input_tokens": 7,
+                    "output_tokens": 30,
+                },
+            }
+        ]
+    )
+    parts = rows[0]["breakdown"]
+    assert {name: part["tokens"] for name, part in parts.items()} == {
+        "uncached_input": 73,
+        "cache_read": 20,
+        "cache_write": 7,
+        "cache_write_1h": 0,
+        "output": 30,
+    }
+    assert sum(Decimal(part["usd"]) for part in parts.values()) == Decimal(rows[0]["usd"])
+
+
+def claude_request(written_1h, **usage_changes):
+    usage_values = {
+        "input_tokens": 1000 + 4000 + 300,
+        "cached_input_tokens": 4000,
+        "cache_write_input_tokens": 300,
+        "cache_write_1h_input_tokens": written_1h,
+        "output_tokens": 50,
+        **usage_changes,
+    }
+    return {"response_id": "c", "model": "claude-opus-5-5", "usage": usage_values}
+
+
+def test_anthropic_five_minute_and_one_hour_writes_price_separately():
+    row = price_requests([claude_request(100)])[0]
+    parts = row["breakdown"]
+    # Opus 5.5: input $4, 5m write $5, 1h write $8, read $0.20 (0.05x), output $20 per MTok.
+    assert parts["uncached_input"] == {"tokens": 1000, "usd": "0.004"}
+    assert parts["cache_read"] == {"tokens": 4000, "usd": "0.0008"}
+    assert parts["cache_write"] == {"tokens": 200, "usd": "0.001"}
+    assert parts["cache_write_1h"] == {"tokens": 100, "usd": "0.0008"}
+    assert parts["output"] == {"tokens": 50, "usd": "0.001"}
+    assert Decimal(row["usd"]) == Decimal("0.0076")
+
+
+def test_unknown_one_hour_split_is_not_priced_at_either_rate():
+    row = price_requests([claude_request(None)])[0]
+    assert row["usd"] is None
+    assert row["reasons"] == ["cache_write_split_missing_or_invalid"]
+    no_writes = price_requests(
+        [claude_request(None, input_tokens=5000, cache_write_input_tokens=0)]
+    )
+    assert no_writes[0]["usd"] is not None
+
+
+@pytest.mark.parametrize("field", ["speed", "service_tier"])
+def test_nonstandard_processing_is_left_unpriced(field):
+    request = {**claude_request(0), field: "fast" if field == "speed" else "priority"}
+    assert price_requests([request])[0]["reasons"] == ["nonstandard_processing_unpriced"]
+
+
+def test_summary_reports_the_cost_breakdown_beside_the_estimate():
+    events, _ = normalize_rollout(journal())
+    result = summarize_events(events, exit_kind="completed")
+    breakdown = result["cost_breakdown"]
+    assert breakdown["completeness"] == result["estimated_cost"]["completeness"]
+    assert sum(Decimal(part["usd"]) for part in breakdown["value"].values()) == Decimal(
+        result["estimated_cost"]["value"]
+    )

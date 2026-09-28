@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from .pricing import price_requests, price_table_metadata
+from .pricing import price_requests, price_table_metadata, total_breakdown
 
 # Versions whose journal and OTel streams were checked against each other on a real run.
 QUALIFIED_CODEX_VERSIONS = frozenset({"0.153.4", "0.157.1"})
@@ -421,6 +421,10 @@ def summarize_events(
         "usage": _measurement(totals, usage_reasons, present=bool(requests) or observed_zero),
         "estimated_cost": _measurement(
             format(sum(priced_values, Decimal(0)), "f"), cost_reasons, present=costs_present
+        ),
+        # Input by type (uncached, cache read, 5-minute and 1-hour write) beside output.
+        "cost_breakdown": _measurement(
+            total_breakdown(priced), cost_reasons, present=costs_present
         ),
         "requests": requests,
         "request_prices": priced,

@@ -48,6 +48,7 @@ def mark_observation_problems(measurements: dict, problems: list[str]) -> None:
         *measurements.get("agent_turns", {}).values(),
         measurements.get("usage"),
         measurements.get("estimated_cost"),
+        measurements.get("cost_breakdown"),
     ]
     for field in fields:
         if isinstance(field, dict):
