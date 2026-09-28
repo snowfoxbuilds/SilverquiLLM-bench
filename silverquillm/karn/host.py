@@ -55,7 +55,12 @@ NATIVE_TELEMETRY_ENVIRONMENT = frozenset(
         "OTEL_LOGS_EXPORT_INTERVAL",
         "OTEL_METRICS_INCLUDE_VERSION",
         "OTEL_LOG_USER_PROMPTS",
+        "OTEL_LOG_ASSISTANT_RESPONSES",
         "OTEL_LOG_TOOL_DETAILS",
+        "OTEL_LOG_TOOL_CONTENT",
+        "OTEL_LOG_RAW_API_BODIES",
+        "OTEL_LOG_MANAGED_SETTINGS",
+        "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA",
     }
 )
 # The standard-library modules proxy.py imports inside the candidate image.

@@ -158,6 +158,30 @@ def test_a_pending_claude_run_keeps_its_transcripts_but_never_credentials(tmp_pa
     ]
 
 
+def nest(directory: Path, depth: int) -> None:
+    """A tree deeper than any path the host could name, built through descriptors."""
+    descriptor = os.open(directory, os.O_RDONLY)
+    for _ in range(depth):
+        os.mkdir("d", dir_fd=descriptor)
+        child = os.open("d", os.O_RDONLY, dir_fd=descriptor)
+        os.close(descriptor)
+        descriptor = child
+    os.close(os.open("x.jsonl", os.O_WRONLY | os.O_CREAT, 0o600, dir_fd=descriptor))
+    os.close(descriptor)
+
+
+def test_a_pathologically_deep_projects_tree_is_refused_not_raised(tmp_path):
+    profile = LoginProfile(tmp_path / "login", "bare-claude-haiku")
+    evidence = tmp_path / "run"
+    evidence.mkdir()
+    (profile.state / "work/projects").mkdir(parents=True)
+    nest(profile.state / "work/projects", 1200)
+    (profile.state / "mounted.json").write_text(json.dumps({"run_id": "run"}))
+    profile.journal({"run_id": "run", "container_name": "c", "evidence_dir": str(evidence)})
+    outcome = preserve_pending_native(profile, lambda *args: None)
+    assert outcome["reason"] == "native_state_limit_exceeded"
+
+
 def test_a_linked_projects_tree_is_not_followed(tmp_path):
     profile = LoginProfile(tmp_path / "login", "bare-claude-haiku")
     evidence = tmp_path / "run"

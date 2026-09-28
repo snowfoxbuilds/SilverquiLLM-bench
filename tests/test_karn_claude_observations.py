@@ -45,7 +45,7 @@ def line(kind, *, sidechain=False, second=0, **fields):
         "isSidechain": sidechain,
         "version": "2.1.284",
         "timestamp": f"2026-09-28T00:00:{second:02}.000Z",
-        "uuid": f"uuid-{kind}-{second}",
+        "uuid": f"00000000-0000-4000-8000-{second:012d}",
         **fields,
     }
     if sidechain:
@@ -155,7 +155,7 @@ def test_subagent_transcripts_add_their_own_responses_and_tools():
 
 
 def test_an_unfinished_main_thread_is_not_a_completed_turn():
-    transcript = [prompt(), *assistant("msg_01", "req_01", [tool_use("t")], stop="tool_use")]
+    transcript = [prompt(), *assistant("msg_01", "req_01", [tool_use("toolu_t")], stop="tool_use")]
     result = summarize_claude_events(events_of(transcript), exit_kind="completed")
     assert "native_turn_not_completed" in result["agent_turns"]["total"]["reasons"]
 
@@ -176,7 +176,9 @@ def test_synthetic_error_messages_are_not_model_responses():
     "hostile",
     [
         "[" * 100000 + "]" * 100000,
-        json.dumps({"type": "assistant", "sessionId": SESSION, "message": {"id": "m", "content": 5}}),
+        json.dumps(
+            {"type": "assistant", "sessionId": SESSION, "message": {"id": "m", "content": 5}}
+        ),
         json.dumps(
             {"type": "assistant", "sessionId": SESSION, "message": {"id": "m", "stop_reason": []}}
         ),
@@ -190,11 +192,81 @@ def test_a_hostile_transcript_line_cannot_break_accounting(hostile):
 
 
 def test_non_finite_otel_costs_are_dropped_or_flagged():
-    [event] = normalize_claude_otlp(otlp(request_id="r", cost_usd=float("inf")))
+    [event] = normalize_claude_otlp(otlp(request_id="req_r", cost_usd=float("inf")))
     assert "cost_usd" not in event["attributes"]
     flagged = api_request("req_01", cost_usd="NaN") + api_request("req_02")
     result = summarize_claude_events(events_of(main_transcript()) + flagged, exit_kind="completed")
     assert "otel_cost_malformed" in result["estimated_cost"]["reasons"]
+
+
+@pytest.mark.parametrize("cost", ["1E+1000000", "9E+999999"])
+def test_an_absurd_otel_cost_is_flagged_not_raised_or_expanded(cost):
+    otel = api_request("req_01", cost_usd=cost) + api_request("req_02")
+    result = summarize_claude_events(events_of(main_transcript()) + otel, exit_kind="completed")
+    assert "otel_cost_malformed" in result["estimated_cost"]["reasons"]
+    assert result["coverage"]["native_reported_cost_usd"] == "0.0123"
+
+
+def test_a_boolean_otel_cost_is_not_read_as_one_dollar():
+    [event] = normalize_claude_otlp(
+        {
+            "resourceLogs": [
+                {
+                    "scopeLogs": [
+                        {
+                            "logRecords": [
+                                {
+                                    "attributes": [
+                                        {
+                                            "key": "event.name",
+                                            "value": {"stringValue": "api_request"},
+                                        },
+                                        {"key": "request_id", "value": {"stringValue": "req_01"}},
+                                        {"key": "cost_usd", "value": {"boolValue": True}},
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+    result = summarize_claude_events(
+        events_of(main_transcript()) + [event] + api_request("req_02"), exit_kind="completed"
+    )
+    assert "otel_cost_malformed" in result["estimated_cost"]["reasons"]
+    assert result["coverage"]["native_reported_cost_usd"] == "0.0123"
+
+
+def test_unescaped_unicode_line_separators_in_content_do_not_split_records(tmp_path):
+    # JSON.stringify leaves U+2028, U+2029 and U+0085 raw; only "\n" ends a transcript line.
+    text = {"type": "text", "text": "a b c\x85d"}
+    transcript = [prompt(), *assistant("msg_01", "req_01", [text], stop="end_turn")]
+    session = tmp_path / "work/projects/-workspace"
+    session.mkdir(parents=True)
+    (session / (SESSION + ".jsonl")).write_text(
+        "\n".join(json.dumps(json.loads(row), ensure_ascii=False) for row in transcript) + "\n"
+    )
+    with ClaudeTelemetryCollector(tmp_path / "run") as collector:
+        collector.harvest_native(tmp_path / "work")
+        result = collector.finalize(exit_kind="completed")
+    assert result["agent_turns"]["responses"]["value"] == 1
+    assert "native_record_malformed" not in result["usage"]["reasons"]
+
+
+def test_a_pathologically_deep_projects_tree_marks_the_harvest_incomplete(tmp_path):
+    from .test_karn_claude_login import nest
+
+    work = tmp_path / "work"
+    session = work / "projects/-workspace"
+    session.mkdir(parents=True)
+    (session / (SESSION + ".jsonl")).write_text("\n".join(main_transcript()))
+    nest(session, 1200)
+    with ClaudeTelemetryCollector(tmp_path / "run") as collector:
+        collector.harvest_native(work)
+        result = collector.finalize(exit_kind="completed")
+    assert "native_journal_size_limit" in result["usage"]["reasons"]
 
 
 def otlp(name="claude_code.api_request", **attrs):
@@ -238,7 +310,7 @@ def test_otel_normalization_keeps_accounting_and_drops_identity_and_content():
     assert event["thread_id"] == SESSION
     assert event["attributes"]["cost_usd"] == "0.0123"
     assert not {"user.email", "organization.id", "prompt"} & set(event["attributes"])
-    assert normalize_claude_otlp(otlp(name="api_request", request_id="r"))[0]["kind"] == (
+    assert normalize_claude_otlp(otlp(name="api_request", request_id="req_r"))[0]["kind"] == (
         "claude_code.api_request"
     )
     assert normalize_claude_otlp(otlp(name="claude_code.user_prompt")) == []
@@ -261,6 +333,31 @@ def test_a_compaction_request_is_priced_from_otel_and_counted_once():
     assert both["coverage"]["native_reported_cost_usd"] == "0.0369"
 
 
+def test_a_compaction_at_otel_normal_speed_is_priced_as_standard():
+    # Claude Code's OTel names the API's "standard" speed "normal".
+    transcript = main_transcript() + [line("system", second=4, subtype="compact_boundary")]
+    otel = api_request("req_01") + api_request("req_02")
+    otel += api_request("req_c", "compact", speed="normal")
+    result = summarize_claude_events(events_of(transcript) + otel, exit_kind="completed")
+    compaction = next(
+        row for row in result["request_prices"] if row["response_id"].startswith("otel:")
+    )
+    assert compaction["usd"] is not None, compaction["reasons"]
+    fast = summarize_claude_events(
+        events_of(transcript) + otel[:2] + api_request("req_c", "compact", speed="fast"),
+        exit_kind="completed",
+    )
+    assert "nonstandard_processing_unpriced" in fast["estimated_cost"]["reasons"]
+
+
+def test_an_otel_compaction_without_a_transcript_boundary_is_flagged():
+    native = events_of(main_transcript())
+    otel = api_request("req_01") + api_request("req_02")
+    otel += api_request("req_c", "compact", input_tokens="999999", output_tokens="999999")
+    result = summarize_claude_events(native + otel, exit_kind="completed")
+    assert "otel_compaction_without_boundary" in result["usage"]["reasons"]
+
+
 def test_otel_cross_check_flags_requests_missing_from_either_stream():
     native = events_of(main_transcript())
     result = summarize_claude_events(native + api_request("req_01"), exit_kind="completed")
@@ -278,9 +375,77 @@ def test_an_otel_tool_result_joins_the_transcript_call_by_id():
     otel = normalize_claude_otlp(
         otlp(name="claude_code.tool_result", tool_use_id="toolu_01", tool_name="Bash")
     )
+    joined = summarize_claude_events(native + otel, exit_kind="completed")
+    assert joined["agent_turns"]["tool_calls"]["value"] == 1
+    assert "otel_tool_call_without_transcript" not in joined["agent_turns"]["total"]["reasons"]
     otel += normalize_claude_otlp(otlp(name="claude_code.tool_result", tool_use_id="toolu_09"))
     result = summarize_claude_events(native + otel, exit_kind="completed")
+    # A call only OTel saw still counts, and the gap in the transcript is visible.
     assert result["agent_turns"]["tool_calls"]["value"] == 2
+    assert "otel_tool_call_without_transcript" in result["agent_turns"]["total"]["reasons"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("sessionId", "sk-ant-oat01-secret"),
+        ("requestId", "req_abc def"),
+        ("model", "claude-opus-5-5 sk-ant-secret"),
+        ("version", "2.1.284-sk-ant"),
+    ],
+)
+def test_a_transcript_label_without_its_real_shape_is_dropped_and_flagged(field, value):
+    lines = main_transcript()
+    # The session and version come from the first record; request and model from a response.
+    index = 0 if field in ("sessionId", "version") else 1
+    record = json.loads(lines[index])
+    if field == "model":
+        record["message"]["model"] = value
+    else:
+        record[field] = value
+    lines[index] = json.dumps(record)
+    rows, problems = normalize_transcript(lines)
+    assert "native_label_rejected" in problems
+    assert value not in json.dumps(rows)
+
+
+def test_a_tool_label_without_its_real_shape_is_dropped_and_flagged():
+    block = {"type": "tool_use", "id": "toolu_ok", "name": "sk-ant-oat01 secret"}
+    transcript = [prompt(), *assistant("msg_01", "req_01", [block], stop="end_turn")]
+    rows, problems = normalize_transcript(transcript)
+    assert "native_label_rejected" in problems
+    assert next(r for r in rows if r["kind"] == "tool_call")["tool_name"] == "tool_use"
+    bad_id = {"type": "tool_use", "id": "sk-ant-oat01-secret", "name": "Bash"}
+    rows, problems = normalize_transcript(
+        [prompt(), *assistant("msg_01", "req_01", [bad_id], stop="end_turn")]
+    )
+    assert "sk-ant" not in json.dumps(rows)
+    assert "native_tool_identity_missing" in problems
+
+
+def test_otel_labels_without_their_real_shape_are_dropped_and_flagged(tmp_path):
+    payload = otlp(
+        request_id="req_ok",
+        tool_name="sk-ant-oat01-secret",
+        query_source="agent:sk-ant-secret",
+        speed="warp",
+    )
+    problems = []
+    [event] = normalize_claude_otlp(payload, problems)
+    assert "tool_name" not in event["attributes"]
+    assert "speed" not in event["attributes"]
+    assert event["attributes"]["query_source"] == "other"
+    assert problems
+    with ClaudeTelemetryCollector(tmp_path / "run") as collector:
+        collector.ingest_otlp(payload)
+        assert "otel_label_rejected" in collector.reasons
+    assert "sk-ant" not in (tmp_path / "run/observations.events.jsonl").read_text()
+
+
+def test_an_api_request_without_a_shaped_cost_is_flagged():
+    otel = api_request("req_01", cost_usd="12 dollars") + api_request("req_02")
+    result = summarize_claude_events(events_of(main_transcript()) + otel, exit_kind="completed")
+    assert "otel_cost_malformed" in result["estimated_cost"]["reasons"]
 
 
 def test_summaries_dispatch_on_the_recorded_adapter():
@@ -381,5 +546,14 @@ def test_the_exporter_environment_is_allowlisted_and_never_logs_prompts(tmp_path
             collector.otel_environment("file:///etc/passwd")
     assert set(environment) <= NATIVE_TELEMETRY_ENVIRONMENT
     assert environment["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] == "http://10.0.0.2:3128/v1/logs"
-    assert environment["OTEL_LOG_USER_PROMPTS"] == "0"
+    for gate in (
+        "OTEL_LOG_USER_PROMPTS",
+        "OTEL_LOG_ASSISTANT_RESPONSES",
+        "OTEL_LOG_TOOL_DETAILS",
+        "OTEL_LOG_TOOL_CONTENT",
+        "OTEL_LOG_RAW_API_BODIES",
+        "OTEL_LOG_MANAGED_SETTINGS",
+        "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA",
+    ):
+        assert environment[gate] == "0"
     assert environment["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] == "http/json"

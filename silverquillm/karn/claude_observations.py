@@ -9,8 +9,10 @@ request never appears in the transcript; its OTel ``api_request`` supplies the u
 
 from __future__ import annotations
 
+import io
 import json
 import os
+import re
 from collections.abc import Iterable
 from decimal import Decimal, InvalidOperation
 from pathlib import Path, PurePosixPath
@@ -22,7 +24,6 @@ from .observations import (
     CodexTelemetryCollector,
     _fingerprint,
     _integer,
-    _label,
     _measurements,
     _stamp,
 )
@@ -31,34 +32,77 @@ from .observations import (
 QUALIFIED_CLAUDE_VERSIONS: frozenset[str] = frozenset()
 MAX_TRANSCRIPT_BYTES = 128 * 1024 * 1024
 MAX_TRANSCRIPT_FILES = 10_000
+MAX_REQUEST_COST_USD = Decimal(1_000_000)
 _EVENTS = {"claude_code.api_request", "claude_code.tool_result", "claude_code.api_error"}
-# Identity attributes (user.email, user.account_uuid, organization.id, ...), prompts and tool
-# arguments are never retained.
-_ATTRIBUTES = {
-    "event.name",
-    "event.timestamp",
-    "event.sequence",
-    "session.id",
-    "app.version",
-    "model",
-    "request_id",
-    "query_source",
-    "agent.name",
-    "speed",
-    "effort",
-    "input_tokens",
-    "output_tokens",
-    "cache_read_tokens",
-    "cache_creation_tokens",
-    "cost_usd",
-    "duration_ms",
-    "tool_name",
-    "tool_use_id",
-    "success",
-    "status_code",
-    "attempt",
-}
 _FINISHED = {"end_turn", "stop_sequence"}
+# Claude Code's OTel reports the API's "standard" usage speed as "normal".
+_OTEL_SPEEDS = {"normal": "standard"}
+
+# The real shapes of every label a Claude run can contribute to a record, checked against
+# Claude Code transcripts. The workload writes these files and can steer its OTel, so any
+# other value, such as a token copied into an id, is dropped and flagged, never retained.
+_UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+_COUNT = r"[0-9]{1,20}"
+SHAPES = {
+    "session": re.compile(_UUID),
+    "agent": re.compile(r"a[0-9a-f]{8,32}"),
+    "uuid": re.compile(_UUID),
+    "message": re.compile(r"msg_[A-Za-z0-9]{1,64}"),
+    "request": re.compile(r"req_[A-Za-z0-9]{1,64}"),
+    "tool_use": re.compile(r"toolu_[A-Za-z0-9]{1,64}"),
+    "tool_name": re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}"),
+    "version": re.compile(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}"),
+    "model": re.compile(r"claude-[a-z0-9-]{1,64}"),
+    "speed": re.compile(r"standard|fast|normal"),
+    "service_tier": re.compile(r"standard|priority|batch"),
+    "stop_reason": re.compile(r"[a-z_]{1,32}"),
+    "timestamp": re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]{8,15}(Z|[+-][0-9]{2}:[0-9]{2})"),
+    "count": re.compile(_COUNT),
+    "cost": re.compile(r"[0-9]{1,12}(\.[0-9]{1,20})?"),
+}
+# Identity attributes (user.email, user.account_uuid, organization.id, ...), prompts, tool
+# arguments and free-form names are never retained; each kept attribute has a shape.
+_ATTRIBUTES = {
+    "event.name": None,
+    "event.timestamp": "timestamp",
+    "event.sequence": "count",
+    "session.id": "session",
+    "app.version": "version",
+    "model": "model",
+    "request_id": "request",
+    "query_source": None,
+    "speed": "speed",
+    "input_tokens": "count",
+    "output_tokens": "count",
+    "cache_read_tokens": "count",
+    "cache_creation_tokens": "count",
+    "cost_usd": "cost",
+    "duration_ms": "count",
+    "tool_name": "tool_name",
+    "tool_use_id": "tool_use",
+    "success": None,
+    "status_code": "count",
+    "attempt": "count",
+}
+# query_source names subagents, which the workload can define; only these values are kept.
+_QUERY_SOURCES = {"repl_main_thread", "compact"}
+
+
+def _shaped(value: Any, shape: str, problems: list[str]) -> str | None:
+    """``value`` when it has the label's real shape; anything else is dropped and flagged."""
+    if value is None:
+        return None
+    if isinstance(value, str) and SHAPES[shape].fullmatch(value):
+        return value
+    problems.append("native_label_rejected")
+    return None
+
+
+def _known(value: Any, shape: str, problems: list[str]) -> str | None:
+    """An enumerated label; an unrecognized value becomes "unknown", which stays unpriced."""
+    if value is None:
+        return None
+    return _shaped(value, shape, problems) or "unknown"
 
 
 def claude_usage(value: Any) -> dict[str, int | None]:
@@ -128,12 +172,16 @@ def normalize_transcript(lines: Iterable[str]) -> tuple[list[dict[str, Any]], li
             continue
         if thread is None:
             sidechain = record.get("isSidechain") is True
-            thread = _label(record.get("agentId") if sidechain else record.get("sessionId"))
-        version = version or _label(record.get("version"))
+            thread = (
+                _shaped(record.get("agentId"), "agent", problems)
+                if sidechain
+                else _shaped(record.get("sessionId"), "session", problems)
+            )
+        version = version or _shaped(record.get("version"), "version", problems)
         if kind == "user" and not sidechain and not record.get("isMeta"):
             started = True
         elif kind == "system" and record.get("subtype") == "compact_boundary":
-            boundary = _label(record.get("uuid"))
+            boundary = _shaped(record.get("uuid"), "uuid", problems)
             if boundary:
                 events.append(base("compaction", "compaction:" + boundary, timestamp))
             else:
@@ -142,7 +190,7 @@ def normalize_transcript(lines: Iterable[str]) -> tuple[list[dict[str, Any]], li
             message = record.get("message")
             if not isinstance(message, dict) or message.get("model") == "<synthetic>":
                 continue
-            response = _label(message.get("id"))
+            response = _shaped(message.get("id"), "message", problems)
             if not response:
                 problems.append("native_response_identity_missing")
                 continue
@@ -153,26 +201,27 @@ def normalize_transcript(lines: Iterable[str]) -> tuple[list[dict[str, Any]], li
                 "response:" + response,
                 timestamp,
                 response_id=response,
-                request_id=_label(record.get("requestId")),
+                request_id=_shaped(record.get("requestId"), "request", problems),
                 owner_thread_id=thread,
-                model=_label(message.get("model")),
+                model=_shaped(message.get("model"), "model", problems),
                 usage=claude_usage(usage),
-                speed=_label(usage.get("speed")),
-                service_tier=_label(usage.get("service_tier")),
+                speed=_known(usage.get("speed"), "speed", problems),
+                service_tier=_known(usage.get("service_tier"), "service_tier", problems),
             )
             if not sidechain:
-                last_stop = _label(message.get("stop_reason"))
+                last_stop = _shaped(message.get("stop_reason"), "stop_reason", problems)
             content = message.get("content")
             for block in content if isinstance(content, list) else []:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
-                    call = _label(block.get("id"))
+                    call = _shaped(block.get("id"), "tool_use", problems)
                     if call:
                         tools[call] = base(
                             "tool_call",
                             "tool:" + call,
                             timestamp,
                             call_id=call,
-                            tool_name=_label(block.get("name")) or "tool_use",
+                            tool_name=_shaped(block.get("name"), "tool_name", problems)
+                            or "tool_use",
                         )
                     else:
                         problems.append("native_tool_identity_missing")
@@ -200,8 +249,9 @@ def _otel_value(raw: Any) -> Any:
     return next((raw[k] for k in ("stringValue", "intValue", "boolValue") if k in raw), None)
 
 
-def normalize_claude_otlp(payload: Any) -> list[dict[str, Any]]:
+def normalize_claude_otlp(payload: Any, problems: list[str] | None = None) -> list[dict[str, Any]]:
     """Keep allowlisted Claude Code accounting events; drop identities, prompts and arguments."""
+    problems = problems if problems is not None else []
     result = []
     if not isinstance(payload, dict) or not isinstance(payload.get("resourceLogs"), list):
         raise TypeError("invalid_otlp_envelope")
@@ -214,20 +264,28 @@ def normalize_claude_otlp(payload: Any) -> list[dict[str, Any]]:
                     if key not in _ATTRIBUTES:
                         continue
                     value = _otel_value(entry.get("value", {}))
-                    if isinstance(value, bool) or _label(value) is not None:
-                        attrs[key] = value
-                    elif type(value) is int:
-                        attrs[key] = str(value)
+                    if type(value) is int:
+                        value = str(value)
+                    shape = _ATTRIBUTES[key]
+                    if key == "success":
+                        if isinstance(value, bool):
+                            attrs[key] = value
+                    elif key == "query_source":
+                        attrs[key] = value if value in _QUERY_SOURCES else "other"
+                    elif key == "event.name":
+                        attrs[key] = value if isinstance(value, str) else None
+                    elif (kept := _shaped(value, shape, problems)) is not None:
+                        attrs[key] = kept
                 name = attrs.get("event.name")
                 if name is None:
                     body = record.get("body", {})
-                    name = _label(body.get("stringValue")) if isinstance(body, dict) else None
+                    name = body.get("stringValue") if isinstance(body, dict) else None
                 # The event is named with or without its claude_code prefix.
                 if isinstance(name, str) and not name.startswith("claude_code."):
                     name = "claude_code." + name
-                attrs["event.name"] = name
                 if name not in _EVENTS:
                     continue
+                attrs["event.name"] = name
                 event = {
                     "source": "otel",
                     "kind": name,
@@ -291,13 +349,20 @@ def summarize_claude_events(
         attrs = event["attributes"]
         if attrs.get("app.version"):
             versions.add(attrs["app.version"])
-        if event["kind"] == "claude_code.tool_result" and attrs.get("tool_use_id"):
-            tools.add(attrs["tool_use_id"])
+        call = attrs.get("tool_use_id")
+        if event["kind"] == "claude_code.tool_result" and call and call not in tools:
+            tools.add(call)
+            reasons.append("otel_tool_call_without_transcript")
         if event["kind"] != "claude_code.api_request":
             continue
         try:
-            cost = Decimal(attrs.get("cost_usd", "0"))
-            if not cost.is_finite() or cost < 0:
+            # Absent when its value had no real shape; Claude Code always reports one.
+            cost = attrs.get("cost_usd")
+            if not isinstance(cost, str):
+                raise InvalidOperation
+            cost = Decimal(cost)
+            # A client-side per-request estimate; no real request approaches a million dollars.
+            if not cost.is_finite() or not 0 <= cost < MAX_REQUEST_COST_USD:
                 raise InvalidOperation
             native_cost += cost
         except InvalidOperation:
@@ -317,7 +382,7 @@ def summarize_claude_events(
                 "model": attrs.get("model"),
                 "usage": _otel_usage(attrs),
                 "timestamp_ms": event["timestamp_ms"],
-                "speed": attrs.get("speed"),
+                "speed": _OTEL_SPEEDS.get(attrs.get("speed"), attrs.get("speed")),
                 "compaction": compaction,
                 "response_identity": "otel_observation",
             }
@@ -325,6 +390,8 @@ def summarize_claude_events(
     if otel and native_requests - otel_requests:
         reasons.append("otel_missing_native_request")
     unresolved = max(0, len(compactions) - otel_compactions)
+    if otel_compactions > len(compactions):
+        reasons.append("otel_compaction_without_boundary")
     if unresolved:
         reasons.append("compaction_usage_unavailable")
     if not sessions:
@@ -380,13 +447,23 @@ class ClaudeTelemetryCollector(CodexTelemetryCollector):
             "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": endpoint or self.endpoint,
             "OTEL_LOGS_EXPORT_INTERVAL": "1000",
             "OTEL_METRICS_INCLUDE_VERSION": "true",
+            # Pinned off over any construct value: no prompts, responses, tool arguments or
+            # content, raw API bodies, managed settings, or beta tracing reach the relay.
             "OTEL_LOG_USER_PROMPTS": "0",
+            "OTEL_LOG_ASSISTANT_RESPONSES": "0",
             "OTEL_LOG_TOOL_DETAILS": "0",
+            "OTEL_LOG_TOOL_CONTENT": "0",
+            "OTEL_LOG_RAW_API_BODIES": "0",
+            "OTEL_LOG_MANAGED_SETTINGS": "0",
+            "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "0",
         }
 
     def ingest_otlp(self, payload: dict[str, Any]) -> None:
-        for event in normalize_claude_otlp(payload):
+        problems: list[str] = []
+        for event in normalize_claude_otlp(payload, problems):
             self._append(event)
+        if problems:
+            self.mark_incomplete("otel_label_rejected")
 
     def harvest_native(self, native_state: Path, *, max_bytes: int = MAX_TRANSCRIPT_BYTES) -> None:
         """Read project transcripts only, never credentials, through descriptors without links."""
@@ -404,7 +481,9 @@ class ClaudeTelemetryCollector(CodexTelemetryCollector):
                 max_bytes=max_bytes,
             ):
                 try:
-                    rows, problems = normalize_transcript(content.decode("utf-8").splitlines())
+                    # Only "\n" ends a record: JSON.stringify leaves U+2028 and U+0085 raw.
+                    text = io.StringIO(content.decode("utf-8"), newline="\n")
+                    rows, problems = normalize_transcript(text)
                 except UnicodeError:
                     self.mark_incomplete("native_journal_unreadable")
                     continue

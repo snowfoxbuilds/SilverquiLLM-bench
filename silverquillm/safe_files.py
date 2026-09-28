@@ -15,6 +15,8 @@ from pathlib import Path, PurePosixPath
 
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+# Far deeper than any journal or repository layout, far shallower than the recursion limit.
+MAX_DEPTH = 64
 
 
 class TreeLimitExceeded(OSError):
@@ -63,6 +65,8 @@ def iter_regular_files(
             info = os.stat(name, dir_fd=descriptor, follow_symlinks=False)
             relative = prefix / name
             if stat.S_ISDIR(info.st_mode):
+                if len(relative.parts) > MAX_DEPTH:
+                    raise TreeLimitExceeded("tree too deep")
                 child = os.open(name, DIRECTORY_FLAGS, dir_fd=descriptor)
                 try:
                     yield from walk(child, relative)
