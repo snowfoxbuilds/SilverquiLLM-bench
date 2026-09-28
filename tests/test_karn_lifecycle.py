@@ -907,12 +907,28 @@ def test_native_telemetry_is_explicit_with_a_documented_codex_home_fallback(tmp_
     assert select_native_telemetry(native, "auto") == {
         "requested": "auto",
         "enabled": True,
-        "source": "codex_home_heuristic",
+        "source": "native_home_heuristic",
+        "adapter": "codex",
     }
     assert select_native_telemetry(native, "none")["enabled"] is False
     assert select_native_telemetry(native, "codex")["source"] == "operator"
     with pytest.raises(KarnError, match="native_telemetry_requires_codex_home"):
         select_native_telemetry(plain, "codex")
+    claude = make_candidate(tmp_path / "claude")
+    claude.runtime["environment"]["CLAUDE_CONFIG_DIR"] = "/native"
+    assert select_native_telemetry(claude, "auto")["adapter"] == "claude"
+    # The relay may be off, but the Claude transcripts are still the journals read.
+    assert select_native_telemetry(claude, "none") == {
+        "requested": "none",
+        "enabled": False,
+        "source": "operator",
+        "adapter": "claude",
+    }
+    with pytest.raises(KarnError, match="native_telemetry_requires_claude_config_dir"):
+        select_native_telemetry(native, "claude")
+    claude.runtime["environment"]["CODEX_HOME"] = "/other"
+    with pytest.raises(KarnError, match="native_telemetry_home_ambiguous"):
+        select_native_telemetry(claude, "auto")
     record = run_benchmark(**options(tmp_path / "run"), native_telemetry="none")
     assert record.run_metadata["native_telemetry"]["requested"] == "none"
     spec = '[[runs]]\nbuild_output="b"\nconstruct="bare"\nbenchmark="example"\n'

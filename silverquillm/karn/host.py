@@ -42,6 +42,22 @@ from .login import (
 from .toolchain import TOOLCHAIN_TARGET, CandidateToolchain
 
 DEFAULT_BUDGET_SECONDS = 24 * 60 * 60
+# The variables a native CLI's telemetry needs from the host: Claude Code reads its exporter
+# only from the environment. They override the construct's own values for the run.
+NATIVE_TELEMETRY_ENVIRONMENT = frozenset(
+    {
+        "CLAUDE_CODE_ENABLE_TELEMETRY",
+        "OTEL_LOGS_EXPORTER",
+        "OTEL_METRICS_EXPORTER",
+        "OTEL_TRACES_EXPORTER",
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+        "OTEL_LOGS_EXPORT_INTERVAL",
+        "OTEL_METRICS_INCLUDE_VERSION",
+        "OTEL_LOG_USER_PROMPTS",
+        "OTEL_LOG_TOOL_DETAILS",
+    }
+)
 # The standard-library modules proxy.py imports inside the candidate image.
 PROXY_PROBE = "import ipaddress, json, os, select, socket, socketserver, urllib.request"
 
@@ -325,6 +341,7 @@ class DockerHost:
         extra_mounts: list[dict] | None = None,
         test_toolchain: CandidateToolchain | None = None,
         runtime_config: str | Callable[[Network], str] | None = None,
+        runtime_environment: Callable[[Network], dict[str, str]] | None = None,
         after_stop: Callable[[HostResult, Path | None], None] | None = None,
         collector_endpoint: str | None = None,
         login_lock_held: bool = False,
@@ -495,6 +512,15 @@ class DockerHost:
                         **(extra_environment or {}),
                         **network.environment,
                     }
+                    if runtime_environment is not None:
+                        configured = runtime_environment(network)
+                        if set(configured) - NATIVE_TELEMETRY_ENVIRONMENT:
+                            raise KarnError("undeclared_runtime_environment_override")
+                        environment.update(configured)
+                        result.host_configuration["environment"] = {
+                            **result.host_configuration["environment"],
+                            **configured,
+                        }
                     if test_toolchain is not None:
                         environment["PYTHONPATH"] = _python_path(
                             candidate, self.docker.inspect_image(candidate.image_id)

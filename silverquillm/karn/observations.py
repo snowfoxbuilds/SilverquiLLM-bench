@@ -282,8 +282,18 @@ def _measurement(value: Any, reasons: Iterable[str], *, present: bool) -> dict[s
 
 
 def summarize_events(
-    events: Iterable[dict[str, Any]], *, exit_kind: str, collection_reasons: Iterable[str] = ()
+    events: Iterable[dict[str, Any]],
+    *,
+    exit_kind: str,
+    collection_reasons: Iterable[str] = (),
+    adapter: str = "codex",
 ) -> dict[str, Any]:
+    if adapter == "claude":
+        from .claude_observations import summarize_claude_events
+
+        return summarize_claude_events(
+            events, exit_kind=exit_kind, collection_reasons=collection_reasons
+        )
     unique: dict[str, dict[str, Any]] = {}
     reasons = list(collection_reasons)
     for event in events:
@@ -394,6 +404,32 @@ def summarize_events(
         response_count = max(response_count, len(otel_usage))
     if present and not opened:
         reasons.append("native_turn_start_unobserved")
+    return _measurements(
+        requests,
+        response_count,
+        len(tools),
+        reasons,
+        present,
+        {
+            "native_versions": sorted(v for v in versions if v),
+            "native_threads": len(native_threads),
+            "observed_threads": len(otel_threads | native_threads),
+            "remote_or_local_compactions": len(compactions),
+            "deduplicated_events": len(rows),
+            "exit_kind": exit_kind,
+            "model_basis": "native_turn_context; observation, not provider attestation",
+        },
+    )
+
+
+def _measurements(
+    requests: list[dict[str, Any]],
+    response_count: int,
+    tool_count: int,
+    reasons: list[str],
+    present: bool,
+    coverage: dict[str, Any],
+) -> dict[str, Any]:
     observed_zero = present and not response_count and not reasons
     turn_reasons = list(reasons)
     usage_reasons = list(reasons)
@@ -411,12 +447,12 @@ def summarize_events(
         usage_reasons.append("per_response_usage_unavailable")
         cost_reasons.append("per_response_usage_unavailable")
     costs_present = bool(priced_values) or observed_zero
-    result = {
+    return {
         "schema_version": 1,
         "agent_turns": {
             "responses": _measurement(response_count, turn_reasons, present=present),
-            "tool_calls": _measurement(len(tools), turn_reasons, present=present),
-            "total": _measurement(response_count + len(tools), turn_reasons, present=present),
+            "tool_calls": _measurement(tool_count, turn_reasons, present=present),
+            "total": _measurement(response_count + tool_count, turn_reasons, present=present),
         },
         "usage": _measurement(totals, usage_reasons, present=bool(requests) or observed_zero),
         "estimated_cost": _measurement(
@@ -429,21 +465,14 @@ def summarize_events(
         "requests": requests,
         "request_prices": priced,
         "price_table": price_table_metadata(),
-        "coverage": {
-            "native_versions": sorted(v for v in versions if v),
-            "native_threads": len(native_threads),
-            "observed_threads": len(otel_threads | native_threads),
-            "remote_or_local_compactions": len(compactions),
-            "deduplicated_events": len(rows),
-            "exit_kind": exit_kind,
-            "model_basis": "native_turn_context; observation, not provider attestation",
-        },
+        "coverage": coverage,
     }
-    return result
 
 
 class CodexTelemetryCollector:
     """Host-owned receiver; the workload sees only its POST-only telemetry route."""
+
+    adapter = "codex"
 
     def __init__(
         self,
@@ -590,11 +619,12 @@ class CodexTelemetryCollector:
     def finalize(self, *, exit_kind: str, native_version: str | None = None) -> dict[str, Any]:
         if native_version is not None and native_version not in QUALIFIED_CODEX_VERSIONS:
             self.mark_incomplete("native_version_not_qualified")
+        return self._write_summary(summarize_events, exit_kind)
+
+    def _write_summary(self, summarize, exit_kind: str) -> dict[str, Any]:
         self._stop_receiver()
         with self._lock:
-            result = summarize_events(
-                self.events, exit_kind=exit_kind, collection_reasons=self.reasons
-            )
+            result = summarize(self.events, exit_kind=exit_kind, collection_reasons=self.reasons)
             path = self.run_dir / "observations.json"
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as output:

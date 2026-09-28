@@ -84,10 +84,10 @@ def common_options(function):
 @click.option("--snapshot-seconds", type=click.FloatRange(min=0.1), default=60, show_default=True)
 @click.option(
     "--native-telemetry",
-    type=click.Choice(["auto", "codex", "none"]),
+    type=click.Choice(["auto", "codex", "claude", "none"]),
     default="auto",
     show_default=True,
-    help="Collect native Codex journals and OTel; auto detects a declared CODEX_HOME.",
+    help="Collect native journals and OTel; auto detects CODEX_HOME or CLAUDE_CONFIG_DIR.",
 )
 @common_options
 def run(**options):

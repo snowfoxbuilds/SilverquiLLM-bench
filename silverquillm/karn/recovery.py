@@ -19,6 +19,7 @@ from .execution import (
     mark_observation_problems,
     observation_session,
     run_lock,
+    telemetry_collector,
 )
 from .grader import (
     DEFAULT_GRADING_TIMEOUT,
@@ -369,7 +370,7 @@ def _recover(
     grading_timeout,
     grader,
 ) -> KarnRunRecord:
-    from .observations import CodexTelemetryCollector, summarize_events
+    from .observations import summarize_events
 
     host = DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     finalized = _finalized_record(run_id, run_dir, results_repo)
@@ -427,6 +428,7 @@ def _recover(
         failure_stage="recovery",
         error="prior_runner_interrupted",
     )
+    telemetry = inputs.get("native_telemetry") or {}
     events, reasons = [], ["prior_runner_interrupted"]
     previous = run_dir / "observations.events.jsonl"
     if previous.exists() and previous.stat().st_size <= 128 * 1024 * 1024:
@@ -438,7 +440,7 @@ def _recover(
     observation_problems = []
     recovery_directory = run_dir / ("recovery-" + str(len(list(run_dir.glob("recovery-*")))))
     with observation_session(
-        CodexTelemetryCollector, recovery_directory, observation_problems
+        telemetry_collector(telemetry), recovery_directory, observation_problems
     ) as collector:
         other_run_pending = (
             profile is not None
@@ -475,6 +477,7 @@ def _recover(
             [*events, *collector.events],
             exit_kind="interrupted",
             collection_reasons=[*reasons, *collector.reasons],
+            adapter=telemetry.get("adapter", "codex"),
         )
     if observation_problems:
         observed.observation_errors.extend(observation_problems)

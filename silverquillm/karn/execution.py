@@ -56,25 +56,44 @@ def mark_observation_problems(measurements: dict, problems: list[str]) -> None:
             field["completeness"] = "missing" if field.get("value") is None else "partial"
 
 
-NATIVE_TELEMETRY = ("auto", "codex", "none")
+NATIVE_TELEMETRY = ("auto", "codex", "claude", "none")
+# The native home each adapter's journals and telemetry configuration require.
+NATIVE_HOMES = {"codex": "CODEX_HOME", "claude": "CLAUDE_CONFIG_DIR"}
 
 
 def select_native_telemetry(candidate, requested: str) -> dict:
-    """Native Codex journals and the OTel relay, chosen by the operator or batch spec.
+    """Native journals and the OTel relay, chosen by the operator or batch spec.
 
     The v4 Construct Definition has no telemetry field, so this is bench-side configuration;
-    ``auto`` keeps the documented fallback of detecting a declared ``CODEX_HOME``.
+    ``auto`` keeps the documented fallback of detecting the adapter's declared native home.
+    The adapter selects which native journals are read even when the relay is off.
     """
     if requested not in NATIVE_TELEMETRY:
         raise KarnError("invalid_native_telemetry")
-    declared = "CODEX_HOME" in candidate.runtime["environment"]
-    if requested == "codex" and not declared:
-        raise KarnError("native_telemetry_requires_codex_home")
+    environment = candidate.runtime["environment"]
+    declared = [name for name, home in NATIVE_HOMES.items() if home in environment]
+    if len(declared) > 1:
+        raise KarnError("native_telemetry_home_ambiguous")
+    if requested in NATIVE_HOMES and requested not in declared:
+        raise KarnError("native_telemetry_requires_" + NATIVE_HOMES[requested].lower())
+    adapter = requested if requested in NATIVE_HOMES else (declared or ["codex"])[0]
     return {
         "requested": requested,
-        "enabled": declared if requested == "auto" else requested == "codex",
-        "source": "codex_home_heuristic" if requested == "auto" else "operator",
+        "enabled": bool(declared) if requested == "auto" else requested in NATIVE_HOMES,
+        "source": "native_home_heuristic" if requested == "auto" else "operator",
+        "adapter": adapter,
     }
+
+
+def telemetry_collector(telemetry: dict):
+    """Runs recorded before adapters existed were Codex runs."""
+    if telemetry.get("adapter", "codex") == "claude":
+        from .claude_observations import ClaudeTelemetryCollector
+
+        return ClaudeTelemetryCollector
+    from .observations import CodexTelemetryCollector
+
+    return CodexTelemetryCollector
 
 
 @contextlib.contextmanager
@@ -281,8 +300,6 @@ def _collect(
     evaluator,
     login_hold,
 ) -> KarnRunRecord:
-    from .observations import CodexTelemetryCollector
-
     start = datetime.now(UTC).isoformat()
     artifact_dir = run_dir / "candidate"
     artifact_dir.mkdir()
@@ -343,7 +360,7 @@ def _collect(
         )
         (run_dir / "prompt.md").write_text(prompt)
         native = telemetry["enabled"]
-        factory = collector_factory or CodexTelemetryCollector
+        factory = collector_factory or telemetry_collector(telemetry)
         bind = collector_host or (collector_address() if native else "127.0.0.1")
         with observation_session(
             factory, run_dir, observation_problems, bind_host=bind
@@ -363,7 +380,14 @@ def _collect(
                         collector.mark_incomplete("native_state_unavailable")
 
                 arguments = {}
-                if native:
+                if native and telemetry.get("adapter") == "claude":
+                    arguments = {
+                        "runtime_environment": lambda network: collector.otel_environment(
+                            network.telemetry_endpoint
+                        ),
+                        "collector_endpoint": collector.endpoint,
+                    }
+                elif native:
                     arguments = {
                         "runtime_config": lambda network: collector.config_toml(
                             network.telemetry_endpoint
@@ -406,6 +430,7 @@ def _collect(
                     getattr(collector, "events", []),
                     exit_kind=observed.status,
                     collection_reasons=["measurement_finalization_failed"],
+                    adapter=telemetry["adapter"],
                 )
         if observed.workspace_stopped:
             stage = "harvest"
@@ -461,7 +486,10 @@ def _collect(
         from .observations import summarize_events
 
         metadata["measurements"] = summarize_events(
-            [], exit_kind=observed.status, collection_reasons=["measurement_collection_unavailable"]
+            [],
+            exit_kind=observed.status,
+            collection_reasons=["measurement_collection_unavailable"],
+            adapter=telemetry["adapter"],
         )
     record = KarnRunRecord(
         {

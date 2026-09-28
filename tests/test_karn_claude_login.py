@@ -231,3 +231,38 @@ def test_login_enrollment_refuses_a_construct_without_a_login_plugin(tmp_path, m
     )
     assert result.exit_code != 0
     assert "candidate_requires_login_plugin" in result.output
+
+
+def test_the_native_telemetry_environment_is_allowlisted_and_recorded(tmp_path):
+    from silverquillm.karn.definition import load_candidate
+    from silverquillm.karn.host import DockerHost
+
+    from .test_karn_host import FakeDocker, make_candidate
+
+    candidate = make_candidate(tmp_path)
+    candidate.runtime["environment"]["CLAUDE_CODE_ENABLE_TELEMETRY"] = "0"
+    candidate.definition_path.write_bytes(canonical(candidate.definition))
+    candidate = load_candidate(
+        candidate.build_output, "bare", image_inspector=lambda ref: {"Id": ref}
+    )
+    docker = FakeDocker()
+    result = DockerHost(docker=docker).run(
+        candidate,
+        tmp_path / "ws",
+        tmp_path / "run",
+        "task",
+        runtime_environment=lambda network: {"CLAUDE_CODE_ENABLE_TELEMETRY": "1"},
+    )
+    assert result.status == "completed"
+    create = next(command for command in docker.commands if command[0] == "create")
+    assert "CLAUDE_CODE_ENABLE_TELEMETRY=1" in create
+    assert "CLAUDE_CODE_ENABLE_TELEMETRY=0" not in create
+    assert result.host_configuration["environment"] == {"CLAUDE_CODE_ENABLE_TELEMETRY": "1"}
+    refused = DockerHost(docker=FakeDocker()).run(
+        make_candidate(tmp_path / "other"),
+        tmp_path / "ws2",
+        tmp_path / "run2",
+        "task",
+        runtime_environment=lambda network: {"LD_PRELOAD": "/tmp/x.so"},
+    )
+    assert refused.error == "undeclared_runtime_environment_override"
