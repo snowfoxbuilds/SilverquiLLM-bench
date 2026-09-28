@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import posixpath
 import time
 import uuid
 from collections.abc import Callable
@@ -511,6 +512,14 @@ class DockerHost:
                         if not native_target:
                             raise KarnError("native_home_required_for_observability")
                         mounts.append(_mount(config, native_target + "/config.toml", True))
+                    # Docker cleans ".." and a leading "//" out of a target and pathlib does not,
+                    # so only canonical targets are comparable.
+                    if any(
+                        mount["Target"] != posixpath.normpath(mount["Target"])
+                        or mount["Target"].startswith("//")
+                        for mount in mounts
+                    ):
+                        raise KarnError("noncanonical_mount_target")
                     # Plugin-admitted and telemetry mounts arrive after the definition check above.
                     for index, mount in enumerate(mounts):
                         if mount in extra_mounts and any(

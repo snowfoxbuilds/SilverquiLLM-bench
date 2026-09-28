@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import io
 import shutil
 import stat
 import subprocess
+import threading
 import zipfile
 from pathlib import Path
 
@@ -21,9 +23,6 @@ from silverquillm.karn.toolchain import (
 )
 
 from .test_karn_host import FakeDocker, make_candidate
-from .test_karn_host import (
-    local_image as local_image_fixture,  # noqa: F401 -- registers the fixture
-)
 
 GRADER_REQUIREMENTS = TOOLCHAIN_SOURCE.parent / "grader_image/requirements.txt"
 
@@ -48,6 +47,10 @@ def replace_pytest_timeout(source: Path, members: dict[str, bytes], **options) -
     """Swap in a crafted pytest-timeout wheel and re-pin it, so only its members are at fault."""
     wheel = source / "wheels/pytest_timeout-2.4.0-py3-none-any.whl"
     write_wheel(wheel, members, **options)
+    repin(source, wheel)
+
+
+def repin(source: Path, wheel: Path) -> None:
     sha = hashlib.sha256(wheel.read_bytes()).hexdigest()
     requirements = source / "requirements.txt"
     lines = requirements.read_text().splitlines()
@@ -67,7 +70,7 @@ def test_toolchain_pins_match_the_graders_where_they_overlap():
 
 def test_vendored_wheels_are_pure_python_and_match_their_pins():
     wheels = locked_wheels()
-    assert {wheel.name.split("-")[0] for wheel, _ in wheels} == {
+    assert {wheel.path.name.split("-")[0] for wheel in wheels} == {
         "iniconfig",
         "packaging",
         "pluggy",
@@ -142,6 +145,80 @@ def test_unsafe_wheel_members_are_refused_even_when_pinned(tmp_path, members, mo
     with pytest.raises(KarnError, match="test_toolchain_integrity_mismatch:pytest_timeout"):
         prepare_toolchain(tmp_path / "state", source)
     assert not (tmp_path / "escape.py").exists()
+
+
+@pytest.mark.parametrize(
+    ("members", "error"),
+    [
+        ({"pytest_timeout.py": b"x", "pytest_timeout.py/": b""}, "FileExistsError"),
+        ({"pytest_timeout.py": b"x", "pytest_timeout.py/inner.py": b""}, "FileExistsError"),
+    ],
+    ids=["duplicate", "file-then-directory"],
+)
+def test_clashing_members_refuse_instead_of_crashing(tmp_path, members, error):
+    source = vendored_copy(tmp_path)
+    replace_pytest_timeout(source, members)
+    with pytest.raises(KarnError, match=f"integrity_mismatch:pytest_timeout.*:{error}"):
+        prepare_toolchain(tmp_path / "state", source)
+
+
+def test_a_pinned_wheel_with_a_bad_crc_is_refused(tmp_path):
+    source = vendored_copy(tmp_path)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        archive.writestr("pytest_timeout.py", b"original content")
+    damaged = buffer.getvalue().replace(b"original content", b"tampered content")
+    wheel = source / "wheels/pytest_timeout-2.4.0-py3-none-any.whl"
+    wheel.write_bytes(damaged)
+    repin(source, wheel)
+    with pytest.raises(KarnError, match="integrity_mismatch:pytest_timeout.*:BadZipFile"):
+        prepare_toolchain(tmp_path / "state", source)
+
+
+def test_unpacking_uses_the_bytes_that_were_hashed(tmp_path, monkeypatch):
+    source = vendored_copy(tmp_path)
+    wheels = locked_wheels(source)
+    for wheel in wheels:
+        wheel.path.write_bytes(b"swapped after hashing")
+    monkeypatch.setattr("silverquillm.karn.toolchain.locked_wheels", lambda _source: wheels)
+    toolchain = prepare_toolchain(tmp_path / "state", source)
+    assert (toolchain.path / "pytest/__init__.py").is_file()
+
+
+def test_prepare_waits_for_the_host_lock(tmp_path):
+    root = tmp_path / "state/toolchains"
+    root.mkdir(parents=True)
+    finished = threading.Event()
+    with open(root / ".lock", "a") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        worker = threading.Thread(
+            target=lambda: (prepare_toolchain(tmp_path / "state"), finished.set())
+        )
+        worker.start()
+        assert not finished.wait(0.5)
+    worker.join(30)
+    assert finished.is_set()
+
+
+def test_concurrent_runs_rebuild_a_corrupted_tree_once_without_crashing(tmp_path):
+    first = prepare_toolchain(tmp_path / "state")
+    (first.path / "pytest/__init__.py").write_text("corrupted")
+    results, errors = [], []
+
+    def prepare():
+        try:
+            results.append(prepare_toolchain(tmp_path / "state"))
+        except Exception as error:  # noqa: BLE001 -- collected for the assertion below.
+            errors.append(error)
+
+    workers = [threading.Thread(target=prepare) for _ in range(6)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(60)
+    assert errors == []
+    assert results == [first] * 6
+    assert "corrupted" not in (first.path / "pytest/__init__.py").read_text()
 
 
 def with_runtime(candidate, **changes):
@@ -240,6 +317,28 @@ def test_toolchain_may_not_overlap_a_plugin_or_telemetry_mount(tmp_path, toolcha
     )
     assert result.status == "host_failed"
     assert result.error == "infrastructure_mount_overlaps"
+    assert not docker.created
+
+
+@pytest.mark.parametrize(
+    "home",
+    ["/run/silverquillm/native/../test-toolchain", "//run/silverquillm/test-toolchain"],
+    ids=["dotdot", "double-slash"],
+)
+def test_a_noncanonical_telemetry_target_cannot_hide_under_the_toolchain(tmp_path, toolchain, home):
+    # Docker cleans both shapes to a path under the toolchain; pathlib compares them as disjoint.
+    candidate = with_runtime(make_candidate(tmp_path), environment={"CODEX_HOME": home})
+    docker = FakeDocker()
+    result = DockerHost(docker=docker).run(
+        candidate,
+        tmp_path / "workspace",
+        tmp_path / "run",
+        "task",
+        test_toolchain=toolchain,
+        runtime_config="[otel]\n",
+    )
+    assert result.status == "host_failed"
+    assert result.error == "noncanonical_mount_target"
     assert not docker.created
 
 

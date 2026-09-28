@@ -346,7 +346,15 @@ def test_schema2_rejects_impossible_or_absent_score_numbers(tmp_path):
         damaged.scores["card_correctness"].update(change)
         with pytest.raises(InvalidRunRecordError):
             damaged.validate()
-    for toolchain in ({"digest": "sha256:short", "target": "/x"}, {"digest": None}):
+    good = result.run_metadata["test_toolchain"]
+    for toolchain in (
+        None,
+        {"digest": "sha256:short", "target": good["target"]},
+        {"digest": None},
+        {**good, "target": "run/silverquillm/test-toolchain"},
+        {**good, "target": "/opt/test-toolchain"},
+        {**good, "target": "/run/silverquillm/x/../../etc"},
+    ):
         damaged = copy.deepcopy(result)
         damaged.manifest["run_metadata"]["test_toolchain"] = toolchain
         with pytest.raises(InvalidRunRecordError, match="test toolchain"):

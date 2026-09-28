@@ -7,15 +7,20 @@ this module and pinned by the hash-locked ``requirements.txt``.
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import hashlib
+import io
 import os
 import re
 import shutil
 import stat
 import tempfile
 import zipfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import NamedTuple
 
 from .definition import KarnError, canonical, digest, read_regular, tree_digest
 
@@ -24,6 +29,12 @@ TOOLCHAIN_TARGET = "/run/silverquillm/test-toolchain"
 MAX_WHEEL_BYTES = 16 * 1024 * 1024
 MAX_UNPACKED_BYTES = 64 * 1024 * 1024
 MAX_MEMBERS = 4096
+
+
+class Wheel(NamedTuple):
+    path: Path
+    sha256: str
+    data: bytes
 
 
 @dataclass(frozen=True)
@@ -66,8 +77,11 @@ def read_pins(requirements: Path) -> dict[str, tuple[str, frozenset[str]]]:
     return pins
 
 
-def locked_wheels(source: Path = TOOLCHAIN_SOURCE) -> list[tuple[Path, str]]:
-    """Return the vendored wheels, each matching exactly one pin, pure-Python and unaltered."""
+def locked_wheels(source: Path = TOOLCHAIN_SOURCE) -> list[Wheel]:
+    """Return the vendored wheels, each matching exactly one pin, pure-Python and unaltered.
+
+    Each wheel carries the bytes that were hashed, so unpacking never rereads the file.
+    """
     pins = read_pins(source / "requirements.txt")
     wheels, seen = [], set()
     for wheel in sorted((source / "wheels").iterdir()):
@@ -77,21 +91,38 @@ def locked_wheels(source: Path = TOOLCHAIN_SOURCE) -> list[tuple[Path, str]]:
         name, version = _normalize(parts[0]), parts[1]
         if name in seen or pins.get(name, ("",))[0] != version:
             _refuse(wheel.name)
-        sha = hashlib.sha256(read_regular(wheel, limit=MAX_WHEEL_BYTES)).hexdigest()
+        data = read_regular(wheel, limit=MAX_WHEEL_BYTES)
+        sha = hashlib.sha256(data).hexdigest()
         if sha not in pins[name][1]:
             _refuse(wheel.name)
         seen.add(name)
-        wheels.append((wheel, sha))
+        wheels.append(Wheel(wheel, sha, data))
     if seen != set(pins):
         _refuse("missing:" + ",".join(sorted(set(pins) - seen)))
     return wheels
 
 
-def _unpack(wheel: Path, site: Path, budget: list[int]) -> None:
-    with zipfile.ZipFile(wheel) as archive:
+def _unpack(wheel: Wheel, site: Path, budget: list[int]) -> None:
+    try:
+        _extract(wheel, site, budget)
+    except (
+        FileExistsError,
+        IsADirectoryError,
+        NotADirectoryError,
+        zipfile.BadZipFile,
+        zlib.error,
+        EOFError,
+    ) as error:
+        # A pinned wheel whose members clash or fail their CRC is refused, not a host crash.
+        _refuse(f"{wheel.path.name}:{type(error).__name__}")
+
+
+def _extract(wheel: Wheel, site: Path, budget: list[int]) -> None:
+    name_of = wheel.path.name
+    with zipfile.ZipFile(io.BytesIO(wheel.data)) as archive:
         members = archive.infolist()
         if len(members) > MAX_MEMBERS:
-            _refuse(wheel.name)
+            _refuse(name_of)
         for member in members:
             name = member.filename
             kind = stat.S_IFMT(member.external_attr >> 16)
@@ -103,14 +134,14 @@ def _unpack(wheel: Path, site: Path, budget: list[int]) -> None:
                 or kind not in (0, stat.S_IFREG, stat.S_IFDIR)
                 or relative.parts[0].endswith(".data")
             ):
-                _refuse(wheel.name)
+                _refuse(name_of)
             destination = site.joinpath(*relative.parts)
             if member.is_dir():
                 destination.mkdir(mode=0o755, parents=True, exist_ok=True)
                 continue
             budget[0] -= member.file_size
             if budget[0] < 0:
-                _refuse(wheel.name)
+                _refuse(name_of)
             destination.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
             with archive.open(member) as stream, open(destination, "xb") as output:
                 shutil.copyfileobj(stream, output)
@@ -124,33 +155,39 @@ def _verified(final: Path) -> bool:
         return False
 
 
+@contextlib.contextmanager
+def _exclusive(root: Path):
+    with open(root / ".lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
 def prepare_toolchain(state_root: Path, source: Path = TOOLCHAIN_SOURCE) -> CandidateToolchain:
     """Verify the pinned wheels and unpack them once per toolchain digest under the state root."""
     wheels = locked_wheels(source)
-    value = digest(canonical([[wheel.name, sha] for wheel, sha in wheels]))
+    value = digest(canonical([[wheel.path.name, wheel.sha256] for wheel in wheels]))
     root = Path(state_root).resolve() / "toolchains"
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     final = root / value.split(":", 1)[1]
-    if final.exists() and not _verified(final):
-        shutil.rmtree(final)
-    if not final.exists():
-        staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=root))
-        try:
-            site = staging / "site"
-            site.mkdir(mode=0o755)
-            budget = [MAX_UNPACKED_BYTES]
-            for wheel, _ in wheels:
-                _unpack(wheel, site, budget)
-            for directory in [site, *(p for p in site.rglob("*") if p.is_dir())]:
-                directory.chmod(0o755)
-            (staging / "tree-digest").write_text(tree_digest(site))
-            os.rename(staging, final)
-        except OSError:
-            # A concurrent run may have unpacked the same toolchain first.
-            if not _verified(final):
-                raise
-        finally:
-            shutil.rmtree(staging, ignore_errors=True)
-    if not _verified(final):
-        _refuse("unpacked")
+    # Concurrent runs share one tree: check, rebuild and rename happen under one host lock,
+    # so no run deletes a tree another run has just verified.
+    with _exclusive(root):
+        if final.exists() and not _verified(final):
+            shutil.rmtree(final)
+        if not final.exists():
+            staging = Path(tempfile.mkdtemp(prefix=".staging-", dir=root))
+            try:
+                site = staging / "site"
+                site.mkdir(mode=0o755)
+                budget = [MAX_UNPACKED_BYTES]
+                for wheel in wheels:
+                    _unpack(wheel, site, budget)
+                for directory in [site, *(p for p in site.rglob("*") if p.is_dir())]:
+                    directory.chmod(0o755)
+                (staging / "tree-digest").write_text(tree_digest(site))
+                os.rename(staging, final)
+            finally:
+                shutil.rmtree(staging, ignore_errors=True)
+        if not _verified(final):
+            _refuse("unpacked")
     return CandidateToolchain(final / "site", value)
