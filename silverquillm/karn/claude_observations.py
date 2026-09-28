@@ -29,7 +29,7 @@ from .observations import (
 )
 
 # Versions whose transcript and OTel streams were checked against each other on a real run.
-QUALIFIED_CLAUDE_VERSIONS: frozenset[str] = frozenset()
+QUALIFIED_CLAUDE_VERSIONS: frozenset[str] = frozenset({"2.1.284"})
 MAX_TRANSCRIPT_BYTES = 128 * 1024 * 1024
 MAX_TRANSCRIPT_FILES = 10_000
 MAX_REQUEST_COST_USD = Decimal(1_000_000)

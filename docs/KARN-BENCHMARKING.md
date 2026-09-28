@@ -98,7 +98,7 @@ Estimated cost is API-equivalent USD, not the subscription bill.
 Agent turns count model responses plus tool calls; missing measurements remain null with an explanation.
 Turns, usage, and cost are complete only for a Codex version whose journal and telemetry were qualified against scripted ground truth (0.153.4 and 0.157.1); qualify another offline, without credentials, with `scripts/qualify_codex_telemetry.py --image IMAGE --native-version VERSION --output DIR`.
 Claude Code runs are read from its session transcripts, subagents included, with the OTel stream as a cross-check; a compaction's own request appears only in OTel.
-No Claude Code version is qualified yet, so Claude measurements are marked partial with `native_version_not_qualified`.
+Claude Code 2.1.284 is qualified, from smoke run 93ffaa74 on `bare-claude-haiku`; measurements from any other version are marked partial with `native_version_not_qualified`.
 Qualify a version from a real run whose relay was on: `scripts/qualify_claude_telemetry.py runs/karn/RUN_ID --out proof.json` checks that both streams agree request by request; commit a qualifying proof with that run's `observations.events.jsonl` under `tests/fixtures/karn_observations_claude_<version>/` and add the version to `QUALIFIED_CLAUDE_VERSIONS`.
 FDN coverage lists tested and uncovered cards explicitly.
 Run metadata fingerprints the actual host grading suites, test helpers, and replay identity maps; unavailable hashes remain explicit observations.

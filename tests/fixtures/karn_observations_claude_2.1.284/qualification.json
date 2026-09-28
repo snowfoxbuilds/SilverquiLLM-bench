@@ -1,0 +1,79 @@
+{
+  "agent_turns": {
+    "responses": {
+      "completeness": "complete",
+      "reasons": [],
+      "value": 80
+    },
+    "tool_calls": {
+      "completeness": "complete",
+      "reasons": [],
+      "value": 101
+    },
+    "total": {
+      "completeness": "complete",
+      "reasons": [],
+      "value": 181
+    }
+  },
+  "cost_breakdown": {
+    "completeness": "complete",
+    "reasons": [],
+    "value": {
+      "cache_read": {
+        "tokens": 5688306,
+        "usd": "0.5688306"
+      },
+      "cache_write": {
+        "tokens": 0,
+        "usd": "0.00"
+      },
+      "cache_write_1h": {
+        "tokens": 101249,
+        "usd": "0.202498"
+      },
+      "output": {
+        "tokens": 29031,
+        "usd": "0.145155"
+      },
+      "uncached_input": {
+        "tokens": 641,
+        "usd": "0.000641"
+      }
+    }
+  },
+  "coverage": {
+    "deduplicated_events": 365,
+    "exit_kind": "completed",
+    "model_basis": "native_message_model; observation, not provider attestation",
+    "native_reported_cost_usd": "0.9171246000000000165",
+    "native_threads": 1,
+    "native_versions": [
+      "2.1.284"
+    ],
+    "observed_threads": 1,
+    "remote_or_local_compactions": 0
+  },
+  "estimated_cost": {
+    "completeness": "complete",
+    "reasons": [],
+    "value": "0.9171246"
+  },
+  "events_sha256": "156efa751c87626f734a7ed195256482dab449f2d4cff6632e1b72fcf5817dd8",
+  "mismatches": [],
+  "native_binary": "claude-code 2.1.284",
+  "paid_inference": true,
+  "qualified": true,
+  "usage": {
+    "completeness": "complete",
+    "reasons": [],
+    "value": {
+      "cache_write_input_tokens": 101249,
+      "cached_input_tokens": 5688306,
+      "input_tokens": 5790196,
+      "output_tokens": 29031,
+      "reasoning_output_tokens": 5778,
+      "total_tokens": 5819227
+    }
+  }
+}

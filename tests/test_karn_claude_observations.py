@@ -38,12 +38,16 @@ def usage(uncached=10, read=4000, written=300, written_1h=100, output=50):
     }
 
 
+# Synthetic transcripts use a version never qualified, so they stay partial.
+SYNTHETIC_VERSION = "2.1.999"
+
+
 def line(kind, *, sidechain=False, second=0, **fields):
     value = {
         "type": kind,
         "sessionId": SESSION,
         "isSidechain": sidechain,
-        "version": "2.1.284",
+        "version": SYNTHETIC_VERSION,
         "timestamp": f"2026-09-28T00:00:{second:02}.000Z",
         "uuid": f"00000000-0000-4000-8000-{second:012d}",
         **fields,
@@ -134,7 +138,7 @@ def test_a_message_split_across_block_lines_counts_once_with_its_tools():
 
 
 def test_an_unqualified_version_keeps_values_but_marks_them_partial():
-    assert "2.1.284" not in QUALIFIED_CLAUDE_VERSIONS
+    assert SYNTHETIC_VERSION not in QUALIFIED_CLAUDE_VERSIONS
     result = summarize_claude_events(events_of(main_transcript()), exit_kind="completed")
     assert result["estimated_cost"]["completeness"] == "partial"
     assert result["estimated_cost"]["reasons"] == ["native_version_not_qualified"]
@@ -274,7 +278,7 @@ def otlp(name="claude_code.api_request", **attrs):
         "event.name": name,
         "event.timestamp": "2026-09-28T00:00:09.000Z",
         "session.id": SESSION,
-        "app.version": "2.1.284",
+        "app.version": SYNTHETIC_VERSION,
         "model": "claude-opus-5-5",
         "user.email": "person@example.com",
         "organization.id": "org-secret",
@@ -517,7 +521,7 @@ def test_a_run_whose_streams_agree_qualifies_its_version():
     proof = qualification()(raw_events(events_of(main_transcript()), otel, tool))
     assert proof["mismatches"] == []
     assert proof["qualified"] is True
-    assert proof["native_binary"] == "claude-code 2.1.284"
+    assert proof["native_binary"] == "claude-code " + SYNTHETIC_VERSION
 
 
 def test_disagreeing_token_counts_do_not_qualify():
