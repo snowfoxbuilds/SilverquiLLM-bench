@@ -29,6 +29,7 @@ from .definition import (
 )
 from .docker import RUN_LABEL, Docker, Network
 from .login import (
+    LOGIN_PLUGINS,
     LoginProfile,
     PluginProcess,
     admit_plugin_mounts,
@@ -405,8 +406,10 @@ class DockerHost:
                     raise KarnError("automaton_required")
                 if candidate.plugins:
                     for artifact in candidate.plugins:
-                        if artifact.row["id"] != "karn-codex-login":
+                        if artifact.row["id"] not in LOGIN_PLUGINS:
                             raise KarnError("runtime_plugin_unavailable:" + artifact.row["id"])
+                    if len(candidate.plugins) != 1:
+                        raise KarnError("multiple_login_plugins")
                     if login_profile is None:
                         raise KarnError("login_profile_required")
                     stage = "authentication"

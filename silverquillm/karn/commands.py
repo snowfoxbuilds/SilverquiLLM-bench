@@ -138,14 +138,15 @@ def _report(record, *, exit_on_status=True):
 def enroll(build_output, construct, state_root):
     """Enroll the construct's own subscription login through its Karn login plugin."""
     from .execution import login_profile
+    from .login import LOGIN_PLUGINS
 
     try:
         candidate = load_candidate(build_output, construct)
         artifacts = [
-            artifact for artifact in candidate.plugins if artifact.row["id"] == "karn-codex-login"
+            artifact for artifact in candidate.plugins if artifact.row["id"] in LOGIN_PLUGINS
         ]
         if len(artifacts) != 1:
-            raise KarnError("candidate_requires_codex_login_plugin")
+            raise KarnError("candidate_requires_login_plugin")
         status = DockerHost(plugin_cache=state_root.resolve() / "plugins").enroll_login(
             login_profile(state_root, construct), artifacts[0]
         )

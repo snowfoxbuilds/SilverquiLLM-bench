@@ -17,3 +17,10 @@ login-build/: generated offline using karn.plugin_builder.build_plugin on
   sha256:e166309ad71cc1ff1a83bf91dc804c0361a1601025707f1657912987d2317630
   Includes the unchanged Codex login 0.1.0 and Plugin SDK 1.3.0 wheel closure.
   Tests use synthetic credentials and a fake enrollment CLI, never account state.
+
+login-build-claude/: generated offline the same way from
+  karn/plugins/karn-claude-login/ at revision
+  adaef04c31e21c59efc3fcf2b5e197c17f033496.
+  Plugin artifact:
+  sha256:ddf34c779074b3a69690df5fdf5fe154da0d04406e859eab1236d365dbe5365c
+  Includes the unchanged Claude login 0.1.0 and the same Plugin SDK 1.3.0 wheel.
