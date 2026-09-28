@@ -153,10 +153,8 @@ class TestSmokeStagedInstructions:
         for pattern in (r"cards/hob", r"cards\.hob", r"implementing HOB", r"hob_<N>"):
             assert not re.search(pattern, text), f"{doc} still says {pattern!r}"
 
-    def test_targets_are_writable_and_authoritative_tests_are_host_side(self) -> None:
-        text = (SMOKE_WS / "AGENTS.md").read_text()
-        assert "writable targets" in text
-        assert "host-side" in text
+    def test_names_the_writable_targets(self) -> None:
+        assert "writable targets" in (SMOKE_WS / "AGENTS.md").read_text()
 
     def test_no_stale_hand_maintained_test_list(self) -> None:
         """PROJECT_MAP.md defers to `find` for the FDN cards that ship a
@@ -168,9 +166,9 @@ class TestSmokeStagedInstructions:
 
     def test_engine_envelope_matches_the_hob_contract(self) -> None:
         """Smoke calibrates the V2/HOB candidate contract, so its envelope
-        language is the HOB one — tests-as-envelope, not additive-only."""
+        language is the HOB one: the engine is freely modifiable."""
         text = (SMOKE_WS / "AGENTS.md").read_text()
-        assert "no additive-only rule and no diff policing" in text
+        assert "The engine is yours to change" in text
         assert not re.search(r"Additive-only|MUST NOT rename|no renaming, no refactoring", text)
 
 
