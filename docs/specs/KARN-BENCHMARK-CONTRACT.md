@@ -47,7 +47,7 @@ Karn allows an Automaton to omit a polling controller (grilling 2026-09-26).
 A controller is needed for automatic scheduling, not direct execution; controller-free execution requires no new wire-format field.
 Externally launched execution does not suppress authentication or other selected lifecycle hooks.
 
-The first supported facilities are ordinary Docker, account bootstrap, temporary Workspace/input/output mounts, Codex subscription login, and restricted networking for model and authentication access (grilling 2026-09-26).
+The first supported facilities are ordinary Docker, account bootstrap, temporary Workspace/input/output mounts, Codex and Claude subscription login, and restricted networking for model and authentication access (grilling 2026-09-26).
 Admission is not tied to a hardcoded model list.
 The integration does not require an exhaustive rejection layer for every facility outside this initial implementation (grilling 2026-09-26).
 The bench does not create a production issue claim or acquire authority to publish a pull request merely to execute a benchmark task.
@@ -86,12 +86,16 @@ The bench supplies its host integration and does not replace the plugin's authen
 The first real run validates this integration with a real device-authorization enrollment; the bench does not further replicate Karn's Node Daemon secret store, setup marker, or process environment, none of which the plugin relies on (grilling 2026-09-26).
 As the Node Daemon does, the host kills a plugin process whose request timed out rather than reading its late reply, and admits the plugin's returned mounts only as an extension of those it passed: the passed mounts unchanged, each new source inside that plugin's own state directory, and no target overlapping another (grilling 2026-09-26).
 
+Claude subscription authentication mirrors Codex through Karn's `karn-claude-login` plugin (grilling 2026-09-28).
+The host accepts exactly the `karn-codex-login` and `karn-claude-login` plugins and refuses any other.
+A Claude profile is enrolled through a fresh `claude auth login` session under the plugin's setup, and the operator's own Claude Code files are never copied into it.
+
 Authentication values stay outside candidate identity and published results.
 Cleanup retains authentication that has not been persisted until persistence succeeds or the operator explicitly abandons it, following Karn's [Login Plugins](https://github.com/snowfoxbuilds/ozolith/blob/main/docs/specs/LOGIN-PLUGINS.md) contract.
 Authentication storage is distinct from the Workspace and from retained benchmark evidence.
 
 A named Login Profile selects subscription authentication independently of candidate identity and can be reused across candidate variants and batches (grilling 2026-09-26).
-A profile is enrolled through a fresh device-authorization session, so it holds its own session and refresh chain, separate from the operator's own Codex login, whose files are never copied into it (grilling 2026-09-26).
+A profile is enrolled through a fresh login session, so it holds its own session and refresh chain, separate from the operator's own login, whose files are never copied into it (grilling 2026-09-26).
 Each run starts with fresh native state; only authentication persists between runs.
 At most one runner on the host may use a login at a time because concurrent token refresh can invalidate the shared authentication (grilling 2026-09-26).
 Use the existing local login binding and a host-local exclusive runner lock, shared by direct runs, scheduler execution, and enrollment.
@@ -117,16 +121,20 @@ The total is the sum of response and tool-call counts; both component counts are
 Include descendant-agent and compaction responses and descendant-agent tool calls.
 Count each logical response and call once, rather than counting streaming fragments or both start and completion notifications.
 A tool call that reports an error remains a tool call.
-Native Codex user-request turns are a different observation and cannot substitute for this metric.
+Native user-request turns, such as Codex's, are a different observation and cannot substitute for this metric.
 
 Estimated Cost is API-equivalent USD computed from observed token usage and a versioned model-price table (grilling 2026-09-26).
 Retain the reported model, token breakdown, price-table version, and pricing assumptions so the estimate can be reproduced.
+The cost breakdown tallies input tokens by type, for every provider: uncached input, cache reads, and cache writes, with 5-minute and 1-hour writes separate where the provider prices them differently; each type carries its token count and its cost beside the output tokens (grilling 2026-09-28).
+Usage is normalized into these types from each provider's own convention: OpenAI's input total includes cached tokens, while Anthropic's input count excludes cache reads and writes.
 The estimate is a comparison of resource usage and does not claim to allocate the actual subscription charge to the run.
 Missing or incomplete observations remain explicitly missing or incomplete, rather than becoming zero.
 
 The integration qualifies response, tool-call, and usage capture against the pinned native CLI.
 The current stock result file's usage:null and whole-request turn.completed events do not establish the required measurements.
 Codex's existing opt-in telemetry is an implementation path to qualify without changing the task into a custom agent workflow.
+Claude Code mirrors it (grilling 2026-09-28): the session transcript under its config directory is the durable source that recovery also reads, and its OpenTelemetry request and tool events cross-check it.
+The transcript's format is internal to Claude Code, so each pinned Claude Code version is qualified before its measurements count as complete.
 
 ### Outcomes and retained evidence
 
