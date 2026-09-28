@@ -289,7 +289,7 @@ def _activate_regular_ability(
     # 4. Choose targets (rule 602.2b/2c) — BEFORE paying costs, so an ability
     #    with no legal target cannot be activated and spends no mana. The chosen
     #    targets are stored on the stack object and are not re-selected at
-    #    resolution (see KEY_DECISIONS: activation-time ability targeting).
+    #    resolution.
     chosen_targets: list[Any] = []
     context: ActivationContext | None = None
     if ability.targeting is not None:
