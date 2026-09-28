@@ -190,6 +190,14 @@ class KarnRunRecord:
             or not DIGEST.fullmatch(str(isolation["grader_image_id"]))
         ):
             raise InvalidRunRecordError("invalid grading isolation")
+        toolchain = self.run_metadata.get("test_toolchain")
+        if toolchain is not None and (
+            not isinstance(toolchain, dict)
+            or set(toolchain) != {"digest", "target"}
+            or not DIGEST.fullmatch(str(toolchain["digest"]))
+            or not isinstance(toolchain["target"], str)
+        ):
+            raise InvalidRunRecordError("invalid test toolchain")
         failure = self.run_metadata.get("grading_failure")
         if failure is not None and (
             not isinstance(failure, dict)

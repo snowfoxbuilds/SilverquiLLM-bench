@@ -500,6 +500,9 @@ def _recover(
         "measurements": measurements,
         "git_history": retain_git_history(run_dir / "workspace", run_dir),
     }
+    if "test_toolchain" in inputs:
+        # Recovery never relaunches the candidate; the toolchain is the one the run started with.
+        metadata["test_toolchain"] = inputs["test_toolchain"]
     if benchmark.identity != inputs["benchmark_identity"]:
         scores = missing_scores("benchmark_changed_since_run_started")
     elif selection and selection["selected"]:
