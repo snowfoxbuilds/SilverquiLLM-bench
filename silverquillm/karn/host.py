@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import posixpath
 import time
 import uuid
 from collections.abc import Callable
@@ -24,6 +25,7 @@ from .definition import (
     inside,
     read_regular,
     strict_json,
+    tree_digest,
 )
 from .docker import RUN_LABEL, Docker, Network
 from .login import (
@@ -36,6 +38,7 @@ from .login import (
     preserve_pending_native,
     recover_login,
 )
+from .toolchain import TOOLCHAIN_TARGET, CandidateToolchain
 
 DEFAULT_BUDGET_SECONDS = 24 * 60 * 60
 # The standard-library modules proxy.py imports inside the candidate image.
@@ -82,6 +85,22 @@ def _now() -> str:
 
 def _mount(source: Path, target: str, readonly: bool) -> dict:
     return {"Type": "bind", "Source": str(source.resolve()), "Target": target, "ReadOnly": readonly}
+
+
+def _overlaps(first: str, second: str) -> bool:
+    return PurePosixPath(first).is_relative_to(second) or PurePosixPath(second).is_relative_to(
+        first
+    )
+
+
+def _python_path(candidate: KarnCandidate, inspection: dict) -> str:
+    """Put the test toolchain first, keeping the construct's or else the image's PYTHONPATH."""
+    inherited = candidate.runtime["environment"].get("PYTHONPATH")
+    if inherited is None:
+        for entry in (inspection.get("Config") or {}).get("Env") or []:
+            if isinstance(entry, str) and entry.startswith("PYTHONPATH="):
+                inherited = entry.removeprefix("PYTHONPATH=")
+    return TOOLCHAIN_TARGET + (":" + inherited if inherited else "")
 
 
 def _host_file(mounts: list[dict], guest: str) -> Path:
@@ -303,6 +322,7 @@ class DockerHost:
         mount_bindings: dict | None = None,
         extra_environment: dict | None = None,
         extra_mounts: list[dict] | None = None,
+        test_toolchain: CandidateToolchain | None = None,
         runtime_config: str | Callable[[Network], str] | None = None,
         after_stop: Callable[[HostResult, Path | None], None] | None = None,
         collector_endpoint: str | None = None,
@@ -331,32 +351,26 @@ class DockerHost:
         }
         if set(extra_environment or {}) - allowed_environment:
             raise KarnError("undeclared_runtime_environment_override")
+        extra_mounts = list(extra_mounts or [])
+        if test_toolchain is not None:
+            extra_mounts.append(_mount(test_toolchain.path, TOOLCHAIN_TARGET, True))
         infrastructure_mounts = []
-        for mount in extra_mounts or []:
+        for mount in extra_mounts:
             target = mount.get("Target", "")
             if not mount.get("ReadOnly") or not target.startswith("/run/silverquillm/"):
                 raise KarnError("infrastructure_mount_must_be_readonly_and_scoped")
             if any(
-                PurePosixPath(target).is_relative_to(row["target"])
-                or PurePosixPath(row["target"]).is_relative_to(target)
+                _overlaps(target, row["target"])
                 for row in candidate.runtime["mounts"]
                 if row.get("exposure", "container") == "container"
             ):
                 raise KarnError("infrastructure_mount_shadows_definition")
-            source = Path(mount["Source"]).resolve()
-            paths = sorted(source.rglob("*")) if source.is_dir() else [source]
-            content = []
-            for path in paths:
-                if path.is_dir():
-                    continue
-                content.append(
-                    [
-                        str(path.relative_to(source)) if path != source else source.name,
-                        digest(read_regular(path, limit=256 * 1024 * 1024)),
-                    ]
-                )
             infrastructure_mounts.append(
-                {"target": target, "read_only": True, "digest": digest(canonical(content))}
+                {
+                    "target": target,
+                    "read_only": True,
+                    "digest": tree_digest(Path(mount["Source"]).resolve()),
+                }
             )
         result = HostResult(
             run_id,
@@ -370,6 +384,8 @@ class DockerHost:
             "environment": extra_environment or {},
             "mounts": infrastructure_mounts,
         }
+        if test_toolchain is not None:
+            result.host_configuration["test_toolchain"] = test_toolchain.to_dict()
         stage = "preparation"
         plugin = None
         mounts = []
@@ -476,7 +492,14 @@ class DockerHost:
                         **(extra_environment or {}),
                         **network.environment,
                     }
-                    mounts.extend(extra_mounts or [])
+                    if test_toolchain is not None:
+                        environment["PYTHONPATH"] = _python_path(
+                            candidate, self.docker.inspect_image(candidate.image_id)
+                        )
+                        result.host_configuration["test_toolchain"]["python_path"] = environment[
+                            "PYTHONPATH"
+                        ]
+                    mounts.extend(extra_mounts)
                     if runtime_config is not None:
                         config = evidence / "native-observability.toml"
                         config.write_text(
@@ -489,6 +512,22 @@ class DockerHost:
                         if not native_target:
                             raise KarnError("native_home_required_for_observability")
                         mounts.append(_mount(config, native_target + "/config.toml", True))
+                    # Docker cleans ".." and a leading "//" out of a target and pathlib does not,
+                    # so only canonical targets are comparable.
+                    if any(
+                        mount["Target"] != posixpath.normpath(mount["Target"])
+                        or mount["Target"].startswith("//")
+                        for mount in mounts
+                    ):
+                        raise KarnError("noncanonical_mount_target")
+                    # Plugin-admitted and telemetry mounts arrive after the definition check above.
+                    for index, mount in enumerate(mounts):
+                        if mount in extra_mounts and any(
+                            _overlaps(mount["Target"], other["Target"])
+                            for position, other in enumerate(mounts)
+                            if position != index
+                        ):
+                            raise KarnError("infrastructure_mount_overlaps")
                     stage = "launch"
                     self._create(
                         candidate,

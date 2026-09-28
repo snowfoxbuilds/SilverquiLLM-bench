@@ -7,6 +7,7 @@ import fcntl
 import json
 import math
 import os
+import posixpath
 import re
 import shutil
 import tempfile
@@ -209,6 +210,18 @@ class KarnRunRecord:
             or not _graded_python(isolation)
         ):
             raise InvalidRunRecordError("invalid grading isolation")
+        # Records before the toolchain omit the key; an explicit null is never written.
+        if "test_toolchain" in self.run_metadata:
+            toolchain = self.run_metadata["test_toolchain"]
+            if (
+                not isinstance(toolchain, dict)
+                or set(toolchain) != {"digest", "target"}
+                or not DIGEST.fullmatch(str(toolchain["digest"]))
+                or not isinstance(toolchain["target"], str)
+                or not toolchain["target"].startswith("/run/silverquillm/")
+                or posixpath.normpath(toolchain["target"]) != toolchain["target"]
+            ):
+                raise InvalidRunRecordError("invalid test toolchain")
         failure = self.run_metadata.get("grading_failure")
         if failure is not None and (
             not isinstance(failure, dict)

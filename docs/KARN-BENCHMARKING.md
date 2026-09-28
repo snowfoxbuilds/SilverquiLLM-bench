@@ -34,6 +34,10 @@ A run interrupted while its login was mounted leaves a pending refresh that only
 Switching to a build with a different login plugin then fails with `login_recovery_requires_previous_plugin`.
 Settle it first with `silverquillm recover RUN_ID`, naming the run in `<state-root>/logins/<construct>/active.json`; recovery uses that run's retained plugin artifact.
 
+Candidates need no test tooling of their own.
+Every candidate container gets the bench's pinned pytest and pytest-timeout read-only at `/run/silverquillm/test-toolchain`, first on `PYTHONPATH`, so `python3 -m pytest` works on the image's own Python.
+The vendored wheels in `silverquillm/karn/candidate_toolchain/` are checked against their hashes before each run and unpacked once under `<state-root>/toolchains/`; a mismatch refuses the run with `test_toolchain_integrity_mismatch`.
+
 ## Build the grader
 
 ```bash

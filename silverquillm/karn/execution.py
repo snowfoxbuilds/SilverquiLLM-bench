@@ -27,6 +27,7 @@ from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
 from .login import LoginProfile
 from .records import KarnIdentity, KarnRunRecord, missing_scores, write_record
 from .snapshots import WorkspaceSnapshots, retain_git_history
+from .toolchain import prepare_toolchain
 
 
 @contextlib.contextmanager
@@ -225,6 +226,7 @@ def run_benchmark(
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     telemetry = select_native_telemetry(candidate, native_telemetry)
     host.preflight(candidate, budget_seconds)
+    toolchain = prepare_toolchain(state_root)
     run_id = run_id or uuid.uuid4().hex
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", run_id):
         raise KarnError("invalid_run_id")
@@ -243,6 +245,7 @@ def run_benchmark(
             selected_login=selected_login,
             host=host,
             telemetry=telemetry,
+            toolchain=toolchain,
             run_id=run_id,
             run_dir=run_dir,
             results_repo=results_repo,
@@ -265,6 +268,7 @@ def _collect(
     selected_login,
     host,
     telemetry,
+    toolchain,
     run_id,
     run_dir,
     results_repo,
@@ -297,6 +301,7 @@ def _collect(
         "login": login,
         "budget_seconds": budget_seconds,
         "native_telemetry": telemetry,
+        "test_toolchain": toolchain.to_dict(),
         "started_at": start,
     }
     if grader.candidate_python is not None:
@@ -314,6 +319,7 @@ def _collect(
         "candidate_definition": candidate.definition,
         "login_profile": login,
         "native_telemetry": telemetry,
+        "test_toolchain": toolchain.to_dict(),
         "grading_source": None,
         "grading_isolation": grader.isolation(),
         "measurements": None,
@@ -374,6 +380,7 @@ def _collect(
                         login_profile=selected_login,
                         login_lock_held=selected_login is not None,
                         after_stop=after_stop,
+                        test_toolchain=toolchain,
                         **arguments,
                     )
                 except (Exception, KeyboardInterrupt) as error:  # noqa: BLE001 -- stop before preserving a host failure.

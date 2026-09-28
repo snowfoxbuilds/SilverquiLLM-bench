@@ -65,6 +65,11 @@ Every audited test in `tests/audited/sos/` must pass against the matching Test O
 
 `test_utils` lives in two parallel workspaces. The canonical agent-visible `test_utils.py` at `benchmarks/sos/workspace/test_utils.py` is frozen — it exposes the canonical engine's existing primitives. The oracle workspace's `test_utils.py` at `benchmarks/sos/data/test_oracle_workspace/test_utils.py` mirrors the canonical file (a 1:1 mirror rule) and is the **home for the host-side ergonomic helpers** added for audited tests: `set_mana_pool`, `set_hand`, `set_battlefield`, `set_library_top`, `set_graveyard`, `assert_on_stack`, `assert_in_zone`, `assert_casting_error`. There is no `silverquillm/test_utils.py`; the host-side layer lives entirely inside the oracle workspace's mirror. Audited tests develop against the oracle workspace's `test_utils.py` and are copied to the canonical audited path at `benchmarks/sos/data/tests/audited/` once green (grilling 2026-05-26, corrected 2026-05-27).
 
+In `hob-medium` and `smoke` the agent-visible `test_utils.py` is byte-identical to the oracle workspace's, so the agent gets every helper the audited tests use *(grilling 2026-09-28)*.
+`activate_card_ability` finds a card's abilities in `get_activated_abilities()` followed by any `get_mana_abilities()` entries not already listed, so either placement of a mana ability works.
+Where the rules leave the shape of a Player Query open, such as whether mana payment asks for a permanent or for one of its mana abilities, an audited test accepts every correct shape.
+When it cannot, as with the names of a card's mode choices, that card's instructions state the shape.
+
 In the oracle workspace's `test_utils.py`, `resolve_top()` resolves exactly one stack object (pop + resolve + state-based-action check) for fine-grained tests, while `_resolve_top_of_stack()` drains the entire stack in a loop; `cast_spell()` uses the latter to auto-drain triggers (grilling 2026-05-30).
 
 The validation harness distinguishes real Test Oracle Impls from empty stubs with `_is_stub_impl()`, which AST-parses `card_impl.py` and treats a class as real only when it defines a non-dunder method (e.g. `on_resolve`, `can_cast`, `get_targets`). Classes with only an `__init__` of attribute assignments stay stubs. AST parsing is robust where text/regex matching could be fooled (grilling 2026-05-30).

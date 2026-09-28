@@ -61,7 +61,7 @@ class PredictedOutcome:
     The prediction must be PURE: it reads game state and returns this value, and
     must not mutate anything (the closures capture live objects, so a mutation
     here would corrupt the real game — a deep-copy sandbox was rejected for the
-    same reason, see KEY_DECISIONS).
+    same reason).
 
     Attributes:
         taps: engine objects the ability would tap.
@@ -110,7 +110,7 @@ class ActivatedAbility:
             that needs none) or ``None`` to signal there is no legal target — in
             which case the ability cannot be activated and no cost is spent. The
             returned targets are stored on the :class:`~engine.stack.StackObject`
-            and are **not** re-selected at resolution (see KEY_DECISIONS). When
+            and are **not** re-selected at resolution. When
             set, the effect is invoked ``effect(game, targets, context)`` with the
             :class:`~engine.stack.ActivationContext` captured at activation.
         can_activate: Optional callable ``(game, source, controller) -> bool``

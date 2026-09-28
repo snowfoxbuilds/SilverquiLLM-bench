@@ -105,7 +105,7 @@ from `limitations.py`.
 
 **Floor tags** — genuine stream limitations the corpus cannot overcome. Each is
 mechanism-proven on a golden by
-`benchmarks/hob-medium/workspace/engine_tests/test_replay_limitations.py::TestLimitationEvidence`:
+`benchmarks/hob-medium/replay_tests/test_replay_limitations.py::TestLimitationEvidence`:
 
 - **unfunded-activation** — the activation/cast cost is not covered by any
   stream-attested resource (no ManaPaid within look-ahead, no attested

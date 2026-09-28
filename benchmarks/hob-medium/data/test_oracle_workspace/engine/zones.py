@@ -314,7 +314,7 @@ def move_to_zone(
         card_types = getattr(card, "card_types", set())
         is_creature = CardType.CREATURE in card_types
 
-        # Fire events BEFORE unregistering (KEY_DECISIONS convention).
+        # Fire events BEFORE unregistering.
         game.trigger_manager.fire_event(
             game,
             LeavesBattlefieldTriggeredEvent(permanent=card, controller=controller),

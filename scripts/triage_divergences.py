@@ -26,7 +26,7 @@ Counting convention (issue #40, "counted-once"): STATE_MISMATCH records are
 bucketed by their leading ``[category]``; the operational types
 (ENGINE_ERROR, ILLEGAL_ACTION, MISSING_CARD, REPLAY_INFRA, ...) are bucketed
 by type. Note this deliberately differs from ``TestGoldenGame._fingerprint``
-(engine_tests/test_replay_simulate.py), whose ``by_category`` folds
+(benchmarks/hob-medium/replay_tests/test_replay_simulate.py), whose ``by_category`` folds
 ILLEGAL_ACTION records into the state categories because their descriptions
 also carry ``[category]`` prefixes.
 

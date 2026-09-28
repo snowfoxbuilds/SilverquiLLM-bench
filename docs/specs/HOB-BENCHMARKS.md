@@ -100,10 +100,16 @@ Deliberately excluded from every pool: Sagas and Vehicles (each a whole new subs
 
 - **Freeze**: the agent-visible workspace engine locks when a tier enters Benchmarking (the tier-locking machinery). Within a lock tier, every candidate sees the identical engine — this is what makes "requires some engine changes" a stable property of the benchmark. Oracle iteration touches HOB card implementations, audited tests, and instruction docs only — never the FDN implementations or the staged workspace engine *(grilling 2026-08-27)*.
 - **Agent envelope**: agents may modify the workspace engine freely — no additive-only rule, no diff policing. The three audited dimensions are the entire judgment, all run against the harvested engine: HOB card correctness, FDN card regression, engine regression *(grilling 2026-08-27)*. Audited tests judge card behavior by simulating gameplay (implementation-agnostic testing); this mechanism is already implemented.
+- **Hidden and missing coverage**: grading suites may hold tests the workspace does not stage, and the staged tests may cover less than grading does; knowing that an engine change can break existing cards is the agent's job *(grilling 2026-09-28)*.
+  Every scored test checks behavior the rules define. Tests of the replay tool (`test_replay_simulate.py`, `test_replay_limitations.py`) are neither staged nor scored in `hob-medium` or `smoke`: they pin exact divergence counts against recorded games and read host-only code and private engine fields, so a more correct engine can fail them.
 
 ## Instruction documents
 
-- Two granularities per tier: a benchmark-level conventions document (engine conventions, what a good implementation looks like, the envelope rule above) and a per-card `instructions.md` beside `card_spec.json`, staged into the workspace card directory *(grilling 2026-08-27)*.
+- Two granularities per tier: a benchmark-level conventions document (engine conventions, what a good implementation looks like, that the engine may be changed freely) and a per-card `instructions.md` beside `card_spec.json`, staged into the workspace card directory *(grilling 2026-08-27)*.
+- Workspace documents describe the task, never its evaluation: no audited or hidden tests, oracle, grading or score *(grilling 2026-09-28)*.
+  The repository rules stay as plain rules the agent follows: each card class stays in its assigned `card_impl.py`, the staged tests are not edited, and life and counters change only through the engine primitives.
+  The conventions document says the engine may have deficiencies and bugs, and that the agent must make its implementations behave as `RULEBOOK.txt` requires without breaking existing cards.
+  Instructions may be incomplete but never misleading; engine-development records such as `KEY_DECISIONS.md` are not staged.
 - Pitfalls are **discovered, not invented**: authored from what the oracle implementation actually surfaced (oracle-first workflow; the oracle iterates while benchmarks run).
 - Instruction docs shape difficulty as much as the pool does: they are locked benchmark data, frozen with the tier at Benchmarking; changing them afterward is a benchmark-version event.
 - Per tier: hob-easy clear, hob-medium detailed, hob-hard none.
@@ -127,6 +133,8 @@ Existing SOS tests can supply source material, but copying them alone does not e
 Medium's instructions and pitfalls are derived from the oracle work and follow the existing Benchmark Tier locking rules.
 
 Development runs and incomplete observations remain useful data; the integration retains their evidence without a leaderboard eligibility gate (grilling 2026-09-26).
+hob-medium stays in Beta until at least two different candidates have run on the fixed workspace and their failures have been reviewed; the move to Benchmarking is a `config.json`-only PR made on the operator's go-ahead (grilling 2026-09-28).
+Runs before the 2026-09-28 workspace fixes are pilot test runs, not comparable to later runs.
 
 ## Evaluation
 

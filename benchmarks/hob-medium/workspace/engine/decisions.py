@@ -145,7 +145,7 @@ PLAYER_ROLES: frozenset[str] = frozenset(
 )
 
 # Canonical Modifier names: Modifiers are open (engines may invent private
-# ones), but any Modifier an audited test asserts on must use a canonical name.
+# ones), but any Modifier a test asserts on must use a canonical name.
 CANONICAL_MODIFIERS: frozenset[str] = frozenset({"spend", "snow"})
 
 # Per-kind blessed attr keys -> value domain. Domain may be a set/frozenset
@@ -223,7 +223,7 @@ def validate_attrs(
 
     Returns the frozenset form. Raises :class:`MalformedAttrsError` for an
     out-of-domain value on a blessed key or a non-hashable value. When
-    ``strict`` is True (the smart-constructor gate for intent and oracle
+    ``strict`` is True (the smart-constructor gate for intent
     authors), an unknown key is also a malformed-attrs error. When ``strict``
     is False (the engine-boundary check), unknown keys are tolerated so engines
     may attach surplus attrs that stay inert under :func:`satisfies`.
