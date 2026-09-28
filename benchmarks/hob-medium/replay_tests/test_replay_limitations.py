@@ -21,11 +21,11 @@ from pathlib import Path
 
 from engine.card import ActivatedAbility, PredictedOutcome
 
-from engine_tests.test_replay_simulate import BF1, card_obj, snapshot
+from test_replay_simulate import BF1, card_obj, snapshot
 from silverquillm.replay.executor import ReplayExecutor
 from silverquillm.replay.types import ReplayGame
 
-REPO_ROOT = Path(__file__).resolve().parents[5]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 GOLDEN = REPO_ROOT / "data" / "replays" / "golden"
 
 # A stand-in for a multi-ability engine source. It exposes get_activated_abilities

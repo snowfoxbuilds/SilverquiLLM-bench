@@ -5,7 +5,7 @@ tag. These tests pin the taxonomy and prove the classifier is TOTAL — no
 divergence type or description shape escapes untagged — and that each tag is
 reached by the record shape it is meant to describe. Fixture-backed evidence
 that the stream genuinely lacks the distinguishing information for the floor
-tags lives in the workspace suite (``engine_tests/test_replay_limitations``).
+tags lives in ``benchmarks/hob-medium/replay_tests/test_replay_limitations.py``.
 """
 
 from __future__ import annotations

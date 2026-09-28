@@ -600,7 +600,7 @@ class TestMintTokenCopy:
 
     def test_attached_to_is_preserved_for_aura(self) -> None:
         """A token copy of an attached aura enters attached to the same host —
-        the oracle keeps such a copy on the battlefield rather than letting it die
+        the GRE keeps such a copy on the battlefield rather than letting it die
         unattached, so the attachment reference is preserved (not the copy's own
         aliased state — a reference to another object)."""
         from engine.card import Enchantment

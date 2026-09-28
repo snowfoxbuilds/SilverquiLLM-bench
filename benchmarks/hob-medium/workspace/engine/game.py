@@ -483,12 +483,12 @@ def mint_token_copy(original: Any) -> Any:
     * ``_grp_id``, the replay-identity hook, holds the card-DEFINITION grpId (many
       objects legitimately share it — every copy of a card carries the same one),
       and a token that's a copy of a permanent IS that card definition. The GRE
-      represents a copy token under the copied object's grpId (the oracle shows
+      represents a copy token under the copied object's grpId (the GRE shows
       original and copy under the same grpId), so inheriting it is what makes the
       copy correlate; dropping it would leave the copy an anonymous token. This is
       distinct from ``object_id`` (per-object instance identity, re-minted above).
     * ``attached_to`` — a token copy of an attached aura/equipment enters attached
-      to what the original was attached to. The oracle keeps such a copy on the
+      to what the original was attached to. The GRE keeps such a copy on the
       battlefield (rather than the strict-rules reading where an unattached aura
       dies to SBA 704.5m the instant it enters), so preserving the reference keeps
       the copy alive and correlating; it is a reference to *another* object, not

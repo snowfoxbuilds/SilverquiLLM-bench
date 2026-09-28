@@ -8,8 +8,8 @@ untagged). The taxonomy has two kinds of tag:
 * **floor** — a genuine stream limitation: the corpus cannot carry the
   distinguishing evidence, so no faithful engine could reproduce GRE. These
   form the "attributed floor". Each is proven on a fixture by a mechanism test
-  (``tests/test_replay_limitations.py`` / workspace
-  ``engine_tests/test_replay_limitations.py``) that shows the stream lacks the
+  (``tests/test_replay_limitations.py`` /
+  ``benchmarks/hob-medium/replay_tests/test_replay_limitations.py``) that shows the stream lacks the
   distinguishing evidence.
 * **family** — an attributed engine/card-gap family that is fixable in
   principle (future card/engine work), not a hard floor. Also mechanism-tested

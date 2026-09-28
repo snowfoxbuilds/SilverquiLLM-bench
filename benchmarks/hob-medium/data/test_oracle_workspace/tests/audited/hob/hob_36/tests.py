@@ -9,6 +9,7 @@ from test_utils import (
     behavioral_game,
     enter_permanent,
     object_preference,
+    payment_preference,
     prefer,
     put_on_battlefield,
     resolve_stack,
@@ -146,6 +147,7 @@ def test_mana_ability_triggers_a_draw_without_using_stack_itself():
     source = put_on_battlefield(
         game, p, ManaCreature(name="Mana creature", base_power=1, base_toughness=1)
     )
+    source.summoning_sick = False
     activate_card_ability(game, p, source)
     assert p.mana_pool.total() == 1
     assert len(game.stack) == 1
@@ -160,9 +162,10 @@ def test_mana_payment_trigger_is_above_the_completed_spell():
     source = put_on_battlefield(
         game, p, ManaCreature(name="Mana creature", base_power=1, base_toughness=1)
     )
+    source.summoning_sick = False
     spell = Instant(name="Payment probe", mana_cost=ManaCost(generic=1), owner=p)
     game.get_hand(p).add(spell)
-    prefer(p, object_preference(game, source))
+    prefer(p, *payment_preference(game, source))
     cast(game, p, spell)
     assert p.mana_pool.total() == 0
     assert game.stack.peek().source is elrond
@@ -238,7 +241,7 @@ def test_payment_and_cast_triggers_are_ordered_apnap():
     source.summoning_sick = False
     spell = Instant(name="Payment probe", mana_cost=ManaCost(generic=1), owner=p)
     game.get_hand(p).add(spell)
-    prefer(p, object_preference(game, source))
+    prefer(p, *payment_preference(game, source))
     cast(game, p, spell)
     assert game.stack.peek().source is elrond
     resolve_stack(game)
