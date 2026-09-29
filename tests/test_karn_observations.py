@@ -297,6 +297,18 @@ def test_request_prices_use_each_request_context_not_aggregate_context():
     assert price_requests(requests)[0]["long_context"] is False
 
 
+def test_gpt61_sol_halves_the_cached_input_rate_of_gpt6_sol():
+    def price(model, input_tokens):
+        request = {"response_id": "r", "model": model, "usage": usage(input_tokens, 100000, 1000)}
+        return Decimal(price_requests([request])[0]["usd"])
+
+    # Both: input $2, output $10 per MTok; cached input $0.10 on 6.1 against $0.20 on 6.
+    assert price("gpt-6.1-sol", 200000) == Decimal("0.22")
+    assert price("gpt-6-sol", 200000) == Decimal("0.23")
+    # Above 272K input tokens: 2x input and cache rates, 1.5x output.
+    assert price("gpt-6.1-sol", 300000) == Decimal("0.835")
+
+
 def test_published_gpt54_session_context_rule_is_recorded_and_applied():
     rows = price_requests(
         [
@@ -464,7 +476,10 @@ def test_streaming_fragments_are_not_retained_or_counted():
         "descendant",
     ],
 )
-@pytest.mark.parametrize("fixture_name", ["karn_observations", "karn_observations_codex_0.157.1"])
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["karn_observations", "karn_observations_codex_0.157.1", "karn_observations_codex_0.159.0"],
+)
 def test_replay_actual_pinned_binary_qualification_matches_scripted_ground_truth(
     scenario, fixture_name
 ):
