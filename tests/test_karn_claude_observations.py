@@ -692,3 +692,163 @@ def test_the_exporter_environment_is_allowlisted_and_never_logs_prompts(tmp_path
     ):
         assert environment[gate] == "0"
     assert environment["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] == "http/json"
+
+
+HAIKU_FIXTURE = "karn_observations_claude_2.1.284"
+
+
+def haiku_events():
+    from pathlib import Path
+
+    raw = (Path(__file__).parent / "fixtures" / HAIKU_FIXTURE / "events.jsonl").read_text()
+    return [json.loads(line) for line in raw.splitlines() if line.strip()]
+
+
+def first(events, kind):
+    return next(e for e in events if e["kind"] == kind)
+
+
+def verdict(events):
+    proof = qualification()(raw_events(events))
+    return proof["qualified"], {m["check"] for m in proof["mismatches"]}, proof
+
+
+def test_the_unaltered_haiku_fixture_qualifies():
+    assert verdict(haiku_events())[:2] == (True, set())
+
+
+def test_a_conflicting_model_does_not_qualify():
+    events = haiku_events()
+    first(events, "claude_code.api_request")["attributes"]["model"] = "claude-opus-5-5"
+    qualified, checks, proof = verdict(events)
+    assert not qualified and checks == {"model_agrees"}
+    [mismatch] = proof["mismatches"]
+    assert mismatch["transcript"] == "claude-haiku-4-5-20251001"
+    assert mismatch["otel"] == "claude-opus-5-5"
+
+
+@pytest.mark.parametrize("side", ["transcript", "otel"])
+def test_a_missing_model_does_not_qualify(side):
+    events = haiku_events()
+    if side == "otel":
+        del first(events, "claude_code.api_request")["attributes"]["model"]
+    else:
+        first(events, "response")["model"] = None
+    qualified, checks, proof = verdict(events)
+    assert not qualified and checks == {"model_comparable"}
+    assert proof["mismatches"][0]["missing"] == side
+
+
+@pytest.mark.parametrize(
+    ("side", "field", "attribute"),
+    [
+        ("otel", "input_tokens", "input_tokens"),
+        ("otel", "cached_input_tokens", "cache_read_tokens"),
+        ("otel", "cache_write_input_tokens", "cache_creation_tokens"),
+        ("otel", "output_tokens", "output_tokens"),
+        ("transcript", "input_tokens", None),
+        ("transcript", "cached_input_tokens", None),
+        ("transcript", "cache_write_input_tokens", None),
+        ("transcript", "output_tokens", None),
+    ],
+)
+def test_a_missing_shared_token_field_does_not_qualify(side, field, attribute):
+    events = haiku_events()
+    if side == "otel":
+        del first(events, "claude_code.api_request")["attributes"][attribute]
+    else:
+        first(events, "response")["usage"][field] = None
+    qualified, checks, proof = verdict(events)
+    assert not qualified and checks == {"usage_comparable"}
+    assert {(m["field"], m["missing"]) for m in proof["mismatches"]} >= {(field, side)}
+
+
+def test_two_transcript_responses_sharing_a_request_id_do_not_qualify():
+    events = haiku_events()
+    response = first(events, "response")
+    events.append(dict(response, id="response:msg_forged", response_id="msg_forged"))
+    qualified, checks, _ = verdict(events)
+    assert not qualified and "native_request_ids_unique" in checks
+
+
+@pytest.mark.parametrize("forged_first", [True, False])
+def test_conflicting_otel_duplicates_do_not_qualify_in_either_order(forged_first):
+    events = haiku_events()
+    report = first(events, "claude_code.api_request")
+    forged = json.loads(json.dumps(report))
+    forged["id"] = "otel:forged"
+    forged["attributes"]["output_tokens"] = "1"
+    at = events.index(report)
+    events.insert(at if forged_first else at + 1, forged)
+    qualified, checks, _ = verdict(events)
+    assert not qualified
+    assert {"otel_observations_agree", "usage_agrees"} <= checks
+
+
+def test_agreeing_duplicates_still_qualify():
+    events = haiku_events()
+    report = first(events, "claude_code.api_request")
+    events.append(dict(report, id="otel:reexported", observed_ns=1))
+    events.append(first(events, "response"))
+    qualified, checks, proof = verdict(events)
+    assert (qualified, checks) == (True, set())
+    assert proof["usage"] == verdict(haiku_events())[2]["usage"]
+
+
+def test_an_otherwise_valid_unqualified_version_qualifies():
+    events = haiku_events()
+    for event in events:
+        if event["kind"] == "session":
+            event["native_version"] = "2.1.300"
+        if event["source"] == "otel" and "app.version" in event["attributes"]:
+            event["attributes"]["app.version"] = "2.1.300"
+    qualified, checks, proof = verdict(events)
+    assert (qualified, checks) == (True, set())
+    assert proof["native_binary"] == "claude-code 2.1.300"
+    # Qualification is about stream agreement; the run itself is still from an unlisted version.
+    assert "native_version_not_qualified" in proof["usage"]["reasons"]
+
+
+@pytest.mark.parametrize("valid", [True, False])
+def test_the_cli_exits_nonzero_for_evidence_that_does_not_qualify(tmp_path, valid):
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    events = haiku_events()
+    if not valid:
+        first(events, "claude_code.api_request")["attributes"]["model"] = "claude-opus-5-5"
+    (tmp_path / "observations.events.jsonl").write_bytes(raw_events(events))
+    script = Path(__file__).parents[1] / "scripts/qualify_claude_telemetry.py"
+    result = subprocess.run(
+        [sys.executable, str(script), str(tmp_path), "--out", str(tmp_path / "proof.json")],
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == (0 if valid else 1)
+    assert json.loads((tmp_path / "proof.json").read_text())["qualified"] is valid
+
+
+def test_a_repeated_otel_only_request_counts_once_and_a_conflict_is_flagged():
+    transcript = main_transcript() + [line("system", second=4, subtype="compact_boundary")]
+    otel = api_request("req_01") + api_request("req_02")
+    [compaction] = api_request("req_c", "compact", cache_creation_tokens="0")
+    again = dict(compaction, id=compaction["id"] + "-again")
+    once = summarize_claude_events(
+        events_of(transcript) + otel + [compaction], exit_kind="completed"
+    )
+    twice = summarize_claude_events(
+        events_of(transcript) + otel + [compaction, again], exit_kind="completed"
+    )
+    assert twice["usage"] == once["usage"]
+    assert twice["agent_turns"] == once["agent_turns"]
+    assert (
+        twice["coverage"]["native_reported_cost_usd"]
+        == once["coverage"]["native_reported_cost_usd"]
+    )
+    [forged] = api_request("req_c", "compact", cache_creation_tokens="0", output_tokens="9")
+    conflicted = summarize_claude_events(
+        events_of(transcript) + otel + [compaction, forged], exit_kind="completed"
+    )
+    assert "otel_request_observations_conflict" in conflicted["usage"]["reasons"]
+    assert conflicted["usage"]["value"] == once["usage"]["value"]

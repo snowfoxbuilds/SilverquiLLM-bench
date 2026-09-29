@@ -5,8 +5,8 @@ stop and before the login plugin clears its work directory; recovery reads the s
 Claude Code writes one transcript line per content block of an assistant message, each
 repeating the message's usage, so accounting is keyed by message id. A compaction's own
 request never appears in the transcript; its OTel ``api_request`` supplies the usage.
-Every other ``api_request`` is reconciled against its transcript response: a disagreement
-leaves the transcript's values in place and marks the observations partial.
+Every other ``api_request`` is reconciled against its transcript response (``reconcile_streams``):
+a disagreement leaves the transcript's values in place and marks the observations partial.
 """
 
 from __future__ import annotations
@@ -319,35 +319,106 @@ def _otel_usage(attrs: dict[str, Any]) -> dict[str, int | None]:
     )
 
 
-def _reconcile(native: dict[str, Any], attrs: dict[str, Any], reasons: list[str]) -> None:
-    """Compare one ``api_request`` with its transcript response, whose values stay authoritative."""
-    observed = _otel_usage(attrs)
-    for key in COMPARED_USAGE:
-        mine = native["usage"].get(key)
-        if mine is None or observed[key] is None:
-            reasons.append("otel_usage_comparison_unavailable")
-        elif mine != observed[key]:
-            reasons.append("otel_usage_conflicts_with_native")
-    if native.get("model") is None or attrs.get("model") is None:
-        reasons.append("otel_model_comparison_unavailable")
-    elif native["model"] != attrs["model"]:
-        reasons.append("otel_model_conflicts_with_native")
+# Each reconciliation check, and the reason it leaves on a run's measurements.
+RECONCILIATION_REASONS = {
+    "native_observations_agree": "conflicting_response_observations",
+    "native_request_ids_unique": "native_request_identity_reused",
+    "native_request_ids_present": "otel_usage_comparison_unavailable",
+    "otel_observations_agree": "otel_request_observations_conflict",
+    "usage_agrees": "otel_usage_conflicts_with_native",
+    "usage_comparable": "otel_usage_comparison_unavailable",
+    "model_agrees": "otel_model_conflicts_with_native",
+    "model_comparable": "otel_model_comparison_unavailable",
+}
 
 
-def summarize_claude_events(
-    events: Iterable[dict[str, Any]], *, exit_kind: str, collection_reasons: Iterable[str] = ()
-) -> dict[str, Any]:
+def _observed(event: dict[str, Any]) -> tuple[Any, ...]:
+    attrs = event["attributes"]
+    usage = _otel_usage(attrs)
+    return (attrs.get("model"), *(usage[key] for key in COMPARED_USAGE))
+
+
+def reconcile_streams(
+    events: Iterable[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Deduplicate observations and list each disagreement between the transcript and OTel.
+
+    Runtime summaries and version qualification share this, so a run whose streams disagree
+    can neither count as complete nor qualify a version. The transcript's values are never
+    changed here; a mismatch only reports that OTel contradicts or cannot confirm them.
+    """
     unique: dict[str, dict[str, Any]] = {}
-    reasons = list(collection_reasons)
+    mismatches: list[dict[str, Any]] = []
     for event in events:
         previous = unique.get(event["id"])
         if previous is not None and event["kind"] == "response":
             comparable = ("response_id", "owner_thread_id", "model", "usage")
             if any(previous.get(key) != event.get(key) for key in comparable):
-                reasons.append("conflicting_response_observations")
+                mismatches.append({"check": "native_observations_agree", "id": event["id"]})
             continue
         unique.setdefault(event["id"], event)
     rows = list(unique.values())
+    native: dict[str | None, list[dict[str, Any]]] = {}
+    for event in rows:
+        if event["kind"] == "response":
+            native.setdefault(event.get("request_id"), []).append(event)
+    observed: dict[str | None, list[dict[str, Any]]] = {}
+    for event in rows:
+        if event["kind"] == "claude_code.api_request":
+            observed.setdefault(event["attributes"].get("request_id"), []).append(event)
+    # One API request yields one message, so a reused request id means a doctored transcript.
+    for request, responses in native.items():
+        if request is not None and len(responses) > 1:
+            mismatches.append({"check": "native_request_ids_unique", "request": request})
+    if observed and None in native:
+        # A response without its request id cannot be matched to anything OTel reported.
+        mismatches.append({"check": "native_request_ids_present", "responses": len(native[None])})
+    for request, reports in observed.items():
+        if request is None:
+            continue
+        if len({_observed(report) for report in reports}) > 1:
+            mismatches.append({"check": "otel_observations_agree", "request": request})
+        for response in native.get(request, []):
+            for report in reports:
+                mismatches += _compare(request, response, report)
+    return rows, mismatches
+
+
+def _compare(request: str, response: dict[str, Any], report: dict[str, Any]) -> list[dict]:
+    found = []
+    theirs = dict(zip(("model", *COMPARED_USAGE), _observed(report), strict=True))
+    mine = {"model": response.get("model"), **{k: response["usage"].get(k) for k in COMPARED_USAGE}}
+    for field in ("model", *COMPARED_USAGE):
+        check = "model" if field == "model" else "usage"
+        if mine[field] is None or theirs[field] is None:
+            missing = "transcript" if mine[field] is None else "otel"
+            found.append(
+                {
+                    "check": check + "_comparable",
+                    "request": request,
+                    "field": field,
+                    "missing": missing,
+                }
+            )
+        elif mine[field] != theirs[field]:
+            found.append(
+                {
+                    "check": check + "_agrees",
+                    "request": request,
+                    "field": field,
+                    "transcript": mine[field],
+                    "otel": theirs[field],
+                }
+            )
+    return found
+
+
+def summarize_claude_events(
+    events: Iterable[dict[str, Any]], *, exit_kind: str, collection_reasons: Iterable[str] = ()
+) -> dict[str, Any]:
+    rows, mismatches = reconcile_streams(events)
+    reasons = list(collection_reasons)
+    reasons += [RECONCILIATION_REASONS[mismatch["check"]] for mismatch in mismatches]
     sessions = [e for e in rows if e["kind"] == "session"]
     requests = [
         {
@@ -363,14 +434,7 @@ def summarize_claude_events(
         for e in rows
         if e["kind"] == "response"
     ]
-    native_requests: dict[str | None, list[dict[str, Any]]] = {}
-    for event in rows:
-        if event["kind"] == "response":
-            native_requests.setdefault(event.get("request_id"), []).append(event)
-    unidentified = native_requests.pop(None, None) is not None
-    # One API request yields one message, so a reused request id means a doctored transcript.
-    if any(len(responses) > 1 for responses in native_requests.values()):
-        reasons.append("native_request_identity_reused")
+    native_requests = {e.get("request_id") for e in rows if e["kind"] == "response"} - {None}
     compactions = [e for e in rows if e["kind"] == "compaction"]
     tools = {e["call_id"] for e in rows if e["kind"] == "tool_call"}
     versions = {e.get("native_version") for e in sessions}
@@ -386,6 +450,10 @@ def summarize_claude_events(
             reasons.append("otel_tool_call_without_transcript")
         if event["kind"] != "claude_code.api_request":
             continue
+        request = attrs.get("request_id")
+        if request is not None and request in otel_requests:
+            continue  # the same request observed again; any disagreement is flagged above
+        otel_requests.add(request)
         try:
             # Absent when its value had no real shape; Claude Code always reports one.
             cost = attrs.get("cost_usd")
@@ -398,11 +466,7 @@ def summarize_claude_events(
             native_cost += cost
         except InvalidOperation:
             reasons.append("otel_cost_malformed")
-        request = attrs.get("request_id")
-        otel_requests.add(request)
         if request in native_requests:
-            for native in native_requests[request]:
-                _reconcile(native, attrs, reasons)
             continue
         compaction = attrs.get("query_source") == "compact"
         otel_compactions += compaction
@@ -420,11 +484,8 @@ def summarize_claude_events(
                 "response_identity": "otel_observation",
             }
         )
-    if otel and native_requests.keys() - otel_requests:
+    if otel and native_requests - otel_requests:
         reasons.append("otel_missing_native_request")
-    if otel and unidentified:
-        # A response without its request id cannot be matched to anything OTel reported.
-        reasons.append("otel_usage_comparison_unavailable")
     unresolved = max(0, len(compactions) - otel_compactions)
     if otel_compactions > len(compactions):
         reasons.append("otel_compaction_without_boundary")
