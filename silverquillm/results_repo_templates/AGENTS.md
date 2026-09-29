@@ -14,6 +14,10 @@ runs.jsonl                                  derived index (see "Index is derived
 results/<candidate-hash>/candidate/         the vendored Candidate Bundle (ozolith-v1 only)
 results/<candidate-hash>/<run-id>/manifest.json
 results/<candidate-hash>/<run-id>/scores.json
+baselines/<tree-id>.bundle                  a benchmark input's staged workspace, stored once
+workspaces/<candidate-hash>/<run-id>/       a record's graded workspace, as a diff from its baseline
+exclusions/<candidate-hash>/<run-id>.json   why an analysis leaves a record out
+karn/                                       the Karn recipes that build the candidates
 ```
 
 - `<candidate-hash>` is the directory key derived from the run's candidate
@@ -49,8 +53,10 @@ results/<candidate-hash>/<run-id>/scores.json
    (`python scripts/rebuild_results_index.py --results-repo <path>` in the bench
    repo). It is never hand-edited and never authoritative: if the index and the
    tree disagree, the tree wins — rebuild the index.
-3. **Heavy artifacts never enter git.** Transcripts, logs, workspace snapshots
-   and per-card trees live elsewhere; `manifest.json` carries *pointers* only.
+3. **Heavy artifacts never enter git, except graded workspaces as diffs.**
+   Transcripts, logs, workspace snapshots and per-card trees live elsewhere;
+   `manifest.json` carries *pointers* only. Each record's graded workspace is
+   kept under `workspaces/` as a diff from a shared baseline (below).
 4. **Identity is never trusted from a recorded value.** An `ozolith-v1`
    identity exists only as the output of recomputation: the bench verified
    the Candidate Bundle through TheOzolith's verifier (`bundle_format_version`
@@ -82,6 +88,78 @@ A later recovery observation can have its own record id while `recovery_of` and 
 
 The reader and derived index preserve both schemas without changing historical identities or interpreting new data through historical publication rules.
 The remaining schema details below describe schema 1 only.
+
+## Workspace archives
+
+`workspaces/<candidate-hash>/<run-id>/` holds two write-once files for a record
+with a graded workspace: `workspace.patch`, a `git diff --binary --full-index`
+from the benchmark input's staged baseline to the tree grading used, and
+`workspace.json`:
+
+| Field | Meaning |
+| --- | --- |
+| `format_version` | `1` |
+| `run_id`, `candidate_hash` | The record it belongs to |
+| `baseline` | `tree` and `commit` ids of the staged workspace, its `bundle` path under `baselines/`, and its `content_digest` (the record's `benchmark_input.workspace_digest`) |
+| `graded` | `source` (the record's `grading_source.selected`), the `tree` id grading used, and its `content_digest` (the digest the record's `grading_source` states for that copy) |
+| `patch` | `path`, `sha256`, `bytes`, `files_changed` |
+| `grading_copy_omits` | What grading's copy of a workspace leaves out: caches, `*.pyc`, symlinks |
+| `archived_at` | When it was written |
+
+`baselines/<tree-id>.bundle` holds one commit, `refs/baselines/base`, whose tree
+is the baseline. Rebuild a workspace only with the bench (`silverquillm regrade`
+does it for you): it applies the patch in a scratch repository with git
+plumbing, and refuses the result unless its tree id and content digest match
+`workspace.json` and the record. Runs write their own archive; `silverquillm
+results archive` backfills records on the host that holds their run artifacts.
+
+## Exclusions
+
+An analysis leaves a record out only through
+`exclusions/<candidate-hash>/<run-id>.json`, written once and never by editing
+the record:
+
+| Field | Meaning |
+| --- | --- |
+| `format_version` | `1` |
+| `run_id`, `candidate_hash` | The excluded record |
+| `reason` | `subagents_used`, `subagents_uncounted`, `never_executed`, `host_failed`, `superseded`, `benchmark_defect`, `pilot` or `other` |
+| `note` | Why, checkably |
+| `source` | `rule` (written by the bench on an observed fact) or `operator` |
+| `superseded_by` | The replacing record's run id, only for `superseded` |
+| `excluded_by`, `excluded_at` | Who and when |
+
+Rules exclude a record for `host_failed` (execution status), `never_executed`
+(zero observed agent turns), `subagents_used` (subagent threads observed) and
+`subagents_uncounted` (measurements without a `subagent_threads` count); an
+unknown measurement never excludes. Operators add the rest with `silverquillm
+results exclude`. To include a record again, delete its file.
+
+Every analysis applies these files and no private filter: aggregate the records
+without an exclusion, and list the excluded ones with their reasons beneath the
+table (`silverquillm results exclusions`). `silverquillm results check` reports
+records a rule excludes that have no file, and files without a record.
+
+## Building candidates and provenance
+
+Every host builds and runs the same way, so a record traces to committed
+sources:
+
+1. Commit and push a recipe under `karn/constructs/<label>` before building it.
+2. `karn build <this repo>/karn/constructs/<label> --out <dir>` from the
+   committed tree, never `--worktree`; the image's `karn.config.revision`
+   label then names the recipe commit.
+3. Run bench code from a pushed `main` commit with no uncommitted tracked
+   change and no untracked file under `silverquillm/` or `benchmarks/`.
+4. Set `SILVERQUILLM_HOST_LABEL` on each host.
+5. Use one subscription on one host at a time.
+
+The bench refuses a run that breaks 2 or 3 unless the operator passes
+`--allow-dirty`. Every new schema 2 record carries `run_metadata.provenance`:
+`host_label` and its `host_label_source`, `bench` and `benchmark_root` (each
+`commit` and `dirty`), `recipe_revision`, `allow_dirty`, and the
+`dirty_reasons` that were overridden. The grader image is in
+`grading_isolation.grader_image_id`.
 
 ## `manifest.json`
 

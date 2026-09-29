@@ -15,6 +15,7 @@ from .benchmark import load_benchmark
 from .definition import KarnError, canonical, load_candidate
 from .execution import (
     _scores,
+    attach_to_record,
     login_profile,
     mark_observation_problems,
     observation_session,
@@ -252,11 +253,12 @@ def _finalized_record(run_id, run_dir, results_repo) -> tuple[KarnRunRecord, lis
     return None
 
 
-def _publish(results_repo, records, final: KarnRunRecord) -> None:
+def _publish(results_repo, records, final: KarnRunRecord, run_dir: Path) -> None:
     """Publish each record not yet published, in order; a blocked write carries the final record."""
     try:
         for record in _unpublished(results_repo, records):
             write_record(results_repo, record)
+            attach_to_record(results_repo, record, run_dir)
     except RecordWritePendingError:
         raise RecordWritePendingError(final) from None
 
@@ -353,7 +355,7 @@ def _conclude(record, unpublished, *, run_id, run_dir, results_repo, state_root,
         )
     except Exception as error:  # noqa: BLE001 -- a final record is published whatever settlement hits.
         failure = error
-    _publish(results_repo, unpublished, record)
+    _publish(results_repo, unpublished, record, run_dir)
     if failure is not None:
         raise LoginSettlementPendingError(_failure_reason(failure), record)
     return record
@@ -528,6 +530,9 @@ def _recover(
     if "test_toolchain" in inputs:
         # Recovery never relaunches the candidate; the toolchain is the one the run started with.
         metadata["test_toolchain"] = inputs["test_toolchain"]
+    if "provenance" in inputs:
+        # Where and from what the run was launched, not where it was recovered.
+        metadata["provenance"] = inputs["provenance"]
     if benchmark.identity != inputs["benchmark_identity"]:
         scores = missing_scores("benchmark_changed_since_run_started")
     elif selection and selection["selected"]:
@@ -588,7 +593,7 @@ def _recover(
             prefix=".recovery-record-",
         )
         unpublished = [previous_record, record]
-    _publish(results_repo, unpublished, record)
+    _publish(results_repo, unpublished, record, run_dir)
     if settlement_failure is not None:
         raise LoginSettlementPendingError(_failure_reason(settlement_failure), record)
     return record

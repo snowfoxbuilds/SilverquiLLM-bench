@@ -450,10 +450,16 @@ def test_scheduler_marks_and_later_writes_a_pending_record(tmp_path, monkeypatch
 def test_record_lock_leaves_no_file_in_the_results_repository(tmp_path):
     record = run_benchmark(**options(tmp_path))
     repository = tmp_path / "records"
-    assert sorted(path.name for path in repository.iterdir()) == ["results"]
-    assert sorted(path.name for path in (repository / "results").iterdir()) == [
-        record.candidate.hash
+    assert sorted(path.name for path in repository.iterdir()) == [
+        "baselines",
+        "results",
+        "workspaces",
     ]
+    for tree in ("results", "workspaces"):
+        assert sorted(path.name for path in (repository / tree).iterdir()) == [
+            record.candidate.hash
+        ]
+    assert [path.suffix for path in (repository / "baselines").iterdir()] == [".bundle"]
     with pytest.raises(RunRecordExistsError):
         write_record(repository, record, lock_seconds=0.1)
 
@@ -866,6 +872,8 @@ def test_terminating_signals_take_the_interrupted_path_and_write_a_record(tmp_pa
             str(opts["results_repo"]),
             "--state-root",
             str(opts["state_root"]),
+            # The fixture image carries no recipe revision, and this checkout may be dirty.
+            "--allow-dirty",
         ],
         cwd=REPO,
         stdout=subprocess.PIPE,
@@ -884,6 +892,8 @@ def test_terminating_signals_take_the_interrupted_path_and_write_a_record(tmp_pa
     records = list(iter_run_records(opts["results_repo"]))
     assert len(records) == 1
     assert records[0][1].run_metadata["execution"]["status"] == "interrupted"
+    assert records[0][1].run_metadata["provenance"]["allow_dirty"] is True
+    assert "recipe_revision_unrecorded" in records[0][1].run_metadata["provenance"]["dirty_reasons"]
 
 
 def test_signal_handlers_are_restored_and_repeats_do_not_abort_cleanup():

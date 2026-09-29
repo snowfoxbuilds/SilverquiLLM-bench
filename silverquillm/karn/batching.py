@@ -180,6 +180,7 @@ class KarnScheduler:
         grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
         executor=run_benchmark,
         recoverer=None,
+        allow_dirty: bool = False,
     ):
         self.directory = Path(batches_dir).resolve()
         self.options = {
@@ -191,6 +192,7 @@ class KarnScheduler:
             "grader_image": grader_image,
             "grading_timeout": grading_timeout,
         }
+        self.allow_dirty = allow_dirty
         self.replay = set(replay_without_state)
         self.executor, self.recoverer = executor, recoverer
         self.warnings = []
@@ -361,6 +363,7 @@ class KarnScheduler:
                         # A run waits for a free login slot; the wait is reported, not deferred.
                         login_wait=lambda message, name=path.stem: self._warn(f"{name}: {message}"),
                         on_launch=launch,
+                        allow_dirty=self.allow_dirty,
                         **self.options,
                     )
                     launch()

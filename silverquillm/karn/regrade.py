@@ -3,6 +3,10 @@
 Run Records are immutable, so a re-grade never replaces one: each run's new scores go to a
 separate output directory, tagged with the grading-inputs digest they were graded against.
 Scores from different digests are not comparable without re-grading both.
+
+A run's graded workspace comes from its local run artifacts when this host ran it, else it
+is rebuilt from the results repository's workspace archive (ADR-015), so any host can
+re-grade any archived run.
 """
 
 from __future__ import annotations
@@ -11,25 +15,31 @@ import concurrent.futures
 import hashlib
 import json
 import os
-import re
 import statistics
 import tempfile
 import threading
 import time
 from datetime import UTC, datetime
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from silverquillm.results_repo import InvalidRunRecordError, iter_run_dirs
 
 from .benchmark import Benchmark, load_benchmark
 from .definition import KarnError
 from .execution import _scores
-from .grader import DEFAULT_GRADING_TIMEOUT, ContainerGrader, DockerRunner, GraderError
+from .grader import (
+    DEFAULT_GRADING_TIMEOUT,
+    LEGACY_PYTHON,
+    ContainerGrader,
+    DockerRunner,
+    GraderError,
+    grader_tag,
+)
 from .grading_inputs import grading_inputs
 from .records import DIMENSIONS, KarnRunRecord, read_record
+from .workspace_archive import ArchiveRefused, graded_path, materialize
 
 SUMMARY = "summary.json"
-RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 STOP_SECONDS = 30
 PACKAGE = Path(__file__).resolve().parents[1]
 
@@ -115,39 +125,48 @@ def graded_workspace(record: KarnRunRecord, results_dir: Path) -> Path:
     Artifact pointers are not followed: a record may come from another host, and its
     paths must never choose what is mounted into the grader.
     """
-    selected = (record.run_metadata.get("grading_source") or {}).get("selected")
-    if not isinstance(selected, str) or not selected:
-        raise Skip("no_graded_workspace")
-    run_id = record.run_metadata.get("execution_run_id", record.run_id)
-    relative = PurePosixPath(selected)
-    if (
-        not isinstance(run_id, str)
-        or not RUN_ID.fullmatch(run_id)
-        or relative.is_absolute()
-        or ".." in relative.parts
-    ):
-        raise Skip("grading_source_invalid")
-    directory = Path(results_dir).resolve() / run_id
-    workspace = directory / relative
-    if not workspace.is_dir():
-        raise Skip("workspace_unavailable")
-    if not workspace.resolve().is_relative_to(directory):
-        raise Skip("grading_source_invalid")
-    return workspace.resolve()
+    try:
+        return graded_path(record, results_dir)
+    except ArchiveRefused as refused:
+        raise Skip(str(refused)) from None
 
 
-def recorded_grader(record: KarnRunRecord, docker, timeout: int) -> ContainerGrader:
-    """The grader image the run was graded with, which must still be present locally."""
+def archived_workspace(record: KarnRunRecord, results_repo: Path, scratch: Path) -> Path:
+    """The run's graded workspace rebuilt from the results repository under ``scratch``."""
+    try:
+        return materialize(results_repo, record, scratch / record.run_id / "workspace")
+    except ArchiveRefused as refused:
+        if str(refused) == "workspace_not_archived":
+            raise Skip("workspace_unavailable") from None
+        raise Skip("workspace_archive_refused:" + str(refused)) from None
+
+
+def recorded_grader(
+    record: KarnRunRecord, docker, timeout: int, *, substitute: bool = False
+) -> tuple[ContainerGrader, str | None]:
+    """The grader image the run was graded with, and the image substituted for it, if any.
+
+    Grader images are built per host, so another host's recorded image is normally absent.
+    With ``substitute`` this host's grader for the recorded Python grades instead, and the
+    output names both images.
+    """
     isolation = record.run_metadata.get("grading_isolation")
     if not isolation:
         raise Skip("grader_unrecorded")
     image_id = isolation["grader_image_id"]
-    if docker.image_id(image_id) != image_id:
-        raise Skip("grader_image_unavailable")
     python = isolation.get("candidate_python")
-    if python is not None and docker.image_python(image_id) != isolation["grader_python"]:
+    minor = isolation["grader_python"] if python is not None else LEGACY_PYTHON
+    used = image_id
+    if docker.image_id(image_id) != image_id:
+        if not substitute:
+            raise Skip("grader_image_unavailable")
+        used = docker.image_id(grader_tag(minor))
+        if used is None:
+            raise Skip("grader_image_unavailable")
+    if (python is not None or used != image_id) and docker.image_python(used) != minor:
         raise Skip("grader_python_mismatch")
-    return ContainerGrader(image_id, docker=docker, candidate_python=python, timeout=timeout)
+    grader = ContainerGrader(used, docker=docker, candidate_python=python, timeout=timeout)
+    return grader, (used if used != image_id else None)
 
 
 def _dimensions(scores: dict) -> dict:
@@ -208,9 +227,11 @@ def _regrade_one(
     *,
     out: Path,
     results_dir: Path,
+    results_repo: Path,
     docker: LiveContainers,
     timeout: int,
     force: bool,
+    substitute_grader: bool,
 ) -> dict:
     path = output_path(out, record)
     if not force and (previous := _reusable(path, record, digests)):
@@ -232,11 +253,25 @@ def _regrade_one(
         },
     }
     try:
-        workspace = graded_workspace(record, results_dir)
-        grader = recorded_grader(record, docker, timeout)
-        result["grading_isolation"] = grader.isolation()
-        evaluated = grader.evaluate_run(workspace.parent, benchmark, workspace_source=workspace)
-        result["scores"] = _scores(evaluated, benchmark)
+        with tempfile.TemporaryDirectory(prefix=".workspaces-", dir=out) as scratch:
+            try:
+                workspace = graded_workspace(record, results_dir)
+                result["source"]["workspace"] = "run_artifacts"
+            except Skip as skip:
+                if str(skip) != "workspace_unavailable":
+                    raise
+                workspace = archived_workspace(record, results_repo, Path(scratch))
+                result["source"]["workspace"] = "results_repo"
+            grader, substituted = recorded_grader(
+                record, docker, timeout, substitute=substitute_grader
+            )
+            result["grading_isolation"] = grader.isolation()
+            if substituted is not None:
+                result["grader_substituted_for"] = record.run_metadata["grading_isolation"][
+                    "grader_image_id"
+                ]
+            evaluated = grader.evaluate_run(workspace.parent, benchmark, workspace_source=workspace)
+            result["scores"] = _scores(evaluated, benchmark)
     except Skip as skip:
         return {**result, "skipped": str(skip)}
     except GraderError as error:
@@ -305,6 +340,7 @@ def regrade(
     workers: int = 2,
     force: bool = False,
     grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
+    substitute_grader: bool = False,
     docker=None,
 ) -> dict:
     """Re-grade the selected runs into ``out`` and return the summary written beside them."""
@@ -340,9 +376,11 @@ def regrade(
                     digests,
                     out=out,
                     results_dir=results_dir,
+                    results_repo=Path(results_repo).resolve(),
                     docker=live,
                     timeout=grading_timeout,
                     force=force,
+                    substitute_grader=substitute_grader,
                 )
                 futures[future] = record
             for future in concurrent.futures.as_completed(futures):

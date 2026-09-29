@@ -185,6 +185,13 @@ It supports resource-use comparisons and does not represent the actual subscript
 
 _Avoid_: "billed cost", "subscription cost" for this estimate
 
+**Exclusion**
+
+A Results Repo entry that leaves one Run Record out of analyses, naming a reason code and a note, without changing the record.
+A rule excludes a run on an observed fact, such as zero Agent Turns or subagent use; an operator excludes anything a rule cannot see, and a superseded run names the record that replaces it.
+
+_Avoid_: "rejected run", "invalid run" (the record stays valid evidence), "filtered out" for an ad hoc analysis choice
+
 **FDN Card Regression**
 
 Post-run evaluation dimension: FDN audited tests (`tests/audited/fdn/`) run against pre-filled FDN `card_impl.py` files using the agent's final Writable Engine. Detects whether engine extensions broke existing card behavior. Host-side only; not staged into the Workspace. Distinct from FDN Reference Tests.
@@ -341,7 +348,7 @@ _Avoid_: "differential testing" (deprecated XMage approach), "checkpoint validat
 
 **Results Repo**
 
-The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: `results/<candidate-hash>/<run-id>/` holding one Run Record each, `results/<candidate-hash>/candidate/` holding the vendored Candidate Bundle of an `ozolith-v1` candidate (written once on its first run, verified at write time — the copy must recompute to the directory's Candidate Hash — immutable; #65), a derived `runs.jsonl` index regenerated from the tree (never hand-edited, never authoritative), and a root `AGENTS.md` carrying the full schema so the repo is self-contained for analysis agents. Heavy artifacts (transcripts, snapshots, per-card trees) never enter it — records carry pointers. Written only through `silverquillm.results_repo`; laid out by `silverquillm results-init <clone>`; the legacy Validated Results corpus is backfilled into it by `scripts/migrate_validated_results.py`.
+The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: `results/<candidate-hash>/<run-id>/` holding one Run Record each, `results/<candidate-hash>/candidate/` holding the vendored Candidate Bundle of an `ozolith-v1` candidate (written once on its first run, verified at write time — the copy must recompute to the directory's Candidate Hash — immutable; #65), a derived `runs.jsonl` index regenerated from the tree (never hand-edited, never authoritative), and a root `AGENTS.md` carrying the full schema so the repo is self-contained for analysis agents. Heavy artifacts (transcripts, snapshots, per-card trees) never enter it — records carry pointers — except each record's Workspace Archive; Exclusions live beside the records. Written only through `silverquillm.results_repo`; laid out by `silverquillm results-init <clone>`; the legacy Validated Results corpus is backfilled into it by `scripts/migrate_validated_results.py`.
 
 _Avoid_: "results dir" (the per-run `docker/<image>/results/` working output), "leaderboard repo" (publishing is the separate port into the bench repo's `published/` — see Published Result)
 
@@ -441,6 +448,12 @@ Karn v4 runs seed Git history from a trusted benchmark baseline and receive task
 Historical image runs wrote `prompt.md` and `run_manifest.json` into the Workspace and preserved the previous run's `.git` when resuming.
 
 _Avoid_: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run), "staged from scratch" (deprecated — workspace is a pre-built directory copied wholesale)
+
+**Workspace Archive**
+
+The graded Workspace copy of a Run Record, kept in the Results Repo as a diff from its benchmark input's staged baseline, so any host can rebuild and re-grade it.
+
+_Avoid_: "workspace snapshot" (an Output Snapshot taken during the run), "workspace backup"
 
 **Writable Engine**
 

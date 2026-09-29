@@ -36,6 +36,12 @@ Karn resolves and builds the candidate; the bench consumes the resulting build o
 Image and definition selection are fixed for that run, and build time is outside its execution budget.
 Recipes and other build sources provide provenance; they do not substitute for the artifact actually executed.
 
+A run's sources must all be committed (#113).
+Its image must carry Karn's `karn.config.revision` label naming a recipe commit, which a build from the committed tree records and a `--worktree` build does not; the bench checkout that runs and grades, and the one holding the benchmark data, must have no change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`.
+Ignored files and untracked files elsewhere, such as scratch notes, worktrees and run artifacts, do not count.
+`run` and `scheduler` refuse a run that breaks this before any evidence exists, unless the operator passes `--allow-dirty`.
+Every new record carries its provenance: the host label (`SILVERQUILLM_HOST_LABEL`, else the hostname), the commit and dirty state of both checkouts, the recipe revision, and any overridden reasons; the grader image is already recorded under `grading_isolation`.
+
 ### Independent execution
 
 The bench launches the candidate directly, without an Ozolith Node Daemon (grilling 2026-09-26).
@@ -195,8 +201,20 @@ The runner preserves the final workspace even when its engine is unusable; fallb
 A fallback grade describes that snapshot, while the execution outcome continues to describe the actual run.
 
 Each record fingerprints the host-owned grading inputs it was graded against (`grading_inputs.digest`), and scores are comparable only between runs graded on the same digest.
-`silverquillm regrade` re-grades retained runs on the checkout's current inputs, from the workspace each run was graded from in the local run artifacts and on its recorded grader image, with the same container isolation; a record's own paths never choose what is mounted.
-A re-grade never replaces or edits a record: its scores go to a separate output directory, tagged with the new digest, and a run whose workspace or grader image is gone is skipped with a reason.
+`silverquillm regrade` re-grades retained runs on the checkout's current inputs, from the workspace each run was graded from and on its recorded grader image, with the same container isolation; a record's own paths never choose what is mounted.
+The workspace comes from the local run artifacts, else from the run's workspace archive in the results repository, so any host can re-grade any archived run; grader images are built per host, so `--substitute-grader` grades on this host's grader for the recorded Python and names both images.
+A re-grade never replaces or edits a record: its scores go to a separate output directory, tagged with the new digest, and a run whose workspace or grader image is unavailable is skipped with a reason.
+
+### Shared results repository
+
+Hosts share one results repository, and everything an analysis needs lives there beside the immutable records (#113).
+Each record's graded workspace is archived as a binary diff from its benchmark input's staged baseline, which is stored once (see ADR-015).
+The run writer archives a workspace and verifies it rebuilds to the graded copy's recorded digest before writing; `silverquillm results archive` backfills records from before archives existed, on the host that holds their run artifacts.
+
+An analysis leaves a run out only through an Exclusion: a write-once file under `exclusions/<candidate-hash>/<run-id>.json` naming a reason code and a note, never an edit to the record.
+The run writer excludes a run when a rule fires on an observed fact (a host failure, zero agent turns, subagent threads, or measurements from before subagent threads were counted); unknown measurements never exclude.
+An operator excludes anything a rule cannot see with `silverquillm results exclude`, a superseded run naming the record that replaces it, and `silverquillm results check` lists records a rule excludes without an Exclusion and Exclusions without a record.
+Tables list the excluded runs with their reasons beneath the included ones.
 
 ### Historical evidence
 
@@ -215,3 +233,4 @@ This consumer contract governs Karn v4 execution.
 | [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Karn builds candidates and an independent bench host executes their declared contract |
 | [ADR-013](../adr/ADR-013-grading-runs-in-a-network-less-grader-container.md) | Candidate code executes only in a network-less grader container |
 | [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | SilverquiLLM runs Karn constructs without Ozolith; Candidate Bundle execution is removed |
+| [ADR-015](../adr/ADR-015-results-repo-keeps-graded-workspaces-as-diffs.md) | The results repo keeps each graded workspace as a diff from one shared baseline |

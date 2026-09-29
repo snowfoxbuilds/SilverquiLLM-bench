@@ -11,7 +11,7 @@ import stat
 import subprocess
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 
@@ -252,6 +252,8 @@ class KarnCandidate:
     definition_digest: str
     image_id: str
     plugins: tuple[PluginArtifact, ...]
+    # The image's labels as inspected at load, e.g. Karn's recipe revision.
+    image_labels: dict = field(default_factory=dict, compare=False)
 
     @property
     def image(self) -> str:
@@ -389,10 +391,20 @@ def load_candidate(
     definition_path = inside(root, f"constructs/{construct_name}/definition.json")
     document = decode_definition(read_regular(definition_path))
     encoded = canonical(document)
-    image_id = _verify_image(document["image"], image_inspector(document["image"]))
+    inspection = image_inspector(document["image"])
+    image_id = _verify_image(document["image"], inspection)
+    config = inspection.get("Config")
+    labels = config.get("Labels") if isinstance(config, dict) else None
     plugins = tuple(
         _plugin(root, definition_path.parent, row) for row in document["runtime"]["plugins"]
     )
     return KarnCandidate(
-        root, definition_path, document, encoded, digest(encoded), image_id, plugins
+        root,
+        definition_path,
+        document,
+        encoded,
+        digest(encoded),
+        image_id,
+        plugins,
+        dict(labels) if isinstance(labels, dict) else {},
     )

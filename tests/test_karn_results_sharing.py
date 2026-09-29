@@ -1,0 +1,483 @@
+"""Workspace archives, provenance and exclusions that let hosts share one results repo."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from silverquillm.cli import main
+from silverquillm.karn import execution, provenance
+from silverquillm.karn.exclusions import (
+    ExclusionError,
+    check,
+    exclude,
+    load_exclusions,
+    rule_exclusion,
+)
+from silverquillm.karn.execution import run_benchmark
+from silverquillm.karn.records import KarnRunRecord, read_record
+from silverquillm.karn.regrade import regrade
+from silverquillm.karn.workspace_archive import (
+    ArchiveRefused,
+    Scratch,
+    archive_dir,
+    archive_run,
+    backfill,
+    content_digest,
+    materialize,
+)
+from silverquillm.results_repo import InvalidRunRecordError
+
+from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
+from .test_karn_execution import FixtureHost, options
+
+
+class EditingHost(FixtureHost):
+    """A run whose agent edits, adds, deletes, and writes binary and CRLF files."""
+
+    def run(self, candidate, workspace, evidence_dir, prompt, **kwargs):
+        (workspace / "engine/card.py").write_text("value = 1  # edited\n")
+        (workspace / "docs/readme.txt").unlink()
+        (workspace / "cards/fdn/fdn_1/art.bin").write_bytes(bytes(range(256)) * 4)
+        (workspace / "cards/fdn/fdn_1/notes.txt").write_bytes(b"line one\r\nline two\r\n")
+        (workspace / ".gitattributes").write_text("* text eol=lf\n")
+        script = workspace / "tool.sh"
+        script.write_text("#!/bin/sh\n")
+        script.chmod(0o755)
+        return super().run(candidate, workspace, evidence_dir, prompt, **kwargs)
+
+
+def tree_bytes(root: Path, *, graded_only: bool = False) -> dict:
+    """Every file's hash; ``graded_only`` drops the bytecode the local grader leaves behind."""
+    return {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+        and not path.is_symlink()
+        and not (graded_only and "__pycache__" in path.parts)
+    }
+
+
+@pytest.fixture
+def edited(tmp_path):
+    opts = options(tmp_path, host=EditingHost())
+    readme = opts["bench_root"] / "benchmarks/example/workspace/docs/readme.txt"
+    readme.parent.mkdir()
+    readme.write_text("deleted by the agent\n")
+    record = run_benchmark(**opts, run_id="edited")
+    return opts, record
+
+
+# ---- workspace archives ----------------------------------------------------------------------
+
+
+def test_a_run_archives_its_graded_workspace_and_it_rebuilds_byte_for_byte(edited, tmp_path):
+    opts, record = edited
+    repo, run_dir = opts["results_repo"], opts["results_dir"] / "edited"
+    archive = archive_dir(repo, record.candidate.hash, record.run_id)
+    metadata = json.loads((archive / "workspace.json").read_text())
+    assert metadata["graded"]["source"] == "workspace_final"
+    assert (
+        metadata["graded"]["content_digest"]
+        == record.run_metadata["grading_source"]["final"]["digest"]
+    )
+    assert (
+        metadata["baseline"]["content_digest"]
+        == record.run_metadata["benchmark_input"]["workspace_digest"]
+    )
+    assert (repo / metadata["baseline"]["bundle"]).is_file()
+    assert metadata["patch"]["files_changed"] == 6
+
+    rebuilt = materialize(repo, record, tmp_path / "rebuilt")
+
+    assert tree_bytes(rebuilt) == tree_bytes(run_dir / "workspace_final", graded_only=True)
+    assert os.access(rebuilt / "tool.sh", os.X_OK)
+    assert not (rebuilt / "docs/readme.txt").exists()
+
+
+def test_runs_of_one_benchmark_input_share_one_baseline(edited):
+    opts, _ = edited
+    run_benchmark(**opts, run_id="second")
+    assert len(list((opts["results_repo"] / "baselines").iterdir())) == 1
+    assert len(list((opts["results_repo"] / "workspaces").glob("*/*"))) == 2
+
+
+def test_the_scratch_repository_ignores_attributes_and_filters(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / ".gitattributes").write_text("* text eol=crlf filter=missing\n")
+    (source / "text.txt").write_bytes(b"a\nb\r\n")
+    scratch = Scratch(tmp_path / "scratch")
+    tree = scratch.tree(source)
+    scratch.write_tree(tree, tmp_path / "out")
+    assert (tmp_path / "out/text.txt").read_bytes() == b"a\nb\r\n"
+    assert content_digest(tmp_path / "out") == content_digest(source)
+
+
+def test_archiving_never_writes_into_the_run_artifacts(edited):
+    opts, record = edited
+    repo, run_dir = opts["results_repo"], opts["results_dir"] / "edited"
+    shutil.rmtree(archive_dir(repo, record.candidate.hash, record.run_id))
+    before = tree_bytes(run_dir)
+
+    assert archive_run(repo, record, run_dir)["status"] == "archived"
+
+    assert tree_bytes(run_dir) == before
+
+
+def test_an_existing_archive_is_kept_and_a_dry_run_writes_nothing(edited):
+    opts, record = edited
+    repo, run_dir = opts["results_repo"], opts["results_dir"] / "edited"
+    archive = archive_dir(repo, record.candidate.hash, record.run_id)
+    assert archive_run(repo, record, run_dir)["status"] == "exists"
+    shutil.rmtree(archive)
+    assert archive_run(repo, record, run_dir, dry_run=True)["status"] == "would_archive"
+    assert not archive.exists()
+
+
+def test_a_changed_graded_copy_is_refused(edited):
+    opts, record = edited
+    repo, run_dir = opts["results_repo"], opts["results_dir"] / "edited"
+    shutil.rmtree(archive_dir(repo, record.candidate.hash, record.run_id))
+    (run_dir / "workspace_final/engine/card.py").write_text("value = 2\n")
+    with pytest.raises(ArchiveRefused, match="graded_workspace_changed"):
+        archive_run(repo, record, run_dir)
+
+
+def test_a_baseline_bundle_is_written_once_and_a_corrupt_one_is_never_replaced(edited):
+    opts, record = edited
+    repo, run_dir = opts["results_repo"], opts["results_dir"] / "edited"
+    [bundle] = (repo / "baselines").iterdir()
+    shutil.rmtree(archive_dir(repo, record.candidate.hash, record.run_id))
+    bundle.write_bytes(b"not a bundle")
+    with pytest.raises(ArchiveRefused):
+        archive_run(repo, record, run_dir)
+    assert bundle.read_bytes() == b"not a bundle"
+    assert not archive_dir(repo, record.candidate.hash, record.run_id).exists()
+
+
+@pytest.mark.parametrize(
+    ("tamper", "reason"),
+    [
+        (lambda m, a: m["graded"].update(tree="f" * 40), "workspace_tree_mismatch"),
+        (lambda m, a: (a / "workspace.patch").write_bytes(b"x"), "workspace_patch_digest_mismatch"),
+        (lambda m, a: m["graded"].update(content_digest="sha256:" + "0" * 64), "does_not_match"),
+    ],
+)
+def test_a_rebuild_that_differs_from_the_record_is_refused(edited, tmp_path, tamper, reason):
+    opts, record = edited
+    archive = archive_dir(opts["results_repo"], record.candidate.hash, record.run_id)
+    metadata = json.loads((archive / "workspace.json").read_text())
+    tamper(metadata, archive)
+    (archive / "workspace.json").write_text(json.dumps(metadata))
+    with pytest.raises(ArchiveRefused, match=reason):
+        materialize(opts["results_repo"], record, tmp_path / "rebuilt")
+
+
+def test_backfill_archives_local_runs_and_skips_other_hosts_runs(edited, tmp_path):
+    opts, record = edited
+    repo = opts["results_repo"]
+    shutil.rmtree(archive_dir(repo, record.candidate.hash, record.run_id))
+    other = run_benchmark(**opts, run_id="elsewhere")
+    shutil.rmtree(opts["results_dir"] / "elsewhere")
+    shutil.rmtree(archive_dir(repo, other.candidate.hash, other.run_id))
+
+    rows = {row["run_id"]: row for row in backfill(repo, opts["results_dir"])}
+
+    assert rows["edited"]["status"] == "archived"
+    assert rows["elsewhere"] == {
+        "run_id": "elsewhere",
+        "candidate_hash": other.candidate.hash,
+        "status": "skipped",
+        "reason": "run_artifacts_unavailable",
+    }
+    assert backfill(repo, opts["results_dir"], runs=["edited"])[0]["status"] == "exists"
+
+
+def test_the_archive_command_reports_refusals_and_exits_non_zero(edited):
+    opts, record = edited
+    repo, run_dir = opts["results_repo"], opts["results_dir"] / "edited"
+    shutil.rmtree(archive_dir(repo, record.candidate.hash, record.run_id))
+    (run_dir / "workspace_final/engine/card.py").write_text("value = 2\n")
+    result = CliRunner().invoke(
+        main,
+        [
+            "results",
+            "archive",
+            "--results-repo",
+            str(repo),
+            "--results-dir",
+            str(opts["results_dir"]),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "refused edited: graded_workspace_changed" in result.output
+
+
+# ---- regrade from another host's archive ------------------------------------------------------
+
+
+class OtherHostDocker(LocalDocker):
+    """This host lacks the recorded grader image but has its own grader for the same Python."""
+
+    LOCAL = "sha256:" + "1" * 64
+
+    def image_id(self, reference):
+        return None if reference == FIXTURE_IMAGE_ID else self.LOCAL
+
+    def image_python(self, image_id):
+        return "3.13"
+
+
+def test_another_hosts_run_regrades_from_its_archive_on_a_substituted_grader(edited, tmp_path):
+    opts, record = edited
+    shutil.rmtree(opts["results_dir"] / "edited")
+    common = {
+        "bench_root": opts["bench_root"],
+        "benchmark_id": "example",
+        "results_repo": opts["results_repo"],
+        "results_dir": opts["results_dir"],
+        "out": tmp_path / "regrade",
+        "docker": OtherHostDocker(),
+    }
+
+    assert regrade(**common)["skipped"] == [
+        {"run_id": "edited", "reason": "grader_image_unavailable"}
+    ]
+    regrade(**common, substitute_grader=True)
+
+    result = json.loads(next((tmp_path / "regrade").glob("*/edited.json")).read_text())
+    assert result["scores"] == record.scores
+    assert result["source"]["workspace"] == "results_repo"
+    assert result["grading_isolation"]["grader_image_id"] == OtherHostDocker.LOCAL
+    assert result["grader_substituted_for"] == FIXTURE_IMAGE_ID
+
+
+# ---- provenance and the clean-source rule ------------------------------------------------------
+
+
+def git(root: Path, *arguments):
+    subprocess.run(
+        ["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t", *arguments],
+        check=True,
+        capture_output=True,
+    )
+
+
+@pytest.fixture
+def checkout(tmp_path):
+    root = tmp_path / "checkout"
+    (root / "silverquillm").mkdir(parents=True)
+    (root / "silverquillm/module.py").write_text("x = 1\n")
+    (root / "notes.md").write_text("tracked\n")
+    git(root, "init", "--quiet")
+    git(root, "add", "--all")
+    git(root, "commit", "--quiet", "-m", "initial")
+    return root
+
+
+def test_a_committed_checkout_is_clean(checkout):
+    state = provenance.checkout_state(checkout / "silverquillm")
+    assert state["dirty"] is False and len(state["commit"]) == 40
+
+
+@pytest.mark.parametrize(
+    ("change", "dirty"),
+    [
+        (lambda root: (root / "notes.md").write_text("edited\n"), True),
+        (lambda root: (root / "silverquillm/new.py").write_text(""), True),
+        (lambda root: (root / "benchmarks/x/data.json").parent.mkdir(parents=True)
+         or (root / "benchmarks/x/data.json").write_text("{}"), True),
+        (lambda root: (root / "scratch-notes.md").write_text("untracked elsewhere\n"), False),
+    ],
+)  # fmt: skip
+def test_tracked_changes_and_untracked_code_or_data_make_a_checkout_dirty(checkout, change, dirty):
+    change(checkout)
+    assert provenance.checkout_state(checkout)["dirty"] is dirty
+
+
+def test_a_directory_outside_git_has_no_commit(tmp_path):
+    assert provenance.checkout_state(tmp_path) == {"commit": None, "dirty": None}
+
+
+def test_dirty_sources_are_refused_and_an_override_is_recorded(checkout, monkeypatch):
+    monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
+    monkeypatch.setenv(provenance.HOST_LABEL_ENV, "bench-host-1")
+    clean = {provenance.RECIPE_LABEL: "a" * 40}
+    recorded = provenance.collect(clean, checkout, allow_dirty=False)
+    assert recorded["host_label"] == "bench-host-1" and recorded["dirty_reasons"] == []
+    assert provenance.valid(recorded)
+
+    with pytest.raises(provenance.DirtySourceError, match="recipe_revision_dirty"):
+        provenance.collect({provenance.RECIPE_LABEL: "dirty"}, checkout, allow_dirty=False)
+    with pytest.raises(provenance.DirtySourceError, match="recipe_revision_unrecorded"):
+        provenance.collect({}, checkout, allow_dirty=False)
+    (checkout / "notes.md").write_text("edited\n")
+    with pytest.raises(provenance.DirtySourceError, match="bench_checkout_dirty"):
+        provenance.collect(clean, checkout, allow_dirty=False)
+
+    overridden = provenance.collect(clean, checkout, allow_dirty=True)
+    assert overridden["allow_dirty"] is True
+    assert overridden["dirty_reasons"] == ["bench_checkout_dirty", "benchmark_root_dirty"]
+    assert provenance.valid(overridden)
+    assert not provenance.valid({**overridden, "allow_dirty": False})
+
+
+def test_a_dirty_run_is_refused_before_any_evidence_exists(tmp_path, checkout, monkeypatch):
+    monkeypatch.setattr(execution, "collect_provenance", provenance.collect)
+    monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
+    opts = options(tmp_path)
+    with pytest.raises(provenance.DirtySourceError, match="recipe_revision_unrecorded"):
+        run_benchmark(**opts, run_id="refused")
+    assert not (opts["results_dir"] / "refused").exists()
+    assert not opts["results_repo"].exists()
+
+
+def test_a_record_carries_its_provenance_and_malformed_provenance_is_invalid(edited):
+    opts, record = edited
+    assert record.run_metadata["provenance"]["host_label"] == "test-host"
+    run_input = json.loads((opts["results_dir"] / "edited/run-input.json").read_text())
+    assert run_input["provenance"] == record.run_metadata["provenance"]
+    broken = json.loads(json.dumps(record.manifest))
+    broken["run_metadata"]["provenance"]["dirty_reasons"] = ["bench_checkout_dirty"]
+    with pytest.raises(InvalidRunRecordError, match="provenance"):
+        KarnRunRecord(broken, record.scores).validate()
+
+
+# ---- exclusions -----------------------------------------------------------------------------
+
+
+def edit(record: KarnRunRecord, change) -> KarnRunRecord:
+    manifest = json.loads(json.dumps(record.manifest))
+    change(manifest["run_metadata"])
+    return KarnRunRecord(manifest, record.scores)
+
+
+def measured(turns, threads="absent"):
+    def change(metadata):
+        metadata["measurements"]["agent_turns"]["total"]["value"] = turns
+        if threads == "absent":
+            metadata["measurements"].pop("subagent_threads", None)
+        else:
+            metadata["measurements"]["subagent_threads"] = threads
+
+    return change
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        (measured(40, 0), None),
+        (measured(None, None), None),
+        (measured(0, 0), "never_executed"),
+        (measured(40, 2), "subagents_used"),
+        (measured(40), "subagents_uncounted"),
+        (lambda m: m["execution"].update(status="host_failed"), "host_failed"),
+    ],
+)
+def test_rules_exclude_only_on_observed_facts(edited, change, reason):
+    _, record = edited
+    matched = rule_exclusion(edit(record, change))
+    assert (matched and matched[0]) == reason
+
+
+def write_record_with(opts, run_id, change):
+    """Record a run, then rewrite its manifest in place as a record with *change* would be."""
+    run_benchmark(**opts, run_id=run_id)
+    path = next(opts["results_repo"].glob(f"results/*/{run_id}/manifest.json"))
+    manifest = json.loads(path.read_text())
+    change(manifest["run_metadata"])
+    path.write_text(json.dumps(manifest))
+    return read_record(path.parent)
+
+
+def test_a_run_meeting_a_rule_is_excluded_when_its_record_is_written(tmp_path, monkeypatch):
+    opts = options(tmp_path)
+    original = execution.write_record
+
+    def zero_turns(repo, record):
+        record.run_metadata["measurements"]["agent_turns"]["total"]["value"] = 0
+        return original(repo, record)
+
+    monkeypatch.setattr(execution, "write_record", zero_turns)
+    record = run_benchmark(**opts, run_id="refusal")
+    exclusion = load_exclusions(opts["results_repo"])["refusal"]
+    assert (exclusion.reason, exclusion.source) == ("never_executed", "rule")
+    assert exclusion.candidate_hash == record.candidate.hash
+
+
+def test_operator_exclusions_check_and_rule_backfill(edited):
+    opts, _ = edited
+    repo = opts["results_repo"]
+    write_record_with(opts, "old", measured(40))
+    write_record_with(opts, "retry", measured(40, 0))
+
+    report = check(repo)
+    assert report["unexcluded_rule_matches"] == [
+        {"run_id": "old", "candidate_hash": report["unexcluded_rule_matches"][0]["candidate_hash"],
+         "rule": "subagents_uncounted"},
+    ]  # fmt: skip
+
+    with pytest.raises(ExclusionError, match="superseded_by_required"):
+        exclude(repo, "edited", reason="superseded", note="rerun", excluded_by="op")
+    with pytest.raises(ExclusionError, match="superseding_run_not_recorded"):
+        exclude(repo, "edited", reason="superseded", note="n", excluded_by="op", superseded_by="x")
+    exclude(
+        repo, "edited", reason="superseded", note="rerun", excluded_by="op", superseded_by="retry"
+    )
+    with pytest.raises(ExclusionError, match="run_already_excluded"):
+        exclude(repo, "edited", reason="other", note="again", excluded_by="op")
+
+    assert [row["run_id"] for row in check(repo, write_rules=True)["written"]] == ["old"]
+    assert check(repo) == {
+        "unexcluded_rule_matches": [],
+        "written": [],
+        "orphaned_exclusions": [],
+        "missing_superseding_runs": [],
+    }
+    assert {e.run_id: e.reason for e in load_exclusions(repo).values()} == {
+        "edited": "superseded",
+        "old": "subagents_uncounted",
+    }
+
+
+def test_a_misplaced_or_malformed_exclusion_is_refused(edited):
+    opts, _ = edited
+    repo = opts["results_repo"]
+    exclusion = exclude(repo, "edited", reason="pilot", note="validation", excluded_by="op")
+    path = repo / "exclusions" / exclusion.candidate_hash / "edited.json"
+    moved = repo / "exclusions" / ("e" * 64) / "edited.json"
+    moved.parent.mkdir()
+    shutil.move(path, moved)
+    with pytest.raises(ExclusionError, match="exclusion_misplaced"):
+        load_exclusions(repo)
+    moved.write_text('{"run_id": "edited"}')
+    with pytest.raises(ExclusionError, match="exclusion_invalid"):
+        load_exclusions(repo)
+
+
+def test_exclusion_commands(edited):
+    opts, _ = edited
+    repo = str(opts["results_repo"])
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        ["results", "exclude", "edited", "--reason", "subagents_used", "--note",
+         "Sonnet delegated to Opus subagents", "--by", "op", "--results-repo", repo],
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    listed = runner.invoke(main, ["results", "exclusions", "--results-repo", repo])
+    assert "subagents_used" in listed.output and "Opus subagents" in listed.output
+    assert runner.invoke(main, ["results", "check", "--results-repo", repo]).exit_code == 0
+    unknown = runner.invoke(
+        main,
+        ["results", "exclude", "nope", "--reason", "other", "--note", "n", "--results-repo", repo],
+    )
+    assert unknown.exit_code == 1 and "run_not_recorded" in unknown.output
