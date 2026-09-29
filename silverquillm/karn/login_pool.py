@@ -210,6 +210,7 @@ def adopt_legacy_login(state_root: Path, construct: str, plugin_id: str) -> bool
             not locked
             or not (legacy / "secret.json").is_file()
             or (legacy / "active.json").exists()
+            or (legacy / "plugin" / "mounted.json").exists()
         ):
             return False
         pool = LoginPool.of(state_root, plugin_id)

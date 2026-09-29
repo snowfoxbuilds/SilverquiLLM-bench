@@ -206,6 +206,9 @@ def test_a_pending_or_busy_legacy_login_stays_where_its_run_names_it(tmp_path):
     assert not adopt_legacy_login(tmp_path / "state", "bare-claude-opus", PLUGIN)
     assert legacy.pending() is not None
     legacy.settled()
+    (legacy.state / "mounted.json").write_text("{}")  # a harvest not yet finished
+    assert not adopt_legacy_login(tmp_path / "state", "bare-claude-opus", PLUGIN)
+    (legacy.state / "mounted.json").unlink()
     with legacy.exclusive():
         assert not adopt_legacy_login(tmp_path / "state", "bare-claude-opus", PLUGIN)
     assert adopt_legacy_login(tmp_path / "state", "bare-claude-opus", PLUGIN)
