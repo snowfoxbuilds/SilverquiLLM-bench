@@ -38,6 +38,10 @@ validation.json
 
 benchmarks/*/analysis/*.json
 benchmarks/*/analysis/*.md
+benchmarks/*/analysis/**/*.json
+benchmarks/*/analysis/**/*.md
+benchmarks/*/analysis/**/*.csv
+benchmarks/*/analysis/**/*.txt
 
 # Batch queue: batch files and the scheduler's committed observed state
 # (batches/state/<id>.json — portable, no host-local data) are tracked; the

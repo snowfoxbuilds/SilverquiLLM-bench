@@ -128,3 +128,56 @@ def test_new_copies_are_summoning_sick_even_if_original_is_not():
         if token is not card:
             with pytest.raises(AbilityError):
                 activate_card_ability(game, p, token)
+
+
+class GrantHaste(Instant):
+    def __init__(self, target, **kwargs):
+        super().__init__(name="Grant haste", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer
+        from engine.types import Keyword
+
+        def apply(state):
+            self.target.keywords |= Keyword.HASTE
+
+        game.effect_manager.add(
+            ContinuousEffect(self, Layer.ABILITY, apply=apply, duration=DURATION_END_OF_TURN)
+        )
+
+
+def test_haste_allows_mana_activation_on_the_turn_notary_enters():
+    # Rules 602.5a and 702.10c waive the tap-cost restriction for haste.
+    from test_utils import cast_card
+
+    game, p, card = arrange()
+    cast_card(game, p, GrantHaste(card, owner=p))
+    activate_card_ability(game, p, card)
+    assert card.is_tapped
+    assert p.mana_pool.get(ManaType.COLORLESS) == 3
+
+
+class TakeControl(Instant):
+    def __init__(self, target, **kwargs):
+        super().__init__(name="Take control", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        game.get_battlefield(self.target.controller).remove(self.target)
+        self.target.controller = self.controller
+        game.get_battlefield(self.controller).add(self.target)
+
+
+def test_pending_copies_belong_to_the_original_trigger_controller():
+    # Rule 603.3a fixes a trigger's controller when it triggers.
+    from test_utils import cast_card
+
+    game = behavioral_game()
+    p, opponent = game.players
+    card = enter_permanent(game, p, TheNotaryHobbits())
+    cast_card(game, opponent, TakeControl(card, owner=opponent))
+    assert game.get_battlefield(opponent).get_all() == [card]
+    copies = game.get_battlefield(p).get_all()
+    assert len(copies) == 2
+    assert all(c.name == card.name and c.is_token for c in copies)

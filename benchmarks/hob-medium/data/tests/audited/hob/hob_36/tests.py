@@ -286,3 +286,83 @@ def test_protection_gained_in_response_invalidates_only_that_target(count):
     advance_game_to_phase(game, Phase.ENDING, Step.END)
     resolve_stack(game)
     assert all(game.get_battlefield(p).contains(card) for card in targets)
+
+
+class HandInvoker(Creature):
+    def get_activated_abilities(self):
+        return [
+            ActivatedAbility(
+                cost=lambda g, c: True,
+                effect=lambda g: None,
+                can_activate=lambda g, c, p: g.get_hand(p).contains(c),
+                description="{0}: Do nothing. Activate only from your hand.",
+            )
+        ]
+
+
+def test_creature_card_activation_in_hand_does_not_use_draw_trigger():
+    # Rule 109.2: "a creature" means a permanent, not a creature card in hand.
+    game, p, _ = arrange()
+    hand_card = HandInvoker(name="Hand invoker", owner=p, base_power=1, base_toughness=1)
+    game.get_hand(p).add(hand_card)
+    creature = put_on_battlefield(
+        game, p, TestCreature(name="Battlefield invoker", base_power=1, base_toughness=1)
+    )
+    activate_card_ability(game, p, hand_card)
+    resolve_stack(game)
+    assert game.get_hand(p).get_all() == [hand_card]
+    activate_card_ability(game, p, creature)
+    resolve_stack(game)
+    assert len(game.get_hand(p).get_all()) == 2
+
+
+class CreatureWithLoyalty(Creature):
+    def __init__(self, **kwargs):
+        super().__init__(name="Loyal creature", base_power=2, base_toughness=2, **kwargs)
+        self.card_types.add(CardType.PLANESWALKER)
+        self.loyalty = 3
+
+    def get_loyalty_abilities(self):
+        from engine.card import LoyaltyAbility
+
+        return [LoyaltyAbility(loyalty_cost=1, effect=lambda g: None)]
+
+
+def test_creature_loyalty_activation_triggers_draw():
+    # Rule 606.1: loyalty abilities are activated abilities too.
+    from test_utils import activate_loyalty_ability
+
+    game, p, _ = arrange()
+    creature = put_on_battlefield(game, p, CreatureWithLoyalty())
+    activate_loyalty_ability(game, p, creature)
+    resolve_stack(game)
+    assert len(game.get_hand(p).get_all()) == 1
+
+
+class CounterPendingAbility(Instant):
+    def __init__(self, target, **kwargs):
+        super().__init__(name="Counter pending ability", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        game.stack.remove_object(self.target)
+
+
+def test_countered_delayed_return_does_not_retry_next_end_step():
+    # Rule 603.7b: the next end step uses up the delayed trigger even if countered.
+    from test_utils import cast_card
+
+    game, p, elrond = arrange()
+    target = bear(game, p)
+    prefer(p, object_preference(game, target))
+    fund(p, BLUE=2, COLORLESS=5)
+    activate_card_ability(game, p, elrond)
+    resolve_stack(game)
+    assert p.zones[Zone.EXILE].contains(target)
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+    cast_card(game, p, CounterPendingAbility(game.stack.peek(), owner=p))
+    advance_game_to_phase(game, Phase.PRECOMBAT_MAIN)
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+    resolve_stack(game)
+    assert p.zones[Zone.EXILE].contains(target)
+    assert not game.get_battlefield(p).contains(target)

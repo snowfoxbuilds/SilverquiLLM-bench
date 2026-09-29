@@ -238,15 +238,16 @@ def activate_ability(
     source = ability.source
     was_creature = (CardType.CREATURE in getattr(source, "card_types", set())
                     and any(game.get_battlefield(p).contains(source) for p in game.players))
-    if isinstance(ability, LoyaltyAbilityInstance):
-        _activate_loyalty_ability(game, player, ability)
-    elif isinstance(ability, ActivatedAbilityInstance):
-        _activate_regular_ability(game, player, ability)
-    else:
-        raise AbilityError(f"Unknown ability type: {type(ability)}")
-    from engine.events import AbilityActivatedTriggeredEvent
-    game.trigger_manager.fire_event(game, AbilityActivatedTriggeredEvent(
-        source=source, controller=player, was_creature=was_creature))
+    with game.trigger_manager.defer_until_activated(game):
+        if isinstance(ability, LoyaltyAbilityInstance):
+            _activate_loyalty_ability(game, player, ability)
+        elif isinstance(ability, ActivatedAbilityInstance):
+            _activate_regular_ability(game, player, ability)
+        else:
+            raise AbilityError(f"Unknown ability type: {type(ability)}")
+        from engine.events import AbilityActivatedTriggeredEvent
+        game.trigger_manager.fire_event(game, AbilityActivatedTriggeredEvent(
+            source=source, controller=player, was_creature=was_creature))
 
 
 # ---------------------------------------------------------------------------

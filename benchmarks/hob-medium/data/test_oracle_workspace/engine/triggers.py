@@ -12,10 +12,11 @@ Event types live in :mod:`engine.events` as typed dataclasses.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
-
 import inspect
+from collections.abc import Callable
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from engine.events import TriggeredEvent
 from engine.stack import StackObject, capture_activation_context
@@ -146,6 +147,29 @@ class TriggerManager:
 
     def __init__(self) -> None:
         self._triggers: list[TriggerRegistration] = []
+        self._deferral_depth = 0
+        self._pending: list[StackObject] = []
+
+    @contextmanager
+    def defer_until_activated(self, game: GameState):
+        # Costs can trigger abilities, but they wait above the completed activation (602.2, 603.3).
+        self._deferral_depth += 1
+        try:
+            yield
+        finally:
+            self._deferral_depth -= 1
+            if self._deferral_depth == 0:
+                pending, self._pending = self._pending, []
+                for active in (True, False):
+                    for obj in pending:
+                        if (obj.controller is game.active_player) == active:
+                            game.stack.push(obj)
+
+    def _place_trigger(self, game: GameState, obj: StackObject) -> None:
+        if self._deferral_depth:
+            self._pending.append(obj)
+        else:
+            game.stack.push(obj)
 
     def register(self, trigger: TriggerRegistration) -> None:
         """Register a triggered ability."""
@@ -222,7 +246,7 @@ class TriggerManager:
                         g, _obj.targets, _obj.activation_context
                     )
                 )
-                game.stack.push(stack_obj)
+                self._place_trigger(game, stack_obj)
             elif trigger.capture is not None:
                 # Untargeted trigger that captures per-fire event state (rule
                 # 603.3): capture NOW (fire time) and store it on this trigger's
@@ -245,7 +269,7 @@ class TriggerManager:
                         g, _c, _s
                     )
                 )
-                game.stack.push(stack_obj)
+                self._place_trigger(game, stack_obj)
             else:
                 effect = trigger.effect
                 if _effect_wants_controller(effect):
@@ -270,7 +294,7 @@ class TriggerManager:
                         controller=fire_controller,
                         on_resolve=effect,
                     )
-                game.stack.push(stack_obj)
+                self._place_trigger(game, stack_obj)
 
     def get_triggers(self) -> list[TriggerRegistration]:
         """Return a shallow copy of all registered triggers."""
