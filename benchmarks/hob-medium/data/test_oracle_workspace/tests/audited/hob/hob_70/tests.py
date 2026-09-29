@@ -130,3 +130,34 @@ def test_blink_does_not_keep_old_counters():
     cast_vanilla_spell(game, 1, 2)
     resolve_stack(game)
     assert (card.power, card.toughness) == (4, 2)
+
+
+class TurnIntoArtifact(Instant):
+    def __init__(self, target, **kwargs):
+        super().__init__(name="Turn into artifact", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer
+        from engine.types import CardType
+
+        def apply(state):
+            self.target.card_types = {CardType.ARTIFACT}
+
+        game.effect_manager.add(
+            ContinuousEffect(self, Layer.TYPE, apply=apply, duration=DURATION_END_OF_TURN)
+        )
+
+
+def test_counter_mode_still_applies_while_gollum_is_not_a_creature():
+    # Rule 608.2k still affects the named object after its characteristics change.
+    from engine.types import Phase, Step
+    from test_utils import advance_game_to_phase, cast_card
+
+    game, p, card = arrange()
+    prefer(p, Decision.mode("counter"))
+    cast_vanilla_spell(game, 1, 2)
+    cast_card(game, p, TurnIntoArtifact(card, owner=p))
+    advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
+    resolve_stack(game)
+    assert (card.power, card.toughness) == (4, 2)

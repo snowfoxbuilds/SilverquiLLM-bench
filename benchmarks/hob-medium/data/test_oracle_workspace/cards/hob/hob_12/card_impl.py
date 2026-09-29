@@ -21,9 +21,17 @@ class TheEaglesAreComing(Instant):
         self.additional_cast_cost = ManaCost.parse("{2}{W}{W}") if self.kicked else ManaCost()
 
     def get_targets(self, game):
-        from engine.types import CardType, TargetRequirement, Zone
+        from engine.types import CardType, Keyword, TargetRequirement, Zone
 
-        legal = lambda c: CardType.CREATURE in c.card_types and c.owner is self.controller
+        def legal(card):
+            return (
+                CardType.CREATURE in card.card_types
+                and card.owner is self.controller
+                and not (
+                    card.keywords & Keyword.HEXPROOF
+                    and card.controller is not self.controller
+                )
+            )
         count = sum(legal(c) for p in game.players for c in game.get_battlefield(p).get_all())
         return [
             TargetRequirement(legal, "creature you own", Zone.BATTLEFIELD, optional=self.kicked)
@@ -48,6 +56,8 @@ class TheEaglesAreComing(Instant):
                 and CardType.CREATURE in card.card_types
                 and card.owner is player
                 and not has_protection_from(card, self)
+                # Hexproof follows the target's controller, not its owner (702.11b, 608.2b).
+                and not (card.keywords & Keyword.HEXPROOF and card.controller is not player)
             ):
                 move_to_zone(game, card, Zone.BATTLEFIELD, Zone.HAND)
                 returned += int(player.zones[Zone.HAND].contains(card))

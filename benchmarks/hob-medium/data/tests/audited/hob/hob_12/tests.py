@@ -1,5 +1,5 @@
 import pytest
-from engine.card import Creature, Instant
+from engine.card import Artifact, Creature, Instant
 from engine.decisions import Decision
 from engine.game import exile
 from engine.types import Keyword, ManaType, Phase, Step, Zone
@@ -204,3 +204,105 @@ def test_protection_gained_in_response_invalidates_only_that_target(count):
     advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
     resolve_stack(game)
     assert len(birds(game, p)) == count - 1
+
+
+def test_unkicked_selects_only_one_of_several_creatures():
+    # Card text and rule 601.2c require exactly one target without kicker.
+    game, p, card, creatures = arrange(count=3)
+    cast_spell(game, 0, card.name)
+    assert sum(p.zones[Zone.HAND].contains(c) for c in creatures) == 1
+    assert sum(game.get_battlefield(p).contains(c) for c in creatures) == 2
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    resolve_stack(game)
+    assert len(birds(game, p)) == 1
+
+
+class CounterPendingAbility(Instant):
+    def __init__(self, target, **kwargs):
+        from engine.types import ManaCost
+
+        super().__init__(name="Counter pending ability", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        game.stack.remove_object(self.target)
+
+
+def test_countered_delayed_trigger_does_not_retry_next_upkeep():
+    # Rule 603.7b consumes the delay when it triggers, even if countered.
+    from test_utils import cast_card
+
+    game, p, card, creatures = arrange()
+    cast_spell(game, 0, card.name)
+    assert p.zones[Zone.HAND].contains(creatures[0])
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    cast_card(game, p, CounterPendingAbility(game.stack.peek(), owner=p))
+    assert not birds(game, p)
+    advance_game_to_phase(game, Phase.PRECOMBAT_MAIN)
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    resolve_stack(game)
+    assert not birds(game, p)
+
+
+class GrantHexproof(Instant):
+    def __init__(self, permanents, **kwargs):
+        from engine.types import ManaCost
+
+        super().__init__(name="Grant hexproof", mana_cost=ManaCost(), **kwargs)
+        self.permanents = permanents
+
+    def on_resolve(self, game):
+        from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer
+
+        def apply(state):
+            for permanent in self.permanents:
+                permanent.keywords |= Keyword.HEXPROOF
+
+        game.effect_manager.add(
+            ContinuousEffect(self, Layer.ABILITY, apply=apply, duration=DURATION_END_OF_TURN)
+        )
+
+
+def test_hexproof_in_response_protects_only_opponent_controlled_target():
+    # Rules 702.11b and 608.2b: hexproof depends on control, while Eagles checks ownership.
+    from engine.casting import cast_spell as cast
+    from test_utils import cast_card
+
+    game, p, card, targets = arrange(True, 2)
+    opponent = game.players[1]
+    stolen = targets[1]
+    game.get_battlefield(p).remove(stolen)
+    game.get_battlefield(opponent).add(stolen)
+    stolen.controller = opponent
+    prefer(p, Decision.yes(), *(object_preference(game, c) for c in targets))
+    cast(game, p, card)
+    cast_card(game, opponent, GrantHexproof(targets, owner=opponent))
+    assert p.zones[Zone.HAND].contains(targets[0])
+    assert game.get_battlefield(opponent).contains(stolen)
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    resolve_stack(game)
+    assert len(birds(game, p)) == 1
+
+
+class InstantCostReducer(Artifact):
+    def spell_cost_reduction(self, game, spell, caster):
+        from engine.types import CardType
+
+        return int(caster is self.controller and CardType.INSTANT in spell.card_types)
+
+
+def test_free_cast_applies_cost_reduction_to_kicker():
+    # Rules 601.2f and 118.9d apply reductions after adding kicker to a free cast.
+    from engine.casting import cast_spell_free
+
+    game, p, card, creatures = arrange(True)
+    put_on_battlefield(game, p, InstantCostReducer(name="Instant reducer"))
+    p.mana_pool.empty()
+    fund(p, WHITE=2, COLORLESS=1)
+    cast_spell_free(game, p, card, Zone.HAND)
+    resolve_stack(game)
+    assert p.zones[Zone.HAND].contains(creatures[0])
+    assert p.mana_pool.total() == 0
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    resolve_stack(game)
+    assert len(birds(game, p)) == 1

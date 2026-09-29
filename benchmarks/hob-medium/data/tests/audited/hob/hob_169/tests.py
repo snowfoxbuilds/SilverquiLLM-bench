@@ -162,3 +162,90 @@ def test_returned_artifact_does_not_keep_creature_counters():
     destroy(game, card)
     resolve_stack(game)
     assert card.card_types == {CardType.ARTIFACT} and not card.counters
+
+
+class DestroyPermanent(Instant):
+    def __init__(self, target, **kwargs):
+        from engine.types import ManaCost
+
+        super().__init__(name="Destroy permanent", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        destroy(game, self.target)
+
+
+def test_tapped_creature_returns_as_untapped_artifact():
+    # Rules 110.5b and 400.7: the returned permanent enters untapped.
+    from test_utils import cast_card
+
+    game, p, card = arrange()
+    card.is_tapped = True
+    cast_card(game, p, DestroyPermanent(card, owner=p))
+    assert game.get_battlefield(p).contains(card)
+    assert card.card_types == {CardType.ARTIFACT}
+    assert not card.is_tapped
+
+
+class CounterPendingAbility(Instant):
+    def __init__(self, target, **kwargs):
+        from engine.types import ManaCost
+
+        super().__init__(name="Counter pending ability", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        game.stack.remove_object(self.target)
+
+
+def test_countering_one_activation_preserves_the_other_paid_power():
+    # Rules 113.7a and 608.2h bind the sacrificed power to each independent ability.
+    from engine.abilities import activate_ability
+    from test_utils import ability_instance, cast_card
+
+    game, p, card = arrange()
+    small = bear(game, p, "Small", 1)
+    large = bear(game, p, "Large", 4)
+    ability = ability_instance(game, p, card)
+    fund(p, COLORLESS=2)
+    prefer(p, object_preference(game, small))
+    activate_ability(game, p, ability)
+    prefer(p, object_preference(game, large))
+    activate_ability(game, p, ability)
+    cast_card(game, p, CounterPendingAbility(game.stack.peek(), owner=p))
+    assert not game.get_hand(p).get_all()
+    assert p.zones[Zone.GRAVEYARD].contains(small)
+    assert p.zones[Zone.GRAVEYARD].contains(large)
+    assert p.mana_pool.total() == 0
+
+
+class HandSizeDeathWatcher(Creature):
+    def register_triggers(self, game):
+        from engine.events import CreatureDiesTriggeredEvent
+        from engine.game import gain_life
+        from engine.triggers import TriggerRegistration
+
+        game.trigger_manager.register(
+            TriggerRegistration(
+                CreatureDiesTriggeredEvent,
+                lambda g, event: event.creature is self,
+                lambda g, player: gain_life(g, player, len(g.get_hand(player).get_all())),
+                self,
+                self.controller,
+            )
+        )
+
+
+def test_sacrifice_death_trigger_resolves_before_drawing_cards():
+    # Rules 602.2 and 603.3 put cost-induced triggers above the completed activation.
+    game, p, card = arrange()
+    victim = enter_permanent(
+        game, p, HandSizeDeathWatcher(name="Death watcher", base_power=3, base_toughness=3)
+    )
+    resolve_stack(game)
+    fund(p, COLORLESS=1)
+    prefer(p, object_preference(game, victim))
+    activate_card_ability(game, p, card)
+    resolve_stack(game)
+    assert len(game.get_hand(p).get_all()) == 2
+    assert p.life == 20
