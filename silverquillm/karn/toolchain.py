@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
-from .definition import KarnError, canonical, digest, read_regular, tree_digest
+from .definition import KarnError, canonical, digest, tree_digest
 
 TOOLCHAIN_SOURCE = Path(__file__).with_name("candidate_toolchain")
 TOOLCHAIN_TARGET = "/run/silverquillm/test-toolchain"
@@ -77,6 +77,27 @@ def read_pins(requirements: Path) -> dict[str, tuple[str, frozenset[str]]]:
     return pins
 
 
+def _read_wheel(path: Path) -> bytes:
+    """Read a vendored wheel once, through a descriptor that follows no symlink.
+
+    Unlike ``read_regular``, a hard link is accepted: a non-editable install such as
+    ``uv --link-mode hardlink`` links package files to the installer's cache. Another name for
+    the same inode cannot swap the content, since these exact bytes are hashed and unpacked.
+    """
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_WHEEL_BYTES:
+                raise KarnError("unsafe_artifact_file")
+            data = stream.read(MAX_WHEEL_BYTES + 1)
+    except OSError:
+        raise KarnError("artifact_file_unavailable") from None
+    if len(data) > MAX_WHEEL_BYTES:
+        raise KarnError("artifact_file_too_large")
+    return data
+
+
 def locked_wheels(source: Path = TOOLCHAIN_SOURCE) -> list[Wheel]:
     """Return the vendored wheels, each matching exactly one pin, pure-Python and unaltered.
 
@@ -91,7 +112,7 @@ def locked_wheels(source: Path = TOOLCHAIN_SOURCE) -> list[Wheel]:
         name, version = _normalize(parts[0]), parts[1]
         if name in seen or pins.get(name, ("",))[0] != version:
             _refuse(wheel.name)
-        data = read_regular(wheel, limit=MAX_WHEEL_BYTES)
+        data = _read_wheel(wheel)
         sha = hashlib.sha256(data).hexdigest()
         if sha not in pins[name][1]:
             _refuse(wheel.name)
