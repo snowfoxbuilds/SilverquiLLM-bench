@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from decimal import Decimal
 from typing import Any
 
-PRICE_TABLE_VERSION = "openai-anthropic-standard-2026-09-28-v4"
+PRICE_TABLE_VERSION = "openai-anthropic-standard-2026-09-29-v5"
 PRICING_SOURCE = "https://developers.openai.com/api/docs/pricing"
 ANTHROPIC_PRICING_SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing"
 # The per-type rows of a request's cost breakdown, in the order they are reported.
@@ -48,6 +48,14 @@ MODEL_PRICES = {
         source="https://developers.openai.com/api/docs/models/gpt-6-astra",
     ),
     "gpt-6-sol": ModelPrice("2", ".2", "10", "2.5", 272000),
+    "gpt-6.1-sol": ModelPrice(
+        "2",
+        ".1",
+        "10",
+        "2.5",
+        272000,
+        source="https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+    ),
     "gpt-6-luna": ModelPrice(".1", ".01", ".5", ".125", 272000),
     "gpt-5.4": ModelPrice(
         "2.5",
