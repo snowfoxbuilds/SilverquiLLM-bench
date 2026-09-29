@@ -25,23 +25,33 @@ BATCHES_DIR_OPTION = click.option(
 )
 
 
+BENCH_ROOT_OPTION = click.option(
+    "--bench-root", type=click.Path(file_okay=False, path_type=Path), default=Path.cwd
+)
+RESULTS_DIR_OPTION = click.option(
+    "--results-dir", type=click.Path(file_okay=False, path_type=Path), default=Path("runs/karn")
+)
+RESULTS_REPO_OPTION = click.option(
+    "--results-repo",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("results"),
+    envvar="SILVERQUILLM_RESULTS_REPO",
+)
+GRADING_TIMEOUT_OPTION = click.option(
+    "--grading-timeout",
+    type=click.IntRange(min=1),
+    default=DEFAULT_GRADING_TIMEOUT,
+    show_default=True,
+    help="Seconds before the grading container is killed.",
+)
+
+
 def common_options(function):
     for option in reversed(
         [
-            click.option(
-                "--bench-root", type=click.Path(file_okay=False, path_type=Path), default=Path.cwd
-            ),
-            click.option(
-                "--results-dir",
-                type=click.Path(file_okay=False, path_type=Path),
-                default=Path("runs/karn"),
-            ),
-            click.option(
-                "--results-repo",
-                type=click.Path(file_okay=False, path_type=Path),
-                default=Path("results"),
-                envvar="SILVERQUILLM_RESULTS_REPO",
-            ),
+            BENCH_ROOT_OPTION,
+            RESULTS_DIR_OPTION,
+            RESULTS_REPO_OPTION,
             click.option(
                 "--state-root",
                 type=click.Path(file_okay=False, path_type=Path),
@@ -62,13 +72,7 @@ def common_options(function):
                     "by a run."
                 ),
             ),
-            click.option(
-                "--grading-timeout",
-                type=click.IntRange(min=1),
-                default=DEFAULT_GRADING_TIMEOUT,
-                show_default=True,
-                help="Seconds before the grading container is killed.",
-            ),
+            GRADING_TIMEOUT_OPTION,
         ]
     ):
         function = option(function)
@@ -248,6 +252,77 @@ def recover(run_id, stop, **options):
     _report(record, exit_on_status=False)
 
 
+@click.command()
+@click.option("--benchmark", "benchmark_id", required=True)
+@click.option(
+    "--out",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Directory for one JSON file per run plus summary.json; never the results repo.",
+)
+@click.option(
+    "--run", "runs", multiple=True, metavar="RUN_ID", help="Run id or prefix; repeatable."
+)
+@click.option(
+    "--candidate",
+    "candidates",
+    multiple=True,
+    metavar="HASH",
+    help="Candidate hash or prefix; repeatable.",
+)
+@click.option("--workers", type=click.IntRange(min=1), default=2, show_default=True)
+@click.option(
+    "--force", is_flag=True, help="Re-grade runs already graded in --out on these inputs."
+)
+@BENCH_ROOT_OPTION
+@RESULTS_DIR_OPTION
+@RESULTS_REPO_OPTION
+@GRADING_TIMEOUT_OPTION
+def regrade(**options):
+    """Re-grade retained runs on the current grading inputs, e.g. after Audited Tests change.
+
+    Each run is graded again from the workspace it was graded from, on its recorded grader
+    image. Records stay untouched; the new scores are written under --out.
+    """
+    from .regrade import regrade as run_regrade
+
+    try:
+        with terminate_as_interrupt():
+            summary = run_regrade(**options)
+    except (KarnError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+    except KeyboardInterrupt:
+        click.echo("regrade interrupted; finished runs are kept in --out", err=True)
+        raise click.exceptions.Exit(130) from None
+    for line in _regrade_table(summary):
+        click.echo(line)
+    for row in summary["skipped"]:
+        click.echo(f"skipped {row['run_id']}: {row['reason']}", err=True)
+    for row in summary["errors"]:
+        click.echo(f"error {row['run_id']}: {row['reason']}", err=True)
+    if summary.get("grading_inputs_changed_during_regrade"):
+        click.echo("grading inputs changed during the regrade; run it again", err=True)
+    if summary["errors"] or summary.get("grading_inputs_changed_during_regrade"):
+        raise click.exceptions.Exit(1)
+
+
+def _regrade_table(summary):
+    def percent(value):
+        return "   -  " if value is None else f"{value * 100:5.1f}%"
+
+    yield f"grading inputs {summary['grading_inputs_digest']}"
+    yield f"{'candidate':12} {'name':28} {'runs':>4}  {'target before':>13} {'after':>6}  {'fdn':>6}  {'engine':>6}"
+    for row in summary["candidates"]:
+        target, fdn, engine = (
+            row[name] for name in ("card_correctness", "fdn_regression", "engine_regression")
+        )
+        yield (
+            f"{row['candidate_hash'][:12]:12} {str(row['name'])[:28]:28} {row['runs']:>4}  "
+            f"{percent(target['before_mean_pass_rate']):>13} {percent(target['after_mean_pass_rate'])}  "
+            f"{percent(fdn['after_mean_pass_rate'])}  {percent(engine['after_mean_pass_rate'])}"
+        )
+
+
 @click.group()
 def queue():
     """Inspect the batch queue."""
@@ -312,4 +387,4 @@ def grader_build(versions, tag):
         raise click.ClickException(str(error)) from None
 
 
-COMMANDS = (run, enroll, scheduler, recover, queue, top, grader)
+COMMANDS = (run, enroll, scheduler, recover, regrade, queue, top, grader)

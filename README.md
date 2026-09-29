@@ -98,6 +98,7 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | `silverquillm run --build-output … --construct … --benchmark …` | Execute a prebuilt Karn construct, grade its work in the grader container, and retain implementation and efficiency observations. |
 | `silverquillm scheduler [--once] [--replay-without-state ID]` | Execute due Karn batches in `batches/*.toml` through the same run lifecycle. |
 | `silverquillm recover RUN_ID [--stop]` | Settle an interrupted or killed run from its retained evidence and write its record, without rerunning work. |
+| `silverquillm regrade --benchmark … --out DIR [--run ID] [--candidate HASH]` | Re-grade retained runs on the current Audited Tests and grading inputs, writing new scores to DIR; records are never changed. |
 | `silverquillm queue ls [--json]` | One-shot, read-only view of the batch queue, including interrupted, partially observed, and unsupported batches. |
 | `silverquillm top` | Live, read-only view of the batch queue (`q` quits). |
 | `silverquillm login --build-output … --construct …` | Enroll the construct's own subscription login through its login plugin. |

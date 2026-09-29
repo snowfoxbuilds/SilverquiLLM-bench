@@ -238,3 +238,17 @@ Candidate Bundles can no longer be run, promoted, or published; rebuild an old c
 Batch files and state in the Candidate Bundle format are shown as unsupported and never run or rewritten.
 `legacy resume` replaces a prior leg's `prompt.md` and `run_manifest.json` with fresh files instead of writing through links, and refuses a prior leg whose `prompt.md` is a link or whose `workspace_final` holds a FIFO, socket, or device.
 The historical `--image` lineage remains under `silverquillm legacy`; `legacy rescore` grades with the authoritative `test_utils` in an isolated copy, so re-grading an old run can change its numbers without touching stored records.
+
+## Re-grade retained runs
+
+After Audited Tests or other grading inputs change, re-grade the runs already recorded instead of rerunning them:
+
+```sh
+silverquillm regrade --benchmark hob-medium --results-repo ~/bench-results --results-dir runs/karn --out regrades/hob-medium
+```
+
+- Each run is graded again from the workspace it was graded from (`grading_source.selected`), found under `--results-dir/<run-id>`, on the grader image its record names, with the same container isolation as a run. A record's artifact pointers are not followed, so a record from another host never chooses what is mounted.
+- Nothing in the results repository or the run artifacts is written; an `--out` that overlaps either is refused. `--out` holds `<candidate-hash>/<run-id>.json` per run, with the new scores in the record's `scores.json` shape, the record's own counts and grading-inputs digest, the new digest, and a digest of the grading code. `summary.json` compares each candidate's mean pass rates before and after, over the runs graded both times.
+- `--run` narrows by run-id prefix and `--candidate` by candidate-hash prefix; a prefix that matches nothing is an error. `--workers` grades runs concurrently (default 2).
+- A run whose workspace or grader image is gone is skipped with a reason. A run whose grading fails keeps the error in its output file, the others continue, and the command exits 1.
+- A rerun reuses every output graded on the same inputs and grading code; `--force` grades them again. Ctrl-C, SIGTERM and SIGHUP remove the grading containers still running, and write no partial output.
