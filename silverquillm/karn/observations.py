@@ -419,6 +419,7 @@ def summarize_events(
             "exit_kind": exit_kind,
             "model_basis": "native_turn_context; observation, not provider attestation",
         },
+        subagent_threads=max(0, len(otel_threads | native_threads) - 1),
     )
 
 
@@ -429,6 +430,8 @@ def _measurements(
     reasons: list[str],
     present: bool,
     coverage: dict[str, Any],
+    *,
+    subagent_threads: int | None = None,
 ) -> dict[str, Any]:
     observed_zero = present and not response_count and not reasons
     turn_reasons = list(reasons)
@@ -449,6 +452,9 @@ def _measurements(
     costs_present = bool(priced_values) or observed_zero
     return {
         "schema_version": 1,
+        # Agent threads beyond the main one: an observation, never an incompleteness reason.
+        # It sits outside ``coverage`` so committed qualification proofs replay unchanged.
+        "subagent_threads": subagent_threads if present else None,
         "agent_turns": {
             "responses": _measurement(response_count, turn_reasons, present=present),
             "tool_calls": _measurement(tool_count, turn_reasons, present=present),

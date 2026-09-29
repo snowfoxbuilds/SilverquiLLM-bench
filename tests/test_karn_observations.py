@@ -541,6 +541,23 @@ def test_anthropic_five_minute_and_one_hour_writes_price_separately():
     assert Decimal(row["usd"]) == Decimal("0.0076")
 
 
+def test_fable_is_priced_from_anthropic_rates():
+    row = price_requests([{**claude_request(100), "model": "claude-fable-5-1"}])[0]
+    parts = row["breakdown"]
+    # Fable 5.1: input $10, 5m write $12.50, 1h write $20, read $0.25 (0.025x), output $50.
+    expected = {
+        "uncached_input": (1000, "0.01"),
+        "cache_read": (4000, "0.001"),
+        "cache_write": (200, "0.0025"),
+        "cache_write_1h": (100, "0.002"),
+        "output": (50, "0.0025"),
+    }
+    for kind, (tokens, usd) in expected.items():
+        assert parts[kind]["tokens"] == tokens
+        assert Decimal(parts[kind]["usd"]) == Decimal(usd)
+    assert Decimal(row["usd"]) == Decimal("0.018")
+
+
 def test_unknown_one_hour_split_is_not_priced_at_either_rate():
     row = price_requests([claude_request(None)])[0]
     assert row["usd"] is None
@@ -565,3 +582,17 @@ def test_summary_reports_the_cost_breakdown_beside_the_estimate():
     assert sum(Decimal(part["usd"]) for part in breakdown["value"].values()) == Decimal(
         result["estimated_cost"]["value"]
     )
+
+
+@pytest.mark.parametrize(("scenario", "expected"), [("basic", 0), ("descendant", 1)])
+def test_codex_subagent_threads_count_threads_beyond_the_main_one(scenario, expected):
+    from pathlib import Path
+
+    fixture = Path(__file__).parent / "fixtures" / "karn_observations_codex_0.157.1"
+    raw = (fixture / (scenario + ".jsonl")).read_bytes()
+    events = [json.loads(line) for line in raw.splitlines()]
+    assert summarize_events(events, exit_kind="completed")["subagent_threads"] == expected
+
+
+def test_subagent_threads_are_missing_without_observations():
+    assert summarize_events([], exit_kind="completed")["subagent_threads"] is None
