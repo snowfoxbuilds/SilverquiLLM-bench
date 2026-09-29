@@ -226,7 +226,7 @@ with urllib.request.urlopen(request,timeout=5) as response:
     candidate.definition_path.write_bytes(canonical(candidate.definition))
     candidate = load_candidate(candidate.build_output, "bare")
     state = tmp_path / "state"
-    profile = LoginPool.of(state, "karn-codex-login").slot("bare")
+    profile = LoginPool.of(state, "karn-codex-login").named_slot("bare")
     auth = canonical(
         {
             "tokens": {
