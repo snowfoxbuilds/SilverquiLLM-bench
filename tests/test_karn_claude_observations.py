@@ -357,7 +357,9 @@ def test_a_compaction_at_otel_normal_speed_is_priced_as_standard():
         + api_request("req_c", "compact", cache_creation_tokens="0", speed="fast"),
         exit_kind="completed",
     )
-    assert "nonstandard_processing_unpriced" in fast["estimated_cost"]["reasons"]
+    # Fast is recorded on the request and priced at standard rates, like every tier.
+    assert fast["estimated_cost"]["value"] == result["estimated_cost"]["value"]
+    assert {r["speed"] for r in fast["requests"] if r["compaction"]} == {"fast"}
 
 
 def test_an_otel_compaction_without_a_transcript_boundary_is_flagged():
@@ -882,3 +884,15 @@ def test_repeated_otel_reports_differing_in_any_field_are_flagged(field, values)
         events_of(transcript) + otel + [one, two], exit_kind="completed"
     )
     assert "otel_request_observations_conflict" in result["usage"]["reasons"]
+
+
+def test_subagent_threads_count_sidechain_transcripts_only():
+    main = summarize_claude_events(events_of(main_transcript()), exit_kind="completed")
+    assert main["subagent_threads"] == 0
+    child = assistant(
+        "msg_09", "req_09", [{"type": "text"}], sidechain=True, stop="end_turn", second=3
+    )
+    both = summarize_claude_events(events_of(main_transcript(), child), exit_kind="completed")
+    assert both["subagent_threads"] == 1
+    # An observation, not a reason: the child adds no incompleteness of its own.
+    assert set(both["usage"]["reasons"]) == set(main["usage"]["reasons"])

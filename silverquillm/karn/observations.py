@@ -76,8 +76,11 @@ _ATTRIBUTES = {
     "agent_name",
     "reasoning_effort",
     "model_reasoning_effort",
+    "service_tier",
     *_OTLP_TOKENS.values(),
 }
+# The tier Codex put in its request (not the one the server applied, which it never reports).
+_SERVICE_TIERS = {"flex", "priority", "fast", "default", "auto", "scale", "standard"}
 _TOOL_TYPES = {
     "function_call",
     "custom_tool_call",
@@ -142,6 +145,8 @@ def normalize_otlp(payload: Any) -> list[dict[str, Any]]:
                         attrs[key] = value
                 if attrs.get("event.name") not in _EVENTS:
                     continue
+                if "service_tier" in attrs and attrs["service_tier"] not in _SERVICE_TIERS:
+                    attrs["service_tier"] = "unknown"
                 if attrs["event.name"] in (
                     "codex.sse_event",
                     "codex.websocket_event",
@@ -354,6 +359,16 @@ def summarize_events(
         ):
             otel_usage.append(event)
     native_usage_threads = {r["thread_id"] for r in requests}
+    requested_tiers: dict[str, set[str]] = {}
+    for event in otel_usage:
+        tier = event["attributes"].get("service_tier")
+        if tier:
+            requested_tiers.setdefault(event["thread_id"], set()).add(tier)
+    for request in requests:
+        tiers = requested_tiers.get(request["thread_id"], set())
+        request["requested_service_tier"] = (
+            next(iter(tiers)) if len(tiers) == 1 else "mixed" if tiers else None
+        )
     for event in otel_usage:
         if event["thread_id"] in native_usage_threads:
             continue
@@ -367,6 +382,7 @@ def summarize_events(
                 "usage": {key: _integer(attrs.get(source)) for key, source in _OTLP_TOKENS.items()},
                 "compaction": False,
                 "response_identity": "otel_observation",
+                "requested_service_tier": attrs.get("service_tier"),
             }
         )
         reasons.append("native_usage_unavailable_for_observed_thread")
@@ -419,6 +435,7 @@ def summarize_events(
             "exit_kind": exit_kind,
             "model_basis": "native_turn_context; observation, not provider attestation",
         },
+        subagent_threads=max(0, len(otel_threads | native_threads) - 1),
     )
 
 
@@ -429,6 +446,8 @@ def _measurements(
     reasons: list[str],
     present: bool,
     coverage: dict[str, Any],
+    *,
+    subagent_threads: int | None = None,
 ) -> dict[str, Any]:
     observed_zero = present and not response_count and not reasons
     turn_reasons = list(reasons)
@@ -449,6 +468,9 @@ def _measurements(
     costs_present = bool(priced_values) or observed_zero
     return {
         "schema_version": 1,
+        # Agent threads beyond the main one: an observation, never an incompleteness reason.
+        # It sits outside ``coverage`` so committed qualification proofs replay unchanged.
+        "subagent_threads": subagent_threads if present else None,
         "agent_turns": {
             "responses": _measurement(response_count, turn_reasons, present=present),
             "tool_calls": _measurement(tool_count, turn_reasons, present=present),

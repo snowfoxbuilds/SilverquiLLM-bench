@@ -140,6 +140,7 @@ Retain the reported model, token breakdown, price-table version, and pricing ass
 The cost breakdown tallies input tokens by type, for every provider: uncached input, cache reads, and cache writes, with 5-minute and 1-hour writes separate where the provider prices them differently; each type carries its token count and its cost beside the output tokens (grilling 2026-09-28).
 Usage is normalized into these types from each provider's own convention: OpenAI's input total includes cached tokens, while Anthropic's input count excludes cache reads and writes.
 The estimate is a comparison of resource usage and does not claim to allocate the actual subscription charge to the run.
+Every request is priced at standard-tier rates, whatever speed or service tier served it (grilling 2026-09-28): a flex, fast-mode or priority request counts as its standard-rate equivalent, so estimates compare token usage rather than billing tier. Each request records the tier observed for it, the tier Claude Code's transcript reports or the tier Codex requested in its telemetry, and a request for an unpriced model stays unpriced.
 Missing or incomplete observations remain explicitly missing or incomplete, rather than becoming zero.
 
 The integration qualifies response, tool-call, and usage capture against the pinned native CLI.

@@ -71,20 +71,19 @@ Use Python 3.13, Docker, Karn on the build host, and a host Codex or Claude Code
 Install the benchmark with `pip install -e .`.
 SilverquiLLM runs a completed Karn build by itself; it needs no Ozolith package.
 
-Build the bare Codex example and the grader image explicitly before running:
+The candidate recipes live in the results repository at `karn/constructs/<label>`. Build them from its committed tree, then build the grader image, before running:
 
 ```bash
-karn build examples/karn --worktree --out /tmp/bench-codex-build
+karn build ~/bench-results/karn --out ~/bench-builds/roster-1
 silverquillm grader build
-silverquillm login --build-output /tmp/bench-codex-build --construct bare-codex
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --results-repo ./private-results
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --results-repo ./private-results
+silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-codex
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark smoke --results-repo ~/bench-results
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark hob-medium --results-repo ~/bench-results
 ```
 
 Grading runs the agent's code only inside the grader container: no network, no access to your home directory, environment, or login.
 
-The example selects `gpt-6-astra` and the existing Codex login plugin, with no custom skills or polling controller.
-The Claude examples (`bare-claude-opus`, `bare-claude-sonnet`, and the cheap `bare-claude-haiku`) run Claude Code on a Claude subscription through Karn's Claude login plugin, enrolled the same way with `--construct bare-claude-haiku`.
+The roster runs GPT-6 Astra, Sol and Luna on Codex with a ChatGPT subscription, and Claude Opus 5.5, Sonnet 5.5, Fable 5.1 and Haiku 4.5 on Claude Code with a Claude subscription, each through Karn's login plugin for its CLI.
 Each run records available grades, API-equivalent estimated cost with its per-type breakdown, model responses, tool calls, and observation completeness.
 Failed and interrupted runs remain useful data; collection has no leaderboard eligibility gate.
 

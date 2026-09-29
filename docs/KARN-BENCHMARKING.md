@@ -12,18 +12,34 @@ source .venv/bin/activate
 
 ## Build and enroll
 
-The checked-in [bare Codex example](../examples/karn/constructs/bare-codex/construct.toml) selects `gpt-6-astra`, Codex 0.153.4 through `codex@1`, and the stock Codex login plugin.
-It carries no custom skills or polling controller.
-[`bare-codex-luna`](../examples/karn/constructs/bare-codex-luna/construct.toml) is the same construct on `gpt-6-luna` with low reasoning effort, a cheap candidate for exercising the pipeline on `smoke`.
-It pins Codex 0.157.1 with its own `[image.native_cli]`, which needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
+The candidate recipes live in the results repository, beside the records they produce: `karn/constructs/<label>` in bench-results is a Karn Config Repo, so any host with that repository can rebuild the same candidates.
+Build from its committed tree, without `--worktree`, so every image's `karn.config.revision` label names the recipe commit behind its records:
 
 ```bash
-karn build examples/karn --worktree --out /tmp/bench-codex-build
-silverquillm login --build-output /tmp/bench-codex-build --construct bare-codex
+karn build ~/bench-results/karn --out ~/bench-builds/roster-1
+silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-codex
 ```
 
-`--worktree` explicitly builds the supplied example files and records the producer's dirty-source provenance.
-For committed Config Repo builds, point Karn at that repository without `--worktree`.
+The current batch (2026-09-28) runs every model at effort `medium` with subagents disabled. The bench does not enforce either, so candidates stay generic.
+
+| Construct | Model | CLI |
+|---|---|---|
+| `bare-codex` | `gpt-6-astra` | Codex 0.157.1 |
+| `bare-codex-luna` | `gpt-6-luna` | Codex 0.157.1 |
+| `bare-codex-sol` | `gpt-6-sol` | Codex 0.157.1 |
+| `bare-claude-opus` | `claude-opus-5-5` | Claude Code 2.1.284 |
+| `bare-claude-sonnet` | `claude-sonnet-5-5` | Claude Code 2.1.284 |
+| `bare-claude-fable` | `claude-fable-5-1` | Claude Code 2.1.284 |
+| `bare-claude-haiku` | `claude-haiku-4-5`, no effort setting | Claude Code 2.1.284 |
+
+Claude recipes bake a managed-settings file that denies `Agent` and `Workflow`.
+Codex recipes bake `/etc/codex/config.toml` with `[agents] enabled = false` (and `multi_agent = false`). The `[agents]` switch is needed on Codex 0.157.1, where the GPT-6 model catalog keeps the collaboration tools whatever the `multi_agent` feature says.
+The Codex recipes also request the Flex tier (`service_tier = "flex"`) as a cost-saving trial, which is why `bare-codex` moved to Codex 0.157.1: 0.153.4 sends only the tiers a model's catalog lists, and astra's lists only Fast. Whether the ChatGPT backend honors Flex shows only in usage, since costs are reported at standard rates.
+Each record's `subagent_threads` measurement counts the agent threads beyond the main one (Claude sidechain transcripts, Codex threads other than the task's), so a batch meant to run without subagents should show `0`.
+The count is an observation, not an incompleteness reason.
+The Codex recipes pin their CLI with their own `[image.native_cli]`; 0.157.1 needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
+Each construct carries no custom skills or polling controller.
+
 Build output and the exact local image must remain available; queued execution never rebuilds or pulls an image.
 Enrollment uses the host's Codex CLI in an isolated home, through Karn's existing plugin.
 Logins are pooled per login plugin in `<state-root>/logins/<plugin-id>/<slot>`: any construct with that plugin can use any slot, so a new construct needs no new login.
@@ -43,12 +59,11 @@ It becomes a slot named `LEGACY` in the pool of `CONSTRUCT`'s login plugin, afte
 
 ### Claude constructs
 
-Three constructs run Claude Code 2.1.284 through `claude@1` on a Claude subscription, with the stock `karn-claude-login` plugin:
-[`bare-claude-opus`](../examples/karn/constructs/bare-claude-opus/construct.toml) on `claude-opus-5-5` and [`bare-claude-sonnet`](../examples/karn/constructs/bare-claude-sonnet/construct.toml) on `claude-sonnet-5-5`, both at `max` effort, and [`bare-claude-haiku`](../examples/karn/constructs/bare-claude-haiku/construct.toml) on `claude-haiku-4-5`, the cheap construct for `smoke`, which takes no effort setting.
+The Claude constructs run Claude Code 2.1.284 through `claude@1` on a Claude subscription, with the stock `karn-claude-login` plugin.
 Their egress allows `api.anthropic.com` for inference and `platform.claude.com`, where Claude Code refreshes its subscription token, and they set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
 
 ```bash
-silverquillm login --build-output /tmp/bench-build --construct bare-claude-haiku
+silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-claude-haiku
 ```
 
 Enrollment runs the host's `claude auth login` in an isolated config directory, so the login is separate from your own Claude Code session and your `~/.claude` is never copied.
@@ -89,8 +104,8 @@ Isolation protects the host, not score integrity: candidate code shares the pyte
 ## Run and inspect
 
 ```bash
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --results-repo ./private-results
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --results-repo ./private-results
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark smoke --results-repo ./private-results
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark hob-medium --results-repo ./private-results
 ```
 
 Use `--bench-root` when launching outside the benchmark checkout.
@@ -107,6 +122,7 @@ Each run retains its workspace, snapshots, stopped final workspace, grading-sour
 The immutable schema 2 record lives under `private-results/results/<candidate-hash>/<run-id>/`.
 Estimated cost is API-equivalent USD, not the subscription bill.
 `cost_breakdown` beside it tallies tokens and USD by type: uncached input, cache reads, cache writes, 1-hour cache writes (Anthropic prices them above the 5-minute ones), and output.
+Every cost is a standard-tier equivalent, whatever tier served the request: each priced request carries `rate_basis: "standard"`, Claude requests keep their transcript `speed` and `service_tier`, and Codex requests keep `requested_service_tier`, the tier Codex put in its request (`mixed` when a thread used several). Codex never reports the tier the server applied, so a flex trial shows up in token usage and the cost breakdown, not in the price.
 Agent turns count model responses plus tool calls; missing measurements remain null with an explanation.
 Turns, usage, and cost are complete only for a Codex version whose journal and telemetry were qualified against scripted ground truth (0.153.4 and 0.157.1); qualify another offline, without credentials, with `scripts/qualify_codex_telemetry.py --image IMAGE --native-version VERSION --output DIR`.
 Claude Code runs are read from its session transcripts, subagents included, with the OTel stream as a cross-check; a compaction's own request appears only in OTel.

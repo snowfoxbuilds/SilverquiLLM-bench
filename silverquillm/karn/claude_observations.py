@@ -531,6 +531,10 @@ def summarize_claude_events(
             # Claude Code's own client-side estimate, kept only to cross-check the bench's.
             "native_reported_cost_usd": format(native_cost, "f") if otel else None,
         },
+        # A subagent's transcript is a sidechain, whose thread is its agent id.
+        subagent_threads=sum(
+            bool(SHAPES["agent"].fullmatch(e["thread_id"] or "")) for e in sessions
+        ),
     )
 
 
