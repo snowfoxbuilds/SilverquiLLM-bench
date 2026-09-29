@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import threading
 
@@ -429,8 +430,6 @@ def test_a_plugin_id_is_never_a_legacy_login_name(tmp_path, name):
 
 
 def test_a_secret_with_a_lone_surrogate_is_unrecognized_not_a_crash(tmp_path):
-    import json
-
     assert stored_login_plugin("\ud800") is None
     legacy = legacy_profile(tmp_path)
     tampered = document().replace('"format"', '"\ud800format"')
@@ -452,3 +451,159 @@ def test_a_slot_with_an_invalid_journal_is_skipped_with_a_warning(tmp_path):
     hold.close()
     with broken.exclusive():
         pass
+
+
+OTHER = {"karn-claude-login": "karn-codex-login", "karn-codex-login": "karn-claude-login"}
+MARKER = "synthetic-credential-marker"
+
+
+def damage(profile: LoginProfile, kind: str, plugin: str) -> None:
+    """Replace a settled slot's secret with one its pool must refuse, holding a marker value."""
+    path = profile.directory / "secret.json"
+    if kind == "malformed_json":
+        path.write_text('"' + MARKER)
+    elif kind == "not_a_string":
+        path.write_bytes(canonical({"format": 1, "files": {"auth.json": MARKER}}))
+    elif kind == "unrecognized_envelope":
+        path.write_bytes(canonical(canonical({"synthetic": MARKER}).decode()))
+    elif kind == "wrong_plugin":
+        path.write_bytes(canonical(document(OTHER[plugin])))
+    elif kind == "symlink":
+        target = profile.directory.parent / "elsewhere.json"
+        target.write_bytes(canonical(document(plugin)))
+        path.unlink()
+        path.symlink_to(target)
+    elif kind == "hardlink":
+        os.link(path, profile.directory.parent / "second-name.json")
+    elif kind == "oversized":
+        path.write_bytes(canonical(MARKER * 20000))
+    elif kind == "empty":
+        path.write_bytes(b"")
+    elif kind == "lone_surrogate":
+        path.write_text(json.dumps(document(plugin).replace('"format"', '"\ud800format"')))
+    elif kind == "unreadable":
+        path.chmod(0)
+    else:
+        raise AssertionError(kind)
+
+
+DAMAGE = {
+    "malformed_json": "login_secret_malformed",
+    "not_a_string": "login_secret_unrecognized",
+    "unrecognized_envelope": "login_secret_unrecognized",
+    "wrong_plugin": "login_secret_belongs_to_other_plugin",
+    "symlink": "login_secret_unreadable",
+    "hardlink": "login_secret_unreadable",
+    "oversized": "login_secret_unreadable",
+    "empty": "login_secret_malformed",
+    "lone_surrogate": "login_secret_unrecognized",
+    "unreadable": "login_secret_unreadable",
+}
+
+
+def secret_state(profile: LoginProfile):
+    path = profile.directory / "secret.json"
+    if path.is_symlink():
+        return ("link", os.readlink(path), path.stat().st_nlink)
+    info = path.stat()
+    path.chmod(info.st_mode | 0o600)
+    content = path.read_bytes()
+    path.chmod(info.st_mode)
+    return ("file", content, info.st_nlink, info.st_mode)
+
+
+@pytest.mark.parametrize("plugin", sorted(STORED))
+@pytest.mark.parametrize("kind", sorted(DAMAGE))
+def test_a_settled_slot_with_a_damaged_login_is_skipped_for_a_healthy_one(tmp_path, plugin, kind):
+    target = LoginPool.of(tmp_path / "state", plugin)
+    damaged = slot(target, "a")
+    slot(target, "b")
+    damage(damaged, kind, plugin)
+    before = secret_state(damaged)
+    warnings = []
+    hold, profile = acquire(target, on_wait=warnings.append)
+    assert profile.name == "b"
+    assert warnings == [f"skipping login slot {plugin}/a: {DAMAGE[kind]}"]
+    assert MARKER not in "".join(warnings)
+    # Validation never rewrites, moves, or removes what it refused, and releases its lock.
+    assert secret_state(damaged) == before
+    assert sorted(p.name for p in damaged.directory.iterdir()) == [
+        SLOT_RECORD,
+        "runner.lock",
+        "secret.json",
+    ]
+    with damaged.exclusive():
+        pass
+    hold.close()
+
+
+@pytest.mark.parametrize("plugin", sorted(STORED))
+def test_a_pool_whose_every_free_slot_is_damaged_refuses_as_unusable(tmp_path, plugin):
+    target = LoginPool.of(tmp_path / "state", plugin)
+    for name, kind in (("a", "malformed_json"), ("b", "wrong_plugin")):
+        damage(slot(target, name), kind, plugin)
+    warnings = []
+    with pytest.raises(KarnError, match=f"login_pool_unusable:{plugin}"):
+        acquire(target, on_wait=warnings.append)
+    assert len(warnings) == 2
+
+
+def test_a_damaged_slot_is_warned_once_while_the_run_waits_for_a_busy_one(tmp_path):
+    target = pool(tmp_path)
+    damage(slot(target, "a"), "malformed_json", PLUGIN)
+    busy = slot(target, "b")
+    messages = []
+
+    def waited(message):
+        messages.append(message)
+        if message.startswith("waiting"):
+            release()
+
+    with held_elsewhere(busy) as release:
+        hold, profile = acquire(target, on_wait=waited)
+    assert profile.name == "b"
+    assert messages == [
+        "skipping login slot karn-claude-login/a: login_secret_malformed",
+        "waiting for a login slot: all 1 usable karn-claude-login slots are busy",
+    ]
+    hold.close()
+
+
+def test_a_pending_slot_is_settleable_whatever_its_stored_login_holds(tmp_path):
+    """Its plugin judges and may repair the login while settling; the pool does not."""
+    target = pool(tmp_path)
+    pending = slot(target, "a")
+    damage(pending, "malformed_json", PLUGIN)
+    pend(pending)
+    hold, profile = acquire(target, settle_artifact="sha256:" + "a" * 64)
+    assert profile.name == "a" and profile.pending()["run_id"] == "run-x"
+    hold.close()
+    with pytest.raises(KarnError, match="login_pool_pending:karn-claude-login"):
+        acquire(target)
+
+
+@pytest.mark.parametrize("plugin", sorted(STORED))
+def test_a_stored_login_at_its_stores_size_bound_still_serves(tmp_path, plugin):
+    target = LoginPool.of(tmp_path / "state", plugin)
+    profile = target.named_slot("a")
+    padded = canonical({"format": 1, "revision": "a" * 32, "files": dict(STORED[plugin])})
+    required = next(iter(STORED[plugin]))
+    files = dict(STORED[plugin], **{required: "e" * (65536 - len(padded) + 4)})
+    stored = canonical({"format": 1, "revision": "a" * 32, "files": files}).decode()
+    assert len(stored.encode()) == 65536
+    profile.set_secret("login.a", stored)
+    hold, chosen = acquire(target)
+    assert chosen.name == "a"
+    hold.close()
+
+
+def test_a_pool_blocked_only_by_unreadable_journals_is_pending_not_unusable(tmp_path):
+    """Re-enrolling cannot fix a slot whose recovery journal is broken, so it is not unusable."""
+    target = pool(tmp_path)
+    (slot(target, "a").directory / "active.json").write_text("[]")
+    damage(slot(target, "b"), "malformed_json", PLUGIN)
+    with pytest.raises(KarnError, match="login_pool_pending:karn-claude-login"):
+        acquire(target, on_wait=lambda _: None)
+    pend(target.slot("a"), artifact="sha256:" + "b" * 64)
+    with pytest.raises(KarnError, match="login_pool_pending:karn-claude-login"):
+        acquire(target, on_wait=lambda _: None)

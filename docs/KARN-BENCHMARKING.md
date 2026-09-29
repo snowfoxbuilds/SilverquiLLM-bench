@@ -47,7 +47,9 @@ Each `silverquillm login` enrolls one new slot (`slot-1`, `slot-2`, …) through
 A slot serves one run at a time, so enroll as many slots per provider as runs you want at once, and use the same state root for direct runs and batches.
 A run takes any free slot; when every usable slot is busy, a direct run or batch entry waits for one (`waiting for a login slot`) before creating anything, and a batch entry counts as started only once it holds a slot, so a scheduler stopped while waiting leaves it pending.
 With no slot enrolled a run refuses with `login_pool_empty:<plugin-id>`. The scheduler then leaves that batch's entries pending, warns once per pass, and goes on with other batches; `serve` retries on its next pass, and `--once` exits with the error only if nothing else ran.
-Each slot records the plugin it was enrolled through and serves only that plugin's pool; a damaged slot is skipped with a warning.
+Each slot records the plugin it was enrolled through and serves only that plugin's pool.
+Before a settled slot is taken, its stored login is checked, without being copied, refreshed or changed, to be a readable file of that plugin's own shape; a damaged slot is skipped with a warning naming only the reason (such as `login_secret_malformed`), and the run takes another.
+When every slot's stored login is damaged, runs refuse with `login_pool_unusable:<plugin-id>`, and the scheduler defers the batch as for an empty pool; re-enroll a slot with `--slot NAME`.
 Slots that are logins to the same subscription share its rate limits, so concurrent runs on one account can slow each other; each run input and record names its slot (`login_profile`, such as `karn-claude-login/slot-1`).
 A login enrolled before pools existed, at `<state-root>/logins/<construct>`, joins a pool only by an explicit command, with no new login:
 

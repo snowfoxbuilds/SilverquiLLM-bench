@@ -1235,6 +1235,37 @@ def test_an_unusable_pool_defers_only_its_batch_and_other_batches_run(tmp_path):
     assert [row["status"] for row in pooled["runs"]] == ["done", "done"]
 
 
+def test_a_pool_of_only_damaged_logins_starts_no_batch_entry(tmp_path):
+    directory = tmp_path / "batches"
+    directory.mkdir()
+    opts = options(tmp_path / "fixture")
+    with_login_plugin(
+        load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
+    )
+    pooled_batch(directory, opts["build_output"])
+    damaged = pool_slot(opts["state_root"])
+    enroll(damaged)
+    (damaged.directory / "secret.json").write_text("{")
+    launched = []
+
+    def execute(**kwargs):
+        launch = kwargs.pop("on_launch")
+        return run_benchmark(
+            **kwargs, host=FixtureHost(), on_launch=lambda: (launched.append(1), launch())
+        )
+
+    runner = scheduler(
+        opts["bench_root"], directory, executor=execute, replay_without_state=["pooled"]
+    )
+    runner.options["state_root"] = Path(opts["state_root"]).resolve()
+    with pytest.raises(KarnError, match="login_pool_unusable:karn-codex-login"):
+        runner.run_until_idle()
+    assert json.loads((directory / "state/pooled.json").read_text())["runs"] == []
+    assert launched == [] and not Path(opts["results_dir"]).exists()
+    assert "pooled: login_pool_unusable:karn-codex-login; entries stay pending" in runner.warnings
+    assert (damaged.directory / "secret.json").read_text() == "{"
+
+
 def test_serve_keeps_polling_while_a_pool_is_unusable(tmp_path, monkeypatch):
     from silverquillm.karn import batching
 

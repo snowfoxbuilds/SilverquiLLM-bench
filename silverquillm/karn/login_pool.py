@@ -26,6 +26,8 @@ from .login import LOGIN_PLUGINS, LoginInUseError, LoginProfile, private_directo
 SLOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 DEFAULT_POLL_SECONDS = 5.0
 SLOT_RECORD = "pool.json"
+# A secret file holds one JSON string of at most 64 KiB, escaped: the bound its store keeps.
+SECRET_FILE_LIMIT = 2 * 65536 + 2
 # What each plugin's store keeps in its secret document: the login file it requires, and
 # every file it may hold. The two sets are disjoint, so a document names its plugin.
 STORED_LOGIN_FILES = {
@@ -85,6 +87,26 @@ def stored_login_plugin(document: object) -> str | None:
         if required in files and set(files) <= allowed:
             return plugin_id
     return None
+
+
+def stored_secret_plugin(directory: Path) -> str:
+    """The plugin whose store wrote the secret document in ``directory``.
+
+    The file is read with its store's bound and never followed through a link. A failure
+    names only what is wrong with the file, never its content.
+    """
+    try:
+        raw = read_regular(directory / "secret.json", limit=SECRET_FILE_LIMIT)
+    except KarnError:
+        raise KarnError("login_secret_unreadable") from None
+    try:
+        document = strict_json(raw)
+    except KarnError:
+        raise KarnError("login_secret_malformed") from None
+    owner = stored_login_plugin(document)
+    if owner is None:
+        raise KarnError("login_secret_unrecognized")
+    return owner
 
 
 @dataclass(frozen=True)
@@ -186,12 +208,14 @@ class LoginPool:
     ) -> LoginProfile:
         """Lock a free slot into ``hold``, waiting while every usable slot is busy.
 
-        A settled slot is preferred. A slot with a pending journal belongs to an interrupted
-        run: it is taken only when no settled slot is free and the journal names
-        ``settle_artifact``, the plugin artifact this run brings, so the host can preserve
-        that run's native state and settle it as a login's next run always has. Any other
-        pending slot waits for ``recover``. With no slot enrolled, or none usable and none
-        busy, waiting could never end, so those refuse instead.
+        A settled slot is preferred once its stored login is read, unchanged, and found to
+        have this pool's plugin's shape; a damaged one is skipped instead of failing the run
+        it would serve. A slot with a pending journal belongs to an interrupted run: it is
+        taken only when no settled slot is free and the journal names ``settle_artifact``,
+        the plugin artifact this run brings, so the host can preserve that run's native state
+        and settle it as a login's next run always has. Its stored login is left for that
+        plugin to judge. Any other pending slot waits for ``recover``. With no slot enrolled,
+        or none usable and none busy, waiting could never end, so those refuse instead.
         """
         report = on_wait or _announce
         announced, skipped = False, set()
@@ -206,7 +230,7 @@ class LoginPool:
             names = self.enrolled()
             if not names:
                 raise LoginPoolUnavailableError("login_pool_empty:" + self.plugin_id)
-            busy = 0
+            busy = damaged_logins = 0
             # Every lock taken while choosing is released here unless handed to ``hold``.
             with contextlib.ExitStack() as candidates:
                 settleable = None
@@ -228,6 +252,13 @@ class LoginPool:
                         skip(name, error)
                         continue
                     if pending is None:
+                        try:
+                            if stored_secret_plugin(profile.directory) != self.plugin_id:
+                                raise KarnError("login_secret_belongs_to_other_plugin")
+                        except KarnError as error:
+                            damaged_logins += 1
+                            skip(name, error)
+                            continue
                         hold.enter_context(lock.pop_all())
                         return profile
                     if (
@@ -240,7 +271,9 @@ class LoginPool:
                     hold.enter_context(settleable[1].pop_all())
                     return settleable[0]
             if not busy:
-                raise LoginPoolUnavailableError("login_pool_pending:" + self.plugin_id)
+                # Only a damaged login needs re-enrolling; anything else waits for recovery.
+                reason = "unusable" if damaged_logins == len(names) else "pending"
+                raise LoginPoolUnavailableError(f"login_pool_{reason}:{self.plugin_id}")
             if not announced:
                 report(
                     f"waiting for a login slot: all {busy} usable {self.plugin_id} slots are busy"
@@ -287,14 +320,13 @@ def adopt_legacy_login(state_root: Path, construct: str, plugin_id: str) -> str:
         if (legacy / "active.json").exists() or (legacy / "plugin" / "mounted.json").exists():
             raise KarnError("legacy_login_pending")
         try:
-            document = strict_json(read_regular(legacy / "secret.json", limit=2 * 65536 + 2))
-        except KarnError:
+            owner = stored_secret_plugin(legacy)
+        except KarnError as error:
+            if str(error) == "login_secret_unrecognized":
+                raise KarnError("legacy_login_unrecognized") from None
             raise KarnError("legacy_login_not_enrolled") from None
-        owner = stored_login_plugin(document)
         if owner != plugin_id:
-            raise KarnError(
-                "legacy_login_belongs_to_other_plugin" if owner else "legacy_login_unrecognized"
-            )
+            raise KarnError("legacy_login_belongs_to_other_plugin")
         pool = LoginPool.of(state_root, plugin_id)
         target = pool.root / construct
         # The record goes in first, so a crash leaves a legacy login, never an unrecorded slot.
