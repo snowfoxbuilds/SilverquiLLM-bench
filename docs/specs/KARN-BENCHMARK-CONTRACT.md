@@ -104,11 +104,12 @@ A Login Profile selects subscription authentication independently of candidate i
 Profiles are pooled per login plugin: any candidate with that plugin may use any profile in its Login Pool, so adding a candidate needs no new login, and the pool's size is the number of concurrent runs on that provider (grilling 2026-09-28).
 A profile is enrolled through a fresh login session, so it holds its own session and refresh chain, separate from the operator's own login, whose files are never copied into it (grilling 2026-09-26).
 A login is never copied between profiles either, because refresh tokens rotate on use and a copy would invalidate its original (grilling 2026-09-28).
+A profile records the plugin it was enrolled through and serves only that plugin's pool; a login from before pools joins one only by an explicit operator step that checks its stored login has that plugin's shape (grilling 2026-09-28).
 Each run starts with fresh native state; only authentication persists between runs.
 At most one runner on the host may use a login at a time because concurrent token refresh can invalidate the shared authentication (grilling 2026-09-26).
 Use the existing local login binding and a host-local exclusive runner lock per profile, shared by direct runs, scheduler execution, and enrollment.
 Exclusive ownership covers authentication preparation, execution, and final authentication harvest; recovery confirms that a prior runner's container has stopped before reusing its login.
-When every usable profile of the pool is busy, a run waits for one instead of refusing, and nothing of the run exists until it holds a profile (grilling 2026-09-28).
+When every usable profile of the pool is busy, a run waits for one instead of refusing, and nothing of the run exists, nor does a batch count it as started, until it holds a profile; a pool that can never serve it stops the scheduler with the entries pending (grilling 2026-09-28).
 The run input and record name the profile a run used, so recovery settles exactly that profile; a profile left pending by an interrupted run serves no other run until it is settled, except that a run bringing the same plugin artifact may take it last and settle it first (grilling 2026-09-28).
 Concurrent runs on one subscription share its rate limits; the operator accepts this, and the named profile lets a slowdown be traced (grilling 2026-09-28).
 No new account registry, credential-deduplication system, or cross-host coordination is part of this integration (grilling 2026-09-26).

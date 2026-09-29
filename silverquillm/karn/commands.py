@@ -132,11 +132,16 @@ def _report(record, *, exit_on_status=True):
 @click.option("--construct", required=True, help="Any construct using the login plugin.")
 @click.option("--slot", help="Re-enroll this slot of the pool; omitted, enroll a new slot.")
 @click.option(
+    "--adopt",
+    metavar="LEGACY",
+    help="Move the per-construct login LEGACY, enrolled before pools, into the pool as a slot.",
+)
+@click.option(
     "--state-root",
     type=click.Path(file_okay=False, path_type=Path),
     default=lambda: Path.home() / ".local/state/silverquillm",
 )
-def enroll(build_output, construct, slot, state_root):
+def enroll(build_output, construct, slot, adopt, state_root):
     """Enroll one subscription login into the pool of the construct's Karn login plugin.
 
     Each slot serves one run at a time, so enroll as many as runs you want concurrently.
@@ -145,6 +150,8 @@ def enroll(build_output, construct, slot, state_root):
     from .login_pool import LoginPool, adopt_legacy_login
 
     try:
+        if slot and adopt:
+            raise KarnError("login_slot_and_adopt_are_exclusive")
         candidate = load_candidate(build_output, construct)
         artifacts = [
             artifact for artifact in candidate.plugins if artifact.row["id"] in LOGIN_PLUGINS
@@ -152,7 +159,9 @@ def enroll(build_output, construct, slot, state_root):
         if len(artifacts) != 1:
             raise KarnError("candidate_requires_login_plugin")
         plugin_id = artifacts[0].row["id"]
-        adopt_legacy_login(state_root, construct, plugin_id)
+        if adopt:
+            click.echo("Adopted login slot " + adopt_legacy_login(state_root, adopt, plugin_id))
+            return
         pool = LoginPool.of(state_root, plugin_id)
         profile = pool.named_slot(slot) if slot else pool.new_slot()
         click.echo(f"Enrolling login slot {pool.ref(profile)}", err=True)

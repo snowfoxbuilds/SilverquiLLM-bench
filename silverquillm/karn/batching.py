@@ -17,6 +17,7 @@ from .definition import KarnError
 from .execution import NATIVE_TELEMETRY, run_benchmark
 from .grader import DEFAULT_GRADING_TIMEOUT
 from .login import LoginInUseError
+from .login_pool import LoginPoolUnavailableError
 from .records import RecordWritePendingError
 
 FORMAT = "karn-v4"
@@ -330,10 +331,15 @@ class KarnScheduler:
                     "run_id": uuid.uuid4().hex,
                     "spec": spec,
                     "status": "running",
-                    "started_at": datetime.now(UTC).isoformat(),
                 }
-                state["runs"].append(row)
-                self._save(state_path, state)
+
+                def launch(row=row, state=state, state_path=state_path):
+                    """Count the entry as started only once it holds a login and is launching."""
+                    if not row.get("started_at"):
+                        row["started_at"] = datetime.now(UTC).isoformat()
+                        state["runs"].append(row)
+                        self._save(state_path, state)
+
                 build = Path(spec["build_output"])
                 if not build.is_absolute():
                     build = self.options["bench_root"] / build
@@ -347,8 +353,10 @@ class KarnScheduler:
                         run_id=row["run_id"],
                         # A run waits for a free login slot; the wait is reported, not deferred.
                         login_wait=lambda message, name=path.stem: self._warn(f"{name}: {message}"),
+                        on_launch=launch,
                         **self.options,
                     )
+                    launch()
                     status = record.run_metadata["execution"]["status"]
                     row.update(
                         status="done" if status == "completed" else "failed",
@@ -356,12 +364,10 @@ class KarnScheduler:
                         candidate=record.candidate.to_dict(),
                     )
                     _flag_unsettled_login(row, record)
-                except LoginInUseError:
-                    # Nothing was created; the entry stays pending for the next pass.
-                    state["runs"].pop()
-                    self._save(state_path, state)
-                    self._warn(f"{path.stem}: login_in_use; run deferred")
-                    break
+                except LoginPoolUnavailableError:
+                    # No login can serve any entry until the operator enrolls or recovers one;
+                    # this entry never started, so it and the rest stay pending.
+                    raise
                 except RecordWritePendingError as error:
                     status = error.record.run_metadata["execution"]["status"]
                     row.update(
@@ -371,8 +377,10 @@ class KarnScheduler:
                         record_write_pending=True,
                         error=str(error),
                     )
+                    launch()
                     _flag_unsettled_login(row, error.record)
                 except Exception as error:  # noqa: BLE001 -- one failed run does not discard the rest of a batch.
+                    launch()
                     row.update(
                         status="failed",
                         error=str(error) if isinstance(error, KarnError) else type(error).__name__,

@@ -86,6 +86,7 @@ def test_interrupt_before_run_input_fails_the_row_and_the_batch_continues(
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_launch"]()
         if created_run_directory:
             (kwargs["results_dir"] / kwargs["run_id"]).mkdir(parents=True)
         raise KeyboardInterrupt
@@ -494,7 +495,7 @@ def login_options(tmp_path, **changes):
 
 def pool_slot(state_root, name="bare"):
     """A slot of the fixture plugin's login pool."""
-    return LoginPool.of(state_root, "karn-codex-login").slot(name)
+    return LoginPool.of(state_root, "karn-codex-login").named_slot(name)
 
 
 def enroll(profile):
@@ -1124,29 +1125,97 @@ def test_a_failed_new_enrollment_leaves_no_slot_but_a_named_one_stays(tmp_path, 
     assert pool.enrolled() == []
 
 
-def test_login_adopts_the_constructs_legacy_login_before_adding_a_slot(tmp_path, monkeypatch):
-    invoke, enrolled = login_command(tmp_path, monkeypatch)
-    legacy = LoginProfile((tmp_path / "state").resolve() / "logins/bare", "bare")
+def legacy_login(state_root, construct="bare"):
+    """A per-construct login enrolled before pools existed; enrollment always took its lock."""
+    legacy = LoginProfile(Path(state_root).resolve() / "logins" / construct, construct)
     with legacy.exclusive():
         enroll(legacy)
-    assert invoke().exit_code == 0
-    assert enrolled == ["slot-1"]
-    pool = LoginPool.of(tmp_path / "state", "karn-codex-login")
-    assert pool.enrolled() == ["bare", "slot-1"]
+    return legacy
 
 
-def test_a_run_adopts_a_settled_legacy_login_and_names_its_slot(tmp_path):
+def test_login_adopts_a_named_legacy_login_into_the_builds_plugin_pool(tmp_path, monkeypatch):
+    invoke, enrolled = login_command(tmp_path, monkeypatch)
+    legacy = legacy_login(tmp_path / "state")
+    result = invoke("--adopt", "bare")
+    assert result.exit_code == 0, result.output
+    assert "Adopted login slot karn-codex-login/bare" in result.output
+    assert enrolled == []
+    assert not legacy.directory.exists()
+    assert LoginPool.of(tmp_path / "state", "karn-codex-login").enrolled() == ["bare"]
+    assert invoke("--adopt", "bare").exit_code == 1
+    assert invoke("--adopt", "bare", "--slot", "x").exit_code == 1
+
+
+def test_a_run_never_adopts_a_legacy_login_by_itself(tmp_path):
     opts = options(tmp_path)
     with_login_plugin(
         load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
     )
-    legacy = LoginProfile(Path(opts["state_root"]).resolve() / "logins/bare", "bare")
-    with legacy.exclusive():
-        enroll(legacy)
-    record = run_benchmark(**opts)
-    assert record.run_metadata["login_profile"] == "karn-codex-login/bare"
-    assert not legacy.directory.exists()
-    assert pool_slot(opts["state_root"]).get_secret("login.bare")
+    legacy = legacy_login(opts["state_root"])
+    with pytest.raises(KarnError, match="login_pool_empty:karn-codex-login"):
+        run_benchmark(**opts)
+    assert legacy.directory.exists()
+    assert not Path(opts["results_dir"]).exists()
+
+
+def test_a_batch_entry_interrupted_while_waiting_for_a_slot_stays_pending(tmp_path):
+    directory = batch(tmp_path / "batches", entries=1)
+    opts = login_options(tmp_path / "fixture")
+    (directory / "trial.toml").write_text(
+        'format="karn-v4"\n[[runs]]\nbuild_output='
+        + json.dumps(str(opts["build_output"]))
+        + '\nconstruct="bare"\nbenchmark="example"\n'
+    )
+
+    def interrupt(message):
+        raise KeyboardInterrupt
+
+    def execute(**kwargs):
+        kwargs.pop("login_wait")
+        return run_benchmark(**kwargs, host=FixtureHost(), login_wait=interrupt)
+
+    runner = scheduler(opts["bench_root"], directory, executor=execute)
+    runner.options["state_root"] = Path(opts["state_root"]).resolve()
+    with held_elsewhere(pool_slot(opts["state_root"])), pytest.raises(KeyboardInterrupt):
+        runner.run_until_idle()
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert state["runs"] == []
+    runner = scheduler(
+        opts["bench_root"],
+        directory,
+        executor=lambda **kwargs: run_benchmark(**kwargs, host=FixtureHost()),
+    )
+    runner.options["state_root"] = Path(opts["state_root"]).resolve()
+    assert runner.run_until_idle() == 1
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert [row["status"] for row in state["runs"]] == ["done"]
+
+
+def test_an_unusable_pool_stops_the_scheduler_and_leaves_every_entry_pending(tmp_path):
+    directory = batch(tmp_path / "batches", entries=2)
+    opts = options(tmp_path / "fixture")
+    with_login_plugin(
+        load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
+    )
+    (directory / "trial.toml").write_text(
+        'format="karn-v4"\n'
+        + (
+            "[[runs]]\nbuild_output="
+            + json.dumps(str(opts["build_output"]))
+            + '\nconstruct="bare"\nbenchmark="example"\n'
+        )
+        * 2
+    )
+    runner = scheduler(
+        opts["bench_root"],
+        directory,
+        executor=lambda **kwargs: run_benchmark(**kwargs, host=FixtureHost()),
+    )
+    runner.options["state_root"] = Path(opts["state_root"]).resolve()
+    with pytest.raises(KarnError, match="login_pool_empty:karn-codex-login"):
+        runner.run_until_idle()
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert state["runs"] == []
 
 
 @pytest.fixture
@@ -1265,6 +1334,7 @@ def test_an_unrecoverable_row_fails_and_the_scheduler_continues(tmp_path, failur
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_launch"]()
         raise KeyboardInterrupt
 
     with pytest.raises(KeyboardInterrupt):
@@ -1295,12 +1365,16 @@ def test_a_recoverer_interrupt_still_propagates(tmp_path):
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_launch"]()
         raise KeyboardInterrupt
 
     with pytest.raises(KeyboardInterrupt):
         scheduler(tmp_path, directory, executor=interrupted).run_until_idle()
+    def interrupted_recovery(**kwargs):
+        raise KeyboardInterrupt
+
     with pytest.raises(KeyboardInterrupt):
-        scheduler(tmp_path, directory, recoverer=interrupted).run_until_idle()
+        scheduler(tmp_path, directory, recoverer=interrupted_recovery).run_until_idle()
     state = json.loads((directory / "state/trial.json").read_text())
     assert [row["status"] for row in state["runs"]] == ["running"]
 

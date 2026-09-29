@@ -25,7 +25,7 @@ from .grader import DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError, selec
 from .grading_inputs import grading_inputs
 from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
 from .login import LOGIN_PLUGINS, LoginProfile
-from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, adopt_legacy_login, logins_root
+from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, logins_root
 from .records import KarnIdentity, KarnRunRecord, missing_scores, write_record
 from .snapshots import WorkspaceSnapshots, retain_git_history
 from .toolchain import prepare_toolchain
@@ -118,17 +118,17 @@ def login_profile(state_root: Path, name: str | None) -> LoginProfile | None:
     plugin, separator, slot = name.partition("/")
     if separator:
         return LoginPool.of(state_root, plugin).slot(slot)
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", name):
+    # A plugin id names a pool, never one login.
+    if name in LOGIN_PLUGINS or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", name):
         raise KarnError("invalid_login_profile_name")
     return LoginProfile(logins_root(state_root) / name, name)
 
 
-def _login_pool(state_root: Path, construct: str, candidate) -> LoginPool | None:
+def _login_pool(state_root: Path, candidate) -> LoginPool | None:
     """The pool of the candidate's one login plugin; the host refuses any other plugin set."""
     ids = [artifact.row["id"] for artifact in candidate.plugins]
     if len(ids) != 1 or ids[0] not in LOGIN_PLUGINS:
         return None
-    adopt_legacy_login(state_root, construct, ids[0])
     return LoginPool.of(state_root, ids[0])
 
 
@@ -244,17 +244,20 @@ def run_benchmark(
     native_telemetry: str = "auto",
     login_poll_seconds: float = DEFAULT_POLL_SECONDS,
     login_wait=None,
+    on_launch=None,
 ) -> KarnRunRecord:
     """Refuse what cannot run before any evidence exists, then collect under both locks.
 
     A run takes any free slot of its login plugin's pool and holds it until its login is
     harvested; while every usable slot is busy it waits, before creating any run directory.
+    ``on_launch`` is called once the run holds its login and is about to create evidence,
+    so a caller can count the run as started only from then.
     """
     candidate = load_candidate(
         build_output, construct, **({"image_inspector": host.docker.inspect_image} if host else {})
     )
     benchmark = load_benchmark(bench_root, benchmark_id)
-    pool = _login_pool(state_root, construct, candidate) if candidate.plugins else None
+    pool = _login_pool(state_root, candidate) if candidate.plugins else None
     grader = grader or select_grader(candidate.image_id, grader_image, timeout=grading_timeout)
     evaluator = evaluator or grader.evaluate_run
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
@@ -276,6 +279,8 @@ def run_benchmark(
                 on_wait=login_wait,
             )
             login = pool.ref(selected_login)
+        if on_launch is not None:
+            on_launch()
         run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
         held.enter_context(run_lock(run_dir))
         return _collect(

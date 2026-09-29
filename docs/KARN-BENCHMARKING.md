@@ -29,10 +29,17 @@ Enrollment uses the host's Codex CLI in an isolated home, through Karn's existin
 Logins are pooled per login plugin in `<state-root>/logins/<plugin-id>/<slot>`: any construct with that plugin can use any slot, so a new construct needs no new login.
 Each `silverquillm login` enrolls one new slot (`slot-1`, `slot-2`, …) through a fresh login; `--slot NAME` re-enrolls that slot instead.
 A slot serves one run at a time, so enroll as many slots per provider as runs you want at once, and use the same state root for direct runs and batches.
-A run takes any free slot; when every usable slot is busy, a direct run or batch entry waits for one (`waiting for a login slot`) before creating anything.
-With no slot enrolled it refuses with `login_pool_empty:<plugin-id>`.
+A run takes any free slot; when every usable slot is busy, a direct run or batch entry waits for one (`waiting for a login slot`) before creating anything, and a batch entry counts as started only once it holds a slot, so a scheduler stopped while waiting leaves it pending.
+With no slot enrolled a run refuses with `login_pool_empty:<plugin-id>`; the scheduler stops with that error and leaves every entry pending.
+Each slot records the plugin it was enrolled through and serves only that plugin's pool; a damaged slot is skipped with a warning.
 Slots that are logins to the same subscription share its rate limits, so concurrent runs on one account can slow each other; each run input and record names its slot (`login_profile`, such as `karn-claude-login/slot-1`).
-A login enrolled before pools existed, at `<state-root>/logins/<construct>`, moves into its plugin's pool as a slot named after the construct the next time that construct runs or enrolls, with no new login; one with a pending run moves once that run is recovered.
+A login enrolled before pools existed, at `<state-root>/logins/<construct>`, joins a pool only by an explicit command, with no new login:
+
+```bash
+silverquillm login --build-output BUILD --construct CONSTRUCT --adopt LEGACY
+```
+
+It becomes a slot named `LEGACY` in the pool of `CONSTRUCT`'s login plugin, after checking that its stored login has that plugin's own shape (`legacy_login_belongs_to_other_plugin` otherwise). A legacy login with a pending run is refused (`legacy_login_pending`) until `silverquillm recover` settles it. Runs never adopt a legacy login by themselves.
 
 ### Claude constructs
 

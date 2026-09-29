@@ -84,14 +84,21 @@ class LoginProfile:
 
     @contextlib.contextmanager
     def exclusive(self) -> Iterator[None]:
-        descriptor = os.open(
-            self.directory / "runner.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600
-        )
+        lock = self.directory / "runner.lock"
+        descriptor = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise LoginInUseError("login_in_use") from None
+            # A pool may move or remove this directory under its own lock; a lock on a file
+            # no longer at this path guards nothing, and a new file there has its own lock.
+            try:
+                current = os.stat(lock, follow_symlinks=False)
+            except OSError:
+                current = None
+            if current is None or not os.path.samestat(os.fstat(descriptor), current):
+                raise LoginInUseError("login_in_use")
             yield
         finally:
             os.close(descriptor)
