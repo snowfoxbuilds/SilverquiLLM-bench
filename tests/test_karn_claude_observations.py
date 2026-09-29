@@ -852,3 +852,33 @@ def test_a_repeated_otel_only_request_counts_once_and_a_conflict_is_flagged():
     )
     assert "otel_request_observations_conflict" in conflicted["usage"]["reasons"]
     assert conflicted["usage"]["value"] == once["usage"]["value"]
+
+
+def test_transcript_responses_without_ids_are_unconfirmed_even_without_otel_requests():
+    transcript = [
+        row.replace('"requestId": "req_0', '"noRequestId": "req_0') for row in main_transcript()
+    ]
+    tool = normalize_claude_otlp(otlp(name="claude_code.tool_result", tool_use_id="toolu_01"))
+    result = summarize_claude_events(qualified(events_of(transcript) + tool), exit_kind="completed")
+    assert "otel_usage_comparison_unavailable" in result["usage"]["reasons"]
+
+
+@pytest.mark.parametrize(
+    ("field", "values"),
+    [
+        ("speed", ("normal", "fast")),
+        ("query_source", ("compact", "repl_main_thread")),
+        ("cost_usd", (0.0001, 5.0)),
+    ],
+)
+def test_repeated_otel_reports_differing_in_any_field_are_flagged(field, values):
+    transcript = main_transcript() + [line("system", second=4, subtype="compact_boundary")]
+    otel = api_request("req_01") + api_request("req_02")
+    base = {"cache_creation_tokens": "0"}
+    first_value, second_value = values
+    [one] = api_request("req_c", "compact", **{**base, field: first_value})
+    [two] = api_request("req_c", "compact", **{**base, field: second_value})
+    result = summarize_claude_events(
+        events_of(transcript) + otel + [one, two], exit_kind="completed"
+    )
+    assert "otel_request_observations_conflict" in result["usage"]["reasons"]

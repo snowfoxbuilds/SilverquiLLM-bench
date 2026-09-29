@@ -338,6 +338,13 @@ def _observed(event: dict[str, Any]) -> tuple[Any, ...]:
     return (attrs.get("model"), *(usage[key] for key in COMPARED_USAGE))
 
 
+def _report_signature(event: dict[str, Any]) -> str:
+    """Everything one ``api_request`` contributes, so repeated reports can be compared."""
+    attrs = event["attributes"]
+    fields = [*_observed(event), *(attrs.get(k) for k in ("speed", "query_source", "cost_usd"))]
+    return json.dumps(fields, sort_keys=True, default=str)
+
+
 def reconcile_streams(
     events: Iterable[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -370,13 +377,13 @@ def reconcile_streams(
     for request, responses in native.items():
         if request is not None and len(responses) > 1:
             mismatches.append({"check": "native_request_ids_unique", "request": request})
-    if observed and None in native:
+    if any(e["source"] == "otel" for e in rows) and None in native:
         # A response without its request id cannot be matched to anything OTel reported.
         mismatches.append({"check": "native_request_ids_present", "responses": len(native[None])})
     for request, reports in observed.items():
         if request is None:
             continue
-        if len({_observed(report) for report in reports}) > 1:
+        if len({_report_signature(report) for report in reports}) > 1:
             mismatches.append({"check": "otel_observations_agree", "request": request})
         for response in native.get(request, []):
             for report in reports:
