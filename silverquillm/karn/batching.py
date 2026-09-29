@@ -345,6 +345,8 @@ class KarnScheduler:
                         budget_seconds=spec.get("budget_seconds", 86400),
                         native_telemetry=spec.get("native_telemetry", "auto"),
                         run_id=row["run_id"],
+                        # A run waits for a free login slot; the wait is reported, not deferred.
+                        login_wait=lambda message, name=path.stem: self._warn(f"{name}: {message}"),
                         **self.options,
                     )
                     status = record.run_metadata["execution"]["status"]

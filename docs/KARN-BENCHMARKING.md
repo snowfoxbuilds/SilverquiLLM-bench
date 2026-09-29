@@ -26,9 +26,13 @@ silverquillm login --build-output /tmp/bench-codex-build --construct bare-codex
 For committed Config Repo builds, point Karn at that repository without `--worktree`.
 Build output and the exact local image must remain available; queued execution never rebuilds or pulls an image.
 Enrollment uses the host's Codex CLI in an isolated home, through Karn's existing plugin.
-Each construct has its own login in `<state-root>/logins/<construct>`, enrolled once and kept across rebuilds of that construct; enroll every construct you run, and use the same state root for direct runs and batches.
-Constructs never share a login, so they can run at the same time, while a host-local lock prevents simultaneous refreshes of any one construct's login.
-A direct run refuses a login another runner holds (`login_in_use`) without creating a run; a batch leaves that entry pending and retries it on its next pass.
+Logins are pooled per login plugin in `<state-root>/logins/<plugin-id>/<slot>`: any construct with that plugin can use any slot, so a new construct needs no new login.
+Each `silverquillm login` enrolls one new slot (`slot-1`, `slot-2`, …) through a fresh login; `--slot NAME` re-enrolls that slot instead.
+A slot serves one run at a time, so enroll as many slots per provider as runs you want at once, and use the same state root for direct runs and batches.
+A run takes any free slot; when every usable slot is busy, a direct run or batch entry waits for one (`waiting for a login slot`) before creating anything.
+With no slot enrolled it refuses with `login_pool_empty:<plugin-id>`.
+Slots that are logins to the same subscription share its rate limits, so concurrent runs on one account can slow each other; each run input and record names its slot (`login_profile`, such as `karn-claude-login/slot-1`).
+A login enrolled before pools existed, at `<state-root>/logins/<construct>`, moves into its plugin's pool as a slot named after the construct the next time that construct runs or enrolls, with no new login; one with a pending run moves once that run is recovered.
 
 ### Claude constructs
 
@@ -44,9 +48,10 @@ Enrollment runs the host's `claude auth login` in an isolated config directory, 
 Sign in with the subscription account; on a host without a browser, open the printed URL elsewhere and paste the code back.
 The host runs exactly one of `karn-codex-login` or `karn-claude-login` per candidate and refuses any other plugin; `login` refuses a construct without one (`candidate_requires_login_plugin`).
 
-A run interrupted while its login was mounted leaves a pending refresh that only the plugin artifact which mounted it may settle.
-Switching to a build with a different login plugin then fails with `login_recovery_requires_previous_plugin`.
-Settle it first with `silverquillm recover RUN_ID`, naming the run in `<state-root>/logins/<construct>/active.json`; recovery uses that run's retained plugin artifact.
+A run interrupted while its login was mounted leaves its slot with a pending refresh that only the plugin artifact which mounted it may settle.
+Other runs skip that slot; a run bringing the same plugin artifact takes it only when no settled slot is free, and settles it first.
+Settle it with `silverquillm recover RUN_ID`, naming the run in the slot's `active.json`; recovery uses that run's retained plugin artifact.
+When every slot is pending, runs refuse with `login_pool_pending:<plugin-id>` until one is recovered.
 
 Candidates need no test tooling of their own.
 Every candidate container gets the bench's pinned pytest and pytest-timeout read-only at `/run/silverquillm/test-toolchain`, first on `PYTHONPATH`, so `python3 -m pytest` works on the image's own Python.

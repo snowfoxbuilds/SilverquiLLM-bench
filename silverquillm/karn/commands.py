@@ -129,16 +129,20 @@ def _report(record, *, exit_on_status=True):
 @click.option(
     "--build-output", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path)
 )
-@click.option("--construct", required=True)
+@click.option("--construct", required=True, help="Any construct using the login plugin.")
+@click.option("--slot", help="Re-enroll this slot of the pool; omitted, enroll a new slot.")
 @click.option(
     "--state-root",
     type=click.Path(file_okay=False, path_type=Path),
     default=lambda: Path.home() / ".local/state/silverquillm",
 )
-def enroll(build_output, construct, state_root):
-    """Enroll the construct's own subscription login through its Karn login plugin."""
-    from .execution import login_profile
+def enroll(build_output, construct, slot, state_root):
+    """Enroll one subscription login into the pool of the construct's Karn login plugin.
+
+    Each slot serves one run at a time, so enroll as many as runs you want concurrently.
+    """
     from .login import LOGIN_PLUGINS
+    from .login_pool import LoginPool, adopt_legacy_login
 
     try:
         candidate = load_candidate(build_output, construct)
@@ -147,9 +151,18 @@ def enroll(build_output, construct, state_root):
         ]
         if len(artifacts) != 1:
             raise KarnError("candidate_requires_login_plugin")
-        status = DockerHost(plugin_cache=state_root.resolve() / "plugins").enroll_login(
-            login_profile(state_root, construct), artifacts[0]
-        )
+        plugin_id = artifacts[0].row["id"]
+        adopt_legacy_login(state_root, construct, plugin_id)
+        pool = LoginPool.of(state_root, plugin_id)
+        profile = pool.named_slot(slot) if slot else pool.new_slot()
+        click.echo(f"Enrolling login slot {pool.ref(profile)}", err=True)
+        try:
+            status = DockerHost(plugin_cache=state_root.resolve() / "plugins").enroll_login(
+                profile, artifacts[0]
+            )
+        finally:
+            if not slot:
+                pool.discard_unenrolled(profile)
     except (KarnError, OSError, ValueError) as error:
         raise click.ClickException(str(error)) from None
     raise click.exceptions.Exit(status)
@@ -246,7 +259,9 @@ def queue_ls(batches_dir, as_json):
 
 @click.command()
 @BATCHES_DIR_OPTION
-@click.option("--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds")
+@click.option(
+    "--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds"
+)
 def top(batches_dir, interval):
     """Live, read-only view of the batch queue. q quits."""
     from .queue_view import run_top
@@ -267,7 +282,9 @@ def grader():
     type=click.Choice(sorted(GRADER_BASES)),
     help="Python minor version to build a grader for; repeatable. Default: every version.",
 )
-@click.option("--tag", default=None, help="Tag other than silverquillm-grader:pyX.Y; one --python only.")
+@click.option(
+    "--tag", default=None, help="Tag other than silverquillm-grader:pyX.Y; one --python only."
+)
 def grader_build(versions, tag):
     """Build pinned grader images and print each one's tag and image ID."""
     from .grader import build_grader_image, grader_tag

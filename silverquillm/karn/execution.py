@@ -24,7 +24,8 @@ from .definition import KarnError, canonical, load_candidate
 from .grader import DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError, select_grader
 from .grading_inputs import grading_inputs
 from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
-from .login import LoginProfile
+from .login import LOGIN_PLUGINS, LoginProfile
+from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, adopt_legacy_login, logins_root
 from .records import KarnIdentity, KarnRunRecord, missing_scores, write_record
 from .snapshots import WorkspaceSnapshots, retain_git_history
 from .toolchain import prepare_toolchain
@@ -111,11 +112,24 @@ def run_lock(run_dir: Path):
 
 
 def login_profile(state_root: Path, name: str | None) -> LoginProfile | None:
+    """The login a run input names: a pool slot ``<plugin-id>/<slot>``, or a legacy construct's."""
     if name is None:
         return None
+    plugin, separator, slot = name.partition("/")
+    if separator:
+        return LoginPool.of(state_root, plugin).slot(slot)
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", name):
         raise KarnError("invalid_login_profile_name")
-    return LoginProfile(Path(state_root).resolve() / "logins" / name, name)
+    return LoginProfile(logins_root(state_root) / name, name)
+
+
+def _login_pool(state_root: Path, construct: str, candidate) -> LoginPool | None:
+    """The pool of the candidate's one login plugin; the host refuses any other plugin set."""
+    ids = [artifact.row["id"] for artifact in candidate.plugins]
+    if len(ids) != 1 or ids[0] not in LOGIN_PLUGINS:
+        return None
+    adopt_legacy_login(state_root, construct, ids[0])
+    return LoginPool.of(state_root, ids[0])
 
 
 def collector_address() -> str:
@@ -228,19 +242,19 @@ def run_benchmark(
     grader: ContainerGrader | None = None,
     evaluator=None,
     native_telemetry: str = "auto",
+    login_poll_seconds: float = DEFAULT_POLL_SECONDS,
+    login_wait=None,
 ) -> KarnRunRecord:
     """Refuse what cannot run before any evidence exists, then collect under both locks.
 
-    A busy login raises :class:`LoginInUseError` without creating a run directory, so a
-    batch can defer the entry instead of consuming it.
+    A run takes any free slot of its login plugin's pool and holds it until its login is
+    harvested; while every usable slot is busy it waits, before creating any run directory.
     """
     candidate = load_candidate(
         build_output, construct, **({"image_inspector": host.docker.inspect_image} if host else {})
     )
     benchmark = load_benchmark(bench_root, benchmark_id)
-    # Each construct owns its subscription login, as each Ozolith Stack does.
-    login = construct if candidate.plugins else None
-    selected_login = login_profile(state_root, login)
+    pool = _login_pool(state_root, construct, candidate) if candidate.plugins else None
     grader = grader or select_grader(candidate.image_id, grader_image, timeout=grading_timeout)
     evaluator = evaluator or grader.evaluate_run
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
@@ -253,8 +267,15 @@ def run_benchmark(
     run_dir = Path(results_dir).resolve() / run_id
     with contextlib.ExitStack() as held:
         login_hold = held.enter_context(contextlib.ExitStack())
-        if selected_login is not None:
-            login_hold.enter_context(selected_login.exclusive())
+        selected_login = login = None
+        if pool is not None:
+            selected_login = pool.acquire(
+                login_hold,
+                settle_artifact=candidate.plugins[0].row["artifact"],
+                poll_seconds=login_poll_seconds,
+                on_wait=login_wait,
+            )
+            login = pool.ref(selected_login)
         run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
         held.enter_context(run_lock(run_dir))
         return _collect(

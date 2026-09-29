@@ -100,12 +100,17 @@ Authentication values stay outside candidate identity and published results.
 Cleanup retains authentication that has not been persisted until persistence succeeds or the operator explicitly abandons it, following Karn's [Login Plugins](https://github.com/snowfoxbuilds/ozolith/blob/main/docs/specs/LOGIN-PLUGINS.md) contract.
 Authentication storage is distinct from the Workspace and from retained benchmark evidence.
 
-A named Login Profile selects subscription authentication independently of candidate identity and can be reused across candidate variants and batches (grilling 2026-09-26).
+A Login Profile selects subscription authentication independently of candidate identity (grilling 2026-09-26).
+Profiles are pooled per login plugin: any candidate with that plugin may use any profile in its Login Pool, so adding a candidate needs no new login, and the pool's size is the number of concurrent runs on that provider (grilling 2026-09-28).
 A profile is enrolled through a fresh login session, so it holds its own session and refresh chain, separate from the operator's own login, whose files are never copied into it (grilling 2026-09-26).
+A login is never copied between profiles either, because refresh tokens rotate on use and a copy would invalidate its original (grilling 2026-09-28).
 Each run starts with fresh native state; only authentication persists between runs.
 At most one runner on the host may use a login at a time because concurrent token refresh can invalidate the shared authentication (grilling 2026-09-26).
-Use the existing local login binding and a host-local exclusive runner lock, shared by direct runs, scheduler execution, and enrollment.
+Use the existing local login binding and a host-local exclusive runner lock per profile, shared by direct runs, scheduler execution, and enrollment.
 Exclusive ownership covers authentication preparation, execution, and final authentication harvest; recovery confirms that a prior runner's container has stopped before reusing its login.
+When every usable profile of the pool is busy, a run waits for one instead of refusing, and nothing of the run exists until it holds a profile (grilling 2026-09-28).
+The run input and record name the profile a run used, so recovery settles exactly that profile; a profile left pending by an interrupted run serves no other run until it is settled, except that a run bringing the same plugin artifact may take it last and settle it first (grilling 2026-09-28).
+Concurrent runs on one subscription share its rate limits; the operator accepts this, and the named profile lets a slowdown be traced (grilling 2026-09-28).
 No new account registry, credential-deduplication system, or cross-host coordination is part of this integration (grilling 2026-09-26).
 Each host benchmarks independently.
 
@@ -173,7 +178,7 @@ The workstream also covers the CLI and batch paths that retain those observation
 ### Operator entrypoints and records
 
 `silverquillm run` and `silverquillm scheduler` share the same staging, execution, observation, harvesting, and grading lifecycle, and `silverquillm recover` settles an interrupted run from its retained evidence without rerunning work.
-The `login` command enrolls a named host-local Login Profile through the selected existing plugin.
+The `login` command enrolls one Login Profile into the pool of the selected existing plugin, or re-enrolls a named one.
 SilverquiLLM runs a completed Karn build by itself; the vendored v4 construct contract is the only thing it takes from Karn, and no Ozolith package is involved.
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
 
