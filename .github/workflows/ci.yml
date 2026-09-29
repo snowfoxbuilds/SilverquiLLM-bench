@@ -13,11 +13,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: pytest (Python 3.13)
+  clear-outcome:
+    # A new head makes the previous test outcome stale, so both labels come off
+    # before the tests start; the test-outcome job labels this head when they end.
+    # It is a job of this workflow, not a workflow of its own, so on the one runner
+    # it queues ahead of this run's tests rather than behind them.
+    name: Clear the test outcome
     # The runner is a developer host and the repository is public: fork
     # pull requests must never execute on it.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request.number;
+            for (const name of ['tests-passed', 'tests-failed']) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name });
+                core.info(`${name}: removed`);
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                core.info(`${name}: absent`);
+              }
+            }
+
+  test:
+    name: pytest (Python 3.13)
+    needs: clear-outcome
+    # Runs when clear-outcome succeeded, or was skipped on a push to main.
+    if: >-
+      !cancelled() && needs.clear-outcome.result != 'failure'
+      && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 30
     steps:
@@ -73,3 +105,75 @@ jobs:
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
           python -m pytest tests/ -q --basetemp "$tmp/pytest"
+
+  test-outcome:
+    # CI owns the test outcome labels: a Reviewer takes a pull request once it
+    # carries `request-review` and `tests-passed`, and nothing but this job adds
+    # `tests-passed` or `tests-failed`. A job that timed out or was cancelled on
+    # its own counts as failed; a run cancelled whole (a newer push) labels nothing.
+    name: Label the test outcome
+    needs: [test, test-py314]
+    if: >-
+      !cancelled() && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request.number;
+            const tested = context.payload.pull_request.head.sha;
+
+            // A push after this run started makes its outcome stale: the newer run
+            // clears the labels and labels the new head.
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+            if (pr.head.sha !== tested) {
+              core.notice(`Head moved from ${tested} to ${pr.head.sha}; not labelling a stale result.`);
+              return;
+            }
+
+            const passed = Object.values(JSON.parse(process.env.RESULTS)).every((job) => job.result === 'success');
+            const [add, remove] = passed ? ['tests-passed', 'tests-failed'] : ['tests-failed', 'tests-passed'];
+
+            if (!passed) {
+              const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt, {
+                owner, repo, run_id: context.runId, attempt_number: Number(process.env.GITHUB_RUN_ATTEMPT),
+              });
+              const lines = [`Tests failed on \`${tested.slice(0, 12)}\`: [CI run](${run}).`, ''];
+              for (const job of jobs.filter((j) => ['failure', 'cancelled', 'timed_out'].includes(j.conclusion))) {
+                const steps = (job.steps || []).filter((s) => ['failure', 'cancelled', 'timed_out'].includes(s.conclusion));
+                lines.push(`- **${job.name}**: ${job.conclusion}${steps.length ? ` at ${steps.map((s) => `\`${s.name}\``).join(', ')}` : ''}`);
+                let log = '';
+                try {
+                  const response = await github.rest.actions.downloadJobLogsForWorkflowRun({ owner, repo, job_id: job.id });
+                  log = typeof response.data === 'string' ? response.data : Buffer.from(response.data).toString();
+                  if (!log && response.url) log = await (await fetch(response.url)).text();
+                } catch (error) {
+                  core.warning(`Could not read the log of ${job.name}: ${error.message}`);
+                }
+                const text = log.split('\n').map((line) => line.replace(/^\S+Z /, ''));
+                const failing = text.filter((line) => /^(FAILED|ERROR) /.test(line));
+                for (const line of failing.slice(0, 25)) lines.push(`  - \`${line.slice(0, 300)}\``);
+                if (failing.length > 25) lines.push(`  - … and ${failing.length - 25} more`);
+                const summary = text.filter((line) => /^=*\s*\d+ (failed|passed|errors?)\b/.test(line)).pop();
+                if (summary) lines.push(`  - pytest: \`${summary.replace(/=/g, '').trim()}\``);
+              }
+              await github.rest.issues.createComment({ owner, repo, issue_number: number, body: lines.join('\n') });
+            }
+
+            try {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name: remove });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: [add] });
+            core.info(`${number}: ${add}`);
