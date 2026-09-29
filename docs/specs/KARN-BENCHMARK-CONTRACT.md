@@ -36,7 +36,7 @@ Karn resolves and builds the candidate; the bench consumes the resulting build o
 Image and definition selection are fixed for that run, and build time is outside its execution budget.
 Recipes and other build sources provide provenance; they do not substitute for the artifact actually executed.
 
-A run's sources must all be committed (#113).
+A run's sources must all be committed (#116).
 Its image must carry Karn's `karn.config.revision` label naming a recipe commit, which a build from the committed tree records and a `--worktree` build does not; the bench checkout that runs and grades, and the one holding the benchmark data, must have no change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`.
 Ignored files and untracked files elsewhere, such as scratch notes, worktrees and run artifacts, do not count.
 `run` and `scheduler` refuse a run that breaks this before any evidence exists, unless the operator passes `--allow-dirty`.
@@ -207,7 +207,7 @@ A re-grade never replaces or edits a record: its scores go to a separate output 
 
 ### Shared results repository
 
-Hosts share one results repository, and everything an analysis needs lives there beside the immutable records (#113).
+Hosts share one results repository, and everything an analysis needs lives there beside the immutable records (#116).
 Each record's graded workspace is archived as a binary diff from its benchmark input's staged baseline, which is stored once (see ADR-015).
 The run writer archives a workspace and verifies it rebuilds to the graded copy's recorded digest before writing; `silverquillm results archive` backfills records from before archives existed, on the host that holds their run artifacts.
 
