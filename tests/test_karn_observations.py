@@ -489,3 +489,164 @@ def test_replay_actual_pinned_binary_qualification_matches_scripted_ground_truth
             {"prompt", "arguments", "output", "user.email", "authorization"}
             & set(event.get("attributes", {}))
         )
+
+
+def test_cost_breakdown_tallies_each_input_type_and_sums_to_the_request_price():
+    rows = price_requests(
+        [
+            {
+                "response_id": "r",
+                "model": "gpt-6-astra",
+                "usage": {
+                    "input_tokens": 100,
+                    "cached_input_tokens": 20,
+                    "cache_write_input_tokens": 7,
+                    "output_tokens": 30,
+                },
+            }
+        ]
+    )
+    parts = rows[0]["breakdown"]
+    assert {name: part["tokens"] for name, part in parts.items()} == {
+        "uncached_input": 73,
+        "cache_read": 20,
+        "cache_write": 7,
+        "cache_write_1h": 0,
+        "output": 30,
+    }
+    assert sum(Decimal(part["usd"]) for part in parts.values()) == Decimal(rows[0]["usd"])
+
+
+def claude_request(written_1h, **usage_changes):
+    usage_values = {
+        "input_tokens": 1000 + 4000 + 300,
+        "cached_input_tokens": 4000,
+        "cache_write_input_tokens": 300,
+        "cache_write_1h_input_tokens": written_1h,
+        "output_tokens": 50,
+        **usage_changes,
+    }
+    return {"response_id": "c", "model": "claude-opus-5-5", "usage": usage_values}
+
+
+def test_anthropic_five_minute_and_one_hour_writes_price_separately():
+    row = price_requests([claude_request(100)])[0]
+    parts = row["breakdown"]
+    # Opus 5.5: input $4, 5m write $5, 1h write $8, read $0.20 (0.05x), output $20 per MTok.
+    assert parts["uncached_input"] == {"tokens": 1000, "usd": "0.004"}
+    assert parts["cache_read"] == {"tokens": 4000, "usd": "0.0008"}
+    assert parts["cache_write"] == {"tokens": 200, "usd": "0.001"}
+    assert parts["cache_write_1h"] == {"tokens": 100, "usd": "0.0008"}
+    assert parts["output"] == {"tokens": 50, "usd": "0.001"}
+    assert Decimal(row["usd"]) == Decimal("0.0076")
+
+
+def test_fable_is_priced_from_anthropic_rates():
+    row = price_requests([{**claude_request(100), "model": "claude-fable-5-1"}])[0]
+    parts = row["breakdown"]
+    # Fable 5.1: input $10, 5m write $12.50, 1h write $20, read $0.25 (0.025x), output $50.
+    expected = {
+        "uncached_input": (1000, "0.01"),
+        "cache_read": (4000, "0.001"),
+        "cache_write": (200, "0.0025"),
+        "cache_write_1h": (100, "0.002"),
+        "output": (50, "0.0025"),
+    }
+    for kind, (tokens, usd) in expected.items():
+        assert parts[kind]["tokens"] == tokens
+        assert Decimal(parts[kind]["usd"]) == Decimal(usd)
+    assert Decimal(row["usd"]) == Decimal("0.018")
+
+
+def test_unknown_one_hour_split_is_not_priced_at_either_rate():
+    row = price_requests([claude_request(None)])[0]
+    assert row["usd"] is None
+    assert row["reasons"] == ["cache_write_split_missing_or_invalid"]
+    no_writes = price_requests(
+        [claude_request(None, input_tokens=5000, cache_write_input_tokens=0)]
+    )
+    assert no_writes[0]["usd"] is not None
+
+
+@pytest.mark.parametrize(
+    ("field", "tier"), [("speed", "fast"), ("service_tier", "priority"), ("service_tier", "flex")]
+)
+def test_every_tier_is_priced_at_standard_rates(field, tier):
+    standard = price_requests([claude_request(0)])[0]
+    row = price_requests([{**claude_request(0), field: tier}])[0]
+    assert row["reasons"] == []
+    assert row["usd"] == standard["usd"]
+    assert row["rate_basis"] == "standard"
+
+
+def test_unknown_models_stay_unpriced_whatever_their_tier():
+    row = price_requests([{**claude_request(0), "model": "future-model", "service_tier": "flex"}])[
+        0
+    ]
+    assert row["usd"] is None
+    assert row["reasons"] == ["model_price_unavailable"]
+
+
+def completed_otlp(nanos, **attrs):
+    return otlp(
+        kind="response.completed",
+        nanos=nanos,
+        input_token_count="100",
+        cached_token_count="20",
+        cache_write_token_count="0",
+        output_token_count="30",
+        reasoning_token_count="5",
+        tool_token_count="130",
+        **attrs,
+    )
+
+
+def test_codex_rows_record_the_tier_codex_requested():
+    native, _ = normalize_rollout(journal())
+    standard = summarize_events(native, exit_kind="completed")
+    flex = summarize_events(
+        native + normalize_otlp(completed_otlp(1, service_tier="flex")), exit_kind="completed"
+    )
+    assert [r["requested_service_tier"] for r in standard["requests"]] == [None]
+    assert [r["requested_service_tier"] for r in flex["requests"]] == ["flex"]
+    # Recorded, never repriced: the estimate stays at standard rates.
+    assert flex["estimated_cost"]["value"] == standard["estimated_cost"]["value"]
+    mixed = summarize_events(
+        native
+        + normalize_otlp(completed_otlp(1, service_tier="flex"))
+        + normalize_otlp(completed_otlp(2, service_tier="priority")),
+        exit_kind="completed",
+    )
+    assert [r["requested_service_tier"] for r in mixed["requests"]] == ["mixed"]
+
+
+def test_an_unrecognized_codex_tier_is_kept_only_as_unknown():
+    [event] = normalize_otlp(completed_otlp(1, service_tier="sk-live-token-lookalike"))
+    assert event["attributes"]["service_tier"] == "unknown"
+    otel_only = summarize_events([event], exit_kind="completed")
+    assert [r["requested_service_tier"] for r in otel_only["requests"]] == ["unknown"]
+    assert otel_only["estimated_cost"]["value"] is not None
+
+
+def test_summary_reports_the_cost_breakdown_beside_the_estimate():
+    events, _ = normalize_rollout(journal())
+    result = summarize_events(events, exit_kind="completed")
+    breakdown = result["cost_breakdown"]
+    assert breakdown["completeness"] == result["estimated_cost"]["completeness"]
+    assert sum(Decimal(part["usd"]) for part in breakdown["value"].values()) == Decimal(
+        result["estimated_cost"]["value"]
+    )
+
+
+@pytest.mark.parametrize(("scenario", "expected"), [("basic", 0), ("descendant", 1)])
+def test_codex_subagent_threads_count_threads_beyond_the_main_one(scenario, expected):
+    from pathlib import Path
+
+    fixture = Path(__file__).parent / "fixtures" / "karn_observations_codex_0.157.1"
+    raw = (fixture / (scenario + ".jsonl")).read_bytes()
+    events = [json.loads(line) for line in raw.splitlines()]
+    assert summarize_events(events, exit_kind="completed")["subagent_threads"] == expected
+
+
+def test_subagent_threads_are_missing_without_observations():
+    assert summarize_events([], exit_kind="completed")["subagent_threads"] is None

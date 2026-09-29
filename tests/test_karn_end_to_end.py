@@ -17,9 +17,9 @@ from silverquillm.karn.batching import KarnScheduler
 from silverquillm.karn.definition import canonical, digest, load_candidate
 from silverquillm.karn.docker import RUN_LABEL
 from silverquillm.karn.execution import run_benchmark
-from silverquillm.karn.grader import DEFAULT_GRADER_IMAGE
+from silverquillm.karn.grader import grader_tag
 from silverquillm.karn.host import DockerHost
-from silverquillm.karn.login import LoginProfile
+from silverquillm.karn.login_pool import LoginPool
 from silverquillm.results_repo import iter_run_records
 
 from .test_karn_execution import benchmark_data
@@ -32,10 +32,12 @@ REPO = Path(__file__).resolve().parents[1]
 @pytest.fixture
 def grader_image():
     checked = subprocess.run(
-        ["docker", "image", "inspect", DEFAULT_GRADER_IMAGE], capture_output=True, check=False
+        ["docker", "image", "inspect", grader_tag("3.13")], capture_output=True, check=False
     )
     if checked.returncode:
-        pytest.skip("requires the grader image; run `silverquillm grader build` first")
+        pytest.skip(
+            "requires the grader image; run `silverquillm grader build --python 3.13` first"
+        )
     return json.loads(checked.stdout)[0]["Id"]
 
 
@@ -224,7 +226,7 @@ with urllib.request.urlopen(request,timeout=5) as response:
     candidate.definition_path.write_bytes(canonical(candidate.definition))
     candidate = load_candidate(candidate.build_output, "bare")
     state = tmp_path / "state"
-    profile = LoginProfile(state / "logins/bare", "bare")
+    profile = LoginPool.of(state, "karn-codex-login").named_slot("bare")
     auth = canonical(
         {
             "tokens": {

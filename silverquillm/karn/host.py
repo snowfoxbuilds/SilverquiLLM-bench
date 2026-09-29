@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import posixpath
 import time
 import uuid
 from collections.abc import Callable
@@ -24,9 +25,11 @@ from .definition import (
     inside,
     read_regular,
     strict_json,
+    tree_digest,
 )
 from .docker import RUN_LABEL, Docker, Network
 from .login import (
+    LOGIN_PLUGINS,
     LoginProfile,
     PluginProcess,
     admit_plugin_mounts,
@@ -36,8 +39,30 @@ from .login import (
     preserve_pending_native,
     recover_login,
 )
+from .toolchain import TOOLCHAIN_TARGET, CandidateToolchain
 
 DEFAULT_BUDGET_SECONDS = 24 * 60 * 60
+# The variables a native CLI's telemetry needs from the host: Claude Code reads its exporter
+# only from the environment. They override the construct's own values for the run.
+NATIVE_TELEMETRY_ENVIRONMENT = frozenset(
+    {
+        "CLAUDE_CODE_ENABLE_TELEMETRY",
+        "OTEL_LOGS_EXPORTER",
+        "OTEL_METRICS_EXPORTER",
+        "OTEL_TRACES_EXPORTER",
+        "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+        "OTEL_LOGS_EXPORT_INTERVAL",
+        "OTEL_METRICS_INCLUDE_VERSION",
+        "OTEL_LOG_USER_PROMPTS",
+        "OTEL_LOG_ASSISTANT_RESPONSES",
+        "OTEL_LOG_TOOL_DETAILS",
+        "OTEL_LOG_TOOL_CONTENT",
+        "OTEL_LOG_RAW_API_BODIES",
+        "OTEL_LOG_MANAGED_SETTINGS",
+        "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA",
+    }
+)
 # The standard-library modules proxy.py imports inside the candidate image.
 PROXY_PROBE = "import ipaddress, json, os, select, socket, socketserver, urllib.request"
 
@@ -82,6 +107,22 @@ def _now() -> str:
 
 def _mount(source: Path, target: str, readonly: bool) -> dict:
     return {"Type": "bind", "Source": str(source.resolve()), "Target": target, "ReadOnly": readonly}
+
+
+def _overlaps(first: str, second: str) -> bool:
+    return PurePosixPath(first).is_relative_to(second) or PurePosixPath(second).is_relative_to(
+        first
+    )
+
+
+def _python_path(candidate: KarnCandidate, inspection: dict) -> str:
+    """Put the test toolchain first, keeping the construct's or else the image's PYTHONPATH."""
+    inherited = candidate.runtime["environment"].get("PYTHONPATH")
+    if inherited is None:
+        for entry in (inspection.get("Config") or {}).get("Env") or []:
+            if isinstance(entry, str) and entry.startswith("PYTHONPATH="):
+                inherited = entry.removeprefix("PYTHONPATH=")
+    return TOOLCHAIN_TARGET + (":" + inherited if inherited else "")
 
 
 def _host_file(mounts: list[dict], guest: str) -> Path:
@@ -303,7 +344,9 @@ class DockerHost:
         mount_bindings: dict | None = None,
         extra_environment: dict | None = None,
         extra_mounts: list[dict] | None = None,
+        test_toolchain: CandidateToolchain | None = None,
         runtime_config: str | Callable[[Network], str] | None = None,
+        runtime_environment: Callable[[Network], dict[str, str]] | None = None,
         after_stop: Callable[[HostResult, Path | None], None] | None = None,
         collector_endpoint: str | None = None,
         login_lock_held: bool = False,
@@ -331,32 +374,26 @@ class DockerHost:
         }
         if set(extra_environment or {}) - allowed_environment:
             raise KarnError("undeclared_runtime_environment_override")
+        extra_mounts = list(extra_mounts or [])
+        if test_toolchain is not None:
+            extra_mounts.append(_mount(test_toolchain.path, TOOLCHAIN_TARGET, True))
         infrastructure_mounts = []
-        for mount in extra_mounts or []:
+        for mount in extra_mounts:
             target = mount.get("Target", "")
             if not mount.get("ReadOnly") or not target.startswith("/run/silverquillm/"):
                 raise KarnError("infrastructure_mount_must_be_readonly_and_scoped")
             if any(
-                PurePosixPath(target).is_relative_to(row["target"])
-                or PurePosixPath(row["target"]).is_relative_to(target)
+                _overlaps(target, row["target"])
                 for row in candidate.runtime["mounts"]
                 if row.get("exposure", "container") == "container"
             ):
                 raise KarnError("infrastructure_mount_shadows_definition")
-            source = Path(mount["Source"]).resolve()
-            paths = sorted(source.rglob("*")) if source.is_dir() else [source]
-            content = []
-            for path in paths:
-                if path.is_dir():
-                    continue
-                content.append(
-                    [
-                        str(path.relative_to(source)) if path != source else source.name,
-                        digest(read_regular(path, limit=256 * 1024 * 1024)),
-                    ]
-                )
             infrastructure_mounts.append(
-                {"target": target, "read_only": True, "digest": digest(canonical(content))}
+                {
+                    "target": target,
+                    "read_only": True,
+                    "digest": tree_digest(Path(mount["Source"]).resolve()),
+                }
             )
         result = HostResult(
             run_id,
@@ -370,6 +407,8 @@ class DockerHost:
             "environment": extra_environment or {},
             "mounts": infrastructure_mounts,
         }
+        if test_toolchain is not None:
+            result.host_configuration["test_toolchain"] = test_toolchain.to_dict()
         stage = "preparation"
         plugin = None
         mounts = []
@@ -389,8 +428,10 @@ class DockerHost:
                     raise KarnError("automaton_required")
                 if candidate.plugins:
                     for artifact in candidate.plugins:
-                        if artifact.row["id"] != "karn-codex-login":
+                        if artifact.row["id"] not in LOGIN_PLUGINS:
                             raise KarnError("runtime_plugin_unavailable:" + artifact.row["id"])
+                    if len(candidate.plugins) != 1:
+                        raise KarnError("multiple_login_plugins")
                     if login_profile is None:
                         raise KarnError("login_profile_required")
                     stage = "authentication"
@@ -476,7 +517,23 @@ class DockerHost:
                         **(extra_environment or {}),
                         **network.environment,
                     }
-                    mounts.extend(extra_mounts or [])
+                    if runtime_environment is not None:
+                        configured = runtime_environment(network)
+                        if set(configured) - NATIVE_TELEMETRY_ENVIRONMENT:
+                            raise KarnError("undeclared_runtime_environment_override")
+                        environment.update(configured)
+                        result.host_configuration["environment"] = {
+                            **result.host_configuration["environment"],
+                            **configured,
+                        }
+                    if test_toolchain is not None:
+                        environment["PYTHONPATH"] = _python_path(
+                            candidate, self.docker.inspect_image(candidate.image_id)
+                        )
+                        result.host_configuration["test_toolchain"]["python_path"] = environment[
+                            "PYTHONPATH"
+                        ]
+                    mounts.extend(extra_mounts)
                     if runtime_config is not None:
                         config = evidence / "native-observability.toml"
                         config.write_text(
@@ -489,6 +546,22 @@ class DockerHost:
                         if not native_target:
                             raise KarnError("native_home_required_for_observability")
                         mounts.append(_mount(config, native_target + "/config.toml", True))
+                    # Docker cleans ".." and a leading "//" out of a target and pathlib does not,
+                    # so only canonical targets are comparable.
+                    if any(
+                        mount["Target"] != posixpath.normpath(mount["Target"])
+                        or mount["Target"].startswith("//")
+                        for mount in mounts
+                    ):
+                        raise KarnError("noncanonical_mount_target")
+                    # Plugin-admitted and telemetry mounts arrive after the definition check above.
+                    for index, mount in enumerate(mounts):
+                        if mount in extra_mounts and any(
+                            _overlaps(mount["Target"], other["Target"])
+                            for position, other in enumerate(mounts)
+                            if position != index
+                        ):
+                            raise KarnError("infrastructure_mount_overlaps")
                     stage = "launch"
                     self._create(
                         candidate,

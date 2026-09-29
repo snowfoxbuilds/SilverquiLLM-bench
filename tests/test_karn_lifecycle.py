@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import os
 import shutil
@@ -10,19 +11,21 @@ import signal
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from silverquillm.karn import recovery
+from silverquillm.karn import execution, recovery
 from silverquillm.karn.batching import KarnScheduler
 from silverquillm.karn.definition import KarnError, canonical, digest, load_candidate
 from silverquillm.karn.execution import login_profile, run_benchmark
 from silverquillm.karn.grader import ContainerGrader
 from silverquillm.karn.host import DockerHost
 from silverquillm.karn.login import NATIVE_PRESERVED, LoginProfile
+from silverquillm.karn.login_pool import LoginPool
 from silverquillm.karn.records import KarnRunRecord, RecordWritePendingError, write_record
 from silverquillm.results_repo import RunRecordExistsError, iter_run_records
 
@@ -43,6 +46,10 @@ def _grade_without_docker(request, monkeypatch):
         "from_image",
         classmethod(lambda cls, reference=None, **kw: local_grader(**kw)),
     )
+    monkeypatch.setattr(
+        execution, "select_grader", lambda image_id, reference=None, **kw: local_grader(**kw)
+    )
+    monkeypatch.setattr(recovery, "legacy_grader", lambda reference=None, **kw: local_grader(**kw))
 
 
 def batch(directory: Path, entries: int = 2) -> Path:
@@ -67,8 +74,7 @@ def scheduler(tmp_path, directory, **changes):
         results_dir=tmp_path / "runs",
         results_repo=tmp_path / "records",
         state_root=tmp_path / "state",
-        replay_without_state=["trial"],
-        **changes,
+        **{"replay_without_state": ["trial"], **changes},
     )
 
 
@@ -79,6 +85,7 @@ def test_interrupt_before_run_input_fails_the_row_and_the_batch_continues(
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_launch"]()
         if created_run_directory:
             (kwargs["results_dir"] / kwargs["run_id"]).mkdir(parents=True)
         raise KeyboardInterrupt
@@ -109,59 +116,252 @@ def test_interrupt_before_run_input_fails_the_row_and_the_batch_continues(
     assert executed == [state["runs"][1]["run_id"]]
 
 
-def test_login_contention_defers_the_batch_entry_instead_of_consuming_it(tmp_path):
+def test_a_batch_entry_waits_for_a_busy_login_slot_instead_of_deferring(tmp_path):
     directory = batch(tmp_path / "batches", entries=1)
     opts = login_options(tmp_path / "fixture")
-    profile = LoginProfile(tmp_path / "state/logins/bare", "bare")
     (directory / "trial.toml").write_text(
         'format="karn-v4"\n[[runs]]\nbuild_output='
         + json.dumps(str(opts["build_output"]))
         + '\nconstruct="bare"\nbenchmark="example"\n'
     )
+    with held_elsewhere(pool_slot(opts["state_root"])) as release:
+
+        def execute(**kwargs):
+            report = kwargs.pop("login_wait")
+            return run_benchmark(
+                **kwargs, host=FixtureHost(), login_wait=lambda m: (report(m), release())
+            )
+
+        runner = scheduler(opts["bench_root"], directory, executor=execute)
+        runner.options["state_root"] = Path(opts["state_root"]).resolve()
+        runner.options["login_poll_seconds"] = 0.05
+        assert runner.run_until_idle() == 1
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert [row["status"] for row in state["runs"]] == ["done"]
+    assert any("waiting for a login slot" in warning for warning in runner.warnings)
+
+
+def test_batch_entries_select_their_grader_by_the_candidates_python(tmp_path, monkeypatch):
+    from silverquillm.karn.grader import GraderError
+
+    directory = batch(tmp_path / "batches", entries=2)
+    opts = options(tmp_path / "fixture")
+    (directory / "trial.toml").write_text(
+        'format="karn-v4"\n'
+        + (
+            "[[runs]]\nbuild_output="
+            + json.dumps(str(opts["build_output"]))
+            + '\nconstruct="bare"\nbenchmark="example"\n'
+        )
+        * 2
+    )
+    selections = []
+
+    def select(image_id, reference=None, **kwargs):
+        selections.append((image_id, reference))
+        if len(selections) == 1:
+            raise GraderError("candidate_python_unsupported")
+        return local_grader(candidate_python="3.14.4", **kwargs)
+
+    monkeypatch.setattr(execution, "select_grader", select)
     runner = scheduler(
         opts["bench_root"],
         directory,
         executor=lambda **kwargs: run_benchmark(**kwargs, host=FixtureHost()),
+        grader_image="custom-grader",
     )
-    runner.options["state_root"] = (tmp_path / "state").resolve()
-    with profile.exclusive():
-        assert runner.run_until_idle() == 0
+    assert runner.run_until_idle() == 2
     state = json.loads((directory / "state/trial.json").read_text())
-    assert state["runs"] == []
-    assert any("login_in_use" in warning for warning in runner.warnings)
-    assert not (opts["bench_root"] / "runs").exists()
-    assert runner.run_until_idle() == 1
-    state = json.loads((directory / "state/trial.json").read_text())
-    assert [row["status"] for row in state["runs"]] == ["done"]
+    assert [(row["status"], row.get("error")) for row in state["runs"]] == [
+        ("failed", "candidate_python_unsupported"),
+        ("done", None),
+    ]
+    assert not (opts["bench_root"] / "runs" / state["runs"][0]["run_id"]).exists()
+    candidate = load_candidate(opts["build_output"], "bare", image_inspector=lambda r: {"Id": r})
+    assert selections == [(candidate.image_id, "custom-grader")] * 2
+    [(_, record)] = list(iter_run_records(opts["bench_root"] / "records"))
+    assert record.run_metadata["grading_isolation"]["candidate_python"] == "3.14.4"
 
 
-def test_direct_run_refuses_a_busy_login_before_creating_evidence(tmp_path):
+def test_recovery_grades_on_the_recorded_python_without_running_the_image(tmp_path, monkeypatch):
+    from silverquillm.karn import grader as grader_module
+
+    opts = options(tmp_path, grader=local_grader(candidate_python="3.14.4"))
+
+    class Killed(FixtureHost):
+        def run(self, *args, **kwargs):
+            raise SystemExit(137)
+
+    with pytest.raises(SystemExit):
+        run_benchmark(**{**opts, "host": Killed()}, run_id="killed")
+    inputs = json.loads((opts["results_dir"] / "killed/run-input.json").read_text())
+    assert inputs["candidate_python"] == "3.14.4"
+    docker = ContainerDocker(running=False)
+    monkeypatch.setattr(
+        recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
+    )
+    monkeypatch.setattr(
+        grader_module, "candidate_python", lambda *a, **k: pytest.fail("recovery probed the image")
+    )
+    chosen = []
+
+    def grader_for(python, reference=None, **kwargs):
+        chosen.append((python, reference))
+        return local_grader(candidate_python=python, **kwargs)
+
+    monkeypatch.setattr(recovery, "grader_for", grader_for)
+    record = recovery.recover_benchmark(
+        run_id="killed",
+        spec={},
+        grader_image="custom-grader",
+        **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+    )
+    assert chosen == [("3.14.4", "custom-grader")]
+    assert record.run_metadata["grading_isolation"]["candidate_python"] == "3.14.4"
+    assert record.run_metadata["grading_isolation"]["grader_python"] == "3.14"
+
+
+def test_recovery_of_a_run_launched_before_versions_were_recorded_keeps_the_313_grader(
+    tmp_path, monkeypatch
+):
+    opts = killed_direct_run(tmp_path)
+    inputs = json.loads((opts["results_dir"] / "killed/run-input.json").read_text())
+    assert "candidate_python" not in inputs
+    docker = ContainerDocker(running=False)
+    monkeypatch.setattr(
+        recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
+    )
+    references = []
+    monkeypatch.setattr(
+        recovery,
+        "legacy_grader",
+        lambda reference=None, **kw: references.append(reference) or local_grader(**kw),
+    )
+    record = recovery.recover_benchmark(
+        run_id="killed",
+        spec={},
+        grader_image="custom-grader",
+        **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+    )
+    assert references == ["custom-grader"]
+    assert "candidate_python" not in record.run_metadata["grading_isolation"]
+
+
+@pytest.mark.parametrize(("label", "accepted"), [("3.13", True), ("3.14", False), (None, False)])
+def test_legacy_recovery_requires_a_grader_labeled_313(tmp_path, monkeypatch, label, accepted):
+    from silverquillm.karn import grader as grader_module
+    from silverquillm.karn.grader import GraderError
+
+    from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
+
+    opts = killed_direct_run(tmp_path)
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: SimpleNamespace(docker=ContainerDocker(running=False), plugin_cache=None),
+    )
+
+    class Labeled(LocalDocker):
+        def image_python(self, reference):
+            assert reference == FIXTURE_IMAGE_ID
+            return label
+
+    monkeypatch.setattr(grader_module, "DockerRunner", Labeled)
+    monkeypatch.setattr(recovery, "legacy_grader", grader_module.legacy_grader)
+
+    def recover():
+        return recovery.recover_benchmark(
+            run_id="killed",
+            spec={},
+            **{
+                key: opts[key]
+                for key in ("bench_root", "results_dir", "results_repo", "state_root")
+            },
+        )
+
+    if accepted:
+        record = recover()
+        assert record.run_metadata["grading_isolation"]["grader_image_id"] == FIXTURE_IMAGE_ID
+    else:
+        with pytest.raises(GraderError, match="grader_python_mismatch"):
+            recover()
+
+
+@pytest.mark.parametrize("recorded", ["3.14", "3.14.4\n", 3.14, "3.14.4; rm", None])
+def test_recovery_refuses_a_malformed_recorded_python(tmp_path, monkeypatch, recorded):
+    opts = killed_direct_run(tmp_path)
+    path = opts["results_dir"] / "killed/run-input.json"
+    inputs = json.loads(path.read_text())
+    path.write_text(json.dumps({**inputs, "candidate_python": recorded}))
+    docker = ContainerDocker(running=False)
+    monkeypatch.setattr(
+        recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
+    )
+    with pytest.raises(KarnError, match="interrupted_run_input_invalid:candidate_python"):
+        recovery.recover_benchmark(
+            run_id="killed",
+            spec={},
+            **{
+                key: opts[key]
+                for key in ("bench_root", "results_dir", "results_repo", "state_root")
+            },
+        )
+
+
+@contextlib.contextmanager
+def held_elsewhere(profile):
+    """Hold a slot's lock from another thread until the yielded ``release`` is called."""
+    held, done = threading.Event(), threading.Event()
+
+    def hold():
+        with profile.exclusive():
+            held.set()
+            done.wait(30)
+
+    thread = threading.Thread(target=hold)
+    thread.start()
+    held.wait()
+    try:
+        yield done.set
+    finally:
+        done.set()
+        thread.join()
+
+
+def test_a_direct_run_waits_for_a_busy_slot_before_creating_evidence(tmp_path):
     opts = login_options(tmp_path)
-    profile = LoginProfile(Path(opts["state_root"]).resolve() / "logins/bare", "bare")
-    with profile.exclusive(), pytest.raises(KarnError, match="login_in_use"):
-        run_benchmark(**opts)
-    assert not Path(opts["results_dir"]).exists()
+    waited = []
+    with held_elsewhere(pool_slot(opts["state_root"])) as release:
+
+        def wait(message):
+            waited.append(message)
+            assert not Path(opts["results_dir"]).exists()
+            release()
+
+        record = run_benchmark(**opts, login_poll_seconds=0.05, login_wait=wait)
+    assert record.run_metadata["execution"]["status"] == "completed"
+    assert waited == ["waiting for a login slot: all 1 usable karn-codex-login slots are busy"]
 
 
-def test_each_construct_of_a_build_owns_a_separate_login(tmp_path):
+def test_constructs_share_the_plugins_pool_and_take_any_free_slot(tmp_path):
     opts = login_options(tmp_path)
     constructs = Path(opts["build_output"]) / "constructs"
     shutil.copytree(constructs / "bare", constructs / "other")
-    state = Path(opts["state_root"]).resolve()
-    bare, other = (login_profile(opts["state_root"], name) for name in ("bare", "other"))
-    assert (bare.directory, other.directory) == (state / "logins/bare", state / "logins/other")
-    with bare.exclusive():
-        with pytest.raises(KarnError, match="login_in_use"):
-            run_benchmark(**opts)
+    enroll(pool_slot(opts["state_root"], "second"))
+    with pool_slot(opts["state_root"]).exclusive():
         record = run_benchmark(**{**opts, "construct": "other", "host": FixtureHost()})
-        with other.exclusive():
-            pass
     assert record.run_metadata["execution"]["status"] == "completed"
-    assert record.run_metadata["login_profile"] == "other"
+    assert record.run_metadata["login_profile"] == "karn-codex-login/second"
+    run_input = json.loads(
+        (Path(opts["results_dir"]) / record.run_id / "run-input.json").read_text()
+    )
+    assert run_input["login"] == "karn-codex-login/second"
+    with pool_slot(opts["state_root"], "second").exclusive():
+        pass
 
 
 @pytest.mark.parametrize("construct", ["bare", "other"])
-def test_run_input_names_the_constructs_own_login(tmp_path, construct):
+def test_run_input_names_the_slot_it_used(tmp_path, construct):
     opts = login_options(tmp_path)
     constructs = Path(opts["build_output"]) / "constructs"
     shutil.copytree(constructs / "bare", constructs / "other")
@@ -169,7 +369,10 @@ def test_run_input_names_the_constructs_own_login(tmp_path, construct):
     run_input = json.loads(
         (Path(opts["results_dir"]) / record.run_id / "run-input.json").read_text()
     )
-    assert run_input["login"] == record.run_metadata["login_profile"] == construct
+    assert run_input["login"] == record.run_metadata["login_profile"] == "karn-codex-login/bare"
+    assert login_profile(opts["state_root"], run_input["login"]).directory == (
+        pool_slot(opts["state_root"]).directory
+    )
 
 
 def test_a_construct_without_a_login_plugin_selects_no_login(tmp_path):
@@ -285,7 +488,13 @@ def login_options(tmp_path, **changes):
     with_login_plugin(
         load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
     )
+    enroll(pool_slot(opts["state_root"]))
     return opts
+
+
+def pool_slot(state_root, name="bare"):
+    """A slot of the fixture plugin's login pool."""
+    return LoginPool.of(state_root, "karn-codex-login").named_slot(name)
 
 
 def enroll(profile):
@@ -362,7 +571,7 @@ def die_after_start(host):
 def test_recovery_never_attributes_another_runs_native_sessions(tmp_path, monkeypatch):
     candidate = login_candidate(tmp_path)
     state = (tmp_path / "state").resolve()
-    profile = LoginProfile(state / "logins/bare", "bare")
+    profile = pool_slot(state)
     enroll(profile)
     common = {
         "build_output": candidate.build_output,
@@ -419,7 +628,7 @@ def test_recovery_without_its_own_native_state_marks_the_other_runs_ownership(
 ):
     candidate = login_candidate(tmp_path)
     state = (tmp_path / "state").resolve()
-    profile = LoginProfile(state / "logins/bare", "bare")
+    profile = pool_slot(state)
     enroll(profile)
     common = {
         "build_output": candidate.build_output,
@@ -620,9 +829,7 @@ SIGNAL_RUNNER = textwrap.dedent(
 
     execution.DockerHost = lambda **kwargs: BlockingHost()
     from tests.grader_fixtures import local_grader
-    execution.ContainerGrader.from_image = classmethod(
-        lambda cls, reference=None, **kwargs: local_grader(**kwargs)
-    )
+    execution.select_grader = lambda image_id, reference=None, **kwargs: local_grader(**kwargs)
     load = execution.load_candidate
     execution.load_candidate = lambda path, construct, **kwargs: load(
         path, construct, image_inspector=lambda reference: {"Id": reference}
@@ -745,12 +952,28 @@ def test_native_telemetry_is_explicit_with_a_documented_codex_home_fallback(tmp_
     assert select_native_telemetry(native, "auto") == {
         "requested": "auto",
         "enabled": True,
-        "source": "codex_home_heuristic",
+        "source": "native_home_heuristic",
+        "adapter": "codex",
     }
     assert select_native_telemetry(native, "none")["enabled"] is False
     assert select_native_telemetry(native, "codex")["source"] == "operator"
     with pytest.raises(KarnError, match="native_telemetry_requires_codex_home"):
         select_native_telemetry(plain, "codex")
+    claude = make_candidate(tmp_path / "claude")
+    claude.runtime["environment"]["CLAUDE_CONFIG_DIR"] = "/native"
+    assert select_native_telemetry(claude, "auto")["adapter"] == "claude"
+    # The relay may be off, but the Claude transcripts are still the journals read.
+    assert select_native_telemetry(claude, "none") == {
+        "requested": "none",
+        "enabled": False,
+        "source": "operator",
+        "adapter": "claude",
+    }
+    with pytest.raises(KarnError, match="native_telemetry_requires_claude_config_dir"):
+        select_native_telemetry(native, "claude")
+    claude.runtime["environment"]["CODEX_HOME"] = "/other"
+    with pytest.raises(KarnError, match="native_telemetry_home_ambiguous"):
+        select_native_telemetry(claude, "auto")
     record = run_benchmark(**options(tmp_path / "run"), native_telemetry="none")
     assert record.run_metadata["native_telemetry"]["requested"] == "none"
     spec = '[[runs]]\nbuild_output="b"\nconstruct="bare"\nbenchmark="example"\n'
@@ -830,7 +1053,290 @@ def test_enrollment_resolves_a_symlinked_state_root(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert caches == [real.resolve() / "plugins"]
-    assert [(p.directory, p.name) for p in profiles] == [(real.resolve() / "logins/bare", "bare")]
+    assert [(p.directory, p.name) for p in profiles] == [
+        (real.resolve() / "logins/karn-codex-login/slot-1", "slot-1")
+    ]
+
+
+def login_command(tmp_path, monkeypatch, *, stores=True, status=0):
+    """Invoke ``silverquillm login`` with a host that records, and optionally stores, logins."""
+    from click.testing import CliRunner
+
+    from silverquillm.cli import main
+    from silverquillm.karn import commands
+
+    candidate = login_candidate(tmp_path)
+    enrolled = []
+
+    class Recorder:
+        def __init__(self, *, plugin_cache):
+            pass
+
+        def enroll_login(self, profile, artifact):
+            enrolled.append(profile.name)
+            if stores:
+                enroll(profile)
+            return status
+
+    monkeypatch.setattr(commands, "DockerHost", Recorder)
+    monkeypatch.setattr(
+        commands,
+        "load_candidate",
+        lambda path, construct: load_candidate(
+            path, construct, image_inspector=lambda ref: {"Id": ref}
+        ),
+    )
+
+    def invoke(*extra):
+        return CliRunner().invoke(
+            main,
+            [
+                "login",
+                "--build-output",
+                str(candidate.build_output),
+                "--construct",
+                "bare",
+                "--state-root",
+                str(tmp_path / "state"),
+                *extra,
+            ],
+        )
+
+    return invoke, enrolled
+
+
+def test_login_enrolls_new_slots_or_reenrolls_a_named_one(tmp_path, monkeypatch):
+    invoke, enrolled = login_command(tmp_path, monkeypatch)
+    for extra in ((), (), ("--slot", "slot-1")):
+        result = invoke(*extra)
+        assert result.exit_code == 0, result.output
+    assert enrolled == ["slot-1", "slot-2", "slot-1"]
+    pool = LoginPool.of(tmp_path / "state", "karn-codex-login")
+    assert pool.enrolled() == ["slot-1", "slot-2"]
+
+
+def test_a_failed_new_enrollment_leaves_no_slot_but_a_named_one_stays(tmp_path, monkeypatch):
+    invoke, _ = login_command(tmp_path, monkeypatch, stores=False, status=1)
+    assert invoke().exit_code == 1
+    assert invoke("--slot", "mine").exit_code == 1
+    pool = LoginPool.of(tmp_path / "state", "karn-codex-login")
+    assert sorted(p.name for p in pool.root.iterdir() if not p.name.startswith(".")) == ["mine"]
+    assert pool.enrolled() == []
+
+
+def legacy_login(state_root, construct="bare"):
+    """A per-construct login enrolled before pools existed; enrollment always took its lock."""
+    legacy = LoginProfile(Path(state_root).resolve() / "logins" / construct, construct)
+    with legacy.exclusive():
+        enroll(legacy)
+    return legacy
+
+
+def test_login_adopts_a_named_legacy_login_into_the_builds_plugin_pool(tmp_path, monkeypatch):
+    invoke, enrolled = login_command(tmp_path, monkeypatch)
+    legacy = legacy_login(tmp_path / "state")
+    result = invoke("--adopt", "bare")
+    assert result.exit_code == 0, result.output
+    assert "Adopted login slot karn-codex-login/bare" in result.output
+    assert enrolled == []
+    assert not legacy.directory.exists()
+    assert LoginPool.of(tmp_path / "state", "karn-codex-login").enrolled() == ["bare"]
+    assert invoke("--adopt", "bare").exit_code == 1
+    assert invoke("--adopt", "bare", "--slot", "x").exit_code == 1
+
+
+def test_a_run_never_adopts_a_legacy_login_by_itself(tmp_path):
+    opts = options(tmp_path)
+    with_login_plugin(
+        load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
+    )
+    legacy = legacy_login(opts["state_root"])
+    with pytest.raises(KarnError, match="login_pool_empty:karn-codex-login"):
+        run_benchmark(**opts)
+    assert legacy.directory.exists()
+    assert not Path(opts["results_dir"]).exists()
+
+
+def test_a_batch_entry_interrupted_while_waiting_for_a_slot_stays_pending(tmp_path):
+    directory = batch(tmp_path / "batches", entries=1)
+    opts = login_options(tmp_path / "fixture")
+    (directory / "trial.toml").write_text(
+        'format="karn-v4"\n[[runs]]\nbuild_output='
+        + json.dumps(str(opts["build_output"]))
+        + '\nconstruct="bare"\nbenchmark="example"\n'
+    )
+
+    def interrupt(message):
+        raise KeyboardInterrupt
+
+    def execute(**kwargs):
+        kwargs.pop("login_wait")
+        return run_benchmark(**kwargs, host=FixtureHost(), login_wait=interrupt)
+
+    runner = scheduler(opts["bench_root"], directory, executor=execute)
+    runner.options["state_root"] = Path(opts["state_root"]).resolve()
+    with held_elsewhere(pool_slot(opts["state_root"])), pytest.raises(KeyboardInterrupt):
+        runner.run_until_idle()
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert state["runs"] == []
+    runner = scheduler(
+        opts["bench_root"],
+        directory,
+        executor=lambda **kwargs: run_benchmark(**kwargs, host=FixtureHost()),
+    )
+    runner.options["state_root"] = Path(opts["state_root"]).resolve()
+    assert runner.run_until_idle() == 1
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert [row["status"] for row in state["runs"]] == ["done"]
+
+
+def pooled_batch(directory, build_output, entries=2):
+    """A batch whose entries use the fixture's login plugin."""
+    spec = (
+        "[[runs]]\nbuild_output="
+        + json.dumps(str(build_output))
+        + '\nconstruct="bare"\nbenchmark="example"\n'
+    )
+    (directory / "pooled.toml").write_text('format="karn-v4"\n' + spec * entries)
+
+
+def test_an_unusable_pool_defers_only_its_batch_and_other_batches_run(tmp_path):
+    directory = batch(tmp_path / "batches", entries=1)
+    opts = options(tmp_path / "fixture")
+    with_login_plugin(
+        load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
+    )
+    pooled_batch(directory, opts["build_output"])
+    executed = []
+
+    def execute(**kwargs):
+        if kwargs["build_output"] == Path(opts["build_output"]):
+            return run_benchmark(**kwargs, host=FixtureHost())
+        executed.append(kwargs["run_id"])
+        return completed(**kwargs)
+
+    runner = scheduler(
+        opts["bench_root"], directory, executor=execute, replay_without_state=["trial", "pooled"]
+    )
+    runner.options["state_root"] = Path(opts["state_root"]).resolve()
+    assert runner.run_until_idle() == 1
+    assert json.loads((directory / "state/pooled.json").read_text())["runs"] == []
+    trial = json.loads((directory / "state/trial.json").read_text())
+    assert [row["status"] for row in trial["runs"]] == ["done"]
+    assert "pooled: login_pool_empty:karn-codex-login; entries stay pending" in runner.warnings
+
+    # Nothing else can run, so a one-shot pass reports the pool as its error.
+    with pytest.raises(KarnError, match="login_pool_empty:karn-codex-login"):
+        runner.run_until_idle()
+    # Once a login is enrolled, the next pass runs the deferred entries.
+    enroll(pool_slot(opts["state_root"]))
+    assert runner.run_until_idle() == 2
+    pooled = json.loads((directory / "state/pooled.json").read_text())
+    assert [row["status"] for row in pooled["runs"]] == ["done", "done"]
+
+
+def test_a_pool_of_only_damaged_logins_starts_no_batch_entry(tmp_path):
+    directory = tmp_path / "batches"
+    directory.mkdir()
+    opts = options(tmp_path / "fixture")
+    with_login_plugin(
+        load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
+    )
+    pooled_batch(directory, opts["build_output"])
+    damaged = pool_slot(opts["state_root"])
+    enroll(damaged)
+    (damaged.directory / "secret.json").write_text("{")
+    launched = []
+
+    def execute(**kwargs):
+        launch = kwargs.pop("on_launch")
+        return run_benchmark(
+            **kwargs, host=FixtureHost(), on_launch=lambda: (launched.append(1), launch())
+        )
+
+    runner = scheduler(
+        opts["bench_root"], directory, executor=execute, replay_without_state=["pooled"]
+    )
+    runner.options["state_root"] = Path(opts["state_root"]).resolve()
+    with pytest.raises(KarnError, match="login_pool_unusable:karn-codex-login"):
+        runner.run_until_idle()
+    assert json.loads((directory / "state/pooled.json").read_text())["runs"] == []
+    assert launched == [] and not Path(opts["results_dir"]).exists()
+    assert "pooled: login_pool_unusable:karn-codex-login; entries stay pending" in runner.warnings
+    assert (damaged.directory / "secret.json").read_text() == "{"
+
+
+def test_serve_keeps_polling_while_a_pool_is_unusable(tmp_path, monkeypatch):
+    from silverquillm.karn import batching
+
+    directory = tmp_path / "batches"
+    directory.mkdir()
+    opts = options(tmp_path / "fixture")
+    with_login_plugin(
+        load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
+    )
+    pooled_batch(directory, opts["build_output"], entries=1)
+    runner = scheduler(
+        opts["bench_root"],
+        directory,
+        executor=lambda **kwargs: run_benchmark(**kwargs, host=FixtureHost()),
+        replay_without_state=["pooled"],
+    )
+    runner.options["state_root"] = Path(opts["state_root"]).resolve()
+    passes = []
+
+    def sleep(seconds):
+        passes.append(seconds)
+        if len(passes) == 1:
+            enroll(pool_slot(opts["state_root"]))
+        else:
+            raise StopIteration
+
+    monkeypatch.setattr(batching.time, "sleep", sleep)
+    with pytest.raises(StopIteration):
+        runner.serve(poll_seconds=0.01)
+    pooled = json.loads((directory / "state/pooled.json").read_text())
+    assert [row["status"] for row in pooled["runs"]] == ["done"]
+
+
+def test_a_vanished_new_slot_does_not_mask_the_enrollment_error(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    from silverquillm.cli import main
+    from silverquillm.karn import commands
+
+    candidate = login_candidate(tmp_path)
+
+    class Failing:
+        def __init__(self, *, plugin_cache):
+            pass
+
+        def enroll_login(self, profile, artifact):
+            shutil.rmtree(profile.directory)
+            raise KarnError("login_plugin:setup_failed")
+
+    monkeypatch.setattr(commands, "DockerHost", Failing)
+    monkeypatch.setattr(
+        commands,
+        "load_candidate",
+        lambda path, construct: load_candidate(
+            path, construct, image_inspector=lambda ref: {"Id": ref}
+        ),
+    )
+    result = CliRunner().invoke(
+        main,
+        [
+            "login",
+            "--build-output",
+            str(candidate.build_output),
+            "--construct",
+            "bare",
+            "--state-root",
+            str(tmp_path / "state"),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "login_plugin:setup_failed" in result.output
 
 
 @pytest.fixture
@@ -875,7 +1381,7 @@ def test_real_killed_direct_run_is_recovered_once_by_command(tmp_path, python_im
     ]
     candidate.definition_path.write_bytes(canonical(candidate.definition))
     state = (tmp_path / "state").resolve()
-    profile = LoginProfile(state / "logins/bare", "bare")
+    profile = pool_slot(state)
     enroll(profile)
     run_id = "killed-" + uuid.uuid4().hex[:12]
     name = "sq-run-" + run_id
@@ -932,7 +1438,7 @@ def test_login_is_released_before_grading(tmp_path):
     from silverquillm.evaluator import FullEvalResult
 
     opts = login_options(tmp_path)
-    profile = LoginProfile(Path(opts["state_root"]).resolve() / "logins/bare", "bare")
+    profile = pool_slot(Path(opts["state_root"]).resolve())
     acquired = []
 
     def evaluator(*args, **kwargs):
@@ -949,6 +1455,7 @@ def test_an_unrecoverable_row_fails_and_the_scheduler_continues(tmp_path, failur
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_launch"]()
         raise KeyboardInterrupt
 
     with pytest.raises(KeyboardInterrupt):
@@ -979,12 +1486,17 @@ def test_a_recoverer_interrupt_still_propagates(tmp_path):
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_launch"]()
         raise KeyboardInterrupt
 
     with pytest.raises(KeyboardInterrupt):
         scheduler(tmp_path, directory, executor=interrupted).run_until_idle()
+
+    def interrupted_recovery(**kwargs):
+        raise KeyboardInterrupt
+
     with pytest.raises(KeyboardInterrupt):
-        scheduler(tmp_path, directory, recoverer=interrupted).run_until_idle()
+        scheduler(tmp_path, directory, recoverer=interrupted_recovery).run_until_idle()
     state = json.loads((directory / "state/trial.json").read_text())
     assert [row["status"] for row in state["runs"]] == ["running"]
 
@@ -1027,7 +1539,7 @@ def harvest_failed_run(tmp_path, *, run_id="run-a", hold_records=False):
     """A completed, stopped run whose login harvest failed, leaving the profile pending."""
     candidate = login_candidate(tmp_path)
     state = (tmp_path / "state").resolve()
-    profile = LoginProfile(state / "logins/bare", "bare")
+    profile = pool_slot(state)
     enroll(profile)
     common = {
         "bench_root": benchmark_data(tmp_path / "data"),
@@ -1050,6 +1562,9 @@ def harvest_failed_run(tmp_path, *, run_id="run-a", hold_records=False):
     assert record.run_metadata["execution"]["workspace_stopped"]
     assert "login_harvest_failed" in record.run_metadata["execution"]["observation_errors"]
     assert profile.pending()["run_id"] == run_id
+    # Recovery settles exactly the slot the run input names.
+    run_input = json.loads((tmp_path / "runs" / run_id / "run-input.json").read_text())
+    assert run_input["login"] == "karn-codex-login/bare"
     return SimpleNamespace(
         candidate=candidate, profile=profile, common=common, record=record, run_id=run_id
     )
@@ -1105,7 +1620,7 @@ def test_recovery_settles_and_publishes_a_retained_only_record(tmp_path, monkeyp
             harvest_failed_run(tmp_path)
     finally:
         os.close(holder)
-    profile = LoginProfile((tmp_path / "state").resolve() / "logins/bare", "bare")
+    profile = pool_slot((tmp_path / "state").resolve())
     assert profile.pending()["run_id"] == "run-a"
     assert not list(iter_run_records(tmp_path / "records"))
     recovery_docker(monkeypatch, (tmp_path / "state").resolve())
@@ -1193,7 +1708,7 @@ def test_any_settlement_failure_still_publishes_the_retained_record(
     with pytest.raises(RecordWritePendingError):
         harvest_failed_run(tmp_path)
     held_records.release()
-    profile = LoginProfile((tmp_path / "state").resolve() / "logins/bare", "bare")
+    profile = pool_slot((tmp_path / "state").resolve())
     journal = profile.pending()
     recovery_docker(monkeypatch, (tmp_path / "state").resolve())
 

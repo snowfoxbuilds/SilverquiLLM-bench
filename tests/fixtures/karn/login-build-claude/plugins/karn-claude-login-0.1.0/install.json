@@ -1,0 +1,23 @@
+{
+  "locations": {
+    "karn_claude_login-0.1.0-py3-none-any.whl": "karn_claude_login-0.1.0-py3-none-any.whl",
+    "ozolith_plugin_sdk-1.3.0-py3-none-any.whl": "ozolith_plugin_sdk-1.3.0-py3-none-any.whl"
+  },
+  "manifest": {
+    "hooks": [
+      "on_setup",
+      "before_container_mount",
+      "after_container_exit",
+      "on_render_status"
+    ],
+    "id": "karn-claude-login",
+    "module": "karn_claude_login",
+    "python": "3.13",
+    "sdk_major": 1,
+    "version": "0.1.0",
+    "wheels": {
+      "karn_claude_login-0.1.0-py3-none-any.whl": "sha256:4b861b3fcedb6b398e056b2135cee9383b3b89604cd6ae8ea735f871a00b2b11",
+      "ozolith_plugin_sdk-1.3.0-py3-none-any.whl": "sha256:763b3eb9425b76dd2c0ca59822361b6c4a5b75bceec95ca87e5fa5c17f259e9c"
+    }
+  }
+}

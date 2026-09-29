@@ -47,7 +47,7 @@ Karn allows an Automaton to omit a polling controller (grilling 2026-09-26).
 A controller is needed for automatic scheduling, not direct execution; controller-free execution requires no new wire-format field.
 Externally launched execution does not suppress authentication or other selected lifecycle hooks.
 
-The first supported facilities are ordinary Docker, account bootstrap, temporary Workspace/input/output mounts, Codex subscription login, and restricted networking for model and authentication access (grilling 2026-09-26).
+The first supported facilities are ordinary Docker, account bootstrap, temporary Workspace/input/output mounts, Codex and Claude subscription login, and restricted networking for model and authentication access (grilling 2026-09-26).
 Admission is not tied to a hardcoded model list.
 The integration does not require an exhaustive rejection layer for every facility outside this initial implementation (grilling 2026-09-26).
 The bench does not create a production issue claim or acquire authority to publish a pull request merely to execute a benchmark task.
@@ -62,6 +62,8 @@ The bench imposes no production test, documentation, or lint workflow gate befor
 Audited Eval grades the harvested Workspace against the host-side grading suites.
 Candidate-written tests are artifacts and do not replace the grading suites.
 The candidate may run available tests while implementing; iteration remains the candidate's responsibility.
+The bench mounts a read-only test toolchain into every candidate container and adds it to `PYTHONPATH`: pinned, hash-checked pure-Python wheels of pytest and pytest-timeout vendored in the repo, so `python3 -m pytest` works on whatever Python the candidate image provides (grilling 2026-09-28).
+Candidates stay generic: the bench never requires a construct to bake its test tooling.
 Container termination and declared result files describe execution, while Audited Eval describes implementation correctness.
 
 ### Grading isolation
@@ -69,6 +71,10 @@ Container termination and declared result files describe execution, while Audite
 Grading imports and runs code the candidate wrote, so it never executes on the benchmark host.
 Every engine-viability probe and grading pass runs in a bench-owned grader image, built explicitly and referenced by image ID, with no network, the operator's UID, a read-only root, dropped capabilities, resource limits, an allowlisted environment, and read-only mounts of only the selected Workspace, SilverquiLLM, and the grading inputs.
 A run refuses before launch when the grader image is missing; it never builds or pulls it.
+Grading runs on the candidate's own Python minor version (grilling 2026-09-28).
+Before launch the bench reads the version of `python3` on the candidate image's default `PATH`, in a container locked down like the grader, and selects the grader image built for that minor version from a pinned base.
+A candidate without `python3`, or older than 3.13 (the floor SilverquiLLM itself requires), is refused as `candidate_python_unsupported`; a supported version without a built grader is refused as `grader_image_unavailable`.
+The Run Record states the candidate's Python version, and SilverquiLLM's tests run on every minor version that has a grader.
 Nothing is mounted writable: the result returns as one size-capped, framed line on the container's stdout and is untrusted data, accepted only in the exact evaluation shape with bounded counts; a timeout, failure, oversized or rejected output records absent grades with the reason.
 Each Run Record states its grading isolation and grader image ID.
 Isolation protects the host's files, credentials, and network; it does not make scores tamper-proof, because candidate code shares the process that counts its results.
@@ -86,16 +92,26 @@ The bench supplies its host integration and does not replace the plugin's authen
 The first real run validates this integration with a real device-authorization enrollment; the bench does not further replicate Karn's Node Daemon secret store, setup marker, or process environment, none of which the plugin relies on (grilling 2026-09-26).
 As the Node Daemon does, the host kills a plugin process whose request timed out rather than reading its late reply, and admits the plugin's returned mounts only as an extension of those it passed: the passed mounts unchanged, each new source inside that plugin's own state directory, and no target overlapping another (grilling 2026-09-26).
 
+Claude subscription authentication mirrors Codex through Karn's `karn-claude-login` plugin (grilling 2026-09-28).
+The host accepts exactly the `karn-codex-login` and `karn-claude-login` plugins and refuses any other.
+A Claude profile is enrolled through a fresh `claude auth login` session under the plugin's setup, and the operator's own Claude Code files are never copied into it.
+
 Authentication values stay outside candidate identity and published results.
 Cleanup retains authentication that has not been persisted until persistence succeeds or the operator explicitly abandons it, following Karn's [Login Plugins](https://github.com/snowfoxbuilds/ozolith/blob/main/docs/specs/LOGIN-PLUGINS.md) contract.
 Authentication storage is distinct from the Workspace and from retained benchmark evidence.
 
-A named Login Profile selects subscription authentication independently of candidate identity and can be reused across candidate variants and batches (grilling 2026-09-26).
-A profile is enrolled through a fresh device-authorization session, so it holds its own session and refresh chain, separate from the operator's own Codex login, whose files are never copied into it (grilling 2026-09-26).
+A Login Profile selects subscription authentication independently of candidate identity (grilling 2026-09-26).
+Profiles are pooled per login plugin: any candidate with that plugin may use any profile in its Login Pool, so adding a candidate needs no new login, and the pool's size is the number of concurrent runs on that provider (grilling 2026-09-28).
+A profile is enrolled through a fresh login session, so it holds its own session and refresh chain, separate from the operator's own login, whose files are never copied into it (grilling 2026-09-26).
+A login is never copied between profiles either, because refresh tokens rotate on use and a copy would invalidate its original (grilling 2026-09-28).
+A profile records the plugin it was enrolled through and serves only that plugin's pool; a login from before pools joins one only by an explicit operator step that checks its stored login has that plugin's shape (grilling 2026-09-28).
 Each run starts with fresh native state; only authentication persists between runs.
 At most one runner on the host may use a login at a time because concurrent token refresh can invalidate the shared authentication (grilling 2026-09-26).
-Use the existing local login binding and a host-local exclusive runner lock, shared by direct runs, scheduler execution, and enrollment.
+Use the existing local login binding and a host-local exclusive runner lock per profile, shared by direct runs, scheduler execution, and enrollment.
 Exclusive ownership covers authentication preparation, execution, and final authentication harvest; recovery confirms that a prior runner's container has stopped before reusing its login.
+When every usable profile of the pool is busy, a run waits for one instead of refusing, and nothing of the run exists, nor does a batch count it as started, until it holds a profile; a pool that can never serve it leaves that batch's entries pending for a later pass while other batches run (grilling 2026-09-28).
+The run input and record name the profile a run used, so recovery settles exactly that profile; a profile left pending by an interrupted run serves no other run until it is settled, except that a run bringing the same plugin artifact may take it last and settle it first (grilling 2026-09-28).
+Concurrent runs on one subscription share its rate limits; the operator accepts this, and the named profile lets a slowdown be traced (grilling 2026-09-28).
 No new account registry, credential-deduplication system, or cross-host coordination is part of this integration (grilling 2026-09-26).
 Each host benchmarks independently.
 
@@ -117,16 +133,22 @@ The total is the sum of response and tool-call counts; both component counts are
 Include descendant-agent and compaction responses and descendant-agent tool calls.
 Count each logical response and call once, rather than counting streaming fragments or both start and completion notifications.
 A tool call that reports an error remains a tool call.
-Native Codex user-request turns are a different observation and cannot substitute for this metric.
+Native user-request turns, such as Codex's, are a different observation and cannot substitute for this metric.
 
 Estimated Cost is API-equivalent USD computed from observed token usage and a versioned model-price table (grilling 2026-09-26).
 Retain the reported model, token breakdown, price-table version, and pricing assumptions so the estimate can be reproduced.
+The cost breakdown tallies input tokens by type, for every provider: uncached input, cache reads, and cache writes, with 5-minute and 1-hour writes separate where the provider prices them differently; each type carries its token count and its cost beside the output tokens (grilling 2026-09-28).
+Usage is normalized into these types from each provider's own convention: OpenAI's input total includes cached tokens, while Anthropic's input count excludes cache reads and writes.
 The estimate is a comparison of resource usage and does not claim to allocate the actual subscription charge to the run.
+Every request is priced at standard-tier rates, whatever speed or service tier served it (grilling 2026-09-28): a flex, fast-mode or priority request counts as its standard-rate equivalent, so estimates compare token usage rather than billing tier. Each request records the tier observed for it, the tier Claude Code's transcript reports or the tier Codex requested in its telemetry, and a request for an unpriced model stays unpriced.
 Missing or incomplete observations remain explicitly missing or incomplete, rather than becoming zero.
 
 The integration qualifies response, tool-call, and usage capture against the pinned native CLI.
 The current stock result file's usage:null and whole-request turn.completed events do not establish the required measurements.
 Codex's existing opt-in telemetry is an implementation path to qualify without changing the task into a custom agent workflow.
+Claude Code mirrors it (grilling 2026-09-28): the session transcript under its config directory is the durable source that recovery also reads, and its OpenTelemetry request and tool events cross-check it.
+A request the two streams report differently, in shared token counts or model, keeps the transcript's values and leaves the measurements partial; OTel supplies usage only for a request the transcript never records, such as a compaction's.
+The transcript's format is internal to Claude Code, so each pinned Claude Code version is qualified before its measurements count as complete.
 
 ### Outcomes and retained evidence
 
@@ -158,7 +180,7 @@ The workstream also covers the CLI and batch paths that retain those observation
 ### Operator entrypoints and records
 
 `silverquillm run` and `silverquillm scheduler` share the same staging, execution, observation, harvesting, and grading lifecycle, and `silverquillm recover` settles an interrupted run from its retained evidence without rerunning work.
-The `login` command enrolls a named host-local Login Profile through the selected existing plugin.
+The `login` command enrolls one Login Profile into the pool of the selected existing plugin, or re-enrolls a named one.
 SilverquiLLM runs a completed Karn build by itself; the vendored v4 construct contract is the only thing it takes from Karn, and no Ozolith package is involved.
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
 

@@ -5,13 +5,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 
 import click
 
 from .definition import KarnError, load_candidate
-from .grader import DEFAULT_GRADER_IMAGE, DEFAULT_GRADING_TIMEOUT
+from .grader import DEFAULT_GRADING_TIMEOUT, GRADER_BASES
 from .host import DockerHost
 from .interruption import terminate_as_interrupt
 
@@ -53,10 +54,13 @@ def common_options(function):
             ),
             click.option(
                 "--grader-image",
-                default=DEFAULT_GRADER_IMAGE,
-                show_default=True,
+                default=None,
                 envvar="SILVERQUILLM_GRADER_IMAGE",
-                help="Local grader image built by `grader build`; never pulled or built by a run.",
+                help=(
+                    "Local grader image to use instead of the one built for the candidate's "
+                    "Python; it must still be built for that version. Never pulled or built "
+                    "by a run."
+                ),
             ),
             click.option(
                 "--grading-timeout",
@@ -81,10 +85,10 @@ def common_options(function):
 @click.option("--snapshot-seconds", type=click.FloatRange(min=0.1), default=60, show_default=True)
 @click.option(
     "--native-telemetry",
-    type=click.Choice(["auto", "codex", "none"]),
+    type=click.Choice(["auto", "codex", "claude", "none"]),
     default="auto",
     show_default=True,
-    help="Collect native Codex journals and OTel; auto detects a declared CODEX_HOME.",
+    help="Collect native journals and OTel; auto detects CODEX_HOME or CLAUDE_CONFIG_DIR.",
 )
 @common_options
 def run(**options):
@@ -126,26 +130,51 @@ def _report(record, *, exit_on_status=True):
 @click.option(
     "--build-output", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path)
 )
-@click.option("--construct", required=True)
+@click.option("--construct", required=True, help="Any construct using the login plugin.")
+@click.option("--slot", help="Re-enroll this slot of the pool; omitted, enroll a new slot.")
+@click.option(
+    "--adopt",
+    metavar="LEGACY",
+    help="Move the per-construct login LEGACY, enrolled before pools, into the pool as a slot.",
+)
 @click.option(
     "--state-root",
     type=click.Path(file_okay=False, path_type=Path),
     default=lambda: Path.home() / ".local/state/silverquillm",
 )
-def enroll(build_output, construct, state_root):
-    """Enroll the construct's own subscription login through its Karn login plugin."""
-    from .execution import login_profile
+def enroll(build_output, construct, slot, adopt, state_root):
+    """Enroll one subscription login into the pool of the construct's Karn login plugin.
+
+    Each slot serves one run at a time, so enroll as many as runs you want concurrently.
+    """
+    from .login import LOGIN_PLUGINS
+    from .login_pool import LoginPool, adopt_legacy_login
 
     try:
+        if slot and adopt:
+            raise KarnError("login_slot_and_adopt_are_exclusive")
         candidate = load_candidate(build_output, construct)
         artifacts = [
-            artifact for artifact in candidate.plugins if artifact.row["id"] == "karn-codex-login"
+            artifact for artifact in candidate.plugins if artifact.row["id"] in LOGIN_PLUGINS
         ]
         if len(artifacts) != 1:
-            raise KarnError("candidate_requires_codex_login_plugin")
-        status = DockerHost(plugin_cache=state_root.resolve() / "plugins").enroll_login(
-            login_profile(state_root, construct), artifacts[0]
-        )
+            raise KarnError("candidate_requires_login_plugin")
+        plugin_id = artifacts[0].row["id"]
+        if adopt:
+            click.echo("Adopted login slot " + adopt_legacy_login(state_root, adopt, plugin_id))
+            return
+        pool = LoginPool.of(state_root, plugin_id)
+        profile = pool.named_slot(slot) if slot else pool.new_slot()
+        click.echo(f"Enrolling login slot {pool.ref(profile)}", err=True)
+        try:
+            status = DockerHost(plugin_cache=state_root.resolve() / "plugins").enroll_login(
+                profile, artifacts[0]
+            )
+        finally:
+            if not slot:
+                # The enrollment's own error, if any, is the one to report.
+                with contextlib.suppress(OSError):
+                    pool.discard_unenrolled(profile)
     except (KarnError, OSError, ValueError) as error:
         raise click.ClickException(str(error)) from None
     raise click.exceptions.Exit(status)
@@ -166,7 +195,9 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, **options):
 
     runner = KarnScheduler(batches_dir, replay_without_state=replay_without_state, **options)
     try:
-        ContainerGrader.from_image(options["grader_image"])
+        # Without an override the grader depends on each entry's candidate, checked per run.
+        if options["grader_image"] is not None:
+            ContainerGrader.from_image(options["grader_image"])
         if once:
             with terminate_as_interrupt():
                 executed = runner.run_until_idle()
@@ -240,7 +271,9 @@ def queue_ls(batches_dir, as_json):
 
 @click.command()
 @BATCHES_DIR_OPTION
-@click.option("--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds")
+@click.option(
+    "--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds"
+)
 def top(batches_dir, interval):
     """Live, read-only view of the batch queue. q quits."""
     from .queue_view import run_top
@@ -254,13 +287,27 @@ def grader():
 
 
 @grader.command("build")
-@click.option("--tag", default=DEFAULT_GRADER_IMAGE, show_default=True)
-def grader_build(tag):
-    """Build the pinned grader image and print its image ID."""
-    from .grader import build_grader_image
+@click.option(
+    "--python",
+    "versions",
+    multiple=True,
+    type=click.Choice(sorted(GRADER_BASES)),
+    help="Python minor version to build a grader for; repeatable. Default: every version.",
+)
+@click.option(
+    "--tag", default=None, help="Tag other than silverquillm-grader:pyX.Y; one --python only."
+)
+def grader_build(versions, tag):
+    """Build pinned grader images and print each one's tag and image ID."""
+    from .grader import build_grader_image, grader_tag
 
+    versions = versions or tuple(sorted(GRADER_BASES))
+    if tag is not None and len(versions) != 1:
+        raise click.UsageError("--tag needs exactly one --python")
     try:
-        click.echo(build_grader_image(tag))
+        for version in versions:
+            image_id = build_grader_image(version, tag)
+            click.echo(f"{tag or grader_tag(version)} {image_id}")
     except KarnError as error:
         raise click.ClickException(str(error)) from None
 

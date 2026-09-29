@@ -81,10 +81,54 @@ player a Baseline Intent if your test reaches that case.
 ### `advance_to_phase`
 
 `advance_to_phase(game, phase, step=None) -> None` — fast-forward without granting priority.
+It only sets the phase: no untap, draw, upkeep or end-step events fire.
+
+### `advance_game_to_phase`
+
+`advance_game_to_phase(game, phase, step=None) -> None` — drive real phase
+transitions to `phase`/`step`: untap, draw, the upkeep, beginning-of-combat and
+end-step events, combat damage and cleanup all happen, resolving the stack on
+the way. Use it when a test depends on delayed or "at the beginning of" triggers.
 
 ### `resolve_stack`
 
 `resolve_stack(game) -> None` — resolve the entire stack.
+
+### `activate_card_ability`
+
+`activate_card_ability(game, player, source_card, index=0) -> None`
+
+Activate ability `index` of `card_abilities(source_card)` through the engine's
+real activation path (targets chosen before costs are paid). Raises
+`AbilityError` when the ability cannot be activated. Resolve the stack
+afterwards to run a non-mana ability's effect.
+
+`card_abilities(card)` is the card's `get_activated_abilities()`, followed by
+any `get_mana_abilities()` entries not already listed, so a mana ability can be
+activated wherever the card exposes it.
+
+`activate_loyalty_ability(game, player, source_card, index=0)` does the same for
+a planeswalker's loyalty abilities.
+
+### More setup and action helpers
+
+- `enter_permanent(game, player, card) -> card` — put `card` into `player`'s hand
+  and move it onto the battlefield through the real zone transition, so its
+  enters-the-battlefield events and triggers fire.
+- `cast_card(game, player, card, resolve=True)` — cast a card that is unzoned or
+  in the caster's hand; the test supplies mana and Intents.
+- `cast_vanilla_spell(game, seat, value=2)` — add mana and cast a generic
+  instant costing `{value}`.
+- `fund_mana_cost(player, cost)` — add exactly `cost`'s mana to the pool.
+- `ability_instance(game, player, source, index=0)` /
+  `mana_ability_instance(game, player, source, index=0)` — build a reusable
+  `ActivatedAbilityInstance` without activating it.
+- `finish_cleanup(game)` — run the cleanup step to completion (discard to hand
+  size, state-based actions, triggers).
+- `behavioral_game()` / `scenario_game(...)` — a game whose players answer
+  unrouted queries with the first offered option (`behavioral_game` also gives
+  each player a 40-card library and starts in the precombat main phase).
+- `card_colors(card)` — a card's colors derived from its mana cost.
 
 ## Intents (the choice channel)
 
@@ -107,6 +151,15 @@ from engine.decisions import Decision, GameRef
   `PostconditionError` if it does not hold.
 
 Lifecycle: `player.start_intent(name, intent)` → actions → `player.end_intent(name)`.
+
+Preference helpers:
+
+- `prefer(player, *decisions)` — set the player's Baseline Intent to prefer
+  `decisions`, in order.
+- `object_preference(game, card)` — a preference for `card` in its current zone.
+- `payment_preference(game, source)` — preferences that activate `source`'s mana
+  ability while paying a cost, whether the engine asks for the permanent or for
+  one of its abilities. Use it as `prefer(player, *payment_preference(game, source))`.
 
 ## Canonical test shape
 

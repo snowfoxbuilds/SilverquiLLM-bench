@@ -7,6 +7,7 @@ import fcntl
 import json
 import math
 import os
+import posixpath
 import re
 import shutil
 import tempfile
@@ -23,6 +24,24 @@ from .definition import DIGEST, KarnError, canonical, decode_definition, digest
 SCHEMA_VERSION = 2
 DIMENSIONS = ("card_correctness", "fdn_regression", "engine_regression")
 RECORD_LOCK_SECONDS = 120
+# Records from before grading followed the candidate's Python carry no versions.
+ISOLATION_FIELDS = (
+    {"mode", "grader_image_id", "network"},
+    {"mode", "grader_image_id", "network", "candidate_python", "grader_python"},
+)
+PYTHON_RELEASE = re.compile(r"(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})")
+
+
+def _graded_python(isolation: dict) -> bool:
+    """A recorded candidate version is a release, and its grader shares its minor version."""
+    if "candidate_python" not in isolation:
+        return True
+    python, grader = isolation["candidate_python"], isolation["grader_python"]
+    return (
+        isinstance(python, str)
+        and bool(PYTHON_RELEASE.fullmatch(python))
+        and grader == python.rpartition(".")[0]
+    )
 
 
 class RecordWritePendingError(KarnError):
@@ -184,12 +203,25 @@ class KarnRunRecord:
         isolation = self.run_metadata.get("grading_isolation")
         if isolation is not None and (
             not isinstance(isolation, dict)
-            or set(isolation) != {"mode", "grader_image_id", "network"}
+            or set(isolation) not in ISOLATION_FIELDS
             or isolation["mode"] != "container"
             or isolation["network"] != "none"
             or not DIGEST.fullmatch(str(isolation["grader_image_id"]))
+            or not _graded_python(isolation)
         ):
             raise InvalidRunRecordError("invalid grading isolation")
+        # Records before the toolchain omit the key; an explicit null is never written.
+        if "test_toolchain" in self.run_metadata:
+            toolchain = self.run_metadata["test_toolchain"]
+            if (
+                not isinstance(toolchain, dict)
+                or set(toolchain) != {"digest", "target"}
+                or not DIGEST.fullmatch(str(toolchain["digest"]))
+                or not isinstance(toolchain["target"], str)
+                or not toolchain["target"].startswith("/run/silverquillm/")
+                or posixpath.normpath(toolchain["target"]) != toolchain["target"]
+            ):
+                raise InvalidRunRecordError("invalid test toolchain")
         failure = self.run_metadata.get("grading_failure")
         if failure is not None and (
             not isinstance(failure, dict)

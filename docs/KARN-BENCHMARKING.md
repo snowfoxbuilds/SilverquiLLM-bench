@@ -12,27 +12,74 @@ source .venv/bin/activate
 
 ## Build and enroll
 
-The checked-in [bare Codex example](../examples/karn/constructs/bare-codex/construct.toml) selects `gpt-6-astra`, Codex 0.153.4 through `codex@1`, and the stock Codex login plugin.
-It carries no custom skills or polling controller.
-[`bare-codex-luna`](../examples/karn/constructs/bare-codex-luna/construct.toml) is the same construct on `gpt-6-luna` with low reasoning effort, a cheap candidate for exercising the pipeline on `smoke`.
-It pins Codex 0.157.1 with its own `[image.native_cli]`, which needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
+The candidate recipes live in the results repository, beside the records they produce: `karn/constructs/<label>` in bench-results is a Karn Config Repo, so any host with that repository can rebuild the same candidates.
+Build from its committed tree, without `--worktree`, so every image's `karn.config.revision` label names the recipe commit behind its records:
 
 ```bash
-karn build examples/karn --worktree --out /tmp/bench-codex-build
-silverquillm login --build-output /tmp/bench-codex-build --construct bare-codex
+karn build ~/bench-results/karn --out ~/bench-builds/roster-1
+silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-codex
 ```
 
-`--worktree` explicitly builds the supplied example files and records the producer's dirty-source provenance.
-For committed Config Repo builds, point Karn at that repository without `--worktree`.
+The current batch (2026-09-28) runs every model at effort `medium` with subagents disabled. The bench does not enforce either, so candidates stay generic.
+
+| Construct | Model | CLI |
+|---|---|---|
+| `bare-codex` | `gpt-6-astra` | Codex 0.157.1 |
+| `bare-codex-luna` | `gpt-6-luna` | Codex 0.157.1 |
+| `bare-codex-sol` | `gpt-6-sol` | Codex 0.157.1 |
+| `bare-claude-opus` | `claude-opus-5-5` | Claude Code 2.1.284 |
+| `bare-claude-sonnet` | `claude-sonnet-5-5` | Claude Code 2.1.284 |
+| `bare-claude-fable` | `claude-fable-5-1` | Claude Code 2.1.284 |
+| `bare-claude-haiku` | `claude-haiku-4-5`, no effort setting | Claude Code 2.1.284 |
+
+Claude recipes bake a managed-settings file that denies `Agent` and `Workflow`.
+Codex recipes bake `/etc/codex/config.toml` with `[agents] enabled = false` (and `multi_agent = false`). The `[agents]` switch is needed on Codex 0.157.1, where the GPT-6 model catalog keeps the collaboration tools whatever the `multi_agent` feature says.
+The Codex recipes also request the Flex tier (`service_tier = "flex"`) as a cost-saving trial, which is why `bare-codex` moved to Codex 0.157.1: 0.153.4 sends only the tiers a model's catalog lists, and astra's lists only Fast. Whether the ChatGPT backend honors Flex shows only in usage, since costs are reported at standard rates.
+Each record's `subagent_threads` measurement counts the agent threads beyond the main one (Claude sidechain transcripts, Codex threads other than the task's), so a batch meant to run without subagents should show `0`.
+The count is an observation, not an incompleteness reason.
+The Codex recipes pin their CLI with their own `[image.native_cli]`; 0.157.1 needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
+Each construct carries no custom skills or polling controller.
+
 Build output and the exact local image must remain available; queued execution never rebuilds or pulls an image.
 Enrollment uses the host's Codex CLI in an isolated home, through Karn's existing plugin.
-Each construct has its own login in `<state-root>/logins/<construct>`, enrolled once and kept across rebuilds of that construct; enroll every construct you run, and use the same state root for direct runs and batches.
-Constructs never share a login, so they can run at the same time, while a host-local lock prevents simultaneous refreshes of any one construct's login.
-A direct run refuses a login another runner holds (`login_in_use`) without creating a run; a batch leaves that entry pending and retries it on its next pass.
+Logins are pooled per login plugin in `<state-root>/logins/<plugin-id>/<slot>`: any construct with that plugin can use any slot, so a new construct needs no new login.
+Each `silverquillm login` enrolls one new slot (`slot-1`, `slot-2`, …) through a fresh login; `--slot NAME` re-enrolls that slot instead.
+A slot serves one run at a time, so enroll as many slots per provider as runs you want at once, and use the same state root for direct runs and batches.
+A run takes any free slot; when every usable slot is busy, a direct run or batch entry waits for one (`waiting for a login slot`) before creating anything, and a batch entry counts as started only once it holds a slot, so a scheduler stopped while waiting leaves it pending.
+With no slot enrolled a run refuses with `login_pool_empty:<plugin-id>`. The scheduler then leaves that batch's entries pending, warns once per pass, and goes on with other batches; `serve` retries on its next pass, and `--once` exits with the error only if nothing else ran.
+Each slot records the plugin it was enrolled through and serves only that plugin's pool.
+Before a settled slot is taken, its stored login is checked, without being copied, refreshed or changed, to be a readable file of that plugin's own shape; a damaged slot is skipped with a warning naming only the reason (such as `login_secret_malformed`), and the run takes another.
+When every slot's stored login is damaged, runs refuse with `login_pool_unusable:<plugin-id>`, and the scheduler defers the batch as for an empty pool; re-enroll a slot with `--slot NAME`.
+Slots that are logins to the same subscription share its rate limits, so concurrent runs on one account can slow each other; each run input and record names its slot (`login_profile`, such as `karn-claude-login/slot-1`).
+A login enrolled before pools existed, at `<state-root>/logins/<construct>`, joins a pool only by an explicit command, with no new login:
 
-A run interrupted while its login was mounted leaves a pending refresh that only the plugin artifact which mounted it may settle.
-Switching to a build with a different login plugin then fails with `login_recovery_requires_previous_plugin`.
-Settle it first with `silverquillm recover RUN_ID`, naming the run in `<state-root>/logins/<construct>/active.json`; recovery uses that run's retained plugin artifact.
+```bash
+silverquillm login --build-output BUILD --construct CONSTRUCT --adopt LEGACY
+```
+
+It becomes a slot named `LEGACY` in the pool of `CONSTRUCT`'s login plugin, after checking that its stored login has that plugin's own shape (`legacy_login_belongs_to_other_plugin` otherwise). A legacy login with a pending run is refused (`legacy_login_pending`) until `silverquillm recover` settles it. Runs never adopt a legacy login by themselves.
+
+### Claude constructs
+
+The Claude constructs run Claude Code 2.1.284 through `claude@1` on a Claude subscription, with the stock `karn-claude-login` plugin.
+Their egress allows `api.anthropic.com` for inference and `platform.claude.com`, where Claude Code refreshes its subscription token, and they set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
+
+```bash
+silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-claude-haiku
+```
+
+Enrollment runs the host's `claude auth login` in an isolated config directory, so the login is separate from your own Claude Code session and your `~/.claude` is never copied.
+Sign in with the subscription account; on a host without a browser, open the printed URL elsewhere and paste the code back.
+The host runs exactly one of `karn-codex-login` or `karn-claude-login` per candidate and refuses any other plugin; `login` refuses a construct without one (`candidate_requires_login_plugin`).
+
+A run interrupted while its login was mounted leaves its slot with a pending refresh that only the plugin artifact which mounted it may settle.
+Other runs skip that slot; a run bringing the same plugin artifact takes it only when no settled slot is free, and settles it first.
+Settle it with `silverquillm recover RUN_ID`, naming the run in the slot's `active.json`; recovery uses that run's retained plugin artifact.
+When every slot is pending, runs refuse with `login_pool_pending:<plugin-id>` until one is recovered.
+
+Candidates need no test tooling of their own.
+Every candidate container gets the bench's pinned pytest and pytest-timeout read-only at `/run/silverquillm/test-toolchain`, first on `PYTHONPATH`, so `python3 -m pytest` works on the image's own Python.
+The vendored wheels in `silverquillm/karn/candidate_toolchain/` are checked against their hashes before each run and unpacked once under `<state-root>/toolchains/`; a mismatch refuses the run with `test_toolchain_integrity_mismatch`.
 
 ## Build the grader
 
@@ -41,16 +88,26 @@ silverquillm grader build
 ```
 
 Grading imports and runs the agent's engine and cards, so it happens only in this bench-owned image: pinned base image and hashed pytest requirements, no network, your UID, a read-only root, dropped capabilities, memory and process limits, and read-only mounts of only the selected workspace, SilverquiLLM, and the grading inputs.
-`run`, `scheduler`, and `recover` refuse before launch with `grader_image_unavailable` when the image is missing; they never build or pull it.
-`--grader-image` (or `SILVERQUILLM_GRADER_IMAGE`) selects another local tag, and `--grading-timeout` (default 3600 seconds) bounds a grading pass.
-A timed-out or failed grading pass records absent scores with `grading_container_failed:<reason>`, never zero, and each record's `grading_isolation` names the grader image ID.
+
+Grading runs on the candidate's own Python minor version.
+`grader build` builds one image per pinned version, tagged `silverquillm-grader:py3.13` and `silverquillm-grader:py3.14`; `--python 3.14` builds just one.
+Before launch, `run` and each batch entry read the version of `python3` in the candidate image, in a sandboxed container with no network or mounts, and select the grader built for that version.
+A candidate without `python3` or older than 3.13 is refused with `candidate_python_unsupported`, and a version with no built grader with `grader_image_unavailable`; neither creates a run.
+Runs never build or pull a grader.
+`recover` grades on the version recorded when the run launched and never runs the candidate image; a run launched before versions were recorded is graded on the 3.13 grader.
+
+`--grader-image` (or `SILVERQUILLM_GRADER_IMAGE`) names another local grader; it must still be one `grader build` made for the candidate's version, or the run is refused with `grader_python_mismatch`.
+Every grader, including the 3.13 grader that legacy recovery and the `--image` lineage use, must carry the version label `grader build` sets; an older unlabeled `silverquillm-grader:local` is refused until you rebuild.
+`--grading-timeout` (default 3600 seconds) bounds a grading pass.
+A timed-out or failed grading pass records absent scores with `grading_container_failed:<reason>`, never zero.
+Each record's `grading_isolation` names the grader image ID, the candidate's `candidate_python`, and the `grader_python` it was graded on.
 Isolation protects the host, not score integrity: candidate code shares the pytest process that counts its results.
 
 ## Run and inspect
 
 ```bash
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --results-repo ./private-results
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --results-repo ./private-results
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark smoke --results-repo ./private-results
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark hob-medium --results-repo ./private-results
 ```
 
 Use `--bench-root` when launching outside the benchmark checkout.
@@ -58,15 +115,22 @@ Use `--bench-root` when launching outside the benchmark checkout.
 The budget begins at container start, including initialization.
 There is no `basic`/`planned` option: benchmark files supply task and planning guidance.
 The selected cards and any engine changes are the requested implementation.
-`--native-telemetry codex` requires native Codex journals and the OTel relay, and refuses a definition without `CODEX_HOME`; `none` disables them.
-The default `auto` enables them when the definition declares `CODEX_HOME`, because the v4 definition has no telemetry field; batch entries accept the same `native_telemetry` key.
+`--native-telemetry codex` requires native Codex journals and the OTel relay, and refuses a definition without `CODEX_HOME`; `claude` does the same for Claude Code and `CLAUDE_CONFIG_DIR`; `none` disables the relay.
+The default `auto` enables them for whichever of `CODEX_HOME` or `CLAUDE_CONFIG_DIR` the definition declares, because the v4 definition has no telemetry field; batch entries accept the same `native_telemetry` key.
+For Claude Code the relay is configured through the environment (`CLAUDE_CODE_ENABLE_TELEMETRY` and the `OTEL_*` exporter variables, prompts and tool details never logged), since Claude Code reads its exporter nowhere else; the host sets only those variables, and records them.
 A `restricted` network runs its egress proxy with the candidate image's own `python3`; an image without it is refused before launch with `restricted_network_requires_python3`.
 
 Each run retains its workspace, snapshots, stopped final workspace, grading-source decision, selected definition and plugin artifacts, sanitized observations, and independent grades under `runs/karn/<run-id>/` by default.
 The immutable schema 2 record lives under `private-results/results/<candidate-hash>/<run-id>/`.
 Estimated cost is API-equivalent USD, not the subscription bill.
+`cost_breakdown` beside it tallies tokens and USD by type: uncached input, cache reads, cache writes, 1-hour cache writes (Anthropic prices them above the 5-minute ones), and output.
+Every cost is a standard-tier equivalent, whatever tier served the request: each priced request carries `rate_basis: "standard"`, Claude requests keep their transcript `speed` and `service_tier`, and Codex requests keep `requested_service_tier`, the tier Codex put in its request (`mixed` when a thread used several). Codex never reports the tier the server applied, so a flex trial shows up in token usage and the cost breakdown, not in the price.
 Agent turns count model responses plus tool calls; missing measurements remain null with an explanation.
 Turns, usage, and cost are complete only for a Codex version whose journal and telemetry were qualified against scripted ground truth (0.153.4 and 0.157.1); qualify another offline, without credentials, with `scripts/qualify_codex_telemetry.py --image IMAGE --native-version VERSION --output DIR`.
+Claude Code runs are read from its session transcripts, subagents included, with the OTel stream as a cross-check; a compaction's own request appears only in OTel.
+Each OTel request is reconciled with its transcript response on uncached, cache-read, cache-write, and output tokens and on the model; a disagreement or a missing field keeps the transcript's values and marks the measurements partial (`otel_usage_conflicts_with_native`, `otel_model_conflicts_with_native`, or a `…_comparison_unavailable` reason); two transcript responses claiming one request id are flagged `native_request_identity_reused`, and repeated OTel reports of one request count once, flagged `otel_request_observations_conflict` if they disagree in tokens, model, speed, query source, or cost.
+Claude Code 2.1.284 is qualified, from smoke run 93ffaa74 on `bare-claude-haiku`; measurements from any other version are marked partial with `native_version_not_qualified`.
+Qualify a version from a real run whose relay was on: `scripts/qualify_claude_telemetry.py runs/karn/RUN_ID --out proof.json` checks that both streams agree request by request, and rejects every disagreement the runtime reconciliation flags; it exits nonzero unless the run qualifies; commit a qualifying proof with that run's `observations.events.jsonl` under `tests/fixtures/karn_observations_claude_<version>/` and add the version to `QUALIFIED_CLAUDE_VERSIONS`.
 FDN coverage lists tested and uncovered cards explicitly.
 Run metadata fingerprints the actual host grading suites, test helpers, and replay identity maps; unavailable hashes remain explicit observations.
 

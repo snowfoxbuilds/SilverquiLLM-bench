@@ -1,17 +1,16 @@
 """Platform test: the staged HOB-generation instructions agree with the spec.
 
 `docs/specs/HOB-BENCHMARKS.md` settles the agent envelope for every
-HOB-generation benchmark (tests-as-envelope): the workspace engine is freely
-modifiable — no additive-only rule, no diff policing — and the three audited
-dimensions run against the harvested engine are the entire judgment. The
-`AGENTS.md` staged into each HOB-generation workspace (hob-medium today, plus
-the smoke benchmark that calibrates the same candidate contract) is what a
-candidate actually reads, so it must say the same thing and must not carry the
-obsolete SOS-era additive-only prohibition. Verified here, at repository test
-time, before any candidate run can consume the docs.
+HOB-generation benchmark: the workspace engine is freely modifiable — no
+additive-only rule, no diff policing. The `AGENTS.md` staged into each
+HOB-generation workspace (hob-medium today, plus the smoke benchmark that
+calibrates the same candidate contract) is what a candidate actually reads, so
+it must grant that freedom, say that the engine may be deficient, and never
+describe how the run is evaluated. Verified here, at repository test time,
+before any candidate run can consume the docs.
 
 `benchmarks/sos/` is the V1 contract and *keeps* additive-only; it is
-deliberately not covered by the envelope assertions below.
+deliberately not covered by the assertions below.
 """
 
 from __future__ import annotations
@@ -68,30 +67,47 @@ class TestSpecEnvelope:
             assert term.lower() in envelope.lower(), f"spec envelope lacks {term!r}"
 
 
-@pytest.mark.parametrize("benchmark", HOB_GENERATION_WORKSPACES)
-class TestStagedInstructionsAgreeWithSpec:
-    def test_states_the_spec_envelope(self, benchmark: str) -> None:
-        agents = _agents_md(benchmark)
-        assert "no additive-only rule and no diff policing" in agents
-        for term in ENVELOPE_TERMS:
-            assert term.lower() in agents.lower(), (
-                f"{benchmark} AGENTS.md lacks the spec's envelope term {term!r}"
-            )
+# Evaluation vocabulary no agent-visible document may use: the workspace
+# describes the task, never how it is judged (HOB-BENCHMARKS.md, Instruction
+# documents).
+EVALUATION_PATTERNS = [
+    r"\baudited\b",
+    r"hidden tests?",
+    r"\bgrad(?:er|ing|ed)\b",
+    r"\boracle\b",
+    r"\bscor(?:e|es|ed|ing)\b",
+    r"authoritative (?:tests?|suites?)",
+    r"\bjudge",
+    r"benchmark's",
+    r"harness",
+    r"host-side",
+]
 
+DEFICIENCIES_LINE = (
+    "The engine may have deficiencies and bugs. It's your job to make sure your "
+    "implementations behave correctly according to the rules in `RULEBOOK.txt`, and "
+    "that your changes don't break existing cards."
+)
+
+
+def _workspace_documents(benchmark: str) -> list[Path]:
+    workspace = REPO_ROOT / "benchmarks" / benchmark / "workspace"
+    return [path for path in sorted(workspace.rglob("*.md")) if "__pycache__" not in path.parts]
+
+
+@pytest.mark.parametrize("benchmark", HOB_GENERATION_WORKSPACES)
+class TestStagedInstructions:
     def test_permits_any_engine_modification(self, benchmark: str) -> None:
         """Renames, moves, deletions and refactors are explicitly allowed."""
         agents = _agents_md(benchmark)
+        assert "The engine is yours to change" in agents
         for verb in ("rename", "move", "refactor", "delete"):
             assert re.search(rf"\b{verb}\b", agents), (
                 f"{benchmark} AGENTS.md must say engine changes may {verb}"
             )
-        assert "the audited tests are the judge" in agents
 
-    def test_names_the_three_audited_dimensions(self, benchmark: str) -> None:
-        agents = _agents_md(benchmark).lower()
-        assert "target-card correctness" in agents
-        assert "fdn card regression" in agents
-        assert "engine regression" in agents
+    def test_states_that_the_engine_may_be_deficient(self, benchmark: str) -> None:
+        assert DEFICIENCIES_LINE in _agents_md(benchmark)
 
     def test_no_obsolete_additive_only_rule(self, benchmark: str) -> None:
         agents = _agents_md(benchmark)
@@ -99,6 +115,20 @@ class TestStagedInstructionsAgreeWithSpec:
             assert not re.search(pattern, agents), (
                 f"{benchmark} AGENTS.md still carries the obsolete rule {pattern!r}"
             )
+
+    def test_documents_never_describe_evaluation(self, benchmark: str) -> None:
+        documents = _workspace_documents(benchmark)
+        assert documents
+        for path in documents:
+            text = re.sub(r"\s+", " ", path.read_text())
+            for pattern in EVALUATION_PATTERNS:
+                match = re.search(pattern, text, re.IGNORECASE)
+                assert not match, f"{path} mentions {match.group(0)!r}"
+
+    def test_engine_development_records_are_not_staged(self, benchmark: str) -> None:
+        workspace = REPO_ROOT / "benchmarks" / benchmark / "workspace"
+        for name in ("KEY_DECISIONS.md", "DROPPED_COVERAGE.md"):
+            assert not (workspace / name).exists()
 
 
 class TestSosKeepsItsOwnContract:

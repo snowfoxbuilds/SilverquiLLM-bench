@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from .pricing import price_requests, price_table_metadata
+from .pricing import price_requests, price_table_metadata, total_breakdown
 
 # Versions whose journal and OTel streams were checked against each other on a real run.
 QUALIFIED_CODEX_VERSIONS = frozenset({"0.153.4", "0.157.1"})
@@ -76,8 +76,11 @@ _ATTRIBUTES = {
     "agent_name",
     "reasoning_effort",
     "model_reasoning_effort",
+    "service_tier",
     *_OTLP_TOKENS.values(),
 }
+# The tier Codex put in its request (not the one the server applied, which it never reports).
+_SERVICE_TIERS = {"flex", "priority", "fast", "default", "auto", "scale", "standard"}
 _TOOL_TYPES = {
     "function_call",
     "custom_tool_call",
@@ -142,6 +145,8 @@ def normalize_otlp(payload: Any) -> list[dict[str, Any]]:
                         attrs[key] = value
                 if attrs.get("event.name") not in _EVENTS:
                     continue
+                if "service_tier" in attrs and attrs["service_tier"] not in _SERVICE_TIERS:
+                    attrs["service_tier"] = "unknown"
                 if attrs["event.name"] in (
                     "codex.sse_event",
                     "codex.websocket_event",
@@ -282,8 +287,18 @@ def _measurement(value: Any, reasons: Iterable[str], *, present: bool) -> dict[s
 
 
 def summarize_events(
-    events: Iterable[dict[str, Any]], *, exit_kind: str, collection_reasons: Iterable[str] = ()
+    events: Iterable[dict[str, Any]],
+    *,
+    exit_kind: str,
+    collection_reasons: Iterable[str] = (),
+    adapter: str = "codex",
 ) -> dict[str, Any]:
+    if adapter == "claude":
+        from .claude_observations import summarize_claude_events
+
+        return summarize_claude_events(
+            events, exit_kind=exit_kind, collection_reasons=collection_reasons
+        )
     unique: dict[str, dict[str, Any]] = {}
     reasons = list(collection_reasons)
     for event in events:
@@ -344,6 +359,16 @@ def summarize_events(
         ):
             otel_usage.append(event)
     native_usage_threads = {r["thread_id"] for r in requests}
+    requested_tiers: dict[str, set[str]] = {}
+    for event in otel_usage:
+        tier = event["attributes"].get("service_tier")
+        if tier:
+            requested_tiers.setdefault(event["thread_id"], set()).add(tier)
+    for request in requests:
+        tiers = requested_tiers.get(request["thread_id"], set())
+        request["requested_service_tier"] = (
+            next(iter(tiers)) if len(tiers) == 1 else "mixed" if tiers else None
+        )
     for event in otel_usage:
         if event["thread_id"] in native_usage_threads:
             continue
@@ -357,6 +382,7 @@ def summarize_events(
                 "usage": {key: _integer(attrs.get(source)) for key, source in _OTLP_TOKENS.items()},
                 "compaction": False,
                 "response_identity": "otel_observation",
+                "requested_service_tier": attrs.get("service_tier"),
             }
         )
         reasons.append("native_usage_unavailable_for_observed_thread")
@@ -394,6 +420,35 @@ def summarize_events(
         response_count = max(response_count, len(otel_usage))
     if present and not opened:
         reasons.append("native_turn_start_unobserved")
+    return _measurements(
+        requests,
+        response_count,
+        len(tools),
+        reasons,
+        present,
+        {
+            "native_versions": sorted(v for v in versions if v),
+            "native_threads": len(native_threads),
+            "observed_threads": len(otel_threads | native_threads),
+            "remote_or_local_compactions": len(compactions),
+            "deduplicated_events": len(rows),
+            "exit_kind": exit_kind,
+            "model_basis": "native_turn_context; observation, not provider attestation",
+        },
+        subagent_threads=max(0, len(otel_threads | native_threads) - 1),
+    )
+
+
+def _measurements(
+    requests: list[dict[str, Any]],
+    response_count: int,
+    tool_count: int,
+    reasons: list[str],
+    present: bool,
+    coverage: dict[str, Any],
+    *,
+    subagent_threads: int | None = None,
+) -> dict[str, Any]:
     observed_zero = present and not response_count and not reasons
     turn_reasons = list(reasons)
     usage_reasons = list(reasons)
@@ -411,35 +466,35 @@ def summarize_events(
         usage_reasons.append("per_response_usage_unavailable")
         cost_reasons.append("per_response_usage_unavailable")
     costs_present = bool(priced_values) or observed_zero
-    result = {
+    return {
         "schema_version": 1,
+        # Agent threads beyond the main one: an observation, never an incompleteness reason.
+        # It sits outside ``coverage`` so committed qualification proofs replay unchanged.
+        "subagent_threads": subagent_threads if present else None,
         "agent_turns": {
             "responses": _measurement(response_count, turn_reasons, present=present),
-            "tool_calls": _measurement(len(tools), turn_reasons, present=present),
-            "total": _measurement(response_count + len(tools), turn_reasons, present=present),
+            "tool_calls": _measurement(tool_count, turn_reasons, present=present),
+            "total": _measurement(response_count + tool_count, turn_reasons, present=present),
         },
         "usage": _measurement(totals, usage_reasons, present=bool(requests) or observed_zero),
         "estimated_cost": _measurement(
             format(sum(priced_values, Decimal(0)), "f"), cost_reasons, present=costs_present
         ),
+        # Input by type (uncached, cache read, 5-minute and 1-hour write) beside output.
+        "cost_breakdown": _measurement(
+            total_breakdown(priced), cost_reasons, present=costs_present
+        ),
         "requests": requests,
         "request_prices": priced,
         "price_table": price_table_metadata(),
-        "coverage": {
-            "native_versions": sorted(v for v in versions if v),
-            "native_threads": len(native_threads),
-            "observed_threads": len(otel_threads | native_threads),
-            "remote_or_local_compactions": len(compactions),
-            "deduplicated_events": len(rows),
-            "exit_kind": exit_kind,
-            "model_basis": "native_turn_context; observation, not provider attestation",
-        },
+        "coverage": coverage,
     }
-    return result
 
 
 class CodexTelemetryCollector:
     """Host-owned receiver; the workload sees only its POST-only telemetry route."""
+
+    adapter = "codex"
 
     def __init__(
         self,
@@ -586,11 +641,12 @@ class CodexTelemetryCollector:
     def finalize(self, *, exit_kind: str, native_version: str | None = None) -> dict[str, Any]:
         if native_version is not None and native_version not in QUALIFIED_CODEX_VERSIONS:
             self.mark_incomplete("native_version_not_qualified")
+        return self._write_summary(summarize_events, exit_kind)
+
+    def _write_summary(self, summarize, exit_kind: str) -> dict[str, Any]:
         self._stop_receiver()
         with self._lock:
-            result = summarize_events(
-                self.events, exit_kind=exit_kind, collection_reasons=self.reasons
-            )
+            result = summarize(self.events, exit_kind=exit_kind, collection_reasons=self.reasons)
             path = self.run_dir / "observations.json"
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as output:

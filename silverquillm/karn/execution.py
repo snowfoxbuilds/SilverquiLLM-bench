@@ -21,12 +21,14 @@ from silverquillm.queue_state import _write_atomically
 
 from .benchmark import load_benchmark, stage_benchmark
 from .definition import KarnError, canonical, load_candidate
-from .grader import DEFAULT_GRADER_IMAGE, DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError
+from .grader import DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError, select_grader
 from .grading_inputs import grading_inputs
 from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
-from .login import LoginProfile
+from .login import LOGIN_PLUGINS, LoginProfile
+from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, logins_root
 from .records import KarnIdentity, KarnRunRecord, missing_scores, write_record
 from .snapshots import WorkspaceSnapshots, retain_git_history
+from .toolchain import prepare_toolchain
 
 
 @contextlib.contextmanager
@@ -47,6 +49,7 @@ def mark_observation_problems(measurements: dict, problems: list[str]) -> None:
         *measurements.get("agent_turns", {}).values(),
         measurements.get("usage"),
         measurements.get("estimated_cost"),
+        measurements.get("cost_breakdown"),
     ]
     for field in fields:
         if isinstance(field, dict):
@@ -54,25 +57,44 @@ def mark_observation_problems(measurements: dict, problems: list[str]) -> None:
             field["completeness"] = "missing" if field.get("value") is None else "partial"
 
 
-NATIVE_TELEMETRY = ("auto", "codex", "none")
+NATIVE_TELEMETRY = ("auto", "codex", "claude", "none")
+# The native home each adapter's journals and telemetry configuration require.
+NATIVE_HOMES = {"codex": "CODEX_HOME", "claude": "CLAUDE_CONFIG_DIR"}
 
 
 def select_native_telemetry(candidate, requested: str) -> dict:
-    """Native Codex journals and the OTel relay, chosen by the operator or batch spec.
+    """Native journals and the OTel relay, chosen by the operator or batch spec.
 
     The v4 Construct Definition has no telemetry field, so this is bench-side configuration;
-    ``auto`` keeps the documented fallback of detecting a declared ``CODEX_HOME``.
+    ``auto`` keeps the documented fallback of detecting the adapter's declared native home.
+    The adapter selects which native journals are read even when the relay is off.
     """
     if requested not in NATIVE_TELEMETRY:
         raise KarnError("invalid_native_telemetry")
-    declared = "CODEX_HOME" in candidate.runtime["environment"]
-    if requested == "codex" and not declared:
-        raise KarnError("native_telemetry_requires_codex_home")
+    environment = candidate.runtime["environment"]
+    declared = [name for name, home in NATIVE_HOMES.items() if home in environment]
+    if len(declared) > 1:
+        raise KarnError("native_telemetry_home_ambiguous")
+    if requested in NATIVE_HOMES and requested not in declared:
+        raise KarnError("native_telemetry_requires_" + NATIVE_HOMES[requested].lower())
+    adapter = requested if requested in NATIVE_HOMES else (declared or ["codex"])[0]
     return {
         "requested": requested,
-        "enabled": declared if requested == "auto" else requested == "codex",
-        "source": "codex_home_heuristic" if requested == "auto" else "operator",
+        "enabled": bool(declared) if requested == "auto" else requested in NATIVE_HOMES,
+        "source": "native_home_heuristic" if requested == "auto" else "operator",
+        "adapter": adapter,
     }
+
+
+def telemetry_collector(telemetry: dict):
+    """Runs recorded before adapters existed were Codex runs."""
+    if telemetry.get("adapter", "codex") == "claude":
+        from .claude_observations import ClaudeTelemetryCollector
+
+        return ClaudeTelemetryCollector
+    from .observations import CodexTelemetryCollector
+
+    return CodexTelemetryCollector
 
 
 @contextlib.contextmanager
@@ -90,11 +112,24 @@ def run_lock(run_dir: Path):
 
 
 def login_profile(state_root: Path, name: str | None) -> LoginProfile | None:
+    """The login a run input names: a pool slot ``<plugin-id>/<slot>``, or a legacy construct's."""
     if name is None:
         return None
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", name):
+    plugin, separator, slot = name.partition("/")
+    if separator:
+        return LoginPool.of(state_root, plugin).slot(slot)
+    # A plugin id names a pool, never one login.
+    if name in LOGIN_PLUGINS or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", name):
         raise KarnError("invalid_login_profile_name")
-    return LoginProfile(Path(state_root).resolve() / "logins" / name, name)
+    return LoginProfile(logins_root(state_root) / name, name)
+
+
+def _login_pool(state_root: Path, candidate) -> LoginPool | None:
+    """The pool of the candidate's one login plugin; the host refuses any other plugin set."""
+    ids = [artifact.row["id"] for artifact in candidate.plugins]
+    if len(ids) != 1 or ids[0] not in LOGIN_PLUGINS:
+        return None
+    return LoginPool.of(state_root, ids[0])
 
 
 def collector_address() -> str:
@@ -202,37 +237,50 @@ def run_benchmark(
     collector_host: str | None = None,
     host: DockerHost | None = None,
     collector_factory=None,
-    grader_image: str = DEFAULT_GRADER_IMAGE,
+    grader_image: str | None = None,
     grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
     grader: ContainerGrader | None = None,
     evaluator=None,
     native_telemetry: str = "auto",
+    login_poll_seconds: float = DEFAULT_POLL_SECONDS,
+    login_wait=None,
+    on_launch=None,
 ) -> KarnRunRecord:
     """Refuse what cannot run before any evidence exists, then collect under both locks.
 
-    A busy login raises :class:`LoginInUseError` without creating a run directory, so a
-    batch can defer the entry instead of consuming it.
+    A run takes any free slot of its login plugin's pool and holds it until its login is
+    harvested; while every usable slot is busy it waits, before creating any run directory.
+    ``on_launch`` is called once the run holds its login and is about to create evidence,
+    so a caller can count the run as started only from then.
     """
     candidate = load_candidate(
         build_output, construct, **({"image_inspector": host.docker.inspect_image} if host else {})
     )
     benchmark = load_benchmark(bench_root, benchmark_id)
-    # Each construct owns its subscription login, as each Ozolith Stack does.
-    login = construct if candidate.plugins else None
-    selected_login = login_profile(state_root, login)
-    grader = grader or ContainerGrader.from_image(grader_image, timeout=grading_timeout)
+    pool = _login_pool(state_root, candidate) if candidate.plugins else None
+    grader = grader or select_grader(candidate.image_id, grader_image, timeout=grading_timeout)
     evaluator = evaluator or grader.evaluate_run
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     telemetry = select_native_telemetry(candidate, native_telemetry)
     host.preflight(candidate, budget_seconds)
+    toolchain = prepare_toolchain(state_root)
     run_id = run_id or uuid.uuid4().hex
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", run_id):
         raise KarnError("invalid_run_id")
     run_dir = Path(results_dir).resolve() / run_id
     with contextlib.ExitStack() as held:
         login_hold = held.enter_context(contextlib.ExitStack())
-        if selected_login is not None:
-            login_hold.enter_context(selected_login.exclusive())
+        selected_login = login = None
+        if pool is not None:
+            selected_login = pool.acquire(
+                login_hold,
+                settle_artifact=candidate.plugins[0].row["artifact"],
+                poll_seconds=login_poll_seconds,
+                on_wait=login_wait,
+            )
+            login = pool.ref(selected_login)
+        if on_launch is not None:
+            on_launch()
         run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
         held.enter_context(run_lock(run_dir))
         return _collect(
@@ -243,6 +291,7 @@ def run_benchmark(
             selected_login=selected_login,
             host=host,
             telemetry=telemetry,
+            toolchain=toolchain,
             run_id=run_id,
             run_dir=run_dir,
             results_repo=results_repo,
@@ -265,6 +314,7 @@ def _collect(
     selected_login,
     host,
     telemetry,
+    toolchain,
     run_id,
     run_dir,
     results_repo,
@@ -276,8 +326,6 @@ def _collect(
     evaluator,
     login_hold,
 ) -> KarnRunRecord:
-    from .observations import CodexTelemetryCollector
-
     start = datetime.now(UTC).isoformat()
     artifact_dir = run_dir / "candidate"
     artifact_dir.mkdir()
@@ -297,8 +345,12 @@ def _collect(
         "login": login,
         "budget_seconds": budget_seconds,
         "native_telemetry": telemetry,
+        "test_toolchain": toolchain.to_dict(),
         "started_at": start,
     }
+    if grader.candidate_python is not None:
+        # Recovery grades on this version; it never runs the candidate image again.
+        run_input["candidate_python"] = grader.candidate_python
     _write_atomically(
         run_dir / "run-input.json", canonical(run_input).decode() + "\n", prefix=".run-input-"
     )
@@ -311,6 +363,7 @@ def _collect(
         "candidate_definition": candidate.definition,
         "login_profile": login,
         "native_telemetry": telemetry,
+        "test_toolchain": toolchain.to_dict(),
         "grading_source": None,
         "grading_isolation": grader.isolation(),
         "measurements": None,
@@ -333,7 +386,7 @@ def _collect(
         )
         (run_dir / "prompt.md").write_text(prompt)
         native = telemetry["enabled"]
-        factory = collector_factory or CodexTelemetryCollector
+        factory = collector_factory or telemetry_collector(telemetry)
         bind = collector_host or (collector_address() if native else "127.0.0.1")
         with observation_session(
             factory, run_dir, observation_problems, bind_host=bind
@@ -353,7 +406,14 @@ def _collect(
                         collector.mark_incomplete("native_state_unavailable")
 
                 arguments = {}
-                if native:
+                if native and telemetry.get("adapter") == "claude":
+                    arguments = {
+                        "runtime_environment": lambda network: collector.otel_environment(
+                            network.telemetry_endpoint
+                        ),
+                        "collector_endpoint": collector.endpoint,
+                    }
+                elif native:
                     arguments = {
                         "runtime_config": lambda network: collector.config_toml(
                             network.telemetry_endpoint
@@ -371,6 +431,7 @@ def _collect(
                         login_profile=selected_login,
                         login_lock_held=selected_login is not None,
                         after_stop=after_stop,
+                        test_toolchain=toolchain,
                         **arguments,
                     )
                 except (Exception, KeyboardInterrupt) as error:  # noqa: BLE001 -- stop before preserving a host failure.
@@ -395,6 +456,7 @@ def _collect(
                     getattr(collector, "events", []),
                     exit_kind=observed.status,
                     collection_reasons=["measurement_finalization_failed"],
+                    adapter=telemetry["adapter"],
                 )
         if observed.workspace_stopped:
             stage = "harvest"
@@ -450,7 +512,10 @@ def _collect(
         from .observations import summarize_events
 
         metadata["measurements"] = summarize_events(
-            [], exit_kind=observed.status, collection_reasons=["measurement_collection_unavailable"]
+            [],
+            exit_kind=observed.status,
+            collection_reasons=["measurement_collection_unavailable"],
+            adapter=telemetry["adapter"],
         )
     record = KarnRunRecord(
         {

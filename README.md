@@ -67,24 +67,24 @@ Audited tests are never visible to the agent. Agent-written tests are harvested 
 
 ## Quickstart
 
-Use Python 3.13, Docker, Karn on the build host, and a host Codex CLI for subscription enrollment.
+Use Python 3.13, Docker, Karn on the build host, and a host Codex or Claude Code CLI for subscription enrollment.
 Install the benchmark with `pip install -e .`.
 SilverquiLLM runs a completed Karn build by itself; it needs no Ozolith package.
 
-Build the bare Codex example and the grader image explicitly before running:
+The candidate recipes live in the results repository at `karn/constructs/<label>`. Build them from its committed tree, then build the grader image, before running:
 
 ```bash
-karn build examples/karn --worktree --out /tmp/bench-codex-build
+karn build ~/bench-results/karn --out ~/bench-builds/roster-1
 silverquillm grader build
-silverquillm login --build-output /tmp/bench-codex-build --construct bare-codex
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark smoke --results-repo ./private-results
-silverquillm run --build-output /tmp/bench-codex-build --construct bare-codex --benchmark hob-medium --results-repo ./private-results
+silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-codex
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark smoke --results-repo ~/bench-results
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark hob-medium --results-repo ~/bench-results
 ```
 
 Grading runs the agent's code only inside the grader container: no network, no access to your home directory, environment, or login.
 
-The example selects `gpt-6-astra` and the existing Codex login plugin, with no custom skills or polling controller.
-Each run records available grades, API-equivalent estimated cost, model responses, tool calls, and observation completeness.
+The roster runs GPT-6 Astra, Sol and Luna on Codex with a ChatGPT subscription, and Claude Opus 5.5, Sonnet 5.5, Fable 5.1 and Haiku 4.5 on Claude Code with a Claude subscription, each through Karn's login plugin for its CLI.
+Each run records available grades, API-equivalent estimated cost with its per-type breakdown, model responses, tool calls, and observation completeness.
 Failed and interrupted runs remain useful data; collection has no leaderboard eligibility gate.
 
 See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retained artifacts, and historical commands.
@@ -101,7 +101,7 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | `silverquillm queue ls [--json]` | One-shot, read-only view of the batch queue, including interrupted, partially observed, and unsupported batches. |
 | `silverquillm top` | Live, read-only view of the batch queue (`q` quits). |
 | `silverquillm login --build-output … --construct …` | Enroll the construct's own subscription login through its login plugin. |
-| `silverquillm grader build` | Build the pinned, network-less grader image that runs every grading pass. |
+| `silverquillm grader build [--python X.Y]` | Build the pinned, network-less grader images, one per graded Python version; each run is graded on its candidate's version. |
 | `silverquillm results-init PATH` | Lay out an empty private results repository. |
 | `silverquillm validate …` | Validate 17lands replays against the engine. |
 | `silverquillm legacy run-image\|smoke\|resume\|chain\|rescore\|logs …` | The historical `--image` entrypoint lineage and its run directories. |

@@ -264,10 +264,17 @@ MTG rules construct the engine implements (e.g. Flying, Reach, Deathtouch, Affin
 
 _Avoid_: "ability word" (distinct concept — see Ability Word)
 
+**Login Pool**
+
+The host-local set of Login Profiles enrolled through one login plugin, such as every Claude subscription login on the host.
+A run takes any free profile from its candidate's pool, so the number of profiles is the number of runs that provider can serve at once (grilling 2026-09-28).
+
+_Avoid_: "credential pool" (a profile holds one login, never a copied credential)
+
 **Login Profile**
 
-A named host-local binding through which a runner selects subscription authentication, independently of Benchmark Candidate identity.
-A profile reuses the existing local login binding across candidate variants and batches, with only one runner using that login at a time on the host (grilling 2026-09-26).
+One host-local subscription login in a Login Pool, through which a run authenticates independently of Benchmark Candidate identity.
+Any candidate using the pool's login plugin may use any of its profiles, and only one run uses a profile at a time on the host (grilling 2026-09-26; pooled grilling 2026-09-28).
 
 _Avoid_: "candidate credential" (authentication is not candidate identity)
 

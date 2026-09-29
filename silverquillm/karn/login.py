@@ -29,6 +29,8 @@ from .definition import KarnError, PluginArtifact, canonical, read_regular, stri
 
 MAX_MESSAGE = 1024 * 1024
 NATIVE_PRESERVED = "native-preserved"
+# The Karn login plugins the host runs; any other plugin is refused.
+LOGIN_PLUGINS = frozenset({"karn-codex-login", "karn-claude-login"})
 MAX_NATIVE_BYTES = 128 * 1024 * 1024
 MAX_NATIVE_FILES = 10_000
 MAX_PLUGIN_MOUNTS = 32
@@ -82,14 +84,21 @@ class LoginProfile:
 
     @contextlib.contextmanager
     def exclusive(self) -> Iterator[None]:
-        descriptor = os.open(
-            self.directory / "runner.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600
-        )
+        lock = self.directory / "runner.lock"
+        descriptor = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise LoginInUseError("login_in_use") from None
+            # A pool may move or remove this directory under its own lock; a lock on a file
+            # no longer at this path guards nothing, and a new file there has its own lock.
+            try:
+                current = os.stat(lock, follow_symlinks=False)
+            except OSError:
+                current = None
+            if current is None or not os.path.samestat(os.fstat(descriptor), current):
+                raise LoginInUseError("login_in_use")
             yield
         finally:
             os.close(descriptor)
@@ -505,6 +514,15 @@ def _is_rollout(path: PurePosixPath) -> bool:
     return path.name.startswith("rollout-") and path.name.endswith(".jsonl")
 
 
+def _is_transcript(path: PurePosixPath) -> bool:
+    return path.suffix == ".jsonl"
+
+
+# Native journal trees in a login plugin's work directory: Codex session rollouts and
+# Claude Code project transcripts (subagent transcripts nest below each session).
+NATIVE_TREES = {"sessions": _is_rollout, "projects": _is_transcript}
+
+
 def preserve_pending_native(
     profile: LoginProfile, stop_and_confirm: Callable[[str, str], None]
 ) -> dict | None:
@@ -536,19 +554,30 @@ def preserve_pending_native(
     except (KarnError, KeyError):
         outcome["reason"] = "native_state_container_not_stopped"
         return outcome
+    trees = {}
     try:
-        sessions = open_directory(profile.state, ("work", "sessions"))
+        for name in NATIVE_TREES:
+            with contextlib.suppress(FileNotFoundError, NotADirectoryError):
+                trees[name] = open_directory(profile.state, ("work", name))
     except OSError:
+        for descriptor in trees.values():
+            os.close(descriptor)
+        outcome["reason"] = "native_state_unavailable"
+        return outcome
+    if not trees:
         outcome["reason"] = "native_state_unavailable"
         return outcome
     temporary = Path(tempfile.mkdtemp(prefix=".native-", dir=evidence))
+    files, size = MAX_NATIVE_FILES, MAX_NATIVE_BYTES
     try:
-        for relative, content in iter_regular_files(
-            sessions, accept=_is_rollout, max_files=MAX_NATIVE_FILES, max_bytes=MAX_NATIVE_BYTES
-        ):
-            destination = temporary / "sessions" / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(content)
+        for name, descriptor in trees.items():
+            for relative, content in iter_regular_files(
+                descriptor, accept=NATIVE_TREES[name], max_files=files, max_bytes=size
+            ):
+                files, size = files - 1, size - len(content)
+                destination = temporary / name / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(content)
         os.rename(temporary, target)
         outcome["preserved"] = True
     except TreeLimitExceeded:
@@ -556,7 +585,8 @@ def preserve_pending_native(
     except OSError:
         outcome["reason"] = "native_state_copy_failed"
     finally:
-        os.close(sessions)
+        for descriptor in trees.values():
+            os.close(descriptor)
         if temporary.exists():
             shutil.rmtree(temporary)
     return outcome

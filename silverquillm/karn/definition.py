@@ -80,6 +80,20 @@ def read_regular(path: Path, *, limit: int = MAX_DOCUMENT) -> bytes:
         raise KarnError("artifact_file_unavailable") from None
 
 
+def tree_digest(source: Path, *, limit: int = 256 * 1024 * 1024) -> str:
+    """Digest a file or directory tree by relative path and content."""
+    paths = sorted(source.rglob("*")) if source.is_dir() else [source]
+    content = [
+        [
+            str(path.relative_to(source)) if path != source else source.name,
+            digest(read_regular(path, limit=limit)),
+        ]
+        for path in paths
+        if not path.is_dir()
+    ]
+    return digest(canonical(content))
+
+
 def inside(root: Path, relative: str) -> Path:
     path = PurePosixPath(relative)
     if (

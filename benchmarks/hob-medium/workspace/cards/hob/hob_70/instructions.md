@@ -6,4 +6,4 @@ Watch opponents' casts, not resolutions and not spell copies. Choose an unused m
 
 A counter mode cannot put a counter on a new incarnation of Gollum. Draw and drain modes still resolve after the source leaves. Drain makes each opponent lose 2 life but gains its controller 2 life total. Use the engine's gain_life/lose_life functions.
 
-Use MODE decisions with names odd/even for the entry choice and counter/drain/draw for the three printed modes, in printed order. These are the benchmark's public choice labels; do not inspect query text in tests or bypass the Player Query protocol.
+Use MODE decisions with names odd/even for the entry choice and counter/drain/draw for the three printed modes, in printed order. These are the public choice labels; do not inspect query text in tests or bypass the Player Query protocol.

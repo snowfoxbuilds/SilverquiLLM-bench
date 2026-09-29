@@ -5,9 +5,11 @@ from __future__ import annotations
 import signal
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -262,3 +264,64 @@ def test_an_interrupted_hanging_grader_leaves_no_client_or_container(
             child.wait()
         if name.startswith("sq-grade-"):
             subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
+
+
+# BuildKit resolves FROM by name, so this builds on the tag python_image checked.
+HANGING_CANDIDATE = """\
+FROM python:3.13-slim
+RUN mkdir /hang && printf '#!/bin/sh\\nexec sleep 1000\\n' > /hang/python3 && chmod 755 /hang/python3
+ENV PATH=/hang:/usr/local/bin:/usr/bin:/bin
+VOLUME /data
+"""
+
+
+@pytest.mark.integration
+def test_a_timed_out_python_probe_leaves_no_container_or_volume(python_image, monkeypatch):
+    from silverquillm.karn import grader as grader_module
+
+    tag = "sq-test-hanging-candidate:" + uuid.uuid4().hex
+    built = subprocess.run(
+        ["docker", "build", "--pull=false", "-q", "-t", tag, "-"],
+        input=HANGING_CANDIDATE.encode(),
+        capture_output=True,
+        check=False,
+    )
+    assert built.returncode == 0, built.stderr
+    name = "sq-probe-" + uuid.uuid4().hex
+    monkeypatch.setattr(
+        grader_module, "uuid", SimpleNamespace(uuid4=lambda: SimpleNamespace(hex=name[9:]))
+    )
+    monkeypatch.setattr(grader_module, "PROBE_TIMEOUT", 8)
+    volumes, done = set(), threading.Event()
+
+    def watch():
+        while not done.is_set():
+            mounted = subprocess.run(
+                ["docker", "inspect", "-f", "{{range .Mounts}}{{.Name}} {{end}}", name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            volumes.update(mounted.stdout.split())
+            time.sleep(0.2)
+
+    watcher = threading.Thread(target=watch, daemon=True)
+    watcher.start()
+    try:
+        with pytest.raises(grader_module.GraderError, match="candidate_python_unsupported"):
+            grader_module.candidate_python(built.stdout.decode().strip())
+    finally:
+        done.set()
+        watcher.join()
+        subprocess.run(["docker", "rm", "-f", "-v", name], capture_output=True, check=False)
+        subprocess.run(["docker", "rmi", tag], capture_output=True, check=False)
+    assert volumes, "the probe container mounted the image's declared volume"
+    assert (
+        subprocess.run(["docker", "inspect", name], capture_output=True, check=False).returncode
+        != 0
+    )
+    for volume in volumes:
+        leftover = subprocess.run(
+            ["docker", "volume", "rm", volume], capture_output=True, check=False
+        )
+        assert leftover.returncode != 0, f"anonymous volume {volume} outlived the probe"
