@@ -26,7 +26,7 @@ from urllib.parse import urlsplit
 from .pricing import price_requests, price_table_metadata, total_breakdown
 
 # Versions whose journal and OTel streams were checked against each other on a real run.
-QUALIFIED_CODEX_VERSIONS = frozenset({"0.153.4", "0.157.1"})
+QUALIFIED_CODEX_VERSIONS = frozenset({"0.153.4", "0.157.1", "0.159.0"})
 TOKEN_KEYS = (
     "input_tokens",
     "cached_input_tokens",

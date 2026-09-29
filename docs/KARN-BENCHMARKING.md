@@ -38,6 +38,7 @@ The Codex recipes also request the Flex tier (`service_tier = "flex"`) as a cost
 Each record's `subagent_threads` measurement counts the agent threads beyond the main one (Claude sidechain transcripts, Codex threads other than the task's), so a batch meant to run without subagents should show `0`.
 The count is an observation, not an incompleteness reason.
 The Codex recipes pin their CLI with their own `[image.native_cli]`; 0.157.1 needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
+The `gpt-6.1-sol` recipes (`bare-codex-sol61-<effort>`, `low` to `max`) pin Codex 0.159.0. That release's bundled catalog predates the model, so Codex takes its entry from the server's model list at sign-in.
 Each construct carries no custom skills or polling controller.
 
 Build output and the exact local image must remain available; queued execution never rebuilds or pulls an image.
@@ -126,7 +127,7 @@ Estimated cost is API-equivalent USD, not the subscription bill.
 `cost_breakdown` beside it tallies tokens and USD by type: uncached input, cache reads, cache writes, 1-hour cache writes (Anthropic prices them above the 5-minute ones), and output.
 Every cost is a standard-tier equivalent, whatever tier served the request: each priced request carries `rate_basis: "standard"`, Claude requests keep their transcript `speed` and `service_tier`, and Codex requests keep `requested_service_tier`, the tier Codex put in its request (`mixed` when a thread used several). Codex never reports the tier the server applied, so a flex trial shows up in token usage and the cost breakdown, not in the price.
 Agent turns count model responses plus tool calls; missing measurements remain null with an explanation.
-Turns, usage, and cost are complete only for a Codex version whose journal and telemetry were qualified against scripted ground truth (0.153.4 and 0.157.1); qualify another offline, without credentials, with `scripts/qualify_codex_telemetry.py --image IMAGE --native-version VERSION --output DIR`.
+Turns, usage, and cost are complete only for a Codex version whose journal and telemetry were qualified against scripted ground truth (0.153.4, 0.157.1 and 0.159.0); qualify another offline, without credentials, with `scripts/qualify_codex_telemetry.py --image IMAGE --native-version VERSION --output DIR`.
 Claude Code runs are read from its session transcripts, subagents included, with the OTel stream as a cross-check; a compaction's own request appears only in OTel.
 Each OTel request is reconciled with its transcript response on uncached, cache-read, cache-write, and output tokens and on the model; a disagreement or a missing field keeps the transcript's values and marks the measurements partial (`otel_usage_conflicts_with_native`, `otel_model_conflicts_with_native`, or a `…_comparison_unavailable` reason); two transcript responses claiming one request id are flagged `native_request_identity_reused`, and repeated OTel reports of one request count once, flagged `otel_request_observations_conflict` if they disagree in tokens, model, speed, query source, or cost.
 Claude Code 2.1.284 is qualified, from smoke run 93ffaa74 on `bare-claude-haiku`; measurements from any other version are marked partial with `native_version_not_qualified`.
