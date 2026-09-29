@@ -323,9 +323,10 @@ def _reconcile(native: dict[str, Any], attrs: dict[str, Any], reasons: list[str]
     """Compare one ``api_request`` with its transcript response, whose values stay authoritative."""
     observed = _otel_usage(attrs)
     for key in COMPARED_USAGE:
-        if native["usage"][key] is None or observed[key] is None:
+        mine = native["usage"].get(key)
+        if mine is None or observed[key] is None:
             reasons.append("otel_usage_comparison_unavailable")
-        elif native["usage"][key] != observed[key]:
+        elif mine != observed[key]:
             reasons.append("otel_usage_conflicts_with_native")
     if native.get("model") is None or attrs.get("model") is None:
         reasons.append("otel_model_comparison_unavailable")
@@ -362,8 +363,14 @@ def summarize_claude_events(
         for e in rows
         if e["kind"] == "response"
     ]
-    native_requests = {e["request_id"]: e for e in rows if e["kind"] == "response"}
+    native_requests: dict[str | None, list[dict[str, Any]]] = {}
+    for event in rows:
+        if event["kind"] == "response":
+            native_requests.setdefault(event.get("request_id"), []).append(event)
     unidentified = native_requests.pop(None, None) is not None
+    # One API request yields one message, so a reused request id means a doctored transcript.
+    if any(len(responses) > 1 for responses in native_requests.values()):
+        reasons.append("native_request_identity_reused")
     compactions = [e for e in rows if e["kind"] == "compaction"]
     tools = {e["call_id"] for e in rows if e["kind"] == "tool_call"}
     versions = {e.get("native_version") for e in sessions}
@@ -394,7 +401,8 @@ def summarize_claude_events(
         request = attrs.get("request_id")
         otel_requests.add(request)
         if request in native_requests:
-            _reconcile(native_requests[request], attrs, reasons)
+            for native in native_requests[request]:
+                _reconcile(native, attrs, reasons)
             continue
         compaction = attrs.get("query_source") == "compact"
         otel_compactions += compaction

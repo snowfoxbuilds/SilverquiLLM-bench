@@ -458,6 +458,27 @@ def test_a_transcript_response_without_a_request_id_cannot_be_reconciled():
     assert "otel_usage_comparison_unavailable" in result["usage"]["reasons"]
 
 
+@pytest.mark.parametrize("first", [True, False])
+def test_a_request_id_reused_by_a_second_response_is_flagged(first):
+    extra = assistant("msg_00", "req_01", [{"type": "text"}], uncached=99999, output=77777)
+    body = main_transcript()
+    transcript = [body[0], *extra, *body[1:]] if first else [*body, *extra]
+    events = qualified(events_of(transcript) + api_request("req_01") + api_request("req_02"))
+    result = summarize_claude_events(events, exit_kind="completed")
+    assert result["usage"]["completeness"] == "partial"
+    assert "native_request_identity_reused" in result["usage"]["reasons"]
+    assert "otel_usage_conflicts_with_native" in result["usage"]["reasons"]
+
+
+def test_a_malformed_retained_response_degrades_instead_of_crashing():
+    events = qualified(events_of(main_transcript()) + api_request("req_01") + api_request("req_02"))
+    for event in events:
+        if event["kind"] == "response":
+            del event["usage"]["output_tokens"]
+    result = summarize_events(events, exit_kind="interrupted", adapter="claude")
+    assert "otel_usage_comparison_unavailable" in result["usage"]["reasons"]
+
+
 def test_duplicate_observations_reconcile_once_each():
     otel = api_request("req_01") + api_request("req_02")
     repeated = [dict(e, id=e["id"] + "-again") for e in api_request("req_01")]
