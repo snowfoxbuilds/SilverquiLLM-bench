@@ -74,8 +74,7 @@ def scheduler(tmp_path, directory, **changes):
         results_dir=tmp_path / "runs",
         results_repo=tmp_path / "records",
         state_root=tmp_path / "state",
-        replay_without_state=["trial"],
-        **changes,
+        **{"replay_without_state": ["trial"], **changes},
     )
 
 
@@ -1191,31 +1190,122 @@ def test_a_batch_entry_interrupted_while_waiting_for_a_slot_stays_pending(tmp_pa
     assert [row["status"] for row in state["runs"]] == ["done"]
 
 
-def test_an_unusable_pool_stops_the_scheduler_and_leaves_every_entry_pending(tmp_path):
-    directory = batch(tmp_path / "batches", entries=2)
+def pooled_batch(directory, build_output, entries=2):
+    """A batch whose entries use the fixture's login plugin."""
+    spec = (
+        "[[runs]]\nbuild_output="
+        + json.dumps(str(build_output))
+        + '\nconstruct="bare"\nbenchmark="example"\n'
+    )
+    (directory / "pooled.toml").write_text('format="karn-v4"\n' + spec * entries)
+
+
+def test_an_unusable_pool_defers_only_its_batch_and_other_batches_run(tmp_path):
+    directory = batch(tmp_path / "batches", entries=1)
     opts = options(tmp_path / "fixture")
     with_login_plugin(
         load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
     )
-    (directory / "trial.toml").write_text(
-        'format="karn-v4"\n'
-        + (
-            "[[runs]]\nbuild_output="
-            + json.dumps(str(opts["build_output"]))
-            + '\nconstruct="bare"\nbenchmark="example"\n'
-        )
-        * 2
+    pooled_batch(directory, opts["build_output"])
+    executed = []
+
+    def execute(**kwargs):
+        if kwargs["build_output"] == Path(opts["build_output"]):
+            return run_benchmark(**kwargs, host=FixtureHost())
+        executed.append(kwargs["run_id"])
+        return completed(**kwargs)
+
+    runner = scheduler(
+        opts["bench_root"], directory, executor=execute, replay_without_state=["trial", "pooled"]
     )
+    runner.options["state_root"] = Path(opts["state_root"]).resolve()
+    assert runner.run_until_idle() == 1
+    assert json.loads((directory / "state/pooled.json").read_text())["runs"] == []
+    trial = json.loads((directory / "state/trial.json").read_text())
+    assert [row["status"] for row in trial["runs"]] == ["done"]
+    assert "pooled: login_pool_empty:karn-codex-login; entries stay pending" in runner.warnings
+
+    # Nothing else can run, so a one-shot pass reports the pool as its error.
+    with pytest.raises(KarnError, match="login_pool_empty:karn-codex-login"):
+        runner.run_until_idle()
+    # Once a login is enrolled, the next pass runs the deferred entries.
+    enroll(pool_slot(opts["state_root"]))
+    assert runner.run_until_idle() == 2
+    pooled = json.loads((directory / "state/pooled.json").read_text())
+    assert [row["status"] for row in pooled["runs"]] == ["done", "done"]
+
+
+def test_serve_keeps_polling_while_a_pool_is_unusable(tmp_path, monkeypatch):
+    from silverquillm.karn import batching
+
+    directory = tmp_path / "batches"
+    directory.mkdir()
+    opts = options(tmp_path / "fixture")
+    with_login_plugin(
+        load_candidate(opts["build_output"], "bare", image_inspector=lambda ref: {"Id": ref})
+    )
+    pooled_batch(directory, opts["build_output"], entries=1)
     runner = scheduler(
         opts["bench_root"],
         directory,
         executor=lambda **kwargs: run_benchmark(**kwargs, host=FixtureHost()),
+        replay_without_state=["pooled"],
     )
     runner.options["state_root"] = Path(opts["state_root"]).resolve()
-    with pytest.raises(KarnError, match="login_pool_empty:karn-codex-login"):
-        runner.run_until_idle()
-    state = json.loads((directory / "state/trial.json").read_text())
-    assert state["runs"] == []
+    passes = []
+
+    def sleep(seconds):
+        passes.append(seconds)
+        if len(passes) == 1:
+            enroll(pool_slot(opts["state_root"]))
+        else:
+            raise StopIteration
+
+    monkeypatch.setattr(batching.time, "sleep", sleep)
+    with pytest.raises(StopIteration):
+        runner.serve(poll_seconds=0.01)
+    pooled = json.loads((directory / "state/pooled.json").read_text())
+    assert [row["status"] for row in pooled["runs"]] == ["done"]
+
+
+def test_a_vanished_new_slot_does_not_mask_the_enrollment_error(tmp_path, monkeypatch):
+    from click.testing import CliRunner
+
+    from silverquillm.cli import main
+    from silverquillm.karn import commands
+
+    candidate = login_candidate(tmp_path)
+
+    class Failing:
+        def __init__(self, *, plugin_cache):
+            pass
+
+        def enroll_login(self, profile, artifact):
+            shutil.rmtree(profile.directory)
+            raise KarnError("login_plugin:setup_failed")
+
+    monkeypatch.setattr(commands, "DockerHost", Failing)
+    monkeypatch.setattr(
+        commands,
+        "load_candidate",
+        lambda path, construct: load_candidate(
+            path, construct, image_inspector=lambda ref: {"Id": ref}
+        ),
+    )
+    result = CliRunner().invoke(
+        main,
+        [
+            "login",
+            "--build-output",
+            str(candidate.build_output),
+            "--construct",
+            "bare",
+            "--state-root",
+            str(tmp_path / "state"),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "login_plugin:setup_failed" in result.output
 
 
 @pytest.fixture
@@ -1370,6 +1460,7 @@ def test_a_recoverer_interrupt_still_propagates(tmp_path):
 
     with pytest.raises(KeyboardInterrupt):
         scheduler(tmp_path, directory, executor=interrupted).run_until_idle()
+
     def interrupted_recovery(**kwargs):
         raise KeyboardInterrupt
 

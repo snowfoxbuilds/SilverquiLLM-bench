@@ -194,6 +194,8 @@ class KarnScheduler:
         self.replay = set(replay_without_state)
         self.executor, self.recoverer = executor, recoverer
         self.warnings = []
+        # Login pools that could serve no entry during the latest pass, by batch.
+        self.unavailable_logins: dict[str, str] = {}
 
     def _warn(self, message: str) -> None:
         """Log each distinct problem once per scheduler; the file itself is never rewritten."""
@@ -208,8 +210,12 @@ class KarnScheduler:
         )
 
     def run_until_idle(self) -> int:
+        """One pass; when nothing ran only because no login could serve it, that is an error."""
         with SchedulerLock(self.directory):
-            return self._run_locked()
+            count = self._run_locked()
+        if not count and self.unavailable_logins:
+            raise LoginPoolUnavailableError(min(self.unavailable_logins.values()))
+        return count
 
     def _warn(self, message: str) -> None:
         if message not in self.warnings:
@@ -296,6 +302,7 @@ class KarnScheduler:
 
     def _run_locked(self) -> int:
         self._recover_running_states()
+        self.unavailable_logins = {}
         count = 0
         for path in sorted(self.directory.glob("*.toml")):
             try:
@@ -364,10 +371,16 @@ class KarnScheduler:
                         candidate=record.candidate.to_dict(),
                     )
                     _flag_unsettled_login(row, record)
-                except LoginPoolUnavailableError:
-                    # No login can serve any entry until the operator enrolls or recovers one;
-                    # this entry never started, so it and the rest stay pending.
-                    raise
+                except LoginPoolUnavailableError as error:
+                    # No login can serve this batch until the operator enrolls or recovers one;
+                    # its entry never started, so it and the rest stay pending for a later pass,
+                    # while other batches go on.
+                    self.unavailable_logins[path.stem] = str(error)
+                    message = f"{path.stem}: {error}; entries stay pending"
+                    if message not in self.warnings:
+                        self.warnings.append(message)
+                    logging.getLogger(__name__).warning("%s", message)
+                    break
                 except RecordWritePendingError as error:
                     status = error.record.run_metadata["execution"]["status"]
                     row.update(

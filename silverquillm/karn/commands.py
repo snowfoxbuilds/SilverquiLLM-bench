@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 
@@ -171,7 +172,9 @@ def enroll(build_output, construct, slot, adopt, state_root):
             )
         finally:
             if not slot:
-                pool.discard_unenrolled(profile)
+                # The enrollment's own error, if any, is the one to report.
+                with contextlib.suppress(OSError):
+                    pool.discard_unenrolled(profile)
     except (KarnError, OSError, ValueError) as error:
         raise click.ClickException(str(error)) from None
     raise click.exceptions.Exit(status)

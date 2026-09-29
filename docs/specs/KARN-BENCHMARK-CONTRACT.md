@@ -109,7 +109,7 @@ Each run starts with fresh native state; only authentication persists between ru
 At most one runner on the host may use a login at a time because concurrent token refresh can invalidate the shared authentication (grilling 2026-09-26).
 Use the existing local login binding and a host-local exclusive runner lock per profile, shared by direct runs, scheduler execution, and enrollment.
 Exclusive ownership covers authentication preparation, execution, and final authentication harvest; recovery confirms that a prior runner's container has stopped before reusing its login.
-When every usable profile of the pool is busy, a run waits for one instead of refusing, and nothing of the run exists, nor does a batch count it as started, until it holds a profile; a pool that can never serve it stops the scheduler with the entries pending (grilling 2026-09-28).
+When every usable profile of the pool is busy, a run waits for one instead of refusing, and nothing of the run exists, nor does a batch count it as started, until it holds a profile; a pool that can never serve it leaves that batch's entries pending for a later pass while other batches run (grilling 2026-09-28).
 The run input and record name the profile a run used, so recovery settles exactly that profile; a profile left pending by an interrupted run serves no other run until it is settled, except that a run bringing the same plugin artifact may take it last and settle it first (grilling 2026-09-28).
 Concurrent runs on one subscription share its rate limits; the operator accepts this, and the named profile lets a slowdown be traced (grilling 2026-09-28).
 No new account registry, credential-deduplication system, or cross-host coordination is part of this integration (grilling 2026-09-26).

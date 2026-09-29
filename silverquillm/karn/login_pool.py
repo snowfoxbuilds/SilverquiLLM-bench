@@ -67,7 +67,8 @@ def stored_login_plugin(document: object) -> str | None:
     """The plugin whose store wrote this secret document, judged by its exact shape."""
     try:
         value = strict_json(document.encode()) if isinstance(document, str) else None
-    except KarnError:
+    except (KarnError, UnicodeError):
+        # A tampered secret can carry a lone surrogate, which no store ever writes.
         return None
     if not isinstance(value, dict) or set(value) != {"format", "revision", "files"}:
         return None
@@ -194,6 +195,13 @@ class LoginPool:
         """
         report = on_wait or _announce
         announced, skipped = False, set()
+
+        def skip(name: str, error: Exception) -> None:
+            # One damaged slot must not stop the pool; the operator is told once.
+            if name not in skipped:
+                skipped.add(name)
+                report(f"skipping login slot {self.plugin_id}/{name}: {error}")
+
         while True:
             names = self.enrolled()
             if not names:
@@ -211,15 +219,13 @@ class LoginPool:
                         busy += 1
                         continue
                     except (KarnError, OSError) as error:
-                        # One damaged slot must not stop the pool; the operator is told once.
-                        if name not in skipped:
-                            skipped.add(name)
-                            report(f"skipping login slot {self.plugin_id}/{name}: {error}")
+                        skip(name, error)
                         continue
                     candidates.enter_context(lock)
                     try:
                         pending = profile.pending()
-                    except KarnError:
+                    except KarnError as error:
+                        skip(name, error)
                         continue
                     if pending is None:
                         hold.enter_context(lock.pop_all())

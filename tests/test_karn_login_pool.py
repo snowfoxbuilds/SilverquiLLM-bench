@@ -426,3 +426,29 @@ def test_locks_taken_while_choosing_are_released_deterministically(tmp_path):
 def test_a_plugin_id_is_never_a_legacy_login_name(tmp_path, name):
     with pytest.raises(KarnError, match="invalid_login_profile_name"):
         login_profile(tmp_path / STATE, name)
+
+
+def test_a_secret_with_a_lone_surrogate_is_unrecognized_not_a_crash(tmp_path):
+    import json
+
+    assert stored_login_plugin("\ud800") is None
+    legacy = legacy_profile(tmp_path)
+    tampered = document().replace('"format"', '"\ud800format"')
+    (legacy.directory / "secret.json").write_text(json.dumps(tampered))
+    with pytest.raises(KarnError, match="legacy_login_unrecognized"):
+        adopt(tmp_path)
+    assert legacy.directory.exists()
+
+
+def test_a_slot_with_an_invalid_journal_is_skipped_with_a_warning(tmp_path):
+    target = pool(tmp_path)
+    broken = slot(target, "a")
+    (broken.directory / "active.json").write_text("[]")
+    slot(target, "b")
+    warnings = []
+    hold, profile = acquire(target, on_wait=warnings.append)
+    assert profile.name == "b"
+    assert warnings == ["skipping login slot karn-claude-login/a: invalid_login_recovery_journal"]
+    hold.close()
+    with broken.exclusive():
+        pass
