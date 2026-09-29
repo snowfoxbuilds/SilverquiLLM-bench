@@ -568,10 +568,64 @@ def test_unknown_one_hour_split_is_not_priced_at_either_rate():
     assert no_writes[0]["usd"] is not None
 
 
-@pytest.mark.parametrize("field", ["speed", "service_tier"])
-def test_nonstandard_processing_is_left_unpriced(field):
-    request = {**claude_request(0), field: "fast" if field == "speed" else "priority"}
-    assert price_requests([request])[0]["reasons"] == ["nonstandard_processing_unpriced"]
+@pytest.mark.parametrize(
+    ("field", "tier"), [("speed", "fast"), ("service_tier", "priority"), ("service_tier", "flex")]
+)
+def test_every_tier_is_priced_at_standard_rates(field, tier):
+    standard = price_requests([claude_request(0)])[0]
+    row = price_requests([{**claude_request(0), field: tier}])[0]
+    assert row["reasons"] == []
+    assert row["usd"] == standard["usd"]
+    assert row["rate_basis"] == "standard"
+
+
+def test_unknown_models_stay_unpriced_whatever_their_tier():
+    row = price_requests([{**claude_request(0), "model": "future-model", "service_tier": "flex"}])[
+        0
+    ]
+    assert row["usd"] is None
+    assert row["reasons"] == ["model_price_unavailable"]
+
+
+def completed_otlp(nanos, **attrs):
+    return otlp(
+        kind="response.completed",
+        nanos=nanos,
+        input_token_count="100",
+        cached_token_count="20",
+        cache_write_token_count="0",
+        output_token_count="30",
+        reasoning_token_count="5",
+        tool_token_count="130",
+        **attrs,
+    )
+
+
+def test_codex_rows_record_the_tier_codex_requested():
+    native, _ = normalize_rollout(journal())
+    standard = summarize_events(native, exit_kind="completed")
+    flex = summarize_events(
+        native + normalize_otlp(completed_otlp(1, service_tier="flex")), exit_kind="completed"
+    )
+    assert [r["requested_service_tier"] for r in standard["requests"]] == [None]
+    assert [r["requested_service_tier"] for r in flex["requests"]] == ["flex"]
+    # Recorded, never repriced: the estimate stays at standard rates.
+    assert flex["estimated_cost"]["value"] == standard["estimated_cost"]["value"]
+    mixed = summarize_events(
+        native
+        + normalize_otlp(completed_otlp(1, service_tier="flex"))
+        + normalize_otlp(completed_otlp(2, service_tier="priority")),
+        exit_kind="completed",
+    )
+    assert [r["requested_service_tier"] for r in mixed["requests"]] == ["mixed"]
+
+
+def test_an_unrecognized_codex_tier_is_kept_only_as_unknown():
+    [event] = normalize_otlp(completed_otlp(1, service_tier="sk-live-token-lookalike"))
+    assert event["attributes"]["service_tier"] == "unknown"
+    otel_only = summarize_events([event], exit_kind="completed")
+    assert [r["requested_service_tier"] for r in otel_only["requests"]] == ["unknown"]
+    assert otel_only["estimated_cost"]["value"] is not None
 
 
 def test_summary_reports_the_cost_breakdown_beside_the_estimate():

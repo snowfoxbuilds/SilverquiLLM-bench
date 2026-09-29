@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 from decimal import Decimal
 from typing import Any
 
-PRICE_TABLE_VERSION = "openai-anthropic-standard-2026-09-28-v3"
+PRICE_TABLE_VERSION = "openai-anthropic-standard-2026-09-28-v4"
 PRICING_SOURCE = "https://developers.openai.com/api/docs/pricing"
 ANTHROPIC_PRICING_SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing"
 # The per-type rows of a request's cost breakdown, in the order they are reported.
@@ -79,12 +79,15 @@ MODEL_PRICES = {
 }
 ASSUMPTIONS = (
     "API-equivalent standard processing USD, not the subscription charge",
-    "Text-token rates; no regional, batch, flex, fast-mode or hosted-tool fees",
+    "Text-token rates; no regional, batch or hosted-tool fees",
     "Reasoning output is already included in output tokens, never charged twice",
     "Input tokens include cache reads and writes, which are disjoint categories",
     "Anthropic's native input count excludes cache reads and writes, so they are added back",
     "Anthropic 5-minute cache writes use cache_write and 1-hour writes use cache_write_1h",
-    "Only standard speed and service tier are priced; fast mode and priority are not",
+    (
+        "Every request is priced at standard rates, whatever speed or service tier served it; "
+        "flex, fast mode and priority are standard-rate equivalents, with the tier kept on the request"
+    ),
     "GPT-5.4 uses the published session-context rule; GPT-6 uses per-request context",
     "Model names are native observations, not attestations of provider-side identity",
 )
@@ -125,16 +128,12 @@ def _price(
         "model": request.get("model"),
         "usd": None,
         "reasons": [],
+        # Standard rates apply whatever tier served the request (grilling 2026-09-28).
+        "rate_basis": "standard",
     }
     rate = prices.get(request.get("model", ""))
     if rate is None:
         result["reasons"] = ["model_price_unavailable"]
-        return result
-    if request.get("speed") not in (None, "standard") or request.get("service_tier") not in (
-        None,
-        "standard",
-    ):
-        result["reasons"] = ["nonstandard_processing_unpriced"]
         return result
     usage = request.get("usage", {})
     keys = ("input_tokens", "cached_input_tokens", "output_tokens")

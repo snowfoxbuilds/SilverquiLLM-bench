@@ -357,7 +357,9 @@ def test_a_compaction_at_otel_normal_speed_is_priced_as_standard():
         + api_request("req_c", "compact", cache_creation_tokens="0", speed="fast"),
         exit_kind="completed",
     )
-    assert "nonstandard_processing_unpriced" in fast["estimated_cost"]["reasons"]
+    # Fast is recorded on the request and priced at standard rates, like every tier.
+    assert fast["estimated_cost"]["value"] == result["estimated_cost"]["value"]
+    assert {r["speed"] for r in fast["requests"] if r["compaction"]} == {"fast"}
 
 
 def test_an_otel_compaction_without_a_transcript_boundary_is_flagged():
