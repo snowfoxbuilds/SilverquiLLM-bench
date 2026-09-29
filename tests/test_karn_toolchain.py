@@ -3,6 +3,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import io
+import os
 import shutil
 import stat
 import subprocess
@@ -12,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from silverquillm.karn.definition import KarnError, canonical, load_candidate
+from silverquillm.karn.definition import KarnError, canonical, load_candidate, read_regular
 from silverquillm.karn.host import DockerHost
 from silverquillm.karn.toolchain import (
     TOOLCHAIN_SOURCE,
@@ -379,3 +380,56 @@ def test_real_docker_candidate_runs_pytest_from_the_mounted_toolchain(
     output = (tmp_path / "workspace/pytest.out").read_text()
     assert result.status == "completed", output
     assert "plugins: timeout-2.4.0" in output and "1 passed" in output
+
+
+def hard_link_wheels(source: Path, store: Path) -> None:
+    """Replace each vendored wheel by a hard link into a separate store, as uv installs it."""
+    store.mkdir()
+    for wheel in (source / "wheels").iterdir():
+        shutil.move(wheel, store / wheel.name)
+        os.link(store / wheel.name, wheel)
+
+
+def test_hard_linked_wheels_prepare_and_reuse_the_toolchain(tmp_path):
+    source = vendored_copy(tmp_path)
+    hard_link_wheels(source, tmp_path / "installer-cache")
+    wheel = next((source / "wheels").iterdir())
+    assert wheel.stat().st_nlink == 2
+    first = prepare_toolchain(tmp_path / "state", source)
+    marker = first.path.parent / "tree-digest"
+    written = marker.stat().st_mtime_ns
+    assert prepare_toolchain(tmp_path / "state", source) == first
+    assert marker.stat().st_mtime_ns == written
+    # Only the toolchain accepts hard links; every other artifact reader still refuses them.
+    with pytest.raises(KarnError, match="unsafe_artifact_file"):
+        read_regular(wheel)
+
+
+def test_tampering_through_another_hard_link_fails_the_hash(tmp_path):
+    source = vendored_copy(tmp_path)
+    store = tmp_path / "installer-cache"
+    hard_link_wheels(source, store)
+    target = store / "pytest_timeout-2.4.0-py3-none-any.whl"
+    with open(target, "r+b") as stream:
+        stream.seek(-1, os.SEEK_END)
+        last = stream.read(1)
+        stream.seek(-1, os.SEEK_END)
+        stream.write(bytes([last[0] ^ 1]))
+    with pytest.raises(KarnError, match="test_toolchain_integrity_mismatch:pytest_timeout"):
+        prepare_toolchain(tmp_path / "state", source)
+
+
+@pytest.mark.parametrize("kind", ["symlink", "fifo", "directory"])
+def test_symlinked_and_special_wheels_are_refused(tmp_path, kind):
+    source = vendored_copy(tmp_path)
+    wheel = source / "wheels/pytest_timeout-2.4.0-py3-none-any.whl"
+    elsewhere = tmp_path / wheel.name
+    shutil.move(wheel, elsewhere)
+    if kind == "symlink":
+        wheel.symlink_to(elsewhere)
+    elif kind == "fifo":
+        os.mkfifo(wheel)
+    else:
+        wheel.mkdir()
+    with pytest.raises(KarnError, match="artifact_file_unavailable|unsafe_artifact_file"):
+        prepare_toolchain(tmp_path / "state", source)
