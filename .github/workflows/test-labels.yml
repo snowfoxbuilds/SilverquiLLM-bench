@@ -1,0 +1,35 @@
+name: Test labels
+
+# A push to a pull request makes its test outcome stale: CI judged a commit the pull
+# request no longer is, so both outcome labels come off and the CI run for the new
+# head labels it again (the test-outcome job in ci.yml).
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  clear:
+    # The runner is a developer host and the repository is public: fork
+    # pull requests must never execute on it.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request.number;
+            for (const name of ['tests-passed', 'tests-failed']) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name });
+                core.info(`${name}: removed`);
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                core.info(`${name}: absent`);
+              }
+            }
