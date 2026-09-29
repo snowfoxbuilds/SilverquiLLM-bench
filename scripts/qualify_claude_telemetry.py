@@ -24,9 +24,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from silverquillm.karn.claude_observations import _otel_usage, summarize_claude_events
-
-COMPARED = ("input_tokens", "cached_input_tokens", "cache_write_input_tokens", "output_tokens")
+from silverquillm.karn.claude_observations import (
+    COMPARED_USAGE,
+    _otel_usage,
+    summarize_claude_events,
+)
 
 
 def qualify(raw: bytes) -> dict:
@@ -50,7 +52,7 @@ def qualify(raw: bytes) -> dict:
             mismatches.append({"check": "request_in_otel", "request": response.get("request_id")})
             continue
         observed = _otel_usage(match["attributes"])
-        for key in COMPARED:
+        for key in COMPARED_USAGE:
             if observed[key] != response["usage"][key]:
                 mismatches.append(
                     {

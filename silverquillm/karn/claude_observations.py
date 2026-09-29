@@ -5,6 +5,8 @@ stop and before the login plugin clears its work directory; recovery reads the s
 Claude Code writes one transcript line per content block of an assistant message, each
 repeating the message's usage, so accounting is keyed by message id. A compaction's own
 request never appears in the transcript; its OTel ``api_request`` supplies the usage.
+Every other ``api_request`` is reconciled against its transcript response: a disagreement
+leaves the transcript's values in place and marks the observations partial.
 """
 
 from __future__ import annotations
@@ -37,6 +39,13 @@ _EVENTS = {"claude_code.api_request", "claude_code.tool_result", "claude_code.ap
 _FINISHED = {"end_turn", "stop_sequence"}
 # Claude Code's OTel reports the API's "standard" usage speed as "normal".
 _OTEL_SPEEDS = {"normal": "standard"}
+# The usage fields both streams report; OTel carries no 1-hour cache-write split.
+COMPARED_USAGE = (
+    "input_tokens",
+    "cached_input_tokens",
+    "cache_write_input_tokens",
+    "output_tokens",
+)
 
 # The real shapes of every label a Claude run can contribute to a record, checked against
 # Claude Code transcripts. The workload writes these files and can steer its OTel, so any
@@ -310,6 +319,20 @@ def _otel_usage(attrs: dict[str, Any]) -> dict[str, int | None]:
     )
 
 
+def _reconcile(native: dict[str, Any], attrs: dict[str, Any], reasons: list[str]) -> None:
+    """Compare one ``api_request`` with its transcript response, whose values stay authoritative."""
+    observed = _otel_usage(attrs)
+    for key in COMPARED_USAGE:
+        if native["usage"][key] is None or observed[key] is None:
+            reasons.append("otel_usage_comparison_unavailable")
+        elif native["usage"][key] != observed[key]:
+            reasons.append("otel_usage_conflicts_with_native")
+    if native.get("model") is None or attrs.get("model") is None:
+        reasons.append("otel_model_comparison_unavailable")
+    elif native["model"] != attrs["model"]:
+        reasons.append("otel_model_conflicts_with_native")
+
+
 def summarize_claude_events(
     events: Iterable[dict[str, Any]], *, exit_kind: str, collection_reasons: Iterable[str] = ()
 ) -> dict[str, Any]:
@@ -339,7 +362,8 @@ def summarize_claude_events(
         for e in rows
         if e["kind"] == "response"
     ]
-    native_requests = {e.get("request_id") for e in rows if e["kind"] == "response"} - {None}
+    native_requests = {e["request_id"]: e for e in rows if e["kind"] == "response"}
+    unidentified = native_requests.pop(None, None) is not None
     compactions = [e for e in rows if e["kind"] == "compaction"]
     tools = {e["call_id"] for e in rows if e["kind"] == "tool_call"}
     versions = {e.get("native_version") for e in sessions}
@@ -370,6 +394,7 @@ def summarize_claude_events(
         request = attrs.get("request_id")
         otel_requests.add(request)
         if request in native_requests:
+            _reconcile(native_requests[request], attrs, reasons)
             continue
         compaction = attrs.get("query_source") == "compact"
         otel_compactions += compaction
@@ -387,8 +412,11 @@ def summarize_claude_events(
                 "response_identity": "otel_observation",
             }
         )
-    if otel and native_requests - otel_requests:
+    if otel and native_requests.keys() - otel_requests:
         reasons.append("otel_missing_native_request")
+    if otel and unidentified:
+        # A response without its request id cannot be matched to anything OTel reported.
+        reasons.append("otel_usage_comparison_unavailable")
     unresolved = max(0, len(compactions) - otel_compactions)
     if otel_compactions > len(compactions):
         reasons.append("otel_compaction_without_boundary")

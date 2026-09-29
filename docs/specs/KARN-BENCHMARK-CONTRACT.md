@@ -140,6 +140,7 @@ The integration qualifies response, tool-call, and usage capture against the pin
 The current stock result file's usage:null and whole-request turn.completed events do not establish the required measurements.
 Codex's existing opt-in telemetry is an implementation path to qualify without changing the task into a custom agent workflow.
 Claude Code mirrors it (grilling 2026-09-28): the session transcript under its config directory is the durable source that recovery also reads, and its OpenTelemetry request and tool events cross-check it.
+A request the two streams report differently, in shared token counts or model, keeps the transcript's values and leaves the measurements partial; OTel supplies usage only for a request the transcript never records, such as a compaction's.
 The transcript's format is internal to Claude Code, so each pinned Claude Code version is qualified before its measurements count as complete.
 
 ### Outcomes and retained evidence

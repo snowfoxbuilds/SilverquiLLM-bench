@@ -300,7 +300,7 @@ def api_request(request, source="repl_main_thread", **overrides):
         "query_source": source,
         "input_tokens": "10",
         "cache_read_tokens": "4000",
-        "cache_creation_tokens": "0",
+        "cache_creation_tokens": "300",
         "output_tokens": "50",
         "cost_usd": 0.0123,
         **overrides,
@@ -328,7 +328,11 @@ def test_a_compaction_request_is_priced_from_otel_and_counted_once():
     without = summarize_claude_events(native, exit_kind="completed")
     assert without["agent_turns"]["responses"]["value"] == 3
     assert "compaction_usage_unavailable" in without["estimated_cost"]["reasons"]
-    otel = api_request("req_01") + api_request("req_02") + api_request("req_c", "compact")
+    otel = (
+        api_request("req_01")
+        + api_request("req_02")
+        + api_request("req_c", "compact", cache_creation_tokens="0")
+    )
     both = summarize_claude_events(native + otel, exit_kind="completed")
     assert both["agent_turns"]["responses"]["value"] == 3
     assert "compaction_usage_unavailable" not in both["estimated_cost"]["reasons"]
@@ -341,14 +345,16 @@ def test_a_compaction_at_otel_normal_speed_is_priced_as_standard():
     # Claude Code's OTel names the API's "standard" speed "normal".
     transcript = main_transcript() + [line("system", second=4, subtype="compact_boundary")]
     otel = api_request("req_01") + api_request("req_02")
-    otel += api_request("req_c", "compact", speed="normal")
+    otel += api_request("req_c", "compact", cache_creation_tokens="0", speed="normal")
     result = summarize_claude_events(events_of(transcript) + otel, exit_kind="completed")
     compaction = next(
         row for row in result["request_prices"] if row["response_id"].startswith("otel:")
     )
     assert compaction["usd"] is not None, compaction["reasons"]
     fast = summarize_claude_events(
-        events_of(transcript) + otel[:2] + api_request("req_c", "compact", speed="fast"),
+        events_of(transcript)
+        + otel[:2]
+        + api_request("req_c", "compact", cache_creation_tokens="0", speed="fast"),
         exit_kind="completed",
     )
     assert "nonstandard_processing_unpriced" in fast["estimated_cost"]["reasons"]
@@ -372,6 +378,110 @@ def test_otel_cross_check_flags_requests_missing_from_either_stream():
     )
     assert "native_usage_unavailable_for_request" in extra["usage"]["reasons"]
     assert extra["agent_turns"]["responses"]["value"] == 3
+
+
+QUALIFIED = min(QUALIFIED_CLAUDE_VERSIONS)
+
+
+def qualified(events):
+    """The synthetic streams relabelled as a qualified version, so agreement is complete."""
+    events = json.loads(json.dumps(events))
+    for event in events:
+        if event["kind"] == "session":
+            event["native_version"] = QUALIFIED
+        if event["source"] == "otel":
+            event["attributes"]["app.version"] = QUALIFIED
+    return events
+
+
+def reconciled(*otel):
+    return summarize_claude_events(
+        qualified(events_of(main_transcript()) + [e for group in otel for e in group]),
+        exit_kind="completed",
+    )
+
+
+def test_agreeing_streams_on_a_qualified_version_are_complete():
+    agreed = reconciled(api_request("req_01"), api_request("req_02"))
+    native_only = summarize_claude_events(
+        qualified(events_of(main_transcript())), exit_kind="completed"
+    )
+    for key in ("usage", "estimated_cost", "cost_breakdown"):
+        assert agreed[key]["completeness"] == "complete", agreed[key]["reasons"]
+        assert agreed[key]["value"] == native_only[key]["value"]
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["input_tokens", "cache_read_tokens", "cache_creation_tokens", "output_tokens"],
+)
+def test_a_token_field_otel_disagrees_on_keeps_native_values_but_is_partial(field):
+    expected = reconciled(api_request("req_01"), api_request("req_02"))
+    result = reconciled(api_request("req_01", **{field: "7"}), api_request("req_02"))
+    for key in ("usage", "estimated_cost", "cost_breakdown"):
+        assert result[key]["value"] == expected[key]["value"]
+        assert result[key]["completeness"] == "partial"
+        assert "otel_usage_conflicts_with_native" in result[key]["reasons"]
+    assert result["requests"] == expected["requests"]
+
+
+def test_a_model_otel_disagrees_on_is_flagged():
+    result = reconciled(api_request("req_01", model="claude-haiku-4-5"), api_request("req_02"))
+    assert "otel_model_conflicts_with_native" in result["usage"]["reasons"]
+    assert {r["model"] for r in result["requests"]} == {"claude-opus-5-5"}
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["input_tokens", "cache_read_tokens", "cache_creation_tokens", "output_tokens", "model"],
+)
+def test_a_field_missing_from_otel_leaves_the_comparison_unavailable(field):
+    [event] = api_request("req_01")
+    del event["attributes"][field]
+    result = reconciled([event], api_request("req_02"))
+    assert result["usage"]["completeness"] == "partial"
+    reason = (
+        "otel_model_comparison_unavailable"
+        if field == "model"
+        else ("otel_usage_comparison_unavailable")
+    )
+    assert reason in result["usage"]["reasons"]
+
+
+def test_a_transcript_response_without_a_request_id_cannot_be_reconciled():
+    transcript = [
+        row.replace('"requestId": "req_02", ', "") if '"req_02"' in row else row
+        for row in main_transcript()
+    ]
+    events = qualified(events_of(transcript) + api_request("req_01") + api_request("req_02"))
+    result = summarize_claude_events(events, exit_kind="completed")
+    assert "otel_usage_comparison_unavailable" in result["usage"]["reasons"]
+
+
+def test_duplicate_observations_reconcile_once_each():
+    otel = api_request("req_01") + api_request("req_02")
+    repeated = [dict(e, id=e["id"] + "-again") for e in api_request("req_01")]
+    native = events_of(main_transcript())
+    result = summarize_claude_events(
+        qualified(native + native + otel + otel + repeated), exit_kind="completed"
+    )
+    assert result["usage"]["completeness"] == "complete", result["usage"]["reasons"]
+    assert result["agent_turns"]["responses"]["value"] == 2
+    conflicting = [dict(e, id=e["id"] + "-again") for e in api_request("req_01", output_tokens="1")]
+    flagged = summarize_claude_events(qualified(native + otel + conflicting), exit_kind="completed")
+    assert "otel_usage_conflicts_with_native" in flagged["usage"]["reasons"]
+    assert flagged["usage"]["value"] == result["usage"]["value"]
+
+
+def test_recovery_summaries_reconcile_the_same_way():
+    events = qualified(
+        events_of(main_transcript())
+        + api_request("req_01", output_tokens="1")
+        + api_request("req_02")
+    )
+    recovered = summarize_events(events, exit_kind="interrupted", adapter="claude")
+    assert "otel_usage_conflicts_with_native" in recovered["usage"]["reasons"]
+    assert recovered == summarize_claude_events(events, exit_kind="interrupted")
 
 
 def test_an_otel_tool_result_joins_the_transcript_call_by_id():
@@ -525,7 +635,7 @@ def test_a_run_whose_streams_agree_qualifies_its_version():
 
 
 def test_disagreeing_token_counts_do_not_qualify():
-    otel = api_request("req_01") + api_request("req_02")
+    otel = api_request("req_01", cache_creation_tokens="0") + api_request("req_02")
     proof = qualification()(raw_events(events_of(main_transcript()), otel))
     assert proof["qualified"] is False
     assert {m["check"] for m in proof["mismatches"]} >= {"usage_agrees", "tool_calls_agree"}
