@@ -40,6 +40,8 @@ def arrange(kicked=False, count=1):
     prefer(
         p,
         Decision.yes() if kicked else Decision.no(),
+        # A kicked cast may ask how many targets before choosing them (rule 601.2c).
+        Decision.number(count),
         *(object_preference(game, c) for c in creatures),
     )
     return game, p, card, creatures
@@ -274,7 +276,10 @@ def test_hexproof_in_response_protects_only_opponent_controlled_target():
     game.get_battlefield(p).remove(stolen)
     game.get_battlefield(opponent).add(stolen)
     stolen.controller = opponent
-    prefer(p, Decision.yes(), *(object_preference(game, c) for c in targets))
+    prefer(
+        p, Decision.yes(), Decision.number(len(targets)),
+        *(object_preference(game, c) for c in targets),
+    )
     cast(game, p, card)
     cast_card(game, opponent, GrantHexproof(targets, owner=opponent))
     assert p.zones[Zone.HAND].contains(targets[0])
