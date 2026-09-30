@@ -310,15 +310,25 @@ def _regrade_table(summary):
     def percent(value):
         return "   -  " if value is None else f"{value * 100:5.1f}%"
 
+    def graded_on(row):
+        digest = row["source_grading_inputs_digest"]
+        if digest is None:
+            return "unknown " + row["run_id"][:8]
+        return digest.removeprefix("sha256:")[:12]
+
     yield f"grading inputs {summary['grading_inputs_digest']}"
-    yield f"{'candidate':12} {'name':28} {'runs':>4}  {'target before':>13} {'after':>6}  {'fdn':>6}  {'engine':>6}"
-    for row in summary["candidates"]:
+    yield (
+        f"{'candidate':12} {'name':28} {'graded on':16} {'runs':>4}  "
+        f"{'target before':>13} {'after':>6} {'pairs':>5}  {'fdn':>6}  {'engine':>6}"
+    )
+    for row in summary["cohorts"]:
         target, fdn, engine = (
             row[name] for name in ("card_correctness", "fdn_regression", "engine_regression")
         )
         yield (
-            f"{row['candidate_hash'][:12]:12} {str(row['name'])[:28]:28} {row['runs']:>4}  "
-            f"{percent(target['before_mean_pass_rate']):>13} {percent(target['after_mean_pass_rate'])}  "
+            f"{row['candidate_hash'][:12]:12} {str(row['name'])[:28]:28} {graded_on(row):16} "
+            f"{row['runs']:>4}  {percent(target['before_mean_pass_rate']):>13} "
+            f"{percent(target['after_mean_pass_rate'])} {target['paired_runs']:>5}  "
             f"{percent(fdn['after_mean_pass_rate'])}  {percent(engine['after_mean_pass_rate'])}"
         )
 

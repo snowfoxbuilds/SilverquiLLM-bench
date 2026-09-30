@@ -101,7 +101,7 @@ def test_unchanged_inputs_reproduce_each_records_scores_and_leave_records_untouc
         assert result["benchmark_configuration_changed"] is False
     assert tree_digest(retained.opts["results_repo"]) == records_before
     assert tree_digest(retained.opts["results_dir"]) == runs_before
-    assert [row["runs"] for row in summary["candidates"]] in ([2, 1], [1, 2])
+    assert [row["runs"] for row in summary["cohorts"]] in ([2, 1], [1, 2])
     assert summary["skipped"] == summary["errors"] == []
     assert json.loads((retained.out / "summary.json").read_text()) == summary
 
@@ -410,3 +410,324 @@ def test_an_interrupt_stops_the_batch_and_writes_no_partial_output(retained, mon
         invoke(retained, workers=1)
     assert calls
     assert not (retained.out / "summary.json").exists()
+
+
+# --- Output containment: nothing reached through a link is ever read or written ----------
+
+
+def protected(retained):
+    return tree_digest(retained.opts["results_repo"]), tree_digest(retained.opts["results_dir"])
+
+
+@pytest.mark.parametrize("target", ["results_repo", "results_dir"])
+def test_a_candidate_output_directory_linked_into_retained_evidence_is_refused(retained, target):
+    record = retained.records[0]
+    inside = (
+        retained.opts["results_dir"] / "run-a" / "workspace_final"
+        if target == "results_dir"
+        else next((retained.opts["results_repo"] / "results").glob("*/run-a"))
+    )
+    retained.out.mkdir()
+    (retained.out / record.candidate.hash).symlink_to(inside, target_is_directory=True)
+    before = protected(retained)
+
+    summary = invoke(retained, runs=["run-a"])
+
+    assert summary["errors"] == [
+        {
+            "run_id": "run-a",
+            "reason": "regrade_output_unsafe:candidate_directory",
+            "stderr_tail": "",
+        }
+    ]
+    assert protected(retained) == before
+    assert not (inside / "run-a.json").exists()
+
+
+def test_an_existing_output_file_that_is_a_link_is_replaced_not_followed(retained, tmp_path):
+    record = retained.records[0]
+    target = tmp_path / "elsewhere.json"
+    target.write_text("{}")
+    directory = retained.out / record.candidate.hash
+    directory.mkdir(parents=True)
+    (directory / "run-a.json").symlink_to(target)
+
+    invoke(retained, runs=["run-a"])
+
+    assert target.read_text() == "{}"
+    assert not (directory / "run-a.json").is_symlink()
+    assert output(retained, "run-a")["scores"] == record.scores
+
+
+@pytest.mark.parametrize("swap", ["link", "move"])
+def test_a_candidate_directory_replaced_while_grading_is_not_written(
+    retained, monkeypatch, swap, tmp_path
+):
+    record = retained.records[0]
+    directory = retained.out / record.candidate.hash
+    moved = tmp_path / "moved"
+    original = regrade_module._scores
+
+    def replace_directory(*args):
+        directory.rename(moved)
+        if swap == "link":
+            directory.symlink_to(retained.opts["results_dir"] / "run-a" / "workspace_final")
+        return original(*args)
+
+    monkeypatch.setattr(regrade_module, "_scores", replace_directory)
+    before = protected(retained)
+
+    summary = invoke(retained, runs=["run-a"])
+
+    assert [row["reason"] for row in summary["errors"]] == [
+        "regrade_output_unsafe:candidate_replaced"
+    ]
+    assert list(moved.iterdir()) == []
+    assert protected(retained) == before
+
+
+def test_an_output_root_replaced_before_writing_is_refused(retained, monkeypatch, tmp_path):
+    original = regrade_module._scores
+
+    def replace_root(*args):
+        retained.out.rename(tmp_path / "old-out")
+        retained.out.symlink_to(retained.opts["results_dir"], target_is_directory=True)
+        return original(*args)
+
+    monkeypatch.setattr(regrade_module, "_scores", replace_root)
+    before = protected(retained)
+
+    with pytest.raises(regrade_module.UnsafeOutput, match="out_replaced"):
+        invoke(retained, runs=["run-a"])
+    assert protected(retained) == before
+
+
+# --- Cache validation: a reused output must be a fully valid success ---------------------
+
+
+def _drop_candidate_name(value):
+    del value["candidate_name"]
+
+
+def _null_dimension(value):
+    value["scores"]["card_correctness"] = None
+
+
+def _empty_dimension(value):
+    value["scores"]["card_correctness"] = {}
+
+
+def _missing_field(value):
+    del value["scores"]["fdn_regression"]["tests_total"]
+
+
+def _rate_out_of_range(value):
+    value["scores"]["card_correctness"]["pass_rate"] = 500
+
+
+def _rate_not_finite(value):
+    value["scores"]["card_correctness"]["pass_rate"] = float("nan")
+
+
+def _inconsistent_counts(value):
+    score = value["scores"]["engine_regression"]
+    score["tests_passed"] = score["tests_total"] + 1
+
+
+def _rate_disagrees_with_counts(value):
+    score = value["scores"]["fdn_regression"]
+    score["pass_rate"] = 0.5 if score["pass_rate"] != 0.5 else 0.25
+
+
+def _malformed_source_scores(value):
+    value["source"]["scores"]["card_correctness"]["pass_rate"] = 0.123
+
+
+def _wrong_source_digest(value):
+    value["source"]["grading_inputs_digest"] = "sha256:" + "1" * 64
+
+
+def _error_beside_scores(value):
+    value["error"] = {"reason": "exit_1", "stderr_tail": ""}
+
+
+def _bad_timestamp(value):
+    value["graded_at"] = "yesterday"
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        _drop_candidate_name,
+        _null_dimension,
+        _empty_dimension,
+        _missing_field,
+        _rate_out_of_range,
+        _rate_not_finite,
+        _inconsistent_counts,
+        _rate_disagrees_with_counts,
+        _malformed_source_scores,
+        _wrong_source_digest,
+        _error_beside_scores,
+        _bad_timestamp,
+    ],
+)
+def test_a_damaged_cache_with_matching_digests_regrades_only_that_run(retained, damage):
+    invoke(retained)
+    path = output_file(retained, "run-a")
+    value = json.loads(path.read_text())
+    damage(value)
+    path.write_text(json.dumps(value))
+    docker = LocalDocker()
+
+    summary = invoke(retained, docker=docker)
+
+    assert len(docker.runs) == 1
+    assert summary["errors"] == []
+    repaired = output(retained, "run-a")
+    assert repaired["scores"] == retained.records[0].scores
+    assert repaired["candidate_name"] == output(retained, "run-b")["candidate_name"]
+    assert json.loads((retained.out / "summary.json").read_text()) == summary
+
+
+def test_a_valid_missing_observation_is_reused_and_left_out_of_that_dimensions_means(retained):
+    invoke(retained)
+    path = output_file(retained, "run-a")
+    value = json.loads(path.read_text())
+    value["scores"]["card_correctness"] = {
+        "evaluated": False,
+        "complete": False,
+        "tests_passed": None,
+        "tests_total": None,
+        "pass_rate": None,
+        "missing_reasons": ["grading_did_not_execute"],
+    }
+    path.write_text(json.dumps(value))
+    docker = LocalDocker()
+
+    summary = invoke(retained, docker=docker)
+
+    assert docker.runs == []
+    cohort = next(c for c in summary["cohorts"] if c["runs"] == 2)
+    assert cohort["card_correctness"]["paired_runs"] == 1
+    assert cohort["fdn_regression"]["paired_runs"] == 2
+
+
+def test_scores_that_break_the_record_invariants_are_an_error_not_an_output(retained, monkeypatch):
+    original = regrade_module._scores
+
+    def impossible(evaluated, benchmark):
+        scores = original(evaluated, benchmark)
+        scores["card_correctness"]["pass_rate"] = 2.0
+        return scores
+
+    monkeypatch.setattr(regrade_module, "_scores", impossible)
+
+    summary = invoke(retained, runs=["run-a"])
+
+    assert [row["reason"] for row in summary["errors"]] == ["regrade_scores_invalid"]
+    assert "scores" not in output(retained, "run-a")
+
+
+# --- Cohorts: original scores from different grading inputs are never averaged ----------
+
+DIGEST_A, DIGEST_B = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+
+
+def synthetic(run_id, source_digest, before, after, candidate="c" * 64):
+    def dimension(rate):
+        return {"tests_passed": None, "tests_total": None, "pass_rate": rate}
+
+    return {
+        "run_id": run_id,
+        "candidate_hash": candidate,
+        "candidate_name": "candidate",
+        "source": {
+            "grading_inputs_digest": source_digest,
+            "scores": {
+                "card_correctness": dimension(before),
+                "fdn_regression": dimension(1.0),
+                "engine_regression": dimension(1.0),
+            },
+        },
+        "scores": {
+            "card_correctness": dimension(after),
+            "fdn_regression": dimension(1.0),
+            "engine_regression": dimension(None),
+        },
+    }
+
+
+def test_one_candidate_graded_on_two_input_digests_forms_two_cohorts():
+    summary = regrade_module.summarize(
+        [synthetic("r1", DIGEST_A, 0.0, 1.0), synthetic("r2", DIGEST_B, 1.0, 1.0)], {}, "example"
+    )
+
+    rows = {row["source_grading_inputs_digest"]: row for row in summary["cohorts"]}
+    assert set(rows) == {DIGEST_A, DIGEST_B}
+    assert rows[DIGEST_A]["card_correctness"]["before_mean_pass_rate"] == 0.0
+    assert rows[DIGEST_B]["card_correctness"]["before_mean_pass_rate"] == 1.0
+    assert all(row["runs"] == 1 for row in rows.values())
+
+
+def test_runs_on_one_digest_aggregate_with_paired_counts_per_dimension():
+    summary = regrade_module.summarize(
+        [synthetic("r1", DIGEST_A, 0.5, 1.0), synthetic("r2", DIGEST_A, 1.0, None)], {}, "example"
+    )
+
+    (row,) = summary["cohorts"]
+    assert row["runs"] == 2
+    assert row["card_correctness"] == {
+        "before_mean_pass_rate": 0.5,
+        "after_mean_pass_rate": 1.0,
+        "paired_runs": 1,
+    }
+    assert row["fdn_regression"]["paired_runs"] == 2
+    assert row["engine_regression"] == {
+        "before_mean_pass_rate": None,
+        "after_mean_pass_rate": None,
+        "paired_runs": 0,
+    }
+
+
+def test_runs_with_an_unknown_original_digest_stay_individual():
+    summary = regrade_module.summarize(
+        [
+            synthetic("r1", None, 0.0, 1.0),
+            synthetic("r2", None, 1.0, 1.0),
+            synthetic("r3", DIGEST_A, 1.0, 1.0),
+        ],
+        {},
+        "example",
+    )
+
+    unknown = [row for row in summary["cohorts"] if row["source_grading_inputs_digest"] is None]
+    assert sorted(row["run_id"] for row in unknown) == ["r1", "r2"]
+    assert all(row["runs"] == 1 for row in unknown)
+    assert len(summary["cohorts"]) == 3
+
+
+def test_reused_outputs_summarize_into_the_same_cohorts(retained):
+    first = invoke(retained)
+    second = invoke(retained)
+    assert first["cohorts"] == second["cohorts"]
+    assert {row["source_grading_inputs_digest"] for row in second["cohorts"]} == {
+        retained.records[0].run_metadata["grading_inputs"]["digest"]
+    }
+
+
+def test_the_table_names_each_cohorts_original_grading_inputs(retained, monkeypatch):
+    monkeypatch.setattr(regrade_module, "DockerRunner", LocalDocker)
+    arguments = [
+        "regrade", "--benchmark", "example", "--out", str(retained.out),
+        "--bench-root", str(retained.opts["bench_root"]),
+        "--results-repo", str(retained.opts["results_repo"]),
+        "--results-dir", str(retained.opts["results_dir"]),
+    ]  # fmt: skip
+
+    result = CliRunner().invoke(main, arguments)
+
+    assert result.exit_code == 0, result.output
+    digest = retained.records[0].run_metadata["grading_inputs"]["digest"]
+    assert "graded on" in result.output
+    assert digest.removeprefix("sha256:")[:12] in result.output
