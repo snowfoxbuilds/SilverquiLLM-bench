@@ -198,7 +198,7 @@ Each record fingerprints the host-owned grading inputs it was graded against (`g
 `silverquillm regrade` re-grades retained runs on the checkout's current inputs, from the workspace each run was graded from in the local run artifacts and on its recorded grader image, with the same container isolation; a record's own paths never choose what is mounted.
 A re-grade never replaces or edits a record: its scores go to a separate output directory, tagged with the new digest, and a run whose workspace or grader image is gone is skipped with a reason.
 The output directory is written only through descriptors that never follow a link, so no link inside it can redirect a write into the records or run artifacts.
-A re-grade summary compares before and after within a cohort of one candidate and one original grading-inputs digest, never across digests, and reuses an earlier output only when it is a complete, invariant-satisfying success on the same inputs and grading code.
+A re-grade summary compares before and after within a cohort of one candidate and one original grading-inputs digest, never across digests, and reuses an earlier output only when it is a complete, invariant-satisfying success on the same inputs, grading code and grader image; any unusable earlier output is a miss that re-grades only that run.
 
 ### Historical evidence
 
