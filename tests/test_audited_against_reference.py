@@ -91,8 +91,13 @@ def _discover_oracle_cards() -> list[str]:
     return cards
 
 
-def _run_audited_tests_against_oracle(cn: str, benchmark: str = "sos") -> tuple[int, str, str]:
+def _run_audited_tests_against_oracle(
+    cn: str, benchmark: str = "sos", *, impl_suffix: str = ""
+) -> tuple[int, str, str]:
     """Run audited tests for a card against its oracle impl.
+
+    *impl_suffix* is appended to the oracle impl, so a test can rebind the card
+    class to a variant that decomposes the same behavior differently.
 
     Returns (returncode, stdout, stderr).
     """
@@ -114,6 +119,9 @@ def _run_audited_tests_against_oracle(cn: str, benchmark: str = "sos") -> tuple[
 
         # Copy oracle impl as card_impl.py
         shutil.copy2(impl_path, tmp / "card_impl.py")
+        if impl_suffix:
+            with open(tmp / "card_impl.py", "a") as impl:
+                impl.write(impl_suffix)
 
         # Copy test_utils.py from oracle workspace
         oracle_test_utils = oracle_workspace / "test_utils.py"
@@ -181,3 +189,35 @@ def test_oracle_impl_passes_audited_tests(benchmark: str, cn: str) -> None:
 def test_hob_oracle_cases_cover_the_selected_pool() -> None:
     assert len(_hob_layout.cards) == len(set(_hob_layout.cards))
     assert set(_hob_layout.cards) == {"hob_12", "hob_36", "hob_70", "hob_131", "hob_169"}
+
+
+# Rule 601.2c lets a spell with a variable number of targets announce how many
+# before choosing them, so an implementation may ask for the count as its own
+# Player Query. The audited suite must accept that decomposition too.
+_ASKS_TARGET_COUNT_FIRST = """
+
+from dataclasses import replace as _replace
+
+from engine.card_queries import choose_number as _choose_number
+
+
+class _AsksTargetCountFirst(TheEaglesAreComing):
+    def get_targets(self, game):
+        requirements = super().get_targets(game)
+        if not self.kicked:
+            return requirements
+        count = _choose_number(
+            game, self.controller, 0, len(requirements), "How many targets?", source_card=self
+        )
+        return [_replace(r, optional=False) for r in requirements[:count]]
+
+
+TheEaglesAreComing = _AsksTargetCountFirst
+"""
+
+
+def test_hob_12_suite_accepts_asking_the_target_count_first() -> None:
+    returncode, stdout, stderr = _run_audited_tests_against_oracle(
+        "hob_12", "hob-medium", impl_suffix=_ASKS_TARGET_COUNT_FIRST
+    )
+    assert returncode == 0, f"hob_12 count-first variant failed:\n{stdout}\n{stderr}"
