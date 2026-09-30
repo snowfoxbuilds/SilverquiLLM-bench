@@ -260,6 +260,75 @@ def test_another_hosts_run_regrades_from_its_archive_on_a_substituted_grader(edi
     assert result["grader_substituted_for"] == FIXTURE_IMAGE_ID
 
 
+def _another_host(edited, tmp_path, docker):
+    opts, _ = edited
+    shutil.rmtree(opts["results_dir"] / "edited", ignore_errors=True)
+    return {
+        "bench_root": opts["bench_root"],
+        "benchmark_id": "example",
+        "results_repo": opts["results_repo"],
+        "results_dir": opts["results_dir"],
+        "out": tmp_path / "regrade",
+        "docker": docker,
+    }
+
+
+def _output(tmp_path):
+    return next((tmp_path / "regrade").glob("*/edited.json"))
+
+
+def test_a_substituted_output_is_reused_only_under_the_same_substitution(edited, tmp_path):
+    regrade(**_another_host(edited, tmp_path, OtherHostDocker()), substitute_grader=True)
+
+    again = OtherHostDocker()
+    assert (
+        regrade(**_another_host(edited, tmp_path, again), substitute_grader=True)["skipped"] == []
+    )
+    assert again.runs == []
+
+    plain = regrade(**_another_host(edited, tmp_path, OtherHostDocker()))
+    assert plain["skipped"] == [{"run_id": "edited", "reason": "grader_image_unavailable"}]
+
+    path = _output(tmp_path)
+    value = json.loads(path.read_text())
+    value["grader_substituted_for"] = "sha256:" + "2" * 64
+    path.write_text(json.dumps(value))
+    repaired = OtherHostDocker()
+    regrade(**_another_host(edited, tmp_path, repaired), substitute_grader=True)
+    assert len(repaired.runs) == 1
+    assert json.loads(path.read_text())["grader_substituted_for"] == FIXTURE_IMAGE_ID
+
+
+def test_an_output_on_the_recorded_grader_is_not_reused_when_this_host_substitutes(
+    edited, tmp_path
+):
+    regrade(**_another_host(edited, tmp_path, LocalDocker()))
+    assert "grader_substituted_for" not in json.loads(_output(tmp_path).read_text())
+
+    substituting = OtherHostDocker()
+    regrade(**_another_host(edited, tmp_path, substituting), substitute_grader=True)
+
+    assert len(substituting.runs) == 1
+    result = json.loads(_output(tmp_path).read_text())
+    assert result["grading_isolation"]["grader_image_id"] == OtherHostDocker.LOCAL
+    assert result["grader_substituted_for"] == FIXTURE_IMAGE_ID
+
+
+@pytest.mark.parametrize("workspace", [[], {}, 7])
+def test_a_cached_workspace_source_of_the_wrong_type_is_a_miss(edited, tmp_path, workspace):
+    regrade(**_another_host(edited, tmp_path, LocalDocker()))
+    path = _output(tmp_path)
+    value = json.loads(path.read_text())
+    value["source"]["workspace"] = workspace
+    path.write_text(json.dumps(value))
+    docker = LocalDocker()
+
+    summary = regrade(**_another_host(edited, tmp_path, docker))
+
+    assert len(docker.runs) == 1 and summary["errors"] == []
+    assert json.loads(path.read_text())["source"]["workspace"] == "results_repo"
+
+
 # ---- provenance and the clean-source rule ------------------------------------------------------
 
 

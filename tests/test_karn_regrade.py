@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import threading
 import time
@@ -18,8 +19,9 @@ from silverquillm.karn import regrade as regrade_module
 from silverquillm.karn.definition import KarnError
 from silverquillm.karn.execution import run_benchmark
 from silverquillm.karn.grader import DockerRun, GraderError
-from silverquillm.karn.records import read_record
+from silverquillm.karn.records import read_record, validate_scores
 from silverquillm.karn.regrade import LiveContainers, recorded_grader, regrade
+from silverquillm.results_repo import InvalidRunRecordError
 
 from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
 from .test_karn_execution import options
@@ -752,3 +754,107 @@ def test_the_table_names_each_cohorts_original_grading_inputs(retained, monkeypa
     digest = retained.records[0].run_metadata["grading_inputs"]["digest"]
     assert "graded on" in result.output
     assert digest.removeprefix("sha256:")[:12] in result.output
+
+
+def test_a_fifo_at_a_cache_path_is_a_miss_and_does_not_block(retained):
+    invoke(retained)
+    path = output_file(retained, "run-a")
+    path.unlink()
+    os.mkfifo(path)
+    docker = LocalDocker()
+    finished = []
+    worker = threading.Thread(target=lambda: finished.append(invoke(retained, docker=docker)))
+    worker.daemon = True
+    worker.start()
+    worker.join(timeout=60)
+
+    assert finished, "a FIFO at the cache path blocked the re-grade"
+    assert len(docker.runs) == 1
+    assert path.is_file() and output(retained, "run-a")["scores"] == retained.records[0].scores
+
+
+def test_a_huge_integer_rate_breaks_the_score_invariants_rather_than_overflowing(retained):
+    scores = json.loads(json.dumps(retained.records[0].scores))
+    scores["card_correctness"]["pass_rate"] = 10**400
+    with pytest.raises(InvalidRunRecordError):
+        validate_scores(scores)
+
+
+def test_caches_that_cannot_be_decoded_or_checked_regrade_only_their_runs(retained):
+    invoke(retained)
+    huge = output_file(retained, "run-a")
+    value = json.loads(huge.read_text())
+    value["scores"]["card_correctness"]["pass_rate"] = 10**400
+    huge.write_text(json.dumps(value))
+    output_file(retained, "run-b").write_text("[" * 20000 + "]" * 20000)
+    reused = output_file(retained, "run-c").read_bytes()
+    docker = LocalDocker()
+
+    summary = invoke(retained, docker=docker)
+
+    assert len(docker.runs) == 2
+    assert summary["errors"] == []
+    assert output_file(retained, "run-c").read_bytes() == reused
+    for index, run_id in enumerate(["run-a", "run-b"]):
+        assert output(retained, run_id)["scores"] == retained.records[index].scores
+    assert json.loads((retained.out / "summary.json").read_text()) == summary
+
+
+def test_an_output_graded_by_another_image_is_graded_again(retained):
+    invoke(retained)
+    path = output_file(retained, "run-a")
+    value = json.loads(path.read_text())
+    other = "sha256:" + "1" * 64
+    assert other != FIXTURE_IMAGE_ID
+    value["grading_isolation"]["grader_image_id"] = other
+    path.write_text(json.dumps(value))
+    docker = LocalDocker()
+
+    invoke(retained, docker=docker)
+
+    assert len(docker.runs) == 1
+    assert output(retained, "run-a")["grading_isolation"]["grader_image_id"] == FIXTURE_IMAGE_ID
+
+
+def _set_inputs(value):
+    def change(manifest):
+        manifest["run_metadata"]["grading_inputs"] = value(
+            manifest["run_metadata"]["grading_inputs"]
+        )
+
+    return change
+
+
+@pytest.mark.parametrize(
+    "inputs",
+    [
+        lambda inputs: {**inputs, "digest": ["bad"]},
+        lambda inputs: {**inputs, "digest": {"sha256": "x"}},
+        lambda inputs: {**inputs, "digest": 7},
+        lambda inputs: {**inputs, "digest": True},
+        lambda inputs: {**inputs, "digest": "sha256:not-hex"},
+        lambda inputs: "sha256:" + "0" * 64,
+    ],
+)
+def test_a_malformed_historical_digest_skips_that_record_and_the_batch_finishes(retained, inputs):
+    edit_manifest(retained, "run-a", _set_inputs(inputs))
+    docker = LocalDocker()
+
+    summary = invoke(retained, docker=docker)
+
+    assert summary["skipped"] == [{"run_id": "run-a", "reason": "invalid_record"}]
+    assert len(docker.runs) == 2
+    assert json.loads((retained.out / "summary.json").read_text()) == summary
+    assert invoke(retained)["skipped"] == summary["skipped"]
+
+
+@pytest.mark.parametrize("inputs", [lambda inputs: None, lambda inputs: {**inputs, "digest": None}])
+def test_an_absent_historical_digest_is_graded_in_the_unknown_cohort(retained, inputs):
+    edit_manifest(retained, "run-a", _set_inputs(inputs))
+    docker = LocalDocker()
+
+    summary = invoke(retained, docker=docker)
+
+    assert summary["skipped"] == []
+    assert len(docker.runs) == 3
+    assert output(retained, "run-a")["source"]["grading_inputs_digest"] is None

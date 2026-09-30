@@ -205,7 +205,7 @@ Each record fingerprints the host-owned grading inputs it was graded against (`g
 The workspace comes from the local run artifacts, else from the run's workspace archive in the results repository, so any host can re-grade any archived run; grader images are built per host, so `--substitute-grader` grades on this host's grader for the recorded Python and names both images.
 A re-grade never replaces or edits a record: its scores go to a separate output directory, tagged with the new digest, and a run whose workspace or grader image is unavailable is skipped with a reason.
 The output directory is written only through descriptors that never follow a link, so no link inside it can redirect a write into the records or run artifacts.
-A re-grade summary compares before and after within a cohort of one candidate and one original grading-inputs digest, never across digests, leaves out excluded runs and lists them separately, and reuses an earlier output only when it is a complete, invariant-satisfying success on the same inputs and grading code.
+A re-grade summary compares before and after within a cohort of one candidate and one original grading-inputs digest, never across digests, leaves out excluded runs and lists them separately, and reuses an earlier output only when it is a complete, invariant-satisfying success on the same inputs, grading code and grader image; any unusable earlier output is a miss that re-grades only that run.
 
 ### Shared results repository
 

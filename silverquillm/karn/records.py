@@ -290,8 +290,9 @@ def validate_scores(scores) -> None:
             or total <= 0
             or not 0 <= passed <= total
             or type(rate) not in (int, float)
-            or not math.isfinite(rate)
+            # The range check comes first: math.isfinite converts, and a huge int overflows.
             or not 0 <= rate <= 1
+            or not math.isfinite(rate)
             or not math.isclose(rate, passed / total, rel_tol=1e-9, abs_tol=1e-12)
         ):
             raise InvalidRunRecordError("impossible grading counts or rate")

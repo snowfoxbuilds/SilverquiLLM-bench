@@ -45,6 +45,7 @@ from .workspace_archive import ArchiveRefused, graded_path, materialize
 
 SUMMARY = "summary.json"
 CANDIDATE_HASH = re.compile(r"[0-9a-f]{64}")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 OUTPUT_LIMIT = 16 * 1024 * 1024
 DIRECTORY = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 #: Every key of a successful per-run output; a reused output carries exactly these.
@@ -139,10 +140,30 @@ def select_records(
             skipped.append({"run_id": run_dir.name, "reason": "not_a_karn_record"})
             continue
         try:
-            selected.append(read_record(run_dir))
+            record = read_record(run_dir)
         except InvalidRunRecordError:
             skipped.append({"run_id": run_dir.name, "reason": "invalid_record"})
+            continue
+        if not _cohort_key_valid(record):
+            skipped.append({"run_id": run_dir.name, "reason": "invalid_record"})
+            continue
+        selected.append(record)
     return selected, skipped
+
+
+def _cohort_key_valid(record: KarnRunRecord) -> bool:
+    """The historical grading-inputs digest is absent, null, or a well-formed digest.
+
+    It keys the comparison cohorts, so a malformed one is refused before grading rather
+    than merged into the unknown cohort or left to break the summary.
+    """
+    inputs = record.run_metadata.get("grading_inputs")
+    if inputs is None:
+        return True
+    if not isinstance(inputs, dict):
+        return False
+    digest = inputs.get("digest")
+    return digest is None or (isinstance(digest, str) and DIGEST.fullmatch(digest) is not None)
 
 
 def graded_workspace(record: KarnRunRecord, results_dir: Path) -> Path:
@@ -193,6 +214,25 @@ def recorded_grader(
         raise Skip("grader_python_mismatch")
     grader = ContainerGrader(used, docker=docker, candidate_python=python, timeout=timeout)
     return grader, (used if used != image_id else None)
+
+
+def expected_grader(record: KarnRunRecord, docker, *, substitute: bool) -> tuple[str, str | None]:
+    """The image this invocation grades the run with, and the recorded image it stands in for.
+
+    Without ``substitute`` that is the recorded image, looked up nowhere. With it, the
+    recorded image when this host has it, else this host's grader for the recorded Python,
+    as :func:`recorded_grader` chooses; ``("", None)`` when neither can be named.
+    """
+    isolation = record.run_metadata.get("grading_isolation") or {}
+    image_id = isolation.get("grader_image_id")
+    if not isinstance(image_id, str):
+        return "", None
+    if not substitute or docker.image_id(image_id) == image_id:
+        return image_id, None
+    python = isolation.get("candidate_python")
+    minor = isolation.get("grader_python") if python is not None else LEGACY_PYTHON
+    used = docker.image_id(grader_tag(minor)) if isinstance(minor, str) else None
+    return (used, image_id) if used and used != image_id else ("", None)
 
 
 def _dimensions(scores: dict) -> dict:
@@ -273,23 +313,23 @@ class OutputDir:
         if not stat.S_ISDIR(current.st_mode) or not _same(current, os.fstat(descriptor)):
             raise UnsafeOutput("regrade_output_unsafe:candidate_replaced")
 
-    def read(self, name: str | None, filename: str) -> dict | list | None:
-        """A regular file's JSON, or None when it is absent, not a regular file, or invalid."""
+    def read(self, name: str | None, filename: str) -> bytes | None:
+        """A regular file's bytes, or None when it is absent, not a regular file, or too large.
+
+        ``O_NONBLOCK`` keeps a FIFO or device at the path from blocking the open; the
+        descriptor is then checked before anything is read from it.
+        """
         directory = self.directory(name)
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
         try:
-            descriptor = os.open(
-                filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
-            )
+            descriptor = os.open(filename, flags, dir_fd=directory)
         except OSError:
             return None
         with os.fdopen(descriptor, "rb") as handle:
             status = os.fstat(handle.fileno())
             if not stat.S_ISREG(status.st_mode) or status.st_size > OUTPUT_LIMIT:
                 return None
-            try:
-                return json.loads(handle.read(OUTPUT_LIMIT + 1))
-            except ValueError:
-                return None
+            return handle.read(OUTPUT_LIMIT + 1)
 
     def write(self, name: str | None, filename: str, value: dict) -> None:
         """Replace ``filename`` atomically, never through a link and never outside ``--out``."""
@@ -347,12 +387,30 @@ def _identity(record: KarnRunRecord, benchmark: Benchmark, digests: dict) -> dic
     }
 
 
-def _reusable(previous, identity: dict) -> dict | None:
+def _cached(out: OutputDir, name: str, filename: str, identity: dict, grader: tuple):
+    """The reusable earlier output, or None to re-grade this run.
+
+    Any failure to decode or check the cache is a miss, whatever the exception: the file is
+    this command's own earlier output, and an unusable one is simply graded again.
+    ``UnsafeOutput`` from opening the directory is not a cache problem and propagates.
+    """
+    data = out.read(name, filename)
+    if data is None:
+        return None
+    try:
+        return _reusable(json.loads(data), identity, grader)
+    except Exception:  # noqa: BLE001 -- e.g. RecursionError, OverflowError on hostile JSON.
+        return None
+
+
+def _reusable(previous, identity: dict, grader: tuple) -> dict | None:
     """A previous successful output of this run on the same inputs and code, fully checked.
 
     Anything else is a miss that re-grades only this run: an output is reused only when its
-    identity and source projection equal what the current record and inputs produce, its
-    scores satisfy the record score invariants, and it carries exactly a success's fields.
+    identity and source projection equal what the current record and inputs produce, it was
+    graded by the image this invocation grades with, standing in for the same recorded image
+    when substituted, its scores satisfy the record score invariants, and it carries exactly
+    a success's fields.
     """
     if not isinstance(previous, dict) or not OUTPUT_KEYS <= set(previous) <= (
         OUTPUT_KEYS | OPTIONAL_OUTPUT_KEYS
@@ -367,14 +425,14 @@ def _reusable(previous, identity: dict) -> dict | None:
         or {k: v for k, v in source.items() if k != "workspace"} != identity["source"]
     ):
         return None
-    if "grader_substituted_for" in previous and not isinstance(
-        previous["grader_substituted_for"], str
-    ):
+    image, substituted_for = grader
+    if previous.get("grader_substituted_for") != substituted_for:
         return None
     isolation = previous["grading_isolation"]
     if (
         not isinstance(isolation, dict)
-        or not isinstance(isolation.get("grader_image_id"), str)
+        or not image
+        or isolation.get("grader_image_id") != image
         or not isinstance(previous["graded_at"], str)
     ):
         return None
@@ -401,8 +459,10 @@ def _regrade_one(
 ) -> dict:
     candidate, filename = record.candidate.hash, f"{record.run_id}.json"
     result = _identity(record, benchmark, digests)
-    if not force and (previous := _reusable(out.read(candidate, filename), result)):
-        return {**previous, "reused": True}
+    if not force:
+        grader_image = expected_grader(record, docker, substitute=substitute_grader)
+        if previous := _cached(out, candidate, filename, result, grader_image):
+            return {**previous, "reused": True}
     try:
         # The archive is rebuilt outside --out, which is written only through descriptors.
         with tempfile.TemporaryDirectory(prefix="sq-regrade-workspace-") as scratch:
