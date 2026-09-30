@@ -21,14 +21,17 @@ from silverquillm.queue_state import _write_atomically
 
 from .benchmark import load_benchmark, stage_benchmark
 from .definition import KarnError, canonical, load_candidate
+from .exclusions import exclude_by_rule
 from .grader import DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError, select_grader
 from .grading_inputs import grading_inputs
 from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
 from .login import LOGIN_PLUGINS, LoginProfile
 from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, logins_root
+from .provenance import collect as collect_provenance
 from .records import KarnIdentity, KarnRunRecord, missing_scores, write_record
 from .snapshots import WorkspaceSnapshots, retain_git_history
 from .toolchain import prepare_toolchain
+from .workspace_archive import ArchiveRefused, archive_run
 
 
 @contextlib.contextmanager
@@ -148,6 +151,35 @@ def collector_address() -> str:
         raise KarnError("collector_host_required") from None
 
 
+def attach_to_record(results_repo: Path, record: KarnRunRecord, run_dir: Path) -> dict:
+    """Archive the graded workspace and write any rule exclusion beside a just-written record.
+
+    Neither changes the record. What happened is kept in the run artifacts; anything left
+    undone is finished later by ``silverquillm results archive`` and ``results check``.
+    """
+    outcome = {"run_id": record.run_id}
+    try:
+        outcome["workspace"] = archive_run(results_repo, record, run_dir)
+    except ArchiveRefused as error:
+        outcome["workspace"] = {"status": "refused", "reason": str(error)}
+    except Exception as error:  # noqa: BLE001 -- the record is written; the archive can be retried.
+        outcome["workspace"] = {"status": "failed", "reason": type(error).__name__}
+    try:
+        written = exclude_by_rule(results_repo, record)
+        outcome["exclusion"] = written.reason if written else None
+    except Exception as error:  # noqa: BLE001 -- `results check` finds a missing rule exclusion.
+        outcome["exclusion_error"] = (
+            str(error) if isinstance(error, KarnError) else type(error).__name__
+        )
+    with contextlib.suppress(OSError):
+        _write_atomically(
+            run_dir / f"results-attachments.{record.run_id}.json",
+            canonical(outcome).decode() + "\n",
+            prefix=".results-attachments-",
+        )
+    return outcome
+
+
 def _scores(evaluated, benchmark) -> dict:
     result = missing_scores("grading_did_not_execute")
     for name, cards in (
@@ -245,18 +277,22 @@ def run_benchmark(
     login_poll_seconds: float = DEFAULT_POLL_SECONDS,
     login_wait=None,
     on_launch=None,
+    allow_dirty: bool = False,
 ) -> KarnRunRecord:
     """Refuse what cannot run before any evidence exists, then collect under both locks.
 
     A run takes any free slot of its login plugin's pool and holds it until its login is
     harvested; while every usable slot is busy it waits, before creating any run directory.
     ``on_launch`` is called once the run holds its login and is about to create evidence,
-    so a caller can count the run as started only from then.
+    so a caller can count the run as started only from then. A candidate built from an
+    uncommitted recipe, or bench code or data with uncommitted changes, is refused unless
+    ``allow_dirty``; the record keeps its provenance either way.
     """
     candidate = load_candidate(
         build_output, construct, **({"image_inspector": host.docker.inspect_image} if host else {})
     )
     benchmark = load_benchmark(bench_root, benchmark_id)
+    provenance = collect_provenance(candidate.image_labels, bench_root, allow_dirty=allow_dirty)
     pool = _login_pool(state_root, candidate) if candidate.plugins else None
     grader = grader or select_grader(candidate.image_id, grader_image, timeout=grading_timeout)
     evaluator = evaluator or grader.evaluate_run
@@ -302,6 +338,7 @@ def run_benchmark(
             grader=grader,
             evaluator=evaluator,
             login_hold=login_hold,
+            provenance=provenance,
         )
 
 
@@ -325,6 +362,7 @@ def _collect(
     grader,
     evaluator,
     login_hold,
+    provenance,
 ) -> KarnRunRecord:
     start = datetime.now(UTC).isoformat()
     artifact_dir = run_dir / "candidate"
@@ -346,6 +384,7 @@ def _collect(
         "budget_seconds": budget_seconds,
         "native_telemetry": telemetry,
         "test_toolchain": toolchain.to_dict(),
+        "provenance": provenance,
         "started_at": start,
     }
     if grader.candidate_python is not None:
@@ -367,6 +406,7 @@ def _collect(
         "grading_source": None,
         "grading_isolation": grader.isolation(),
         "measurements": None,
+        "provenance": provenance,
     }
     observed = HostResult(
         run_id,
@@ -540,4 +580,5 @@ def _collect(
         prefix=".run-record-",
     )
     write_record(results_repo, record)
+    attach_to_record(results_repo, record, run_dir)
     return record

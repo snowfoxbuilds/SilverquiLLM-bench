@@ -20,6 +20,17 @@ karn build ~/bench-results/karn --out ~/bench-builds/roster-1
 silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-codex
 ```
 
+Every host builds and runs candidates the same way, so any record can be traced to committed sources:
+
+1. Commit and push a recipe change to bench-results before building it, and pull before building someone else's.
+2. Build from the committed tree, `karn build ~/bench-results/karn/constructs/<label> --out <dir>` or the whole `karn` directory, never with `--worktree`.
+3. Run bench code from a pushed `main` commit, with no uncommitted change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`; a detached worktree per batch keeps runs off the checkout you edit.
+4. Set `SILVERQUILLM_HOST_LABEL` to a short name for the host (otherwise its hostname is recorded).
+5. Use a subscription on one host at a time; enroll each host's slots with its own logins where you can.
+
+`run` and `scheduler` refuse a run that breaks steps 2 or 3 before creating anything, with `dirty_source_refused:` and each reason: `recipe_revision_unrecorded` or `recipe_revision_dirty` for the image, and `bench_checkout_dirty` or `benchmark_root_dirty` (or `_not_a_git_checkout`) for the checkouts.
+`--allow-dirty` runs anyway, for development only; the record's `run_metadata.provenance` keeps the overridden reasons beside the host label, both checkouts' commits and the recipe revision.
+
 The current batch (2026-09-28) runs every model at effort `medium` with subagents disabled. The bench does not enforce either, so candidates stay generic.
 
 | Construct | Model | CLI |
@@ -253,5 +264,43 @@ silverquillm regrade --benchmark hob-medium --results-repo ~/bench-results --res
 - Every read and write under `--out` goes through directory descriptors that never follow a link. A candidate directory that is a link, or that is replaced while a run grades, fails that run with `regrade_output_unsafe:…` and nothing is written through it; an existing output file that is a link is replaced, never followed.
 - `summary.json` and the table compare mean pass rates before and after per cohort: one candidate whose runs were originally graded on one grading-inputs digest. Original scores from different digests are never averaged together, and a run whose original digest is unknown is its own cohort, named by run id. Each dimension reports `paired_runs`, the runs observed both before and after, which both means cover. The table's `graded on` column shows the cohort's original digest.
 - `--run` narrows by run-id prefix and `--candidate` by candidate-hash prefix; a prefix that matches nothing is an error. `--workers` grades runs concurrently (default 2).
-- A run whose workspace or grader image is gone is skipped with a reason. A record whose `grading_inputs` is not an object, or whose digest is neither absent, null nor a `sha256:` digest, is skipped as `invalid_record` before grading, because the digest keys its cohort. A run whose grading fails keeps the error in its output file, the others continue, and the command exits 1.
-- A rerun reuses an output only when it is a complete success graded on the same inputs and grading code by the image this invocation grades with, its identity and copy of the record's scores still match the record, and its scores satisfy the record score invariants. Anything else is re-graded, only for that run, and its file is rewritten: a cache file that is not a regular file (a FIFO is opened without blocking), cannot be decoded, or fails any check is a miss, never an error; `--force` grades every run again. New scores that break the invariants are a per-run error (`regrade_scores_invalid`), never an output. Ctrl-C, SIGTERM and SIGHUP remove the grading containers still running, and write no partial output.
+- Excluded runs (see [Exclusions](#exclusions)) are graded like any other but left out of every cohort; the summary lists them under `excluded` with their reasons and notes, and the command prints them beneath the table. Exclusion files are read on every invocation and never stored with a run's output, so adding or deleting one changes the next summary even when every output is reused. A malformed or misplaced exclusion file stops the regrade before anything is graded.
+- A run with no run artifacts on this host, such as another host's, is graded from its workspace archive in the results repository instead, which is rebuilt and verified against the record first, in a scratch directory under the system temp dir (`TMPDIR`) rather than `--out`; the output's `source.workspace` says which (`run_artifacts` or `results_repo`).
+- Grader images are built per host, so another host's recorded image is normally absent and its runs are skipped with `grader_image_unavailable`. `--substitute-grader` grades them on this host's grader for the recorded Python; the output's `grading_isolation` names the image used and `grader_substituted_for` the recorded one.
+- A run whose workspace or grader image is unavailable is skipped with a reason. A record whose `grading_inputs` is not an object, or whose digest is neither absent, null nor a `sha256:` digest, is skipped as `invalid_record` before grading, because the digest keys its cohort. A run whose grading fails keeps the error in its output file, the others continue, and the command exits 1.
+- A rerun reuses an output only when it is a complete success graded on the same inputs and grading code by the image this invocation grades with (under `--substitute-grader`, only an output substituted for the same recorded image), its identity and copy of the record's scores still match the record, and its scores satisfy the record score invariants. Anything else is re-graded, only for that run, and its file is rewritten: a cache file that is not a regular file (a FIFO is opened without blocking), cannot be decoded, or fails any check is a miss, never an error; `--force` grades every run again. New scores that break the invariants are a per-run error (`regrade_scores_invalid`), never an output. Ctrl-C, SIGTERM and SIGHUP remove the grading containers still running, and write no partial output.
+
+## Shared results repository
+
+Several hosts write to the same bench-results repository. Records never collide, since each has its own path, so pull before a batch and push its records after; every file the bench writes there is write-once.
+
+### Workspace archives
+
+Each run archives its graded workspace beside its record, as a diff from its benchmark input's staged baseline under `baselines/` (see ADR-015), after rebuilding it and checking it against the record's grading digest.
+The outcome is kept in the run artifacts as `results-attachments.<run-id>.json`; a failed archive never affects the record.
+Records from before archives, or whose archive failed, are backfilled on the host that holds their run artifacts:
+
+```sh
+silverquillm results archive --results-repo ~/bench-results --results-dir runs/karn --dry-run
+silverquillm results archive --results-repo ~/bench-results --results-dir runs/karn
+```
+
+A record whose run artifacts are elsewhere is skipped (`run_artifacts_unavailable`), as is a run with no graded workspace; anything that fails verification is `refused` with its reason, and the command exits 1.
+Commit `baselines/` and `workspaces/` with the records.
+
+### Exclusions
+
+A run is left out of analyses only by an exclusion file, `exclusions/<candidate-hash>/<run-id>.json`, never by editing its record or by a private filter.
+The run writer adds one when a rule fires on an observed fact: `host_failed`, `never_executed` (zero agent turns), `subagents_used` (subagent threads observed), or `subagents_uncounted` (measurements from before subagent threads were counted).
+An unknown measurement never excludes a run: absent, null or empty measurements, or an unknown turn or thread count, leave it in.
+Exclude anything else yourself, with a note a later reader can check:
+
+```sh
+silverquillm results exclude RUN_ID --reason subagents_used --note "Sonnet delegated to Opus subagents" --results-repo ~/bench-results
+silverquillm results exclude RUN_ID --reason superseded --superseded-by RETRY_ID --note "rerun after the host outage" --results-repo ~/bench-results
+```
+
+Reasons are `subagents_used`, `subagents_uncounted`, `never_executed`, `host_failed`, `superseded` (requires `--superseded-by`), `benchmark_defect`, `pilot` and `other`.
+An exclusion is written once; to change one, delete its file and exclude again, and git history keeps the trail.
+`silverquillm results check` lists records a rule excludes that have no exclusion (`--write-rules` writes them) and exclusions whose record or superseding record is missing, exiting 1 on either.
+`silverquillm results exclusions` prints every excluded run with its reason and note: a results table lists these beneath the included runs.

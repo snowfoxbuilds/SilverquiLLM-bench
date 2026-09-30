@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 import contextlib
+import getpass
 import json
 from pathlib import Path
 
 import click
 
 from .definition import KarnError, load_candidate
+from .exclusions import REASONS as REASON_CODES
 from .grader import DEFAULT_GRADING_TIMEOUT, GRADER_BASES
 from .host import DockerHost
 from .interruption import terminate_as_interrupt
@@ -43,6 +45,16 @@ GRADING_TIMEOUT_OPTION = click.option(
     default=DEFAULT_GRADING_TIMEOUT,
     show_default=True,
     help="Seconds before the grading container is killed.",
+)
+
+
+ALLOW_DIRTY_OPTION = click.option(
+    "--allow-dirty",
+    is_flag=True,
+    help=(
+        "Run even though the candidate's recipe or the bench checkout has uncommitted "
+        "changes; the record keeps what was overridden."
+    ),
 )
 
 
@@ -94,6 +106,7 @@ def common_options(function):
     show_default=True,
     help="Collect native journals and OTel; auto detects CODEX_HOME or CLAUDE_CONFIG_DIR.",
 )
+@ALLOW_DIRTY_OPTION
 @common_options
 def run(**options):
     """Execute a fixed definition and image, grade available work, and retain a record."""
@@ -189,15 +202,21 @@ def enroll(build_output, construct, slot, adopt, state_root):
 @click.option("--once", is_flag=True)
 @click.option("--poll-seconds", type=click.FloatRange(min=0.1), default=30)
 @click.option("--replay-without-state", multiple=True, metavar="BATCH_ID")
+@ALLOW_DIRTY_OPTION
 @common_options
-def scheduler(batches_dir, once, poll_seconds, replay_without_state, **options):
+def scheduler(batches_dir, once, poll_seconds, replay_without_state, allow_dirty, **options):
     """Execute due batches serially through the same run lifecycle."""
     from silverquillm.queue_state import SchedulerLockedError
 
     from .batching import KarnScheduler, queue_rows
     from .grader import ContainerGrader
 
-    runner = KarnScheduler(batches_dir, replay_without_state=replay_without_state, **options)
+    runner = KarnScheduler(
+        batches_dir,
+        replay_without_state=replay_without_state,
+        allow_dirty=allow_dirty,
+        **options,
+    )
     try:
         # Without an override the grader depends on each entry's candidate, checked per run.
         if options["grader_image"] is not None:
@@ -274,6 +293,14 @@ def recover(run_id, stop, **options):
 @click.option(
     "--force", is_flag=True, help="Re-grade runs already graded in --out on these inputs."
 )
+@click.option(
+    "--substitute-grader",
+    is_flag=True,
+    help=(
+        "Grade a run whose recorded grader image is absent here, e.g. one from another "
+        "host, on this host's grader for the same Python; the output names both images."
+    ),
+)
 @BENCH_ROOT_OPTION
 @RESULTS_DIR_OPTION
 @RESULTS_REPO_OPTION
@@ -282,7 +309,8 @@ def regrade(**options):
     """Re-grade retained runs on the current grading inputs, e.g. after Audited Tests change.
 
     Each run is graded again from the workspace it was graded from, on its recorded grader
-    image. Records stay untouched; the new scores are written under --out.
+    image. The workspace comes from the local run artifacts, else from the results repo's
+    workspace archive. Records stay untouched; the new scores are written under --out.
     """
     from .regrade import regrade as run_regrade
 
@@ -296,6 +324,10 @@ def regrade(**options):
         raise click.exceptions.Exit(130) from None
     for line in _regrade_table(summary):
         click.echo(line)
+    if summary["excluded"]:
+        click.echo("excluded from the comparison:")
+    for row in summary["excluded"]:
+        click.echo(f"  {row['run_id'][:8]}  {row['reason']:20} {row['note']}")
     for row in summary["skipped"]:
         click.echo(f"skipped {row['run_id']}: {row['reason']}", err=True)
     for row in summary["errors"]:
@@ -397,4 +429,113 @@ def grader_build(versions, tag):
         raise click.ClickException(str(error)) from None
 
 
-COMMANDS = (run, enroll, scheduler, recover, regrade, queue, top, grader)
+@click.group()
+def results():
+    """Workspace archives and exclusions kept beside the records in the results repo."""
+
+
+@results.command("archive")
+@click.option(
+    "--run", "runs", multiple=True, metavar="RUN_ID", help="Record id or prefix; repeatable."
+)
+@click.option("--dry-run", is_flag=True, help="Verify each archive without writing it.")
+@RESULTS_DIR_OPTION
+@RESULTS_REPO_OPTION
+def results_archive(runs, dry_run, results_dir, results_repo):
+    """Archive the graded workspace of every record whose run artifacts this host holds.
+
+    Runs write their own archive; this backfills records from before archives existed
+    and retries any that failed. Each archive is rebuilt and verified before it is written.
+    """
+    from .workspace_archive import backfill
+
+    rows = backfill(results_repo, results_dir, runs=runs, dry_run=dry_run)
+    counts: dict[str, int] = {}
+    size = 0
+    for row in rows:
+        counts[row["status"]] = counts.get(row["status"], 0) + 1
+        size += row.get("bytes", 0) if row["status"] in ("archived", "would_archive") else 0
+        if row["status"] in ("skipped", "refused"):
+            click.echo(f"{row['status']} {row['run_id']}: {row['reason']}", err=True)
+    click.echo(
+        json.dumps({"counts": counts, "patch_bytes": size, "dry_run": dry_run}, sort_keys=True)
+    )
+    if counts.get("refused"):
+        raise click.exceptions.Exit(1)
+
+
+@results.command("exclude")
+@click.argument("run_id")
+@click.option("--reason", required=True, type=click.Choice(sorted(REASON_CODES)))
+@click.option("--note", required=True, help="Why, in a sentence a later reader can check.")
+@click.option("--superseded-by", metavar="RUN_ID", help="The record replacing it (superseded).")
+@click.option("--by", "excluded_by", default=getpass.getuser, show_default="current user")
+@RESULTS_REPO_OPTION
+def results_exclude(run_id, reason, note, superseded_by, excluded_by, results_repo):
+    """Exclude a recorded run from analyses, with the reason and a note.
+
+    Writes exclusions/<candidate-hash>/<run-id>.json once; delete the file to include the
+    run again.
+    """
+    from .exclusions import exclude
+
+    try:
+        exclusion = exclude(
+            results_repo,
+            run_id,
+            reason=reason,
+            note=note,
+            excluded_by=excluded_by,
+            superseded_by=superseded_by,
+        )
+    except KarnError as error:
+        raise click.ClickException(str(error)) from None
+    click.echo(json.dumps(exclusion.to_dict(), sort_keys=True))
+
+
+@results.command("check")
+@click.option(
+    "--write-rules", is_flag=True, help="Write the missing rule exclusions instead of listing them."
+)
+@RESULTS_REPO_OPTION
+def results_check(write_rules, results_repo):
+    """List records a rule excludes that have no exclusion, and exclusions without records."""
+    from .exclusions import check
+
+    try:
+        report = check(results_repo, write_rules=write_rules)
+    except KarnError as error:
+        raise click.ClickException(str(error)) from None
+    for row in report["written"]:
+        click.echo(f"excluded {row['run_id']}: {row['reason']} ({row['note']})")
+    for row in report["unexcluded_rule_matches"]:
+        click.echo(f"unexcluded {row['run_id']}: rule {row['rule']}", err=True)
+    for row in report["orphaned_exclusions"]:
+        click.echo(f"orphaned exclusion {row['run_id']}: no such record", err=True)
+    for row in report["missing_superseding_runs"]:
+        click.echo(
+            f"superseding run {row['superseded_by']} of {row['run_id']} not recorded", err=True
+        )
+    if any(report[key] for key in report if key != "written"):
+        raise click.exceptions.Exit(1)
+
+
+@results.command("exclusions")
+@click.option("--json", "as_json", is_flag=True, help="Print the exclusion files as JSON lines.")
+@RESULTS_REPO_OPTION
+def results_exclusions(as_json, results_repo):
+    """Every excluded run with its reason and note, for the short list under a table."""
+    from .exclusions import load_exclusions
+
+    try:
+        exclusions = load_exclusions(results_repo)
+    except KarnError as error:
+        raise click.ClickException(str(error)) from None
+    for exclusion in sorted(exclusions.values(), key=lambda e: (e.reason, e.run_id)):
+        if as_json:
+            click.echo(json.dumps(exclusion.to_dict(), sort_keys=True))
+        else:
+            click.echo(f"{exclusion.run_id[:8]}  {exclusion.reason:20} {exclusion.note}")
+
+
+COMMANDS = (run, enroll, scheduler, recover, regrade, queue, top, grader, results)

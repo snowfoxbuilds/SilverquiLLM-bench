@@ -20,6 +20,7 @@ from pathlib import Path
 from silverquillm.results_repo import InvalidRunRecordError, RunRecordExistsError
 
 from .definition import DIGEST, KarnError, canonical, decode_definition, digest
+from .provenance import valid as provenance_valid
 
 SCHEMA_VERSION = 2
 DIMENSIONS = ("card_correctness", "fdn_regression", "engine_regression")
@@ -222,6 +223,11 @@ class KarnRunRecord:
                 or posixpath.normpath(toolchain["target"]) != toolchain["target"]
             ):
                 raise InvalidRunRecordError("invalid test toolchain")
+        # Records before provenance omit the key; an explicit null is never written.
+        if "provenance" in self.run_metadata and not provenance_valid(
+            self.run_metadata["provenance"]
+        ):
+            raise InvalidRunRecordError("invalid run provenance")
         failure = self.run_metadata.get("grading_failure")
         if failure is not None and (
             not isinstance(failure, dict)

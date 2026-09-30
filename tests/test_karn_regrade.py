@@ -140,11 +140,28 @@ def test_an_unreadable_record_of_the_benchmark_is_skipped(retained):
     assert len(graded(retained)) == 3
 
 
+def test_a_run_without_local_artifacts_is_graded_from_its_workspace_archive(retained, tmp_path):
+    moved = tmp_path / "moved"
+    shutil.move(retained.opts["results_dir"] / "run-a", moved / "run-a")
+
+    summary = invoke(retained, runs=["run-a"])
+
+    assert summary["skipped"] == summary["errors"] == []
+    result = output(retained, "run-a")
+    assert result["source"]["workspace"] == "results_repo"
+    assert result["scores"] == retained.records[0].scores
+    assert sorted(path.name for path in retained.out.iterdir()) == [
+        retained.records[0].candidate.hash,
+        "summary.json",
+    ]
+
+
 def test_a_missing_workspace_is_skipped_unless_results_dir_holds_the_moved_artifacts(
     retained, tmp_path
 ):
     moved = tmp_path / "moved"
     shutil.move(retained.opts["results_dir"] / "run-a", moved / "run-a")
+    shutil.rmtree(next((retained.opts["results_repo"] / "workspaces").glob("*/run-a")))
 
     summary = invoke(retained)
     assert summary["skipped"] == [{"run_id": "run-a", "reason": "workspace_unavailable"}]
@@ -152,6 +169,7 @@ def test_a_missing_workspace_is_skipped_unless_results_dir_holds_the_moved_artif
 
     summary = invoke(retained, results_dir=moved)
     assert summary["skipped"] == []
+    assert output(retained, "run-a")["source"]["workspace"] == "run_artifacts"
     assert output(retained, "run-a")["scores"] == retained.records[0].scores
 
 
@@ -295,7 +313,10 @@ def test_a_records_artifact_pointer_never_chooses_the_mounted_directory(retained
     docker = LocalDocker()
     summary = invoke(retained, docker=docker, runs=["run-a"])
 
-    assert summary["skipped"] == [{"run_id": "run-a", "reason": "workspace_unavailable"}]
+    # The archive belongs to the recorded graded copy, so it is refused for another path.
+    assert summary["skipped"] == [
+        {"run_id": "run-a", "reason": "workspace_archive_refused:graded_digest_unrecorded"}
+    ]
     assert str(elsewhere) not in workspace_mounts(docker)
 
 
