@@ -13,6 +13,7 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 - Card implementations: one class per card, subclassing `CardImpl`
 - Tests: pytest with `test_utils` helpers, max 30 per card. Audited grader tests are host-side only, not run from the agent workspace.
 - Three evaluation dimensions: target-set card correctness (SOS card correctness for SOS; HOB card correctness for the HOB generation), FDN card regression, engine regression
+- Pull requests: CI (`.github/workflows/ci.yml`, on the self-hosted runner) owns the `tests-passed` and `tests-failed` labels and comments on a failure; a push to the pull request removes both. Agents never add either label. Add `request-review` when a pull request is ready for review; a reviewer takes it once CI has added `tests-passed`.
 - Karn integration purpose: collect run data, learn, and improve; retain failures and incomplete observations without a leaderboard eligibility gate
 - Development phases: Phase 1 (engine port) → Phase 2 (container harness + audited tests) → Phase 3 (FDN completion + replay validation) → Phase 4 (SOS benchmark runs + leaderboard)
 

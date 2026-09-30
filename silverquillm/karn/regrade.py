@@ -15,6 +15,9 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import re
+import secrets
+import stat
 import statistics
 import tempfile
 import threading
@@ -36,10 +39,32 @@ from .grader import (
     grader_tag,
 )
 from .grading_inputs import grading_inputs
-from .records import DIMENSIONS, KarnRunRecord, read_record
+from .records import DIMENSIONS, KarnRunRecord, read_record, validate_scores
 from .workspace_archive import ArchiveRefused, graded_path, materialize
 
 SUMMARY = "summary.json"
+CANDIDATE_HASH = re.compile(r"[0-9a-f]{64}")
+OUTPUT_LIMIT = 16 * 1024 * 1024
+DIRECTORY = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+#: Every key of a successful per-run output; a reused output carries exactly these.
+OUTPUT_KEYS = frozenset(
+    {
+        "run_id",
+        "candidate_hash",
+        "candidate_name",
+        "benchmark",
+        "grading_inputs_digest",
+        "grading_code_digest",
+        "benchmark_configuration_changed",
+        "source",
+        "grading_isolation",
+        "scores",
+        "graded_at",
+    }
+)
+#: Present only when this host's grader stood in for an absent recorded image.
+OPTIONAL_OUTPUT_KEYS = frozenset({"grader_substituted_for"})
+WORKSPACE_SOURCES = frozenset({"run_artifacts", "results_repo"})
 STOP_SECONDS = 30
 PACKAGE = Path(__file__).resolve().parents[1]
 
@@ -176,15 +201,116 @@ def _dimensions(scores: dict) -> dict:
     }
 
 
-def _write(path: Path, value: dict) -> None:
-    descriptor, temporary = tempfile.mkstemp(prefix=".regrade-", dir=path.parent)
-    try:
-        with os.fdopen(descriptor, "w") as handle:
-            handle.write(json.dumps(value, indent=2, sort_keys=True) + "\n")
-        os.replace(temporary, path)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
+class UnsafeOutput(KarnError):
+    """An output location that could redirect a write, so nothing is written there."""
+
+
+def _same(left: os.stat_result, right: os.stat_result) -> bool:
+    return (left.st_dev, left.st_ino) == (right.st_dev, right.st_ino)
+
+
+class OutputDir:
+    """``--out``, written only through directory descriptors that never follow a link.
+
+    Checking the resolved ``--out`` against the records and run artifacts is not enough: a
+    candidate directory inside it could be a link into either. Every read, temporary file
+    and replacement below goes through descriptors opened with ``O_NOFOLLOW``, and each
+    directory is checked again right before a replacement, so a directory swapped for a
+    link while a run grades is refused rather than written through.
+    """
+
+    def __init__(self, path: Path):
+        self.path = path
+        try:
+            self.root = os.open(path, DIRECTORY)
+        except OSError as error:
+            raise UnsafeOutput(f"regrade_output_unsafe:{error.strerror}") from None
+        self.children: dict[str, int] = {}
+        self.lock = threading.Lock()
+
+    def close(self) -> None:
+        for descriptor in [*self.children.values(), self.root]:
+            os.close(descriptor)
+        self.children.clear()
+
+    def _check_root(self) -> None:
+        try:
+            current = os.stat(self.path, follow_symlinks=False)
+        except OSError:
+            raise UnsafeOutput("regrade_output_unsafe:out_replaced") from None
+        if not _same(current, os.fstat(self.root)):
+            raise UnsafeOutput("regrade_output_unsafe:out_replaced")
+
+    def directory(self, name: str | None) -> int:
+        """The descriptor of ``--out`` itself, or of its candidate directory ``name``."""
+        if name is None:
+            return self.root
+        if not CANDIDATE_HASH.fullmatch(name):
+            raise UnsafeOutput("regrade_output_unsafe:candidate_hash")
+        with self.lock:
+            if name in self.children:
+                return self.children[name]
+            try:
+                os.mkdir(name, 0o755, dir_fd=self.root)
+            except FileExistsError:
+                pass
+            try:
+                descriptor = os.open(name, DIRECTORY, dir_fd=self.root)
+            except OSError:
+                raise UnsafeOutput("regrade_output_unsafe:candidate_directory") from None
+            self.children[name] = descriptor
+            return descriptor
+
+    def _check(self, name: str | None, descriptor: int) -> None:
+        self._check_root()
+        if name is None:
+            return
+        try:
+            current = os.stat(name, dir_fd=self.root, follow_symlinks=False)
+        except OSError:
+            raise UnsafeOutput("regrade_output_unsafe:candidate_replaced") from None
+        if not stat.S_ISDIR(current.st_mode) or not _same(current, os.fstat(descriptor)):
+            raise UnsafeOutput("regrade_output_unsafe:candidate_replaced")
+
+    def read(self, name: str | None, filename: str) -> dict | list | None:
+        """A regular file's JSON, or None when it is absent, not a regular file, or invalid."""
+        directory = self.directory(name)
+        try:
+            descriptor = os.open(
+                filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=directory
+            )
+        except OSError:
+            return None
+        with os.fdopen(descriptor, "rb") as handle:
+            status = os.fstat(handle.fileno())
+            if not stat.S_ISREG(status.st_mode) or status.st_size > OUTPUT_LIMIT:
+                return None
+            try:
+                return json.loads(handle.read(OUTPUT_LIMIT + 1))
+            except ValueError:
+                return None
+
+    def write(self, name: str | None, filename: str, value: dict) -> None:
+        """Replace ``filename`` atomically, never through a link and never outside ``--out``."""
+        directory = self.directory(name)
+        self._check(name, directory)
+        data = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+        temporary = f".regrade-{secrets.token_hex(8)}"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC
+        descriptor = os.open(temporary, flags, 0o644, dir_fd=directory)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            self._check(name, directory)
+            os.replace(temporary, filename, src_dir_fd=directory, dst_dir_fd=directory)
+        except BaseException:
+            try:
+                os.unlink(temporary, dir_fd=directory)
+            except FileNotFoundError:
+                pass
+            raise
 
 
 def grading_code_digest() -> str:
@@ -195,29 +321,68 @@ def grading_code_digest() -> str:
     return "sha256:" + hashed.hexdigest()
 
 
-def _reusable(path: Path, record: KarnRunRecord, digests: dict) -> dict | None:
-    """A previous output of this run graded on the same inputs and code, if well formed."""
-    try:
-        previous = json.loads(path.read_text())
-    except (OSError, ValueError):
-        return None
-    if (
-        isinstance(previous, dict)
-        and previous.get("run_id") == record.run_id
-        and previous.get("candidate_hash") == record.candidate.hash
-        and all(previous.get(key) == value for key, value in digests.items())
-        and isinstance(previous.get("scores"), dict)
-        and set(previous["scores"]) == set(DIMENSIONS)
-        and isinstance(previous.get("source"), dict)
-        and isinstance(previous["source"].get("scores"), dict)
-        and set(previous["source"]["scores"]) == set(DIMENSIONS)
+def _source(record: KarnRunRecord) -> dict:
+    """What the record itself says, kept beside the new scores so the two are never mixed."""
+    metadata = record.run_metadata
+    return {
+        "grading_inputs_digest": (metadata.get("grading_inputs") or {}).get("digest"),
+        "workspace_digest": metadata["benchmark_input"].get("workspace_digest"),
+        "execution_status": metadata["execution"]["status"],
+        "scores": _dimensions(record.scores),
+    }
+
+
+def _identity(record: KarnRunRecord, benchmark: Benchmark, digests: dict) -> dict:
+    metadata = record.run_metadata
+    return {
+        "run_id": record.run_id,
+        "candidate_hash": record.candidate.hash,
+        "candidate_name": metadata["candidate_definition"].get("name"),
+        "benchmark": benchmark.id,
+        **digests,
+        "benchmark_configuration_changed": metadata["benchmark_input"].get("configuration_digest")
+        != benchmark.identity["configuration_digest"],
+        "source": _source(record),
+    }
+
+
+def _reusable(previous, identity: dict) -> dict | None:
+    """A previous successful output of this run on the same inputs and code, fully checked.
+
+    Anything else is a miss that re-grades only this run: an output is reused only when its
+    identity and source projection equal what the current record and inputs produce, its
+    scores satisfy the record score invariants, and it carries exactly a success's fields.
+    """
+    if not isinstance(previous, dict) or not OUTPUT_KEYS <= set(previous) <= (
+        OUTPUT_KEYS | OPTIONAL_OUTPUT_KEYS
     ):
-        return previous
-    return None
-
-
-def output_path(out: Path, record: KarnRunRecord) -> Path:
-    return out / record.candidate.hash / f"{record.run_id}.json"
+        return None
+    if any(previous[key] != value for key, value in identity.items() if key != "source"):
+        return None
+    source = previous["source"]
+    if (
+        not isinstance(source, dict)
+        or source.get("workspace") not in WORKSPACE_SOURCES
+        or {k: v for k, v in source.items() if k != "workspace"} != identity["source"]
+    ):
+        return None
+    if "grader_substituted_for" in previous and not isinstance(
+        previous["grader_substituted_for"], str
+    ):
+        return None
+    isolation = previous["grading_isolation"]
+    if (
+        not isinstance(isolation, dict)
+        or not isinstance(isolation.get("grader_image_id"), str)
+        or not isinstance(previous["graded_at"], str)
+    ):
+        return None
+    try:
+        validate_scores(previous["scores"])
+        datetime.fromisoformat(previous["graded_at"])
+    except (InvalidRunRecordError, ValueError):
+        return None
+    return previous
 
 
 def _regrade_one(
@@ -225,7 +390,7 @@ def _regrade_one(
     benchmark: Benchmark,
     digests: dict,
     *,
-    out: Path,
+    out: OutputDir,
     results_dir: Path,
     results_repo: Path,
     docker: LiveContainers,
@@ -233,27 +398,13 @@ def _regrade_one(
     force: bool,
     substitute_grader: bool,
 ) -> dict:
-    path = output_path(out, record)
-    if not force and (previous := _reusable(path, record, digests)):
+    candidate, filename = record.candidate.hash, f"{record.run_id}.json"
+    result = _identity(record, benchmark, digests)
+    if not force and (previous := _reusable(out.read(candidate, filename), result)):
         return {**previous, "reused": True}
-    source = record.run_metadata
-    result = {
-        "run_id": record.run_id,
-        "candidate_hash": record.candidate.hash,
-        "candidate_name": source["candidate_definition"].get("name"),
-        "benchmark": benchmark.id,
-        **digests,
-        "benchmark_configuration_changed": source["benchmark_input"].get("configuration_digest")
-        != benchmark.identity["configuration_digest"],
-        "source": {
-            "grading_inputs_digest": (source.get("grading_inputs") or {}).get("digest"),
-            "workspace_digest": source["benchmark_input"].get("workspace_digest"),
-            "execution_status": source["execution"]["status"],
-            "scores": _dimensions(record.scores),
-        },
-    }
     try:
-        with tempfile.TemporaryDirectory(prefix=".workspaces-", dir=out) as scratch:
+        # The archive is rebuilt outside --out, which is written only through descriptors.
+        with tempfile.TemporaryDirectory(prefix="sq-regrade-workspace-") as scratch:
             try:
                 workspace = graded_workspace(record, results_dir)
                 result["source"]["workspace"] = "run_artifacts"
@@ -271,7 +422,12 @@ def _regrade_one(
                     "grader_image_id"
                 ]
             evaluated = grader.evaluate_run(workspace.parent, benchmark, workspace_source=workspace)
-            result["scores"] = _scores(evaluated, benchmark)
+            scores = _scores(evaluated, benchmark)
+        try:
+            validate_scores(scores)
+        except InvalidRunRecordError:
+            raise GraderError("regrade_scores_invalid") from None
+        result["scores"] = scores
     except Skip as skip:
         return {**result, "skipped": str(skip)}
     except GraderError as error:
@@ -281,42 +437,56 @@ def _regrade_one(
     if docker.stopped:
         return {**result, "interrupted": True}
     result["graded_at"] = datetime.now(UTC).isoformat()
-    path.parent.mkdir(exist_ok=True)
-    _write(path, result)
+    out.write(candidate, filename, result)
     return result
 
 
-def _means(pairs) -> tuple[float | None, float | None]:
-    """Mean before and after over the runs graded both times, so both cover the same runs."""
+def _means(pairs) -> tuple[float | None, float | None, int]:
+    """Mean before and after over the runs observed both times, so both cover the same runs."""
     pairs = [(before, after) for before, after in pairs if None not in (before, after)]
     if not pairs:
-        return None, None
-    return statistics.fmean(p[0] for p in pairs), statistics.fmean(p[1] for p in pairs)
+        return None, None, 0
+    before = statistics.fmean(p[0] for p in pairs)
+    return before, statistics.fmean(p[1] for p in pairs), len(pairs)
 
 
 def summarize(results: list[dict], digests: dict, benchmark_id: str) -> dict:
-    groups: dict[str, list[dict]] = {}
+    """Before/after means per cohort: one candidate graded originally on one inputs digest.
+
+    Original scores from different grading-inputs digests are never averaged together, and
+    a run whose original digest is unknown forms a cohort of its own.
+    """
+    groups: dict[tuple, list[dict]] = {}
     for result in results:
         if "scores" in result:
-            groups.setdefault(result["candidate_hash"], []).append(result)
-    candidates = []
-    for candidate_hash, rows in sorted(groups.items()):
+            original = result["source"]["grading_inputs_digest"]
+            key = (result["candidate_hash"], original or "", "" if original else result["run_id"])
+            groups.setdefault(key, []).append(result)
+    cohorts = []
+    for (candidate_hash, original, unknown_run), rows in sorted(groups.items()):
         entry = {
             "candidate_hash": candidate_hash,
             "name": rows[0]["candidate_name"],
+            "source_grading_inputs_digest": original or None,
             "runs": len(rows),
         }
+        if unknown_run:
+            entry["run_id"] = unknown_run
         for name in DIMENSIONS:
-            before, after = _means(
+            before, after, paired = _means(
                 (r["source"]["scores"][name].get("pass_rate"), r["scores"][name].get("pass_rate"))
                 for r in rows
             )
-            entry[name] = {"before_mean_pass_rate": before, "after_mean_pass_rate": after}
-        candidates.append(entry)
+            entry[name] = {
+                "before_mean_pass_rate": before,
+                "after_mean_pass_rate": after,
+                "paired_runs": paired,
+            }
+        cohorts.append(entry)
     return {
         "benchmark": benchmark_id,
         **digests,
-        "candidates": candidates,
+        "cohorts": cohorts,
         "skipped": sorted(
             ({"run_id": r["run_id"], "reason": r["skipped"]} for r in results if "skipped" in r),
             key=lambda row: row["run_id"],
@@ -358,50 +528,61 @@ def regrade(
             if not any(key(record).startswith(prefix) for record in records):
                 raise KarnError("regrade_selection_matched_nothing:" + prefix)
     out.mkdir(parents=True, exist_ok=True)
-    inputs = grading_inputs(benchmark)
-    digests = {
-        "grading_inputs_digest": inputs["digest"],
-        "grading_code_digest": grading_code_digest(),
-    }
-    live = LiveContainers(docker or DockerRunner())
-    results = [{**row, "skipped": row.pop("reason")} for row in unreadable]
+    output = OutputDir(out)
+    try:
+        inputs = grading_inputs(benchmark)
+        digests = {
+            "grading_inputs_digest": inputs["digest"],
+            "grading_code_digest": grading_code_digest(),
+        }
+        results = _grade_all(
+            records,
+            benchmark,
+            digests,
+            LiveContainers(docker or DockerRunner()),
+            workers,
+            out=output,
+            results_dir=results_dir,
+            results_repo=Path(results_repo).resolve(),
+            timeout=grading_timeout,
+            force=force,
+            substitute_grader=substitute_grader,
+        )
+        results += [{**row, "skipped": row["reason"]} for row in unreadable]
+        summary = summarize(results, digests, benchmark_id)
+        if inputs["problems"]:
+            summary["grading_inputs_problems"] = inputs["problems"]
+        if grading_inputs(benchmark)["digest"] != inputs["digest"]:
+            summary["grading_inputs_changed_during_regrade"] = True
+        output.write(None, SUMMARY, summary)
+        return summary
+    finally:
+        output.close()
+
+
+def _grade_all(records, benchmark, digests, live, workers, **options) -> list[dict]:
+    results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {}
         try:
             for record in records:
                 future = pool.submit(
-                    _regrade_one,
-                    record,
-                    benchmark,
-                    digests,
-                    out=out,
-                    results_dir=results_dir,
-                    results_repo=Path(results_repo).resolve(),
-                    docker=live,
-                    timeout=grading_timeout,
-                    force=force,
-                    substitute_grader=substitute_grader,
+                    _regrade_one, record, benchmark, digests, docker=live, **options
                 )
                 futures[future] = record
             for future in concurrent.futures.as_completed(futures):
                 try:
                     results.append(future.result())
                 except Exception as error:  # noqa: BLE001 -- e.g. the output could not be written.
-                    record = futures[future]
+                    reason = str(error) if isinstance(error, KarnError) else type(error).__name__
                     results.append(
                         {
-                            "run_id": record.run_id,
-                            "error": {"reason": type(error).__name__, "stderr_tail": ""},
+                            "run_id": futures[future].run_id,
+                            "error": {"reason": reason, "stderr_tail": ""},
                         }
                     )
         except BaseException:
             pool.shutdown(wait=False, cancel_futures=True)
             live.stop()
             raise
-    summary = summarize(results, digests, benchmark_id)
-    if inputs["problems"]:
-        summary["grading_inputs_problems"] = inputs["problems"]
-    if grading_inputs(benchmark)["digest"] != inputs["digest"]:
-        summary["grading_inputs_changed_during_regrade"] = True
-    _write(out / SUMMARY, summary)
-    return summary
+    return results

@@ -242,43 +242,7 @@ class KarnRunRecord:
                 or not all(isinstance(value, str) for value in pointer.values())
             ):
                 raise InvalidRunRecordError("invalid artifact pointer")
-        if not isinstance(self.scores, dict) or set(self.scores) != set(DIMENSIONS):
-            raise InvalidRunRecordError("invalid Karn score dimensions")
-        for score in self.scores.values():
-            if (
-                not isinstance(score, dict)
-                or type(score.get("evaluated")) is not bool
-                or type(score.get("complete")) is not bool
-            ):
-                raise InvalidRunRecordError("invalid Karn dimension observation")
-            reasons = score.get("missing_reasons")
-            if not isinstance(reasons, list) or not all(
-                isinstance(reason, str) and reason for reason in reasons
-            ):
-                raise InvalidRunRecordError("invalid grading explanation")
-            passed, total, rate = (
-                score.get(key) for key in ("tests_passed", "tests_total", "pass_rate")
-            )
-            if not score["evaluated"]:
-                if (
-                    any(value is not None for value in (passed, total, rate))
-                    or not reasons
-                    or score["complete"]
-                ):
-                    raise InvalidRunRecordError(
-                        "absent grading must remain null with an explanation"
-                    )
-            elif (
-                type(passed) is not int
-                or type(total) is not int
-                or total <= 0
-                or not 0 <= passed <= total
-                or type(rate) not in (int, float)
-                or not math.isfinite(rate)
-                or not 0 <= rate <= 1
-                or not math.isclose(rate, passed / total, rel_tol=1e-9, abs_tol=1e-12)
-            ):
-                raise InvalidRunRecordError("impossible grading counts or rate")
+        validate_scores(self.scores)
 
     def index_row(self):
         return {
@@ -292,6 +256,45 @@ class KarnRunRecord:
             "execution_run_id": self.run_metadata.get("execution_run_id", self.run_id),
             "measurements": self.run_metadata.get("measurements"),
         }
+
+
+def validate_scores(scores) -> None:
+    """Enforce the record score invariants on a ``scores.json``-shaped value."""
+    if not isinstance(scores, dict) or set(scores) != set(DIMENSIONS):
+        raise InvalidRunRecordError("invalid Karn score dimensions")
+    for score in scores.values():
+        if (
+            not isinstance(score, dict)
+            or type(score.get("evaluated")) is not bool
+            or type(score.get("complete")) is not bool
+        ):
+            raise InvalidRunRecordError("invalid Karn dimension observation")
+        reasons = score.get("missing_reasons")
+        if not isinstance(reasons, list) or not all(
+            isinstance(reason, str) and reason for reason in reasons
+        ):
+            raise InvalidRunRecordError("invalid grading explanation")
+        passed, total, rate = (
+            score.get(key) for key in ("tests_passed", "tests_total", "pass_rate")
+        )
+        if not score["evaluated"]:
+            if (
+                any(value is not None for value in (passed, total, rate))
+                or not reasons
+                or score["complete"]
+            ):
+                raise InvalidRunRecordError("absent grading must remain null with an explanation")
+        elif (
+            type(passed) is not int
+            or type(total) is not int
+            or total <= 0
+            or not 0 <= passed <= total
+            or type(rate) not in (int, float)
+            or not math.isfinite(rate)
+            or not 0 <= rate <= 1
+            or not math.isclose(rate, passed / total, rel_tol=1e-9, abs_tol=1e-12)
+        ):
+            raise InvalidRunRecordError("impossible grading counts or rate")
 
 
 def missing_scores(reason: str) -> dict:

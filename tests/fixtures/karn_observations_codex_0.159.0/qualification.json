@@ -1,0 +1,473 @@
+{
+  "image": "sha256:48d8bc27c118418549e647336ef6f8bed3ed057e6469b711246042b0cd27f1ec",
+  "native_binary": "codex-cli 0.159.0",
+  "network": "none; loopback-only scripted Responses and OTLP",
+  "paid_inference": false,
+  "real_credentials": false,
+  "scenarios": {
+    "basic": {
+      "agent_turns": {
+        "responses": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 1
+        },
+        "tool_calls": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 0
+        },
+        "total": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 1
+        }
+      },
+      "coverage": {
+        "deduplicated_events": 9,
+        "exit_kind": "completed",
+        "model_basis": "native_turn_context; observation, not provider attestation",
+        "native_threads": 1,
+        "native_versions": [
+          "0.159.0"
+        ],
+        "observed_threads": 1,
+        "remote_or_local_compactions": 0
+      },
+      "estimated_cost": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": "0.000655"
+      },
+      "events_sha256": "edcbd9d88e287bc7dbd94c48c83a2ea4430e1d249d74ab989f3880d7adfe7ce4",
+      "exit_code": 0,
+      "export_attempts": 0,
+      "http_attempts": 1,
+      "provider_threads": 1,
+      "scripted_responses": 1,
+      "scripted_tool_calls": 0,
+      "usage": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": {
+          "cache_write_input_tokens": 7,
+          "cached_input_tokens": 20,
+          "input_tokens": 100,
+          "output_tokens": 30,
+          "reasoning_output_tokens": 5,
+          "total_tokens": 130
+        }
+      }
+    },
+    "compaction": {
+      "agent_turns": {
+        "responses": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 3
+        },
+        "tool_calls": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 1
+        },
+        "total": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 4
+        }
+      },
+      "coverage": {
+        "deduplicated_events": 23,
+        "exit_kind": "completed",
+        "model_basis": "native_turn_context; observation, not provider attestation",
+        "native_threads": 1,
+        "native_versions": [
+          "0.159.0"
+        ],
+        "observed_threads": 1,
+        "remote_or_local_compactions": 1
+      },
+      "estimated_cost": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": "0.001965"
+      },
+      "events_sha256": "a7a6b5f0f65dfbb2beca048cfd11570a75853a0e91b2d080c816a5932a604603",
+      "exit_code": 0,
+      "export_attempts": 0,
+      "http_attempts": 3,
+      "provider_threads": 1,
+      "scripted_responses": 3,
+      "scripted_tool_calls": 1,
+      "usage": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": {
+          "cache_write_input_tokens": 21,
+          "cached_input_tokens": 60,
+          "input_tokens": 300,
+          "output_tokens": 90,
+          "reasoning_output_tokens": 15,
+          "total_tokens": 390
+        }
+      }
+    },
+    "descendant": {
+      "agent_turns": {
+        "responses": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 6
+        },
+        "tool_calls": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 4
+        },
+        "total": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 10
+        }
+      },
+      "coverage": {
+        "deduplicated_events": 49,
+        "exit_kind": "completed",
+        "model_basis": "native_turn_context; observation, not provider attestation",
+        "native_threads": 2,
+        "native_versions": [
+          "0.159.0"
+        ],
+        "observed_threads": 2,
+        "remote_or_local_compactions": 0
+      },
+      "estimated_cost": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": "0.003930"
+      },
+      "events_sha256": "23a2d4e3ad878ad28e665c3bbf360d14bb33e980cd1ea765630a439ea6295726",
+      "exit_code": 0,
+      "export_attempts": 0,
+      "http_attempts": 6,
+      "provider_threads": 2,
+      "scripted_responses": 6,
+      "scripted_tool_calls": 4,
+      "usage": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": {
+          "cache_write_input_tokens": 42,
+          "cached_input_tokens": 120,
+          "input_tokens": 600,
+          "output_tokens": 180,
+          "reasoning_output_tokens": 30,
+          "total_tokens": 780
+        }
+      }
+    },
+    "export_retry": {
+      "agent_turns": {
+        "responses": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 1
+        },
+        "tool_calls": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 0
+        },
+        "total": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 1
+        }
+      },
+      "coverage": {
+        "deduplicated_events": 9,
+        "exit_kind": "completed",
+        "model_basis": "native_turn_context; observation, not provider attestation",
+        "native_threads": 1,
+        "native_versions": [
+          "0.159.0"
+        ],
+        "observed_threads": 1,
+        "remote_or_local_compactions": 0
+      },
+      "estimated_cost": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": "0.000655"
+      },
+      "events_sha256": "348ed243ede4abc80baa4303fcdbc9b370129814517c944a24318da29545742d",
+      "exit_code": 0,
+      "export_attempts": 3,
+      "http_attempts": 1,
+      "provider_threads": 1,
+      "scripted_responses": 1,
+      "scripted_tool_calls": 0,
+      "usage": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": {
+          "cache_write_input_tokens": 7,
+          "cached_input_tokens": 20,
+          "input_tokens": 100,
+          "output_tokens": 30,
+          "reasoning_output_tokens": 5,
+          "total_tokens": 130
+        }
+      }
+    },
+    "interruption": {
+      "agent_turns": {
+        "responses": {
+          "completeness": "partial",
+          "reasons": [
+            "execution_did_not_complete",
+            "native_turn_not_completed"
+          ],
+          "value": 1
+        },
+        "tool_calls": {
+          "completeness": "partial",
+          "reasons": [
+            "execution_did_not_complete",
+            "native_turn_not_completed"
+          ],
+          "value": 1
+        },
+        "total": {
+          "completeness": "partial",
+          "reasons": [
+            "execution_did_not_complete",
+            "native_turn_not_completed"
+          ],
+          "value": 2
+        }
+      },
+      "coverage": {
+        "deduplicated_events": 11,
+        "exit_kind": "interrupted",
+        "model_basis": "native_turn_context; observation, not provider attestation",
+        "native_threads": 1,
+        "native_versions": [
+          "0.159.0"
+        ],
+        "observed_threads": 1,
+        "remote_or_local_compactions": 0
+      },
+      "estimated_cost": {
+        "completeness": "partial",
+        "reasons": [
+          "execution_did_not_complete",
+          "native_turn_not_completed"
+        ],
+        "value": "0.000655"
+      },
+      "events_sha256": "74f8abdd46d40b72f3ab76da508053ea5efc5dc2d6c6851377cab87228ec76f0",
+      "exit_code": 1,
+      "export_attempts": 0,
+      "http_attempts": 1,
+      "provider_threads": 1,
+      "scripted_responses": 1,
+      "scripted_tool_calls": 1,
+      "usage": {
+        "completeness": "partial",
+        "reasons": [
+          "execution_did_not_complete",
+          "native_turn_not_completed"
+        ],
+        "value": {
+          "cache_write_input_tokens": 7,
+          "cached_input_tokens": 20,
+          "input_tokens": 100,
+          "output_tokens": 30,
+          "reasoning_output_tokens": 5,
+          "total_tokens": 130
+        }
+      }
+    },
+    "killed_response": {
+      "agent_turns": {
+        "responses": {
+          "completeness": "partial",
+          "reasons": [
+            "execution_did_not_complete",
+            "native_turn_not_completed",
+            "response_started_without_native_usage"
+          ],
+          "value": 1
+        },
+        "tool_calls": {
+          "completeness": "partial",
+          "reasons": [
+            "execution_did_not_complete",
+            "native_turn_not_completed",
+            "response_started_without_native_usage"
+          ],
+          "value": 0
+        },
+        "total": {
+          "completeness": "partial",
+          "reasons": [
+            "execution_did_not_complete",
+            "native_turn_not_completed",
+            "response_started_without_native_usage"
+          ],
+          "value": 1
+        }
+      },
+      "coverage": {
+        "deduplicated_events": 5,
+        "exit_kind": "interrupted",
+        "model_basis": "native_turn_context; observation, not provider attestation",
+        "native_threads": 1,
+        "native_versions": [
+          "0.159.0"
+        ],
+        "observed_threads": 1,
+        "remote_or_local_compactions": 0
+      },
+      "estimated_cost": {
+        "completeness": "missing",
+        "reasons": [
+          "execution_did_not_complete",
+          "native_turn_not_completed",
+          "per_response_usage_unavailable",
+          "response_started_without_native_usage"
+        ],
+        "value": null
+      },
+      "events_sha256": "2414c53b2ca108c064a8002f4a6279152db85f06aaf7cd9344ead9148aa84299",
+      "exit_code": -9,
+      "export_attempts": 0,
+      "http_attempts": 1,
+      "provider_threads": 1,
+      "scripted_responses": 1,
+      "scripted_tool_calls": 0,
+      "usage": {
+        "completeness": "missing",
+        "reasons": [
+          "execution_did_not_complete",
+          "native_turn_not_completed",
+          "per_response_usage_unavailable",
+          "response_started_without_native_usage"
+        ],
+        "value": null
+      }
+    },
+    "retry": {
+      "agent_turns": {
+        "responses": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 1
+        },
+        "tool_calls": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 0
+        },
+        "total": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 1
+        }
+      },
+      "coverage": {
+        "deduplicated_events": 10,
+        "exit_kind": "completed",
+        "model_basis": "native_turn_context; observation, not provider attestation",
+        "native_threads": 1,
+        "native_versions": [
+          "0.159.0"
+        ],
+        "observed_threads": 1,
+        "remote_or_local_compactions": 0
+      },
+      "estimated_cost": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": "0.000655"
+      },
+      "events_sha256": "2ae14059a3023d7f47977325124b01923aa43e935e2096d1738ea855dcb51741",
+      "exit_code": 0,
+      "export_attempts": 0,
+      "http_attempts": 2,
+      "provider_threads": 1,
+      "scripted_responses": 1,
+      "scripted_tool_calls": 0,
+      "usage": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": {
+          "cache_write_input_tokens": 7,
+          "cached_input_tokens": 20,
+          "input_tokens": 100,
+          "output_tokens": 30,
+          "reasoning_output_tokens": 5,
+          "total_tokens": 130
+        }
+      }
+    },
+    "tool_error": {
+      "agent_turns": {
+        "responses": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 2
+        },
+        "tool_calls": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 1
+        },
+        "total": {
+          "completeness": "complete",
+          "reasons": [],
+          "value": 3
+        }
+      },
+      "coverage": {
+        "deduplicated_events": 17,
+        "exit_kind": "completed",
+        "model_basis": "native_turn_context; observation, not provider attestation",
+        "native_threads": 1,
+        "native_versions": [
+          "0.159.0"
+        ],
+        "observed_threads": 1,
+        "remote_or_local_compactions": 0
+      },
+      "estimated_cost": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": "0.001310"
+      },
+      "events_sha256": "c6df51443dcc445076eee991f6b8388512e13602105ce8b8cc7f2a82e0217ad9",
+      "exit_code": 0,
+      "export_attempts": 0,
+      "http_attempts": 2,
+      "provider_threads": 1,
+      "scripted_responses": 2,
+      "scripted_tool_calls": 1,
+      "usage": {
+        "completeness": "complete",
+        "reasons": [],
+        "value": {
+          "cache_write_input_tokens": 14,
+          "cached_input_tokens": 40,
+          "input_tokens": 200,
+          "output_tokens": 60,
+          "reasoning_output_tokens": 10,
+          "total_tokens": 260
+        }
+      }
+    }
+  },
+  "source": "scripts/qualify_codex_telemetry.py",
+  "source_sha256": "0b768050317cb56e6fd3c712ddb3e238404cbc9618edbd7efcc2e86b1e2fe38e"
+}
