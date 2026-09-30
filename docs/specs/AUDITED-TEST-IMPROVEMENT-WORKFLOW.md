@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-09-02
+Last updated: 2026-09-29
 
 # Audited Test-Improvement Workflow
 
@@ -58,6 +58,12 @@ The skill lives at `.claude/skills/test-investigation/SKILL.md` (Claude Code nat
 - Rewrite to the audited standard: integration-style, behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted (see [AUDITED-TEST-SUITE.md](AUDITED-TEST-SUITE.md)).
 - Must pass the matching Test Oracle Impl gate and the canonical-API-only check, then clear human review.
 - Legal only in Beta/Benchmarking. Released locks audited tests, so promotion stops at Release and published scores do not drift afterward.
+## Re-grading after promotion
+
+Promoted or edited Audited Tests change the grading inputs, so earlier runs' scores are no longer comparable with new ones.
+After a merge that changes them, re-grade the benchmark's retained runs with `silverquillm regrade --benchmark <bench> --out <dir>` and compare runs only on the same grading-inputs digest, as [KARN-BENCHMARK-CONTRACT.md](KARN-BENCHMARK-CONTRACT.md) defines.
+Re-grade output stays beside the records, never in place of them.
+
 ## Cadence
 
 The workflow is **on-demand** (it is the manual v1), but a harvest + investigation pass is **required before any Benchmarking→Released transition** — the moment audited tests are frozen for good, and therefore the last chance to catch convention-coupled or low-discrimination tests. It is not run on every benchmark run and not automated in CI; doing so would contradict the manual, human-gated design.

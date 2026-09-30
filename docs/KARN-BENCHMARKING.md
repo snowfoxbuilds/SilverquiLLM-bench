@@ -239,3 +239,19 @@ Candidate Bundles can no longer be run, promoted, or published; rebuild an old c
 Batch files and state in the Candidate Bundle format are shown as unsupported and never run or rewritten.
 `legacy resume` replaces a prior leg's `prompt.md` and `run_manifest.json` with fresh files instead of writing through links, and refuses a prior leg whose `prompt.md` is a link or whose `workspace_final` holds a FIFO, socket, or device.
 The historical `--image` lineage remains under `silverquillm legacy`; `legacy rescore` grades with the authoritative `test_utils` in an isolated copy, so re-grading an old run can change its numbers without touching stored records.
+
+## Re-grade retained runs
+
+After Audited Tests or other grading inputs change, re-grade the runs already recorded instead of rerunning them:
+
+```sh
+silverquillm regrade --benchmark hob-medium --results-repo ~/bench-results --results-dir runs/karn --out regrades/hob-medium
+```
+
+- Each run is graded again from the workspace it was graded from (`grading_source.selected`), found under `--results-dir/<run-id>`, on the grader image its record names, with the same container isolation as a run. A record's artifact pointers are not followed, so a record from another host never chooses what is mounted.
+- Nothing in the results repository or the run artifacts is written; an `--out` that overlaps either is refused. `--out` holds `<candidate-hash>/<run-id>.json` per run, with the new scores in the record's `scores.json` shape, the record's own counts and grading-inputs digest, the new digest, and a digest of the grading code.
+- Every read and write under `--out` goes through directory descriptors that never follow a link. A candidate directory that is a link, or that is replaced while a run grades, fails that run with `regrade_output_unsafe:…` and nothing is written through it; an existing output file that is a link is replaced, never followed.
+- `summary.json` and the table compare mean pass rates before and after per cohort: one candidate whose runs were originally graded on one grading-inputs digest. Original scores from different digests are never averaged together, and a run whose original digest is unknown is its own cohort, named by run id. Each dimension reports `paired_runs`, the runs observed both before and after, which both means cover. The table's `graded on` column shows the cohort's original digest.
+- `--run` narrows by run-id prefix and `--candidate` by candidate-hash prefix; a prefix that matches nothing is an error. `--workers` grades runs concurrently (default 2).
+- A run whose workspace or grader image is gone is skipped with a reason. A record whose `grading_inputs` is not an object, or whose digest is neither absent, null nor a `sha256:` digest, is skipped as `invalid_record` before grading, because the digest keys its cohort. A run whose grading fails keeps the error in its output file, the others continue, and the command exits 1.
+- A rerun reuses an output only when it is a complete success graded on the same inputs and grading code by the image this invocation grades with, its identity and copy of the record's scores still match the record, and its scores satisfy the record score invariants. Anything else is re-graded, only for that run, and its file is rewritten: a cache file that is not a regular file (a FIFO is opened without blocking), cannot be decoded, or fails any check is a miss, never an error; `--force` grades every run again. New scores that break the invariants are a per-run error (`regrade_scores_invalid`), never an output. Ctrl-C, SIGTERM and SIGHUP remove the grading containers still running, and write no partial output.

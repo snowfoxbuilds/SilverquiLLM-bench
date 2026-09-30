@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-09-26
+Last updated: 2026-09-29
 
 # Karn Benchmark Contract
 
@@ -193,6 +193,12 @@ Workspace snapshots contain only workspace files and exclude authentication stat
 Final evidence includes a Git bundle of available referenced commits, produced through a clean repository that excludes candidate hooks and credential configuration; an unavailable history is recorded explicitly.
 The runner preserves the final workspace even when its engine is unusable; fallback selects the newest retained snapshot whose engine passes the same viability check, and records the selected path and reason.
 A fallback grade describes that snapshot, while the execution outcome continues to describe the actual run.
+
+Each record fingerprints the host-owned grading inputs it was graded against (`grading_inputs.digest`), and scores are comparable only between runs graded on the same digest.
+`silverquillm regrade` re-grades retained runs on the checkout's current inputs, from the workspace each run was graded from in the local run artifacts and on its recorded grader image, with the same container isolation; a record's own paths never choose what is mounted.
+A re-grade never replaces or edits a record: its scores go to a separate output directory, tagged with the new digest, and a run whose workspace or grader image is gone is skipped with a reason.
+The output directory is written only through descriptors that never follow a link, so no link inside it can redirect a write into the records or run artifacts.
+A re-grade summary compares before and after within a cohort of one candidate and one original grading-inputs digest, never across digests, and reuses an earlier output only when it is a complete, invariant-satisfying success on the same inputs, grading code and grader image; any unusable earlier output is a miss that re-grades only that run.
 
 ### Historical evidence
 
