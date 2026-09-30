@@ -214,7 +214,7 @@ Each record's graded workspace is archived as a binary diff from its benchmark i
 The run writer archives a workspace and verifies it rebuilds to the graded copy's recorded digest before writing; `silverquillm results archive` backfills records from before archives existed, on the host that holds their run artifacts.
 
 An analysis leaves a run out only through an Exclusion: a write-once file under `exclusions/<candidate-hash>/<run-id>.json` naming a reason code and a note, never an edit to the record.
-The run writer excludes a run when a rule fires on an observed fact (a host failure, zero agent turns, subagent threads, or measurements from before subagent threads were counted); unknown measurements never exclude.
+The run writer excludes a run when a rule fires on an observed fact (a host failure, zero agent turns, subagent threads, or a populated measurement object from before subagent threads were counted); absent, empty or unknown measurements never exclude.
 An operator excludes anything a rule cannot see with `silverquillm results exclude`, a superseded run naming the record that replaces it, and `silverquillm results check` lists records a rule excludes without an Exclusion and Exclusions without a record.
 Tables list the excluded runs with their reasons beneath the included ones.
 

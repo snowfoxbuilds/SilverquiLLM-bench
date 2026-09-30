@@ -29,6 +29,7 @@ from silverquillm.results_repo import InvalidRunRecordError, iter_run_dirs
 
 from .benchmark import Benchmark, load_benchmark
 from .definition import KarnError
+from .exclusions import Exclusion, load_exclusions
 from .execution import _scores
 from .grader import (
     DEFAULT_GRADING_TIMEOUT,
@@ -450,15 +451,44 @@ def _means(pairs) -> tuple[float | None, float | None, int]:
     return before, statistics.fmean(p[1] for p in pairs), len(pairs)
 
 
-def summarize(results: list[dict], digests: dict, benchmark_id: str) -> dict:
+def _excluded(result: dict, exclusions: dict[str, Exclusion]) -> Exclusion | None:
+    exclusion = exclusions.get(result["run_id"])
+    if exclusion is not None and exclusion.candidate_hash == result.get("candidate_hash"):
+        return exclusion
+    return None
+
+
+def summarize(
+    results: list[dict],
+    digests: dict,
+    benchmark_id: str,
+    exclusions: dict[str, Exclusion] | None = None,
+) -> dict:
     """Before/after means per cohort: one candidate graded originally on one inputs digest.
 
     Original scores from different grading-inputs digests are never averaged together, and
-    a run whose original digest is unknown forms a cohort of its own.
+    a run whose original digest is unknown forms a cohort of its own. A run excluded in the
+    results repository is graded like any other but left out of every cohort and listed,
+    with its reason, under ``excluded``.
     """
+    exclusions = exclusions or {}
+    excluded = sorted(
+        (
+            {
+                "run_id": exclusion.run_id,
+                "candidate_hash": exclusion.candidate_hash,
+                "reason": exclusion.reason,
+                "note": exclusion.note,
+                "superseded_by": exclusion.superseded_by,
+            }
+            for result in results
+            if (exclusion := _excluded(result, exclusions)) is not None
+        ),
+        key=lambda row: (row["candidate_hash"], row["run_id"]),
+    )
     groups: dict[tuple, list[dict]] = {}
     for result in results:
-        if "scores" in result:
+        if "scores" in result and _excluded(result, exclusions) is None:
             original = result["source"]["grading_inputs_digest"]
             key = (result["candidate_hash"], original or "", "" if original else result["run_id"])
             groups.setdefault(key, []).append(result)
@@ -487,6 +517,7 @@ def summarize(results: list[dict], digests: dict, benchmark_id: str) -> dict:
         "benchmark": benchmark_id,
         **digests,
         "cohorts": cohorts,
+        "excluded": excluded,
         "skipped": sorted(
             ({"run_id": r["run_id"], "reason": r["skipped"]} for r in results if "skipped" in r),
             key=lambda row: row["run_id"],
@@ -527,6 +558,9 @@ def regrade(
         for prefix in prefixes:
             if not any(key(record).startswith(prefix) for record in records):
                 raise KarnError("regrade_selection_matched_nothing:" + prefix)
+    # Read on every invocation and never cached with a run's scores, so adding or deleting
+    # an exclusion changes the next summary even when every output is reused.
+    exclusions = load_exclusions(Path(results_repo).resolve())
     out.mkdir(parents=True, exist_ok=True)
     output = OutputDir(out)
     try:
@@ -549,7 +583,7 @@ def regrade(
             substitute_grader=substitute_grader,
         )
         results += [{**row, "skipped": row["reason"]} for row in unreadable]
-        summary = summarize(results, digests, benchmark_id)
+        summary = summarize(results, digests, benchmark_id, exclusions)
         if inputs["problems"]:
             summary["grading_inputs_problems"] = inputs["problems"]
         if grading_inputs(benchmark)["digest"] != inputs["digest"]:

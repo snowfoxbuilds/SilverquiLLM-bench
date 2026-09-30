@@ -118,13 +118,18 @@ def exclusion_path(results_repo: Path, candidate_hash: str, run_id: str) -> Path
 def rule_exclusion(record: KarnRunRecord) -> tuple[str, str] | None:
     """The first mechanical rule the record meets, as ``(reason, note)``, else None.
 
-    Only observed facts count: unknown turns or a missing measurement never exclude.
+    Only observed facts count. A host failure is an observed status, whatever the
+    measurements hold. Absent, null or empty measurements are unknown and never exclude;
+    only a populated measurement object that lacks ``subagent_threads`` shows the run was
+    measured before threads were counted.
     """
     metadata = record.run_metadata
-    measurements = metadata.get("measurements") or {}
-    turns = ((measurements.get("agent_turns") or {}).get("total") or {}).get("value")
     if metadata["execution"]["status"] == "host_failed":
         return "host_failed", "execution status host_failed"
+    measurements = metadata.get("measurements")
+    if not isinstance(measurements, dict) or not measurements:
+        return None
+    turns = ((measurements.get("agent_turns") or {}).get("total") or {}).get("value")
     if turns == 0:
         return "never_executed", "observed zero agent turns"
     threads = measurements.get("subagent_threads")

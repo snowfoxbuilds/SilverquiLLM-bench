@@ -481,3 +481,207 @@ def test_exclusion_commands(edited):
         ["results", "exclude", "nope", "--reason", "other", "--note", "n", "--results-repo", repo],
     )
     assert unknown.exit_code == 1 and "run_not_recorded" in unknown.output
+
+
+# ---- relative results paths ----------------------------------------------------------------------
+
+
+def test_runs_sharing_a_baseline_archive_through_a_relative_results_repo(edited, monkeypatch):
+    opts, _ = edited
+    repo = opts["results_repo"]
+    monkeypatch.chdir(repo.parent)
+    relative = {**opts, "results_repo": Path(repo.name)}
+
+    for run_id in ("second", "third"):
+        record = run_benchmark(**relative, run_id=run_id)
+        attachments = json.loads(
+            (opts["results_dir"] / run_id / f"results-attachments.{run_id}.json").read_text()
+        )
+        assert attachments["workspace"]["status"] == "archived", attachments
+        assert (archive_dir(repo, record.candidate.hash, run_id) / "workspace.json").is_file()
+    assert len(list((repo / "baselines").iterdir())) == 1
+
+
+def test_relative_paths_backfill_and_materialize(edited, monkeypatch, tmp_path):
+    opts, record = edited
+    repo, results_dir = opts["results_repo"], opts["results_dir"]
+    shutil.rmtree(archive_dir(repo, record.candidate.hash, record.run_id))
+    monkeypatch.chdir(tmp_path)
+
+    rows = backfill(Path(repo.relative_to(tmp_path)), Path(results_dir.relative_to(tmp_path)))
+    rebuilt = materialize(Path(repo.relative_to(tmp_path)), record, Path("rebuilt"))
+
+    assert [row["status"] for row in rows] == ["archived"]
+    assert rebuilt.is_absolute()
+    assert tree_bytes(rebuilt) == tree_bytes(
+        results_dir / "edited" / "workspace_final", graded_only=True
+    )
+
+
+def test_a_run_whose_archive_failed_is_repaired_by_a_later_backfill(tmp_path, monkeypatch):
+    opts = options(tmp_path, host=EditingHost())
+    readme = opts["bench_root"] / "benchmarks/example/workspace/docs/readme.txt"
+    readme.parent.mkdir()
+    readme.write_text("deleted by the agent\n")
+
+    def unavailable(*args, **kwargs):
+        raise ArchiveRefused("workspace_archive_locked")
+
+    monkeypatch.setattr(execution, "archive_run", unavailable)
+    record = run_benchmark(**opts, run_id="retry")
+    attachments = json.loads(
+        (opts["results_dir"] / "retry" / "results-attachments.retry.json").read_text()
+    )
+    assert attachments["workspace"] == {"status": "refused", "reason": "workspace_archive_locked"}
+    assert read_record(next(opts["results_repo"].glob("results/*/retry")))
+    monkeypatch.undo()
+    monkeypatch.chdir(tmp_path)
+
+    rows = backfill(
+        Path(opts["results_repo"].relative_to(tmp_path)),
+        Path(opts["results_dir"].relative_to(tmp_path)),
+    )
+
+    assert [row["status"] for row in rows] == ["archived"]
+    assert (archive_dir(opts["results_repo"], record.candidate.hash, "retry")).is_dir()
+
+
+def test_a_corrupt_baseline_is_refused_through_a_relative_path_and_kept(edited, monkeypatch):
+    opts, record = edited
+    repo = opts["results_repo"]
+    [bundle] = (repo / "baselines").iterdir()
+    shutil.rmtree(archive_dir(repo, record.candidate.hash, record.run_id))
+    bundle.write_bytes(b"not a bundle")
+    monkeypatch.chdir(repo.parent)
+
+    with pytest.raises(ArchiveRefused, match="git_failed:bundle"):
+        archive_run(Path(repo.name), record, opts["results_dir"] / "edited")
+    assert bundle.read_bytes() == b"not a bundle"
+
+
+# ---- rules never exclude on unknown measurements ---------------------------------------------
+
+
+@pytest.mark.parametrize("blank", [None, {}])
+def test_absent_or_empty_measurements_never_exclude(edited, blank):
+    opts, record = edited
+    assert rule_exclusion(edit(record, lambda m: m.update(measurements=blank))) is None
+
+    def failed(metadata):
+        metadata.update(measurements=blank)
+        metadata["execution"]["status"] = "host_failed"
+
+    assert rule_exclusion(edit(record, failed)) == ("host_failed", "execution status host_failed")
+
+    blank_record = write_record_with(opts, "blank", lambda m: m.update(measurements=blank))
+    report = check(opts["results_repo"], write_rules=True)
+    assert "blank" not in [row["run_id"] for row in report["written"]]
+    assert "blank" not in load_exclusions(opts["results_repo"])
+    assert not (
+        opts["results_repo"] / "exclusions" / blank_record.candidate.hash / "blank.json"
+    ).exists()
+
+
+def test_historical_measurements_without_a_thread_count_are_still_uncounted(edited):
+    _, record = edited
+    assert rule_exclusion(edit(record, measured(40)))[0] == "subagents_uncounted"
+
+
+# ---- regrade summaries apply exclusions ------------------------------------------------------
+
+
+def regrade_with(opts, out, docker=None, **changes):
+    return regrade(
+        bench_root=opts["bench_root"],
+        benchmark_id="example",
+        results_repo=opts["results_repo"],
+        results_dir=opts["results_dir"],
+        out=out,
+        docker=docker or LocalDocker(),
+        **changes,
+    )
+
+
+def cohort_runs(summary):
+    return sum(row["runs"] for row in summary["cohorts"])
+
+
+def test_regrade_summaries_leave_out_excluded_runs_and_list_them(edited, tmp_path):
+    opts, _ = edited
+    write_record_with(opts, "old", measured(40))
+    run_benchmark(**opts, run_id="kept")
+    repo = opts["results_repo"]
+    exclude(repo, "edited", reason="pilot", note="pipeline validation", excluded_by="op")
+    check(repo, write_rules=True)
+
+    summary = regrade_with(opts, tmp_path / "regrade")
+
+    assert cohort_runs(summary) == 1
+    assert {(row["run_id"], row["reason"]) for row in summary["excluded"]} == {
+        ("edited", "pilot"),
+        ("old", "subagents_uncounted"),
+    }
+    assert {row["note"] for row in summary["excluded"]} >= {"pipeline validation"}
+    assert len(list((tmp_path / "regrade").glob("*/*.json"))) == 3
+
+
+def test_an_all_excluded_or_explicitly_selected_excluded_run_has_no_cohort(edited, tmp_path):
+    opts, _ = edited
+    exclude(opts["results_repo"], "edited", reason="pilot", note="n", excluded_by="op")
+
+    summary = regrade_with(opts, tmp_path / "regrade", runs=["edited"])
+
+    assert summary["cohorts"] == []
+    assert [row["run_id"] for row in summary["excluded"]] == ["edited"]
+
+
+def test_a_malformed_exclusion_stops_the_regrade_before_grading(edited, tmp_path):
+    opts, record = edited
+    path = opts["results_repo"] / "exclusions" / record.candidate.hash / "edited.json"
+    path.parent.mkdir(parents=True)
+    path.write_text('{"run_id": "edited"}')
+    docker = LocalDocker()
+
+    with pytest.raises(ExclusionError, match="exclusion_invalid"):
+        regrade_with(opts, tmp_path / "regrade", docker=docker)
+    assert docker.runs == []
+
+
+def test_exclusions_apply_to_reused_outputs_and_are_never_cached(edited, tmp_path):
+    opts, record = edited
+    run_benchmark(**opts, run_id="kept")
+    out = tmp_path / "regrade"
+    assert cohort_runs(regrade_with(opts, out)) == 2
+
+    exclude(opts["results_repo"], "edited", reason="other", note="later", excluded_by="op")
+    docker = LocalDocker()
+    summary = regrade_with(opts, out, docker=docker)
+    assert docker.runs == []
+    assert cohort_runs(summary) == 1
+    assert "excluded" not in json.loads(next(out.glob("*/edited.json")).read_text())
+
+    (opts["results_repo"] / "exclusions" / record.candidate.hash / "edited.json").unlink()
+    summary = regrade_with(opts, out, docker=docker)
+    assert docker.runs == []
+    assert cohort_runs(summary) == 2
+    assert summary["excluded"] == []
+
+
+def test_the_regrade_command_lists_excluded_runs_beneath_the_table(edited, tmp_path, monkeypatch):
+    from silverquillm.karn import regrade as regrade_module
+
+    opts, _ = edited
+    exclude(opts["results_repo"], "edited", reason="pilot", note="pipeline check", excluded_by="op")
+    monkeypatch.setattr(regrade_module, "DockerRunner", LocalDocker)
+    arguments = [
+        "regrade", "--benchmark", "example", "--out", str(tmp_path / "regrade"),
+        "--bench-root", str(opts["bench_root"]),
+        "--results-repo", str(opts["results_repo"]),
+        "--results-dir", str(opts["results_dir"]),
+    ]  # fmt: skip
+
+    result = CliRunner().invoke(main, arguments)
+
+    assert result.exit_code == 0, result.output
+    _, _, excluded = result.output.partition("excluded from the comparison:")
+    assert "pilot" in excluded and "pipeline check" in excluded

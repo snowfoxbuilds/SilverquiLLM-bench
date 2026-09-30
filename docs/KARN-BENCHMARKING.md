@@ -264,6 +264,7 @@ silverquillm regrade --benchmark hob-medium --results-repo ~/bench-results --res
 - Every read and write under `--out` goes through directory descriptors that never follow a link. A candidate directory that is a link, or that is replaced while a run grades, fails that run with `regrade_output_unsafe:…` and nothing is written through it; an existing output file that is a link is replaced, never followed.
 - `summary.json` and the table compare mean pass rates before and after per cohort: one candidate whose runs were originally graded on one grading-inputs digest. Original scores from different digests are never averaged together, and a run whose original digest is unknown is its own cohort, named by run id. Each dimension reports `paired_runs`, the runs observed both before and after, which both means cover. The table's `graded on` column shows the cohort's original digest.
 - `--run` narrows by run-id prefix and `--candidate` by candidate-hash prefix; a prefix that matches nothing is an error. `--workers` grades runs concurrently (default 2).
+- Excluded runs (see [Exclusions](#exclusions)) are graded like any other but left out of every cohort; the summary lists them under `excluded` with their reasons and notes, and the command prints them beneath the table. Exclusion files are read on every invocation and never stored with a run's output, so adding or deleting one changes the next summary even when every output is reused. A malformed or misplaced exclusion file stops the regrade before anything is graded.
 - A run with no run artifacts on this host, such as another host's, is graded from its workspace archive in the results repository instead, which is rebuilt and verified against the record first, in a scratch directory under the system temp dir (`TMPDIR`) rather than `--out`; the output's `source.workspace` says which (`run_artifacts` or `results_repo`).
 - Grader images are built per host, so another host's recorded image is normally absent and its runs are skipped with `grader_image_unavailable`. `--substitute-grader` grades them on this host's grader for the recorded Python; the output's `grading_isolation` names the image used and `grader_substituted_for` the recorded one.
 - A run whose workspace or grader image is unavailable is skipped with a reason. A run whose grading fails keeps the error in its output file, the others continue, and the command exits 1.
@@ -291,7 +292,7 @@ Commit `baselines/` and `workspaces/` with the records.
 
 A run is left out of analyses only by an exclusion file, `exclusions/<candidate-hash>/<run-id>.json`, never by editing its record or by a private filter.
 The run writer adds one when a rule fires on an observed fact: `host_failed`, `never_executed` (zero agent turns), `subagents_used` (subagent threads observed), or `subagents_uncounted` (measurements from before subagent threads were counted).
-An unknown measurement never excludes a run.
+An unknown measurement never excludes a run: absent, null or empty measurements, or an unknown turn or thread count, leave it in.
 Exclude anything else yourself, with a note a later reader can check:
 
 ```sh

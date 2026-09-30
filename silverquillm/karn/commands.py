@@ -324,6 +324,10 @@ def regrade(**options):
         raise click.exceptions.Exit(130) from None
     for line in _regrade_table(summary):
         click.echo(line)
+    if summary["excluded"]:
+        click.echo("excluded from the comparison:")
+    for row in summary["excluded"]:
+        click.echo(f"  {row['run_id'][:8]}  {row['reason']:20} {row['note']}")
     for row in summary["skipped"]:
         click.echo(f"skipped {row['run_id']}: {row['reason']}", err=True)
     for row in summary["errors"]:

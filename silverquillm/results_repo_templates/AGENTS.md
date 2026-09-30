@@ -131,13 +131,17 @@ the record:
 
 Rules exclude a record for `host_failed` (execution status), `never_executed`
 (zero observed agent turns), `subagents_used` (subagent threads observed) and
-`subagents_uncounted` (measurements without a `subagent_threads` count); an
-unknown measurement never excludes. Operators add the rest with `silverquillm
-results exclude`. To include a record again, delete its file.
+`subagents_uncounted` (a populated measurement object without a
+`subagent_threads` count). An unknown measurement never excludes: absent, null or
+empty measurements, and a present but unknown turn or thread count, leave the
+record in. Operators add the rest with `silverquillm results exclude`. To include
+a record again, delete its file.
 
 Every analysis applies these files and no private filter: aggregate the records
 without an exclusion, and list the excluded ones with their reasons beneath the
-table (`silverquillm results exclusions`). `silverquillm results check` reports
+table (`silverquillm results exclusions`). `silverquillm regrade` does the same:
+it grades excluded records too, but leaves them out of its comparison and lists
+them under `excluded` in its summary. `silverquillm results check` reports
 records a rule excludes that have no file, and files without a record.
 
 ## Building candidates and provenance

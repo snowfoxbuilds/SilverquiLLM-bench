@@ -83,7 +83,7 @@ class Scratch:
     """A throwaway bare repository whose git never reads host, user or workspace config."""
 
     def __init__(self, root: Path):
-        self.root = Path(root)
+        self.root = Path(root).absolute()
         self.root.mkdir(parents=True, exist_ok=True)
         self.git_dir = self.root / "repository.git"
         self.environment = {
@@ -137,7 +137,7 @@ class Scratch:
 
     def tree(self, directory: Path) -> str:
         """The git tree of *directory*'s kept files, content stored byte for byte."""
-        files = list(_files(Path(directory)))
+        files = list(_files(Path(directory).absolute()))
         paths = b"".join(str(path).encode() + b"\n" for _, path in files)
         if any(b"\n" in str(path).encode() for _, path in files):
             raise ArchiveRefused("workspace_path_not_representable")
@@ -192,12 +192,14 @@ class Scratch:
         self.git("update-ref", BASELINE_REF, commit)
         return commit
 
+    # Git runs with the scratch directory as its working directory, so every path handed to
+    # it is made absolute first; a relative one would resolve against the scratch directory.
     def bundle(self, path: Path) -> None:
-        self.git("bundle", "create", "--quiet", str(path), BASELINE_REF)
+        self.git("bundle", "create", "--quiet", str(Path(path).absolute()), BASELINE_REF)
 
     def unbundle(self, path: Path, tree: str) -> str:
         """Import a baseline bundle and return its commit, refusing any other tree."""
-        heads = self.git("bundle", "unbundle", str(path)).decode().split()
+        heads = self.git("bundle", "unbundle", str(Path(path).absolute())).decode().split()
         if len(heads) != 2 or heads[1] != BASELINE_REF or not OBJECT_ID.fullmatch(heads[0]):
             raise ArchiveRefused("baseline_bundle_invalid")
         if self.git("rev-parse", heads[0] + "^{tree}").decode().strip() != tree:
@@ -222,7 +224,12 @@ class Scratch:
         self.git("read-tree", base, index=index)
         if patch.stat().st_size:
             self.git(
-                "apply", "--cached", "--binary", "--whitespace=nowarn", str(patch), index=index
+                "apply",
+                "--cached",
+                "--binary",
+                "--whitespace=nowarn",
+                str(Path(patch).absolute()),
+                index=index,
             )
         return self.git("write-tree", index=index).decode().strip()
 
@@ -350,6 +357,7 @@ def materialize(results_repo: Path, record, destination: Path) -> Path:
     Refused unless the rebuilt tree is the archived tree and its content digest is the one
     the record itself states grading used.
     """
+    results_repo = Path(results_repo).absolute()
     directory = archive_dir(results_repo, record.candidate.hash, record.run_id)
     if not (directory / METADATA).is_file():
         raise ArchiveRefused("workspace_not_archived")
@@ -360,7 +368,7 @@ def materialize(results_repo: Path, record, destination: Path) -> Path:
         or metadata["graded"]["content_digest"] != graded_digest(record)
     ):
         raise ArchiveRefused("workspace_archive_does_not_match_record")
-    destination = Path(destination)
+    destination = Path(destination).absolute()
     if destination.exists():
         raise ArchiveRefused("materialize_destination_exists")
     with tempfile.TemporaryDirectory(prefix="sq-workspace-") as scratch_root:
@@ -401,7 +409,7 @@ def archive_run(results_repo: Path, record, run_dir: Path, *, dry_run: bool = Fa
     Returns ``{"status": "archived" | "exists" | "would_archive", ...}``; raises
     :class:`ArchiveRefused` when the run cannot be archived faithfully.
     """
-    results_repo, run_dir = Path(results_repo), Path(run_dir)
+    results_repo, run_dir = Path(results_repo).absolute(), Path(run_dir).absolute()
     target = archive_dir(results_repo, record.candidate.hash, record.run_id)
     if (target / METADATA).is_file():
         return {"status": "exists", "path": str(target.relative_to(results_repo))}
@@ -504,6 +512,7 @@ def backfill(results_repo: Path, results_dir: Path, *, runs=(), dry_run: bool = 
 
     from .records import read_record
 
+    results_repo = Path(results_repo).absolute()
     rows = []
     for record_dir in iter_run_dirs(results_repo):
         if runs and not any(record_dir.name.startswith(run) for run in runs):
