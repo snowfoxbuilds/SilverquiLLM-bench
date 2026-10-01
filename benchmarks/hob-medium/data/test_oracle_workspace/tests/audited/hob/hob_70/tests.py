@@ -1,11 +1,14 @@
 import pytest
 from engine.card import Creature, Instant
+from engine.casting import cast_spell, cast_spell_free
 from engine.decisions import Decision
-from engine.game import exile
+from engine.game import exile, gain_life
+from engine.stack import copy_spell, move_spell_off_stack
 from engine.types import ManaCost, ManaType, Zone
 from engine.zones import move_to_zone
 from test_utils import (
     behavioral_game,
+    cast_card,
     cast_vanilla_spell,
     enter_permanent,
     prefer,
@@ -161,3 +164,67 @@ def test_counter_mode_still_applies_while_gollum_is_not_a_creature():
     advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
     resolve_stack(game)
     assert (card.power, card.toughness) == (4, 2)
+
+
+class CounterProbe(Instant):
+    def __init__(self, original, **kwargs):
+        super().__init__(name="Counter probe", mana_cost=ManaCost(), **kwargs)
+        self.original = original
+
+    def on_resolve(self, game):
+        move_spell_off_stack(game, self.original)
+
+
+class CopyProbe(Instant):
+    def __init__(self, original, copy_controller, **kwargs):
+        super().__init__(name="Copy probe", mana_cost=ManaCost(), **kwargs)
+        self.original = original
+        self.copy_controller = copy_controller
+
+    def on_resolve(self, game):
+        game.stack.push(copy_spell(game, self.original, self.copy_controller))
+
+
+class LifeProbe(Instant):
+    def on_resolve(self, game):
+        gain_life(game, self.controller, 7)
+
+
+def test_free_cast_uses_printed_mana_value_and_triggers_gollum():
+    game, player, _gollum = arrange("odd")
+    opponent = game.players[1]
+    prefer(player, Decision.mode("drain"))
+    spell = Instant(name="Free odd spell", mana_cost=ManaCost(generic=3), owner=opponent)
+    game.get_exile(opponent).add(spell)
+    assert opponent.mana_pool.total() == 0
+    cast_spell_free(game, opponent, spell, Zone.EXILE)
+    resolve_stack(game)
+    assert (player.life, opponent.life) == (22, 18)
+    assert opponent.mana_pool.total() == 0
+
+
+def test_countering_the_spell_does_not_counter_gollums_cast_trigger():
+    game, player, _gollum = arrange("odd")
+    opponent = game.players[1]
+    prefer(player, Decision.mode("draw"))
+    spell = LifeProbe(name="Odd life spell", mana_cost=ManaCost(generic=1), owner=opponent)
+    game.get_hand(opponent).add(spell)
+    fund(opponent, COLORLESS=1)
+    original = cast_spell(game, opponent, spell)
+    cast_card(game, player, CounterProbe(original, owner=player))
+    resolve_stack(game)
+    assert game.get_graveyard(opponent).contains(spell)
+    assert opponent.life == 20
+    assert len(game.get_hand(player).get_all()) == 1
+
+
+def test_copying_and_resolving_a_spell_do_not_trigger_gollum_again():
+    game, player, gollum = arrange("odd")
+    opponent = game.players[1]
+    prefer(player, Decision.mode("draw"))
+    original = cast_vanilla_spell(game, 1, 1)
+    cast_card(game, player, CopyProbe(original, opponent, owner=player))
+    resolve_stack(game)
+    assert len(game.get_hand(player).get_all()) == 1
+    assert (player.life, opponent.life) == (20, 20)
+    assert (gollum.power, gollum.toughness) == (3, 1)

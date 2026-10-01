@@ -1,12 +1,13 @@
 import pytest
 from engine.card import Artifact, Creature, Instant
 from engine.decisions import Decision
-from engine.game import exile
+from engine.game import create_token, exile
 from engine.types import Keyword, ManaType, Phase, Step, Zone
 from engine.zones import move_to_zone
 from test_utils import (
     advance_game_to_phase,
     behavioral_game,
+    cast_card,
     cast_spell,
     object_preference,
     prefer,
@@ -27,7 +28,6 @@ def fund(player, **amounts):
 from card_impl import TheEaglesAreComing
 from engine.protection import get_colors
 from engine.types import Color
-from test_utils import TestSetupError as SetupError
 
 
 def arrange(kicked=False, count=1):
@@ -121,11 +121,33 @@ def test_partial_resolution_counts_only_returned_creatures():
 
 
 def test_kicker_cannot_be_paid_with_only_normal_mana():
-    game, p, card, _ = arrange()
-    prefer(p, Decision.yes())
-    with pytest.raises(SetupError):
-        cast_spell(game, 0, card.name)
-    assert p.mana_pool.total() == 2
+    from engine.casting import CastingError, cast_spell as cast
+
+    game, p, card, creatures = arrange(count=2)
+    prefer(p, Decision.yes(), Decision.number(2),
+           *(object_preference(game, creature) for creature in creatures))
+    # An unaffordable kicker may be filtered out before asking the player.
+    # Either reject the cast atomically or complete a legal unkicked cast.
+    try:
+        cast(game, p, card)
+    except CastingError:
+        assert p.mana_pool.total() == 2
+        assert game.get_hand(p).contains(card)
+        assert all(game.get_battlefield(p).contains(creature) for creature in creatures)
+        assert game.stack.is_empty()
+        returned = 0
+    else:
+        resolve_stack(game)
+        assert p.mana_pool.total() == 0
+        assert game.get_graveyard(p).contains(card)
+        assert sum(game.get_hand(p).contains(creature) for creature in creatures) == 1
+        assert sum(game.get_battlefield(p).contains(creature) for creature in creatures) == 1
+        returned = 1
+
+    assert not birds(game, p)
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    resolve_stack(game)
+    assert len(birds(game, p)) == returned
 
 
 def test_owns_target_even_when_an_opponent_controls_it():
@@ -311,3 +333,51 @@ def test_free_cast_applies_cost_reduction_to_kicker():
     advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
     resolve_stack(game)
     assert len(birds(game, p)) == 1
+
+
+def test_returned_token_counts_even_though_it_ceases_to_exist():
+    game = behavioral_game()
+    player = game.players[0]
+    token = create_token(
+        game, player, Creature(name="Spirit", subtypes={"Spirit"},
+                               base_power=1, base_toughness=1)
+    )[0]
+    prefer(player, Decision.no(), object_preference(game, token))
+    fund(player, WHITE=1, COLORLESS=1)
+    cast_card(game, player, TheEaglesAreComing())
+    assert not game.get_battlefield(player).contains(token)
+    assert not game.get_hand(player).contains(token)
+    assert not birds(game, player)
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    resolve_stack(game)
+    assert len(birds(game, player)) == 1
+
+
+def test_count_is_kept_by_the_delayed_trigger_not_the_spell():
+    game = behavioral_game()
+    player = game.players[0]
+    first_targets = [put_on_battlefield(
+        game, player, Creature(name=name, base_power=2, base_toughness=2)
+    ) for name in ("First", "Second")]
+    spell = TheEaglesAreComing()
+    prefer(player, Decision.yes(), Decision.number(2),
+           *(object_preference(game, target) for target in first_targets))
+    fund(player, WHITE=3, COLORLESS=3)
+    cast_card(game, player, spell)
+    assert all(game.get_hand(player).contains(target) for target in first_targets)
+    assert game.get_graveyard(player).contains(spell)
+
+    move_to_zone(game, spell, Zone.GRAVEYARD, Zone.HAND)
+    last_target = put_on_battlefield(
+        game, player, Creature(name="Third", base_power=2, base_toughness=2)
+    )
+    prefer(player, Decision.no(), object_preference(game, last_target))
+    fund(player, WHITE=1, COLORLESS=1)
+    cast_card(game, player, spell)
+    assert game.get_hand(player).contains(last_target)
+    assert game.get_graveyard(player).contains(spell)
+    assert not birds(game, player)
+
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    resolve_stack(game)
+    assert len(birds(game, player)) == 3

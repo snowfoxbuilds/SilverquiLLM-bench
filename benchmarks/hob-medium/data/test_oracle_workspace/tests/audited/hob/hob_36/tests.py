@@ -1,5 +1,6 @@
 import pytest
-from engine.card import Creature, Instant
+from engine.card import Artifact, Creature, Instant
+from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer
 from engine.game import add_counter, exile
 from engine.types import CardType, ManaCost, ManaType, Phase, Step, Zone
 from engine.zones import move_to_zone
@@ -7,6 +8,7 @@ from test_utils import (
     activate_card_ability,
     advance_game_to_phase,
     behavioral_game,
+    cast_card,
     enter_permanent,
     object_preference,
     payment_preference,
@@ -366,3 +368,43 @@ def test_countered_delayed_return_does_not_retry_next_end_step():
     resolve_stack(game)
     assert p.zones[Zone.EXILE].contains(target)
     assert not game.get_battlefield(p).contains(target)
+
+
+class GainControl(Instant):
+    def __init__(self, target, **kwargs):
+        super().__init__(name="Gain control response", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        controller = self.controller
+
+        def apply(state):
+            for player in state.players:
+                battlefield = state.get_battlefield(player)
+                if battlefield.contains(self.target):
+                    if player is not controller:
+                        battlefield.remove(self.target)
+                        state.get_battlefield(controller).add(self.target)
+                    self.target.controller = controller
+                    return
+
+        game.effect_manager.add(
+            ContinuousEffect(
+                source=self, layer=Layer.CONTROL, apply=apply,
+                duration=DURATION_END_OF_TURN,
+            )
+        )
+
+
+def test_targets_are_revalidated_against_the_activating_controller():
+    game, player, elrond = arrange()
+    opponent = game.players[1]
+    relic = put_on_battlefield(game, player, Artifact(name="Relic"))
+    prefer(player, object_preference(game, relic))
+    fund(player, BLUE=2, COLORLESS=5)
+    activate_card_ability(game, player, elrond)
+    cast_card(game, opponent, GainControl(relic, owner=opponent), resolve=False)
+    resolve_stack(game)
+    assert relic.controller is opponent
+    assert game.get_battlefield(opponent).contains(relic)
+    assert not game.get_exile(player).contains(relic)
