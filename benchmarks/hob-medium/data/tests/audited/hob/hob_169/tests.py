@@ -1,11 +1,13 @@
 import pytest
 from engine.card import Creature, Instant
+from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer, SubLayer
 from engine.game import add_counter, destroy
-from engine.types import CardType, ManaType, Supertype, Zone
+from engine.types import CardType, ManaCost, ManaType, Supertype, Zone
 from engine.zones import move_to_zone
 from test_utils import (
     activate_card_ability,
     behavioral_game,
+    cast_card,
     cast_spell,
     enter_permanent,
     object_preference,
@@ -249,3 +251,91 @@ def test_sacrifice_death_trigger_resolves_before_drawing_cards():
     resolve_stack(game)
     assert len(game.get_hand(p).get_all()) == 2
     assert p.life == 20
+
+
+class Pump(Instant):
+    def __init__(self, target, **kwargs):
+        super().__init__(name="Give +2/+2", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        def apply(state):
+            if any(state.get_battlefield(p).contains(self.target) for p in state.players):
+                self.target.modified_power += 2
+                self.target.modified_toughness += 2
+
+        game.effect_manager.add(
+            ContinuousEffect(
+                source=self, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT,
+                apply=apply, duration=DURATION_END_OF_TURN,
+            )
+        )
+
+
+class GainControl(Instant):
+    def __init__(self, target, **kwargs):
+        super().__init__(name="Gain control response", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        controller = self.controller
+
+        def apply(state):
+            for player in state.players:
+                battlefield = state.get_battlefield(player)
+                if battlefield.contains(self.target):
+                    if player is not controller:
+                        battlefield.remove(self.target)
+                        state.get_battlefield(controller).add(self.target)
+                    self.target.controller = controller
+                    return
+
+        game.effect_manager.add(
+            ContinuousEffect(
+                source=self, layer=Layer.CONTROL, apply=apply,
+                duration=DURATION_END_OF_TURN,
+            )
+        )
+
+
+def test_power_includes_counters_and_continuous_effects():
+    game, player, tom = arrange()
+    victim = put_on_battlefield(
+        game, player, Creature(name="Bear", base_power=2, base_toughness=2)
+    )
+    add_counter(game, victim, "+1/+1", 1)
+    cast_card(game, player, Pump(victim, owner=player))
+    assert victim.power == 5
+    before_hand = len(game.get_hand(player))
+    before_library = len(game.get_library(player))
+    before_graveyard = len(game.get_graveyard(player))
+    prefer(player, object_preference(game, victim))
+    fund(player, COLORLESS=1)
+    activate_card_ability(game, player, tom)
+    assert game.get_graveyard(player).contains(victim)
+    resolve_stack(game)
+    assert len(game.get_library(player)) == before_library - 5
+    assert len(game.get_hand(player)) == before_hand + 4
+    assert len(game.get_graveyard(player)) == before_graveyard + 2
+
+
+def test_draws_for_the_activating_player_even_after_control_changes():
+    game, player, tom = arrange()
+    opponent = game.players[1]
+    victim = put_on_battlefield(
+        game, player, Creature(name="Bear", base_power=2, base_toughness=2)
+    )
+    prefer(player, object_preference(game, victim))
+    fund(player, COLORLESS=1)
+    activate_card_ability(game, player, tom)
+    assert game.get_graveyard(player).contains(victim)
+    cast_card(game, opponent, GainControl(tom, owner=opponent), resolve=False)
+    hands = [len(game.get_hand(p)) for p in game.players]
+    libraries = [len(game.get_library(p)) for p in game.players]
+    resolve_stack(game)
+    assert tom.controller is opponent
+    assert game.get_battlefield(opponent).contains(tom)
+    assert len(game.get_hand(player)) == hands[0] + 1
+    assert len(game.get_library(player)) == libraries[0] - 2
+    assert len(game.get_hand(opponent)) == hands[1]
+    assert len(game.get_library(opponent)) == libraries[1]
