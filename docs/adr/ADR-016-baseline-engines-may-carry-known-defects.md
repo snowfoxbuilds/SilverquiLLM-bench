@@ -39,3 +39,7 @@ Released benchmarks never take the fix.
 - **Separate reference scores per regression dimension**: Rejected, because an engine defect often fails FDN Audited Tests, so attributing defects to dimensions needs per-test bookkeeping for little difference in what a reader learns.
 - **Hold ledger-disputed failures as pending until adjudicated**: Rejected, because it needs per-run grading state; a wrong graded test is instead fixed while the benchmark is in Benchmarking and every run is regraded.
 - **Use each benchmark's Test Oracle Workspace engine as its known-best engine**: Rejected, because the oracle engines are benchmark-specific copies carrying the same inherited defects, and a fix would have to be found and made separately in each one.
+
+## Relevant PRs
+
+- #126 — Specifies the Known-Best Engine model, Known Defect manifests and Combined Regression.

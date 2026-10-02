@@ -11,7 +11,7 @@ The Phase 18 SOS test audit identified 10 cards whose Test Oracle Impls require 
 ## Decision
 
 The Test Oracle Workspace at `benchmarks/sos/data/test_oracle_workspace/` keeps an independent copy of `engine/` that may diverge from canonical.
-For benchmarks built from the Known-Best Workspace, the oracle engine starts from the ported Known-Best Engine rather than from the agent-visible baseline, so it carries none of the baseline's Known Defects (amended 2026-10-02, #123). Canonical `benchmarks/sos/workspace/engine/` is frozen with respect to Phase 18 work — engine extensions needed by Test Oracle Impls land in the oracle's engine only.
+For benchmarks built from the Known-Best Workspace, the oracle engine starts from the ported Known-Best Engine rather than from the agent-visible baseline, so it carries none of the baseline's Known Defects (amended 2026-10-02, #126). Canonical `benchmarks/sos/workspace/engine/` is frozen with respect to Phase 18 work — engine extensions needed by Test Oracle Impls land in the oracle's engine only.
 
 The rewritten audited test suite is constrained to call only public APIs present in the canonical engine. Tests target observable game-state outcomes; they never reach into oracle-engine-only helpers. This guarantees that a rewritten audited test passes against any correct agent impl regardless of which primitives that agent invents to satisfy the spec.
 
@@ -39,4 +39,8 @@ Engine extensions land in `test_oracle_workspace/engine/` only. The validation h
 
 ## Amendments
 
-- **2026-10-02 (#123)**: Oracle engines of benchmarks built from the Known-Best Workspace start from the ported Known-Best Engine, so oracle validation runs on an engine without the baseline's Known Defects (ADR-016).
+- **2026-10-02 (#126)**: Oracle engines of benchmarks built from the Known-Best Workspace start from the ported Known-Best Engine, so oracle validation runs on an engine without the baseline's Known Defects (ADR-016).
+
+## Relevant PRs
+
+- #126 — Starts oracle engines from the ported Known-Best Engine.
