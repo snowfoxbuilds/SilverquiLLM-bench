@@ -21,6 +21,7 @@ from silverquillm.benchmark_targets import target_cards
 from silverquillm.evaluator import _target_card_id
 from silverquillm.queue_state import _write_atomically
 
+from .baseline import BaselineStore, baseline_reference_grade, combined_regression
 from .benchmark import load_benchmark, stage_benchmark
 from .definition import KarnError, canonical, load_candidate
 from .exclusions import exclude_by_rule
@@ -343,6 +344,7 @@ def run_benchmark(
             evaluator=evaluator,
             login_hold=login_hold,
             provenance=provenance,
+            baseline_store=BaselineStore(Path(state_root).resolve() / "baseline-grades"),
         )
 
 
@@ -367,6 +369,7 @@ def _collect(
     evaluator,
     login_hold,
     provenance,
+    baseline_store,
 ) -> KarnRunRecord:
     start = datetime.now(UTC).isoformat()
     artifact_dir = run_dir / "candidate"
@@ -510,6 +513,14 @@ def _collect(
             if selection["selected"]:
                 stage = "grading"
                 metadata["grading_inputs"] = grading_inputs(benchmark)
+                baseline = baseline_reference_grade(
+                    benchmark,
+                    evaluate=evaluator,
+                    score=_scores,
+                    grading_inputs_digest=metadata["grading_inputs"]["digest"],
+                    grader_image_id=grader.isolation()["grader_image_id"],
+                    store=baseline_store,
+                )
                 evaluated = evaluator(
                     run_dir, benchmark, workspace_source=run_dir / selection["selected"]
                 )
@@ -518,9 +529,13 @@ def _collect(
                 )
                 scores = _scores(evaluated, benchmark)
                 after_grading = grading_inputs(benchmark)
-                if after_grading["digest"] != metadata["grading_inputs"]["digest"]:
+                changed = after_grading["digest"] != metadata["grading_inputs"]["digest"]
+                if changed:
                     metadata["grading_inputs"]["changed_during_grading"] = True
                     metadata["grading_inputs"]["after"] = after_grading
+                combined = combined_regression(scores, evaluated, baseline, inputs_changed=changed)
+                if combined is not None:
+                    metadata["combined_regression"] = combined
             else:
                 scores = missing_scores("no_usable_workspace_or_snapshot")
         else:
