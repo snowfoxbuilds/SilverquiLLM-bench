@@ -1,0 +1,20 @@
+{
+  "name": "Strix Lookout",
+  "mana_cost": "{1}{U}",
+  "type_line": "Creature — Bird",
+  "oracle_text": "Flying, vigilance (Attacking doesn't cause this creature to tap.)\n{1}{U}, {T}: Draw a card, then discard a card.",
+  "power": "1",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Vigilance"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "52",
+  "complexity_tier": "medium"
+}

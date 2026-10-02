@@ -1,0 +1,19 @@
+{
+  "name": "Exemplar of Light",
+  "mana_cost": "{2}{W}{W}",
+  "type_line": "Creature — Angel",
+  "oracle_text": "Flying\nWhenever you gain life, put a +1/+1 counter on this creature.\nWhenever you put one or more +1/+1 counters on this creature, draw a card. This ability triggers only once each turn.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "11",
+  "complexity_tier": "medium"
+}

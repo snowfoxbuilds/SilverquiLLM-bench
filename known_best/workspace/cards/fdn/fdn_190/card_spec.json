@@ -1,0 +1,19 @@
+{
+  "name": "Brass's Bounty",
+  "mana_cost": "{6}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "For each land you control, create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Treasure"
+  ],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "190",
+  "complexity_tier": "medium"
+}

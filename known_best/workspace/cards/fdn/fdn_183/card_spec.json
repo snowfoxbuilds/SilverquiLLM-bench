@@ -1,0 +1,17 @@
+{
+  "name": "Rise of the Dark Realms",
+  "mana_cost": "{7}{B}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Put all creature cards from all graveyards onto the battlefield under your control.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "fdn",
+  "collector_number": "183",
+  "complexity_tier": "medium"
+}
