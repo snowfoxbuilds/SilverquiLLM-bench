@@ -166,6 +166,8 @@ class EffectManager:
             The number of effects removed.
         """
         before = len(self._effects)
+        from engine.copying import refresh_copies
+        refresh_copies(game)
         remaining: list[ContinuousEffect] = []
         for eff in self._effects:
             if eff.duration == DURATION_PERMANENT:
@@ -201,6 +203,10 @@ class EffectManager:
         sorted_effects = sorted(self._effects, key=lambda e: e._sort_key())
         for effect in sorted_effects:
             effect.apply(game)
+        from engine.planeswalker import refresh_granted_abilities
+        refresh_granted_abilities(game)
+        from engine.mana_grants import refresh_mana_grants
+        refresh_mana_grants(game)
 
     # ------------------------------------------------------------------
     # Internal helpers

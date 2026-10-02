@@ -283,6 +283,11 @@ def move_to_zone(
         lki = snapshot(card, Zone.BATTLEFIELD)
         game.last_known[lki_key(card)] = lki
 
+    leaving_types = set(getattr(card, 'card_types', ()))
+    if leaving_battlefield:
+        from engine.preparation import clear_preparation
+        clear_preparation(game, card)
+
     # --- Perform the zone move ---
     source_container.remove(card)
 
@@ -329,6 +334,12 @@ def move_to_zone(
     # (e.g. a flicker's exile leg). Minting stays lazy — the registry
     # re-mints on the next observation.
     game.refs.note_zone_change(card)
+    if leaving_battlefield and dest_zone == Zone.GRAVEYARD:
+        game.battlefield_deaths.append((card, game.refs.zone_epoch(card), game.turn_number,
+                                       CardType.CREATURE in leaving_types))
+    if from_zone != Zone.STACK:
+        card.was_cast = False
+    card._game = game
 
     # --- Leaving battlefield hooks ---
     removed_source_effects = False
@@ -390,6 +401,11 @@ def move_to_zone(
         # Now unregister triggers and replacement effects.
         game.trigger_manager.unregister(card)
         game.replacement_manager.unregister(card)
+        from engine.copying import end_copy
+        end_copy(card, game)
+        for callback in getattr(card, 'zone_departure_callbacks', []):
+            callback()
+        card.zone_departure_callbacks = []
 
     # --- Entering battlefield hooks ---
     if entering_battlefield:
@@ -435,10 +451,13 @@ def move_to_zone(
     # manager still needs one reset pass to strip the departed buff.
     if leaving_battlefield or entering_battlefield:
         effect_manager = getattr(game, "effect_manager", None)
-        if effect_manager is not None and (
-            len(effect_manager) > 0 or removed_source_effects
-        ):
+        if effect_manager is not None and (len(effect_manager) > 0 or removed_source_effects):
             effect_manager.apply_all(game)
+        else:
+            from engine.planeswalker import refresh_granted_abilities
+            from engine.mana_grants import refresh_mana_grants
+            refresh_granted_abilities(game)
+            refresh_mana_grants(game)
 
 
 def _remove_from_combat(game: GameState, card: Any) -> None:
@@ -477,3 +496,8 @@ _DESTINATION_ZONE_MAP: dict[str, Zone] = {
     "hand": Zone.HAND,
     "library": Zone.LIBRARY,
 }
+
+
+def creatures_died_this_turn(game):
+    return sum(turn == game.turn_number and creature
+               for card, epoch, turn, creature in game.battlefield_deaths)

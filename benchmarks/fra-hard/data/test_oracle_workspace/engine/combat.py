@@ -86,6 +86,9 @@ def _can_attack(creature: Any) -> bool:
     - It has summoning sickness (``summoning_sick``) and does not have ``HASTE``.
     - A continuous effect has set ``_cant_attack`` (e.g. Pacifism).
     """
+    from engine.types import CardType
+    if hasattr(creature, 'card_types') and CardType.CREATURE not in creature.card_types:
+        return False
     if getattr(creature, "is_tapped", False):
         return False
 
@@ -114,6 +117,9 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
       (e.g. Rogue's Passage).
     - If the attacker has flying, the blocker must have flying or reach.
     """
+    from engine.types import CardType
+    if hasattr(blocker, 'card_types') and CardType.CREATURE not in blocker.card_types:
+        return False
     if getattr(blocker, "is_tapped", False):
         return False
 

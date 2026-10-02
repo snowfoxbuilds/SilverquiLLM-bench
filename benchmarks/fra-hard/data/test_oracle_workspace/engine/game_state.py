@@ -73,6 +73,8 @@ class GameState:
         self.phase: Phase = Phase.BEGINNING
         self.step: Step | None = Step.UNTAP
         self.turn_number: int = 1
+        self.cast_permissions: list[dict] = []
+        self.battlefield_deaths: list[tuple] = []
         self.stack: Stack = Stack()
         self.trigger_manager: TriggerManager = TriggerManager()
         self.replacement_manager: ReplacementManager = ReplacementManager()

@@ -229,6 +229,8 @@ class TriggerManager:
                     )
                 )
                 game.stack.push(stack_obj)
+                from engine.ward import trigger_ward
+                trigger_ward(game, stack_obj)
             elif trigger.capture is not None:
                 # Untargeted trigger that captures per-fire event state (rule
                 # 603.3): capture NOW (fire time) and store it on this trigger's
