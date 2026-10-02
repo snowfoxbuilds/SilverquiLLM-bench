@@ -36,7 +36,6 @@ class GleamingBarrier(ArtifactCreature):
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
         from engine.game import create_token
-        source = self
 
         def _effect(game: GameState, controller: Any) -> None:
             # The fire-time controller: as the source last existed if it died

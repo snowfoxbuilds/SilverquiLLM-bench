@@ -66,7 +66,6 @@ class Condemn(Instant):
         # Capture characteristics before the creature leaves the battlefield.
         controller = getattr(target, 'controller', None)
         toughness = getattr(target, 'toughness', 0)
-        owner = getattr(target, 'owner', controller)
 
         # Move the creature to the bottom of its owner's library.
         from engine.zones import move_to_zone

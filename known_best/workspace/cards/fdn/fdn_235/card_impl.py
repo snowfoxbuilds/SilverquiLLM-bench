@@ -41,7 +41,6 @@ class WaryThespian(Creature):
 
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
-        source = self
 
         def _surveil_effect(game: GameState, controller: Any) -> None:
             # The fire-time controller: as the source last existed if it died
