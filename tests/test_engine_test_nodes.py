@@ -185,10 +185,12 @@ FIXTURE_SUITE = {
 
 
 def _support_snapshot(workspace: Path) -> dict[Path, bytes]:
+    # Pytest's own bytecode and cache directories depend on where the inner run
+    # finds its rootdir, not on the reporter; every other file must be unchanged.
     return {
         path: path.read_bytes()
         for path in workspace.rglob("*")
-        if path.is_file() and "__pycache__" not in path.parts
+        if path.is_file() and not {"__pycache__", ".pytest_cache"}.intersection(path.parts)
     }
 
 

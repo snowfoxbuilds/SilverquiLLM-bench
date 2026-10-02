@@ -37,6 +37,7 @@ def overlay(tmp_path_factory):
         yield workspace
     finally:
         _BENCHMARK_DATA_ROOT.reset(token)
+        shutil.rmtree(workspace.parent, ignore_errors=True)
 
 
 def _failing(nodes: list[dict]) -> list[str]:
