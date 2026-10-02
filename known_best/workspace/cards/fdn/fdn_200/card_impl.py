@@ -46,6 +46,20 @@ class GoblinSurprise(Instant):
             Mode(name="Tokens", description="Create two 1/1 red Goblin creature tokens."),
         ]
 
+    def get_targets(self, game: GameState) -> list[Any]:
+        """Choose the mode while casting (rule 601.2b); neither mode targets."""
+        from engine.card_queries import choose_mode
+
+        controller = _get_controller(self) or getattr(self, "owner", None)
+        names = [mode.name for mode in self.get_modes()]
+        chosen = choose_mode(game, controller, names, "Choose one", source_card=self)
+        self.chosen_mode = names.index(chosen)
+        return []
+
+    def reset_for_zone_change(self) -> None:
+        self.chosen_mode = None
+        super().reset_for_zone_change()
+
     def on_resolve(self, game: GameState) -> None:
         mode = self.chosen_mode
         if mode is None:
