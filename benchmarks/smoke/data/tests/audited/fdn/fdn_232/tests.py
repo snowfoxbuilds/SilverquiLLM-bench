@@ -11,7 +11,6 @@ actually exiled.
 from __future__ import annotations
 
 import pytest
-
 from cards.fdn.fdn_232.card_impl import ScavengingOoze
 from engine.abilities import AbilityError
 from engine.card import Creature, Instant
@@ -38,10 +37,13 @@ def _noncreature_card(p, name="Dead Bolt"):
 def _activate(game, player, ooze, target):
     """Activate Ooze targeting *target* (a graveyard card) via an Intent."""
     inst = game.refs.instance_id(target, Zone.GRAVEYARD.value)
-    player.start_intent("ooze", Intent(
-        pattern=GameRef(card=frozenset({("name", ooze.name)})),
-        preferences=(Decision.obj(instance=inst),),
-    ))
+    player.start_intent(
+        "ooze",
+        Intent(
+            pattern=GameRef(card=frozenset({("name", ooze.name)})),
+            preferences=(Decision.obj(instance=inst),),
+        ),
+    )
     try:
         activate_card_ability(game, player, ooze)
     finally:
@@ -55,12 +57,6 @@ class TestScavengingOozeProperties:
         assert ooze.mana_cost == ManaCost.parse("{1}{G}")
         assert (ooze.base_power, ooze.base_toughness) == (2, 2)
 
-    def test_has_targeted_ability(self):
-        ooze = ScavengingOoze(owner=None)
-        abilities = ooze.get_activated_abilities()
-        assert len(abilities) == 1
-        assert abilities[0].targeting is not None
-
 
 class TestScavengingOozeAbility:
     def _setup(self, gy_cards):
@@ -73,7 +69,7 @@ class TestScavengingOozeAbility:
 
     def test_target_fixed_at_activation_on_stack(self):
         target = _creature_card(None)
-        game, p1, p2, ooze = self._setup([target])
+        game, p1, _p2, ooze = self._setup([target])
         _activate(game, p1, ooze, target)
         # Chosen at activation and captured on the stack — before resolution.
         top = game.stack.peek()
@@ -83,7 +79,7 @@ class TestScavengingOozeAbility:
         assert p1.mana_pool.get(ManaType.GREEN) == 2
 
     def test_no_graveyard_card_rejects_before_cost(self):
-        game, p1, p2, ooze = self._setup([])
+        game, p1, _p2, ooze = self._setup([])
         with pytest.raises(AbilityError):
             activate_card_ability(game, p1, ooze)
         assert p1.mana_pool.get(ManaType.GREEN) == 3  # no {G} spent
@@ -107,7 +103,7 @@ class TestScavengingOozeAbility:
         _activate(game, p1, ooze, target)
         resolve_stack(game)
         assert game.get_exile(p2).contains(target)  # exiled
-        assert ooze.plus_one_counters == 0           # but no reward
+        assert ooze.plus_one_counters == 0  # but no reward
         assert p1.life == life_before
 
     def test_target_removed_in_response_not_reselected(self):

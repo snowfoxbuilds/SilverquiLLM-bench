@@ -143,6 +143,7 @@ class TestEvaluateRun:
         assert result.sos_results["fdn_129"].tests_passed >= 8
         assert result.sos_results["fdn_129"].tests_failed == 0
         assert result.sos_results["fdn_205"].tests_total > 0
+        assert result.fdn_results
         assert not set(result.fdn_results) & SMOKE_TARGETS
         assert result.engine_result.tests_total > 0
 

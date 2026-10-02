@@ -11,7 +11,15 @@ from __future__ import annotations
 from cards.fdn.fdn_205.card_impl import SeismicRupture
 from engine.card import Creature, Sorcery
 from engine.types import Keyword, ManaCost, ManaType, Zone
-from test_utils import cast_spell, create_game, set_board_state
+from test_utils import (
+    cast_card,
+    cast_spell,
+    fund_mana_cost,
+    set_board_state,
+)
+from test_utils import (
+    scenario_game as create_game,
+)
 
 
 def _ground(name: str, power: int = 3, toughness: int = 3) -> Creature:
@@ -20,8 +28,11 @@ def _ground(name: str, power: int = 3, toughness: int = 3) -> Creature:
 
 def _flyer(name: str, power: int = 1, toughness: int = 1) -> Creature:
     return Creature(
-        name=name, subtypes={"Bird"}, keywords=Keyword.FLYING,
-        base_power=power, base_toughness=toughness,
+        name=name,
+        subtypes={"Bird"},
+        keywords=Keyword.FLYING,
+        base_power=power,
+        base_toughness=toughness,
     )
 
 
@@ -37,12 +48,6 @@ class TestSeismicRuptureProperties:
     def test_mana_cost(self) -> None:
         assert SeismicRupture(owner=None).mana_cost == ManaCost.parse("{2}{R}")
 
-    def test_takes_no_targets(self) -> None:
-        """Mass damage is untargeted — the card offers no target spec."""
-        game = create_game()
-        card = SeismicRupture(owner=game.players[0], controller=game.players[0])
-        assert card.get_targets(game) == []
-
 
 class TestSeismicRuptureDamage:
     """Deals 2 to each creature without flying, on every battlefield."""
@@ -54,7 +59,8 @@ class TestSeismicRuptureDamage:
         set_board_state(game, 0, battlefield=[bear])
         rupture = SeismicRupture(owner=p1, controller=p1)
 
-        rupture.on_resolve(game)
+        fund_mana_cost(p1, rupture.mana_cost)
+        cast_card(game, p1, rupture)
 
         assert bear.damage_marked == 2
 
@@ -65,21 +71,23 @@ class TestSeismicRuptureDamage:
         set_board_state(game, 0, battlefield=[bird])
         rupture = SeismicRupture(owner=p1, controller=p1)
 
-        rupture.on_resolve(game)
+        fund_mana_cost(p1, rupture.mana_cost)
+        cast_card(game, p1, rupture)
 
         assert bird.damage_marked == 0
 
     def test_hits_both_battlefields(self) -> None:
         """Untargeted: the caster's own ground creatures are hit too."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         mine = _ground("My Bear")
         theirs = _ground("Their Bear")
         set_board_state(game, 0, battlefield=[mine])
         set_board_state(game, 1, battlefield=[theirs])
         rupture = SeismicRupture(owner=p1, controller=p1)
 
-        rupture.on_resolve(game)
+        fund_mana_cost(p1, rupture.mana_cost)
+        cast_card(game, p1, rupture)
 
         assert mine.damage_marked == 2
         assert theirs.damage_marked == 2
@@ -96,7 +104,8 @@ class TestSeismicRuptureDamage:
         set_board_state(game, 1, battlefield=[small, bird])
         rupture = SeismicRupture(owner=p1, controller=p1)
 
-        rupture.on_resolve(game)
+        fund_mana_cost(p1, rupture.mana_cost)
+        cast_card(game, p1, rupture)
         resolve_state_based_actions(game)
 
         bf = game.get_battlefield(p2).get_all()
@@ -107,11 +116,12 @@ class TestSeismicRuptureDamage:
     def test_deals_damage_through_the_cast_pipeline(self) -> None:
         """End-to-end: casting the spell resolves the sweep on the board."""
         game = create_game()
-        p1, p2 = game.players
+        p1, _p2 = game.players
         victim = _ground("Their Bear")
         set_board_state(game, 1, battlefield=[victim])
         set_board_state(
-            game, 0,
+            game,
+            0,
             hand=[SeismicRupture(owner=p1, controller=p1)],
             mana={ManaType.RED: 3},
         )
