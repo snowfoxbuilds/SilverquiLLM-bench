@@ -78,7 +78,11 @@ class TestHeartfireImmolatorAbility:
         immo.modified_power = 5  # e.g. prowess pump
         _activate_targeting(game, p1, immo, target)
         resolve_stack(game)
-        assert target.damage_marked == 5
+        # Five damage kills the 2/3, so read it as it last existed (rule 603.10a).
+        from engine.last_known import last_known_info
+
+        assert not _on_battlefield(game, target)
+        assert last_known_info(game, target).damage_marked == 5
 
     def test_target_captured_on_stack(self):
         game, p1, _p2, immo, target = self._setup()

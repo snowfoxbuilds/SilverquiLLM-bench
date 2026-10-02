@@ -10,9 +10,9 @@ one-fewer count it left with. The dies-and-return mechanic is preserved.
 from __future__ import annotations
 
 from cards.fdn.fdn_66.card_impl import NineLivesFamiliar
-from engine.types import ManaCost, Zone
+from engine.types import ManaCost, Phase, Step, Zone
 from engine.zones import move_to_zone
-from test_utils import create_game, resolve_stack, set_board_state
+from test_utils import advance_game_to_phase, create_game, resolve_stack, set_board_state
 
 
 def _place_on_stack(game, player, card):
@@ -51,18 +51,46 @@ class TestNineLivesEntersWithRevival:
 
 
 class TestNineLivesDiesReturn:
-    def test_dies_returns_with_one_fewer_revival(self) -> None:
+    @staticmethod
+    def _dies_with_eight_revival():
         game = create_game()
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         p1 = game.players[0]
         card = NineLivesFamiliar(owner=p1, controller=p1)
         _place_on_stack(game, p1, card)
         move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
         assert card.counters.get("revival", 0) == 8
 
-        # Killing it (battlefield -> graveyard) fires the dies-trigger, which
-        # goes on the stack; resolving it removes one revival counter and
-        # returns it to the battlefield.
+        # Killing it (battlefield -> graveyard) fires the dies-trigger, whose
+        # resolution sets up the return at the beginning of the next end step.
         move_to_zone(game, card, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+        resolve_stack(game)
+        return game, p1, card
+
+    def test_dies_returns_with_one_fewer_revival(self) -> None:
+        game, p1, card = self._dies_with_eight_revival()
+        assert game.get_graveyard(p1).contains(card)
+
+        advance_game_to_phase(game, Phase.ENDING, Step.END)
         resolve_stack(game)
         assert game.get_battlefield(p1).contains(card)
         assert card.counters.get("revival", 0) == 7
+
+    def test_does_not_return_before_the_next_end_step(self) -> None:
+        game, p1, card = self._dies_with_eight_revival()
+        advance_game_to_phase(game, Phase.POSTCOMBAT_MAIN)
+        resolve_stack(game)
+        assert game.get_graveyard(p1).contains(card)
+        assert not game.get_battlefield(p1).contains(card)
+
+    def test_does_not_return_if_it_left_the_graveyard_first(self) -> None:
+        game, p1, card = self._dies_with_eight_revival()
+        # Leaving the graveyard makes it a new object (rule 400.7), even if it
+        # comes back before the end step.
+        move_to_zone(game, card, Zone.GRAVEYARD, Zone.EXILE)
+        move_to_zone(game, card, Zone.EXILE, Zone.GRAVEYARD)
+
+        advance_game_to_phase(game, Phase.ENDING, Step.END)
+        resolve_stack(game)
+        assert game.get_graveyard(p1).contains(card)
+        assert not game.get_battlefield(p1).contains(card)
