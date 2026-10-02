@@ -55,10 +55,11 @@ class TestSosResolutionUnchanged:
         assert p.engine_tests == root / "workspace/engine_tests"
         assert p.engine_support == root / "workspace"
 
-    def test_smoke_resolves_fdn_target_and_workspace_test_utils(self) -> None:
+    def test_smoke_resolves_fdn_target_and_oracle_test_utils(self) -> None:
         p = resolve_eval_paths(REPO / "benchmarks" / "smoke", "fdn")
         assert p.audited_target == REPO / "benchmarks/smoke/data/tests/audited/fdn"
-        assert p.test_utils == REPO / "benchmarks/smoke/workspace/test_utils.py"
+        assert p.test_utils == REPO / "benchmarks/smoke/data/test_oracle_workspace/test_utils.py"
+        assert p.engine_tests == REPO / "benchmarks/smoke/data/tests/audited/engine"
 
 
 SMOKE_TARGETS = {"fdn_129", "fdn_205", "fdn_232"}
