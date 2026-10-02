@@ -61,7 +61,9 @@ CI checks, for every benchmark in scope:
 
 ### Baseline reference grade
 
-The Baseline Score is produced, never hand-written: the grader grades the unmodified Workspace once per grading-inputs digest, and that baseline reference grade records the per-test outcomes (grilling 2026-10-02).
+The Baseline Score is produced, never hand-written: the grader grades the unmodified Workspace once per grading-inputs digest and Workspace content, and that baseline reference grade records the per-test outcomes (grilling 2026-10-02).
+The grading-inputs digest alone does not cover the Workspace's engine or FDN implementations, so a defect fixed in a Beta Workspace must still produce a new baseline reference grade.
+A benchmark reports reference scores only once it has a Known Defect manifest; hob-medium and SOS have none.
 Every run graded under the same digest reports against it (see [SCORING.md](SCORING.md) → Regression reference scores).
 
 ### Fixing a newly found defect
