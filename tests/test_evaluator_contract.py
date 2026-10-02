@@ -40,11 +40,62 @@ class TestSosResolutionUnchanged:
         assert p.cards_dir == REPO / "benchmarks/sos/workspace/cards"
         assert p.engine_dir == REPO / "benchmarks/sos/workspace/engine"
         assert p.test_utils == REPO / "benchmarks/sos/data/test_oracle_workspace/test_utils.py"
+        assert p.engine_support == REPO / "benchmarks/sos/workspace"
+
+    @pytest.mark.parametrize("benchmark", ["sos", "hob-medium"])
+    def test_frozen_benchmarks_grade_the_host_copy_of_their_engine_tests(
+        self, benchmark: str
+    ) -> None:
+        root = REPO / "benchmarks" / benchmark
+        p = resolve_eval_paths(root, "sos" if benchmark == "sos" else "hob")
+        assert not (root / "data/tests/audited/engine").exists()
+        assert p.engine_tests == root / "workspace/engine_tests"
+        assert p.engine_support == root / "workspace"
 
     def test_smoke_resolves_fdn_target_and_workspace_test_utils(self) -> None:
         p = resolve_eval_paths(REPO / "benchmarks" / "smoke", "fdn")
         assert p.audited_target == REPO / "benchmarks/smoke/data/tests/audited/fdn"
         assert p.test_utils == REPO / "benchmarks/smoke/workspace/test_utils.py"
+
+
+class TestEngineSuiteResolution:
+    """The engine suite is the Audited Engine Tests when present, else the staged copy."""
+
+    def _root(self, tmp_path: Path) -> Path:
+        root = tmp_path / "bench"
+        (root / "workspace/engine_tests").mkdir(parents=True)
+        return root
+
+    def test_audited_engine_tests_are_selected_when_present(self, tmp_path: Path) -> None:
+        root = self._root(tmp_path)
+        (root / "data/tests/audited/engine").mkdir(parents=True)
+        (root / "data/tests/audited/engine/test_a.py").write_text("def test_a():\n    pass\n")
+        p = resolve_eval_paths(root, "fdn")
+        assert p.engine_tests == root / "data/tests/audited/engine"
+        assert p.engine_support == root / "workspace"
+
+    def test_staged_copy_is_the_fallback(self, tmp_path: Path) -> None:
+        root = self._root(tmp_path)
+        p = resolve_eval_paths(root, "fdn")
+        assert p.engine_tests == root / "workspace/engine_tests"
+        assert p.engine_support == root / "workspace"
+        assert p.engine_support == p.engine_tests.parent
+
+    def test_empty_audited_engine_dir_is_selected_and_grades_zero(self, tmp_path: Path) -> None:
+        root = self._root(tmp_path)
+        (root / "data/tests/audited/engine").mkdir(parents=True)
+        (root / "workspace/engine_tests/test_staged.py").write_text("def test_s():\n    pass\n")
+        (root / "workspace/test_utils.py").write_text("")
+        (root / "workspace/engine").mkdir()
+        (root / "workspace/cards").mkdir()
+        p = resolve_eval_paths(root, "fdn")
+        assert p.engine_tests == root / "data/tests/audited/engine"
+        result = _eval_engine(
+            root / "workspace/engine", p.engine_tests, 60,
+            support_dir=p.engine_support, test_utils=p.test_utils,
+        )
+        assert result.tests_total == 0
+        assert result.test_nodes == []
 
 
 class TestEvaluateRun:
@@ -131,6 +182,15 @@ class TestGradingIsolation:
         missing = tmp_path / "nope" / "test_utils.py"
         result = _eval_engine(
             overlay / "engine", SMOKE_WS.parent / "workspace/engine_tests", 30,
-            test_utils=missing,
+            support_dir=SMOKE_WS, test_utils=missing,
         )
         assert result.errors and any("test_utils" in e for e in result.errors)
+
+    def test_engine_missing_support_dir_fails_visibly(self, tmp_path: Path) -> None:
+        overlay = self._overlay(tmp_path, "none")
+        result = _eval_engine(
+            overlay / "engine", SMOKE_WS / "engine_tests", 30,
+            support_dir=tmp_path / "nope",
+        )
+        assert result.tests_total == 0
+        assert result.errors and any("support" in e for e in result.errors)

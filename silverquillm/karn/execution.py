@@ -251,6 +251,7 @@ def _scores(evaluated, benchmark) -> dict:
         "missing_reasons": [error for error in engine.errors if not error.startswith("FAILED ")]
         or ([] if engine.tests_total else ["no_executed_engine_tests"]),
         "diagnostics": engine.errors,
+        "test_nodes": [dict(node) for node in engine.test_nodes],
     }
     # Fail here, inside the caller's grading guard, rather than when the record is written.
     canonical(result)

@@ -34,6 +34,7 @@ from silverquillm.karn.grader import (
     _evaluation_payload,
     evaluation_from_json,
 )
+from silverquillm.karn.records import validate_scores
 from silverquillm.results_repo import InvalidRunRecordError
 
 from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker, local_grader
@@ -119,7 +120,16 @@ def valid_evaluation() -> dict:
                 tests_hash="a" * 64,
             )
         },
-        engine_result=EngineResult(tests_passed=3, tests_total=3, pass_rate=1.0),
+        engine_result=EngineResult(
+            tests_passed=3,
+            tests_total=3,
+            pass_rate=1.0,
+            test_nodes=[
+                {"test_node": "test_zones.py::test_a", "outcome": "pass"},
+                {"test_node": "zone_change/test_lki.py::test_b[two]", "outcome": "pass"},
+                {"test_node": "test_combat.py", "outcome": "pass"},
+            ],
+        ),
     )
     result.compute_aggregates()
     return asdict(result)
@@ -133,6 +143,7 @@ def test_valid_output_round_trips_and_rates_are_recomputed():
     assert result.sos_results["hob_12"].pass_rate == 0.5
     assert result.sos_pass_rate == 0.5
     assert result.engine_result.tests_passed == 3
+    assert result.engine_result.test_nodes == value["engine_result"]["test_nodes"]
 
 
 @pytest.mark.parametrize(
@@ -155,6 +166,14 @@ def test_valid_output_round_trips_and_rates_are_recomputed():
         lambda v: v["sos_results"]["hob_12"].update(skipped="no"),
         lambda v: v["sos_results"]["hob_12"].pop("errors"),
         lambda v: v["fdn_results"].update({"../x": v["sos_results"]["hob_12"]}),
+        lambda v: v["engine_result"].pop("test_nodes"),
+        lambda v: v["engine_result"].update(test_nodes={"test_zones.py::test_a": "pass"}),
+        lambda v: v["engine_result"].update(test_nodes=[{"test_node": "x"}]),
+        lambda v: v["engine_result"].update(
+            test_nodes=[{"test_node": "x", "outcome": "pass", "extra": 1}]
+        ),
+        lambda v: v["engine_result"].update(test_nodes=[{"test_node": 7, "outcome": "pass"}]),
+        lambda v: v["engine_result"].update(test_nodes=[{"test_node": "x", "outcome": "ok"}]),
     ],
 )
 def test_untrusted_output_of_the_wrong_shape_is_refused(mutate):
@@ -187,6 +206,78 @@ def test_grader_stdout_must_be_exactly_one_framed_line():
             _evaluation_payload(stdout)
     with pytest.raises(GraderError, match="evaluation_too_large"):
         _evaluation_payload(EVALUATION_SENTINEL + b" " * (MAX_EVALUATION_BYTES + 1) + b"\n")
+
+
+def test_a_hob_medium_sized_engine_payload_fits_the_evaluation_cap():
+    value = valid_evaluation()
+    nodes = [
+        {
+            "test_node": f"test_continuous_effects_layers.py::TestLayerSystem::"
+            f"test_characteristic_defining_ability_applies_in_layer_seven_{index:04d}[case]",
+            "outcome": "fail" if index % 7 else "pass",
+        }
+        for index in range(3000)
+    ]
+    value["engine_result"].update(
+        tests_passed=0, tests_failed=3000, tests_total=3000, pass_rate=0.0, test_nodes=nodes,
+        errors=[f"FAILED engine_tests/{node['test_node']}" for node in nodes],
+    )
+    document = json.dumps(value).encode()
+    assert len(document) < MAX_EVALUATION_BYTES
+    assert evaluation_from_json(document).engine_result.test_nodes == nodes
+
+
+def _engine_suite_options(tmp_path, *, audited: bool):
+    docker = LocalDocker()
+    opts = options(tmp_path, grader=local_grader(docker=docker))
+    root = opts["bench_root"] / "benchmarks/example"
+    (root / "workspace/conftest.py").write_text("")
+    (root / "workspace/pytest.ini").write_text("[pytest]\naddopts = --import-mode=importlib\n")
+    if audited:
+        suite = root / "data/tests/audited/engine/test_audited.py"
+        suite.parent.mkdir(parents=True)
+        suite.write_text("from engine.card import value\ndef test_audited(): assert value == 1\n")
+        (root / "workspace/engine_tests/test_engine.py").write_text("def test_staged(): assert False\n")
+    return docker, opts
+
+
+def _benchmark_mount_targets(docker) -> list[str]:
+    worker = next(run for run in docker.runs if WORKER in run["command"])
+    prefix = "/opt/sq/benchmarks/example/"
+    return sorted(
+        target.removeprefix(prefix) for _, target, _ in mounts(worker) if target.startswith(prefix)
+    )
+
+
+def test_grading_mounts_the_audited_engine_tests_and_never_the_staged_copy(tmp_path):
+    docker, opts = _engine_suite_options(tmp_path, audited=True)
+    record = run_benchmark(**opts)
+    assert _benchmark_mount_targets(docker) == [
+        "data/tests/audited/engine",
+        "data/tests/audited/fdn",
+        "workspace/conftest.py",
+        "workspace/pytest.ini",
+        "workspace/test_utils.py",
+    ]
+    engine = record.scores["engine_regression"]
+    assert engine["tests_passed"] == engine["tests_total"] == 1
+    assert engine["test_nodes"] == [{"test_node": "test_audited.py::test_audited", "outcome": "pass"}]
+    validate_scores(record.scores)
+
+
+def test_grading_mounts_without_audited_engine_tests_are_unchanged(tmp_path):
+    docker, opts = _engine_suite_options(tmp_path, audited=False)
+    record = run_benchmark(**opts)
+    assert _benchmark_mount_targets(docker) == [
+        "data/tests/audited/fdn",
+        "workspace/conftest.py",
+        "workspace/engine_tests",
+        "workspace/pytest.ini",
+        "workspace/test_utils.py",
+    ]
+    assert record.scores["engine_regression"]["test_nodes"] == [
+        {"test_node": "test_engine.py::test_value", "outcome": "pass"}
+    ]
 
 
 def test_candidate_prints_during_grading_do_not_reach_the_result_line(tmp_path):

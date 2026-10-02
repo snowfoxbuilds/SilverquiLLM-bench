@@ -448,8 +448,8 @@ class ContainerGrader:
             })),
             paths.audited_fdn,
             paths.engine_tests,
-            paths.engine_tests.parent / "conftest.py",
-            paths.engine_tests.parent / "pytest.ini",
+            paths.engine_support / "conftest.py",
+            paths.engine_support / "pytest.ini",
             paths.test_utils,
         )
         container_root = f"{PACKAGE_ROOT}/benchmarks/{root.name}"
@@ -484,9 +484,9 @@ class ContainerGrader:
                 paths.audited_target,
                 paths.audited_fdn,
                 paths.engine_tests,
-                paths.engine_tests.parent / "conftest.py",
-                paths.engine_tests.parent / "pytest.ini",
-                paths.engine_tests.parent / "test_utils.py",
+                paths.engine_support / "conftest.py",
+                paths.engine_support / "pytest.ini",
+                paths.engine_support / "test_utils.py",
                 sos / "data" / "test_oracle_workspace" / "test_utils.py",
             )
             mounts = [
@@ -562,7 +562,9 @@ CARD_FIELDS = {
     "collector_number", "tests_passed", "tests_failed", "tests_total", "pass_rate",
     "errors", "skipped", "test_nodes", "tests_hash",
 }  # fmt: skip
-ENGINE_FIELDS = {"tests_passed", "tests_failed", "tests_total", "pass_rate", "errors"}
+ENGINE_FIELDS = {
+    "tests_passed", "tests_failed", "tests_total", "pass_rate", "errors", "test_nodes",
+}  # fmt: skip
 RESULT_FIELDS = {
     "sos_results", "fdn_results", "engine_result",
     "sos_pass_rate", "fdn_pass_rate", "engine_pass_rate",
@@ -589,11 +591,7 @@ def _strings(value) -> list[str]:
     return value
 
 
-def _card(key: str, value) -> CardResult:
-    if not isinstance(value, dict) or set(value) != CARD_FIELDS or value["collector_number"] != key:
-        raise GraderError("evaluation_invalid_card")
-    passed, failed, total = _counts(value)
-    nodes = value["test_nodes"]
+def _test_nodes(nodes) -> list[dict]:
     if not isinstance(nodes, list) or not all(
         isinstance(node, dict)
         and set(node) == {"test_node", "outcome"}
@@ -602,6 +600,14 @@ def _card(key: str, value) -> CardResult:
         for node in nodes
     ):
         raise GraderError("evaluation_invalid_test_nodes")
+    return [dict(node) for node in nodes]
+
+
+def _card(key: str, value) -> CardResult:
+    if not isinstance(value, dict) or set(value) != CARD_FIELDS or value["collector_number"] != key:
+        raise GraderError("evaluation_invalid_card")
+    passed, failed, total = _counts(value)
+    nodes = _test_nodes(value["test_nodes"])
     tests_hash = value["tests_hash"]
     if (
         type(value["skipped"]) is not bool
@@ -617,7 +623,7 @@ def _card(key: str, value) -> CardResult:
         pass_rate=passed / total if total else 0.0,
         errors=_strings(value["errors"]),
         skipped=value["skipped"],
-        test_nodes=[dict(node) for node in nodes],
+        test_nodes=nodes,
         tests_hash=value["tests_hash"],
     )
 
@@ -649,6 +655,7 @@ def evaluation_from_json(raw: bytes) -> FullEvalResult:
             tests_total=total,
             pass_rate=passed / total if total else 0.0,
             errors=_strings(engine["errors"]),
+            test_nodes=_test_nodes(engine["test_nodes"]),
         ),
     )
     result.compute_aggregates()

@@ -38,7 +38,7 @@ def grading_inputs(benchmark) -> dict:
         sources.append(("engine", paths.engine_tests))
     sources.append(("test_utils", paths.test_utils))
     for name in ("conftest.py", "pytest.ini"):
-        source = paths.engine_tests.parent / name
+        source = paths.engine_support / name
         if source.is_file():
             sources.append(("engine_support", source))
     repository = benchmark.root.parent.parent
