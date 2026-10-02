@@ -1,6 +1,7 @@
 """Chandra's +2 and −4 through canonical loyalty activation."""
 
 import pytest
+from engine.game import destroy
 from cards.fdn.fdn_81.card_impl import ChandraFlameshaper
 from engine.abilities import AbilityError
 from engine.card import Creature, Planeswalker
@@ -127,4 +128,16 @@ class TestChandraFlameshaperMinus4Split:
         _activate_minus4(game, p1, chandra)
         assert only.damage_marked == 8
         assert p1.transcript.queries(DecisionKind.NUMBER) == []
+        assert chandra.loyalty == 2
+
+    def test_division_is_locked_in_at_activation(self) -> None:
+        """The division is announced while activating (rule 601.2d via
+        602.2b); a target that becomes illegal is dealt nothing and the other
+        keeps exactly its share (608.2b)."""
+        game, p1, chandra, (a, b) = _minus4_setup(2)
+        prefer(p1, object_preference(game, a), object_preference(game, b), Decision.number(5))
+        activate_loyalty_ability(game, p1, chandra, 2)
+        destroy(game, a)
+        resolve_stack(game)
+        assert b.damage_marked == 3
         assert chandra.loyalty == 2
