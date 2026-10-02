@@ -51,7 +51,12 @@ class BurnishedHart(ArtifactCreature):
         def _effect(game: Any) -> None:
             from engine.card_queries import choose_object
 
-            controller = source.controller
+            from engine.last_known import last_known_info
+
+            # The source was sacrificed to pay the cost: the player who
+            # controlled it as it last existed searches (rule 603.10a).
+            lki = last_known_info(game, source)
+            controller = lki.controller if lki is not None else source.controller
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]

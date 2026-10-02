@@ -39,8 +39,9 @@ class InfestationSage(Creature):
         from engine.game import create_token
         source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
+        def _effect(game: GameState, controller: Any) -> None:
+            # The fire-time controller: as the source last existed if it died
+            # (rules 603.3d, 603.10a).
             if controller is None:
                 return
             token = make_creature_token("Insect", {"Insect"}, [Color.BLACK, Color.GREEN], 1, 1, keywords=Keyword.FLYING)

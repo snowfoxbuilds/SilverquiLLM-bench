@@ -37,8 +37,9 @@ class InfernalVessel(Creature):
             creature = event.creature
             if creature is not source:
                 return False
-            subtypes = getattr(creature, 'subtypes', set())
-            return 'Demon' not in subtypes
+            # "if it wasn't a Demon" — as it last existed (rule 603.10a).
+            lki = event.last_known
+            return lki is not None and 'Demon' not in lki.subtypes
 
         def _effect(game: GameState) -> None:
             owner = getattr(source, 'owner', None)

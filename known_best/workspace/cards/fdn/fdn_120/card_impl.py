@@ -57,11 +57,16 @@ class FiendishPanda(Creature):
             if _is_on_battlefield(game, source):
                 add_counter(game, source, '+1/+1', 1)
 
-        def _dies_effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
+        def _dies_effect(game: GameState, controller: Any) -> None:
+            # The fire-time controller: as the source last existed if it died
+            # (rules 603.3d, 603.10a).
             if controller is None:
                 return
-            power = getattr(source, 'power', getattr(source, 'base_power', 3))
+            from engine.last_known import last_known_info
+
+            # "this creature's power" as it last existed (rule 603.10a).
+            lki = last_known_info(game, source)
+            power = lki.power if lki is not None else source.power
             graveyard = controller.zones[Zone.GRAVEYARD]
             candidates = []
             for obj in graveyard.get_all():

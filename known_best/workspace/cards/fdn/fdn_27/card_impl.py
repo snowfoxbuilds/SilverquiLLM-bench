@@ -45,12 +45,17 @@ class ValkyrieSCall(Enchantment):
             creature = event.creature
             if creature is None:
                 return False
+            # Read the creature as it last existed on the battlefield (rule
+            # 603.10a): the graveyard card is a new object (400.7).
+            lki = event.last_known
+            if lki is None:
+                return False
             ctrl = getattr(source, 'controller', None)
-            if getattr(creature, 'controller', None) is not ctrl:
+            if lki.controller is not ctrl:
                 return False
-            if getattr(creature, 'is_token', False):
+            if lki.is_token:
                 return False
-            if 'Angel' in getattr(creature, 'subtypes', set()):
+            if 'Angel' in lki.subtypes:
                 return False
             source._valkyrie_dying_queue.append(creature)
             return True
