@@ -432,14 +432,50 @@ class TestResolutionOrder:
 # 4. Equipment lifecycle
 # ---------------------------------------------------------------------------
 
+class _TestAxe(Equipment):
+    """A test-local Equipment: equipped creature gets +1/+1 and has double
+    strike and trample; equip {3}."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Test Axe")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{4}"))
+        kwargs.setdefault("equip_cost", ManaCost.parse("{3}"))
+        super().__init__(**kwargs)
+
+    def make_equip_effects(self, game):
+        equipment = self
+
+        def _pt(g):
+            if equipment.is_equip_active(g):
+                creature = equipment.attached_to
+                creature.modified_power += 1
+                creature.modified_toughness += 1
+
+        def _kw(g):
+            if equipment.is_equip_active(g):
+                creature = equipment.attached_to
+                creature.keywords |= Keyword.DOUBLE_STRIKE | Keyword.TRAMPLE
+
+        return [
+            ContinuousEffect(
+                source=self,
+                layer=Layer.POWER_TOUGHNESS,
+                sublayer=SubLayer.MODIFY_PT,
+                apply=_pt,
+                duration=DURATION_PERMANENT,
+            ),
+            ContinuousEffect(
+                source=self, layer=Layer.ABILITY, apply=_kw, duration=DURATION_PERMANENT,
+            ),
+        ]
+
+
 class TestEquipmentLifecycle:
     def test_attach_buffs_then_detach_removes(self):
-        from cards.fdn.fdn_129.card_impl import LeylineAxe
-
         game = create_game()
         p1 = game.players[0]
         bear = _creature("Bear", p1, 2, 2)
-        axe = LeylineAxe(owner=p1, controller=p1)
+        axe = _TestAxe(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[bear, axe])
         axe.equip(bear, game)
         assert axe.attached_to is bear
@@ -451,12 +487,10 @@ class TestEquipmentLifecycle:
         assert Keyword.DOUBLE_STRIKE not in bear.keywords
 
     def test_sba_unattaches_when_creature_leaves(self):
-        from cards.fdn.fdn_129.card_impl import LeylineAxe
-
         game = create_game()
         p1 = game.players[0]
         bear = _creature("Bear", p1, 2, 2)
-        axe = LeylineAxe(owner=p1, controller=p1)
+        axe = _TestAxe(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[bear, axe])
         axe.equip(bear, game)
         move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.GRAVEYARD)
@@ -792,12 +826,10 @@ class TestEquipmentLifecycle:
     # --- Equipment departure lifecycle ---
 
     def test_equipment_bounced_clears_state_and_re_equips(self):
-        from cards.fdn.fdn_129.card_impl import LeylineAxe
-
         game = create_game()
         p1 = game.players[0]
         bear = _creature("Bear", p1, 2, 2)
-        axe = LeylineAxe(owner=p1, controller=p1)
+        axe = _TestAxe(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[bear, axe])
         axe.equip(bear, game)
         assert axe.attached_to is bear and bear.power == 3
@@ -816,12 +848,10 @@ class TestEquipmentLifecycle:
         """Destroy (→ graveyard), exile (graveyard → exile), and blink
         (exile → battlefield) all leave no stale attachment, and the blinked
         Equipment equips normally afterward."""
-        from cards.fdn.fdn_129.card_impl import LeylineAxe
-
         game = create_game()
         p1 = game.players[0]
         bear = _creature("Bear", p1, 2, 2)
-        axe = LeylineAxe(owner=p1, controller=p1)
+        axe = _TestAxe(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[bear, axe])
         axe.equip(bear, game)
 
@@ -861,13 +891,11 @@ class TestEquipmentLifecycle:
         assert rig.attached_to is None
 
     def test_equipped_creature_leaves_equipment_remains(self):
-        from cards.fdn.fdn_129.card_impl import LeylineAxe
-
         game = create_game()
         p1 = game.players[0]
         bear = _creature("Bear", p1, 2, 2)
         other = _creature("Other", p1, 2, 2)
-        axe = LeylineAxe(owner=p1, controller=p1)
+        axe = _TestAxe(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[bear, other, axe])
         axe.equip(bear, game)
 
