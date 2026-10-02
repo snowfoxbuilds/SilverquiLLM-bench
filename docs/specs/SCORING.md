@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-06-10
+Last updated: 2026-10-02
 
 # Scoring
 
@@ -55,6 +55,22 @@ For the HOB-generation benchmarks (hob-easy/medium/hard), the Writable Engine is
 3. **Engine Regression** — core engine tests against the harvested `/workspace/engine/`.
 
 Audited tests judge card behavior by simulating gameplay (Implementation-Agnostic Testing), so **any** engine change — including renames and refactors — is permitted; it is judged solely by its observable consequences on these three dimensions. Engine churn (`engine_diff.patch`) stays a **diagnostic** metric only: it is never scored and never policed. HOB-generation benchmarks score raw pass/total — the complexity weighting below is SOS-only.
+
+### Regression reference scores
+
+For benchmarks built from the Known-Best Workspace (smoke, fra-hard, and later), each regression dimension reports its raw pass/total next to two reference points (grilling 2026-10-02):
+
+| Metric | Definition |
+| --- | --- |
+| Raw score | Audited Tests passed / total against the agent's final engine — the score itself |
+| Baseline Score | The unmodified Workspace's pass/total, from the baseline reference grade under the same grading-inputs digest |
+| Known-Best Score | Always total/total: the Test Oracle Workspace passes every regression Audited Test |
+| Fixed | Audited Tests that fail on the baseline and pass for the agent |
+| Regressed | Audited Tests that pass on the baseline and fail for the agent |
+
+There is no normalized score: an agent can land below its Baseline Score, and fixing three Known Defects while breaking three cards is reported as exactly that, not as no change.
+The Baseline Score and the per-test baseline outcomes come from [KNOWN-BEST-ENGINE.md](KNOWN-BEST-ENGINE.md) → Baseline reference grade.
+Engine Regression grades the hidden Audited Engine Tests, never the Workspace's Engine Reference Tests; hob-medium and SOS, frozen before that split, grade from the host copy of their staged engine tests.
 
 ### Complexity Weighting
 
@@ -111,3 +127,9 @@ Regression Summary
 **Self-eval**: Run each agent's tests against its own implementations. Useful for measuring self-serving test bias.
 
 **Test Quality scoring**: Audit survival rate, discrimination score, difficulty calibration, coverage. Requires cross-eval infrastructure.
+
+## Relevant ADRs
+
+| ADR | Decision |
+| --- | --- |
+| [ADR-016](../adr/ADR-016-baseline-engines-may-carry-known-defects.md) | Baseline engines may carry Known Defects, scored against a separate Known-Best Engine |

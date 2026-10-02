@@ -110,8 +110,9 @@ Deliberately excluded from every pool: Sagas and Vehicles (each a whole new subs
 
 - Two granularities per tier: a benchmark-level conventions document (engine conventions, what a good implementation looks like, that the engine may be changed freely) and a per-card `instructions.md` beside `card_spec.json`, staged into the workspace card directory *(grilling 2026-08-27)*.
 - Workspace documents describe the task, never its evaluation: no audited or hidden tests, oracle, grading or score *(grilling 2026-09-28)*.
-  The repository rules stay as plain rules the agent follows: each card class stays in its assigned `card_impl.py`, the staged tests are not edited, and life and counters change only through the engine primitives.
-  The conventions document says the engine may have deficiencies and bugs, and that the agent must make its implementations behave as `RULEBOOK.txt` requires without breaking existing cards.
+  The repository rules stay as plain rules the agent follows: each card class stays in its assigned `card_impl.py`, and life and counters change only through the engine primitives.
+  The conventions document says the engine may have deficiencies and bugs, and so may the existing tests, and that the agent must make its implementations behave as `RULEBOOK.txt` requires without breaking existing cards.
+  The staged Reference Tests are editable and say nothing more about it (grilling 2026-10-02); hob-medium, frozen before that ruling, keeps its rule that the staged tests are not edited.
   Instructions may be incomplete but never misleading; engine-development records such as `KEY_DECISIONS.md` are not staged.
 - Pitfalls are **discovered, not invented**: authored from what the oracle implementation actually surfaced (oracle-first workflow; the oracle iterates while benchmarks run).
 - Instruction docs shape difficulty as much as the pool does: they are locked benchmark data, frozen with the tier at Benchmarking; changing them afterward is a benchmark-version event.
@@ -138,6 +139,8 @@ Medium's instructions and pitfalls are derived from the oracle work and follow t
 Development runs and incomplete observations remain useful data; the integration retains their evidence without a leaderboard eligibility gate (grilling 2026-09-26).
 hob-medium stays in Beta until at least two different candidates have run on the fixed workspace and their failures have been reviewed; the move to Benchmarking is a `config.json`-only PR made on the operator's go-ahead (grilling 2026-09-28).
 Runs before the 2026-09-28 workspace fixes are pilot test runs, not comparable to later runs.
+hob-medium's Workspace, graded suites, and contract are frozen as of 2026-10-02: its runs are complete, and it keeps its baseline engine, read-only staged tests, and current graded copies (grilling 2026-10-02).
+Its graded `fdn_126` asserts that counters survive a zone change, contradicting CR 400.7, while some of its Audited Tests require the rules-correct reset; its results carry that conflict as a caveat.
 
 ## Evaluation
 
@@ -152,3 +155,4 @@ Oracle-first audited tests are the sole scored method for all three tiers (Audit
 | [ADR-010](../adr/ADR-010-test-oracle-workspace-uses-independent-engine.md) | Oracle mechanics use an independent engine while tests remain portable across implementations |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |
 | [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Independent execution of prebuilt Karn candidates |
+| [ADR-016](../adr/ADR-016-baseline-engines-may-carry-known-defects.md) | Baseline engines may carry Known Defects, scored against a separate Known-Best Engine |

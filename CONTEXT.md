@@ -29,6 +29,13 @@ The total combines both kinds of event; response and tool-call counts remain sep
 
 _Avoid_: "Codex turn" (one native user request can contain many Agent Turns), "tool call" as a synonym for the total
 
+**Audited Engine Tests**
+
+The hidden Audited Tests suite for the Engine Regression dimension, at a benchmark's `data/tests/audited/engine/` (grilling 2026-10-02).
+Seeded from the Engine Reference Tests, then maintained independently of them; it asserts rules-correct engine behavior through the Audited Test API.
+
+_Avoid_: "engine tests" alone, "hidden engine tests" (informal)
+
 **Audited Eval**
 
 The only evaluation method in v1: audited tests run against agent output post-run. Three dimensions: target-set card correctness (SOS card correctness for SOS; HOB card correctness for the HOB-generation benchmarks), FDN card regression, engine regression. Tests are LLM-drafted, then failure-reviewed by a human. The authoritative measure of correctness.
@@ -43,7 +50,9 @@ _Avoid_: "test harness" (collides with the validation harness `tests/test_audite
 
 **Audited Tests**
 
-The curated, human-reviewed grading suite at `tests/audited/{set_code}/{collector_number}/tests.py`, used by Audited Eval to score agent output. Behavioral / outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted (Implementation-Agnostic Testing). Maintainer-authored; each test must pass against the matching Test Oracle Impl before commit. Covers the SOS Card Correctness and FDN Card Regression dimensions. Distinct from Engine Tests, Agent Tests, and FDN Reference Tests.
+The curated, human-reviewed, hidden grading suites under a benchmark's `data/tests/audited/`, used by Audited Eval to score agent output. Behavioral / outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted (Implementation-Agnostic Testing). Maintainer-authored; each test must pass against the matching Test Oracle Impl before commit. Covers all three dimensions: target-card tests, FDN tests, and Audited Engine Tests (grilling 2026-10-02).
+They assert rules-correct behavior, so a baseline engine carrying Known Defects fails some of them.
+Distinct from Reference Tests, Agent Tests, and Platform Tests.
 
 _Avoid_: "gold tests", "grader tests" (informal — say "Audited Tests"), "benchmark tests"
 
@@ -52,6 +61,13 @@ _Avoid_: "gold tests", "grader tests" (informal — say "Audited Tests"), "bench
 The FDN Draft Set: MTG Foundations limited format card pool (FDN 001–291 + SPG 074–083 Special Guests). Serves as engine validation, agent reference examples, and regression suite. Ported from XMage Java source. Engine validated via Replay Validation against 17lands GRE JSON data.
 
 _Avoid_: "foundation cards" (use "Foundations cards" or "base set")
+
+**Baseline Score**
+
+The score an unmodified benchmark Workspace earns on one regression dimension's Audited Tests (grilling 2026-10-02).
+It is below the Known-Best Score by exactly the tests the benchmark's Known Defects make fail, and it changes whenever those Audited Tests change.
+
+_Avoid_: "zero point", "floor" (an agent can score below it by regressing)
 
 **Batch**
 
@@ -168,15 +184,17 @@ _Avoid_: "engine modification" (neutral — use "engine extension" to imply addi
 
 **Engine Regression**
 
-Post-run evaluation dimension: core engine tests (`engine_tests/`) run against the agent's final Writable Engine. Detects whether engine extensions broke fundamental game mechanics (mana, stack, combat, state-based actions, etc.). Separate from FDN Card Regression — an agent could pass all FDN card tests but fail engine tests if card-level workarounds corrupt internal state.
+Post-run evaluation dimension: Audited Engine Tests run against the agent's final Writable Engine. Detects whether engine extensions broke fundamental game mechanics (mana, stack, combat, state-based actions, etc.) and whether Known Defects were fixed. Reported against the benchmark's Baseline Score and Known-Best Score (grilling 2026-10-02). Separate from FDN Card Regression — an agent could pass all FDN card tests but fail engine tests if card-level workarounds corrupt internal state.
 
-_Avoid_: "engine test" alone (ambiguous — specify "engine regression tests")
+_Avoid_: "engine test" alone (ambiguous — say "Audited Engine Tests" or "Engine Reference Tests")
 
-**Engine Tests**
+**Engine Reference Tests**
 
-Maintainer-authored core MTG-engine mechanics tests at `engine_tests/` — the input to the Engine Regression evaluation dimension (mana, stack, combat, state-based actions, etc.), run against the agent's final Writable Engine post-run. They live in the workspace at `workspace/engine_tests/` per ADR-006 so agents can self-verify Engine Extensions; grading uses the host-repo copy. A separate bucket from Audited Tests (which grade card behavior) and Platform Tests (which test the tooling).
+The agent-visible core MTG-engine mechanics tests at `workspace/engine_tests/` (mana, stack, combat, state-based actions, etc.), staged so agents can check their Engine Extensions locally (ADR-006).
+Like FDN Reference Tests they are editable and never graded, and they may be wrong or encode a Known Defect (grilling 2026-10-02).
+The graded counterpart is the hidden Audited Engine Tests suite.
 
-_Avoid_: "engine test" alone (ambiguous — say "Engine Tests" / "Engine Regression"), folding under "audited tests"
+_Avoid_: "Engine Tests" alone (formerly named both the visible and the graded suite), "engine test" alone
 
 **Estimated Cost**
 
@@ -194,13 +212,13 @@ _Avoid_: "rejected run", "invalid run" (the record stays valid evidence), "filte
 
 **FDN Card Regression**
 
-Post-run evaluation dimension: FDN audited tests (`tests/audited/fdn/`) run against pre-filled FDN `card_impl.py` files using the agent's final Writable Engine. Detects whether engine extensions broke existing card behavior. Host-side only; not staged into the Workspace. Distinct from FDN Reference Tests.
+Post-run evaluation dimension: FDN audited tests (`tests/audited/fdn/`) run against pre-filled FDN `card_impl.py` files using the agent's final Writable Engine. Detects whether engine extensions broke existing card behavior and whether Known Defects were fixed. Reported against the benchmark's Baseline Score and Known-Best Score (grilling 2026-10-02). Host-side only; not staged into the Workspace. Distinct from FDN Reference Tests.
 
 _Avoid_: "regression check" (deprecated — was per-card sequential re-run), "FDN tests" alone (ambiguous — specify Reference vs Card Regression)
 
 **FDN Reference Tests**
 
-Illustrative pytest files colocated with FDN reference implementations at `cards/fdn/{collector_number}/tests.py`. Agent-visible inside the Workspace. Demonstrate the testing pattern (DeterministicPlayer scripts, expected-state asserts) so agents can model `cards/sos/{card_id}/tests.py` after them in Tested Mode. Distinct from FDN Card Regression — these are learning material, not grading input. Modifying them does not affect score.
+Illustrative pytest files colocated with FDN reference implementations at `cards/fdn/{collector_number}/tests.py`. Agent-visible inside the Workspace. Demonstrate the testing pattern (DeterministicPlayer scripts, expected-state asserts) so agents can model `cards/sos/{card_id}/tests.py` after them in Tested Mode. Distinct from FDN Card Regression — these are learning material, not grading input. One kind of Reference Tests: editable, and may be wrong (grilling 2026-10-02).
 
 _Avoid_: "FDN tests" alone (ambiguous — specify Reference vs Card Regression), "FDN illustrative tests" (use "FDN Reference Tests")
 
@@ -271,6 +289,33 @@ MTG rules construct the engine implements (e.g. Flying, Reach, Deathtouch, Affin
 
 _Avoid_: "ability word" (distinct concept — see Ability Word)
 
+**Known Defect**
+
+A recorded way a benchmark's baseline engine or FDN implementations depart from `RULEBOOK.txt`, listed with its rule citation and the Audited Tests it makes fail (grilling 2026-10-02).
+A Known Defect is either inherited (found in an engine or implementation) or a Seeded Defect; agents may fix either kind.
+
+_Avoid_: "bug" alone, "baseline gap" (the retired name for failing cases cut from a graded suite)
+
+**Known-Best Engine**
+
+The engine with every engine Known Defect fixed, kept in the Known-Best Workspace and separate from every benchmark Workspace (grilling 2026-10-02).
+Benchmark baselines and Test Oracle Workspace engines are ported from it; fixes land in it first.
+
+_Avoid_: "reference engine", "canonical engine" (the canonical engine is a benchmark's agent-visible baseline), "gold engine"
+
+**Known-Best Score**
+
+The score the Known-Best Engine earns on one regression dimension's Audited Tests: always a perfect score, which validates that every such test is passable (grilling 2026-10-02).
+
+_Avoid_: "max score", "oracle score"
+
+**Known-Best Workspace**
+
+The host-only, benchmark-independent workspace holding the Known-Best Engine, the FDN implementations with every Known Defect fixed, and the full regression Audited Tests (grilling 2026-10-02).
+A benchmark is built by porting a copy of it.
+
+_Avoid_: "master workspace", "reference workspace"
+
 **Login Pool**
 
 The host-local set of Login Profiles enrolled through one login plugin, such as every Claude subscription login on the host.
@@ -306,9 +351,9 @@ _Avoid_: "test run" (ambiguous), "dry run" (has a different meaning — `--dry-r
 
 **Platform Tests**
 
-Maintainer-authored tests for the SilverquiLLM repository's own tooling — runner, harvester, evaluator, telemetry, and `scripts/` — living under the repository's top-level `tests/` (the grading suites live elsewhere: Audited Tests under `benchmarks/<benchmark>/data/tests/audited/`, Engine Tests under `benchmarks/<benchmark>/workspace/engine_tests/`). They verify that the benchmark *software* works; they do not grade agent output. E.g. `tests/test_harvest_rows.py`, `tests/test_check_promotion_candidate.py`, `tests/test_evaluator.py`. Distinct from Audited Tests, Engine Tests, and Agent Tests.
+Maintainer-authored tests for the SilverquiLLM repository's own tooling — runner, harvester, evaluator, telemetry, and `scripts/` — living under the repository's top-level `tests/` (the grading suites live elsewhere: Audited Tests under `benchmarks/<benchmark>/data/tests/audited/`, Reference Tests in the benchmark's `workspace/`). They verify that the benchmark *software* works; they do not grade agent output. E.g. `tests/test_harvest_rows.py`, `tests/test_check_promotion_candidate.py`, `tests/test_evaluator.py`. Distinct from Audited Tests, Reference Tests, and Agent Tests.
 
-_Avoid_: "repository tests" (ambiguous — Audited Tests and Engine Tests also live in the repo), "unit tests" alone (some are integration-level), "harness tests" (collides with the audited validation harness)
+_Avoid_: "repository tests" (ambiguous — Audited Tests and Reference Tests also live in the repo), "unit tests" alone (some are integration-level), "harness tests" (collides with the audited validation harness)
 
 **Player Decision**
 
@@ -339,6 +384,13 @@ _Avoid_: "leaderboard entry" (a leaderboard is a derivation over Published Resul
 One of the public vanilla candidates checked in under `candidates/` (#65): `vanilla-claude` and `vanilla-codex` — the stock TheOzolith run image for the adapter, no setup, no knowledge, no Agent Policy, the adapter's default model spelled as its most-pinned provider ID, the model's default effort. They vary nothing: the fixed points every operator can run (smoke, calibration, Pipeline Validation Runs) and compare against. Pi joins when its adapter exists.
 
 _Avoid_: "baseline agent", "default candidate"
+
+**Reference Tests**
+
+The agent-visible, editable, never-graded tests staged in a Workspace: FDN Reference Tests and Engine Reference Tests (grilling 2026-10-02).
+They may be wrong, including by encoding a Known Defect; a good agent fixes a test that contradicts `RULEBOOK.txt`.
+
+_Avoid_: "visible tests" (informal), "staged tests" (informal)
 
 **Replay Validation**
 
@@ -389,6 +441,13 @@ _Avoid_: "run summary" (`run_summary.json` is the legacy per-run aggregate the r
 The starting-state `card_impl.py` for an SOS card: a `class CardName(CardImpl): pass` declaration with a TODO docstring. Pins class name, inheritance, and import path so audited tests can reliably import. Provides no behavior — `CardImpl` is no-op-by-default (all hooks return safe defaults), so stubs are runnable from day one and tests fail on missing behavior, not import/structure. The agent's task is to fill in the class body.
 
 _Avoid_: "empty template" (technically inaccurate — stubs are non-empty), "skeleton card"
+
+**Seeded Defect**
+
+A Known Defect introduced into a benchmark's baseline engine or FDN implementations on purpose (grilling 2026-10-02).
+Seeded Defects are fixed per benchmark version, so every run on that version sees the same engine.
+
+_Avoid_: "fuzzed engine", "fuzzing" (fuzzing names random-input testing), "planted bug"
 
 **System Prompt**
 
@@ -472,7 +531,7 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - The agent has a Writable Engine (`/workspace/engine/`) and may extend it freely throughout the run.
 - All evaluation is post-run. After the container exits, the evaluator runs tests against harvested implementations and the final engine state.
 - FDN Card Regression: evaluator runs `tests/audited/fdn/` against pre-filled FDN card impls + agent's final Writable Engine. Detects broken card behavior.
-- Engine Regression: evaluator runs `engine_tests/` against agent's final Writable Engine. Detects broken rules mechanics.
+- Engine Regression: evaluator runs the Audited Engine Tests against agent's final Writable Engine. Detects broken rules mechanics.
 - Self-eval / N×N cross-eval are retired; the Test Harvester (manual v1, automated v2) improves audited tests instead. Automated v2 test-quality scoring is future work.
 - The Base Set forms the reference codebase agents can browse. No Expanded Pool — agents implement new mechanics from scratch.
 - A Draft Set may span multiple Scryfall set codes (e.g., FDN + SPG).
@@ -487,7 +546,8 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - The runner does NOT orchestrate test iteration — the agent self-manages. The runner stages, launches, harvests, evaluates.
 - On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
 - Historical **Blind** and **Tested** modes varied test instructions. New Karn v4 runs take their guidance from the selected benchmark and have no independent mode selector.
-- SOS and FDN audited tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Engine tests are staged at `workspace/engine_tests/` per ADR-006 so agents can locally verify engine extensions; grading still uses host-repo copies for all three dimensions. FDN Reference Tests are colocated with the FDN card implementations at `workspace/cards/fdn/{collector_number}/tests.py` as additional reference for agents. Audited SOS grader tests live host-side only — there is no `workspace/tests/cards/` directory.
+- Audited Tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Reference Tests are the agent-visible, editable, ungraded counterpart: FDN Reference Tests at `workspace/cards/fdn/{collector_number}/tests.py` and Engine Reference Tests at `workspace/engine_tests/` (ADR-006). Audited target-card tests live host-side only — there is no `workspace/tests/cards/` directory.
+- hob-medium and SOS predate the Audited Engine Tests suite and grade Engine Regression from the host copy of their Engine Reference Tests; both are frozen (grilling 2026-10-02).
 - The runner is the hard timeout authority. Historical Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
 - Output Snapshots are runner-owned, Workspace-only, and independent of candidate cooperation. The runner may use a prior snapshot as fallback if the final engine state is unusable.
 - Historical image runs write the User Prompt to `/workspace/prompt.md`; Karn v4 task input follows the Construct Definition's declared file mounts.

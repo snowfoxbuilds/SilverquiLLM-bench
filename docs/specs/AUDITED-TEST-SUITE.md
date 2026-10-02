@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-06-10
+Last updated: 2026-10-02
 
 # Audited Test Suite
 
@@ -42,7 +42,7 @@ Both modes produce `card_impl.py` per card. Tested mode also produces `tests.py`
 
 1. **SOS Card Correctness** — Audited SOS tests against each agent's `card_impl.py` + harvested `/workspace/engine/` (materialized in `workspace_final/`)
 2. **FDN Card Regression** — Audited FDN tests against pre-filled FDN impls + harvested `/workspace/engine/` (materialized in `workspace_final/`)
-3. **Engine Regression** — Core engine tests against harvested `/workspace/engine/` (materialized in `workspace_final/`)
+3. **Engine Regression** — Audited Engine Tests against harvested `/workspace/engine/` (materialized in `workspace_final/`); the staged Engine Reference Tests are never graded (grilling 2026-10-02)
 Self-eval and cross-eval deferred to v2 (requires test harvester). Agent-written `tests.py` files are harvested as artifacts but not used for v1 scoring. The FDN audited tests (`tests/audited/fdn/`) serve as the post-run regression check against the agent's Writable Engine.
 
 ### Audited test authoring and file layout
@@ -151,6 +151,8 @@ def declare_blockers(game, blocks) -> None: ...
 ### Test Quality Guidelines
 
 - Each test tests one thing
+- A test asserts the rules-correct outcome of the behavior it is about, and its other assertions hold whatever convention the engine follows for unrelated rules (grilling 2026-10-02).
+  A stint-validation test, for example, compares counters before and after resolution instead of pinning whether counters survive a zone change; zone-change semantics get their own Engine Tests asserting the rules-correct outcome.
 - Tests are independent (no shared state)
 - Tests are deterministic (seeded randomness)
 - Board state setup is minimal
@@ -262,5 +264,7 @@ Test patterns audited SOS tests may use, post Phase 18 audit. Tests target obser
 
 | ADR | Decision |
 | --- | --- |
+| [ADR-006](../adr/ADR-006-engine-tests-staged-into-workspace.md) | Engine Reference Tests are staged and editable; grading reads hidden Audited Engine Tests |
 | [ADR-010](../adr/ADR-010-test-oracle-workspace-uses-independent-engine.md) | Test Oracle Workspace Uses Independent Engine |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |
+| [ADR-016](../adr/ADR-016-baseline-engines-may-carry-known-defects.md) | Baseline engines may carry Known Defects, scored against a separate Known-Best Engine |
