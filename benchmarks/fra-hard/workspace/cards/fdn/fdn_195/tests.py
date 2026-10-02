@@ -25,6 +25,10 @@ def _bear(p, name="Bear"):
     return Creature(name=name, base_power=2, base_toughness=2, owner=p, controller=p)
 
 
+def _names(zone):
+    return [card.name for card in zone.get_all()]
+
+
 def _on_battlefield(game, obj):
     return any(game.get_battlefield(p).contains(obj) for p in game.players)
 
@@ -82,10 +86,18 @@ class TestFanaticalFirebrandAbility:
 
     def test_cost_taps_and_sacrifices(self):
         game, p1, p2, brand, target = self._setup()
+        # {T} is part of the cost: a tapped Firebrand cannot pay it.
+        brand.is_tapped = True
+        with pytest.raises(AbilityError):
+            _activate_targeting(game, p1, brand, target)
+        assert brand.name in _names(game.get_battlefield(p1))
+        brand.is_tapped = False
         _activate_targeting(game, p1, brand, target)
-        assert brand.is_tapped is True
-        assert not _on_battlefield(game, brand)
-        assert game.get_graveyard(p1).contains(brand)
+        # Status is not read off the sacrificed card: it is a new object (CR 400.7).
+        assert brand.name not in _names(game.get_battlefield(p1))
+        assert brand.name in _names(game.get_graveyard(p1))
+        resolve_stack(game)
+        assert target.damage_marked == 1
 
     def test_target_captured_on_stack(self):
         game, p1, p2, brand, target = self._setup()
