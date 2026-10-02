@@ -1,0 +1,17 @@
+{
+  "name": "Micromancer",
+  "mana_cost": "{3}{U}",
+  "type_line": "Creature — Human Wizard",
+  "oracle_text": "When this creature enters, you may search your library for an instant or sorcery card with mana value 1, reveal it, put it into your hand, then shuffle.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "158",
+  "complexity_tier": "medium"
+}

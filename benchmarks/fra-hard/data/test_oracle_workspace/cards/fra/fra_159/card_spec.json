@@ -1,0 +1,20 @@
+{
+  "name": "Uldaros Theorix",
+  "mana_cost": "{3}{U}{B}{B}",
+  "type_line": "Legendary Creature — Elder Sphinx",
+  "oracle_text": "Flying\nWhen Uldaros Theorix enters, if you cast him, exile up to one target nonland card of each card type from your graveyard. Copy those cards. You may cast any number of spells with total mana value 6 or less from among the copies without paying their mana costs. (Permanent spells cast this way become tokens.)",
+  "colors": [
+    "B",
+    "U"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "mythic",
+  "set": "fra",
+  "collector_number": "159",
+  "power": "5",
+  "toughness": "5",
+  "layout": "normal",
+  "mana_cost_str": "{3}{U}{B}{B}"
+}

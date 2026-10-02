@@ -1,0 +1,17 @@
+{
+  "name": "Savannah Lions",
+  "mana_cost": "{W}",
+  "type_line": "Creature — Cat",
+  "oracle_text": "",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "146",
+  "complexity_tier": "simple"
+}

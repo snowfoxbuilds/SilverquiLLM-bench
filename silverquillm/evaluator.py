@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Protocol
 
 from silverquillm import untrusted_git
+from silverquillm.benchmark_targets import target_cards as resolve_target_cards
 
 
 class GradedBenchmark(Protocol):
@@ -1241,11 +1242,12 @@ def _eval_target_cards(
 ) -> dict[str, CardResult]:
     """Dimension 1: correctness of the benchmark's target cards."""
     results: dict[str, CardResult] = {}
-    for cn in target_cards:
-        card_id = _target_card_id(target_set, cn, audited_target)
-        test_file = audited_target / card_id / "tests.py"
+    for card_set, cn in resolve_target_cards(target_set, target_cards):
+        audited_set = audited_target.parent / card_set
+        card_id = _target_card_id(card_set, cn, audited_set)
+        test_file = audited_set / card_id / "tests.py"
         results[card_id] = _grade_audited_card(
-            card_id, test_file, overlay, timeout, test_utils=test_utils, card_set=target_set
+            card_id, test_file, overlay, timeout, test_utils=test_utils, card_set=card_set
         )
     return results
 

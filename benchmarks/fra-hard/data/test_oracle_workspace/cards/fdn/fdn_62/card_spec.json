@@ -1,0 +1,17 @@
+{
+  "name": "Hungry Ghoul",
+  "mana_cost": "{1}{B}",
+  "type_line": "Creature — Zombie",
+  "oracle_text": "{1}, Sacrifice another creature: Put a +1/+1 counter on this creature.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "62",
+  "complexity_tier": "medium"
+}

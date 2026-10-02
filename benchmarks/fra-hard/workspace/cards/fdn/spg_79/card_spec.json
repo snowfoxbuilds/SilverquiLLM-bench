@@ -1,0 +1,19 @@
+{
+  "name": "Bloom Tender",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature — Elf Druid",
+  "oracle_text": "Vivid — {T}: For each color among permanents you control, add one mana of that color.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [
+    "Vivid"
+  ],
+  "rarity": "mythic",
+  "set_code": "spg",
+  "collector_number": "79",
+  "complexity_tier": "medium"
+}

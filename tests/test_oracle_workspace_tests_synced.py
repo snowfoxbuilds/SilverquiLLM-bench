@@ -7,7 +7,7 @@ import pytest
 from scripts.oracle_support import load_layout
 
 ROOT = Path(__file__).resolve().parents[1]
-BENCHMARKS = ("sos", "hob-medium")
+BENCHMARKS = ("sos", "hob-medium", "fra-hard")
 
 
 def layout(benchmark):
@@ -37,8 +37,9 @@ def test_oracle_audited_test_matches_canonical(benchmark, relative):
     assert oracle.read_bytes() == canonical.read_bytes(), f"Audited copy drift: {oracle}"
 
 
-def test_hob_mirrors_every_authoritative_suite():
-    selected = layout("hob-medium")
+@pytest.mark.parametrize("benchmark", ("hob-medium", "fra-hard"))
+def test_v2_oracle_mirrors_every_authoritative_suite(benchmark):
+    selected = layout(benchmark)
     canonical = selected.benchmark_root / "data/tests/audited"
     for path in canonical.rglob("tests.py"):
         assert (selected.oracle / "tests/audited" / path.relative_to(canonical)).is_file()

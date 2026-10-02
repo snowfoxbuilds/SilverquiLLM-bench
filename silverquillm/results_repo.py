@@ -709,7 +709,8 @@ def leaderboard_validity_reasons(
     2. ``resumed_from`` is set — Resume Legs inherit prior-leg workspace state
        (CONTEXT.md → Resume Leg);
     3. a card filter is present and differs from the benchmark's ``cards``
-       set **after integer normalization** of collector numbers;
+       set after integer normalization of collector numbers, preserving set
+       identities when the benchmark uses qualified selections;
     4. the scored card set differs from the benchmark's ``cards`` set.
     """
     reasons: list[str] = []
@@ -718,15 +719,33 @@ def leaderboard_validity_reasons(
         reasons.append("benchmark is not leaderboard-eligible (leaderboard.eligible: false)")
     if resumed_from:
         reasons.append(f"Resume Leg (resumed_from={resumed_from})")
-    pool = _normalized_set(benchmark_config.get("cards") or [])
+    cards = benchmark_config.get("cards") or []
+    qualified = any(":" in str(card) for card in cards)
+    primary_set = str(
+        (benchmark_config.get("draft_set") or {}).get("primary_set_code", "")
+    ).lower()
+
+    def normalized(values: Iterable[str | int]) -> set[str]:
+        if not qualified:
+            return _normalized_set(values)
+        identities = set()
+        for value in values:
+            text = str(value).strip()
+            match = re.fullmatch(r"([A-Za-z0-9]+)[:_](.+)", text)
+            set_code, number = match.groups() if match else (primary_set, text)
+            number = str(int(number)) if number.isdigit() else number
+            identities.add(f"{set_code.lower()}:{number}")
+        return identities
+
+    pool = normalized(cards)
     if card_filter is not None:
-        filtered = _normalized_set(card_filter)
+        filtered = normalized(card_filter)
         if filtered != pool:
             reasons.append(
                 f"card filter ({len(filtered)} cards) differs from the benchmark's "
                 f"{len(pool)}-card set"
             )
-    scored = _normalized_set(scored_card_set)
+    scored = normalized(scored_card_set)
     if scored != pool:
         reasons.append(
             f"scored card set ({len(scored)} cards) differs from the benchmark's "

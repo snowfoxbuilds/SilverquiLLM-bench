@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from silverquillm.benchmark_targets import target_cards
 from silverquillm.evaluator import _target_card_id, resolve_eval_paths
 
 from .definition import KarnError, canonical, digest, read_regular, strict_json
@@ -10,9 +11,10 @@ from .definition import KarnError, canonical, digest, read_regular, strict_json
 def grading_inputs(benchmark) -> dict:
     paths = resolve_eval_paths(benchmark.root, benchmark.target_set)
     sources = []
-    for number in benchmark.cards:
-        card = _target_card_id(benchmark.target_set, number, paths.audited_target)
-        directory = paths.audited_target / card
+    for card_set, number in target_cards(benchmark.target_set, benchmark.cards):
+        audited_set = paths.audited_target.parent / card_set
+        card = _target_card_id(card_set, number, audited_set)
+        directory = audited_set / card
         sources.append(("target", directory / "tests.py"))
         if (directory / "conftest.py").exists():
             sources.append(("target", directory / "conftest.py"))

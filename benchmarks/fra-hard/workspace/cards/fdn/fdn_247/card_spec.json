@@ -1,0 +1,20 @@
+{
+  "name": "Tatyova, Benthic Druid",
+  "mana_cost": "{3}{G}{U}",
+  "type_line": "Legendary Creature — Merfolk Druid",
+  "oracle_text": "Landfall — Whenever a land you control enters, you gain 1 life and draw a card.",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [
+    "Landfall"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "247",
+  "complexity_tier": "medium"
+}

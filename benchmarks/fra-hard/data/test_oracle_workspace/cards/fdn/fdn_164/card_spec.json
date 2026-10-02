@@ -1,0 +1,20 @@
+{
+  "name": "Spectral Sailor",
+  "mana_cost": "{U}",
+  "type_line": "Creature — Spirit Pirate",
+  "oracle_text": "Flash (You may cast this spell any time you could cast an instant.)\nFlying\n{3}{U}: Draw a card.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Flash"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "164",
+  "complexity_tier": "medium"
+}

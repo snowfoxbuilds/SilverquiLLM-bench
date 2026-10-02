@@ -1,0 +1,21 @@
+{
+  "name": "Dreadwing Scavenger",
+  "mana_cost": "{1}{U}{B}",
+  "type_line": "Creature — Nightmare Bird",
+  "oracle_text": "Flying\nWhenever this creature enters or attacks, draw a card, then discard a card.\nThreshold — This creature gets +1/+1 and has deathtouch as long as there are seven or more cards in your graveyard.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Threshold"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "118",
+  "complexity_tier": "medium"
+}

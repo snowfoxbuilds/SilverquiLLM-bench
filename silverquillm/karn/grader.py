@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import silverquillm
+from silverquillm.benchmark_targets import target_cards
 from silverquillm.evaluator import (
     _REPO_ROOT,
     CardResult,
@@ -442,7 +443,9 @@ class ContainerGrader:
         root = Path(benchmark.root).resolve()
         paths = resolve_eval_paths(root, benchmark.target_set)
         inputs = (
-            paths.audited_target,
+            *(paths.audited_target.parent / code for code in sorted({
+                code for code, _ in target_cards(benchmark.target_set, benchmark.cards)
+            })),
             paths.audited_fdn,
             paths.engine_tests,
             paths.engine_tests.parent / "conftest.py",

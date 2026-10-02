@@ -1,0 +1,19 @@
+{
+  "name": "Bulk Up",
+  "mana_cost": "{1}{R}",
+  "type_line": "Instant",
+  "oracle_text": "Double target creature's power until end of turn.\nFlashback {4}{R}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Flashback"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "80",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Heartfire Immolator",
+  "mana_cost": "{1}{R}",
+  "type_line": "Creature — Human Wizard",
+  "oracle_text": "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)\n{R}, Sacrifice this creature: It deals damage equal to its power to target creature or planeswalker.",
+  "power": "2",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Prowess"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "201",
+  "complexity_tier": "medium"
+}

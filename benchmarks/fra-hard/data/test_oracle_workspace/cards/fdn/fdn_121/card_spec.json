@@ -1,0 +1,21 @@
+{
+  "name": "Koma, World-Eater",
+  "mana_cost": "{3}{G}{G}{U}{U}",
+  "type_line": "Legendary Creature — Serpent",
+  "oracle_text": "This spell can't be countered.\nTrample, ward {4}\nWhenever Koma deals combat damage to a player, create four 3/3 blue Serpent creature tokens named Koma's Coil.",
+  "power": "8",
+  "toughness": "12",
+  "loyalty": null,
+  "colors": [
+    "G",
+    "U"
+  ],
+  "keywords": [
+    "Trample",
+    "Ward"
+  ],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "121",
+  "complexity_tier": "medium"
+}

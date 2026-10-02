@@ -1,0 +1,17 @@
+{
+  "name": "Valkyrie's Call",
+  "mana_cost": "{3}{W}{W}",
+  "type_line": "Enchantment",
+  "oracle_text": "Whenever a nontoken, non-Angel creature you control dies, return that card to the battlefield under its owner's control with a +1/+1 counter on it. It has flying and is an Angel in addition to its other types.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "fdn",
+  "collector_number": "27",
+  "complexity_tier": "medium"
+}

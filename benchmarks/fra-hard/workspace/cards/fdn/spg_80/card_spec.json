@@ -1,0 +1,17 @@
+{
+  "name": "Paradise Druid",
+  "mana_cost": "{1}{G}",
+  "type_line": "Creature — Elf Druid",
+  "oracle_text": "This creature has hexproof as long as it's untapped. (It can't be the target of spells or abilities your opponents control.)\n{T}: Add one mana of any color.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "spg",
+  "collector_number": "80",
+  "complexity_tier": "medium"
+}
