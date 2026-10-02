@@ -98,7 +98,7 @@ def _sba_creature_zero_toughness(game: GameState) -> bool:
     to_remove: list[tuple[Player, Any]] = []
     for player in game.players:
         for obj in _battlefield(game, player).get_all():
-            if CardType.CREATURE in getattr(obj, "card_types", {CardType.CREATURE}) and hasattr(obj, "toughness") and obj.toughness <= 0:
+            if hasattr(obj, "toughness") and obj.toughness <= 0:
                 to_remove.append((player, obj))
     for player, obj in to_remove:
         _move_to_graveyard(game, player, obj)
@@ -118,7 +118,7 @@ def _sba_creature_lethal_damage(game: GameState) -> bool:
     to_remove: list[tuple[Player, Any]] = []
     for player in game.players:
         for obj in _battlefield(game, player).get_all():
-            if CardType.CREATURE not in getattr(obj, "card_types", {CardType.CREATURE}) or not hasattr(obj, "toughness") or not hasattr(obj, "damage_marked"):
+            if not hasattr(obj, "toughness") or not hasattr(obj, "damage_marked"):
                 continue
 
             # Skip indestructible creatures
@@ -167,8 +167,6 @@ def _sba_legend_rule(game: GameState) -> bool:
     action_taken = False
     for player in game.players:
         bf = _battlefield(game, player)
-        if getattr(player, "legend_rule_suppressed", False):
-            continue
         legendaries: dict[str, list[Any]] = defaultdict(list)
         for obj in bf.get_all():
             if (
@@ -343,14 +341,6 @@ def check_state_based_actions(game: GameState) -> bool:
     game state is fully stable.
     """
     action_taken = False
-    for player in game.players:
-        protected = any(getattr(card, "protects_zero_loyalty", False)
-                        for card in _battlefield(game, player).get_all())
-        if not protected:
-            for card in _battlefield(game, player).get_all():
-                if CardType.PLANESWALKER in getattr(card, "card_types", set()) and getattr(card, "loyalty", 0) <= 0:
-                    _move_to_graveyard(game, player, card)
-                    action_taken = True
     # Player with 0 or less life loses
     action_taken = _sba_player_life_zero(game) or action_taken
     # Creature with toughness 0 or less → graveyard

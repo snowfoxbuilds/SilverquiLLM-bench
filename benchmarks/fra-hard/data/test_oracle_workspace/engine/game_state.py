@@ -6,6 +6,7 @@ from typing import Any
 
 from engine.combat import CombatState
 from engine.continuous_effects import EffectManager
+from engine.last_known import LastKnownInformation
 from engine.player import Player
 from engine.refs_registry import GameRefsRegistry
 from engine.replacement_effects import ReplacementManager
@@ -72,8 +73,6 @@ class GameState:
         self.phase: Phase = Phase.BEGINNING
         self.step: Step | None = Step.UNTAP
         self.turn_number: int = 1
-        self.cast_permissions: list[dict] = []
-        self.battlefield_deaths: list[tuple] = []
         self.stack: Stack = Stack()
         self.trigger_manager: TriggerManager = TriggerManager()
         self.replacement_manager: ReplacementManager = ReplacementManager()
@@ -90,6 +89,12 @@ class GameState:
         # normal rotation.  When extras are exhausted the game picks up
         # from _normal_next_index.
         self._normal_next_index: int = 1
+        # Each object's snapshot from its most recent departure from the
+        # battlefield, keyed by ``object_id`` (see engine.last_known).
+        self.last_known: dict[int, LastKnownInformation] = {}
+        # Whether a creature died this turn (morbid, rule 700.4); cleared in
+        # the cleanup step.
+        self.creature_died_this_turn: bool = False
 
     # ------------------------------------------------------------------
     # Player properties
@@ -168,6 +173,8 @@ class GameState:
             self.priority_player_index = self.active_player_index
             self.phase = _TURN_SEQUENCE[0][0]
             self.step = _TURN_SEQUENCE[0][1]
+            for player in self.players:
+                player.attacked_this_turn = False
 
             # The active player has changed. Re-derive continuous effects so a
             # turn-dependent buff ("during your turn ...", e.g. Quick-Draw

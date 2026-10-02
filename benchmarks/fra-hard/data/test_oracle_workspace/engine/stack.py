@@ -109,7 +109,6 @@ class StackObject:
     event_state: Any = None
     prior_qualifying_casts: int | None = None
     departure_zone: Zone | None = None
-    graveyard_departure_zone: Zone | None = None
     is_spell: bool = False
 
 
@@ -405,32 +404,10 @@ def move_spell_off_stack(
         # Countering fizzle: this occurrence already left the stack.
         return False
 
-    if not stack_obj.is_spell:
-        return True
-
     card = stack_obj.source
     if any(p.zones[Zone.STACK].contains(card) for p in game.players):
         destination = stack_obj.departure_zone or to_zone
-        adventure = bool(resolving and getattr(card, 'casting_adventure', False))
-        if adventure:
-            destination = Zone.EXILE
-        if destination == Zone.GRAVEYARD and stack_obj.graveyard_departure_zone:
-            destination = stack_obj.graveyard_departure_zone
-        if getattr(card, 'is_card_copy', False):
-            if destination == Zone.BATTLEFIELD:
-                card.is_token = True
-            else:
-                for player in game.players:
-                    if player.zones[Zone.STACK].contains(card):
-                        player.zones[Zone.STACK].remove(card)
-                return True
-        restore = getattr(card, 'restore_front_face', None)
-        if restore is not None:
-            restore()
         move_to_zone(game, card, Zone.STACK, destination)
-        if adventure and destination == Zone.EXILE:
-            from engine.casting import grant_cast_permission
-            grant_cast_permission(game, stack_obj.controller, card, normal_face_only=True)
     return True
 
 
@@ -473,8 +450,6 @@ def copy_spell(
     copied_card = copy.copy(original.source)
     copied_card.controller = controller
     copied_card.owner = getattr(original.source, "owner", controller)
-    copied_card.was_cast = False
-    copied_card.is_card_copy = True
 
     if new_targets is not None:
         # New targets chosen for the copy — capture their current stints.
@@ -517,11 +492,6 @@ def copy_spell(
             g, copy_obj.activation_context, copy_obj.targets
         )
         copied_card.on_resolve(g)
-        from engine.types import CardType
-        if copied_card.card_types & {CardType.CREATURE, CardType.ARTIFACT,
-                                     CardType.ENCHANTMENT, CardType.PLANESWALKER}:
-            controller.zones[Zone.STACK].add(copied_card)
-            move_spell_off_stack(g, copy_obj, Zone.BATTLEFIELD, resolving=True)
 
     copy_obj.on_resolve = _copy_resolve
     return copy_obj

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import Instant
 from engine.card_queries import query_yes_no
+from engine.zones import move_to_zone
 from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
@@ -67,12 +68,6 @@ class UnchartedVoyage(Instant):
         if target is not None:
             owner = getattr(target, "owner", None)
             if owner is not None:
-                # Remove from battlefield
-                for player in game.players:
-                    bf = game.get_battlefield(player)
-                    if bf.contains(target):
-                        bf.remove(target)
-                        break
                 # Owner chooses top or bottom
                 put_on_top = query_yes_no(
                     game,
@@ -80,13 +75,10 @@ class UnchartedVoyage(Instant):
                     f"Put {getattr(target, 'name', 'creature')} on top of library? (No = bottom)",
                     source_card=self,
                 )
-                library = owner.zones[Zone.LIBRARY]
-                if put_on_top:
-                    # Top of library is end of list
-                    library.add(target)
-                else:
-                    # Bottom of library is start of list
-                    library.add(target, position="bottom")
+                move_to_zone(
+                    game, target, Zone.BATTLEFIELD, Zone.LIBRARY,
+                    position="top" if put_on_top else "bottom",
+                )
 
         # Surveil 1
         library = controller.zones[Zone.LIBRARY]

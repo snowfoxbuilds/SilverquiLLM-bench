@@ -66,8 +66,9 @@ class SolemnSimulacrum(ArtifactCreature):
             bf.add(chosen)
             library.shuffle()
 
-        def _dies_effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
+        def _dies_effect(game: GameState, controller: Any) -> None:
+            # The fire-time controller: as the source last existed if it died
+            # (rules 603.3a, 603.10a).
             if controller is not None:
                 draw_card(game, controller)
         controller = getattr(self, 'controller', None) or game.active_player

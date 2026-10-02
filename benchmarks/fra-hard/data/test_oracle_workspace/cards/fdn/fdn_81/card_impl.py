@@ -10,6 +10,11 @@ if TYPE_CHECKING:
     from engine.player import Player
     from cards.registry import CardRegistry
 
+def _is_creature_or_planeswalker(obj: Any) -> bool:
+    card_types = getattr(obj, 'card_types', set())
+    return CardType.CREATURE in card_types or CardType.PLANESWALKER in card_types
+
+
 class ChandraFlameshaper(Planeswalker):
     """Chandra, Flameshaper — {5}{R}{R} — 6 loyalty.
 
@@ -80,19 +85,36 @@ class ChandraFlameshaper(Planeswalker):
                     sacrifice(game, controller, token)
             game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_eot_condition, effect=_eot_effect, source=token, controller=controller))
 
-        def _minus4(game: Any) -> None:
-            """Deal 8 damage divided as the controller chooses among targets."""
+        # Each activation's division, keyed by the identity of the targets it
+        # chose; set while activating and read when that activation resolves.
+        divisions: dict[tuple[int, ...], list[int]] = {}
+
+        def _minus4_targeting(game: Any, source: Any, controller: Any) -> list[Any]:
+            """Choose any number of target creatures and/or planeswalkers
+            (rule 601.2c via 602.2b), then divide the 8 damage among them
+            (601.2d): each target except the last gets a NUMBER Player Query
+            for at least 1, and the last takes the forced remainder."""
             from engine.card_queries import choose_number
-            from engine.game import deal_damage
-            # Targets resolved by the engine (the engine sets ``chosen_targets``
-            # at resolve time). "Divided as you choose" is a player choice: each
-            # target except the last gets a NUMBER Player Query (every remaining
-            # target must receive at least 1), and the last target takes the
-            # forced remainder. A single target takes all 8 with no query.
-            targets = getattr(pw, 'chosen_targets', []) or []
-            controller = pw.controller
-            if not targets or controller is None:
-                return
+            from engine.protection import has_protection_from
+
+            candidates = [
+                obj
+                for player in game.players
+                for obj in game.get_battlefield(player).get_all()
+                if _is_creature_or_planeswalker(obj) and not has_protection_from(obj, pw)
+            ]
+            chosen = choose_object(
+                game, controller, candidates,
+                'Choose any number of target creatures and/or planeswalkers',
+                source_card=pw, min=0, max=min(8, len(candidates)),
+            ) if candidates else []
+            if chosen is None:
+                targets = []
+            elif isinstance(chosen, list):
+                targets = chosen
+            else:
+                targets = [chosen]
+            amounts: list[int] = []
             remaining = 8
             for i, t in enumerate(targets):
                 left_after = len(targets) - i - 1
@@ -100,6 +122,19 @@ class ChandraFlameshaper(Planeswalker):
                     dmg = remaining
                 else:
                     dmg = choose_number(game, controller, 1, remaining - left_after, f"damage to {getattr(t, 'name', 'target')} ({remaining} of 8 left to divide)", source_card=pw)
-                deal_damage(game, pw, t, dmg)
+                amounts.append(dmg)
                 remaining -= dmg
-        return [LoyaltyAbility(loyalty_cost=+2, effect=_plus2, description='+2: Add {R}{R}{R}. Exile top 3, choose one to play this turn.'), LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description='+1: Create a hasty token copy of target creature (sacrifice at end step).'), LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description='−4: Deal 8 damage divided among target creatures and/or planeswalkers.')]
+            divisions[tuple(map(id, targets))] = amounts
+            return targets
+
+        def _minus4(game: Any, targets: list[Any], context: Any = None) -> None:
+            """Deal the 8 damage as divided at activation; a target that is no
+            longer legal is dealt nothing (rule 608.2b)."""
+            from engine.game import deal_damage
+            from engine.stack import surviving_targets
+            amounts = divisions.pop(tuple(map(id, targets)), [])
+            legal = surviving_targets(game, context, targets, is_legal=_is_creature_or_planeswalker)
+            for target, dmg in zip(targets, amounts):
+                if any(target is t for t in legal):
+                    deal_damage(game, pw, target, dmg)
+        return [LoyaltyAbility(loyalty_cost=+2, effect=_plus2, description='+2: Add {R}{R}{R}. Exile top 3, choose one to play this turn.'), LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description='+1: Create a hasty token copy of target creature (sacrifice at end step).'), LoyaltyAbility(loyalty_cost=-4, effect=_minus4, targeting=_minus4_targeting, description='−4: Deal 8 damage divided among target creatures and/or planeswalkers.')]

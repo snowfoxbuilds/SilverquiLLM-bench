@@ -526,7 +526,10 @@ def _fire_spell_cast_event(
     game.trigger_manager.fire_event(
         game,
         SpellCastTriggeredEvent(
-            spell=card, card=card, player=player, controller=player
+            spell=card, card=card, player=player, controller=player,
+            # On the stack, X is its chosen value (rule 202.3e).
+            mana_value=card.mana_cost.cmc
+            + getattr(card, "x_value", 0) * card.mana_cost.x_count,
         ),
     )
 
@@ -535,108 +538,35 @@ def _fire_spell_cast_event(
 # Cast spell
 # ------------------------------------------------------------------
 
-def _place_deferred_cast_triggers(game, spell, deferred):
-    if not deferred:
-        return
-    cast_triggers = []
-    while game.stack.peek() is not spell:
-        cast_triggers.append(game.stack.pop())
-    triggers = [*deferred, *reversed(cast_triggers)]
-    for active in (True, False):
-        for trigger in triggers:
-            if (trigger.controller is game.active_player) == active:
-                game.stack.push(trigger)
+def _announce_x(game: GameState, player: Player, card: CardImpl, *, free: bool = False) -> None:
+    """Choose the value of X while casting (rule 601.2b).
+
+    A spell cast without paying its mana cost has X = 0 (rule 107.3b).
+    """
+    from engine.card_queries import choose_number
+
+    card.x_value = 0  # type: ignore[attr-defined]
+    x_count = card.mana_cost.x_count
+    if x_count and not free:
+        maximum = max(0, player.mana_pool.total() - card.mana_cost.cmc) // x_count
+        card.x_value = choose_number(  # type: ignore[attr-defined]
+            game, player, 0, maximum, "Choose X", source_card=card
+        )
 
 
-def _mana_payment_window(game, player, spell, costs):
-    from engine.abilities import AbilityError, ActivatedAbilityInstance, activate_ability
-    from engine.card_queries import choose_number, choose_object
-    blocked = set()
-    deferred = []
-    while not any(player.mana_pool.can_pay(cost) for cost in costs):
-        sources = [c for c in game.get_battlefield(player).get_all()
-                   if c.object_id not in blocked and not getattr(c, 'is_tapped', False)
-                   and callable(getattr(c, 'get_mana_abilities', None)) and c.get_mana_abilities()]
-        if not sources:
-            break
-        source = choose_object(game, player, sources, 'Activate a mana ability',
-                               source_card=spell, optional=True)
-        if source is None:
-            break
-        abilities = source.get_mana_abilities()
-        index = (choose_number(game, player, 0, len(abilities)-1, 'Mana ability', source_card=source)
-                 if len(abilities) > 1 else 0)
-        ability = abilities[index]
-        before = player.mana_pool.total()
-        stack_size = len(game.stack)
-        try:
-            activate_ability(game, player, ActivatedAbilityInstance(
-                source=source, controller=player, cost=ability.cost,
-                effect=ability.mana_produced, is_mana_ability=True))
-        except AbilityError:
-            blocked.add(source.object_id)
-        added = []
-        while len(game.stack) > stack_size:
-            added.append(game.stack.pop())
-        deferred.extend(reversed(added))
-        if player.mana_pool.total() <= before:
-            blocked.add(source.object_id)
-    return deferred
+def _with_x(cost: ManaCost, x_value: int) -> ManaCost:
+    """*cost* with each {X} replaced by *x_value* generic mana (rule 601.2f)."""
+    if not cost.x_count:
+        return cost
+    return ManaCost(
+        generic=cost.generic + x_value * cost.x_count,
+        pips=dict(cost.pips),
+        x_count=0,
+        hybrid=list(cost.hybrid),
+    )
 
 
-def grant_cast_permission(game, player, card, *, from_zone=Zone.EXILE,
-                          until_turn=None, life_cost=False, departure_zone=None,
-                          controller_source=None, normal_face_only=False):
-    permission = dict(player=player, card=card, zone=from_zone,
-                      epoch=game.refs.zone_epoch(card), until_turn=until_turn,
-                      life_cost=life_cost, departure_zone=departure_zone,
-                      source=controller_source,
-                      normal_face_only=normal_face_only,
-                      source_epoch=game.refs.zone_epoch(controller_source) if controller_source else None)
-    game.cast_permissions.append(permission)
-
-
-def _permission(game, player, card):
-    from engine.stack import object_current_zone
-    for permission in game.cast_permissions:
-        source = permission['source']
-        if source is not None:
-            if (object_current_zone(game, source) != Zone.BATTLEFIELD.value or
-                    game.refs.zone_epoch(source) != permission['source_epoch'] or
-                    source.controller is not player):
-                continue
-        elif permission['player'] is not player:
-            continue
-        if (permission['card'] is card and
-                permission['epoch'] == game.refs.zone_epoch(card) and
-                object_current_zone(game, card) == permission['zone'].value and
-                (permission['until_turn'] is None or permission['until_turn'] == game.turn_number)):
-            return permission
-    return None
-
-
-def cast_spell(game: GameState, player: Player, card: CardImpl, **kwargs) -> StackObject:
-    origin = next((owner.zones[zone] for owner in game.players for zone in Zone
-                   if zone in owner.zones and owner.zones[zone].contains(card)), None)
-    controller = card.controller
-    try:
-        return _cast_spell(game, player, card, **kwargs)
-    except Exception:
-        if origin is not None and not origin.contains(card):
-            for owner in game.players:
-                if owner.zones[Zone.STACK].contains(card):
-                    owner.zones[Zone.STACK].remove(card)
-                    origin.add(card)
-                    break
-        restore = getattr(card, 'restore_front_face', None)
-        if restore is not None:
-            restore()
-        card.controller = controller
-        raise
-
-
-def _cast_spell(game: GameState, player: Player, card: CardImpl, *,
-               from_zone=None, ignore_timing=False, departure_zone=None) -> StackObject:
+def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
     """Cast *card* from *player*'s hand.
 
     Pipeline
@@ -667,10 +597,8 @@ def _cast_spell(game: GameState, player: Player, card: CardImpl, *,
     Raises:
         CastingError: If any legality check fails.
     """
-    if hasattr(card, 'choose_cast_face'):
-        card.choose_cast_face(game, player)
     # 1. Timing
-    if not ignore_timing and not can_cast_at_instant_speed(card) and not is_sorcery_speed(game, player):
+    if not can_cast_at_instant_speed(card) and not is_sorcery_speed(game, player):
         raise CastingError(
             f"Cannot cast {card.name!r} — sorcery-speed timing not met"
         )
@@ -680,21 +608,9 @@ def _cast_spell(game: GameState, player: Player, card: CardImpl, *,
         raise CastingError(f"Cannot cast {card.name!r} — can_cast returned False")
 
     # 3. Hand check
-    permission = None
     hand = game.get_hand(player)
     if not hand.contains(card):
-        permission = _permission(game, player, card)
-        origin = from_zone if from_zone is not None else permission['zone'] if permission else None
-        if origin is not None:
-            hand = next((p.zones[origin] for p in game.players if p.zones[origin].contains(card)), hand)
-    if not hand.contains(card):
         raise CastingError(f"Cannot cast {card.name!r} — card not in hand")
-
-    from engine.stack import object_current_zone
-    card.cast_from_zone = Zone(object_current_zone(game, card))
-    card.controller = player
-    if card.owner is None:
-        card.owner = player
 
     # 4. Move card from hand to stack zone
     stack_zone = player.zones[Zone.STACK]
@@ -704,6 +620,8 @@ def _cast_spell(game: GameState, player: Player, card: CardImpl, *,
     # Clear any stale colors_spent from a prior cast before new payment.
     if hasattr(card, "colors_spent"):
         del card.colors_spent
+
+    _announce_x(game, player, card)
 
     # 5. Choose targets
     target_specs = card.get_targets(game)
@@ -770,47 +688,33 @@ def _cast_spell(game: GameState, player: Player, card: CardImpl, *,
     #   3. Keep only the candidates the player can actually pay, then choose
     #      among them (a Player Query fires only when more than one is payable).
     raw_reduction = _raw_cost_reduction(game, card, player, targets=chosen_targets)
-    pay_life = bool(permission and permission['life_cost'])
-    life_amount = card.mana_cost.cmc if pay_life else 0
-    base_costs = [ManaCost()] if pay_life else [card.mana_cost, *card.alternative_costs(game)]
-    card.x_value = 0
-    if card.mana_cost.x_count and not pay_life:
-        from engine.card_queries import choose_number
-        maximum = max(0, (player.mana_pool.total() + raw_reduction - card.mana_cost.cmc) // card.mana_cost.x_count)
-        card.x_value = choose_number(game, player, 0, maximum, 'Choose X', source_card=card)
-        base_costs = [ManaCost(generic=c.generic + card.x_value * c.x_count,
-                               pips=dict(c.pips), hybrid=list(c.hybrid)) for c in base_costs]
+    base_costs = [
+        _with_x(base, card.x_value)  # type: ignore[attr-defined]
+        for base in [card.mana_cost, *card.alternative_costs(game)]
+    ]
     payable: list[tuple[int, ManaCost]] = []
-    reduced_costs = [_apply_cost_reduction(base, raw_reduction) for base in base_costs]
-    deferred = _mana_payment_window(game, player, card, reduced_costs)
     for index, base in enumerate(base_costs):
         clamped = min(raw_reduction, base.generic) if raw_reduction > 0 else 0
         reduced = _apply_cost_reduction(base, clamped) if clamped > 0 else base
         if player.mana_pool.can_pay(reduced):
             payable.append((index, reduced))
 
-    if not payable or player.life < life_amount:
+    if not payable:
         # Rollback: move card from stack zone back to hand
         stack_zone.remove(card)
         hand.add(card)
-        for trigger in deferred:
-            game.stack.push(trigger)
         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
 
     effective_cost = _choose_cost(game, player, card, payable)
 
     # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
     player.mana_pool.pay(effective_cost)
-    if pay_life:
-        from engine.game import lose_life
-        lose_life(game, player, life_amount)
 
     # Store colors of mana spent on the card for mechanics like Converge
     # that care about the colors used to cast the spell.
     card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
 
     # 7. Call on_cast hook
-    card.was_cast = True
     card.on_cast(game)
 
     # 7b. The spell has now become cast (rule 601.2i). Record it in the caster's
@@ -834,7 +738,6 @@ def _cast_spell(game: GameState, player: Player, card: CardImpl, *,
         activation_context=activation_context,
         prior_qualifying_casts=prior_qualifying_casts,
         is_spell=True,
-        graveyard_departure_zone=departure_zone or (permission['departure_zone'] if permission else None),
     )
 
     def _on_resolve(g: GameState) -> None:
@@ -842,8 +745,6 @@ def _cast_spell(game: GameState, player: Player, card: CardImpl, *,
 
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
-    from engine.ward import trigger_ward
-    trigger_ward(game, stack_obj)
 
     # 9. The spell is now on the stack (rule 601.2i complete). Fire the
     #    cast-triggered event so "whenever you cast …" abilities queue on top of
@@ -851,7 +752,6 @@ def _cast_spell(game: GameState, player: Player, card: CardImpl, *,
     #    can correlate to this exact occurrence, and after the cast history is
     #    recorded so a cast-count reader sees this spell counted.
     _fire_spell_cast_event(game, player, card)
-    _place_deferred_cast_triggers(game, stack_obj, deferred)
     return stack_obj
 
 
@@ -867,7 +767,6 @@ def cast_spell_free(
     from_zone: Zone,
     *,
     mode: CastMode = CastMode.NORMAL,
-    mana_value_limit: int | None = None,
 ) -> StackObject:
     """Cast *card* without paying its mana cost, using the stack.
 
@@ -956,12 +855,6 @@ def cast_spell_free(
                 f"{player.name!r}'s graveyard"
             )
 
-    card.cast_from_zone = from_zone
-    card.x_value = 0
-    if hasattr(card, 'choose_cast_face'):
-        card.choose_cast_face(game, player, mana_value_limit=mana_value_limit)
-    if mana_value_limit is not None and card.mana_cost.cmc > mana_value_limit:
-        raise CastingError('Spell exceeds the remaining mana-value allowance')
     # Ensure controller is set
     card.controller = player
     if card.owner is None:
@@ -991,6 +884,7 @@ def cast_spell_free(
     stack_zone = player.zones[Zone.STACK]
     source_zone_container.remove(card)
     stack_zone.add(card)
+    _announce_x(game, player, card, free=True)
 
     # 3. Choose targets (with rollback on failure)
     try:
@@ -1039,7 +933,6 @@ def cast_spell_free(
     )
 
     # 4. Call on_cast hook
-    card.was_cast = True
     card.on_cast(game)
 
     # 4b. The free-cast spell has become cast (rule 601.2i); record it in the
@@ -1082,8 +975,6 @@ def cast_spell_free(
 
     stack_obj.on_resolve = _on_resolve
     game.stack.push(stack_obj)
-    from engine.ward import trigger_ward
-    trigger_ward(game, stack_obj)
 
     # 6. The free-cast spell is on the stack (rule 601.2i complete). Fire the
     #    cast-triggered event, exactly as on the normal path — a spell cast
@@ -1189,12 +1080,6 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
 
     # Card must be in hand
     hand = game.get_hand(player)
-    origin = Zone.HAND
-    if not hand.contains(land_card):
-        permission = _permission(game, player, land_card)
-        if permission:
-            origin = permission['zone']
-            hand = next((p.zones[origin] for p in game.players if p.zones[origin].contains(land_card)), hand)
     if not hand.contains(land_card):
         raise CastingError(
             f"Cannot play land {land_card.name!r} — card not in hand"
@@ -1213,7 +1098,7 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
     # Move from hand to battlefield via move_to_zone, which fires
     # ENTERS_BATTLEFIELD and registers triggers/replacement effects.
     from engine.zones import move_to_zone
-    move_to_zone(game, land_card, origin, Zone.BATTLEFIELD)
+    move_to_zone(game, land_card, Zone.HAND, Zone.BATTLEFIELD)
 
     # Decrement land plays
     player.land_plays_remaining -= 1

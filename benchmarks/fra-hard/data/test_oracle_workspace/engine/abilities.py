@@ -144,42 +144,6 @@ class LoyaltyAbilityInstance:
 _loyalty_activated_this_turn: set[tuple[int, int]] = set()
 
 
-def borrowed_abilities(donor, source, *, available=None):
-    """Rebind self references in an ability's closures to its new source."""
-    import copy
-    import types
-
-    def bind(value):
-        if value is donor:
-            return source
-        if isinstance(value, types.MethodType) and value.__self__ is donor:
-            return types.MethodType(value.__func__, source)
-        if isinstance(value, types.FunctionType):
-            def cell(item):
-                return (lambda: item).__closure__[0]
-            closure = tuple(cell(bind(c.cell_contents)) for c in value.__closure__) if value.__closure__ else None
-            defaults = tuple(bind(item) for item in value.__defaults__) if value.__defaults__ else None
-            result = types.FunctionType(value.__code__, value.__globals__, value.__name__, defaults, closure)
-            result.__kwdefaults__ = value.__kwdefaults__
-            return result
-        return value
-
-    ordinary = donor.get_activated_abilities()
-    mana = getattr(donor, 'get_mana_abilities', lambda: [])()
-    for original in ordinary + [item for item in mana if item not in ordinary]:
-        ability = copy.copy(original)
-        for name in ('cost', 'effect', 'mana_produced', 'targeting', 'can_activate'):
-            if hasattr(ability, name):
-                setattr(ability, name, bind(getattr(ability, name)))
-        original_cost = ability.cost
-        def cost(game, permanent, original_cost=original_cost, available=available):
-            if available is not None and not available(game):
-                return False
-            return original_cost(game, permanent)
-        ability.cost = cost
-        yield ability
-
-
 def clear_loyalty_tracking() -> None:
     """Clear the loyalty-activated-this-turn tracker.
 
@@ -372,8 +336,6 @@ def _activate_regular_ability(
         else:
             stack_obj.on_resolve = ability.effect
         game.stack.push(stack_obj)
-        from engine.ward import trigger_ward
-        trigger_ward(game, stack_obj)
 
 
 def _activate_loyalty_ability(
@@ -458,5 +420,3 @@ def _activate_loyalty_ability(
     else:
         stack_obj.on_resolve = ability.effect
     game.stack.push(stack_obj)
-    from engine.ward import trigger_ward
-    trigger_ward(game, stack_obj)

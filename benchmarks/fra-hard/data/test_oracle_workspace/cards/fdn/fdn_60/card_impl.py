@@ -47,7 +47,7 @@ class GutlessPlunderer(Creature):
             return
 
         # Check raid condition
-        # ENGINE LIMITATION: no attacked_this_turn tracking; always triggers
+        # Raid: the engine records a declared attack on the attacking player.
         attacked = getattr(controller, "attacked_this_turn", False)
         if not attacked:
             return
