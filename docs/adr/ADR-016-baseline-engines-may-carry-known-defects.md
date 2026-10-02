@@ -14,7 +14,7 @@ Oracle validation could not catch this, because each Test Oracle Workspace engin
 
 A benchmark's baseline engine and FDN implementations may carry Known Defects, either inherited (found in an engine or implementation) or seeded on purpose; Seeded Defects are fixed per benchmark version, and agents may fix either kind.
 The Audited Tests of the two regression dimensions assert rules-correct behavior even where the baseline fails them.
-Each regression dimension reports its raw pass/total against two reference points: the Baseline Score (the unmodified Workspace's grade) and the Known-Best Score (a perfect score).
+The FDN and engine regression Audited Tests are pooled into one Combined Regression, reported as raw pass/total against two reference points: the Baseline Score (the unmodified Workspace's grade) and the Known-Best Score (a perfect score). The two regression dimensions keep their own raw pass/total for diagnosis.
 
 A Known-Best Workspace, separate from every benchmark, holds the Known-Best Engine and the FDN implementations with every Known Defect fixed, and the full regression Audited Tests.
 A benchmark is built by porting a copy of it; its Test Oracle Workspace engine starts from that copy, and its baseline engine is that copy plus its Known Defects.
@@ -36,5 +36,6 @@ Released benchmarks never take the fix.
 
 - **Fix every defect in each benchmark's baseline engine**: Rejected, because a locked Workspace cannot change and new defects keep being found; it also removes engine repair from what the benchmark can measure.
 - **Make regression tests convention-agnostic, so any engine convention passes**: Rejected as the general rule, because a dedicated rules test is then impossible and correct fixes earn nothing; individual tests still avoid pinning conventions unrelated to the behavior they check.
+- **Separate reference scores per regression dimension**: Rejected, because an engine defect often fails FDN Audited Tests, so attributing defects to dimensions needs per-test bookkeeping for little difference in what a reader learns.
 - **Hold ledger-disputed failures as pending until adjudicated**: Rejected, because it needs per-run grading state; a wrong graded test is instead fixed while the benchmark is in Benchmarking and every run is regraded.
 - **Use each benchmark's Test Oracle Workspace engine as its known-best engine**: Rejected, because the oracle engines are benchmark-specific copies carrying the same inherited defects, and a fix would have to be found and made separately in each one.

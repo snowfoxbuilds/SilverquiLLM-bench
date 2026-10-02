@@ -47,8 +47,8 @@ Copies are hard copies, so each benchmark stays self-contained after the Known-B
 
 A Known Defect may sit in the baseline engine or in an FDN implementation; agents may fix either, and FDN Card Regression rewards an FDN fix the way Engine Regression rewards an engine fix (grilling 2026-10-02).
 Each benchmark lists its Known Defects in a host-only `data/known_defects.json` (grilling 2026-10-02).
-An entry names the defect, its rule citation, its component (`engine` or `fdn`), whether it is `inherited` or `seeded`, and the Audited Tests it makes fail.
-Engine and FDN Known Defects are scored separately: each counts toward its own regression dimension's Baseline Score and fixed count (grilling 2026-10-02).
+An entry names the defect, its rule citation, whether it is `inherited` or `seeded`, and the Audited Tests it makes fail.
+Reference scores pool the FDN and engine Audited Tests into one Combined Regression, so an entry needs no component and its failing tests may sit in either suite (grilling 2026-10-02).
 Seeded Defects are fixed per benchmark version: they are part of the Workspace and freeze with it, so every run on that version sees the same engine.
 
 Nothing constrains what the Reference Tests say about a Known Defect: they may reveal it, miss it, or encode it, because tests are not instructions.

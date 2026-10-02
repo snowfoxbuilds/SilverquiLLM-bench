@@ -58,12 +58,13 @@ Audited tests judge card behavior by simulating gameplay (Implementation-Agnosti
 
 ### Regression reference scores
 
-For benchmarks built from the Known-Best Workspace (smoke, fra-hard, and later), each regression dimension reports its raw pass/total next to two reference points (grilling 2026-10-02):
+For benchmarks built from the Known-Best Workspace (smoke, fra-hard, and later), the FDN Card Regression and Engine Regression Audited Tests are pooled into one Combined Regression, reported as its raw pass/total next to two reference points (grilling 2026-10-02).
+Each regression dimension keeps its own raw pass/total for diagnosis.
 
 | Metric | Definition |
 | --- | --- |
 | Raw score | Audited Tests passed / total against the agent's final engine — the score itself |
-| Baseline Score | The unmodified Workspace's pass/total, from the baseline reference grade under the same grading-inputs digest |
+| Baseline Score | The unmodified Workspace's pass/total, from the baseline reference grade for the same grading inputs and Workspace |
 | Known-Best Score | Always total/total: the Test Oracle Workspace passes every regression Audited Test |
 | Fixed | Audited Tests that fail on the baseline and pass for the agent |
 | Regressed | Audited Tests that pass on the baseline and fail for the agent |

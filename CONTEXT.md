@@ -64,7 +64,7 @@ _Avoid_: "foundation cards" (use "Foundations cards" or "base set")
 
 **Baseline Score**
 
-The score an unmodified benchmark Workspace earns on one regression dimension's Audited Tests (grilling 2026-10-02).
+The Combined Regression score an unmodified benchmark Workspace earns (grilling 2026-10-02).
 It is below the Known-Best Score by exactly the tests the benchmark's Known Defects make fail, and it changes whenever those Audited Tests change.
 
 _Avoid_: "zero point", "floor" (an agent can score below it by regressing)
@@ -139,6 +139,13 @@ Retired with the MSH benchmark: the checkpoint/capability-DAG design served boun
 
 _Avoid_: "Output Snapshot" (runner-owned 60-second Git commits), "snapshot" alone
 
+**Combined Regression**
+
+The pooled FDN Card Regression and Engine Regression Audited Tests of a benchmark, reported as one raw pass/total with its Baseline Score, Known-Best Score, Fixed and Regressed counts (grilling 2026-10-02).
+The two regression dimensions it pools keep their own raw pass/total for diagnosis.
+
+_Avoid_: "regression score" alone (ambiguous with either dimension), "total regression"
+
 **Complexity Tier**
 
 Classification of card difficulty: trivial (1×), simple (2×), medium (3×), complex (4×), expert (5×). Assigned via automated heuristics. Recorded per card, but v1 leaderboard scoring is unweighted (raw pass/total) — complexity weighting is not applied in v1. Canonical key name in code and JSON is `complexity_tier` (not `tier`).
@@ -184,7 +191,7 @@ _Avoid_: "engine modification" (neutral — use "engine extension" to imply addi
 
 **Engine Regression**
 
-Post-run evaluation dimension: Audited Engine Tests run against the agent's final Writable Engine. Detects whether engine extensions broke fundamental game mechanics (mana, stack, combat, state-based actions, etc.) and whether Known Defects were fixed. Reported against the benchmark's Baseline Score and Known-Best Score (grilling 2026-10-02). Separate from FDN Card Regression — an agent could pass all FDN card tests but fail engine tests if card-level workarounds corrupt internal state.
+Post-run evaluation dimension: Audited Engine Tests run against the agent's final Writable Engine. Detects whether engine extensions broke fundamental game mechanics (mana, stack, combat, state-based actions, etc.) and whether Known Defects were fixed. Pooled into Combined Regression (grilling 2026-10-02). Separate from FDN Card Regression — an agent could pass all FDN card tests but fail engine tests if card-level workarounds corrupt internal state.
 
 _Avoid_: "engine test" alone (ambiguous — say "Audited Engine Tests" or "Engine Reference Tests")
 
@@ -212,7 +219,7 @@ _Avoid_: "rejected run", "invalid run" (the record stays valid evidence), "filte
 
 **FDN Card Regression**
 
-Post-run evaluation dimension: FDN audited tests (`tests/audited/fdn/`) run against pre-filled FDN `card_impl.py` files using the agent's final Writable Engine. Detects whether engine extensions broke existing card behavior and whether Known Defects were fixed. Reported against the benchmark's Baseline Score and Known-Best Score (grilling 2026-10-02). Host-side only; not staged into the Workspace. Distinct from FDN Reference Tests.
+Post-run evaluation dimension: FDN audited tests (`tests/audited/fdn/`) run against pre-filled FDN `card_impl.py` files using the agent's final Writable Engine. Detects whether engine extensions broke existing card behavior and whether Known Defects were fixed. Pooled into Combined Regression (grilling 2026-10-02). Host-side only; not staged into the Workspace. Distinct from FDN Reference Tests.
 
 _Avoid_: "regression check" (deprecated — was per-card sequential re-run), "FDN tests" alone (ambiguous — specify Reference vs Card Regression)
 
@@ -305,7 +312,7 @@ _Avoid_: "reference engine", "canonical engine" (the canonical engine is a bench
 
 **Known-Best Score**
 
-The score the Known-Best Engine earns on one regression dimension's Audited Tests: always a perfect score, which validates that every such test is passable (grilling 2026-10-02).
+The Combined Regression score the Known-Best Engine earns: always a perfect score, which validates that every regression Audited Test is passable (grilling 2026-10-02).
 
 _Avoid_: "max score", "oracle score"
 
