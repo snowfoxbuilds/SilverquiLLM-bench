@@ -315,6 +315,11 @@ def declare_attackers_step(game: GameState, attackers: Any = None) -> None:
         if Keyword.VIGILANCE not in kw:
             attacker.is_tapped = True
 
+    # Raid and similar abilities ask whether a player attacked this turn: a
+    # player has attacked once they declare at least one attacker (rule 508.1).
+    if declared:
+        game.active_player.attacked_this_turn = True
+
     # All attackers are declared simultaneously (rule 508.1); only after the
     # whole set is registered do "whenever ~ attacks" abilities go on the stack
     # (rule 508.2), so a trigger reading "each other attacking creature"

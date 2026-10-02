@@ -170,6 +170,8 @@ class GameState:
             self.priority_player_index = self.active_player_index
             self.phase = _TURN_SEQUENCE[0][0]
             self.step = _TURN_SEQUENCE[0][1]
+            for player in self.players:
+                player.attacked_this_turn = False
 
             # The active player has changed. Re-derive continuous effects so a
             # turn-dependent buff ("during your turn ...", e.g. Quick-Draw
