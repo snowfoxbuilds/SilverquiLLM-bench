@@ -378,6 +378,8 @@ def move_to_zone(
             ),
         )
         if is_creature and dest_zone == Zone.GRAVEYARD:
+            # "Dies" means put into a graveyard from the battlefield (700.4).
+            game.creature_died_this_turn = True
             game.trigger_manager.fire_event(
                 game,
                 CreatureDiesTriggeredEvent(

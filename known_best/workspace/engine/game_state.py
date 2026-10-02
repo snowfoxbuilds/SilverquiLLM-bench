@@ -92,6 +92,9 @@ class GameState:
         # Each object's snapshot from its most recent departure from the
         # battlefield, keyed by ``object_id`` (see engine.last_known).
         self.last_known: dict[int, LastKnownInformation] = {}
+        # Whether a creature died this turn (morbid, rule 700.4); cleared in
+        # the cleanup step.
+        self.creature_died_this_turn: bool = False
 
     # ------------------------------------------------------------------
     # Player properties
