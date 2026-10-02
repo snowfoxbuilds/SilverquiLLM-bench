@@ -16,12 +16,15 @@ from pathlib import Path
 import pytest
 
 from silverquillm.evaluator import (
+    FullEvalResult,
     _eval_engine,
     _eval_target_cards,
     evaluate_run,
+    fdn_target_card_ids,
     resolve_eval_paths,
 )
 from silverquillm.karn.benchmark import load_benchmark
+from silverquillm.karn.execution import _scores
 
 REPO = Path(__file__).resolve().parents[1]
 SMOKE_WS = REPO / "benchmarks/smoke/workspace"
@@ -56,6 +59,29 @@ class TestSosResolutionUnchanged:
         p = resolve_eval_paths(REPO / "benchmarks" / "smoke", "fdn")
         assert p.audited_target == REPO / "benchmarks/smoke/data/tests/audited/fdn"
         assert p.test_utils == REPO / "benchmarks/smoke/workspace/test_utils.py"
+
+
+SMOKE_TARGETS = {"fdn_129", "fdn_205", "fdn_232"}
+
+
+class TestFdnTargetExclusion:
+    """An FDN target card is graded by card correctness only, never by FDN Card Regression."""
+
+    def test_fdn_target_card_ids(self) -> None:
+        audited = REPO / "benchmarks/smoke/data/tests/audited"
+        assert fdn_target_card_ids("fdn", ["129", "205", "232"], audited) == SMOKE_TARGETS
+
+    @pytest.mark.parametrize("name", ["hob-medium", "sos", "fra-hard"])
+    def test_no_fdn_targets_elsewhere(self, name: str) -> None:
+        benchmark = load_benchmark(REPO, name)
+        audited = benchmark.root / "data/tests/audited"
+        assert fdn_target_card_ids(benchmark.target_set, benchmark.cards, audited) == frozenset()
+
+    def test_fdn_regression_population_excludes_smoke_targets(self) -> None:
+        scores = _scores(FullEvalResult(), load_benchmark(REPO, "smoke"))
+        population = set(scores["fdn_regression"]["coverage"]["population_cards"])
+        assert population
+        assert not population & SMOKE_TARGETS
 
 
 class TestEngineSuiteResolution:
@@ -117,7 +143,7 @@ class TestEvaluateRun:
         assert result.sos_results["fdn_129"].tests_passed >= 8
         assert result.sos_results["fdn_129"].tests_failed == 0
         assert result.sos_results["fdn_205"].tests_total > 0
-        assert result.fdn_results
+        assert not set(result.fdn_results) & SMOKE_TARGETS
         assert result.engine_result.tests_total > 0
 
     def test_missing_workspace_final_is_reported_not_crashed(self, tmp_path: Path) -> None:

@@ -44,6 +44,7 @@ import uuid
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from collections.abc import Collection, Iterable
 from typing import Protocol
 
 from silverquillm import untrusted_git
@@ -1246,6 +1247,17 @@ def _target_card_id(target_set: str, collector_number: str, audited_target: Path
     return stripped
 
 
+def fdn_target_card_ids(
+    target_set: str, target_cards: Iterable[str], audited_root: Path
+) -> frozenset[str]:
+    """Target cards from the FDN set; their suites grade card correctness only."""
+    return frozenset(
+        _target_card_id("fdn", number, audited_root / "fdn")
+        for card_set, number in resolve_target_cards(target_set, list(target_cards))
+        if card_set == "fdn"
+    )
+
+
 def _eval_target_cards(
     overlay: Path,
     target_set: str,
@@ -1273,15 +1285,16 @@ def _eval_audited_dir(
     timeout: int,
     *,
     test_utils: Path | None,
+    exclude: Collection[str] = frozenset(),
 ) -> dict[str, CardResult]:
     """Dimension 2: every card with an audited suite under *audited_dir* graded
-    against the agent's tree (FDN regression)."""
+    against the agent's tree (FDN regression), except the cards in *exclude*."""
     results: dict[str, CardResult] = {}
     if not audited_dir.is_dir():
         return results
     for card_dir in sorted(audited_dir.iterdir()):
         test_file = card_dir / "tests.py"
-        if not card_dir.is_dir() or not test_file.exists():
+        if not card_dir.is_dir() or not test_file.exists() or card_dir.name in exclude:
             continue
         results[card_dir.name] = _grade_audited_card(
             card_dir.name, test_file, overlay, timeout, test_utils=test_utils, card_set=audited_dir.name,
@@ -1331,6 +1344,9 @@ def evaluate_run(
         # Dimension 2 — FDN card regression.
         result.fdn_results = _eval_audited_dir(
             overlay, paths.audited_fdn, timeout, test_utils=paths.test_utils,
+            exclude=fdn_target_card_ids(
+                benchmark.target_set, benchmark.cards, paths.audited_fdn.parent
+            ),
         )
         # Dimension 3 — engine regression (authoritative suite + support, agent engine).
         result.engine_result = _eval_engine(

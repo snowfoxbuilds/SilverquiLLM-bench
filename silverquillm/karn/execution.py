@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from silverquillm.benchmark_targets import target_cards
-from silverquillm.evaluator import _target_card_id
+from silverquillm.evaluator import _target_card_id, fdn_target_card_ids
 from silverquillm.queue_state import _write_atomically
 
 from .baseline import BaselineStore, baseline_reference_grade, combined_regression
@@ -200,6 +200,8 @@ def _scores(evaluated, benchmark) -> dict:
                 {path.name for path in directory.iterdir() if (path / "card_spec.json").is_file()}
                 if directory.is_dir()
                 else set()
+            ) - fdn_target_card_ids(
+                benchmark.target_set, benchmark.cards, benchmark.root / "data/tests/audited"
             )
 
         def case_counts(value):

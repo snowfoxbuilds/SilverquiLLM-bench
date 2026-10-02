@@ -24,6 +24,7 @@ from silverquillm.evaluator import (
     _eval_audited_dir,
     _eval_engine,
     _eval_target_cards,
+    fdn_target_card_ids,
     resolve_eval_paths,
 )
 from silverquillm.known_defects import (
@@ -70,7 +71,13 @@ def audited_outcomes(benchmark, workspace: Path, dimension: str, *, timeout: int
             )
         else:
             results = _eval_audited_dir(
-                overlay, paths.audited_fdn, timeout, test_utils=paths.test_utils
+                overlay,
+                paths.audited_fdn,
+                timeout,
+                test_utils=paths.test_utils,
+                exclude=fdn_target_card_ids(
+                    benchmark.target_set, benchmark.cards, paths.audited_fdn.parent
+                ),
             )
     finally:
         shutil.rmtree(overlay_root, ignore_errors=True)

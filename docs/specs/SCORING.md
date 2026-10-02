@@ -27,6 +27,7 @@ Measures how well the agent implemented the target cards.
 ### Dimension 2: FDN Card Regression
 
 Measures whether the agent's engine extensions broke existing card behavior. FDN audited tests (`tests/audited/fdn/`) are run against the pre-filled FDN `card_impl.py` files using the agent's final engine.
+A benchmark target card from the FDN set (smoke's targets) is graded by target-card correctness only and is left out of FDN Card Regression, so a stub target never counts as a regression (grilling 2026-10-02).
 
 | Metric | Definition |
 | --- | --- |
