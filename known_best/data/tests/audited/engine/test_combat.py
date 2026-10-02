@@ -41,7 +41,6 @@ from engine.decisions import Decision, GameRef
 from engine.events import AttacksTriggeredEvent, DealsDamageTriggeredEvent
 from engine.game_state import GameState
 from engine.intent_player import DeterministicPlayer, Intent
-from engine.last_known import last_known_info
 from engine.triggers import TriggerRegistration
 from engine.types import Keyword, Zone
 
@@ -104,6 +103,8 @@ def _damage_marked(game: GameState, creature: Creature) -> int:
     combat damage killed it (rules 400.7, 603.10a)."""
     if any(game.get_battlefield(p).contains(creature) for p in game.players):
         return creature.damage_marked
+    from engine.last_known import last_known_info
+
     return last_known_info(game, creature).damage_marked
 
 
