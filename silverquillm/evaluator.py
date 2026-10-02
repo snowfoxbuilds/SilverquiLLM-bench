@@ -41,10 +41,10 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from collections.abc import Collection, Iterable
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from collections.abc import Collection, Iterable
 from typing import Protocol
 
 from silverquillm import untrusted_git

@@ -20,7 +20,7 @@ from .known_defect_checks import oracle_problems, workspace_problems
 
 REPO = Path(__file__).resolve().parents[1]
 KNOWN_BEST = REPO / "known_best"
-PORTED = ("smoke",)
+PORTED = ("smoke", "fra-hard")
 _CACHES = ["__pycache__", ".pytest_cache"]
 
 
@@ -43,6 +43,12 @@ def test_unmodified_workspace_fails_exactly_the_manifest(name: str, dimension: s
 @pytest.mark.parametrize("name", PORTED)
 def test_oracle_passes_every_target_audited_test(name: str) -> None:
     problems = oracle_problems(load_benchmark(REPO, name), "card_correctness")
+    assert problems == [], "\n".join(problems)
+
+
+@pytest.mark.parametrize("dimension", REGRESSION_DIMENSIONS)
+def test_fra_hard_oracle_passes_every_regression_audited_test(dimension: str) -> None:
+    problems = oracle_problems(load_benchmark(REPO, "fra-hard"), dimension)
     assert problems == [], "\n".join(problems)
 
 
