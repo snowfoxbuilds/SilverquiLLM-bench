@@ -15,6 +15,7 @@ from engine.abilities import AbilityError
 from engine.card import Creature, Planeswalker
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
+from engine.last_known import last_known_info
 from engine.types import Keyword, ManaCost, ManaType, Zone
 from engine.zones import move_to_zone
 from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
@@ -78,7 +79,9 @@ class TestHeartfireImmolatorAbility:
         immo.modified_power = 5  # e.g. prowess pump
         _activate_targeting(game, p1, immo, target)
         resolve_stack(game)
-        assert target.damage_marked == 5
+        # Five damage kills the 2/3, so read it as it last existed (rule 603.10a).
+        assert not _on_battlefield(game, target)
+        assert last_known_info(game, target).damage_marked == 5
 
     def test_target_captured_on_stack(self):
         game, p1, _p2, immo, target = self._setup()

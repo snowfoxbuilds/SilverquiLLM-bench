@@ -74,7 +74,13 @@ def snapshot(card: Any, zone: Zone) -> LastKnownInformation:
     )
 
 
+def lki_key(card: Any) -> int:
+    """The ``GameState.last_known`` key for *card*: its ``object_id``, or its
+    identity for a duck-typed object without one."""
+    return getattr(card, "object_id", None) or id(card)
+
+
 def last_known_info(game: GameState, card: Any) -> LastKnownInformation | None:
     """Return *card*'s snapshot from its most recent departure from the
     battlefield, or ``None`` if it has never left."""
-    return game.last_known.get(card.object_id)
+    return game.last_known.get(lki_key(card))

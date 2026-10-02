@@ -41,6 +41,7 @@ from engine.decisions import Decision, GameRef
 from engine.events import AttacksTriggeredEvent, DealsDamageTriggeredEvent
 from engine.game_state import GameState
 from engine.intent_player import DeterministicPlayer, Intent
+from engine.last_known import last_known_info
 from engine.triggers import TriggerRegistration
 from engine.types import Keyword, Zone
 
@@ -96,6 +97,14 @@ def _make_game(
     for p in (p1, p2):
         p.set_baseline(Intent(pattern=GameRef()))
     return GameState([p1, p2])
+
+
+def _damage_marked(game: GameState, creature: Creature) -> int:
+    """Damage marked on *creature*, as it last existed on the battlefield if
+    combat damage killed it (rules 400.7, 603.10a)."""
+    if any(game.get_battlefield(p).contains(creature) for p in game.players):
+        return creature.damage_marked
+    return last_known_info(game, creature).damage_marked
 
 
 def _place_on_battlefield(
@@ -601,7 +610,7 @@ class TestCombatDamage:
         combat_damage_step(game)
 
         # First striker deals 3 damage to blocker (lethal for 3 toughness)
-        assert blocker.damage_marked >= 3
+        assert _damage_marked(game, blocker) >= 3
         # After SBAs, blocker dies — first_striker should not have damage
         # from normal damage sub-step (blocker was removed by SBAs)
         # The blocker's damage-back only happens in the normal damage step
@@ -654,7 +663,7 @@ class TestCombatDamage:
         combat_damage_step(game)
 
         # Trampler assigns lethal (2) to blocker, excess (3) to player
-        assert blocker.damage_marked >= 2
+        assert _damage_marked(game, blocker) >= 2
         assert game.non_active_player.life == 17
 
     def test_trample_with_deathtouch(self) -> None:
@@ -674,7 +683,7 @@ class TestCombatDamage:
         combat_damage_step(game)
 
         # Deathtouch lethal = 1, so 1 to blocker and 4 to player
-        assert blocker.damage_marked >= 1
+        assert _damage_marked(game, blocker) >= 1
         assert game.non_active_player.life == 16
 
     def test_lifelink_gains_life(self) -> None:
@@ -734,7 +743,7 @@ class TestCombatDamage:
         combat_damage_step(game)
 
         # Without trample, all 10 damage goes to blocker
-        assert small.damage_marked == 10
+        assert _damage_marked(game, small) == 10
         # No damage to defending player
         assert game.non_active_player.life == 20
 
@@ -756,8 +765,8 @@ class TestCombatDamage:
         combat_damage_step(game)
 
         # b1 gets lethal (2), b2 gets remaining (3)
-        assert b1.damage_marked == 2
-        assert b2.damage_marked == 3
+        assert _damage_marked(game, b1) == 2
+        assert _damage_marked(game, b2) == 3
         assert game.non_active_player.life == 20  # no trample
 
 
@@ -826,8 +835,8 @@ class TestCombatIntegration:
         combat_damage_step(game)
 
         # Attacker dealt 3 to blocker, blocker dealt 2 to attacker
-        assert blocker.damage_marked == 3
-        assert attacker.damage_marked == 2
+        assert _damage_marked(game, blocker) == 3
+        assert _damage_marked(game, attacker) == 2
         # Blocker died (3 >= 2 toughness), so SBAs should have moved it
         gy = game.non_active_player.zones[Zone.GRAVEYARD]
         assert gy.contains(blocker)
@@ -877,7 +886,7 @@ class TestCombatIntegration:
         combat_damage_step(game)
 
         # Trample: 2 to blocker (lethal), 3 to player
-        assert flyer_blocker.damage_marked >= 2
+        assert _damage_marked(game, flyer_blocker) >= 2
         assert game.non_active_player.life == 17
         # Lifelink: gains 5 life total (2 to blocker + 3 to player)
         assert game.active_player.life == 20

@@ -189,7 +189,13 @@ class TriggerManager:
         # target selection, and the ActivationContext — so a source that changed
         # hands after registration triggers, orders, and resolves under its new
         # controller.
+        # A leaves-the-battlefield ability's source is already a new object
+        # (rule 400.7), so its controller is read as it last existed (603.10a).
+        last_known = getattr(event, "last_known", None)
+
         def _fire_controller(trigger: TriggerRegistration) -> Any:
+            if last_known is not None and last_known.card is trigger.source:
+                return last_known.controller or trigger.controller
             return getattr(trigger.source, "controller", None) or trigger.controller
 
         active_player = game.active_player
@@ -283,3 +289,41 @@ class TriggerManager:
     def clear(self) -> None:
         """Remove all registered triggers."""
         self._triggers.clear()
+
+
+def register_delayed_trigger(
+    game: GameState,
+    event_type: type[TriggeredEvent],
+    controller: Player,
+    effect: Callable[..., None],
+    *,
+    condition: Callable[..., bool] | None = None,
+    name: str = "Delayed trigger",
+) -> None:
+    """Create a delayed triggered ability (rule 603.7).
+
+    It triggers once, the next time an *event_type* event satisfies
+    *condition*, and then ceases to exist (603.7c). Its source is a marker
+    object of its own, so it outlives the object whose ability created it
+    (603.7d). *effect* follows the untargeted :class:`TriggerRegistration`
+    contract: ``effect(game)`` or ``effect(game, controller)``.
+    """
+    from engine.card import CardImpl
+
+    marker = CardImpl(name=name, owner=controller)
+
+    def _once(game: GameState, event: TriggeredEvent) -> bool:
+        if condition is not None and not condition(game, event):
+            return False
+        game.trigger_manager.unregister(marker)
+        return True
+
+    game.trigger_manager.register(
+        TriggerRegistration(
+            event_type=event_type,
+            condition=_once,
+            effect=effect,
+            source=marker,
+            controller=controller,
+        )
+    )
