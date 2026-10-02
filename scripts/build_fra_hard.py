@@ -2,6 +2,12 @@
 
 Run ``python3 scripts/build_fra_hard.py`` from any directory. Existing oracle
 implementations and hidden tests are never overwritten.
+
+The Workspace is hob-medium's; the Test Oracle Workspace and the hidden FDN
+Audited Tests and Audited Engine Tests are seeded from the Known-Best Workspace
+(``known_best/``). The oracle's engine extensions and the Workspace's three
+convention-independent Reference Test rewrites are one-time edits recorded in
+git, not regenerated, so a re-run on the committed tree is a no-op.
 """
 
 from __future__ import annotations
@@ -16,6 +22,10 @@ from urllib.request import urlopen
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / "benchmarks/fra-hard"
 BASE = ROOT / "benchmarks/hob-medium"
+KNOWN_BEST = ROOT / "known_best"
+# The oracle takes these from the Known-Best Workspace, everything else from the Workspace.
+KNOWN_BEST_ORACLE_ITEMS = ("engine", "cards/fdn", "cards/__init__.py", "cards/loader.py",
+                           "cards/registry.py", "cards/py.typed")
 TARGETS = {"fra": (1, 49, 64, 159, 179), "hob": (33, 76, 86, 167, 174)}
 RULEBOOK_URL = "https://media.wizards.com/2026/downloads/MagicCompRules%2020260925.txt"
 FIELDS = ("name", "mana_cost", "type_line", "oracle_text", "colors", "keywords",
@@ -59,6 +69,34 @@ def stage_test_helpers(workspace: Path, oracle: Path) -> None:
     for destination in (workspace, oracle):
         (destination / "test_utils.py").write_text(source)
         (destination / "test_utils.md").write_text(documentation)
+
+
+def replace_once(text: str, old: str, new: str) -> str:
+    if text.count(old) != 1:
+        raise ValueError(f"Baseline AGENTS.md changed; review the FRA adaptation of {old[:40]!r}")
+    return text.replace(old, new)
+
+
+def editable_reference_tests(orientation: str) -> str:
+    """Drop the read-only rule: Reference Tests are editable and may be wrong (ADR-016)."""
+    orientation = replace_once(
+        orientation,
+        "The engine may have deficiencies and bugs. It's your job",
+        "The engine may have deficiencies and bugs, and so may the existing tests. It's your job",
+    )
+    orientation = replace_once(
+        orientation,
+        "   not move or rename card directories.\n\n"
+        "2. **Existing tests are read-only** — Do not modify, add to, or delete files in\n"
+        "   `engine_tests/`, and do not modify or delete the FDN tests at\n"
+        "   `cards/fdn/fdn_*/tests.py` (read them as examples). Your own FRA and HOB tests\n"
+        "   belong at `cards/{set_code}/{set_code}_<N>/tests.py`.\n",
+        "   not move or rename card directories. Your own FRA and HOB tests belong at\n"
+        "   `cards/{set_code}/{set_code}_<N>/tests.py`.\n",
+    )
+    for number in range(3, 7):
+        orientation = replace_once(orientation, f"\n{number}. **", f"\n{number - 1}. **")
+    return orientation
 
 
 def stub(spec: dict) -> str:
@@ -124,7 +162,7 @@ def main() -> None:
         "Keep each class in its assigned card_impl.py with its provided name. card_spec.json contains the complete "
         "card specification, including card_faces for cards with multiple components. Implement the whole card.\n\n"
         "You may change engine/ freely. Use the Player Query / Player Decision protocol for choices. "
-        "Your tests belong beside target implementations. Existing engine and FDN tests are read-only. "
+        "Your tests belong beside target implementations. "
         "Run `python3 -m pytest` from the workspace root. Consult RULEBOOK.txt for rules and test_utils.md for test APIs.\n")
     orientation = (BASE / "workspace/AGENTS.md").read_text()
     orientation = orientation.replace(" and each target card's `instructions.md`", " and each target card's `card_spec.json`")
@@ -134,6 +172,7 @@ def main() -> None:
     orientation = orientation.replace("cards/hob/hob_{collector_number}/tests.py", "cards/{set_code}/{set_code}_{collector_number}/tests.py")
     orientation = orientation.replace("from cards.hob.hob_<N>.card_impl import <ClassName>",
                                       "from cards.fra.fra_<N>.card_impl import <ClassName>\nfrom cards.hob.hob_<N>.card_impl import <ClassName>")
+    orientation = editable_reference_tests(orientation)
     (workspace / "AGENTS.md").write_text(orientation)
     (workspace / "PROJECT_MAP.md").write_text(
         "# Workspace layout\n\nengine/ contains the editable game engine; cards/fdn/ contains reference cards. "
@@ -143,15 +182,20 @@ def main() -> None:
         "instructions.md and AGENTS.md describe the task. test_utils.py and test_utils.md provide test helpers. "
         "RULEBOOK.txt contains the Comprehensive Rules; skills/grep-rulebook explains rules lookup.\n")
     oracle = DEST / "data/test_oracle_workspace"
-    copy_new(workspace, oracle)
-    for name in ("loader.py", "registry.py"):
-        copy_new(workspace / f"cards/{name}", oracle / f"cards/{name}")
+    for item in KNOWN_BEST_ORACLE_ITEMS:
+        copy_new(KNOWN_BEST / "workspace" / item, oracle / item)
+    for item in workspace.iterdir():
+        if item.name not in ("cards", "__pycache__", ".pytest_cache"):
+            copy_new(item, oracle / item.name)
+    for item in (workspace / "cards").iterdir():
+        if f"cards/{item.name}" not in KNOWN_BEST_ORACLE_ITEMS:
+            copy_new(item, oracle / "cards" / item.name)
+    for name in ("AGENTS.md", "instructions.md"):
+        (oracle / name).write_text((workspace / name).read_text())
     stage_test_helpers(workspace, oracle)
-    copy_new(BASE / "data/tests/audited/fdn", DEST / "data/tests/audited/fdn")
+    for suite in ("fdn", "engine"):
+        copy_new(KNOWN_BEST / "data/tests/audited" / suite, DEST / "data/tests/audited" / suite)
     copy_new(DEST / "data/tests/audited/fdn", oracle / "tests/audited/fdn")
-    for name in ("fdn_regression_coverage.json", "fdn_audit_migration.json"):
-        if (BASE / "data" / name).exists():
-            copy_new(BASE / "data" / name, DEST / "data" / name)
     manifest = {
         str(path.relative_to(workspace)): hashlib.sha256(path.read_bytes()).hexdigest()
         for directory in ("engine", "engine_tests", "cards/fdn")
@@ -165,6 +209,8 @@ def main() -> None:
     write_json(DEST / "data/provenance.json", {
         "candidate_baseline": "benchmarks/hob-medium/workspace",
         "candidate_baseline_files": manifest,
+        "regression_suites_source": "known_best/data/tests/audited",
+        "oracle_engine_base": "known_best/workspace",
         "test_helpers": {
             "derived_from": "benchmarks/hob-medium/workspace/test_utils.py",
             "adaptation": "resolve_stack checks state-based actions before resolving the stack",
