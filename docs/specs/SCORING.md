@@ -73,6 +73,51 @@ There is no normalized score: an agent can land below its Baseline Score, and fi
 The Baseline Score and the per-test baseline outcomes come from [KNOWN-BEST-ENGINE.md](KNOWN-BEST-ENGINE.md) → Baseline reference grade.
 Engine Regression grades the hidden Audited Engine Tests, never the Workspace's Engine Reference Tests; hob-medium and SOS, frozen before that split, grade from the host copy of their staged engine tests.
 
+Combined Regression is a report pooled over two dimensions, not a fourth dimension, so it sits beside the scores rather than in them: at `run_metadata["combined_regression"]` in a Run Record, and as a top-level `combined_regression` in each regrade output.
+A Run Record carries it only for a benchmark with a Known Defect manifest whose grading ran; every regrade output of such a benchmark carries it.
+
+```json
+{
+  "available": true,
+  "tests_passed": 1821,
+  "tests_total": 1831,
+  "pass_rate": 0.99454,
+  "baseline_score":   {"tests_passed": 1820, "tests_total": 1831},
+  "known_best_score": {"tests_passed": 1831, "tests_total": 1831},
+  "fixed": {
+    "count": 2,
+    "test_nodes": {
+      "fdn_regression": ["fdn_66/tests.py::test_dies_returns_with_one_fewer_revival"],
+      "engine_regression": ["zone_change/test_lki.py::test_counters_reset"]
+    }
+  },
+  "regressed": {
+    "count": 1,
+    "test_nodes": {"fdn_regression": [], "engine_regression": ["test_combat.py::test_first_strike_damage"]}
+  },
+  "baseline": {
+    "grading_inputs_digest": "sha256:…",
+    "grading_code_digest": "sha256:…",
+    "workspace_digest": "sha256:…",
+    "grader_image_id": "sha256:…"
+  }
+}
+```
+
+- `tests_passed` and `tests_total` are the sums of the two dimensions' raw counts; `baseline_score` sums the baseline reference grade's, and `known_best_score` is its total over its total.
+- `fixed` and `regressed` list, per suite and sorted, the Audited Tests whose outcome moved from the baseline's; a baseline-passing test the run no longer executes counts as Regressed, and a test the baseline never ran is ignored.
+- `baseline` names the baseline reference grade's key.
+
+When the block cannot be computed it is `{"available": false, "reason": "<reason>"}`, with the first reason that applies:
+
+| Reason | When |
+| --- | --- |
+| `grading_inputs_changed_during_grading` | The grading inputs changed while the run was graded |
+| `regression_not_evaluated` | Either regression dimension executed no test for the run |
+| `baseline_workspace_incomplete` | The unmodified Workspace could not be copied in full |
+| `baseline_grading_failed:<reason>` | Grading the unmodified Workspace failed |
+| `baseline_incomplete` | The baseline reference grade is incomplete for any reason but the FDN coverage gap every run shares |
+
 ### Complexity Weighting
 
 | Tier | Criteria | Weight |
