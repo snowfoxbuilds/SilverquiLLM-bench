@@ -182,6 +182,11 @@ def _deal_damage(
     if has_protection_from(target, source):
         return
 
+    # "Prevent all combat damage that would be dealt to it this turn" (rule
+    # 615.1): prevented damage is never dealt, so nothing below happens.
+    if getattr(target, "combat_damage_prevented", False):
+        return
+
     # Record damage assignment
     if source not in combat_state.damage_assignments:
         combat_state.damage_assignments[source] = []

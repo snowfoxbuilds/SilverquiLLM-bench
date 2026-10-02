@@ -76,6 +76,8 @@ def cleanup_mechanical(game: GameState) -> None:
                 obj.is_attacking = False
             if hasattr(obj, "is_blocking"):
                 obj.is_blocking = False
+            if hasattr(obj, "combat_damage_prevented"):
+                obj.combat_damage_prevented = False
         if hasattr(player, "cards_drawn_this_turn"):
             player.cards_drawn_this_turn = 0
 
