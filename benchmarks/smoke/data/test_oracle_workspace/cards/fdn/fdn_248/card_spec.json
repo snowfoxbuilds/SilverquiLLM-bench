@@ -1,0 +1,18 @@
+{
+  "name": "Thousand-Year Storm",
+  "mana_cost": "{4}{U}{R}",
+  "type_line": "Enchantment",
+  "oracle_text": "Whenever you cast an instant or sorcery spell, copy it for each other instant and sorcery spell you've cast before it this turn. You may choose new targets for the copies.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R",
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "248",
+  "complexity_tier": "medium"
+}

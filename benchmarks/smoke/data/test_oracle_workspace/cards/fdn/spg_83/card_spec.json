@@ -1,0 +1,18 @@
+{
+  "name": "Fiend Artisan",
+  "mana_cost": "{B/G}{B/G}",
+  "type_line": "Creature — Nightmare",
+  "oracle_text": "This creature gets +1/+1 for each creature card in your graveyard.\n{X}{B/G}, {T}, Sacrifice another creature: Search your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle. Activate only as a sorcery.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "B",
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "spg",
+  "collector_number": "83",
+  "complexity_tier": "medium"
+}

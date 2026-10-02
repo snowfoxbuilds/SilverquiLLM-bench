@@ -1,0 +1,19 @@
+{
+  "name": "Goblin Bushwhacker",
+  "mana_cost": "{R}",
+  "type_line": "Creature — Goblin Warrior",
+  "oracle_text": "Kicker {R} (You may pay an additional {R} as you cast this spell.)\nWhen this creature enters, if it was kicked, creatures you control get +1/+0 and gain haste until end of turn.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Kicker"
+  ],
+  "rarity": "mythic",
+  "set_code": "spg",
+  "collector_number": "78",
+  "complexity_tier": "medium"
+}
