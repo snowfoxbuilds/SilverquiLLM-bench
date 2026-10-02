@@ -40,6 +40,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -618,10 +619,10 @@ def _prepare_engine_work(
     return engine_dir, None
 
 
-def _generate_report_conftest(report_jsonl_path: str) -> str:
-    """Return Python source for a conftest.py that records test outcomes to JSONL.
+def _generate_report_plugin(report_jsonl_path: str) -> str:
+    """Return Python source for a pytest plugin that records test outcomes to JSONL.
 
-    The generated conftest uses the ``pytest_runtest_logreport`` hook to capture
+    The generated plugin uses the ``pytest_runtest_logreport`` hook to capture
     per-test outcomes.  Only ``when == "call"`` reports are recorded for
     pass/fail.  ``when == "setup"`` failures (including collection errors) are
     also captured since those tests never reach ``call``.
@@ -740,19 +741,6 @@ def _parse_report_jsonl(report_path: Path, suite_dir: str | None = None) -> list
     return nodes
 
 
-def _restore_conftest(
-    conftest_path: Path | None,
-    original_content: str | None,
-) -> None:
-    """Restore or remove the conftest.py after report capture."""
-    if conftest_path is None:
-        return
-    if original_content is not None:
-        conftest_path.write_text(original_content)
-    elif conftest_path.exists():
-        conftest_path.unlink()
-
-
 def _run_pytest_with_pythonpath(
     test_path: Path,
     pythonpath_parts: list[str],
@@ -767,6 +755,13 @@ def _run_pytest_with_pythonpath(
     Returns ``(passed, failed, total, errors)``.  When *capture_test_nodes*
     is ``True``, returns a 5-tuple with an additional list of per-node
     outcome dicts: ``[{"test_node": "tests.py::test_x", "outcome": "pass"|"fail"}, ...]``.
+
+    Node capture loads a generated reporter as its own pytest plugin
+    (``-p <module>``) from a fresh temporary directory placed first on
+    ``PYTHONPATH``, under a per-call module name.  Pytest dispatches its hooks
+    beside any ``conftest.py`` hooks, so authoritative support files are never
+    edited and their own hooks keep running.  The directory, holding the plugin
+    and its JSONL report, is removed however the run ends.
     """
     # Graded code gets no inherited credentials or tokens; see ADR-013.
     env = {key: os.environ[key] for key in _PYTEST_ENVIRONMENT if key in os.environ}
@@ -775,11 +770,9 @@ def _run_pytest_with_pythonpath(
         env["SILVERQUILLM_BENCH_ROOT"] = str(data_root)
     existing = os.environ.get("PYTHONPATH", "") if isolated_workspace is None else ""
     parts = pythonpath_parts + ([existing] if existing else [])
-    env["PYTHONPATH"] = os.pathsep.join(parts)
 
     report_jsonl_path = None
-    existing_conftest_backup = None
-    conftest_in_test_dir = None
+    report_dir = None
 
     cmd = [
         sys.executable,
@@ -798,25 +791,16 @@ def _run_pytest_with_pythonpath(
         ])
 
     if capture_test_nodes:
-        # Write a report JSONL to a temp file; inject conftest into the test's
-        # parent directory so pytest picks it up automatically.
-        report_jsonl_dir = tempfile.mkdtemp(prefix="eval_report_")
-        report_jsonl_path = Path(report_jsonl_dir) / "report.jsonl"
-        test_dir = test_path.parent
-        conftest_in_test_dir = test_dir / "conftest.py"
-
-        # Back up any existing conftest.py (e.g. from audited tests)
-        if conftest_in_test_dir.exists():
-            existing_conftest_backup = conftest_in_test_dir.read_text()
-            # Prepend report hooks to existing conftest
-            report_hooks = _generate_report_conftest(str(report_jsonl_path))
-            conftest_in_test_dir.write_text(
-                report_hooks + "\n" + existing_conftest_backup
-            )
-        else:
-            conftest_in_test_dir.write_text(
-                _generate_report_conftest(str(report_jsonl_path))
-            )
+        report_dir = Path(tempfile.mkdtemp(prefix="eval_report_"))
+        report_jsonl_path = report_dir / "report.jsonl"
+        # First on the path, so no graded module can shadow the reporter.
+        plugin = f"_silverquillm_node_report_{uuid.uuid4().hex}"
+        (report_dir / f"{plugin}.py").write_text(
+            _generate_report_plugin(str(report_jsonl_path))
+        )
+        parts = [str(report_dir), *parts]
+        cmd.extend(["-p", plugin])
+    env["PYTHONPATH"] = os.pathsep.join(parts)
 
     try:
         try:
@@ -850,13 +834,10 @@ def _run_pytest_with_pythonpath(
 
         return parsed
     finally:
-        # Always restore conftest and clean up the report temp dir, regardless
-        # of how the body exits (normal return, TimeoutExpired, or any other
+        # However the body exits (normal return, TimeoutExpired, or any other
         # exception such as OSError/PermissionError).
-        if capture_test_nodes:
-            _restore_conftest(conftest_in_test_dir, existing_conftest_backup)
-            if report_jsonl_path:
-                shutil.rmtree(report_jsonl_path.parent, ignore_errors=True)
+        if report_dir is not None:
+            shutil.rmtree(report_dir, ignore_errors=True)
 
 
 def _make_card_result(
