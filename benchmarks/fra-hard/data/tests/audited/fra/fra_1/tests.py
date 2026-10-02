@@ -230,3 +230,76 @@ def test_ward_counters_activated_ability_without_removing_source():
     resolve_stack(game)
     assert game.get_battlefield(player).contains(emrakul)
     assert game.get_battlefield(opponent).contains(source)
+
+
+def test_opponents_land_can_receive_grant_but_not_cast_permission():
+    game, player, emrakul, _ = arrange()
+    opponent = game.players[1]
+    land = enter_permanent(game, opponent, Forest(name="Opposing land"))
+    prefer(player, object_preference(game, land))
+    exile_ability(game, player, emrakul)
+    activate_ability(game, opponent, mana_ability_instance(game, opponent, land, 1))
+    assert opponent.mana_pool.total() == 2
+    opponent.mana_pool.add(ManaType.COLORLESS, 10)
+    with pytest.raises(CastingError):
+        cast_spell(game, opponent, emrakul)
+
+
+def test_insufficient_activation_mana_does_not_exile_or_pay():
+    from engine.abilities import AbilityError
+
+    game, player, emrakul, _ = arrange()
+    player.mana_pool.pay(ManaCost(generic=1))
+    with pytest.raises(AbilityError):
+        activate_card_ability(game, player, emrakul)
+    assert game.get_hand(player).contains(emrakul)
+    assert player.mana_pool.total() == 2
+
+
+def test_exile_activation_is_not_available_on_battlefield():
+    from engine.abilities import AbilityError
+
+    game, player, emrakul, _ = arrange()
+    move_to_zone(game, emrakul, Zone.HAND, Zone.BATTLEFIELD)
+    with pytest.raises(AbilityError):
+        activate_card_ability(game, player, emrakul)
+    assert game.get_battlefield(player).contains(emrakul)
+    assert player.mana_pool.total() == 3
+
+
+def test_land_grant_resolves_even_if_emrakul_already_left_exile():
+    game, player, emrakul, land = arrange()
+    activate_card_ability(game, player, emrakul)
+    move_to_zone(game, emrakul, Zone.EXILE, Zone.HAND)
+    resolve_stack(game)
+    assert len(card_abilities(land)) == 2
+    assert game.get_hand(player).contains(emrakul)
+
+
+def test_blinked_land_in_response_gets_no_grant_or_permission():
+    game, player, emrakul, land = arrange()
+    activate_card_ability(game, player, emrakul)
+    move_to_zone(game, land, Zone.BATTLEFIELD, Zone.EXILE)
+    move_to_zone(game, land, Zone.EXILE, Zone.BATTLEFIELD)
+    resolve_stack(game)
+    assert len(card_abilities(land)) == 1
+    player.mana_pool.add(ManaType.COLORLESS, 10)
+    with pytest.raises(CastingError):
+        cast_spell(game, player, emrakul)
+
+
+def test_countering_emrakul_does_not_counter_its_cast_trigger():
+    from cards.fdn.fdn_153.card_impl import EssenceScatter
+
+    game, player, emrakul, land = arrange()
+    land.is_tapped = True
+    player.mana_pool.add(ManaType.COLORLESS, 7)
+    cast_spell(game, player, emrakul)
+    opponent = game.players[1]
+    opponent.mana_pool.add(ManaType.BLUE, 1)
+    opponent.mana_pool.add(ManaType.COLORLESS, 1)
+    cast_card(game, opponent, EssenceScatter(), resolve=False)
+    resolve_top(game)
+    assert player.zones[Zone.GRAVEYARD].contains(emrakul) and land.is_tapped
+    resolve_stack(game)
+    assert not land.is_tapped

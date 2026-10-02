@@ -93,7 +93,8 @@ def _discover_oracle_cards() -> list[str]:
 
 
 def _run_audited_tests_against_oracle(
-    cn: str, benchmark: str = "sos", *, impl_suffix: str = "", implementation: Path | None = None
+    cn: str, benchmark: str = "sos", *, impl_suffix: str = "", implementation: Path | None = None,
+    test_utils: Path | None = None,
 ) -> tuple[int, str, str]:
     """Run audited tests for a card against its oracle impl.
 
@@ -125,7 +126,7 @@ def _run_audited_tests_against_oracle(
                 impl.write(impl_suffix)
 
         # Copy test_utils.py from oracle workspace
-        oracle_test_utils = oracle_workspace / "test_utils.py"
+        oracle_test_utils = test_utils or oracle_workspace / "test_utils.py"
         if oracle_test_utils.exists():
             shutil.copy2(oracle_test_utils, tmp / "test_utils.py")
 

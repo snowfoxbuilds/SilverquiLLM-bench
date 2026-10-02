@@ -131,3 +131,66 @@ def test_return_to_hand_does_not_exile_bilbo_spell():
     move_spell_off_stack(g, g.stack.peek(), Zone.HAND)
     assert p.zones[Zone.HAND].contains(spell)
     assert not p.zones[Zone.EXILE].contains(spell)
+
+
+def test_attack_casts_only_one_spell():
+    g, p, _q, bilbo, spell = setup()
+    other = Instant(name='Unchosen', owner=p)
+    p.zones[Zone.GRAVEYARD].add(other)
+    p.mana_pool.add(ManaType.BLUE)
+    attack(g, bilbo)
+    resolve_stack(g)
+    assert p.zones[Zone.EXILE].contains(spell)
+    assert p.zones[Zone.GRAVEYARD].contains(other)
+
+
+def test_chosen_spell_leaving_before_trigger_resolves_cannot_be_cast():
+    from engine.zones import move_to_zone
+    g, p, _q, bilbo, spell = setup()
+    p.mana_pool.add(ManaType.BLUE)
+    attack(g, bilbo)
+    move_to_zone(g, spell, Zone.GRAVEYARD, Zone.EXILE)
+    resolve_stack(g)
+    assert p.zones[Zone.EXILE].contains(spell)
+    assert p.mana_pool.total() == 1
+
+
+def test_artifact_creature_is_an_eligible_attack_spell():
+    from engine.card import ArtifactCreature
+    g, p, _q, bilbo, spell = setup(ArtifactCreature)
+    spell.base_power = spell.base_toughness = 2
+    p.mana_pool.add(ManaType.BLUE)
+    attack(g, bilbo)
+    resolve_stack(g)
+    assert p.zones[Zone.BATTLEFIELD].contains(spell)
+
+
+def test_discount_applies_to_creature_cast_from_exile():
+    g, p, _q, _bilbo, spell = setup(Creature)
+    from engine.zones import move_to_zone
+    move_to_zone(g, spell, Zone.GRAVEYARD, Zone.EXILE)
+    spell.base_power = spell.base_toughness = 2
+    p.mana_pool.add(ManaType.BLUE)
+    cast(g, p, spell, from_zone=Zone.EXILE, ignore_timing=True)
+    resolve_stack(g)
+    assert p.zones[Zone.BATTLEFIELD].contains(spell)
+    assert p.mana_pool.total() == 0
+
+
+def test_opponents_nonhand_spell_receives_no_discount():
+    g, _p, q, _bilbo, spell = setup(owner_seat=1)
+    q.mana_pool.add(ManaType.BLUE)
+    with pytest.raises(CastingError):
+        cast(g, q, spell, from_zone=Zone.GRAVEYARD, ignore_timing=True)
+    assert q.zones[Zone.GRAVEYARD].contains(spell)
+
+
+def test_declining_trigger_does_not_leave_cast_permission():
+    g, p, _q, bilbo, spell = setup()
+    p.mana_pool.add(ManaType.BLUE, 3)
+    prefer(p, Decision.no())
+    attack(g, bilbo)
+    resolve_stack(g)
+    with pytest.raises(CastingError):
+        cast(g, p, spell)
+    assert p.zones[Zone.GRAVEYARD].contains(spell)

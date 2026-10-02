@@ -62,9 +62,15 @@ Target results retain canonical IDs such as `fra_159` and `hob_33`.
 There is no extra weighting for a card's set or rarity.
 
 Audited Tests exercise observable gameplay through the public engine and test interfaces.
+The candidate and oracle Workspaces provide byte-identical `test_utils.py` helpers and matching API documentation.
+For this benchmark, `resolve_stack` checks state-based actions before resolving the stack, including when the stack is empty.
 Each selected card has at most 30 tests, covering its positive behavior, restrictions, and relevant interactions.
 Validation must account for all ten selected cards and fail on missing implementations, missing suites, or unsynchronized oracle test copies.
 The oracle must also pass FDN and engine regression checks.
+
+The audited coverage includes target legality and zone changes, permission lifetimes, mana and life payment boundaries, copy characteristics, countered spells and abilities, and effects whose controller changes before resolution.
+Separate oracle regression tests exercise interactions between selected cards without importing another target's implementation into a per-card hidden suite.
+The test envelope uses the baseline engine's two-player games; multiplayer variants and arbitrary additional casting costs are outside the validated scope.
 
 Execution and network-less candidate grading follow [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md).
 The benchmark starts in Beta while candidate calibration is pending.

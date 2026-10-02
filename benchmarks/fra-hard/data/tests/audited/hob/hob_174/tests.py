@@ -245,3 +245,111 @@ def test_negative_power_does_not_increase_cost():
     cast(g, p, spell)
     resolve_stack(g)
     assert p.zones[Zone.GRAVEYARD].contains(spell)
+
+
+def test_adventure_has_sorcery_characteristics_on_stack():
+    g, p, _q, sword = setup()
+    adventure(g, p, sword, resolve=False)
+    assert sword.name == 'Gleam of Death'
+    assert sword.card_types == {CardType.SORCERY}
+    assert sword.mana_cost.cmc == 4
+    assert sword.subtypes == {'Adventure'}
+
+
+def test_adventure_permission_allows_only_front_face():
+    g, p, _q, sword = setup()
+    adventure(g, p, sword)
+    p.mana_pool.add(ManaType.COLORLESS, 4)
+    p.mana_pool.add(ManaType.BLUE)
+    prefer(p, Decision.yes())
+    cast(g, p, sword)
+    resolve_stack(g)
+    assert p.zones[Zone.BATTLEFIELD].contains(sword)
+    assert p.mana_pool.total() == 3
+
+
+def test_adventure_permission_survives_cleanup():
+    from engine.types import Step
+    g, p, _q, sword = setup()
+    adventure(g, p, sword)
+    for _ in range(2):
+        g.phase, g.step = Phase.ENDING, Step.CLEANUP
+        g.advance_phase()
+    g.phase = Phase.PRECOMBAT_MAIN
+    p.mana_pool.add(ManaType.COLORLESS, 2)
+    cast(g, p, sword)
+    resolve_stack(g)
+    assert p.zones[Zone.BATTLEFIELD].contains(sword)
+
+
+def test_equip_cannot_target_opponents_creature():
+    from engine.abilities import AbilityError
+    g, p, q, sword = setup()
+    p.zones[Zone.HAND].remove(sword)
+    enter_permanent(g, p, sword)
+    other = enter_permanent(g, q, Creature(name='Enemy', base_power=3, base_toughness=3))
+    p.mana_pool.add(ManaType.COLORLESS, 2)
+    prefer(p, object_preference(g, other))
+    with pytest.raises(AbilityError):
+        activate_card_ability(g, p, sword)
+    assert sword.attached_to is None
+    assert p.mana_pool.total() == 2
+
+
+def test_equip_cannot_activate_in_combat():
+    from engine.abilities import AbilityError
+    g, p, _q, sword = setup()
+    equip(g, p, sword)
+    p.mana_pool.add(ManaType.COLORLESS, 2)
+    g.phase = Phase.COMBAT
+    with pytest.raises(AbilityError):
+        activate_card_ability(g, p, sword)
+    assert p.mana_pool.total() == 2
+
+
+def test_equip_target_leaving_does_not_attach_or_grant_discount():
+    g, p, _q, sword = setup()
+    p.zones[Zone.HAND].remove(sword)
+    enter_permanent(g, p, sword)
+    bearer = enter_permanent(g, p, Creature(name='Bearer', base_power=3, base_toughness=3))
+    p.mana_pool.add(ManaType.COLORLESS, 2)
+    prefer(p, object_preference(g, bearer))
+    activate_card_ability(g, p, sword)
+    move_to_zone(g, bearer, Zone.BATTLEFIELD, Zone.HAND)
+    resolve_stack(g)
+    assert sword.attached_to is None
+    assert p.mana_pool.total() == 0
+
+
+def test_equipment_leaving_ends_discount():
+    g, p, _q, sword = setup()
+    equip(g, p, sword)
+    move_to_zone(g, sword, Zone.BATTLEFIELD, Zone.HAND)
+    spell = Instant(name='Full price', mana_cost=ManaCost.parse('{3}'), owner=p)
+    p.zones[Zone.HAND].add(spell)
+    with pytest.raises(CastingError):
+        cast(g, p, spell)
+
+
+def test_discount_reduces_generic_x_cost():
+    g, p, _q, sword = setup()
+    equip(g, p, sword, power=3)
+    spell = Instant(name='X spell', mana_cost=ManaCost.parse('{X}{U}'), owner=p)
+    p.zones[Zone.HAND].add(spell)
+    p.mana_pool.add(ManaType.BLUE)
+    prefer(p, Decision.number(3))
+    cast(g, p, spell)
+    assert spell.x_value == 3
+    assert p.mana_pool.total() == 0
+    resolve_stack(g)
+
+
+def test_countered_front_face_from_adventure_exile_has_no_permission():
+    g, p, _q, sword = setup()
+    adventure(g, p, sword)
+    p.mana_pool.add(ManaType.COLORLESS, 2)
+    pending = cast(g, p, sword)
+    move_spell_off_stack(g, pending)
+    assert p.zones[Zone.GRAVEYARD].contains(sword)
+    with pytest.raises(CastingError):
+        cast(g, p, sword)

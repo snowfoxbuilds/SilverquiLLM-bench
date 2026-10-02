@@ -210,3 +210,135 @@ def test_one_invalid_target_does_not_stop_other_copy():
     assert player.zones[Zone.HAND].contains(original)
     assert player.zones[Zone.EXILE].contains(artifact)
     assert any(card.name == "Relic" for card in game.get_battlefield(player).get_all())
+
+
+def test_blinked_graveyard_target_is_not_same_target():
+    from engine.casting import resolve_top
+
+    game, player = arrange()
+    target = grave(game, player)
+    cast_card(game, player, UldarosTheorix(), resolve=False)
+    resolve_top(game)
+    move_to_zone(game, target, Zone.GRAVEYARD, Zone.HAND)
+    move_to_zone(game, target, Zone.HAND, Zone.GRAVEYARD)
+    resolve_stack(game)
+    assert player.zones[Zone.GRAVEYARD].contains(target)
+    assert len(game.get_battlefield(player).get_all()) == 1
+
+
+def test_zero_mana_value_copy_does_not_consume_budget():
+    game, player = arrange()
+    grave(game, player, Artifact, "Free memory", 0)
+    grave(game, player, Creature, "Six memory", 6)
+    cast_card(game, player, UldarosTheorix())
+    assert len([c for c in game.get_battlefield(player).get_all() if c.name.endswith("memory")]) == 2
+
+
+def test_single_multitype_card_is_copied_only_once():
+    game, player = arrange()
+    original = grave(game, player, ArtifactCreature)
+    cast_card(game, player, UldarosTheorix())
+    assert player.zones[Zone.EXILE].get_all() == [original]
+    assert len([c for c in game.get_battlefield(player).get_all() if c.name == original.name]) == 1
+
+
+def test_uncast_over_budget_copy_cannot_be_saved_for_later():
+    from engine.casting import CastingError, cast_spell
+
+    game, player = arrange()
+    original = grave(game, player, value=7)
+    cast_card(game, player, UldarosTheorix())
+    player.mana_pool.add(ManaType.COLORLESS, 7)
+    with pytest.raises(CastingError):
+        cast_spell(game, player, original)
+    assert player.zones[Zone.EXILE].get_all() == [original]
+
+
+def test_mandatory_target_missing_does_not_cast_copy_or_erase_original():
+    from engine.types import TargetRequirement
+
+    class MissingTarget(Instant):
+        def __init__(self, **kwargs):
+            super().__init__(name="Missing target", mana_cost=ManaCost(generic=1), **kwargs)
+
+        def get_targets(self, game):
+            return [TargetRequirement(
+                lambda card: CardType.ARTIFACT in getattr(card, "card_types", set()),
+                "Target artifact", Zone.BATTLEFIELD,
+            )]
+
+    game, player = arrange()
+    original = MissingTarget(owner=player)
+    player.zones[Zone.GRAVEYARD].add(original)
+    cast_card(game, player, UldarosTheorix())
+    assert player.zones[Zone.EXILE].get_all() == [original]
+    assert not player.zones[Zone.GRAVEYARD].get_all()
+    assert not len(game.stack)
+
+
+def test_free_copy_still_obeys_card_cast_restrictions():
+    class Forbidden(Creature):
+        def __init__(self, **kwargs):
+            super().__init__(name="Forbidden", mana_cost=ManaCost(generic=1),
+                             base_power=1, base_toughness=1, **kwargs)
+
+        def can_cast(self, game):
+            return False
+
+    game, player = arrange()
+    original = Forbidden(owner=player)
+    player.zones[Zone.GRAVEYARD].add(original)
+    cast_card(game, player, UldarosTheorix())
+    assert player.zones[Zone.EXILE].get_all() == [original]
+    assert len(game.get_battlefield(player).get_all()) == 1
+
+
+def test_copy_is_cast_and_runs_its_cast_ability():
+    from engine.game import gain_life
+
+    class CastMemory(Creature):
+        def __init__(self, **kwargs):
+            super().__init__(name="Cast memory", mana_cost=ManaCost(generic=2),
+                             base_power=2, base_toughness=2, **kwargs)
+
+        def on_cast(self, game):
+            gain_life(game, self.controller, 4)
+
+    game, player = arrange()
+    original = CastMemory(owner=player)
+    player.zones[Zone.GRAVEYARD].add(original)
+    cast_card(game, player, UldarosTheorix())
+    assert player.life == 24
+    assert player.zones[Zone.EXILE].contains(original)
+    assert any(c.name == original.name and c.is_token for c in game.get_battlefield(player).get_all())
+
+
+def test_free_x_spell_uses_zero_even_when_mana_is_available():
+    from engine.game import gain_life
+
+    class XMemory(Instant):
+        def __init__(self, **kwargs):
+            super().__init__(name="X memory", mana_cost=ManaCost.parse("{X}"), **kwargs)
+
+        def on_resolve(self, game):
+            gain_life(game, self.controller, self.x_value + 1)
+
+    game, player = arrange()
+    player.mana_pool.add(ManaType.COLORLESS, 4)
+    original = XMemory(owner=player)
+    player.zones[Zone.GRAVEYARD].add(original)
+    prefer(player, Decision.obj(), Decision.number(4))
+    cast_card(game, player, UldarosTheorix())
+    assert player.life == 21 and player.mana_pool.total() == 4
+    assert player.zones[Zone.EXILE].get_all() == [original]
+
+
+def test_exile_selected_original_but_decline_casting_its_copy():
+    from test_utils import object_preference
+
+    game, player = arrange()
+    original = grave(game, player)
+    prefer(player, object_preference(game, original))
+    cast_card(game, player, UldarosTheorix())
+    assert player.zones[Zone.EXILE].get_all() == [original]
+    assert len(game.get_battlefield(player).get_all()) == 1

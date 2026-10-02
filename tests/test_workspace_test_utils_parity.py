@@ -1,6 +1,6 @@
 """The agent-visible test_utils.py is the one grading uses (AUDITED-TEST-SUITE.md).
 
-In hob-medium and smoke the staged copy is byte-identical to the grading copy,
+In hob-medium, smoke and fra-hard the staged copy is byte-identical to the grading copy,
 so an agent's own tests can use every helper, and the same activation
 semantics, that the grading suites rely on.
 """
@@ -15,7 +15,7 @@ import pytest
 from silverquillm.evaluator import resolve_eval_paths
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BENCHMARKS = {"hob-medium": "hob", "smoke": "fdn"}
+BENCHMARKS = {"hob-medium": "hob", "smoke": "fdn", "fra-hard": "fra"}
 
 
 @pytest.mark.parametrize("benchmark,target_set", BENCHMARKS.items())
@@ -28,7 +28,7 @@ def test_staged_test_utils_is_the_grading_copy(benchmark, target_set):
 def test_hob_generation_benchmarks_share_one_test_utils():
     copies = {
         (REPO_ROOT / "benchmarks" / benchmark / "workspace" / "test_utils.py").read_bytes()
-        for benchmark in BENCHMARKS
+        for benchmark in ("hob-medium", "smoke")
     }
     assert len(copies) == 1
 

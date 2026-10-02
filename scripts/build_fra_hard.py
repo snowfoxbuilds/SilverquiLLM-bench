@@ -39,6 +39,28 @@ def copy_new(source: Path, destination: Path) -> None:
         shutil.copy2(source, destination)
 
 
+def stage_test_helpers(workspace: Path, oracle: Path) -> None:
+    source = (BASE / "workspace/test_utils.py").read_text()
+    old = '''    """Resolve the entire stack (public alias for the internal resolver)."""
+    _resolve_top_of_stack(game)'''
+    new = '''    """Settle a priority boundary, including state-based actions on an empty stack."""
+    from engine.state_based_actions import resolve_state_based_actions
+
+    resolve_state_based_actions(game)
+    _resolve_top_of_stack(game)'''
+    if source.count(old) != 1:
+        raise ValueError("Baseline resolve_stack helper changed; review the FRA adaptation")
+    source = source.replace(old, new)
+    documentation = (BASE / "workspace/test_utils.md").read_text().replace(
+        "`resolve_stack(game) -> None` — resolve the entire stack.",
+        "`resolve_stack(game) -> None` — check state-based actions first (even when "
+        "the stack is empty), then resolve the entire stack.",
+    )
+    for destination in (workspace, oracle):
+        (destination / "test_utils.py").write_text(source)
+        (destination / "test_utils.md").write_text(documentation)
+
+
 def stub(spec: dict) -> str:
     face = spec.get("card_faces", [spec])[0]
     name = face["name"]
@@ -121,13 +143,10 @@ def main() -> None:
         "instructions.md and AGENTS.md describe the task. test_utils.py and test_utils.md provide test helpers. "
         "RULEBOOK.txt contains the Comprehensive Rules; skills/grep-rulebook explains rules lookup.\n")
     oracle = DEST / "data/test_oracle_workspace"
-    seed_oracle = not oracle.exists()
     copy_new(workspace, oracle)
     for name in ("loader.py", "registry.py"):
         copy_new(workspace / f"cards/{name}", oracle / f"cards/{name}")
-    # The grading helper is host-side and intentionally differs from the candidate helper.
-    if seed_oracle:
-        shutil.copy2(BASE / "data/test_oracle_workspace/test_utils.py", oracle / "test_utils.py")
+    stage_test_helpers(workspace, oracle)
     copy_new(BASE / "data/tests/audited/fdn", DEST / "data/tests/audited/fdn")
     copy_new(DEST / "data/tests/audited/fdn", oracle / "tests/audited/fdn")
     for name in ("fdn_regression_coverage.json", "fdn_audit_migration.json"):
@@ -146,7 +165,11 @@ def main() -> None:
     write_json(DEST / "data/provenance.json", {
         "candidate_baseline": "benchmarks/hob-medium/workspace",
         "candidate_baseline_files": manifest,
-        "oracle_test_helpers": "benchmarks/hob-medium/data/test_oracle_workspace/test_utils.py",
+        "test_helpers": {
+            "derived_from": "benchmarks/hob-medium/workspace/test_utils.py",
+            "adaptation": "resolve_stack checks state-based actions before resolving the stack",
+            "sha256": hashlib.sha256((workspace / "test_utils.py").read_bytes()).hexdigest(),
+        },
         "rules": {"source": RULEBOOK_URL, "effective_date": "2026-09-25",
                   "sha256": hashlib.sha256((workspace / "RULEBOOK.txt").read_bytes()).hexdigest()},
         "raw_sets": {code: {"path": f"data/sets/{code}.json",

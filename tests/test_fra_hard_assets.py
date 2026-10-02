@@ -65,6 +65,18 @@ def test_candidate_target_tree_contains_exactly_the_selected_pool():
     assert actual == selected
 
 
+@pytest.mark.parametrize("relative", ("data/tests/audited", "data/test_oracle_workspace/tests/audited"))
+def test_target_hidden_suites_cover_exactly_the_selected_pool(relative):
+    selected = {f"{code}/{code}_{number}/tests.py" for code, number in POOL}
+    root = BENCH / relative
+    actual = {
+        str(path.relative_to(root))
+        for code in ("fra", "hob")
+        for path in (root / code).rglob("tests.py")
+    }
+    assert actual == selected
+
+
 def test_candidate_engine_preserves_baseline_and_excludes_oracle_material():
     workspace = BENCH / "workspace"
     provenance = json.loads((BENCH / "data/provenance.json").read_text())
@@ -94,3 +106,10 @@ def test_every_selected_oracle_and_portable_hidden_suite_is_ready(code, number):
 def test_hidden_helpers_use_the_candidate_public_api():
     layout = load_layout(ROOT, "fra-hard", require_cards=True)
     assert not check_v2_api(layout.oracle / "test_utils.py", layout, helper=True)
+    provenance = json.loads((BENCH / "data/provenance.json").read_text())
+    assert hashlib.sha256((layout.oracle / "test_utils.py").read_bytes()).hexdigest() == (
+        provenance["test_helpers"]["sha256"]
+    )
+    assert (layout.oracle / "test_utils.md").read_bytes() == (
+        BENCH / "workspace/test_utils.md"
+    ).read_bytes()

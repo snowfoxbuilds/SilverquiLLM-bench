@@ -34,10 +34,11 @@ class BilboThiefintheNight(Creature):
             chosen = choose_object(g, controller, candidates, 'Cast a spell from your graveyard',
                                    source_card=self, optional=True)
             if chosen is not None:
-                departure = Zone.EXILE if chosen.card_types & {CardType.INSTANT, CardType.SORCERY} else None
                 try:
-                    cast_spell(g, controller, chosen, from_zone=Zone.GRAVEYARD,
-                               ignore_timing=True, departure_zone=departure)
+                    pending = cast_spell(g, controller, chosen, from_zone=Zone.GRAVEYARD,
+                                         ignore_timing=True)
+                    if chosen.card_types & {CardType.INSTANT, CardType.SORCERY}:
+                        pending.graveyard_departure_zone = Zone.EXILE
                 except CastingError:
                     pass
         game.trigger_manager.register(TriggerRegistration(

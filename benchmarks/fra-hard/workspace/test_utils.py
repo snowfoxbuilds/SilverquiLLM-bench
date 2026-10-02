@@ -333,7 +333,10 @@ def put_on_battlefield(game: GameState, player: Any, card: Any) -> Any:
 
 
 def resolve_stack(game: GameState) -> None:
-    """Resolve the entire stack (public alias for the internal resolver)."""
+    """Settle a priority boundary, including state-based actions on an empty stack."""
+    from engine.state_based_actions import resolve_state_based_actions
+
+    resolve_state_based_actions(game)
     _resolve_top_of_stack(game)
 
 

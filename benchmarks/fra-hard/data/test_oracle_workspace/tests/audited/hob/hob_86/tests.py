@@ -191,3 +191,77 @@ def test_food_cannot_attack():
     g.phase, g.step = Phase.COMBAT, Step.DECLARE_ATTACKERS
     declare_attackers_step(g, [victim])
     assert not victim.is_attacking
+
+
+def test_noncreature_artifact_put_in_graveyard_is_not_returned():
+    from engine.card import Artifact
+    g, p, q, _victim = setup()
+    artifact = enter_permanent(g, q, Artifact(name='Broken relic'))
+    sacrifice(g, q, artifact)
+    supper(g, p)
+    assert q.zones[Zone.GRAVEYARD].contains(artifact)
+
+
+def test_your_card_dying_under_opponent_control_is_not_returned():
+    g, p, q, _victim = setup()
+    own = creature('Stolen')
+    own.owner, own.controller = p, q
+    q.zones[Zone.HAND].add(own)
+    move_to_zone(g, own, Zone.HAND, Zone.BATTLEFIELD)
+    sacrifice(g, q, own)
+    supper(g, p)
+    assert p.zones[Zone.GRAVEYARD].contains(own)
+
+
+def test_sacrificed_food_can_be_returned_by_a_second_supper():
+    g, p, q, victim = setup()
+    supper(g, p)
+    p.mana_pool.add(ManaType.COLORLESS, 2)
+    activate_card_ability(g, p, victim)
+    resolve_stack(g)
+    assert q.zones[Zone.GRAVEYARD].contains(victim)
+    supper(g, p)
+    assert p.zones[Zone.BATTLEFIELD].contains(victim)
+    assert victim.card_types == {CardType.ARTIFACT}
+    assert victim.subtypes == {'Food'}
+
+
+def test_returned_food_fires_its_enter_trigger():
+    from engine.events import EntersBattlefieldTriggeredEvent
+    from engine.game import gain_life
+    from engine.triggers import TriggerRegistration
+
+    class Welcomer(Creature):
+        def register_triggers(self, game):
+            game.trigger_manager.register(TriggerRegistration(
+                event_type=EntersBattlefieldTriggeredEvent, source=self,
+                controller=self.controller,
+                condition=lambda g, event: event.permanent is self,
+                effect=lambda g, controller: gain_life(g, controller, 2)))
+    g = scenario_game()
+    p, q = g.players
+    victim = enter_permanent(g, q, Welcomer(name='Welcomer', base_power=1, base_toughness=1))
+    resolve_stack(g)
+    sacrifice(g, q, victim)
+    supper(g, p)
+    assert p.life == 22 and q.life == 22
+
+
+def test_leaving_food_loses_granted_activated_ability():
+    from test_utils import card_abilities
+    g, p, _q, victim = setup()
+    supper(g, p)
+    move_to_zone(g, victim, Zone.BATTLEFIELD, Zone.HAND)
+    assert card_abilities(victim) == []
+
+
+def test_food_ability_countered_keeps_cost_paid_without_life_gain():
+    g, p, q, victim = setup()
+    supper(g, p)
+    p.mana_pool.add(ManaType.COLORLESS, 2)
+    activate_card_ability(g, p, victim)
+    g.stack.pop()
+    resolve_stack(g)
+    assert p.life == 20
+    assert p.mana_pool.total() == 0
+    assert q.zones[Zone.GRAVEYARD].contains(victim)

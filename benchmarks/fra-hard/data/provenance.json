@@ -737,7 +737,11 @@
     "cards/loader.py": "0512f46b8ebb198b5f05e2ed8f4a0c6673506316ed165667babcf8afd03b5fc0",
     "cards/registry.py": "b53a4ebb144228699059b4f5d8ad1d5aa82f5297d1606708be62e31e571e82af"
   },
-  "oracle_test_helpers": "benchmarks/hob-medium/data/test_oracle_workspace/test_utils.py",
+  "test_helpers": {
+    "derived_from": "benchmarks/hob-medium/workspace/test_utils.py",
+    "adaptation": "resolve_stack checks state-based actions before resolving the stack",
+    "sha256": "371a07ad5aecde6e1771bc40505d13b14336b2caa6f6fdf3b2bd1fbff96d9193"
+  },
   "rules": {
     "source": "https://media.wizards.com/2026/downloads/MagicCompRules%2020260925.txt",
     "effective_date": "2026-09-25",

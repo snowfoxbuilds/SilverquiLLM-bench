@@ -1,7 +1,7 @@
 import pytest
 from card_impl import HallofEchoes
 from engine.abilities import AbilityError
-from engine.card import ActivatedAbility, Creature
+from engine.card import ActivatedAbility, Creature, Instant
 from engine.game import add_counter, exile
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Supertype, Zone
 from engine.zones import move_to_zone
@@ -9,6 +9,7 @@ from test_utils import (
     activate_card_ability,
     advance_game_to_phase,
     behavioral_game,
+    cast_card,
     enter_permanent,
     object_preference,
     prefer,
@@ -184,3 +185,157 @@ def test_plus_one_counter_on_land_applies_while_copied_and_persists():
     assert hall.power == 5 and hall.toughness == 6
     advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
     assert hall.counters.get("+1/+1") == 2
+
+
+def test_copying_does_not_trigger_copied_enters_ability():
+    from engine.events import EntersBattlefieldTriggeredEvent
+    from engine.game import draw_card
+    from engine.triggers import TriggerRegistration
+
+    class Welcomer(Creature):
+        def __init__(self, **kwargs):
+            super().__init__(name="Welcomer", base_power=2, base_toughness=2, **kwargs)
+
+        def register_triggers(self, game):
+            game.trigger_manager.register(TriggerRegistration(
+                EntersBattlefieldTriggeredEvent,
+                lambda state, event: event.permanent is self,
+                lambda state: draw_card(state, self.controller),
+                self, self.controller,
+            ))
+
+    game, player, hall, _ = arrange()
+    target = enter_permanent(game, player, Welcomer())
+    resolve_stack(game)
+    assert len(game.get_hand(player).get_all()) == 1
+    prefer(player, object_preference(game, target))
+    activate_card_ability(game, player, hall)
+    resolve_stack(game)
+    assert hall.name == "Welcomer" and len(game.get_hand(player).get_all()) == 1
+
+
+def test_illegal_target_prevents_legend_rule_suppression():
+    game, player, hall, target = arrange()
+    activate_card_ability(game, player, hall)
+    exile(game, target)
+    resolve_stack(game)
+    for _ in range(2):
+        enter_permanent(game, player, Creature(name="Twin", supertypes={Supertype.LEGENDARY}, base_power=2, base_toughness=2))
+    resolve_stack(game)
+    assert len([c for c in game.get_battlefield(player).get_all() if c.name == "Twin"]) == 1
+
+
+def test_hall_blinked_in_response_is_not_copied():
+    game, player, hall, _ = arrange()
+    activate_card_ability(game, player, hall)
+    move_to_zone(game, hall, Zone.BATTLEFIELD, Zone.EXILE)
+    move_to_zone(game, hall, Zone.EXILE, Zone.BATTLEFIELD)
+    resolve_stack(game)
+    assert hall.name == "Hall of Echoes" and hall.card_types == {CardType.LAND}
+
+
+def test_legend_rule_suppression_does_not_protect_opponent():
+    game, player, hall, _ = arrange()
+    activate_card_ability(game, player, hall)
+    resolve_stack(game)
+    opponent = game.players[1]
+    for _ in range(2):
+        enter_permanent(game, opponent, Creature(name="Twin", supertypes={Supertype.LEGENDARY}, base_power=2, base_toughness=2))
+    resolve_stack(game)
+    assert len([c for c in game.get_battlefield(opponent).get_all() if c.name == "Twin"]) == 1
+
+
+def test_copied_dies_trigger_fires_for_hall_without_killing_original():
+    from cards.fdn.fdn_252.card_impl import GleamingBarrier
+    from engine.game import sacrifice
+
+    game, player, hall, _ = arrange()
+    target = enter_permanent(game, player, GleamingBarrier())
+    prefer(player, object_preference(game, target))
+    activate_card_ability(game, player, hall)
+    resolve_stack(game)
+    sacrifice(game, player, hall)
+    resolve_stack(game)
+    assert hall.name == "Hall of Echoes" and player.zones[Zone.GRAVEYARD].contains(hall)
+    assert game.get_battlefield(player).contains(target)
+    assert len([c for c in game.get_battlefield(player).get_all() if "Treasure" in c.subtypes]) == 1
+
+
+def test_temporary_granted_keyword_is_not_copied():
+    from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer
+
+    game, player, hall, target = arrange()
+    game.effect_manager.add(ContinuousEffect(
+        target, Layer.ABILITY,
+        apply=lambda state: setattr(target, "keywords", target.keywords | Keyword.HASTE),
+        duration=DURATION_END_OF_TURN,
+    ))
+    game.effect_manager.apply_all(game)
+    assert Keyword.HASTE in target.keywords
+    activate_card_ability(game, player, hall)
+    resolve_stack(game)
+    assert Keyword.HASTE not in hall.keywords
+    assert Keyword.FLYING in hall.keywords
+
+
+class ControlChange(Instant):
+    def __init__(self, target, **kwargs):
+        super().__init__(name="Control change", mana_cost=ManaCost(), **kwargs)
+        self.target = target
+
+    def on_resolve(self, game):
+        from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer
+
+        controller = self.controller
+
+        def apply(state):
+            for previous in state.players:
+                if state.get_battlefield(previous).contains(self.target):
+                    if previous is not controller:
+                        state.get_battlefield(previous).remove(self.target)
+                        state.get_battlefield(controller).add(self.target)
+                    self.target.controller = controller
+                    break
+
+        game.effect_manager.add(ContinuousEffect(
+            self, Layer.CONTROL, apply=apply, duration=DURATION_END_OF_TURN,
+        ))
+
+def test_stolen_target_is_illegal_when_copy_ability_resolves():
+    game, player, hall, target = arrange()
+    activate_card_ability(game, player, hall)
+    cast_card(game, game.players[1], ControlChange(target))
+    assert hall.name == "Hall of Echoes"
+    assert target.controller is game.players[1]
+
+
+def test_pending_copy_keeps_original_controller_for_legend_suppression():
+    game, player, hall, target = arrange()
+    activate_card_ability(game, player, hall)
+    opponent = game.players[1]
+    cast_card(game, opponent, ControlChange(hall))
+    assert hall.controller is opponent and hall.name == target.name
+    for controller in (player, opponent):
+        for _ in range(2):
+            enter_permanent(game, controller, Creature(
+                name="Twin", supertypes={Supertype.LEGENDARY}, base_power=2, base_toughness=2,
+            ))
+    resolve_stack(game)
+    assert len([c for c in game.get_battlefield(player).get_all() if c.name == "Twin"]) == 2
+    assert len([c for c in game.get_battlefield(opponent).get_all() if c.name == "Twin"]) == 1
+
+
+@pytest.mark.parametrize("haste", [False, True])
+def test_new_hall_can_attack_only_if_copy_has_haste(haste):
+    from engine.combat import declare_attackers_step
+
+    game, player, hall, _ = arrange()
+    target = enter_permanent(game, player, Creature(
+        name="Attack copy", base_power=2, base_toughness=2,
+        keywords=Keyword.HASTE if haste else Keyword(0),
+    ))
+    prefer(player, object_preference(game, target))
+    activate_card_ability(game, player, hall)
+    resolve_stack(game)
+    declare_attackers_step(game, [hall])
+    assert hall.is_attacking is haste

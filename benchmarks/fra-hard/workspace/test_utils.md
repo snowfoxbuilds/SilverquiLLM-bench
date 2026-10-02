@@ -92,7 +92,7 @@ the way. Use it when a test depends on delayed or "at the beginning of" triggers
 
 ### `resolve_stack`
 
-`resolve_stack(game) -> None` — resolve the entire stack.
+`resolve_stack(game) -> None` — check state-based actions first (even when the stack is empty), then resolve the entire stack.
 
 ### `activate_card_ability`
 

@@ -103,13 +103,19 @@ def test_blink_does_not_preserve_preparation():
 
 def test_multiple_prepare_events_do_not_accumulate_copies():
     game, player, _source = arrange()
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    for i in range(3):
+        victim = enter_permanent(game, player, Creature(name=f"New victim {i}", base_power=1, base_toughness=1))
+        sacrifice(game, player, victim)
     advance_game_to_phase(game, Phase.ENDING, Step.END)
     resolve_stack(game)
     assert len(copies(player)) == 1
 
 
 def test_noncreature_deaths_do_not_prepare():
-    game, player, _source = arrange(0)
+    game = behavioral_game()
+    player = game.players[0]
+    enter_permanent(game, player, BloodlineRecollector())
     for i in range(3):
         victim = enter_permanent(game, player, Artifact(name=f"Relic {i}"))
         sacrifice(game, player, victim)
@@ -172,3 +178,85 @@ def test_control_change_transfers_cast_permission_without_recreating_copy():
     resolve_stack(game)
     assert len(game.get_hand(player).get_all()) == 3
     assert not copies(player) and not copies(opponent)
+
+
+def test_creatures_exiled_instead_of_dying_do_not_prepare():
+    game = behavioral_game()
+    player = game.players[0]
+    _source = enter_permanent(game, player, BloodlineRecollector())
+    for i in range(3):
+        victim = enter_permanent(game, player, Creature(name=f"Exiled {i}", base_power=1, base_toughness=1))
+        exile(game, victim)
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+    resolve_stack(game)
+    assert not copies(player)
+
+
+def test_token_creature_deaths_count():
+    game = behavioral_game()
+    player = game.players[0]
+    _source = enter_permanent(game, player, BloodlineRecollector())
+    for i in range(3):
+        victim = enter_permanent(game, player, Creature(name=f"Token {i}", base_power=1, base_toughness=1))
+        victim.is_token = True
+        sacrifice(game, player, victim)
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+    resolve_stack(game)
+    assert len(copies(player)) == 1
+
+
+def test_preparation_is_consumed_on_cast_before_resolution():
+    game, player, _ = arrange()
+    player.mana_pool.add(ManaType.BLACK, 1)
+    spell = copies(player)[0]
+    cast_spell(game, player, spell)
+    assert not copies(player) and player.life == 20
+    player.mana_pool.add(ManaType.BLACK, 1)
+    with pytest.raises(CastingError):
+        cast_spell(game, player, spell)
+    resolve_stack(game)
+    assert player.life == 17
+
+
+def test_leaving_before_prepare_trigger_resolves_does_not_prepare():
+    game = behavioral_game()
+    player = game.players[0]
+    source = enter_permanent(game, player, BloodlineRecollector())
+    for i in range(3):
+        sacrifice(game, player, enter_permanent(game, player, Creature(name=f"Victim {i}", base_power=1, base_toughness=1)))
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+    exile(game, source)
+    resolve_stack(game)
+    assert not copies(player)
+
+
+def test_two_recollectors_prepare_independently():
+    game = behavioral_game()
+    player = game.players[0]
+    _source = enter_permanent(game, player, BloodlineRecollector())
+    enter_permanent(game, player, BloodlineRecollector())
+    for i in range(3):
+        sacrifice(game, player, enter_permanent(game, player, Creature(name=f"Victim {i}", base_power=1, base_toughness=1)))
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+    resolve_stack(game)
+    assert len(copies(player)) == 2
+    player.mana_pool.add(ManaType.BLACK, 1)
+    cast_spell(game, player, copies(player)[0])
+    resolve_stack(game)
+    assert len(copies(player)) == 1
+
+
+def test_countered_prepared_spell_still_consumes_preparation():
+    from cards.fdn.fdn_160.card_impl import AnOfferYouCantRefuse
+
+    game, player, source = arrange()
+    spell = copies(player)[0]
+    player.mana_pool.add(ManaType.BLACK, 1)
+    cast_spell(game, player, spell)
+    opponent = game.players[1]
+    opponent.mana_pool.add(ManaType.BLUE, 1)
+    cast_card(game, opponent, AnOfferYouCantRefuse())
+    assert player.life == 20 and not game.get_hand(player).get_all()
+    assert not copies(player)
+    assert all(not player.zones[zone].contains(spell) for zone in Zone)
+    assert game.get_battlefield(player).contains(source)

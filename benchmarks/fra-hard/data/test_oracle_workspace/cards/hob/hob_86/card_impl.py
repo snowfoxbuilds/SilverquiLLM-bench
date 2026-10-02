@@ -26,6 +26,7 @@ class SupperforSpiders(Instant):
             card.controller = self.controller
             original_subtypes = set(card.subtypes)
             original_getter = card.get_activated_abilities
+            had_getter_override = 'get_activated_abilities' in card.__dict__
 
             def food_type(g, permanent=card):
                 permanent.card_types = {CardType.ARTIFACT}
@@ -49,8 +50,12 @@ class SupperforSpiders(Instant):
                     description='{2}, {T}, Sacrifice: gain 3 life')]
 
             card.get_activated_abilities = abilities
-            def restore(permanent=card, getter=original_getter, subtypes=original_subtypes):
-                permanent.get_activated_abilities = getter
+            def restore(permanent=card, getter=original_getter, subtypes=original_subtypes,
+                        had_override=had_getter_override):
+                if had_override:
+                    permanent.get_activated_abilities = getter
+                else:
+                    permanent.__dict__.pop('get_activated_abilities', None)
                 permanent.subtypes = set(subtypes)
                 permanent.card_types = set(permanent._original_card_types)
             card.zone_departure_callbacks = [restore]
