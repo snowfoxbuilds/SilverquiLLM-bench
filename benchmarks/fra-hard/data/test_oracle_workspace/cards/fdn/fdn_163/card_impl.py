@@ -1,0 +1,62 @@
+"""Card implementation for Self-Reflection."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
+
+if TYPE_CHECKING:
+    from engine.game_state import GameState
+
+
+class SelfReflection(Sorcery):
+    """Self-Reflection — {4}{U}{U} — Sorcery.
+
+    Create a token that's a copy of target creature you control.
+    Flashback {3}{U}
+
+    FDN collector number 163.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Self-Reflection")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{4}{U}{U}"))
+        kwargs.setdefault(
+            "rules_text",
+            "Create a token that's a copy of target creature you control.\n"
+            "Flashback {3}{U}",
+        )
+        super().__init__(**kwargs)
+        self.flashback_cost = ManaCost.parse("{3}{U}")
+
+    def get_targets(self, game: "GameState") -> list:
+        """Target creature you control."""
+        return [
+            TargetRequirement(
+                filter_fn=lambda obj: (
+                    CardType.CREATURE in getattr(obj, "card_types", set())
+                    and getattr(obj, "controller", None) is getattr(self, "controller", None)
+                ),
+                description="target creature you control",
+                zone=Zone.BATTLEFIELD,
+            )
+        ]
+
+    def on_resolve(self, game: "GameState") -> None:
+        """Create a token copy of target creature you control."""
+        from engine.game import create_token, mint_token_copy
+
+        chosen = getattr(self, "chosen_targets", None)
+        target = chosen[0] if chosen else None
+        if target is None:
+            return
+        controller = self.controller
+        if controller is None:
+            return
+        # A token copy is a new object carrying only the copiable characteristics
+        # (rule 707.2): mint_token_copy re-mints identity and drops the target's
+        # counters/damage/tap, unlike a bare copy.copy.
+        token = mint_token_copy(target)
+        create_token(game, controller, token)

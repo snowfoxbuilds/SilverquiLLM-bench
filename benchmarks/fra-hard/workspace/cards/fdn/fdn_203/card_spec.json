@@ -1,0 +1,19 @@
+{
+  "name": "Involuntary Employment",
+  "mana_cost": "{3}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. Create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Treasure"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "203",
+  "complexity_tier": "medium"
+}

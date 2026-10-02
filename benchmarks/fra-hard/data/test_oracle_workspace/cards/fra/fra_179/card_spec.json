@@ -1,0 +1,13 @@
+{
+  "name": "Hall of Echoes",
+  "mana_cost": "",
+  "type_line": "Land",
+  "oracle_text": "{T}: Add {C}.\n{5}: This land becomes a copy of target creature you control until end of turn. The \"legend rule\" doesn't apply to permanents you control this turn.",
+  "colors": [],
+  "keywords": [],
+  "rarity": "rare",
+  "set": "fra",
+  "collector_number": "179",
+  "layout": "normal",
+  "mana_cost_str": ""
+}

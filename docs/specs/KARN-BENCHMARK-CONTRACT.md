@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-09-29
+Last updated: 2026-10-02
 
 # Karn Benchmark Contract
 
@@ -180,6 +180,9 @@ The stock entrypoint's result file is runtime evidence, not required model-autho
 
 Completing hob-medium is part of this workstream, including its missing Test Oracle Workspace and all five selected Test Oracle Impls (grilling 2026-09-26).
 [HOB Benchmarks](HOB-BENCHMARKS.md) owns the selected Card Pool, benchmark assets, instruction data, and oracle-first validation requirements.
+[FRA Hard Benchmark](FRA-HARD-BENCHMARK.md) defines the mixed FRA/HOB pool and its independent assets.
+Mixed pools qualify target selections as `set:collector_number`; staging and grading retain each card's actual set identity.
+Existing unqualified selections continue to use the benchmark's primary set.
 The existing smoke benchmark exercises the integration before hob-medium runs collect implementation and efficiency data.
 The workstream also covers the CLI and batch paths that retain those observations as Run Records.
 

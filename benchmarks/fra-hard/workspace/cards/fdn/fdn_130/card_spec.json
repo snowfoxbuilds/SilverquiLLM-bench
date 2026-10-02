@@ -1,0 +1,17 @@
+{
+  "name": "Quick-Draw Katana",
+  "mana_cost": "{2}",
+  "type_line": "Artifact — Equipment",
+  "oracle_text": "During your turn, equipped creature gets +2/+0 and has first strike. (It deals combat damage before creatures without first strike.)\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Equip"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "130",
+  "complexity_tier": "medium"
+}

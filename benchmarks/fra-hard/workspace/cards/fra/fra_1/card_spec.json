@@ -1,0 +1,19 @@
+{
+  "name": "Emrakul, the Exigent Doom",
+  "mana_cost": "{10}",
+  "type_line": "Legendary Creature — Eldrazi",
+  "oracle_text": "When you cast this spell, untap all lands you control.\nFlying, trample\nWard—Sacrifice three permanents.\n{3}, Exile this card from your hand: Target land gains \"{T}: Add {C}{C}\" until this card is cast from exile. You may cast this card for as long as it remains exiled.",
+  "colors": [],
+  "keywords": [
+    "Flying",
+    "Trample",
+    "Ward"
+  ],
+  "rarity": "mythic",
+  "set": "fra",
+  "collector_number": "1",
+  "power": "12",
+  "toughness": "12",
+  "layout": "normal",
+  "mana_cost_str": "{10}"
+}

@@ -9,6 +9,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from silverquillm.benchmark_targets import target_cards
+
 from .definition import KarnError, canonical, digest
 from .snapshots import copy_workspace
 
@@ -50,6 +52,7 @@ def load_benchmark(bench_root: Path, benchmark_id: str) -> Benchmark:
             raise ValueError
         if not (root / "workspace").is_dir():
             raise ValueError
+        target_cards(target, config["cards"])
     except (OSError, ValueError, KeyError, TypeError):
         raise KarnError("benchmark_unavailable:" + benchmark_id) from None
     return Benchmark(benchmark_id, root, config)
@@ -59,18 +62,31 @@ def stage_benchmark(benchmark: Benchmark, destination: Path) -> tuple[str, dict]
     copied = copy_workspace(benchmark.root / "workspace", destination)
     if copied["errors"] or copied["omissions"]:
         raise KarnError("benchmark_workspace_incomplete")
-    selected = {str(int(number)) if number.isdigit() else number for number in benchmark.cards}
+    selected = {
+        (code, str(int(number)) if number.isdigit() else number)
+        for code, number in target_cards(benchmark.target_set, benchmark.cards)
+    }
     targets = []
-    for directory in sorted((destination / "cards" / benchmark.target_set).iterdir()):
+    matched = set()
+    directories = []
+    for set_code in sorted({set_code for set_code, _ in selected}):
+        set_directory = destination / "cards" / set_code
+        if set_directory.is_dir():
+            directories.extend(sorted(set_directory.iterdir()))
+    for directory in directories:
         spec = directory / "card_spec.json"
         if not directory.is_dir() or not spec.is_file():
             continue
         data = json.loads(spec.read_text())
         number = str(data["collector_number"])
         number = str(int(number)) if number.isdigit() else number
-        if number in selected:
+        identity = (directory.parent.name, number)
+        if identity in selected:
+            if identity in matched:
+                raise KarnError("benchmark_selected_card_ambiguous")
+            matched.add(identity)
             targets.append(str(directory.relative_to(destination)))
-    if len(targets) != len(selected):
+    if matched != selected:
         raise KarnError("benchmark_selected_cards_missing")
     # Benchmark guidance ships inside the Workspace (e.g. hob-medium's workspace/instructions.md).
     guidance = "Read the Workspace guidance and each selected card's instructions.md when present."

@@ -1,0 +1,19 @@
+{
+  "name": "Clinquant Skymage",
+  "mana_cost": "{3}{U}",
+  "type_line": "Creature — Bird Wizard",
+  "oracle_text": "Flying\nWhenever you draw a card, put a +1/+1 counter on this creature.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "33",
+  "complexity_tier": "medium"
+}

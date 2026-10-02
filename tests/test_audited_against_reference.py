@@ -17,6 +17,7 @@ HOB card is always validated; a missing implementation or suite is a failure.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -92,7 +93,8 @@ def _discover_oracle_cards() -> list[str]:
 
 
 def _run_audited_tests_against_oracle(
-    cn: str, benchmark: str = "sos", *, impl_suffix: str = ""
+    cn: str, benchmark: str = "sos", *, impl_suffix: str = "", implementation: Path | None = None,
+    test_utils: Path | None = None,
 ) -> tuple[int, str, str]:
     """Run audited tests for a card against its oracle impl.
 
@@ -110,21 +112,21 @@ def _run_audited_tests_against_oracle(
         errors = readiness_errors(layout, cn)
         if errors:
             return 1, "\n".join(errors), ""
-        oracle_workspace, audited_dir = layout.oracle, layout.audited
         impl_path, tests_path = layout.implementation(cn), layout.suite(cn)
+        oracle_workspace, audited_dir = layout.oracle, tests_path.parent.parent
 
     tmp_dir = tempfile.mkdtemp(prefix=f"oracle_{cn}_")
     try:
         tmp = Path(tmp_dir)
 
         # Copy oracle impl as card_impl.py
-        shutil.copy2(impl_path, tmp / "card_impl.py")
+        shutil.copy2(implementation or impl_path, tmp / "card_impl.py")
         if impl_suffix:
             with open(tmp / "card_impl.py", "a") as impl:
                 impl.write(impl_suffix)
 
         # Copy test_utils.py from oracle workspace
-        oracle_test_utils = oracle_workspace / "test_utils.py"
+        oracle_test_utils = test_utils or oracle_workspace / "test_utils.py"
         if oracle_test_utils.exists():
             shutil.copy2(oracle_test_utils, tmp / "test_utils.py")
 
@@ -177,6 +179,8 @@ _oracle_cards = _discover_oracle_cards()
 _hob_layout = load_layout(_REPO_ROOT, "hob-medium", require_cards=True)
 _cases = [pytest.param("sos", card, id=f"sos/{card}") for card in _oracle_cards]
 _cases += [pytest.param("hob-medium", card, id=f"hob-medium/{card}") for card in _hob_layout.cards]
+_fra_layout = load_layout(_REPO_ROOT, "fra-hard", require_cards=True)
+_cases += [pytest.param("fra-hard", card, id=f"fra-hard/{card}") for card in _fra_layout.cards]
 
 
 @pytest.mark.parametrize("benchmark,cn", _cases)
@@ -184,6 +188,10 @@ def test_oracle_impl_passes_audited_tests(benchmark: str, cn: str) -> None:
     """Every selected HOB card is checked, including missing/stub/empty cases."""
     returncode, stdout, stderr = _run_audited_tests_against_oracle(cn, benchmark)
     assert returncode == 0, f"Oracle {benchmark}/{cn} failed:\n{stdout}\n{stderr}"
+    if benchmark == "fra-hard":
+        summary = re.search(r"\b(\d+) passed\b", stdout)
+        assert summary and 1 <= int(summary.group(1)) <= 30, stdout
+        assert not re.search(r"\b\d+ (skipped|xfailed|xpassed)\b", stdout), stdout
 
 
 def test_hob_oracle_cases_cover_the_selected_pool() -> None:

@@ -1,0 +1,19 @@
+{
+  "name": "Youthful Valkyrie",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature — Angel",
+  "oracle_text": "Flying\nWhenever another Angel you control enters, put a +1/+1 counter on this creature.",
+  "power": "1",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "149",
+  "complexity_tier": "medium"
+}

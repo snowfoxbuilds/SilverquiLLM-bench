@@ -1,0 +1,17 @@
+{
+  "name": "Raise the Past",
+  "mana_cost": "{2}{W}{W}",
+  "type_line": "Sorcery",
+  "oracle_text": "Return all creature cards with mana value 2 or less from your graveyard to the battlefield.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "22",
+  "complexity_tier": "medium"
+}

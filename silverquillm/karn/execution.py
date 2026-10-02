@@ -17,6 +17,8 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+from silverquillm.benchmark_targets import target_cards
+from silverquillm.evaluator import _target_card_id
 from silverquillm.queue_state import _write_atomically
 
 from .benchmark import load_benchmark, stage_benchmark
@@ -188,7 +190,8 @@ def _scores(evaluated, benchmark) -> dict:
     ):
         if name == "card_correctness":
             expected = {
-                f"{benchmark.target_set}_{int(c) if c.isdigit() else c}" for c in benchmark.cards
+                _target_card_id(card_set, number, benchmark.root / "data/tests/audited" / card_set)
+                for card_set, number in target_cards(benchmark.target_set, benchmark.cards)
             }
         else:
             directory = benchmark.root / "workspace/cards/fdn"

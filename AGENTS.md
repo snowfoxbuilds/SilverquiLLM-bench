@@ -43,6 +43,7 @@ All specs, code, and agent instructions use these terms exactly.
 | `17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format for engine correctness validation |
 | `AUDITED-TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
 | `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): picked pools (23/5/5, selective subsets of the HOB set), run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |
+| `FRA-HARD-BENCHMARK.md` | The ten-card mixed FRA/HOB hard benchmark: selected pool, qualified card identities, independent oracle, and hidden evaluation |
 | `DECISION-MODEL.md` | V2 engine Player Query / Player Decision protocol, Game Symbols/Refs, Intents, DeterministicPlayer (V2) — engine-level, pool-neutral |
 | `BENCHMARK-CANDIDATES.md` | Retired: the removed Candidate Bundle promotion, batch, and publication pipeline, and what of it remains readable |
 | `BENCH-CONTRACT.md` | Historical Candidate Bundle and production Implementer Run contract (vendored read-only from the-ozolith); reference for legacy candidates |

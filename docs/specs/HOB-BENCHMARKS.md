@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-09-26
+Last updated: 2026-10-02
 
 # HOB Benchmarks
 
@@ -31,6 +31,9 @@ Magic: The Gathering | The Hobbit, main expansion set code HOB, released 2026-08
 Operator picks, made 2026-08-28 (hard, medium) and 2026-09-01 (easy) on issue #62; recorded here at grilling 2026-09-02 as the authoritative pool lists. Collector numbers are first printings (see Card pool source). Each benchmark's `config.json` `cards` and `data/` pool are populated from these lists by the pool-work issues; hob-easy is 23 cards (the 2026-08-27 sizing target of 20 was a placeholder). Work tracking lives in GitHub issues under the HOB-generation tracking issue #67, not in `TODO.md` (`TODO.md` and `docs/TODO_COMPLETED.md` are retired and deleted); #62 stays at its groundwork scope with `hob-medium/config.json` `cards` empty, the hob-medium pool / oracle / audited-test / instruction-doc work is a follow-on issue, and the hob-easy / hob-hard trees come later still *(grilling 2026-09-02)*.
 
 **hob-hard (5)** — extensive engine changes:
+
+These five selections also form the HOB portion of the ten-card [FRA Hard Benchmark](FRA-HARD-BENCHMARK.md).
+Its mixed-set Workspace, oracle, and Audited Tests are independent assets under `benchmarks/fra-hard/`.
 
 | # | Card | Why it's hard |
 | --- | --- | --- |

@@ -1,0 +1,19 @@
+{
+  "name": "An Offer You Can't Refuse",
+  "mana_cost": "{U}",
+  "type_line": "Instant",
+  "oracle_text": "Counter target noncreature spell. Its controller creates two Treasure tokens. (They're artifacts with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Treasure"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "160",
+  "complexity_tier": "medium"
+}

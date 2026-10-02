@@ -7,6 +7,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from silverquillm.benchmark_targets import target_cards
+
 
 @dataclass(frozen=True)
 class OracleLayout:
@@ -32,16 +34,19 @@ class OracleLayout:
         return self.benchmark_root / "data/tests/audited" / self.target_set
 
     def implementation(self, card: str) -> Path:
-        return self.oracle / "cards" / self.target_set / card / "card_impl.py"
+        return self.oracle / "cards" / card.split("_", 1)[0] / card / "card_impl.py"
 
     def suite(self, card: str) -> Path:
-        return self.audited / card / "tests.py"
+        return self.audited.parent / card.split("_", 1)[0] / card / "tests.py"
 
 
 def load_layout(root: Path, benchmark: str, *, require_cards: bool = False) -> OracleLayout:
     data = json.loads((root / "benchmarks" / benchmark / "config.json").read_text())
     target = data.get("draft_set", {}).get("primary_set_code", benchmark).lower()
-    cards = tuple(f"{target}_{str(number).lstrip('0') or '0'}" for number in data.get("cards", ()))
+    cards = tuple(
+        f"{code}_{int(number) if number.isdigit() else number}"
+        for code, number in target_cards(target, data.get("cards", ()))
+    )
     if require_cards and not cards:
         raise ValueError(f"{benchmark}: no selected cards in config.json")
     return OracleLayout(root, benchmark, target, cards)

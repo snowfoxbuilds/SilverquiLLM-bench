@@ -1,0 +1,17 @@
+{
+  "name": "Refute",
+  "mana_cost": "{1}{U}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Counter target spell. Draw a card, then discard a card.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "48",
+  "complexity_tier": "simple"
+}

@@ -36,6 +36,7 @@ import argparse
 import ast
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -347,6 +348,9 @@ def check_oracle_gate(
     try:
         config = json.loads(config_path.read_text()) if config_path.is_file() else {}
         target_set = config.get("draft_set", {}).get("primary_set_code", bench).lower()
+        identity = re.fullmatch(r"([A-Za-z0-9]+)_([A-Za-z0-9]+)", card)
+        if identity:
+            target_set = identity.group(1).lower()
     except (OSError, ValueError, AttributeError) as error:
         return False, f"Cannot resolve benchmark target set: {error}"
     oracle_cards_dir = oracle_workspace / "cards" / target_set

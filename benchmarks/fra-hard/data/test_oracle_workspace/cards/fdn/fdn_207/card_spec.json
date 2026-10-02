@@ -1,0 +1,17 @@
+{
+  "name": "Slagstorm",
+  "mana_cost": "{1}{R}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Choose one —\n• Slagstorm deals 3 damage to each creature.\n• Slagstorm deals 3 damage to each player.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "207",
+  "complexity_tier": "medium"
+}

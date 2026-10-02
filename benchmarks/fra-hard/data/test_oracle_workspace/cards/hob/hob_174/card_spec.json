@@ -1,0 +1,37 @@
+{
+  "name": "Glamdring, Foe-hammer // Gleam of Death",
+  "mana_cost": "{2} // {3}{U}",
+  "type_line": "Legendary Artifact — Equipment // Sorcery — Adventure",
+  "colors": [],
+  "keywords": [
+    "Equip",
+    "Mill"
+  ],
+  "rarity": "rare",
+  "set": "hob",
+  "collector_number": "174",
+  "layout": "adventure",
+  "card_faces": [
+    {
+      "object": "card_face",
+      "name": "Glamdring, Foe-hammer",
+      "mana_cost": "{2}",
+      "type_line": "Legendary Artifact — Equipment",
+      "oracle_text": "Instant and sorcery spells you cast cost {X} less to cast, where X is equipped creature's power.\nEquip {2}",
+      "flavor_text": "Suddenly a sword flashed in its own light.",
+      "artist": "Chris Cold",
+      "artist_id": "2622d22b-3fd8-4831-9b2b-adc5fac01b85",
+      "illustration_id": "407d54a9-c52a-41d2-b7f1-7f589d092b61"
+    },
+    {
+      "object": "card_face",
+      "name": "Gleam of Death",
+      "mana_cost": "{3}{U}",
+      "type_line": "Sorcery — Adventure",
+      "oracle_text": "Mill six cards, then put all instant and sorcery cards from among them into your hand. (Then exile this card. You may cast the artifact later from exile.)",
+      "artist": "Chris Cold",
+      "artist_id": "2622d22b-3fd8-4831-9b2b-adc5fac01b85"
+    }
+  ],
+  "mana_cost_str": "{2} // {3}{U}"
+}

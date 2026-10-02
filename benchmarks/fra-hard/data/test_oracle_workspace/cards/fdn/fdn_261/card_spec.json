@@ -1,0 +1,15 @@
+{
+  "name": "Dismal Backwater",
+  "mana_cost": "",
+  "type_line": "Land",
+  "oracle_text": "This land enters tapped.\nWhen this land enters, you gain 1 life.\n{T}: Add {U} or {B}.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "261",
+  "complexity_tier": "medium"
+}
