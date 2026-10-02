@@ -526,7 +526,10 @@ def _fire_spell_cast_event(
     game.trigger_manager.fire_event(
         game,
         SpellCastTriggeredEvent(
-            spell=card, card=card, player=player, controller=player
+            spell=card, card=card, player=player, controller=player,
+            # On the stack, X is its chosen value (rule 202.3e).
+            mana_value=card.mana_cost.cmc
+            + getattr(card, "x_value", 0) * card.mana_cost.x_count,
         ),
     )
 
@@ -534,6 +537,34 @@ def _fire_spell_cast_event(
 # ------------------------------------------------------------------
 # Cast spell
 # ------------------------------------------------------------------
+
+def _announce_x(game: GameState, player: Player, card: CardImpl, *, free: bool = False) -> None:
+    """Choose the value of X while casting (rule 601.2b).
+
+    A spell cast without paying its mana cost has X = 0 (rule 107.3b).
+    """
+    from engine.card_queries import choose_number
+
+    card.x_value = 0  # type: ignore[attr-defined]
+    x_count = card.mana_cost.x_count
+    if x_count and not free:
+        maximum = max(0, player.mana_pool.total() - card.mana_cost.cmc) // x_count
+        card.x_value = choose_number(  # type: ignore[attr-defined]
+            game, player, 0, maximum, "Choose X", source_card=card
+        )
+
+
+def _with_x(cost: ManaCost, x_value: int) -> ManaCost:
+    """*cost* with each {X} replaced by *x_value* generic mana (rule 601.2f)."""
+    if not cost.x_count:
+        return cost
+    return ManaCost(
+        generic=cost.generic + x_value * cost.x_count,
+        pips=dict(cost.pips),
+        x_count=0,
+        hybrid=list(cost.hybrid),
+    )
+
 
 def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
     """Cast *card* from *player*'s hand.
@@ -589,6 +620,8 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
     # Clear any stale colors_spent from a prior cast before new payment.
     if hasattr(card, "colors_spent"):
         del card.colors_spent
+
+    _announce_x(game, player, card)
 
     # 5. Choose targets
     target_specs = card.get_targets(game)
@@ -655,7 +688,10 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
     #   3. Keep only the candidates the player can actually pay, then choose
     #      among them (a Player Query fires only when more than one is payable).
     raw_reduction = _raw_cost_reduction(game, card, player, targets=chosen_targets)
-    base_costs = [card.mana_cost, *card.alternative_costs(game)]
+    base_costs = [
+        _with_x(base, card.x_value)  # type: ignore[attr-defined]
+        for base in [card.mana_cost, *card.alternative_costs(game)]
+    ]
     payable: list[tuple[int, ManaCost]] = []
     for index, base in enumerate(base_costs):
         clamped = min(raw_reduction, base.generic) if raw_reduction > 0 else 0
@@ -848,6 +884,7 @@ def cast_spell_free(
     stack_zone = player.zones[Zone.STACK]
     source_zone_container.remove(card)
     stack_zone.add(card)
+    _announce_x(game, player, card, free=True)
 
     # 3. Choose targets (with rollback on failure)
     try:

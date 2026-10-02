@@ -104,6 +104,7 @@ class SpellCastTriggeredEvent(TriggeredEvent):
     player: Any = None
     card: Any = None
     controller: Any = None
+    mana_value: int | None = None
 
 
 @dataclass
