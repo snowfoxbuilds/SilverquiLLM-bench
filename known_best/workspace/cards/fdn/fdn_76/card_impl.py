@@ -44,7 +44,7 @@ class VengefulBloodwitch(Creature):
 
         def _effect(game: GameState, controller: Any) -> None:
             # The fire-time controller: as the source last existed if it died
-            # (rules 603.3d, 603.10a).
+            # (rules 603.3a, 603.10a).
             from engine.game import gain_life
             gain_life(game, controller, 1)
             for player in game.players:

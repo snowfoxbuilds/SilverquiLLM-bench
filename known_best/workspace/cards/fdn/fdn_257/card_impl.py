@@ -68,7 +68,7 @@ class SolemnSimulacrum(ArtifactCreature):
 
         def _dies_effect(game: GameState, controller: Any) -> None:
             # The fire-time controller: as the source last existed if it died
-            # (rules 603.3d, 603.10a).
+            # (rules 603.3a, 603.10a).
             if controller is not None:
                 draw_card(game, controller)
         controller = getattr(self, 'controller', None) or game.active_player

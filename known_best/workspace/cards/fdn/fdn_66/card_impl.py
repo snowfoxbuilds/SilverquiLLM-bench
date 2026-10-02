@@ -58,7 +58,7 @@ class NineLivesFamiliar(Creature):
 
         def _capture(game: Any, event: Any, controller: Any) -> tuple[int, int | None]:
             # The card that died is the graveyard object of this stint; if it
-            # leaves the graveyard it becomes a new object and is not returned.
+            # leaves the graveyard it is not returned (rule 603.7c).
             return _revival(event), object_stint_id(game, source)
 
         def _dies_effect(game: GameState, controller: Any, state: tuple[int, int | None]) -> None:

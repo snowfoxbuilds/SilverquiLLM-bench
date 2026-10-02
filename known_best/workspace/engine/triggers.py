@@ -302,10 +302,11 @@ def register_delayed_trigger(
 ) -> None:
     """Create a delayed triggered ability (rule 603.7).
 
-    It triggers once, the next time an *event_type* event satisfies
-    *condition*, and then ceases to exist (603.7c). Its source is a marker
-    object of its own, so it outlives the object whose ability created it
-    (603.7d). *effect* follows the untargeted :class:`TriggerRegistration`
+    It triggers only once, the next time an *event_type* event satisfies
+    *condition* (603.7b), and is controlled by *controller* (603.7d-e). It is
+    registered under a marker object of its own, so it survives the creating
+    object leaving the battlefield. *effect* follows the untargeted
+    :class:`TriggerRegistration`
     contract: ``effect(game)`` or ``effect(game, controller)``.
     """
     from engine.card import CardImpl

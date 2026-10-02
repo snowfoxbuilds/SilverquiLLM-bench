@@ -31,7 +31,7 @@ class TestWildwoodScourgeProperties:
 
     def test_enters_with_x_counters(self) -> None:
         """X = 3 is chosen and paid while casting (rules 601.2b, 601.2f), and
-        the permanent enters with three +1/+1 counters (400.7c, 614.1c)."""
+        the permanent enters with three +1/+1 counters (400.7d, 614.1c)."""
         from engine.decisions import Decision
         from engine.types import ManaType
         from test_utils import cast_card, fund_mana_cost, prefer

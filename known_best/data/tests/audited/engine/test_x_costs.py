@@ -1,6 +1,6 @@
 """A spell with {X} in its cost: X is chosen while casting (rule 601.2b) and
 paid as part of the total cost (601.2f); on the stack its mana value counts X
-(202.3e), and the permanent it becomes keeps that choice (400.7c)."""
+(202.3e), and the permanent it becomes keeps that choice (400.7d)."""
 
 from __future__ import annotations
 
