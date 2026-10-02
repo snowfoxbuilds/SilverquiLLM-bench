@@ -1,14 +1,19 @@
 """Per-turn history the engine keeps for abilities to read: whether a player
 attacked this turn (raid, rule 508.1) and whether a creature died this turn
-(morbid, 700.4)."""
+(morbid, 700.4), plus permanents that don't untap during the untap step
+(502.3)."""
 
 from __future__ import annotations
 
 from engine.card import Creature
-from engine.game import destroy
+from engine.game import destroy, tap
 from engine.turn import untap_step
 from engine.types import Phase, Step
 from test_utils import advance_game_to_phase, behavioral_game, declare_attackers, enter_permanent
+
+
+class _DoesNotUntap(Creature):
+    skip_untap = True
 
 
 def _next_turn(game) -> None:
@@ -42,3 +47,16 @@ def test_creature_dying_records_creature_died_this_turn():
 
     _next_turn(game)
     assert game.creature_died_this_turn is False
+
+
+def test_permanent_that_does_not_untap_stays_tapped():
+    game = behavioral_game()
+    player = game.players[0]
+    stays = enter_permanent(game, player, _DoesNotUntap(name="Stays Tapped", base_power=1, base_toughness=1))
+    untaps = enter_permanent(game, player, Creature(name="Untaps", base_power=1, base_toughness=1))
+    tap(game, stays)
+    tap(game, untaps)
+
+    untap_step(game)
+    assert stays.is_tapped is True
+    assert untaps.is_tapped is False
