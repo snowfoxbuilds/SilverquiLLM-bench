@@ -1,10 +1,10 @@
-"""Chandra's +2 uses canonical loyalty activation; -4 baseline gaps are recorded separately."""
+"""Chandra's +2 and −4 through canonical loyalty activation."""
 
 import pytest
 from cards.fdn.fdn_81.card_impl import ChandraFlameshaper
 from engine.abilities import AbilityError
 from engine.card import Creature, Planeswalker
-from engine.decisions import GameRef
+from engine.decisions import Decision, DecisionKind, GameRef
 from engine.intent_player import Intent
 from engine.types import ManaCost, ManaType, Phase
 from test_utils import (
@@ -12,6 +12,9 @@ from test_utils import (
     behavioral_game,
     create_game,
     enter_permanent,
+    object_preference,
+    prefer,
+    put_on_battlefield,
     resolve_stack,
 )
 
@@ -67,3 +70,61 @@ def test_plus_two_cannot_be_repeated_in_the_same_turn():
         activate_loyalty_ability(game, player, card, 0)
     assert card.loyalty == 8 and player.mana_pool.get(ManaType.RED) == 3
     assert len(game.get_exile(player).get_all()) == 3
+
+
+def _minus4_setup(n_targets):
+    """Chandra (loyalty 6) on p1's battlefield and ``n_targets`` 4/9 creatures
+    on p2's, so no target dies to the damage."""
+    game = behavioral_game()
+    p1, p2 = game.players
+    chandra = enter_permanent(game, p1, ChandraFlameshaper())
+    targets = [
+        put_on_battlefield(game, p2, Creature(name=f"Target{i}", base_power=4, base_toughness=9))
+        for i in range(n_targets)
+    ]
+    return game, p1, chandra, targets
+
+
+def _activate_minus4(game, player, chandra):
+    activate_loyalty_ability(game, player, chandra, 2)
+    resolve_stack(game)
+
+
+class TestChandraFlameshaperMinus4Split:
+    """−4: 8 damage divided as the controller chooses among any number of
+    target creatures and/or planeswalkers (rules 601.2c-d via 602.2b)."""
+
+    def test_intent_chooses_the_split(self) -> None:
+        game, p1, chandra, (a, b) = _minus4_setup(2)
+        prefer(p1, object_preference(game, a), object_preference(game, b), Decision.number(5))
+        _activate_minus4(game, p1, chandra)
+        assert (a.damage_marked, b.damage_marked) == (5, 3)
+        assert chandra.loyalty == 2
+
+    def test_baseline_takes_first_offered_lowest(self) -> None:
+        # NUMBER options are offered ascending, so with no number preference
+        # each queried target gets 1 and the last takes the remainder.
+        game, p1, chandra, targets = _minus4_setup(3)
+        prefer(p1, *(object_preference(game, t) for t in targets))
+        _activate_minus4(game, p1, chandra)
+        assert [t.damage_marked for t in targets] == [1, 1, 6]
+        assert chandra.loyalty == 2
+
+    def test_each_queried_target_must_get_at_least_one(self) -> None:
+        # First of three targets: 8 left, two targets after it -> options 1..6.
+        game, p1, chandra, targets = _minus4_setup(3)
+        prefer(p1, *(object_preference(game, t) for t in targets))
+        _activate_minus4(game, p1, chandra)
+        number_queries = p1.transcript.queries(DecisionKind.NUMBER)
+        assert len(number_queries) == 2  # the last target is forced, no query
+        assert [dict(o.attrs)["value"] for o in number_queries[0].options] == [1, 2, 3, 4, 5, 6]
+        assert [t.damage_marked for t in targets] == [1, 1, 6]
+        assert chandra.loyalty == 2
+
+    def test_single_target_takes_all_8_without_a_query(self) -> None:
+        game, p1, chandra, (only,) = _minus4_setup(1)
+        prefer(p1, object_preference(game, only))
+        _activate_minus4(game, p1, chandra)
+        assert only.damage_marked == 8
+        assert p1.transcript.queries(DecisionKind.NUMBER) == []
+        assert chandra.loyalty == 2
