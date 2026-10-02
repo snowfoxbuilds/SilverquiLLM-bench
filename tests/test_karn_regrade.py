@@ -248,7 +248,7 @@ def test_graded_runs_are_reused_until_forced_or_the_grading_inputs_change(retain
     invoke(retained, docker=docker, force=True)
     assert len(docker.runs) == 3
 
-    suite = retained.opts["bench_root"] / "benchmarks/example/data/tests/audited/fdn/fdn_1/tests.py"
+    suite = retained.opts["bench_root"] / "benchmarks/example/data/tests/audited/fdn/fdn_2/tests.py"
     suite.write_text(suite.read_text() + "def test_another(): assert value == 1\n")
     changed = LocalDocker()
     summary = invoke(retained, docker=changed)

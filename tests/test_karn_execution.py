@@ -43,6 +43,9 @@ def benchmark_data(tmp_path):
         "cards/fdn/fdn_1/__init__.py": "",
         "cards/fdn/fdn_1/card_impl.py": "value = 1\n",
         "cards/fdn/fdn_1/card_spec.json": '{"collector_number":"1","name":"Example"}',
+        "cards/fdn/fdn_2/__init__.py": "",
+        "cards/fdn/fdn_2/card_impl.py": "value = 1\n",
+        "cards/fdn/fdn_2/card_spec.json": '{"collector_number":"2","name":"Reference"}',
         "engine_tests/test_engine.py": "from engine.card import value\ndef test_value(): assert value == 1\n",
     }.items():
         path = workspace / name
@@ -51,9 +54,12 @@ def benchmark_data(tmp_path):
     (root / "config.json").write_text(
         '{"id":"example","cards":["1"],"draft_set":{"primary_set_code":"FDN"}}'
     )
-    suite = root / "data/tests/audited/fdn/fdn_1/tests.py"
-    suite.parent.mkdir(parents=True)
-    suite.write_text("from engine.card import value\ndef test_value(): assert value == 1\n")
+    # fdn_1 is the target card, graded by card correctness only; fdn_2 is the
+    # FDN Card Regression population.
+    for card_id in ("fdn_1", "fdn_2"):
+        suite = root / f"data/tests/audited/fdn/{card_id}/tests.py"
+        suite.parent.mkdir(parents=True)
+        suite.write_text("from engine.card import value\ndef test_value(): assert value == 1\n")
     return tmp_path
 
 
@@ -733,7 +739,7 @@ def test_reference_extra_set_card_loads_from_its_declared_fdn_population(tmp_pat
     suite.write_text("from card_impl import value\ndef test_extra_reference(): assert value == 9\n")
     result = run_benchmark(**opts)
     assert result.scores["fdn_regression"]["tests_passed"] == 2
-    assert result.scores["fdn_regression"]["coverage"]["evaluated_cards"] == ["fdn_1", "spg_74"]
+    assert result.scores["fdn_regression"]["coverage"]["evaluated_cards"] == ["fdn_2", "spg_74"]
 
 
 def test_replay_card_map_uses_selected_benchmark_data_root(tmp_path, monkeypatch):
@@ -795,6 +801,7 @@ def test_fingerprint_without_audited_engine_tests_keeps_its_shape(tmp_path):
     assert _fingerprint_rows(root) == [
         ("target", "benchmarks/example/data/tests/audited/fdn/fdn_1/tests.py"),
         ("fdn", "benchmarks/example/data/tests/audited/fdn/fdn_1/tests.py"),
+        ("fdn", "benchmarks/example/data/tests/audited/fdn/fdn_2/tests.py"),
         ("engine", "benchmarks/example/workspace/engine_tests/test_engine.py"),
         ("test_utils", "benchmarks/example/workspace/test_utils.py"),
         ("engine_support", "benchmarks/example/workspace/conftest.py"),
