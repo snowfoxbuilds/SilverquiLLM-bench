@@ -6,6 +6,7 @@ from typing import Any
 
 from engine.combat import CombatState
 from engine.continuous_effects import EffectManager
+from engine.last_known import LastKnownInformation
 from engine.player import Player
 from engine.refs_registry import GameRefsRegistry
 from engine.replacement_effects import ReplacementManager
@@ -88,6 +89,9 @@ class GameState:
         # normal rotation.  When extras are exhausted the game picks up
         # from _normal_next_index.
         self._normal_next_index: int = 1
+        # Each object's snapshot from its most recent departure from the
+        # battlefield, keyed by ``object_id`` (see engine.last_known).
+        self.last_known: dict[int, LastKnownInformation] = {}
 
     # ------------------------------------------------------------------
     # Player properties
