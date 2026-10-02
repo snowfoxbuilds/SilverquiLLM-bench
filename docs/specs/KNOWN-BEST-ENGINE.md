@@ -32,6 +32,34 @@ It holds:
 
 It is seeded from hob-medium's Workspace without any oracle extensions, then has the already-identified Known Defects fixed: the zone-change reset that preserves last-known information (CR 400.7, 110.5, 111.7, 603.10a) and the engine or FDN-implementation defects behind the eight FDN cases hob-medium cut from its graded suite as baseline gaps.
 Those eight cases and dedicated zone-change Audited Engine Tests join its suites; seeding is complete when every regression Audited Test passes on it.
+A Platform Test grades a throwaway copy of it through the benchmark grading code and requires every regression Audited Test to pass.
+
+#### Layout
+
+The Known-Best Workspace is the top-level `known_best/` directory, laid out with a benchmark's relative paths so that porting is a plain hard copy with no path rewriting:
+
+```
+known_best/
+├── workspace/
+│   ├── engine/                      Known-Best Engine
+│   ├── cards/                       package files and fdn/ (FDN implementations
+│   │                                with their FDN Reference Tests)
+│   ├── conftest.py
+│   ├── pytest.ini
+│   └── test_utils.py
+└── data/tests/audited/
+    ├── fdn/<card_id>/tests.py       FDN Audited Tests
+    └── engine/                      Audited Engine Tests
+```
+
+| From `known_best/` | To a benchmark |
+| --- | --- |
+| `workspace/engine/`, `workspace/cards/fdn/` | `workspace/` and the Test Oracle Workspace |
+| `data/tests/audited/fdn/`, `data/tests/audited/engine/` | `data/tests/audited/` |
+| `data/tests/audited/engine/` | `workspace/engine_tests/`, seeding the Engine Reference Tests |
+
+It deliberately holds no `config.json` (it is not a benchmark), no target-set cards or stubs, no agent-facing documents, no Test Oracle Workspace or oracle extension, and no Engine Reference Tests.
+Engine Regression grades a benchmark's `data/tests/audited/engine/` whenever that directory exists and otherwise the host copy of `workspace/engine_tests/`, so `known_best/` is graded by exactly the code that grades benchmarks.
 
 ### Building a benchmark from it
 
