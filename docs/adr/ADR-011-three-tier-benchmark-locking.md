@@ -21,13 +21,15 @@ Tier transitions are **forward-only and non-reversible except for grave, explici
 
 - **Benchmarking → Beta** invalidates all existing benchmarks for that identity.
 - **Released → Benchmarking** forces retraction of all published scores.
-Enforcement is a **CI check** that reads the **base branch's** `tier`, expands it to locked path-globs, runs `git diff --name-only base...head`, and fails the PR if any changed path matches a locked glob. Locked paths by tier: Benchmarking locks `benchmarks/<bench>/workspace/`; Released additionally locks the oracle impls/engine (`benchmarks/<bench>/data/test_oracle_workspace/`) and audited tests (`benchmarks/<bench>/data/tests/audited/`). `config.json` is **never** a locked path, so a pure tier-transition PR (touching only `config.json`) always passes — and because a PR's edits are judged against the base (pre-transition, stricter) tier, lowering a tier and editing newly-unlocked files in the *same* PR is structurally impossible; those edits must land in a follow-up PR after the transition merges. No bypass label or transition carve-out is required. The tier is flipped via a human PR edit to `config.json`. SOS is currently in **Benchmarking**.
+Enforcement is a **CI check** that reads the **base branch's** `tier`, expands it to locked path-globs, runs `git diff --name-only base...head`, and fails the PR if any changed path matches a locked glob. Locked paths by tier: Benchmarking locks `benchmarks/<bench>/workspace/`; Released additionally locks the oracle impls/engine (`benchmarks/<bench>/data/test_oracle_workspace/`) and audited tests (`benchmarks/<bench>/data/tests/audited/`). `config.json` is **never** a locked path, so a pure tier-transition PR (touching only `config.json`) always passes — and because a PR's edits are judged against the base (pre-transition, stricter) tier, lowering a tier and editing newly-unlocked files in the *same* PR is structurally impossible; those edits must land in a follow-up PR after the transition merges. No bypass label or transition carve-out is required. The tier is flipped via a human PR edit to `config.json`. SOS and hob-medium are **Released** (amended 2026-10-02).
 
 ## Tier Transition Log
 
 Tier transitions are recorded here — there is no separate log file. Each entry notes the date, benchmark identity, direction, and triggering reason; for any →Released transition it also records the result of the required pre-Release harvest + investigation pass (see [AUDITED-TEST-IMPROVEMENT-WORKFLOW.md](../specs/AUDITED-TEST-IMPROVEMENT-WORKFLOW.md) → Cadence). Downgrades additionally note the invalidation (Benchmarking→Beta) or score retraction (Released→Benchmarking) they trigger.
 
 - 2026-05-28 — `sos` set to **Benchmarking** (initial tiering; `workspace/` locked).
+- 2026-10-02 — `sos` **Benchmarking → Released**: the legacy SOS lineage is frozen, and Known-Best Engine fixes never reach it (#123). No pre-Release harvest + investigation pass ran; the requirement is waived for a lineage that takes no further runs.
+- 2026-10-02 — `hob-medium` **Beta → Released**, skipping Benchmarking: its runs are complete and it is frozen for comparability (#123). The pre-Release harvest + investigation pass is waived; the failure review of its runs took its place.
 ## Consequences
 
 - **Positive**: Scores are comparable within a tier. "What may change" is explicit and machine-enforced. Because Released freezes audited tests, the manual investigation/discovery skill (v1 Test Harvester) and any test promotion run only *before* Release — so Released scores never drift.
@@ -38,3 +40,7 @@ Tier transitions are recorded here — there is no separate log file. Each entry
 - **Immutable Released, revise only by forking to a new versioned identity** (e.g. `benchmarks/sos-v2/`): cleanest provenance, but heavier for every correction. Rejected in favor of allowing in-place reversal with explicit invalidation/retraction.
 - **No formal tiers, rely on reviewer discipline**: the status quo that produced the inconsistency. Rejected.
 - **Lock audited tests at Benchmarking too**: rejected — the point of Benchmarking is to keep refining oracle impls and audited tests while the workspace agents see stays fixed.
+
+## Amendments
+
+- **2026-10-02 (#123)**: Recorded SOS and hob-medium as Released in the body and the Tier Transition Log; hob-medium moved from Beta straight to Released, which the forward-only rule permits.

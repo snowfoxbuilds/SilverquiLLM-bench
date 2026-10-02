@@ -7,7 +7,7 @@ Validates the three-check promotion gate:
 4. Orchestrator (check_promotion_candidate) short-circuits on tier failure
 5. CLI (main) exit codes
 6. Never-promotes invariant (no files written to audited tree)
-7. Real benchmarks/sos/config.json exists with tier=benchmarking
+7. Real benchmarks/sos/config.json exists with tier=Released
 """
 
 from __future__ import annotations
@@ -753,7 +753,7 @@ class TestNeverPromotes:
 
 
 # ---------------------------------------------------------------------------
-# 8. Real benchmarks/sos/config.json exists with tier=benchmarking
+# 8. Real benchmarks/sos/config.json exists with tier=Released
 # ---------------------------------------------------------------------------
 
 
@@ -764,16 +764,16 @@ class TestRealConfig:
         config_path = REPO_ROOT / "benchmarks" / "sos" / "config.json"
         assert config_path.is_file(), f"Expected {config_path} to exist"
 
-    def test_config_json_parses_with_tier_benchmarking(self) -> None:
+    def test_config_json_parses_with_tier_released(self) -> None:
         config_path = REPO_ROOT / "benchmarks" / "sos" / "config.json"
         data = json.loads(config_path.read_text(encoding="utf-8"))
         assert "tier" in data
-        assert data["tier"].lower() == "benchmarking"
+        assert data["tier"].lower() == "released"
 
-    def test_check_tier_passes_on_real_repo(self) -> None:
-        """check_tier with the real repo root returns ok."""
+    def test_check_tier_refuses_on_real_repo(self) -> None:
+        """check_tier with the real repo root refuses: SOS is Released."""
         ok, reason = check_tier(REPO_ROOT, bench="sos")
-        assert ok is True
+        assert ok is False
 
     def test_config_json_conforms_to_documented_schema(self) -> None:
         """config.json carries the full schema documented in BENCHMARK-RUNNER.md.
@@ -803,7 +803,7 @@ class TestRealConfig:
         # Canonical set name (matches README, specs, and sos.json set_name); guards
         # against drift back to the "Shadows over Sonnenthal" alias.
         assert data["display_name"] == "Secrets of Strixhaven"
-        assert data["tier"].lower() == "benchmarking"
+        assert data["tier"].lower() == "released"
 
         # draft_set sub-shape
         assert set(data["draft_set"]) >= {"primary_set_code", "collector_range", "extra_set_codes"}

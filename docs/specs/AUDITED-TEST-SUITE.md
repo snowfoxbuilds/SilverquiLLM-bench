@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-06-10
+Last updated: 2026-10-02
 
 # Audited Test Suite
 
@@ -225,7 +225,7 @@ A benchmark's lifecycle is an explicit tier in `benchmarks/sos/config.json`, wit
 - **Benchmarking** — `workspace/` locked; oracle impls/engine and audited tests still editable.
 - **Released** — all three locked (workspace + oracle impls/engine + audited tests).
 
-Locking oracle impls at Released (beyond the original two-item note) prevents audited tests being silently invalidated post-release. The tier is enforced by a CI check against the base branch's tier. SOS is currently in Benchmarking (grilling 2026-05-28).
+Locking oracle impls at Released (beyond the original two-item note) prevents audited tests being silently invalidated post-release. The tier is enforced by a CI check against the base branch's tier. SOS and hob-medium are Released (grilling 2026-10-02).
 
 Tier transitions are forward-only, non-reversible except for grave, documented reasons: Benchmarking→Beta invalidates all existing benchmarks for that identity; Released→Benchmarking forces retraction of all published scores. Tier is flipped via human PR edit to `config.json`. Because the CI check enforces the **base branch's** tier and `config.json` is never a locked path, a pure transition PR always passes and lowering-a-tier-plus-editing in one PR is structurally impossible — no carve-out or bypass label is needed (grilling 2026-05-28).
 
