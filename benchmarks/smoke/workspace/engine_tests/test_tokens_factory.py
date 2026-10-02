@@ -22,8 +22,12 @@ from cards.fdn.tokens import (
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
 from engine.protection import get_colors
-from engine.types import CardType, Color, Keyword, ManaType, Zone
+from engine.types import CardType, Color, Keyword, ManaType
 from test_utils import create_game, set_board_state
+
+
+def _names(zone) -> list[str]:
+    return [card.name for card in zone.get_all()]
 
 
 class TestFoodToken:
@@ -47,12 +51,16 @@ class TestFoodToken:
         life_before = player.life
 
         ability = food.get_activated_abilities()[0]
+        # {T} is part of the cost: a tapped Food cannot pay it.
+        food.is_tapped = True
+        assert ability.cost(game, food) is False
+        assert player.mana_pool.total() == 2
+        food.is_tapped = False
         assert ability.cost(game, food) is True
-        # Cost: {2} spent, token tapped then sacrificed to the graveyard.
+        # Cost: {2} spent and the token sacrificed. Status is not read off the
+        # sacrificed token: it left the battlefield as a new object (CR 400.7).
         assert player.mana_pool.total() == 0
-        assert food.is_tapped is True
-        assert not game.get_battlefield(player).contains(food)
-        assert player.zones[Zone.GRAVEYARD].contains(food)
+        assert "Food" not in _names(game.get_battlefield(player))
 
         ability.effect(game)
         assert player.life == life_before + 3
@@ -88,11 +96,13 @@ class TestTreasureToken:
         create_token(game, player, treasure)
         ability = treasure.get_mana_abilities()[0]
 
-        # Cost: tap + sacrifice.
+        # Cost: tap + sacrifice; a tapped Treasure cannot pay it.
+        treasure.is_tapped = True
+        assert ability.cost(game, treasure) is False
+        assert "Treasure" in _names(game.get_battlefield(player))
+        treasure.is_tapped = False
         assert ability.cost(game, treasure) is True
-        assert treasure.is_tapped is True
-        assert not game.get_battlefield(player).contains(treasure)
-        assert player.zones[Zone.GRAVEYARD].contains(treasure)
+        assert "Treasure" not in _names(game.get_battlefield(player))
 
         # "Add one mana of any color" — the controller chooses; answer red.
         player.start_intent("treasure", Intent(

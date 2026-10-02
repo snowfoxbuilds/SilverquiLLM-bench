@@ -14,7 +14,7 @@ cards/fdn/fdn_232/card_impl.py   — Scavenging Ooze
 These three implementations are the writable targets. Every other `cards/fdn/`
 implementation is a completed reference (read them for examples).
 
-The engine may have deficiencies and bugs. It's your job to make sure your
+The engine may have deficiencies and bugs, and so may the existing tests. It's your job to make sure your
 implementations behave correctly according to the rules in `RULEBOOK.txt`, and
 that your changes don't break existing cards.
 
@@ -28,21 +28,16 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
 1. **Card location** — Each target card's implementation class stays in its
    stub file (`cards/fdn/fdn_129/card_impl.py`, `cards/fdn/fdn_205/card_impl.py`,
    `cards/fdn/fdn_232/card_impl.py`), under the class name the stub gives. Do
-   not move or rename card directories.
+   not move or rename card directories. Your own tests for a target card belong
+   at `cards/fdn/fdn_<N>/tests.py` (the targets ship without one).
 
-2. **Existing tests are read-only** — Do not modify, add to, or delete files in
-   `engine_tests/`, and do not modify or delete the FDN tests at
-   `cards/fdn/fdn_*/tests.py` (read them as examples). Your own tests for a
-   target card belong at `cards/fdn/fdn_<N>/tests.py` (the targets ship
-   without one).
-
-3. **The engine is yours to change** — You may add, change, rename, move,
+2. **The engine is yours to change** — You may add, change, rename, move,
    refactor, or delete anything inside `engine/`. Prefer generic, reusable
    extensions over card-specific hacks. Existing cards and engine behavior must
    keep working, including public names such as `engine.card.CardImpl`,
    `engine.game` and the Player Query machinery.
 
-4. **Life changes go through `gain_life` / `lose_life`** — A card
+3. **Life changes go through `gain_life` / `lose_life`** — A card
    implementation changes a player's life **only** by calling
    `engine.game.gain_life(game, player, amount)` or
    `engine.game.lose_life(game, player, amount)`. Never assign `player.life`
@@ -55,7 +50,7 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
    in a card impl is rejected by the AST guard
    (`engine_tests/test_card_impl_ast_guard.py`, rule (d)).
 
-5. **Own enters-triggers fire on their own entry (rule 603.3a)** — The engine
+4. **Own enters-triggers fire on their own entry (rule 603.3a)** — The engine
    registers an entering permanent's own triggers **before** firing its
    `EntersBattlefieldTriggeredEvent` (in `move_to_zone` and `create_token`), so
    a "when this creature/permanent enters" ability registered in
@@ -66,7 +61,7 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
    exclude the source in its own condition filter (`if permanent is source:
    return False`).
 
-6. **Counters are an engine primitive** — Add/remove counters only through
+5. **Counters are an engine primitive** — Add/remove counters only through
    `engine.game.add_counter(game, permanent, type, amount)` /
    `remove_counter(...)`, and read them via `permanent.counters` (or
    `_generic_counters` for named types). Never store counters in a card-private

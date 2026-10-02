@@ -83,11 +83,17 @@ EVALUATION_PATTERNS = [
     r"host-side",
 ]
 
-DEFICIENCIES_LINE = (
-    "The engine may have deficiencies and bugs. It's your job to make sure your "
-    "implementations behave correctly according to the rules in `RULEBOOK.txt`, and "
-    "that your changes don't break existing cards."
+_DEFICIENCIES_TAIL = (
+    " It's your job to make sure your implementations behave correctly according to "
+    "the rules in `RULEBOOK.txt`, and that your changes don't break existing cards."
 )
+# hob-medium is Released and frozen; smoke is built from the Known-Best Workspace,
+# whose Reference Tests are editable and may be wrong (KNOWN-BEST-ENGINE.md).
+DEFICIENCIES_LINE = {
+    "hob-medium": "The engine may have deficiencies and bugs." + _DEFICIENCIES_TAIL,
+    "smoke": "The engine may have deficiencies and bugs, and so may the existing tests."
+    + _DEFICIENCIES_TAIL,
+}
 
 
 def _workspace_documents(benchmark: str) -> list[Path]:
@@ -107,7 +113,11 @@ class TestStagedInstructions:
             )
 
     def test_states_that_the_engine_may_be_deficient(self, benchmark: str) -> None:
-        assert DEFICIENCIES_LINE in _agents_md(benchmark)
+        assert DEFICIENCIES_LINE[benchmark] in _agents_md(benchmark)
+
+    def test_reference_tests_are_editable_once_built_from_known_best(self, benchmark: str) -> None:
+        read_only = "Existing tests are read-only" in _agents_md(benchmark)
+        assert read_only == (benchmark == "hob-medium")
 
     def test_no_obsolete_additive_only_rule(self, benchmark: str) -> None:
         agents = _agents_md(benchmark)
