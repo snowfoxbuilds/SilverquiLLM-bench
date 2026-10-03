@@ -7,6 +7,8 @@ imports (``from engine.X import …``, ``from cards.X import …``,
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
 
 from silverquillm._bootstrap import ensure_workspace_on_path

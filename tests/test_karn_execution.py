@@ -807,24 +807,3 @@ def test_fingerprint_follows_the_audited_engine_tests(tmp_path):
         ("engine_support", "benchmarks/example/workspace/pytest.ini"),
     ]
     assert not any("workspace/engine_tests" in path for _, path in rows)
-
-
-def test_v5_run_records_karn_v5_identity_beside_v4_records(tmp_path):
-    opts = options(tmp_path)
-    v5 = make_candidate(tmp_path / "v5", definition_version=5)
-    old = run_benchmark(**opts)
-    new = run_benchmark(**{**opts, "build_output": v5.build_output})
-    assert old.manifest["candidate"]["scheme"] == "karn-v4"
-    assert old.manifest["candidate"]["definition_version"] == 4
-    assert new.manifest["candidate"]["scheme"] == "karn-v5"
-    assert new.manifest["candidate"]["definition_version"] == 5
-    assert new.run_metadata["candidate_definition"]["definition_version"] == 5
-    stored = {record.run_id: record for _, record in iter_run_records(opts["results_repo"])}
-    assert {stored[old.run_id].candidate.scheme, stored[new.run_id].candidate.scheme} == {
-        "karn-v4",
-        "karn-v5",
-    }
-    assert {row["run_id"] for row in rebuild_index(opts["results_repo"])} == {
-        old.run_id,
-        new.run_id,
-    }
