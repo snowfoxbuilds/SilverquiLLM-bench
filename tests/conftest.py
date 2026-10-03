@@ -68,3 +68,11 @@ def plain_run_clone(plain_run, tmp_path):
     from .retained_runs import clone
 
     return clone(plain_run, tmp_path)
+
+
+@pytest.fixture(scope="session")
+def staged_sos_workspace(tmp_path_factory):
+    """``stage_workspace(output_dir)`` of the SOS Workspace, staged once; read it, never change it."""
+    from silverquillm.workspace import stage_workspace
+
+    return stage_workspace(tmp_path_factory.mktemp("staged-sos"))

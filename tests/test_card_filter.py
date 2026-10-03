@@ -59,97 +59,52 @@ def _all_sos_collector_numbers() -> set[str]:
 
 
 # ---------------------------------------------------------------------------
-# card_filter=None → all SOS cards staged
+# One staging per filter, each checked for everything that filter decides
 # ---------------------------------------------------------------------------
 
 
-class TestCardFilterNone:
-    """When card_filter is None (default), all SOS cards are staged."""
-
-    def test_all_sos_cards_present(self, tmp_path):
-        ws, _ = stage_workspace(tmp_path)
-        staged = _sos_collector_numbers(ws)
-        expected = _all_sos_collector_numbers()
-        assert staged == expected
-
-    def test_fdn_cards_present(self, tmp_path):
-        ws, _ = stage_workspace(tmp_path)
-        assert _fdn_dir_count(ws) > 0
-
-    def test_prompt_says_all(self, tmp_path):
-        ws, _ = stage_workspace(tmp_path)
-        prompt = (ws / "prompt.md").read_text()
-        assert "Implement all SOS cards" in prompt
+def test_no_filter_stages_every_sos_card_and_fdn_and_says_all(staged_sos_workspace):
+    ws, _ = staged_sos_workspace
+    assert _sos_collector_numbers(ws) == _all_sos_collector_numbers()
+    assert _fdn_dir_count(ws) > 0
+    assert "Implement all SOS cards" in (ws / "prompt.md").read_text()
 
 
-# ---------------------------------------------------------------------------
-# card_filter with specific collector numbers
-# ---------------------------------------------------------------------------
+def test_a_subset_filter_stages_only_its_cards_names_them_and_prints_them(tmp_path, capsys):
+    ws, _ = stage_workspace(tmp_path, card_filter=["1", "2"])
+    captured = capsys.readouterr().out
+    assert _sos_collector_numbers(ws) == {"1", "2"}
+    prompt = (ws / "prompt.md").read_text()
+    assert "1" in prompt
+    assert "2" in prompt
+    assert "1" in captured
+    assert "2" in captured
 
 
-class TestCardFilterSubset:
-    """When card_filter is set, only matching SOS cards are staged."""
-
-    def test_only_filtered_sos_cards_staged(self, tmp_path):
-        ws, _ = stage_workspace(tmp_path, card_filter=["1", "2"])
-        staged = _sos_collector_numbers(ws)
-        assert staged == {"1", "2"}
-
-    def test_single_card_filter(self, tmp_path):
-        ws, _ = stage_workspace(tmp_path, card_filter=["1"])
-        staged = _sos_collector_numbers(ws)
-        assert staged == {"1"}
-
-    def test_fdn_always_full_with_filter(self, tmp_path):
-        """FDN dirs must always be staged in full regardless of card_filter."""
-        ws_filtered, _ = stage_workspace(tmp_path / "filtered", card_filter=["1"])
-        ws_unfiltered, _ = stage_workspace(tmp_path / "unfiltered")
-        assert _fdn_dir_count(ws_filtered) == _fdn_dir_count(ws_unfiltered)
-
-    def test_fdn_count_positive_with_filter(self, tmp_path):
-        ws, _ = stage_workspace(tmp_path, card_filter=["1"])
-        assert _fdn_dir_count(ws) > 0
-
-    def test_prompt_mentions_filtered_cards(self, tmp_path):
-        ws, _ = stage_workspace(tmp_path, card_filter=["1", "2"])
-        prompt = (ws / "prompt.md").read_text()
-        assert "1" in prompt
-        assert "2" in prompt
-
-    def test_prompt_does_not_say_all_when_filtered(self, tmp_path):
-        ws, _ = stage_workspace(tmp_path, card_filter=["1"])
-        prompt = (ws / "prompt.md").read_text()
-        assert "Implement all SOS cards" not in prompt
+def test_a_single_card_filter_keeps_fdn_in_full_and_never_says_all(
+    tmp_path, staged_sos_workspace
+):
+    """FDN dirs must always be staged in full regardless of card_filter."""
+    ws, _ = stage_workspace(tmp_path, card_filter=["1"])
+    unfiltered, _ = staged_sos_workspace
+    assert _sos_collector_numbers(ws) == {"1"}
+    assert _fdn_dir_count(ws) > 0
+    assert _fdn_dir_count(ws) == _fdn_dir_count(unfiltered)
+    assert "Implement all SOS cards" not in (ws / "prompt.md").read_text()
 
 
-# ---------------------------------------------------------------------------
-# Edge cases
-# ---------------------------------------------------------------------------
+def test_an_empty_filter_stages_no_sos_card_but_all_fdn(tmp_path):
+    """An empty list means no SOS cards match."""
+    ws, _ = stage_workspace(tmp_path, card_filter=[])
+    assert _sos_collector_numbers(ws) == set()
+    assert _fdn_dir_count(ws) > 0
 
 
-class TestCardFilterEdgeCases:
-    """Edge cases for the card_filter parameter."""
-
-    def test_empty_filter_stages_no_sos(self, tmp_path):
-        """An empty list means no SOS cards match."""
-        ws, _ = stage_workspace(tmp_path, card_filter=[])
-        staged = _sos_collector_numbers(ws)
-        assert staged == set()
-
-    def test_nonexistent_collector_number_stages_nothing(self, tmp_path):
-        """A filter with no matching collector numbers produces empty SOS."""
-        ws, _ = stage_workspace(tmp_path, card_filter=["99999"])
-        staged = _sos_collector_numbers(ws)
-        assert staged == set()
-
-    def test_fdn_present_even_with_empty_filter(self, tmp_path):
-        ws, _ = stage_workspace(tmp_path, card_filter=[])
-        assert _fdn_dir_count(ws) > 0
-
-    def test_sos_tier_dir_exists_even_when_empty(self, tmp_path):
-        """The sos/ directory should exist even when filter matches nothing."""
-        ws, _ = stage_workspace(tmp_path, card_filter=["99999"])
-        assert (ws / "cards" / "sos").is_dir()
+def test_an_unmatched_filter_stages_nothing_but_keeps_the_sos_dir(tmp_path):
+    """A filter with no matching collector numbers produces an empty, present sos/ directory."""
+    ws, _ = stage_workspace(tmp_path, card_filter=["99999"])
+    assert _sos_collector_numbers(ws) == set()
+    assert (ws / "cards" / "sos").is_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -159,12 +114,6 @@ class TestCardFilterEdgeCases:
 
 class TestCardFilterStdout:
     """Verify card_filter info is echoed to stdout."""
-
-    def test_prints_filter_value(self, tmp_path, capsys):
-        stage_workspace(tmp_path, card_filter=["1", "2"])
-        captured = capsys.readouterr().out
-        assert "1" in captured
-        assert "2" in captured
 
     def test_prints_all_when_no_filter(self, tmp_path, capsys):
         stage_workspace(tmp_path)

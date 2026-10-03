@@ -24,9 +24,9 @@ class TestEngineExtensionPermission:
         """_PROMPT_TEXT base template includes the engine-extension permission."""
         assert _ENGINE_PERMISSION in _PROMPT_TEXT
 
-    def test_unfiltered_prompt_contains_permission(self, tmp_path: Path):
+    def test_unfiltered_prompt_contains_permission(self, staged_sos_workspace):
         """Unfiltered run (card_filter=None) produces prompt.md with permission."""
-        workspace, _ = stage_workspace(tmp_path)
+        workspace, _ = staged_sos_workspace
         prompt_md = (workspace / "prompt.md").read_text(encoding="utf-8")
         assert _ENGINE_PERMISSION in prompt_md
 
