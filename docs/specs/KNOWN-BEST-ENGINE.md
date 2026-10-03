@@ -133,7 +133,9 @@ Every run graded under the same digest reports against it (see [SCORING.md](SCOR
 
 The grade's key also covers the grading-code digest and the grader image, since either can change an outcome, so it is the benchmark identity plus those four: grading inputs, grading code, Workspace content and grader image.
 The grade is computed on demand, by the first run, recovery or regrade that needs it, through that caller's own grader, and cached host-side at `<state_root>/baseline-grades/<benchmark>/<sha256 of the key>.json`.
-It records each regression dimension's raw pass/total, missing reasons and per-test outcomes; a failed grading is never cached, and a damaged or mismatched file is graded again.
+It records each regression dimension's raw pass/total, missing reasons and per-test outcomes.
+Only a complete grade is cached: failing Audited Tests are what it records, and the FDN coverage gap every run shares does not count against it, but a grading that raised, timed out, failed to collect a suite or executed none is reported for that attempt only and graded again by the next request; a damaged, mismatched or incomplete cached file is graded again too.
+The grading inputs are checked against the requested digest before and after the grading, and a grade whose inputs changed meanwhile is reported as `grading_inputs_changed_during_grading` and never cached, so a cached grade always belongs to the digest it is filed under.
 
 ### Fixing a newly found defect
 

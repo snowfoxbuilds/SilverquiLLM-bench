@@ -112,11 +112,13 @@ When the block cannot be computed it is `{"available": false, "reason": "<reason
 
 | Reason | When |
 | --- | --- |
-| `grading_inputs_changed_during_grading` | The grading inputs changed while the run was graded |
+| `grading_inputs_changed_during_grading` | The grading inputs changed while the run or the baseline was graded |
 | `regression_not_evaluated` | Either regression dimension executed no test for the run |
 | `baseline_workspace_incomplete` | The unmodified Workspace could not be copied in full |
 | `baseline_grading_failed:<reason>` | Grading the unmodified Workspace failed |
 | `baseline_incomplete` | The baseline reference grade is incomplete for any reason but the FDN coverage gap every run shares |
+
+A regrade reuses an earlier output's block only when it is available or unavailable as `regression_not_evaluated`, which depends on the candidate's own grading; any other unavailable block is graded again on the next regrade, with no `--force` needed.
 
 ### Complexity Weighting
 
