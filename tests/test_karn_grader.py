@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import itertools
 import json
 import os
@@ -50,10 +51,9 @@ def mounts(run):
     return rows
 
 
-def test_every_grading_container_is_sandboxed_and_sees_only_declared_inputs(tmp_path):
-    docker = LocalDocker()
-    opts = options(tmp_path, grader=local_grader(docker=docker))
-    record = run_benchmark(**opts)
+def test_every_grading_container_is_sandboxed_and_sees_only_declared_inputs(plain_run):
+    opts, record = plain_run.opts, plain_run.record
+    docker = opts["grader"].docker
     assert all(score["tests_passed"] == 1 for score in record.scores.values())
     assert record.run_metadata["grading_isolation"] == {
         "mode": "container",
@@ -219,7 +219,11 @@ def test_a_hob_medium_sized_engine_payload_fits_the_evaluation_cap():
         for index in range(3000)
     ]
     value["engine_result"].update(
-        tests_passed=0, tests_failed=3000, tests_total=3000, pass_rate=0.0, test_nodes=nodes,
+        tests_passed=0,
+        tests_failed=3000,
+        tests_total=3000,
+        pass_rate=0.0,
+        test_nodes=nodes,
         errors=[f"FAILED engine_tests/{node['test_node']}" for node in nodes],
     )
     document = json.dumps(value).encode()
@@ -237,7 +241,9 @@ def _engine_suite_options(tmp_path, *, audited: bool):
         suite = root / "data/tests/audited/engine/test_audited.py"
         suite.parent.mkdir(parents=True)
         suite.write_text("from engine.card import value\ndef test_audited(): assert value == 1\n")
-        (root / "workspace/engine_tests/test_engine.py").write_text("def test_staged(): assert False\n")
+        (root / "workspace/engine_tests/test_engine.py").write_text(
+            "def test_staged(): assert False\n"
+        )
     return docker, opts
 
 
@@ -261,28 +267,16 @@ def test_grading_mounts_the_audited_engine_tests_and_never_the_staged_copy(tmp_p
     ]
     engine = record.scores["engine_regression"]
     assert engine["tests_passed"] == engine["tests_total"] == 1
-    assert engine["test_nodes"] == [{"test_node": "test_audited.py::test_audited", "outcome": "pass"}]
+    assert engine["test_nodes"] == [
+        {"test_node": "test_audited.py::test_audited", "outcome": "pass"}
+    ]
     validate_scores(record.scores)
 
 
 def test_grading_mounts_without_audited_engine_tests_are_unchanged(tmp_path):
     docker, opts = _engine_suite_options(tmp_path, audited=False)
-    record = run_benchmark(**opts)
-    assert _benchmark_mount_targets(docker) == [
-        "data/tests/audited/fdn",
-        "workspace/conftest.py",
-        "workspace/engine_tests",
-        "workspace/pytest.ini",
-        "workspace/test_utils.py",
-    ]
-    assert record.scores["engine_regression"]["test_nodes"] == [
-        {"test_node": "test_engine.py::test_value", "outcome": "pass"}
-    ]
-
-
-def test_candidate_prints_during_grading_do_not_reach_the_result_line(tmp_path):
-    """The worker discards everything else written to stdout, including by graded code."""
-    opts = options(tmp_path, grader=local_grader())
+    # Graded code that prints, even into the grader process's own stdout, never reaches the
+    # worker's result line.
     engine = opts["bench_root"] / "benchmarks/example/workspace/engine/card.py"
     engine.write_text(
         engine.read_text()
@@ -297,6 +291,16 @@ def test_candidate_prints_during_grading_do_not_reach_the_result_line(tmp_path):
     record = run_benchmark(**opts)
     assert "grading_failure" not in record.run_metadata
     assert all(score["evaluated"] for score in record.scores.values())
+    assert _benchmark_mount_targets(docker) == [
+        "data/tests/audited/fdn",
+        "workspace/conftest.py",
+        "workspace/engine_tests",
+        "workspace/pytest.ini",
+        "workspace/test_utils.py",
+    ]
+    assert record.scores["engine_regression"]["test_nodes"] == [
+        {"test_node": "test_engine.py::test_value", "outcome": "pass"}
+    ]
 
 
 REAL_RUN = grader_module.DockerRunner.run
@@ -461,7 +465,11 @@ def test_any_answer_but_a_supported_release_refuses_the_candidate(stdout):
 @pytest.mark.parametrize(
     ("answer", "reason", "removed"),
     [
-        (DockerRun(127, "python3: executable file not found"), "candidate_python_unsupported", True),
+        (
+            DockerRun(127, "python3: executable file not found"),
+            "candidate_python_unsupported",
+            True,
+        ),
         (DockerRun(1, "Traceback"), "candidate_python_unsupported", False),
         (DockerRun(None, "", overflow=True), "candidate_python_unsupported", True),
         (DockerRun(None, ""), "candidate_python_unsupported", True),
@@ -545,7 +553,9 @@ def test_a_direct_run_grades_on_the_probed_version_and_records_it(tmp_path, monk
         (DockerRun(0, "", b"3.14.4\n"), {}, "grader_image_unavailable"),
     ],
 )
-def test_a_direct_run_refuses_before_any_run_directory(tmp_path, monkeypatch, answer, graders, reason):
+def test_a_direct_run_refuses_before_any_run_directory(
+    tmp_path, monkeypatch, answer, graders, reason
+):
     docker = ProbedDocker(answer=answer, graders=graders)
     monkeypatch.setattr(grader_module, "DockerRunner", lambda: docker)
     opts = options(tmp_path)
@@ -555,8 +565,8 @@ def test_a_direct_run_refuses_before_any_run_directory(tmp_path, monkeypatch, an
     assert not opts["results_dir"].exists()
 
 
-def test_recorded_versions_must_agree_and_older_records_stay_valid(tmp_path):
-    record = run_benchmark(**options(tmp_path))
+def test_recorded_versions_must_agree_and_older_records_stay_valid(plain_run):
+    record = copy.deepcopy(plain_run.record)
     assert set(record.run_metadata["grading_isolation"]) == {"mode", "grader_image_id", "network"}
     record.validate()
     isolation = record.run_metadata["grading_isolation"]
@@ -609,8 +619,7 @@ def test_grader_build_builds_every_pinned_version_with_its_label(monkeypatch):
     monkeypatch.setattr(
         grader_module.DockerRunner,
         "build",
-        lambda self, tag, context, *, base, python: built.append((tag, context, base, python))
-        or 0,
+        lambda self, tag, context, *, base, python: built.append((tag, context, base, python)) or 0,
     )
     monkeypatch.setattr(
         grader_module.DockerRunner, "image_id", lambda self, reference: FIXTURE_IMAGE_ID
@@ -659,7 +668,9 @@ def test_the_legacy_lineage_grades_only_on_a_grader_labeled_313(
     engine.mkdir()
     if reason is None:
         result = grader_module.evaluate_legacy(tmp_path, cards, engine)
-        assert result.engine_result.tests_total == valid_evaluation()["engine_result"]["tests_total"]
+        assert (
+            result.engine_result.tests_total == valid_evaluation()["engine_result"]["tests_total"]
+        )
     else:
         with pytest.raises(GraderError, match=reason):
             grader_module.evaluate_legacy(tmp_path, cards, engine)
@@ -692,13 +703,18 @@ def test_the_docker_runner_builds_with_the_pinned_base_and_version_label(monkeyp
         lambda arguments, **kwargs: calls.append(arguments) or SimpleNamespace(returncode=0),
     )
     REAL_BUILD(
-        grader_module.DockerRunner(), "tag", Path("/context"), base="python:x@sha256:1", python="3.14"
+        grader_module.DockerRunner(),
+        "tag",
+        Path("/context"),
+        base="python:x@sha256:1",
+        python="3.14",
     )
     monkeypatch.setattr(
         grader_module.subprocess,
         "run",
-        lambda arguments, **kwargs: calls.append(arguments)
-        or SimpleNamespace(returncode=0, stdout=b"3.14\n"),
+        lambda arguments, **kwargs: (
+            calls.append(arguments) or SimpleNamespace(returncode=0, stdout=b"3.14\n")
+        ),
     )
     assert REAL_IMAGE_PYTHON(grader_module.DockerRunner(), FIXTURE_IMAGE_ID) == "3.14"
     assert calls[-1] == [
@@ -725,7 +741,9 @@ class CannedOutput(LocalDocker):
 
     def run(self, arguments, *, timeout, stdout_limit=0):
         self.runs.append(arguments)
-        return DockerRun(0, "", EVALUATION_SENTINEL + json.dumps(valid_evaluation()).encode() + b"\n")
+        return DockerRun(
+            0, "", EVALUATION_SENTINEL + json.dumps(valid_evaluation()).encode() + b"\n"
+        )
 
 
 def test_legacy_evaluation_mounts_only_run_inputs_and_keeps_patch_errors(tmp_path):
