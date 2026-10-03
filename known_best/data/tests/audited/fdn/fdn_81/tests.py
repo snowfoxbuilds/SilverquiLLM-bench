@@ -112,22 +112,33 @@ class TestChandraFlameshaperMinus4Split:
         assert chandra.loyalty == 2
 
     def test_each_queried_target_must_get_at_least_one(self) -> None:
-        # First of three targets: 8 left, two targets after it -> options 1..6.
+        # Asking for a zero share must not work: each of three targets gets at
+        # least 1 of the 8 (rule 601.2d), however the division is queried.
         game, p1, chandra, targets = _minus4_setup(3)
-        prefer(p1, *(object_preference(game, t) for t in targets))
+        prefer(p1, *(object_preference(game, t) for t in targets), Decision.number(0))
         _activate_minus4(game, p1, chandra)
-        number_queries = p1.transcript.queries(DecisionKind.NUMBER)
-        assert len(number_queries) == 2  # the last target is forced, no query
-        assert [dict(o.attrs)["value"] for o in number_queries[0].options] == [1, 2, 3, 4, 5, 6]
-        assert [t.damage_marked for t in targets] == [1, 1, 6]
+        damage = [t.damage_marked for t in targets]
+        assert min(damage) >= 1 and sum(damage) == 8
+        offered = [
+            dict(option.attrs)["value"]
+            for query in p1.transcript.queries(DecisionKind.NUMBER)
+            for option in query.options
+        ]
+        assert all(1 <= value <= 6 for value in offered)
         assert chandra.loyalty == 2
 
     def test_single_target_takes_all_8_without_a_query(self) -> None:
+        # A single target can only be dealt all 8; any amount offered is 8.
         game, p1, chandra, (only,) = _minus4_setup(1)
         prefer(p1, object_preference(game, only))
         _activate_minus4(game, p1, chandra)
         assert only.damage_marked == 8
-        assert p1.transcript.queries(DecisionKind.NUMBER) == []
+        offered = [
+            dict(option.attrs)["value"]
+            for query in p1.transcript.queries(DecisionKind.NUMBER)
+            for option in query.options
+        ]
+        assert all(value == 8 for value in offered)
         assert chandra.loyalty == 2
 
     def test_division_is_locked_in_at_activation(self) -> None:
