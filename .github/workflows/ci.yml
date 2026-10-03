@@ -81,8 +81,10 @@ jobs:
     # Grading runs on the candidate's own Python minor version, so SilverquiLLM,
     # which runs inside each pinned grader, is tested on every graded version.
     # The login-plugin tests skip here: the plugin host stays on 3.13.
+    # It runs after merge only: a pull request is gated on 3.13 alone, which
+    # halves its time on the one runner, and a 3.14-only break fails this job on main.
     name: pytest (Python 3.14)
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push'
     runs-on: [self-hosted, Linux, X64]
     needs: test
     timeout-minutes: 30
@@ -112,7 +114,7 @@ jobs:
     # `tests-passed` or `tests-failed`. A job that timed out or was cancelled on
     # its own counts as failed; a run cancelled whole (a newer push) labels nothing.
     name: Label the test outcome
-    needs: [test, test-py314]
+    needs: test
     if: >-
       !cancelled() && github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
