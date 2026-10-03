@@ -11,8 +11,8 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 - Agents: Karn-built images paired with v4 Construct Definitions, executed by SilverquiLLM's own benchmark host with no Ozolith dependency; candidate code is graded only in a network-less grader container
 - License: MIT (matching XMage)
 - Card implementations: one class per card, subclassing `CardImpl`
-- Tests: pytest with `test_utils` helpers, max 30 per card. Audited grader tests are host-side only, not run from the agent workspace.
-- Three evaluation dimensions: target-set card correctness (SOS card correctness for SOS; HOB card correctness for the HOB generation), FDN card regression, engine regression
+- Tests: pytest with `test_utils` helpers, max 30 per card. Audited grader tests are host-side only, not run from the agent workspace; staged Reference Tests are editable and never graded.
+- Three evaluation dimensions: target-set card correctness (SOS card correctness for SOS; HOB card correctness for the HOB generation), FDN card regression, engine regression; the two regression dimensions pool into a Combined Regression reported against a Baseline Score and a Known-Best Score
 - Pull requests: CI (`.github/workflows/ci.yml`, on the self-hosted runner) owns the `tests-passed` and `tests-failed` labels and comments on a failure; a push to the pull request removes both. Agents never add either label. Add `request-review` when a pull request is ready for review; a reviewer takes it once CI has added `tests-passed`.
 - Review routing: every pull request carries exactly one `implementer:claude` or `implementer:codex` label naming the agent family that wrote it, added by its author on opening. The other family's reviewer takes it — `implementer:claude` goes to the Codex reviewer, `implementer:codex` to the Claude reviewer — and a pull request with neither label is never reviewed. A human merges.
 - Pushing back: a reviewer's findings are advice, not orders, and its verdict is not the final word. An implementer that judges a finding wrong may push back, saying why in a reply on the pull request, and then adds `request-review` again; the human who merges decides.
@@ -44,6 +44,7 @@ All specs, code, and agent instructions use these terms exactly.
 | `AUDITED-TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
 | `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): picked pools (23/5/5, selective subsets of the HOB set), run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |
 | `FRA-HARD-BENCHMARK.md` | The ten-card mixed FRA/HOB hard benchmark: selected pool, qualified card identities, independent oracle, and hidden evaluation |
+| `KNOWN-BEST-ENGINE.md` | The Known-Best Workspace and Engine, per-benchmark Known Defects, the baseline reference grade, and how newly found defects and wrong Audited Tests are fixed |
 | `DECISION-MODEL.md` | V2 engine Player Query / Player Decision protocol, Game Symbols/Refs, Intents, DeterministicPlayer (V2) — engine-level, pool-neutral |
 | `BENCHMARK-CANDIDATES.md` | Retired: the removed Candidate Bundle promotion, batch, and publication pipeline, and what of it remains readable |
 | `BENCH-CONTRACT.md` | Historical Candidate Bundle and production Implementer Run contract (vendored read-only from the-ozolith); reference for legacy candidates |

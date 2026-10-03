@@ -1,0 +1,17 @@
+{
+  "name": "Day of Judgment",
+  "mana_cost": "{2}{W}{W}",
+  "type_line": "Sorcery",
+  "oracle_text": "Destroy all creatures.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "140",
+  "complexity_tier": "simple"
+}

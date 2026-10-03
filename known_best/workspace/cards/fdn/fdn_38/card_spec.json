@@ -1,0 +1,17 @@
+{
+  "name": "Faebloom Trick",
+  "mana_cost": "{2}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Create two 1/1 blue Faerie creature tokens with flying. When you do, tap target creature an opponent controls.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "38",
+  "complexity_tier": "medium"
+}

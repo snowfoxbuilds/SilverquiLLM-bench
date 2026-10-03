@@ -1,0 +1,17 @@
+{
+  "name": "Sure Strike",
+  "mana_cost": "{1}{R}",
+  "type_line": "Instant",
+  "oracle_text": "Target creature gets +3/+0 and gains first strike until end of turn. (It deals combat damage before creatures without first strike.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "209",
+  "complexity_tier": "medium"
+}

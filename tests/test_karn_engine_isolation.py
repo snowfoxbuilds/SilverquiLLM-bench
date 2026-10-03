@@ -125,7 +125,8 @@ def test_candidate_edits_are_graded_and_poisoned_support_is_ignored(grading_tree
     }
 
     result = _eval_engine(
-        candidate / "engine", host / "engine_tests", test_utils=host / "test_utils.py"
+        candidate / "engine", host / "engine_tests",
+        support_dir=host, test_utils=host / "test_utils.py",
     )
 
     assert result.tests_total == 4, result.errors
@@ -141,7 +142,8 @@ def test_legacy_engine_only_staging_uses_explicit_reference_cards(grading_trees,
     _write(engine_only / "engine/rules.py", "VALUE = 'candidate engine'\n")
 
     result = _eval_engine(
-        engine_only / "engine", host / "engine_tests", cards_dir=candidate / "cards"
+        engine_only / "engine", host / "engine_tests", support_dir=host,
+        cards_dir=candidate / "cards",
     )
 
     assert result.tests_total == result.tests_passed == 4, result.errors
@@ -151,7 +153,31 @@ def test_legacy_engine_only_staging_uses_explicit_reference_cards(grading_trees,
 def test_missing_candidate_packages_do_not_fall_back_to_host(grading_trees):
     host, candidate = grading_trees
     result = _eval_engine(
-        candidate / "missing-engine", host / "engine_tests", test_utils=host / "test_utils.py"
+        candidate / "missing-engine", host / "engine_tests",
+        support_dir=host, test_utils=host / "test_utils.py",
     )
     assert result.tests_total == 0
     assert any("selected grading code directory not found" in message for message in result.errors)
+
+
+def test_audited_engine_tests_take_support_only_from_support_dir(grading_trees):
+    host, candidate = grading_trees
+    audited = host.parent / "data/tests/audited/engine"
+    for name in ("__init__.py", "support.py", "test_grading.py"):
+        _write(audited / name, (host / "engine_tests" / name).read_text())
+    _write(host / "engine_tests/test_grading.py", "def test_staged_copy_is_not_graded():\n    assert False\n")
+    source_files = {
+        p: p.read_bytes() for root in (host.parent, candidate) for p in root.rglob("*") if p.is_file()
+    }
+
+    result = _eval_engine(candidate / "engine", audited, support_dir=host)
+
+    assert result.tests_total == result.tests_passed == 4, result.errors
+    assert sorted(node["test_node"] for node in result.test_nodes) == [
+        "test_grading.py::test_authoritative_support",
+        "test_grading.py::test_external_replay_root_and_relative_fixtures",
+        "test_grading.py::test_selected_card_and_relative_source",
+        "test_grading.py::test_selected_engine",
+    ]
+    assert {node["outcome"] for node in result.test_nodes} == {"pass"}
+    assert all(path.read_bytes() == data for path, data in source_files.items())

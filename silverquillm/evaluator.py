@@ -40,6 +40,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -119,6 +120,7 @@ class EngineResult:
     tests_total: int = 0
     pass_rate: float = 0.0
     errors: list[str] = field(default_factory=list)
+    test_nodes: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -617,10 +619,10 @@ def _prepare_engine_work(
     return engine_dir, None
 
 
-def _generate_report_conftest(report_jsonl_path: str) -> str:
-    """Return Python source for a conftest.py that records test outcomes to JSONL.
+def _generate_report_plugin(report_jsonl_path: str) -> str:
+    """Return Python source for a pytest plugin that records test outcomes to JSONL.
 
-    The generated conftest uses the ``pytest_runtest_logreport`` hook to capture
+    The generated plugin uses the ``pytest_runtest_logreport`` hook to capture
     per-test outcomes.  Only ``when == "call"`` reports are recorded for
     pass/fail.  ``when == "setup"`` failures (including collection errors) are
     also captured since those tests never reach ``call``.
@@ -683,12 +685,21 @@ def _normalize_nodeid(nodeid: str) -> str:
     return nodeid
 
 
-def _parse_report_jsonl(report_path: Path) -> list[dict]:
+def _suite_relative_nodeid(nodeid: str, suite_dir: str) -> str:
+    """Make a node id relative to the graded suite root, keeping subdirectories."""
+    if nodeid in ("", "<collection-error>", suite_dir):
+        return "<collection-error>"
+    return nodeid.removeprefix(suite_dir + "/")
+
+
+def _parse_report_jsonl(report_path: Path, suite_dir: str | None = None) -> list[dict]:
     """Parse the JSONL report file into a list of ``{"test_node": ..., "outcome": ...}`` dicts.
 
-    Deduplicates by nodeid (first occurrence wins).  Normalizes nodeids to
-    ``tests.py::test_x`` form.  Collection errors without a real nodeid get
-    a synthetic ``tests.py::<collection-error>`` id.
+    Deduplicates by nodeid (first occurrence wins).  Without *suite_dir*,
+    normalizes nodeids to ``tests.py::test_x`` form and gives collection errors
+    without a real nodeid a synthetic ``tests.py::<collection-error>`` id.  With
+    *suite_dir*, nodeids are made relative to that suite directory and a
+    nodeless collection error becomes ``<collection-error>``.
     """
     if not report_path.exists():
         return []
@@ -713,8 +724,9 @@ def _parse_report_jsonl(report_path: Path) -> list[dict]:
         if outcome not in ("pass", "fail"):
             continue
 
-        # Normalize the nodeid
-        if raw_nodeid and raw_nodeid != "<collection-error>":
+        if suite_dir is not None:
+            normalized = _suite_relative_nodeid(raw_nodeid, suite_dir)
+        elif raw_nodeid and raw_nodeid != "<collection-error>":
             normalized = _normalize_nodeid(raw_nodeid)
         else:
             normalized = "tests.py::<collection-error>"
@@ -729,19 +741,6 @@ def _parse_report_jsonl(report_path: Path) -> list[dict]:
     return nodes
 
 
-def _restore_conftest(
-    conftest_path: Path | None,
-    original_content: str | None,
-) -> None:
-    """Restore or remove the conftest.py after report capture."""
-    if conftest_path is None:
-        return
-    if original_content is not None:
-        conftest_path.write_text(original_content)
-    elif conftest_path.exists():
-        conftest_path.unlink()
-
-
 def _run_pytest_with_pythonpath(
     test_path: Path,
     pythonpath_parts: list[str],
@@ -749,12 +748,20 @@ def _run_pytest_with_pythonpath(
     capture_test_nodes: bool = False,
     *,
     isolated_workspace: Path | None = None,
+    suite_dir: str | None = None,
 ) -> tuple[int, int, int, list[str]] | tuple[int, int, int, list[str], list[dict]]:
     """Run pytest on *test_path* with a custom PYTHONPATH.
 
     Returns ``(passed, failed, total, errors)``.  When *capture_test_nodes*
     is ``True``, returns a 5-tuple with an additional list of per-node
     outcome dicts: ``[{"test_node": "tests.py::test_x", "outcome": "pass"|"fail"}, ...]``.
+
+    Node capture loads a generated reporter as its own pytest plugin
+    (``-p <module>``) from a fresh temporary directory placed first on
+    ``PYTHONPATH``, under a per-call module name.  Pytest dispatches its hooks
+    beside any ``conftest.py`` hooks, so authoritative support files are never
+    edited and their own hooks keep running.  The directory, holding the plugin
+    and its JSONL report, is removed however the run ends.
     """
     # Graded code gets no inherited credentials or tokens; see ADR-013.
     env = {key: os.environ[key] for key in _PYTEST_ENVIRONMENT if key in os.environ}
@@ -763,11 +770,9 @@ def _run_pytest_with_pythonpath(
         env["SILVERQUILLM_BENCH_ROOT"] = str(data_root)
     existing = os.environ.get("PYTHONPATH", "") if isolated_workspace is None else ""
     parts = pythonpath_parts + ([existing] if existing else [])
-    env["PYTHONPATH"] = os.pathsep.join(parts)
 
     report_jsonl_path = None
-    existing_conftest_backup = None
-    conftest_in_test_dir = None
+    report_dir = None
 
     cmd = [
         sys.executable,
@@ -786,25 +791,16 @@ def _run_pytest_with_pythonpath(
         ])
 
     if capture_test_nodes:
-        # Write a report JSONL to a temp file; inject conftest into the test's
-        # parent directory so pytest picks it up automatically.
-        report_jsonl_dir = tempfile.mkdtemp(prefix="eval_report_")
-        report_jsonl_path = Path(report_jsonl_dir) / "report.jsonl"
-        test_dir = test_path.parent
-        conftest_in_test_dir = test_dir / "conftest.py"
-
-        # Back up any existing conftest.py (e.g. from audited tests)
-        if conftest_in_test_dir.exists():
-            existing_conftest_backup = conftest_in_test_dir.read_text()
-            # Prepend report hooks to existing conftest
-            report_hooks = _generate_report_conftest(str(report_jsonl_path))
-            conftest_in_test_dir.write_text(
-                report_hooks + "\n" + existing_conftest_backup
-            )
-        else:
-            conftest_in_test_dir.write_text(
-                _generate_report_conftest(str(report_jsonl_path))
-            )
+        report_dir = Path(tempfile.mkdtemp(prefix="eval_report_"))
+        report_jsonl_path = report_dir / "report.jsonl"
+        # First on the path, so no graded module can shadow the reporter.
+        plugin = f"_silverquillm_node_report_{uuid.uuid4().hex}"
+        (report_dir / f"{plugin}.py").write_text(
+            _generate_report_plugin(str(report_jsonl_path))
+        )
+        parts = [str(report_dir), *parts]
+        cmd.extend(["-p", plugin])
+    env["PYTHONPATH"] = os.pathsep.join(parts)
 
     try:
         try:
@@ -831,18 +827,17 @@ def _run_pytest_with_pythonpath(
             # less than tests_total when skips exist.  The authoritative counts
             # (tests_passed, tests_failed, tests_total) come from
             # _parse_pytest_output and are unaffected.
-            test_nodes = _parse_report_jsonl(report_jsonl_path) if report_jsonl_path else []
+            test_nodes = (
+                _parse_report_jsonl(report_jsonl_path, suite_dir) if report_jsonl_path else []
+            )
             return parsed[0], parsed[1], parsed[2], parsed[3], test_nodes
 
         return parsed
     finally:
-        # Always restore conftest and clean up the report temp dir, regardless
-        # of how the body exits (normal return, TimeoutExpired, or any other
+        # However the body exits (normal return, TimeoutExpired, or any other
         # exception such as OSError/PermissionError).
-        if capture_test_nodes:
-            _restore_conftest(conftest_in_test_dir, existing_conftest_backup)
-            if report_jsonl_path:
-                shutil.rmtree(report_jsonl_path.parent, ignore_errors=True)
+        if report_dir is not None:
+            shutil.rmtree(report_dir, ignore_errors=True)
 
 
 def _make_card_result(
@@ -1020,6 +1015,7 @@ def _eval_engine(
     engine_tests_dir: Path,
     timeout: int = 120,
     *,
+    support_dir: Path,
     test_utils: Path | None = None,
     cards_dir: Path | None = None,
 ) -> EngineResult:
@@ -1027,13 +1023,16 @@ def _eval_engine(
 
     The workspace-relative card checks and repository-relative replay fixtures
     must see the same candidate packages as ordinary imports. Candidate pytest
-    configuration, tests and helper modules never enter the grading workspace.
-    Legacy engine-only staging supplies its reference cards explicitly.
+    configuration, tests and helper modules never enter the grading workspace:
+    ``conftest.py``, ``pytest.ini`` and the default ``test_utils.py`` come from
+    the host-side *support_dir*. Legacy engine-only staging supplies its
+    reference cards explicitly.
     """
     if not engine_tests_dir.is_dir():
         return EngineResult(errors=[f"No engine tests at {engine_tests_dir}"])
-    authoritative_workspace = engine_tests_dir.parent
-    support = test_utils if test_utils is not None else authoritative_workspace / "test_utils.py"
+    if not support_dir.is_dir():
+        return EngineResult(errors=[f"authoritative engine support not found at {support_dir}"])
+    support = test_utils if test_utils is not None else support_dir / "test_utils.py"
     if not support.is_file():
         return EngineResult(errors=[f"authoritative test_utils.py not found at {support}"])
     selected_cards = cards_dir if cards_dir is not None else engine_work.parent / "cards"
@@ -1052,11 +1051,12 @@ def _eval_engine(
         workspace.mkdir(parents=True)
         shutil.copytree(engine_work, workspace / "engine", ignore=_GRADING_IGNORE)
         shutil.copytree(selected_cards, workspace / "cards", ignore=_GRADING_IGNORE)
+        # Suites import engine_tests.* whatever the source directory is called.
         staged_tests = workspace / "engine_tests"
         shutil.copytree(engine_tests_dir, staged_tests, ignore=_GRADING_IGNORE)
         shutil.copy2(support, workspace / "test_utils.py")
         for name in ("conftest.py", "pytest.ini"):
-            source = authoritative_workspace / name
+            source = support_dir / name
             if source.is_file():
                 shutil.copy2(source, workspace / name)
         if not (workspace / "pytest.ini").is_file():
@@ -1077,9 +1077,10 @@ def _eval_engine(
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, destination)
 
-        passed, failed, total, errors = _run_pytest_with_pythonpath(
+        passed, failed, total, errors, test_nodes = _run_pytest_with_pythonpath(
             staged_tests, [str(workspace), str(_REPO_ROOT)], timeout=timeout,
-            isolated_workspace=workspace,
+            capture_test_nodes=True, isolated_workspace=workspace,
+            suite_dir=staged_tests.name,
         )
     return EngineResult(
         tests_passed=passed,
@@ -1087,6 +1088,7 @@ def _eval_engine(
         tests_total=total,
         pass_rate=passed / total if total > 0 else 0.0,
         errors=errors,
+        test_nodes=test_nodes,
     )
 
 
@@ -1101,7 +1103,9 @@ class EvalPaths:
 
     ``target_set`` cards are what the agent implements (Dimension 1); ``fdn``
     is the FDN regression population (Dimension 2); ``engine_tests`` is the
-    engine suite (Dimension 3).  All are resolved from the benchmark root so a
+    engine suite (Dimension 3), and ``engine_support`` the host-side directory
+    that supplies its ``conftest.py`` and ``pytest.ini``.  All are resolved
+    from the benchmark root so a
     new benchmark needs no code change — and the ``sos`` resolution reproduces
     the paths the legacy :func:`evaluate` hardcoded (see the resolution
     regression test).
@@ -1115,6 +1119,7 @@ class EvalPaths:
     audited_fdn: Path
     engine_tests: Path
     test_utils: Path
+    engine_support: Path
 
 
 def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
@@ -1123,11 +1128,17 @@ def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
     ``test_utils`` prefers the oracle workspace copy (as SOS uses today) and
     falls back to the staged workspace copy for benchmarks that ship only the
     latter (e.g. smoke).
+
+    ``engine_tests`` is the hidden Audited Engine Tests directory
+    ``data/tests/audited/engine`` whenever it exists, even empty; otherwise it
+    falls back to the host copy of the staged ``workspace/engine_tests`` (as
+    hob-medium and SOS grade). ``engine_support`` is always ``workspace``.
     """
     benchmark_root = Path(benchmark_root)
     tests_audited = benchmark_root / "data" / "tests" / "audited"
     oracle_test_utils = benchmark_root / "data" / "test_oracle_workspace" / "test_utils.py"
     workspace_test_utils = benchmark_root / "workspace" / "test_utils.py"
+    audited_engine = tests_audited / "engine"
     return EvalPaths(
         benchmark_root=benchmark_root,
         target_set=target_set,
@@ -1135,8 +1146,12 @@ def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
         engine_dir=benchmark_root / "workspace" / "engine",
         audited_target=tests_audited / target_set,
         audited_fdn=tests_audited / "fdn",
-        engine_tests=benchmark_root / "workspace" / "engine_tests",
+        engine_tests=(
+            audited_engine if audited_engine.is_dir()
+            else benchmark_root / "workspace" / "engine_tests"
+        ),
         test_utils=oracle_test_utils if oracle_test_utils.is_file() else workspace_test_utils,
+        engine_support=benchmark_root / "workspace",
     )
 
 
@@ -1320,7 +1335,7 @@ def evaluate_run(
         # Dimension 3 — engine regression (authoritative suite + support, agent engine).
         result.engine_result = _eval_engine(
             overlay / "engine", paths.engine_tests, timeout=timeout,
-            test_utils=paths.test_utils,
+            support_dir=paths.engine_support, test_utils=paths.test_utils,
         )
     finally:
         shutil.rmtree(overlay_root, ignore_errors=True)
@@ -1398,7 +1413,8 @@ def evaluate(
 
         # Dimension 3: Engine Regression
         result.engine_result = _eval_engine(
-            engine_work, engine_tests, timeout=timeout, cards_dir=cards_dir,
+            engine_work, engine_tests, timeout=timeout,
+            support_dir=_sos_paths.engine_support, cards_dir=cards_dir,
         )
         if engine_prep_error is not None:
             result.engine_result.errors.insert(0, engine_prep_error)

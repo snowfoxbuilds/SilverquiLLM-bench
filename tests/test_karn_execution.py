@@ -771,3 +771,51 @@ def test_fingerprint_includes_authoritative_engine_configuration_and_replay_supp
         "replay_fixture",
         "replay_support",
     }
+
+
+def _fingerprint_rows(root):
+    from silverquillm.karn.benchmark import load_benchmark
+    from silverquillm.karn.grading_inputs import grading_inputs
+
+    return [
+        (row["kind"], row["path"])
+        for row in grading_inputs(load_benchmark(root, "example"))["files"]
+    ]
+
+
+def _with_engine_support(root):
+    workspace = root / "benchmarks/example/workspace"
+    (workspace / "conftest.py").write_text("# authoritative fixtures\n")
+    (workspace / "pytest.ini").write_text("[pytest]\n")
+
+
+def test_fingerprint_without_audited_engine_tests_keeps_its_shape(tmp_path):
+    root = benchmark_data(tmp_path / "data")
+    _with_engine_support(root)
+    assert _fingerprint_rows(root) == [
+        ("target", "benchmarks/example/data/tests/audited/fdn/fdn_1/tests.py"),
+        ("fdn", "benchmarks/example/data/tests/audited/fdn/fdn_1/tests.py"),
+        ("engine", "benchmarks/example/workspace/engine_tests/test_engine.py"),
+        ("test_utils", "benchmarks/example/workspace/test_utils.py"),
+        ("engine_support", "benchmarks/example/workspace/conftest.py"),
+        ("engine_support", "benchmarks/example/workspace/pytest.ini"),
+        ("replay_token_map", "data/replays/token_id_map.json"),
+        ("replay_card_map", "data/replays/card_id_map.json"),
+    ]
+
+
+def test_fingerprint_follows_the_audited_engine_tests(tmp_path):
+    root = benchmark_data(tmp_path / "data")
+    _with_engine_support(root)
+    audited = root / "benchmarks/example/data/tests/audited/engine"
+    (audited / "zone_change").mkdir(parents=True)
+    (audited / "test_audited.py").write_text("def test_a(): pass\n")
+    (audited / "zone_change/test_lki.py").write_text("def test_b(): pass\n")
+    rows = _fingerprint_rows(root)
+    assert [row for row in rows if row[0] in {"engine", "engine_support"}] == [
+        ("engine", "benchmarks/example/data/tests/audited/engine/test_audited.py"),
+        ("engine", "benchmarks/example/data/tests/audited/engine/zone_change/test_lki.py"),
+        ("engine_support", "benchmarks/example/workspace/conftest.py"),
+        ("engine_support", "benchmarks/example/workspace/pytest.ini"),
+    ]
+    assert not any("workspace/engine_tests" in path for _, path in rows)

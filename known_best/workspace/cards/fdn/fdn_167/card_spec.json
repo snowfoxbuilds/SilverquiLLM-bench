@@ -1,0 +1,19 @@
+{
+  "name": "Tolarian Terror",
+  "mana_cost": "{6}{U}",
+  "type_line": "Creature — Serpent",
+  "oracle_text": "This spell costs {1} less to cast for each instant and sorcery card in your graveyard.\nWard {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)",
+  "power": "5",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Ward"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "167",
+  "complexity_tier": "medium"
+}
