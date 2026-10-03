@@ -25,6 +25,20 @@ if TYPE_CHECKING:
     from engine.player import Player
 
 
+def _required_positional(effect: Callable[..., Any]) -> int:
+    """The number of required positional parameters *effect* declares."""
+    try:
+        params = list(inspect.signature(effect).parameters.values())
+    except (TypeError, ValueError):
+        return 1
+    return len([
+        p
+        for p in params
+        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        and p.default is p.empty
+    ])
+
+
 def _effect_wants_controller(effect: Callable[..., Any]) -> bool:
     """Return ``True`` if an *untargeted* trigger effect accepts the fire-time
     controller as a second positional argument — ``effect(game, controller)``.
