@@ -80,6 +80,7 @@ class InvoluntaryEmployment(Sorcery):
             source=self,
             layer=Layer.CONTROL,
             sublayer=None,
+            bound_to=[creature_ref],
             apply=_apply_control,
             duration=DURATION_END_OF_TURN,
         ))
@@ -100,6 +101,7 @@ class InvoluntaryEmployment(Sorcery):
             source=self,
             layer=Layer.ABILITY,
             sublayer=None,
+            bound_to=[creature_ref],
             apply=_apply_haste,
             duration=DURATION_END_OF_TURN,
         ))

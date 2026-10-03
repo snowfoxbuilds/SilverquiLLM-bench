@@ -119,6 +119,7 @@ class CelestialArmor(Equipment):
             ContinuousEffect(
                 source=self,
                 layer=Layer.ABILITY,
+                bound_to=[protected_creature],
                 apply=_apply_protection,
                 duration=DURATION_END_OF_TURN,
             )

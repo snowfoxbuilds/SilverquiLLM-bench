@@ -84,6 +84,7 @@ class TragicBanshee(Creature):
             source=self,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
+            bound_to=[target],
             apply=_apply,
             duration=DURATION_END_OF_TURN,
         ))

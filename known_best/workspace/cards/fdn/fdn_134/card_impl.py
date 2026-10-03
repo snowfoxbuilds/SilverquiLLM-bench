@@ -142,6 +142,7 @@ class AjaniCallerOfThePride(Planeswalker):
                 ContinuousEffect(
                     source=pw,
                     layer=Layer.ABILITY,
+                    bound_to=[target],
                     apply=_apply,
                     duration=DURATION_END_OF_TURN,
                 )

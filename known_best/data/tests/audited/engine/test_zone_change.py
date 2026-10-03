@@ -3,12 +3,15 @@
 It keeps none of its counters (122.2), status (110.5b, 110.5d), combat role
 (506.4) or freedom from summoning sickness (302.6), and a token stops existing
 (111.7, 704.5d). Abilities that refer to the object as it last existed on the
-battlefield read its last-known information instead (603.10a, 608.2h).
+battlefield read its last-known information instead (603.10a, 608.2h), and an
+effect locked onto it by a resolved spell or ability no longer applies to it
+(611.2c).
 """
 
 from __future__ import annotations
 
 from engine.card import Creature
+from engine.continuous_effects import DURATION_END_OF_TURN, DURATION_PERMANENT, ContinuousEffect, Layer, SubLayer
 from engine.events import CreatureDiesTriggeredEvent, LeavesBattlefieldTriggeredEvent
 from engine.game import add_counter, deal_damage, destroy, exile, tap
 from engine.state_based_actions import resolve_state_based_actions
@@ -187,3 +190,86 @@ def test_token_dies_trigger_fires_with_last_known_information():
     assert seen[0].counters.get("+1/+1") == 2
     assert seen[0].power == 3
     assert not _in_any_zone(game, token)
+
+
+def _pump(game, source, creatures, amount=3):
+    """A resolved "creatures get +amount/+0 until end of turn" locked onto
+    *creatures* (rule 611.2c)."""
+    affected = list(creatures)
+
+    def _apply(game) -> None:
+        for creature in affected:
+            creature.modified_power += amount
+
+    return game.effect_manager.add(ContinuousEffect(
+        source=source, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT,
+        apply=_apply, duration=DURATION_END_OF_TURN, bound_to=affected,
+    ))
+
+
+def test_effect_locked_onto_a_creature_ends_when_it_leaves():
+    game = behavioral_game()
+    p1 = game.players[0]
+    exiled = enter_permanent(game, p1, _creature("Exiled", 2, 2))
+    killed = enter_permanent(game, p1, _creature("Killed", 2, 2))
+    _pump(game, _creature("Spell"), [exiled])
+    _pump(game, _creature("Spell"), [killed])
+    game.effect_manager.apply_all(game)
+    assert (exiled.power, killed.power) == (5, 5)
+
+    exile(game, exiled)
+    move_to_zone(game, exiled, Zone.EXILE, Zone.BATTLEFIELD)
+    destroy(game, killed)
+    move_to_zone(game, killed, Zone.GRAVEYARD, Zone.BATTLEFIELD)
+    game.effect_manager.apply_all(game)
+    assert (exiled.power, killed.power) == (2, 2)
+
+
+def test_effect_over_several_creatures_keeps_affecting_the_ones_that_stay():
+    game = behavioral_game()
+    p1 = game.players[0]
+    leaves = enter_permanent(game, p1, _creature("Leaves", 2, 2))
+    stays = enter_permanent(game, p1, _creature("Stays", 2, 2))
+    _pump(game, _creature("Spell"), [leaves, stays])
+
+    move_to_zone(game, leaves, Zone.BATTLEFIELD, Zone.HAND)
+    move_to_zone(game, leaves, Zone.HAND, Zone.BATTLEFIELD)
+    game.effect_manager.apply_all(game)
+    assert leaves.power == 2
+    assert stays.power == 5
+
+
+def test_static_effect_applies_to_a_returned_permanent():
+    game = behavioral_game()
+    p1 = game.players[0]
+    creature = enter_permanent(game, p1, _creature("Follower", 2, 2))
+    lord = enter_permanent(game, p1, _creature("Lord", 1, 1))
+
+    def _anthem(game) -> None:
+        for obj in game.get_battlefield(p1).get_all():
+            if obj is not lord:
+                obj.modified_power += 1
+
+    game.effect_manager.add(ContinuousEffect(
+        source=lord, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT,
+        apply=_anthem, duration=DURATION_PERMANENT,
+    ))
+    exile(game, creature)
+    move_to_zone(game, creature, Zone.EXILE, Zone.BATTLEFIELD)
+    game.effect_manager.apply_all(game)
+    assert creature.power == 3
+
+
+def test_locked_effect_still_ends_at_cleanup():
+    game = behavioral_game()
+    p1 = game.players[0]
+    creature = enter_permanent(game, p1, _creature("Pumped", 2, 2))
+    _pump(game, _creature("Spell"), [creature])
+    game.effect_manager.apply_all(game)
+    assert creature.power == 5
+
+    from engine.turn import cleanup_mechanical
+
+    cleanup_mechanical(game)
+    assert creature.power == 2
+
