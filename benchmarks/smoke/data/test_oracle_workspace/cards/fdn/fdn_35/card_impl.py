@@ -59,7 +59,6 @@ class DrakeHatcher(Creature):
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         """Remove three incubation counters: Create a 2/2 blue Drake token with flying."""
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             from engine.game import remove_counter
@@ -69,11 +68,11 @@ class DrakeHatcher(Creature):
             remove_counter(game, src, 'incubation', 3)
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from cards.fdn.tokens import make_creature_token
             from engine.game import create_token
             from engine.types import Color
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             token = make_creature_token(

@@ -34,7 +34,6 @@ class SpectralSailor(Creature):
         super().__init__(**kwargs)
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             controller = src.controller
@@ -47,10 +46,9 @@ class SpectralSailor(Creature):
             controller.mana_pool.pay(ManaCost.parse("{3}{U}"))
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from engine.game import draw_card
 
-            controller = source.controller
             if controller is not None:
                 draw_card(game, controller)
 

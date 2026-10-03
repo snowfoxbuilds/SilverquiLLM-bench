@@ -50,8 +50,7 @@ class ZulAshurLichLord(Creature):
         """Tap ability: cast Zombie from graveyard this turn."""
         source = self
 
-        def _tap_effect(game: 'GameState') -> None:
-            controller = getattr(source, 'controller', None)
+        def _tap_effect(game: 'GameState', controller: Any) -> None:
             if controller is None:
                 return
             gy = controller.zones[Zone.GRAVEYARD]

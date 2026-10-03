@@ -53,8 +53,8 @@ class FlamewakePhoenix(Creature):
                         return True
             return False
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None) or getattr(source, 'owner', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             if not query_yes_no(game, ctrl, 'Pay {R} to return Flamewake Phoenix from graveyard?', source_card=source):

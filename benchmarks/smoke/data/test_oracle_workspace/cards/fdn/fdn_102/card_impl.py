@@ -41,9 +41,9 @@ class EagerTrufflesnout(Creature):
             target = event.target
             return isinstance(target, Player)
 
-        def _effect(game: 'GameState') -> None:
+        def _effect(game: 'GameState', controller: Any) -> None:
             from cards.fdn.tokens import make_food_token
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             create_token(game, ctrl, make_food_token())

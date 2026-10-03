@@ -52,8 +52,8 @@ class KykarZephyrAwakener(Creature):
             card_types = getattr(spell, 'card_types', set())
             return CardType.CREATURE not in card_types
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             bf = game.get_battlefield(ctrl)

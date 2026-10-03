@@ -4,7 +4,7 @@
   "defects": [
     {
       "id": "zone-change-keeps-object-state",
-      "description": "A permanent that leaves the battlefield keeps its counters, status, damage, combat role, summoning-sickness state and controller, and leaves/dies abilities have no last-known information.",
+      "description": "A permanent that leaves the battlefield keeps its counters, status, damage, combat role, summoning-sickness state, controller and the effects locked onto it, and leaves/dies abilities have no last-known information.",
       "rules": [
         "CR 400.7",
         "CR 122.2",
@@ -15,7 +15,8 @@
         "CR 108.4a",
         "CR 603.10a",
         "CR 608.2h",
-        "CR 603.3a"
+        "CR 603.3a",
+        "CR 611.2c"
       ],
       "kind": "inherited",
       "failing_tests": {
@@ -28,6 +29,10 @@
           "test_zone_change.py::test_leaves_trigger_effect_uses_last_known_information",
           "test_zone_change.py::test_dies_trigger_sees_last_known_counters",
           "test_zone_change.py::test_token_dies_trigger_fires_with_last_known_information",
+          "test_zone_change.py::test_effect_locked_onto_a_creature_ends_when_it_leaves",
+          "test_zone_change.py::test_effect_over_several_creatures_keeps_affecting_the_ones_that_stay",
+          "test_zone_change.py::test_locked_effect_still_ends_at_cleanup",
+          "test_zone_change.py::test_ability_of_a_sacrificed_source_resolves_for_the_player_who_activated_it",
           "test_combat.py::TestCombatDamage::test_first_strike_deals_damage_first",
           "test_combat.py::TestCombatDamage::test_trample_excess_damage_to_player",
           "test_combat.py::TestCombatDamage::test_trample_with_deathtouch",
@@ -41,7 +46,10 @@
           "fdn_66/tests.py::TestNineLivesDiesReturn::test_dies_returns_with_one_fewer_revival",
           "fdn_66/tests.py::TestNineLivesDiesReturn::test_does_not_return_before_the_next_end_step",
           "fdn_66/tests.py::TestNineLivesDiesReturn::test_does_not_return_if_it_left_the_graveyard_first",
-          "fdn_201/tests.py::TestHeartfireImmolatorAbility::test_damage_uses_power_snapshot_at_activation"
+          "fdn_201/tests.py::TestHeartfireImmolatorAbility::test_damage_uses_power_snapshot_at_activation",
+          "fdn_223/tests.py::TestGiantGrowth::test_pump_ends_when_the_target_dies_and_returns",
+          "fdn_223/tests.py::TestGiantGrowth::test_pump_ends_when_the_target_is_exiled_and_returned",
+          "fdn_61/tests.py::TestHighSocietyHunterDraw::test_pending_draw_ignores_the_hunter_returning_under_its_owner"
         ]
       }
     },

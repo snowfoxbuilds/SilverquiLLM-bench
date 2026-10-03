@@ -61,8 +61,8 @@ class DwynenGiltLeafDaen(Creature):
         def _attack_condition(game: Any, event: dict) -> bool:
             return event.creature is source
 
-        def _attack_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _attack_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             bf = game.get_battlefield(ctrl)

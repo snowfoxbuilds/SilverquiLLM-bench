@@ -39,8 +39,7 @@ class BurglarRat(Creature):
         from engine.game import discard
         source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             for player in game.players:

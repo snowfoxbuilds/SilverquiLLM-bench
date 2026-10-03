@@ -76,6 +76,7 @@ class AdventuringGear(Equipment):
                     source=source,
                     layer=Layer.POWER_TOUGHNESS,
                     sublayer=SubLayer.MODIFY_PT,
+                    bound_to=[creature],
                     apply=_apply_landfall_pt,
                     duration=DURATION_END_OF_TURN,
                 )

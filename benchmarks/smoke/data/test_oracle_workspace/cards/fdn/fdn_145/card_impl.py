@@ -38,10 +38,8 @@ class ResoluteReinforcements(Creature):
         from engine.triggers import TriggerRegistration
         from cards.fdn.tokens import make_creature_token
         from engine.game import create_token
-        source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is not None:
                 token = make_creature_token('Soldier', {'Soldier'}, [Color.WHITE], 1, 1)
                 create_token(game, controller, token)

@@ -87,6 +87,7 @@ class FleetingDistraction(Instant):
             source=self,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
+            bound_to=[creature_ref],
             apply=_apply_debuff,
             duration=DURATION_END_OF_TURN,
         )

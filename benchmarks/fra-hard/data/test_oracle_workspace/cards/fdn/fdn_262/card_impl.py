@@ -45,13 +45,9 @@ class EvolvingWilds(Land):
             sacrifice(game, controller, src)
             return True
 
-        def _effect(game: "GameState") -> None:
-            from engine.last_known import last_known_info
-
-            # The source was sacrificed to pay the cost: the player who
-            # controlled it as it last existed searches (rule 603.10a).
-            lki = last_known_info(game, source)
-            controller = lki.controller if lki is not None else source.controller
+        def _effect(game: "GameState", controller: Any) -> None:
+            # The source was sacrificed to pay the cost, so it is a new object
+            # now: the activating player searches (rules 602.2, 400.7).
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]

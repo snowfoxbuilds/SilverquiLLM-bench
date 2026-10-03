@@ -47,8 +47,7 @@ class SolemnSimulacrum(ArtifactCreature):
         from engine.game import draw_card
         source = self
 
-        def _etb_effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
+        def _etb_effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]

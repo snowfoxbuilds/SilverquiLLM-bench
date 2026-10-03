@@ -36,10 +36,8 @@ class HelpfulHunter(Creature):
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
         from engine.game import draw_card
-        source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is not None:
                 draw_card(game, controller)
         controller = getattr(self, 'controller', None) or game.active_player

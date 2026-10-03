@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 from engine.casting import is_sorcery_speed
+from engine.triggers import _effect_wants_controller
 from engine.stack import (
     ActivationContext,
     StackObject,
@@ -333,6 +334,15 @@ def _activate_regular_ability(
                     g, _obj.targets, _obj.activation_context
                 )
             )
+        elif _effect_wants_controller(ability.effect):
+            # An untargeted effect that names the ability's controller gets
+            # the activating player, not the source's controller at resolution
+            # — the source may have left the battlefield (e.g. sacrificed as a
+            # cost) and become a new object since (rules 602.2, 400.7).
+            effect = ability.effect
+            stack_obj.on_resolve = (
+                lambda g, _effect=effect, _controller=controller: _effect(g, _controller)
+            )
         else:
             stack_obj.on_resolve = ability.effect
         game.stack.push(stack_obj)
@@ -416,6 +426,13 @@ def _activate_loyalty_ability(
             lambda g, _obj=stack_obj, _effect=effect: _effect(
                 g, _obj.targets, _obj.activation_context
             )
+        )
+    elif _effect_wants_controller(ability.effect):
+        # As for activated abilities: the activating player, not the
+        # planeswalker's controller at resolution (rules 602.2, 400.7).
+        effect = ability.effect
+        stack_obj.on_resolve = (
+            lambda g, _effect=effect, _controller=controller: _effect(g, _controller)
         )
     else:
         stack_obj.on_resolve = ability.effect

@@ -45,11 +45,10 @@ class VivienReid(Planeswalker):
     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
         pw = self
 
-        def _plus1(game: Any) -> None:
+        def _plus1(game: Any, controller: Any) -> None:
             """Look at top 4 cards, may reveal a creature or land to hand."""
             import random
 
-            controller = pw.controller
             if controller is None:
                 return
 
@@ -138,7 +137,7 @@ class VivienReid(Planeswalker):
             for target in legal:
                 destroy(game, target)
 
-        def _minus8(game: Any) -> None:
+        def _minus8(game: Any, controller: Any) -> None:
             """Emblem — creatures you control get +2/+2, vigilance, trample, indestructible."""
             from engine.continuous_effects import (
                 ContinuousEffect,
@@ -147,7 +146,6 @@ class VivienReid(Planeswalker):
                 SubLayer,
             )
 
-            controller = pw.controller
             if controller is None:
                 return
 

@@ -43,10 +43,10 @@ class SearslicerGoblin(Creature):
                 attacked = getattr(ctrl, 'attacked_this_turn', False)
             return attacked
 
-        def _effect(game: 'GameState') -> None:
+        def _effect(game: 'GameState', controller: Any) -> None:
             from cards.fdn.tokens import make_creature_token
             from engine.game import create_token
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             token = make_creature_token('Goblin', {'Goblin'}, [Color.RED], 1, 1)

@@ -73,8 +73,7 @@ class SphinxsTutelage(Enchantment):
             controller = source.controller or source.owner
             return event.player is controller
 
-        def _effect(g: Any) -> None:
-            controller = source.controller or source.owner
+        def _effect(g: Any, controller: Any) -> None:
             if controller is None:
                 return
             opponent = None
@@ -95,7 +94,6 @@ class SphinxsTutelage(Enchantment):
         game.trigger_manager.register(reg)
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             controller = getattr(src, 'controller', None)
@@ -107,9 +105,8 @@ class SphinxsTutelage(Enchantment):
             controller.mana_pool.pay(cost)
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from engine.game import draw_card, discard
-            controller = source.controller or source.owner
             if controller is None:
                 return
             card_drawn = draw_card(game, controller)

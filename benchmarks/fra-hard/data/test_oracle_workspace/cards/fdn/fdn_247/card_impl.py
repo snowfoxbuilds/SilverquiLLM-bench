@@ -48,8 +48,8 @@ class TatyovaBenthicDruid(Creature):
                 return bf.contains(permanent)
             return perm_ctrl is ctrl
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             from engine.game import gain_life

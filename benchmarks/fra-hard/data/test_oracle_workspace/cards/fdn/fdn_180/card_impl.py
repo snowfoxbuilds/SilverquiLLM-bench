@@ -45,8 +45,7 @@ class PhyrexianArena(Enchantment):
             controller = source.controller
             return controller is not None and controller is game.active_player
 
-        def _effect(game: GameState) -> None:
-            controller = source.controller
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             draw_card(game, controller)

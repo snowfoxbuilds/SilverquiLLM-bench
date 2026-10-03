@@ -43,16 +43,14 @@ class LilianaDreadhordeGeneral(Planeswalker):
         super().__init__(**kwargs)
 
     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
-        pw = self
 
-        def _plus1(game: Any) -> None:
+        def _plus1(game: Any, controller: Any) -> None:
             # +1: Create a 2/2 black Zombie creature token.
             from engine.game import create_token
 
             from cards.fdn.tokens import make_creature_token
             from engine.types import Color
 
-            controller = getattr(pw, "controller", None)
             if controller is None:
                 return
             create_token(

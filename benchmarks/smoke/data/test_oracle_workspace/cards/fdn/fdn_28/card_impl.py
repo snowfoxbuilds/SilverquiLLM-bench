@@ -46,9 +46,9 @@ class VanguardSeraph(Creature):
                 return False
             return True
 
-        def _gain_life_effect(game: 'GameState') -> None:
+        def _gain_life_effect(game: 'GameState', controller: Any) -> None:
             source._vanguard_surveil_on_turn = getattr(game, 'turn_number', 0)
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             from engine.types import Zone

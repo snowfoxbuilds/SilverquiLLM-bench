@@ -56,10 +56,10 @@ class LootExuberantExplorer(Creature):
             src.is_tapped = True
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             import random
             from engine.game import create_token, move_to_zone
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             library = ctrl.zones[Zone.LIBRARY]

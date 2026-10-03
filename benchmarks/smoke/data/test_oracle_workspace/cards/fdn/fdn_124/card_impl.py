@@ -48,8 +48,8 @@ class PerforatingArtist(Creature):
                 attacked = getattr(ctrl, 'attacked_this_turn', False)
             return attacked
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             for player in game.players:

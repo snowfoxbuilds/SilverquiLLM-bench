@@ -40,8 +40,7 @@ class IcewindElemental(Creature):
         from engine.game import draw_card, discard
         source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is not None:
                 drawn = draw_card(game, controller)
                 hand = game.get_hand(controller)

@@ -35,8 +35,7 @@ class VampireGourmand(Creature):
         def _condition(game: Any, event: dict) -> bool:
             return event.creature is source
 
-        def _effect(game: 'GameState') -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
             if controller is None:
                 return
             bf = game.get_battlefield(controller)

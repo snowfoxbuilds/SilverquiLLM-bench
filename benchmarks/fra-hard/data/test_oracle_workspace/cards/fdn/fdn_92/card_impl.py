@@ -56,8 +56,7 @@ class RiteOfTheDragoncaller(Enchantment):
             card_types = getattr(spell, 'card_types', set())
             return CardType.INSTANT in card_types or CardType.SORCERY in card_types
 
-        def _effect(game: GameState) -> None:
-            controller = source.controller
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             token = make_creature_token("Dragon", {"Dragon"}, [Color.RED], 5, 5, keywords=Keyword.FLYING)

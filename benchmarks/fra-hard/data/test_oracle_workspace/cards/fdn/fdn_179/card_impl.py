@@ -51,8 +51,7 @@ class PainfulQuandary(Enchantment):
             spell_controller = getattr(spell, 'controller', None)
             return spell_controller is not controller
 
-        def _effect(game: GameState) -> None:
-            controller = source.controller
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             from engine.game import deal_damage

@@ -85,6 +85,7 @@ class FleetingFlight(Instant):
             source=self,
             layer=Layer.ABILITY,
             sublayer=None,
+            bound_to=[creature_ref],
             apply=_apply_flying,
             duration=DURATION_END_OF_TURN,
         ))

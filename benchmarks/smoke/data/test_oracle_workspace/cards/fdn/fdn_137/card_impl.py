@@ -70,8 +70,7 @@ class AuthorityOfTheConsuls(Enchantment):
                 return False
             return CardType.CREATURE in getattr(permanent, 'card_types', set())
 
-        def _effect(game: GameState) -> None:
-            controller = source.controller
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             if hasattr(controller, 'life'):

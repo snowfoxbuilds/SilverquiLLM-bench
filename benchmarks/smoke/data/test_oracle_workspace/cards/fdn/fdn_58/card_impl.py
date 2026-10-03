@@ -46,8 +46,7 @@ class BloodthirstyConqueror(Creature):
             _last_amount[0] = event.amount
             return _last_amount[0] > 0
 
-        def _eff(game: 'GameState') -> None:
-            controller = getattr(source, 'controller', None)
+        def _eff(game: 'GameState', controller: Any) -> None:
             if controller is None:
                 return
             from engine.game import gain_life

@@ -39,9 +39,8 @@ class ChandraFlameshaper(Planeswalker):
     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
         pw = self
 
-        def _plus2(game: Any) -> None:
+        def _plus2(game: Any, controller: Any) -> None:
             """Add {R}{R}{R}. Exile top 3, may play one this turn."""
-            controller = pw.controller
             if controller is None:
                 return
             controller.mana_pool.add(ManaType.RED, 3)
@@ -61,12 +60,11 @@ class ChandraFlameshaper(Planeswalker):
                     chosen._playable_this_turn = True
                     chosen._playable_by = controller
 
-        def _plus1(game: Any) -> None:
+        def _plus1(game: Any, controller: Any) -> None:
             """Create a token copy of target creature (with haste, sacrifice at end step)."""
             from engine.game import create_token
             from engine.triggers import TriggerRegistration
             target = None
-            controller = pw.controller
             if target is None or controller is None:
                 return
             token = Creature(name=getattr(target, 'name', 'Token'), base_power=getattr(target, 'base_power', 0), base_toughness=getattr(target, 'base_toughness', 0), subtypes=getattr(target, 'subtypes', set()).copy() if getattr(target, 'subtypes', None) else set(), keywords=getattr(target, 'keywords', Keyword(0)) | Keyword.HASTE)

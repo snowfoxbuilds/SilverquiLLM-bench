@@ -39,8 +39,8 @@ class DrakusethMawOfFlames(Creature):
         def _condition(game: Any, event: dict) -> bool:
             return event.creature is source
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             from engine.types import CardType

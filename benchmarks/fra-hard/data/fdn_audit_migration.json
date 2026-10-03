@@ -1,8 +1,8 @@
 {
   "original_reference_suites": 86,
   "original_reference_tests": 429,
-  "current_audited_suites": 86,
-  "current_audited_tests": 412,
+  "current_audited_suites": 90,
+  "current_audited_tests": 423,
   "baseline_gaps": [],
   "removed_or_replaced_cases": [
     {

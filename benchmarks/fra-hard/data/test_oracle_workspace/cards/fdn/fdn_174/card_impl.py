@@ -50,7 +50,7 @@ class FakeYourOwnDeath(Instant):
 
         def _apply_buff(game: Any) -> None:
             creature_ref.modified_power += 2
-        game.effect_manager.add(ContinuousEffect(source=self, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply_buff, duration=DURATION_END_OF_TURN))
+        game.effect_manager.add(ContinuousEffect(source=self, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, bound_to=[creature_ref], apply=_apply_buff, duration=DURATION_END_OF_TURN))
 
         def _death_condition(game: Any, event: dict) -> bool:
             return event.creature is creature_ref

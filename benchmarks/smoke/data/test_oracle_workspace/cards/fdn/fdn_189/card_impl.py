@@ -119,6 +119,7 @@ class AxgardCavalry(Creature):
                 ContinuousEffect(
                     source=source,
                     layer=Layer.ABILITY,
+                    bound_to=[chosen],
                     apply=_apply,
                     duration=DURATION_END_OF_TURN,
                 )

@@ -366,6 +366,10 @@ def move_to_zone(
             for effect in effect_manager.get_effects_by_source(card):
                 effect_manager.remove(effect)
                 removed_source_effects = True
+            # Effects locked onto this permanent stop applying to it: it
+            # returns, if ever, as a new object (rules 400.7, 611.2c).
+            if effect_manager.release(card):
+                removed_source_effects = True
 
         _begin_new_object(card)
 

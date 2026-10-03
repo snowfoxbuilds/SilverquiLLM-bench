@@ -38,10 +38,8 @@ class GuardedHeir(Creature):
         from engine.triggers import TriggerRegistration
         from cards.fdn.tokens import make_creature_token
         from engine.game import create_token
-        source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is not None:
                 for _ in range(2):
                     token = make_creature_token('Knight', {'Knight'}, [Color.WHITE], 3, 3)

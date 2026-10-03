@@ -50,7 +50,7 @@ class MildManneredLibrarian(Creature):
             source._librarian_activated = True
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from engine.game import add_counter, draw_card
 
             # Becomes a Werewolf (add subtype, remove Human)
@@ -59,7 +59,6 @@ class MildManneredLibrarian(Creature):
             # Put two +1/+1 counters
             add_counter(game, source, "+1/+1", 2)
             # Draw a card
-            controller = source.controller
             if controller is not None:
                 draw_card(game, controller)
 

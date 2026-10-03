@@ -47,8 +47,8 @@ class FirespitterWhelp(Creature):
             is_dragon = 'Dragon' in subtypes
             return is_noncreature or is_dragon
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             for player in game.players:

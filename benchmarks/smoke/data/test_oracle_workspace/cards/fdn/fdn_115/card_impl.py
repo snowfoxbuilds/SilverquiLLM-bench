@@ -58,8 +58,8 @@ class AleshaWhoLaughsAtFate(Creature):
                 attacked = getattr(ctrl, 'attacked_this_turn', False)
             return attacked
 
-        def _raid_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _raid_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             power = getattr(source, 'power', getattr(source, 'base_power', 2))

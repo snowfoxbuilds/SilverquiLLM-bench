@@ -81,8 +81,7 @@ class GarruksUprising(Enchantment):
             power = getattr(permanent, 'power', getattr(permanent, 'base_power', 0))
             return power >= 4
 
-        def _effect(game: GameState) -> None:
-            controller = source.controller
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is not None:
                 draw_card(game, controller)
         controller = getattr(self, 'controller', None) or game.active_player

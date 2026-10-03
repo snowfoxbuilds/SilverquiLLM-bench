@@ -52,8 +52,8 @@ class LathrilBladeOfTheElves(Creature):
             _damage_queue.append(amount)
             return True
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None or not _damage_queue:
                 return
             amount = _damage_queue.pop(0)
@@ -64,7 +64,6 @@ class LathrilBladeOfTheElves(Creature):
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         """Return the tap-ten-elves activated ability."""
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             if getattr(src, 'is_tapped', False):
@@ -88,8 +87,8 @@ class LathrilBladeOfTheElves(Creature):
                 elf.is_tapped = True
             return True
 
-        def _effect(game: Any) -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: Any, controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             for player in game.players:

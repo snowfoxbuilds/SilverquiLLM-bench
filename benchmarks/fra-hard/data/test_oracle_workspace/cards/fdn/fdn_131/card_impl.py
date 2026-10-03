@@ -50,9 +50,8 @@ class RavenousAmulet(Artifact):
                     sacrifice(game, controller, creatures[0])
             return True
 
-        def _sac_creature_effect(game: Any) -> None:
+        def _sac_creature_effect(game: Any, controller: Any) -> None:
             from engine.game import draw_card, add_counter
-            controller = source.controller
             if controller is not None:
                 draw_card(game, controller)
                 # Soul counters live in the engine counter system (readable via
@@ -65,9 +64,8 @@ class RavenousAmulet(Artifact):
             src.is_tapped = True
             return True
 
-        def _drain_effect(game: Any) -> None:
+        def _drain_effect(game: Any, controller: Any) -> None:
             from engine.game import sacrifice
-            controller = source.controller
             if controller is not None:
                 # Sacrifice this artifact
                 soul = source.counters.get('soul', 0)

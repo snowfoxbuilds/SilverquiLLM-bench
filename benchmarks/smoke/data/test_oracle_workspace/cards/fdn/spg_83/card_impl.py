@@ -121,8 +121,7 @@ class FiendArtisan(Creature):
                 move_to_zone(game, sac_target, Zone.BATTLEFIELD, Zone.GRAVEYARD)
             return True
 
-        def _effect(game: Any) -> None:
-            controller = source.controller or source.owner
+        def _effect(game: Any, controller: Any) -> None:
             if controller is None:
                 return
             x_value = getattr(source, '_x_value', 0)

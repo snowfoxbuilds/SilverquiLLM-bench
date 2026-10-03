@@ -41,7 +41,7 @@ class InfernalVessel(Creature):
             lki = event.last_known
             return lki is not None and 'Demon' not in lki.subtypes
 
-        def _effect(game: GameState) -> None:
+        def _effect(game: GameState, controller: Any) -> None:
             owner = getattr(source, 'owner', None)
             if owner is None:
                 return

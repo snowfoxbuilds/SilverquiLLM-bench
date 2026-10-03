@@ -36,8 +36,8 @@ class FrenziedGoblin(Creature):
         def _condition(game: Any, event: dict) -> bool:
             return event.creature is source
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             if not query_yes_no(game, ctrl, 'Pay {R} to make a creature unable to block?', source_card=source):
@@ -57,5 +57,5 @@ class FrenziedGoblin(Creature):
 
                 def _apply(game: Any) -> None:
                     target._cant_block = True
-                game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.ABILITY, sublayer=None, apply=_apply, duration=DURATION_END_OF_TURN))
+                game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.ABILITY, sublayer=None, bound_to=[target], apply=_apply, duration=DURATION_END_OF_TURN))
         game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
