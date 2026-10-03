@@ -2,7 +2,7 @@
 
 A simulated benchmark runs the whole ``run_benchmark`` pipeline and costs seconds, so a module
 builds its runs once and each test works on a clone of them (see
-docs/specs/TESTING-CONVENTIONS.md). Records, login journals and plugin environments name their
+docs/specs/PLATFORM-TEST-CONVENTIONS.md). Records, login journals and plugin environments name their
 own files by absolute path, so a clone rewrites the template's root to its own in each text file.
 """
 

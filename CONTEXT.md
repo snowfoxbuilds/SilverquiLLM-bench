@@ -456,6 +456,13 @@ Seeded Defects are fixed per benchmark version, so every run on that version see
 
 _Avoid_: "fuzzed engine", "fuzzing" (fuzzing names random-input testing), "planted bug"
 
+**Simulated Benchmark**
+
+A Platform Test that runs the whole run pipeline (staging, execution, grading, the Run Record) on a toy benchmark, with a stand-in for the agent's container and the Grader Container, so nothing launches a model or Docker (grilling 2026-10-03).
+A Simulated Benchmark is an end-to-end test.
+
+_Avoid_: "fake run", "mock benchmark" (only the agent host and the container runtime are stand-ins), "Pipeline Validation Run" (that runs a real benchmark through real containers)
+
 **System Prompt**
 
 Agent-optimization instructions baked into the Docker image's entrypoint. Controls how the agent executes (iteration strategy, mode-specific behavior, tool configuration). Not written by the runner. Contrast with User Prompt.

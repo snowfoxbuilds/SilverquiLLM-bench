@@ -245,6 +245,6 @@ Audited tests may use **only** the following to touch the engine. Anything else 
 
 ## Relationship to existing conventions
 
-- **Revises **[**TESTING-CONVENTIONS.md**](TESTING-CONVENTIONS.md)** Rule 5.** Entering the priority loop is now *required*, not forbidden — but only via `priority_loop` / `advance_to_phase`. `game.run()` / `run_game()` / `run_turn()` stay banned.
+- **Revises **[**AUDITED-TEST-CONVENTIONS.md**](AUDITED-TEST-CONVENTIONS.md)** Rule 5.** Entering the priority loop is now *required*, not forbidden — but only via `priority_loop` / `advance_to_phase`. `game.run()` / `run_game()` / `run_turn()` stay banned.
 - **Replaces the free-function step helpers for audited tests.** The old `cast_spell(game, ...)` and `resolve_top(game)` shortcuts bypass priority and are no longer permitted in audited tests; casting and resolution now happen through `DeterministicPlayer` directives inside `priority_loop`. (Those helpers may still exist for the engine's own internal unit tests — they are simply outside the audited allow-list.)
 - **Keep the ****`pytest-timeout`**** 300s backstop** (the value set in the workspace `pytest.ini` / host `pyproject.toml`) so a misused loop fails fast.
