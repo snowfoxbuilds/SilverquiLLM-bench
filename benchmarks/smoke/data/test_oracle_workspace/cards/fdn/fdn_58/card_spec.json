@@ -1,0 +1,20 @@
+{
+  "name": "Bloodthirsty Conqueror",
+  "mana_cost": "{3}{B}{B}",
+  "type_line": "Creature — Vampire Knight",
+  "oracle_text": "Flying, deathtouch\nWhenever an opponent loses life, you gain that much life. (Damage causes loss of life.)",
+  "power": "5",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Deathtouch",
+    "Flying"
+  ],
+  "rarity": "mythic",
+  "set_code": "fdn",
+  "collector_number": "58",
+  "complexity_tier": "medium"
+}

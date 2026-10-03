@@ -77,8 +77,18 @@ def test_target_hidden_suites_cover_exactly_the_selected_pool(relative):
     assert actual == selected
 
 
+# The Reference Tests rewritten to hold under either zone-change convention (ADR-016).
+REWRITTEN_REFERENCE_TESTS = {
+    "engine_tests/test_tokens_factory.py",
+    "cards/fdn/fdn_126/tests.py",
+    "cards/fdn/fdn_195/tests.py",
+}
+
+
 def test_candidate_engine_preserves_baseline_and_excludes_oracle_material():
     workspace = BENCH / "workspace"
+    baseline = ROOT / "benchmarks/hob-medium/workspace"
+    oracle = BENCH / "data/test_oracle_workspace"
     provenance = json.loads((BENCH / "data/provenance.json").read_text())
     pinned = provenance["candidate_baseline_files"]
     assert pinned
@@ -86,6 +96,15 @@ def test_candidate_engine_preserves_baseline_and_excludes_oracle_material():
     assert engine_files == {path for path in pinned if path.startswith("engine/") and path.endswith(".py")}
     for relative, digest in pinned.items():
         assert hashlib.sha256((workspace / relative).read_bytes()).hexdigest() == digest, relative
+    changed = {
+        relative for relative in pinned
+        if (workspace / relative).read_bytes() != (baseline / relative).read_bytes()
+    }
+    assert changed == REWRITTEN_REFERENCE_TESTS
+    oracle_only = {
+        str(path.relative_to(oracle)) for path in (oracle / "engine").rglob("*.py")
+    } - engine_files
+    assert "engine/copying.py" in oracle_only
     assert not (workspace / "data").exists()
     assert not (workspace / "tests/audited").exists()
     assert not (workspace / "test_oracle_workspace").exists()

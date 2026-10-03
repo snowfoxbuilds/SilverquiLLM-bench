@@ -34,12 +34,19 @@ RUN-ARTIFACTS-AND-TELEMETRY.md → Smoke runs.
 - `workspace/` — a hard copy of the hob-medium workspace (sibling benchmarks
   never share). The target cards (`cards/fdn/fdn_129`, `fdn_205`, `fdn_232`) are
   reduced to stubs for the candidate to fill; every other FDN card stays a filled
-  reference implementation.
+  reference implementation. Its engine and FDN implementations carry the Known
+  Defects listed in `data/known_defects.json`.
 - `data/pool.json` — spec data (name, mana cost, type line, oracle text) for the
   three target cards.
-- `data/tests/audited/fdn/fdn_<cn>/tests.py` — the audited grader suite per
-  target: the target's own FDN Reference Tests, already validated against the
-  known-good hob-medium implementation.
+- `data/tests/audited/` — hard copies of the Known-Best Workspace's FDN Audited
+  Tests (`fdn/`, which include the three targets' suites) and Audited Engine
+  Tests (`engine/`). A target's suite grades card correctness only, never FDN
+  Card Regression.
+- `data/test_oracle_workspace/` — the Test Oracle Workspace: a hard copy of the
+  Known-Best Workspace, whose implementations of the three targets are smoke's
+  Test Oracle Impls.
+- `data/known_defects.json` — the Known Defect manifest: the regression Audited
+  Tests the unmodified Workspace fails, each traced to its defect.
 
 ## Targets
 
@@ -50,5 +57,6 @@ RUN-ARTIFACTS-AND-TELEMETRY.md → Smoke runs.
 | Scavenging Ooze | 232 | Creature — Ooze | Activated ability, +1/+1 counters, graveyard interaction, lifegain. |
 
 Three distinct card types across three distinct mechanics — a broad, still-cheap
-slice of the engine. `tests/test_smoke_benchmark.py` proves the audited suite is
-green against the hob-medium reference implementations.
+slice of the engine. `tests/test_smoke_benchmark.py` proves the target suites are
+green on smoke's own engine with the Test Oracle Impls swapped in, and
+`tests/test_ported_benchmarks.py` checks the Known Defect manifest.

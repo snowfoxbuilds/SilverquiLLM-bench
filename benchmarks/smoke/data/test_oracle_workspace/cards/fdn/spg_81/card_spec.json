@@ -1,0 +1,15 @@
+{
+  "name": "Akroma's Memorial",
+  "mana_cost": "{7}",
+  "type_line": "Legendary Artifact",
+  "oracle_text": "Creatures you control have flying, first strike, vigilance, trample, haste, and protection from black and from red.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "mythic",
+  "set_code": "spg",
+  "collector_number": "81",
+  "complexity_tier": "medium"
+}

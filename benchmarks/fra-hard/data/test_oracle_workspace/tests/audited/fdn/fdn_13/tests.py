@@ -83,3 +83,44 @@ class TestFleetingFlightResolution:
         advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
         assert not bear.keywords & Keyword.FLYING
         assert (bear.power, bear.toughness) == (3, 3)
+
+    def test_targeted_creature_survives_combat_with_a_four_power_flyer(self) -> None:
+        """It gets a +1/+1 counter and "prevent all combat damage that would be
+        dealt to it this turn" (rule 615.1): the 2/2 target becomes a flying
+        3/3 and survives a block by a 4/4 flyer."""
+        from engine.combat import combat_damage_step
+        from engine.turn import untap_step
+        from engine.types import Keyword
+        from test_utils import (
+            cast_card,
+            declare_attackers,
+            declare_blockers,
+            fund_mana_cost,
+            object_preference,
+            prefer,
+            put_on_battlefield,
+            resolve_stack,
+        )
+
+        game = create_game()
+        player, opponent = game.players
+        target = put_on_battlefield(
+            game, player, Creature(name="Protected attacker", base_power=2, base_toughness=2)
+        )
+        blocker = put_on_battlefield(
+            game, opponent,
+            Creature(name="Flying blocker", base_power=4, base_toughness=4, keywords=Keyword.FLYING),
+        )
+        spell = FleetingFlight(owner=player)
+        fund_mana_cost(player, spell.mana_cost)
+        prefer(player, object_preference(game, target))
+        cast_card(game, player, spell)
+        assert (target.power, target.toughness) == (3, 3)
+
+        untap_step(game)
+        declare_attackers(game, [target.name])
+        declare_blockers(game, {target.name: [blocker.name]})
+        combat_damage_step(game)
+        resolve_stack(game)
+        assert game.get_battlefield(player).contains(target)
+        assert (target.power, target.toughness) == (3, 3)

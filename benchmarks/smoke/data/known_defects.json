@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "benchmark": "smoke",
+  "defects": [
+    {
+      "id": "zone-change-keeps-object-state",
+      "description": "A permanent that leaves the battlefield keeps its counters, status, damage, combat role, summoning-sickness state, controller and the effects locked onto it, and leaves/dies abilities have no last-known information.",
+      "rules": [
+        "CR 400.7",
+        "CR 122.2",
+        "CR 110.5b",
+        "CR 110.5d",
+        "CR 302.6",
+        "CR 506.4",
+        "CR 108.4a",
+        "CR 603.10a",
+        "CR 608.2h",
+        "CR 603.3a",
+        "CR 611.2c"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "engine_regression": [
+          "test_zone_change.py::test_counters_do_not_survive_leaving_the_battlefield",
+          "test_zone_change.py::test_returned_permanent_enters_untapped",
+          "test_zone_change.py::test_card_off_the_battlefield_has_no_status",
+          "test_zone_change.py::test_returned_creature_is_a_new_object_in_combat",
+          "test_zone_change.py::test_returned_creature_is_summoning_sick",
+          "test_zone_change.py::test_leaves_trigger_effect_uses_last_known_information",
+          "test_zone_change.py::test_dies_trigger_sees_last_known_counters",
+          "test_zone_change.py::test_token_dies_trigger_fires_with_last_known_information",
+          "test_zone_change.py::test_effect_locked_onto_a_creature_ends_when_it_leaves",
+          "test_zone_change.py::test_effect_over_several_creatures_keeps_affecting_the_ones_that_stay",
+          "test_zone_change.py::test_locked_effect_still_ends_at_cleanup",
+          "test_zone_change.py::test_ability_of_a_sacrificed_source_resolves_for_the_player_who_activated_it",
+          "test_zone_change.py::test_pending_ability_reads_its_departed_source_from_its_own_stint",
+          "test_zone_change.py::test_pending_ability_reads_its_source_as_it_exists_on_resolution",
+          "test_combat.py::TestCombatDamage::test_first_strike_deals_damage_first",
+          "test_combat.py::TestCombatDamage::test_trample_excess_damage_to_player",
+          "test_combat.py::TestCombatDamage::test_trample_with_deathtouch",
+          "test_combat.py::TestCombatDamage::test_without_trample_all_damage_to_blocker",
+          "test_combat.py::TestCombatDamage::test_multiple_blockers_damage_assignment_order",
+          "test_combat.py::TestCombatIntegration::test_full_combat_cycle_blocked",
+          "test_combat.py::TestCombatIntegration::test_creature_with_multiple_keywords",
+          "test_combat_damage_prevention.py::test_prevention_ends_at_cleanup"
+        ],
+        "fdn_regression": [
+          "fdn_66/tests.py::TestNineLivesDiesReturn::test_dies_returns_with_one_fewer_revival",
+          "fdn_66/tests.py::TestNineLivesDiesReturn::test_does_not_return_before_the_next_end_step",
+          "fdn_66/tests.py::TestNineLivesDiesReturn::test_does_not_return_if_it_left_the_graveyard_first",
+          "fdn_201/tests.py::TestHeartfireImmolatorAbility::test_damage_uses_power_snapshot_at_activation",
+          "fdn_223/tests.py::TestGiantGrowth::test_pump_ends_when_the_target_dies_and_returns",
+          "fdn_223/tests.py::TestGiantGrowth::test_pump_ends_when_the_target_is_exiled_and_returned",
+          "fdn_61/tests.py::TestHighSocietyHunterDraw::test_pending_draw_ignores_the_hunter_returning_under_its_owner",
+          "fdn_117/tests.py::TestAshrootAnimistAttack::test_a_later_return_and_departure_do_not_change_the_pending_power"
+        ]
+      }
+    },
+    {
+      "id": "x-cost-not-chosen-or-paid",
+      "description": "{X} is never chosen or paid, so X spells resolve as X=0.",
+      "rules": [
+        "CR 107.3a",
+        "CR 107.3b",
+        "CR 601.2b",
+        "CR 601.2f",
+        "CR 202.3e"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "engine_regression": [
+          "test_x_costs.py::test_x_is_chosen_paid_and_kept_by_the_permanent"
+        ],
+        "fdn_regression": [
+          "fdn_88/tests.py::TestGoblinNegotiationMint::test_excess_damage_mints_11_red_goblin_tokens",
+          "fdn_236/tests.py::TestWildwoodScourgeProperties::test_enters_with_x_counters"
+        ]
+      }
+    },
+    {
+      "id": "raid-history-not-recorded",
+      "description": "Declaring an attacker never records that the player attacked this turn.",
+      "rules": [
+        "CR 508.1",
+        "CR 207.2c"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "engine_regression": [
+          "test_turn_history.py::test_declaring_an_attacker_records_attacked_this_turn"
+        ],
+        "fdn_regression": [
+          "fdn_93/tests.py::TestSearslicerGoblinMint::test_raid_end_step_mints_11_red_goblin_token",
+          "fdn_115/tests.py::TestAleshaRaid::test_returns_a_creature_card_with_mana_value_up_to_its_power",
+          "fdn_115/tests.py::TestAleshaRaid::test_uses_its_power_as_it_last_existed_if_it_left"
+        ]
+      }
+    },
+    {
+      "id": "death-history-not-recorded",
+      "description": "A creature dying never records that a creature died this turn.",
+      "rules": [
+        "CR 700.4"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "engine_regression": [
+          "test_turn_history.py::test_creature_dying_records_creature_died_this_turn"
+        ],
+        "fdn_regression": [
+          "fdn_94/tests.py::TestSlumberingCerberusMorbid::test_untaps_when_a_creature_died_this_turn"
+        ]
+      }
+    },
+    {
+      "id": "skip-untap-ignored",
+      "description": "The untap step untaps permanents that don't untap during their controller's untap step.",
+      "rules": [
+        "CR 502.3"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "engine_regression": [
+          "test_turn_history.py::test_permanent_that_does_not_untap_stays_tapped"
+        ],
+        "fdn_regression": [
+          "fdn_94/tests.py::TestSlumberingCerberusMorbid::test_stays_tapped_when_no_creature_died"
+        ]
+      }
+    },
+    {
+      "id": "combat-damage-prevention-ignored",
+      "description": "Combat damage to a permanent whose combat damage is prevented this turn is dealt anyway.",
+      "rules": [
+        "CR 615.1",
+        "CR 510.2"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "engine_regression": [
+          "test_combat_damage_prevention.py::test_prevented_creature_survives_a_lethal_block",
+          "test_combat_damage_prevention.py::test_prevention_ends_at_cleanup"
+        ],
+        "fdn_regression": [
+          "fdn_13/tests.py::TestFleetingFlightResolution::test_targeted_creature_survives_combat_with_a_four_power_flyer"
+        ]
+      }
+    },
+    {
+      "id": "fdn-200-mode-not-chosen",
+      "description": "Goblin Surprise never asks for its mode, so it does nothing.",
+      "rules": [
+        "CR 601.2b",
+        "CR 700.2a"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "fdn_regression": [
+          "fdn_200/tests.py::TestGoblinSurpriseMint::test_token_mode_mints_two_11_red_goblin_tokens",
+          "fdn_200/tests.py::TestGoblinSurprisePump::test_pump_mode_gives_creatures_you_control_plus_two_until_end_of_turn"
+        ]
+      }
+    },
+    {
+      "id": "fdn-244-replacement-leaves-it-on-battlefield",
+      "description": "Progenitus's replacement adds it to the library but leaves it on the battlefield.",
+      "rules": [
+        "CR 614.1a",
+        "CR 614.6"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "fdn_regression": [
+          "fdn_244/tests.py::TestProgenitusGraveyardReplacement::test_replacement_redirects_to_library_and_prevents"
+        ]
+      }
+    },
+    {
+      "id": "fdn-81-minus-four-has-no-targets",
+      "description": "Chandra, Flameshaper's −4 has no targeting, so it deals no damage.",
+      "rules": [
+        "CR 601.2c",
+        "CR 602.2b",
+        "CR 115.1"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "fdn_regression": [
+          "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_intent_chooses_the_split",
+          "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_baseline_takes_first_offered_lowest",
+          "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_each_queried_target_must_get_at_least_one",
+          "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_single_target_takes_all_8_without_a_query",
+          "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_division_is_locked_in_at_activation"
+        ]
+      }
+    },
+    {
+      "id": "fdn-66-returns-immediately",
+      "description": "Nine-Lives Familiar returns as soon as its dies trigger resolves, not at the beginning of the next end step.",
+      "rules": [
+        "CR 603.7a",
+        "CR 603.7b",
+        "CR 603.7c"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "fdn_regression": [
+          "fdn_66/tests.py::TestNineLivesDiesReturn::test_dies_returns_with_one_fewer_revival",
+          "fdn_66/tests.py::TestNineLivesDiesReturn::test_does_not_return_before_the_next_end_step",
+          "fdn_66/tests.py::TestNineLivesDiesReturn::test_does_not_return_if_it_left_the_graveyard_first"
+        ]
+      }
+    },
+    {
+      "id": "fdn-81-division-chosen-at-resolution",
+      "description": "Chandra, Flameshaper's −4 divides its damage on resolution, among whichever targets are still legal.",
+      "rules": [
+        "CR 601.2d",
+        "CR 602.2b",
+        "CR 608.2b"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "fdn_regression": [
+          "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_division_is_locked_in_at_activation"
+        ]
+      }
+    }
+  ]
+}

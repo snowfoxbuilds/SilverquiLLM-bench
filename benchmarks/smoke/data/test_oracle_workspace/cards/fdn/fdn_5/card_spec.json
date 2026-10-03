@@ -1,0 +1,20 @@
+{
+  "name": "Celestial Armor",
+  "mana_cost": "{2}{W}",
+  "type_line": "Artifact — Equipment",
+  "oracle_text": "Flash (You may cast this spell any time you could cast an instant.)\nWhen this Equipment enters, attach it to target creature you control. That creature gains hexproof and indestructible until end of turn.\nEquipped creature gets +2/+0 and has flying.\nEquip {3}{W} ({3}{W}: Attach to target creature you control. Equip only as a sorcery.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Equip",
+    "Flash"
+  ],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "5",
+  "complexity_tier": "complex"
+}

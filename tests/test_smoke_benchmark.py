@@ -10,10 +10,10 @@ pipeline validation / candidate calibration. These tests:
 - prove the audited suite is green against a **correct** implementation using
   the engine the smoke benchmark actually ships: the *smoke* workspace is
   copied to an isolated temporary overlay, only the three target
-  `card_impl.py` stubs are replaced by hob-medium's known-good versions, and
-  the copied audited suites run there — so a green smoke run means the
-  pipeline works, not that the tests are trivially satisfiable, and a smoke
-  engine that drifted from hob-medium's would be caught here.
+  `card_impl.py` stubs are replaced by the Test Oracle Impls from smoke's Test
+  Oracle Workspace, and the copied audited suites run there — so a green smoke
+  run means the pipeline works, not that the tests are trivially satisfiable,
+  and a smoke engine the targets cannot work on would be caught here.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SMOKE = REPO_ROOT / "benchmarks" / "smoke"
 SMOKE_WS = SMOKE / "workspace"
 AUDITED = SMOKE / "data" / "tests" / "audited" / "fdn"
-HOB_WS = REPO_ROOT / "benchmarks" / "hob-medium" / "workspace"
+ORACLE = SMOKE / "data" / "test_oracle_workspace"
 
 TARGETS = ["fdn_129", "fdn_205", "fdn_232"]
 TARGET_IMPL_PATHS = [f"cards/fdn/{t}/card_impl.py" for t in TARGETS]
@@ -182,15 +182,15 @@ _IGNORE = shutil.ignore_patterns("__pycache__", ".pytest_cache", ".git")
 
 
 def _build_overlay(root: Path) -> Path:
-    """Copy the smoke workspace into ``root`` and overlay hob-medium's
-    known-good implementations of the three targets. Also copy the targets'
+    """Copy the smoke workspace into ``root`` and overlay the Test Oracle
+    Impls of the three targets. Also copy the targets'
     audited suites in, so the whole run is rooted inside the overlay (the
     workspace's own ``pytest.ini`` / ``conftest.py`` govern, exactly as they
     would for a candidate). Nothing under ``benchmarks/`` is touched."""
     ws = root / "workspace"
     shutil.copytree(SMOKE_WS, ws, ignore=_IGNORE)
     for t in TARGETS:
-        shutil.copy2(HOB_WS / "cards" / "fdn" / t / "card_impl.py",
+        shutil.copy2(ORACLE / "cards" / "fdn" / t / "card_impl.py",
                      ws / "cards" / "fdn" / t / "card_impl.py")
         shutil.copytree(AUDITED / t, ws / "_audited" / t, ignore=_IGNORE)
     return ws
@@ -219,7 +219,7 @@ class TestSmokeAuditedSuiteGreen:
     ) -> None:
         """The overlay engine is byte-identical to the committed *smoke*
         engine, and exactly the three targets differ from the committed smoke
-        workspace — each now equal to hob-medium's non-stub implementation."""
+        workspace — each now equal to its Test Oracle Impl."""
         cmp = filecmp.dircmp(SMOKE_WS / "engine", overlay / "engine", ignore=["__pycache__"])
         assert not cmp.diff_files and not cmp.left_only and not cmp.right_only, (
             f"overlay engine drifted from the smoke engine: {cmp.diff_files} "
@@ -227,7 +227,7 @@ class TestSmokeAuditedSuiteGreen:
         )
         for t in TARGETS:
             rel = Path("cards") / "fdn" / t / "card_impl.py"
-            assert filecmp.cmp(HOB_WS / rel, overlay / rel, shallow=False)
+            assert filecmp.cmp(ORACLE / rel, overlay / rel, shallow=False)
             assert not filecmp.cmp(SMOKE_WS / rel, overlay / rel, shallow=False), (
                 f"{rel} in the overlay is still the smoke stub"
             )
@@ -239,7 +239,7 @@ class TestSmokeAuditedSuiteGreen:
 
     def test_subprocess_resolves_engine_from_the_overlay(self, overlay: Path) -> None:
         """Negative regression: the run's ``engine`` and ``cards`` come from
-        the smoke-derived overlay — not from hob-medium's workspace, not from
+        the smoke-derived overlay — not from the Test Oracle Workspace, not from
         the committed smoke workspace, and not from a repo-level package."""
         probe = (
             "import engine, cards, test_utils\n"
@@ -259,14 +259,14 @@ class TestSmokeAuditedSuiteGreen:
             assert path.is_relative_to(overlay.resolve()), (
                 f"{path} resolved outside the smoke-derived overlay"
             )
-            assert not path.is_relative_to(HOB_WS.resolve())
+            assert not path.is_relative_to(ORACLE.resolve())
             assert not path.is_relative_to(SMOKE_WS.resolve())
 
     def test_audited_tests_pass_against_reference_impls(self, overlay: Path) -> None:
         """Run the copied smoke audited suites inside the overlay: smoke engine,
-        hob-medium's known-good target impls. A probe test in the same pytest
+        the Test Oracle Impls of the targets. A probe test in the same pytest
         process asserts ``engine.__file__`` is the overlay's, so a rewrite that
-        pointed the run back at hob-medium's workspace would fail here too."""
+        pointed the run back at the Test Oracle Workspace would fail here too."""
         probe_dir = overlay / "_audited" / "_probe"
         probe_dir.mkdir()
         (probe_dir / "test_engine_origin.py").write_text(
@@ -297,11 +297,11 @@ class TestSmokeAuditedSuiteGreen:
             f"smoke audited suite failed on the smoke engine + reference impls "
             f"(exit {result.returncode}):\n{result.stdout}\n{result.stderr}"
         )
-        # Sanity: the run collected the three target suites (each a substantive
-        # behavioral suite, >=8 tests) plus the probe — never zero tests.
+        # Sanity: the run collected the three target suites (23 behavioral
+        # tests between them) plus the probe — never zero tests.
         m = re.search(r"(\d+) passed", result.stdout)
         assert m, f"no pass count in output:\n{result.stdout}"
-        assert int(m.group(1)) >= 3 * 8 + 1, result.stdout
+        assert int(m.group(1)) >= 23 + 1, result.stdout
         assert "failed" not in result.stdout and "error" not in result.stdout.lower(), (
             result.stdout
         )

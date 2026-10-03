@@ -526,7 +526,10 @@ def _fire_spell_cast_event(
     game.trigger_manager.fire_event(
         game,
         SpellCastTriggeredEvent(
-            spell=card, card=card, player=player, controller=player
+            spell=card, card=card, player=player, controller=player,
+            # On the stack, X is its chosen value (rule 202.3e).
+            mana_value=card.mana_cost.cmc
+            + getattr(card, "x_value", 0) * card.mana_cost.x_count,
         ),
     )
 
@@ -534,6 +537,37 @@ def _fire_spell_cast_event(
 # ------------------------------------------------------------------
 # Cast spell
 # ------------------------------------------------------------------
+
+def _announce_x(
+    game: GameState, player: Player, card: CardImpl, *, free: bool = False, reduction: int = 0
+) -> None:
+    """Choose the value of X while casting (rule 601.2b).
+
+    A spell cast without paying its mana cost has X = 0 (rule 107.3b). The
+    offered maximum counts the generic *reduction* the payment will get.
+    """
+    from engine.card_queries import choose_number
+
+    card.x_value = 0  # type: ignore[attr-defined]
+    x_count = card.mana_cost.x_count
+    if x_count and not free:
+        maximum = max(0, player.mana_pool.total() + reduction - card.mana_cost.cmc) // x_count
+        card.x_value = choose_number(  # type: ignore[attr-defined]
+            game, player, 0, maximum, "Choose X", source_card=card
+        )
+
+
+def _with_x(cost: ManaCost, x_value: int) -> ManaCost:
+    """*cost* with each {X} replaced by *x_value* generic mana (rule 601.2f)."""
+    if not cost.x_count:
+        return cost
+    return ManaCost(
+        generic=cost.generic + x_value * cost.x_count,
+        pips=dict(cost.pips),
+        x_count=0,
+        hybrid=list(cost.hybrid),
+    )
+
 
 def _place_deferred_cast_triggers(game, spell, deferred):
     if not deferred:
@@ -705,6 +739,12 @@ def _cast_spell(game: GameState, player: Player, card: CardImpl, *,
     if hasattr(card, "colors_spent"):
         del card.colors_spent
 
+    _announce_x(
+        game, player, card,
+        free=bool(permission and permission['life_cost']),
+        reduction=_raw_cost_reduction(game, card, player, targets=[]),
+    )
+
     # 5. Choose targets
     target_specs = card.get_targets(game)
     chosen_targets: list[Any] = []
@@ -772,14 +812,10 @@ def _cast_spell(game: GameState, player: Player, card: CardImpl, *,
     raw_reduction = _raw_cost_reduction(game, card, player, targets=chosen_targets)
     pay_life = bool(permission and permission['life_cost'])
     life_amount = card.mana_cost.cmc if pay_life else 0
-    base_costs = [ManaCost()] if pay_life else [card.mana_cost, *card.alternative_costs(game)]
-    card.x_value = 0
-    if card.mana_cost.x_count and not pay_life:
-        from engine.card_queries import choose_number
-        maximum = max(0, (player.mana_pool.total() + raw_reduction - card.mana_cost.cmc) // card.mana_cost.x_count)
-        card.x_value = choose_number(game, player, 0, maximum, 'Choose X', source_card=card)
-        base_costs = [ManaCost(generic=c.generic + card.x_value * c.x_count,
-                               pips=dict(c.pips), hybrid=list(c.hybrid)) for c in base_costs]
+    base_costs = [ManaCost()] if pay_life else [
+        _with_x(base, card.x_value)  # type: ignore[attr-defined]
+        for base in [card.mana_cost, *card.alternative_costs(game)]
+    ]
     payable: list[tuple[int, ManaCost]] = []
     reduced_costs = [_apply_cost_reduction(base, raw_reduction) for base in base_costs]
     deferred = _mana_payment_window(game, player, card, reduced_costs)
@@ -991,6 +1027,7 @@ def cast_spell_free(
     stack_zone = player.zones[Zone.STACK]
     source_zone_container.remove(card)
     stack_zone.add(card)
+    _announce_x(game, player, card, free=True)
 
     # 3. Choose targets (with rollback on failure)
     try:

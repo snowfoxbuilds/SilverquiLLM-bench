@@ -1,0 +1,19 @@
+{
+  "name": "Electroduplicate",
+  "mana_cost": "{2}{R}",
+  "type_line": "Sorcery",
+  "oracle_text": "Create a token that's a copy of target creature you control, except it has haste and \"At the beginning of the end step, sacrifice this token.\"\nFlashback {2}{R}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Flashback"
+  ],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "85",
+  "complexity_tier": "medium"
+}

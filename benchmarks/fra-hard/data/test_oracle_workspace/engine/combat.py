@@ -188,6 +188,11 @@ def _deal_damage(
     if has_protection_from(target, source):
         return
 
+    # "Prevent all combat damage that would be dealt to it this turn" (rule
+    # 615.1): prevented damage is never dealt, so nothing below happens.
+    if getattr(target, "combat_damage_prevented", False):
+        return
+
     # Record damage assignment
     if source not in combat_state.damage_assignments:
         combat_state.damage_assignments[source] = []
@@ -320,6 +325,11 @@ def declare_attackers_step(game: GameState, attackers: Any = None) -> None:
         kw = getattr(attacker, "keywords", Keyword(0))
         if Keyword.VIGILANCE not in kw:
             attacker.is_tapped = True
+
+    # Raid and similar abilities ask whether a player attacked this turn: a
+    # player has attacked once they declare at least one attacker (rule 508.1).
+    if declared:
+        game.active_player.attacked_this_turn = True
 
     # All attackers are declared simultaneously (rule 508.1); only after the
     # whole set is registered do "whenever ~ attacks" abilities go on the stack

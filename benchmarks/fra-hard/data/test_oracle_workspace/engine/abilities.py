@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
 from engine.casting import is_sorcery_speed
+from engine.triggers import _effect_wants_controller, _required_positional
 from engine.stack import (
     ActivationContext,
     StackObject,
@@ -341,6 +342,10 @@ def _activate_regular_ability(
         #    source/target stints) now, while the source and targets are in
         #    their activation zones, and before the cost mutates anything.
         context = capture_activation_context(game, source, controller, chosen_targets)
+    elif not ability.is_mana_ability:
+        # Untargeted abilities keep the source's stint too, so an effect that
+        # refers to its source can find it after a sacrifice cost (608.2h).
+        context = capture_activation_context(game, source, controller, [])
 
     # 6. Pay costs
     cost_paid = ability.cost(game, source)
@@ -368,6 +373,24 @@ def _activate_regular_ability(
                 lambda g, _obj=stack_obj, _effect=effect: _effect(
                     g, _obj.targets, _obj.activation_context
                 )
+            )
+        elif _required_positional(ability.effect) >= 3:
+            # effect(game, controller, context): it also refers to its source
+            # as it existed when activated (see engine.last_known.as_it_exists).
+            effect = ability.effect
+            stack_obj.on_resolve = (
+                lambda g, _effect=effect, _controller=controller, _context=context: _effect(
+                    g, _controller, _context
+                )
+            )
+        elif _effect_wants_controller(ability.effect):
+            # An untargeted effect that names the ability's controller gets
+            # the activating player, not the source's controller at resolution
+            # — the source may have left the battlefield (e.g. sacrificed as a
+            # cost) and become a new object since (rules 602.2, 400.7).
+            effect = ability.effect
+            stack_obj.on_resolve = (
+                lambda g, _effect=effect, _controller=controller: _effect(g, _controller)
             )
         else:
             stack_obj.on_resolve = ability.effect
@@ -426,6 +449,8 @@ def _activate_loyalty_ability(
         context = capture_activation_context(
             game, source, controller, chosen_targets
         )
+    else:
+        context = capture_activation_context(game, source, controller, [])
 
     # 5. Pay loyalty cost.
     current_loyalty = getattr(source, "loyalty", 0)
@@ -454,6 +479,20 @@ def _activate_loyalty_ability(
             lambda g, _obj=stack_obj, _effect=effect: _effect(
                 g, _obj.targets, _obj.activation_context
             )
+        )
+    elif _required_positional(ability.effect) >= 3:
+        effect = ability.effect
+        stack_obj.on_resolve = (
+            lambda g, _effect=effect, _controller=controller, _context=context: _effect(
+                g, _controller, _context
+            )
+        )
+    elif _effect_wants_controller(ability.effect):
+        # As for activated abilities: the activating player, not the
+        # planeswalker's controller at resolution (rules 602.2, 400.7).
+        effect = ability.effect
+        stack_obj.on_resolve = (
+            lambda g, _effect=effect, _controller=controller: _effect(g, _controller)
         )
     else:
         stack_obj.on_resolve = ability.effect
