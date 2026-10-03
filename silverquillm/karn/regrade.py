@@ -29,6 +29,7 @@ from silverquillm.known_defects import has_known_defects_manifest
 from silverquillm.results_repo import InvalidRunRecordError, iter_run_dirs
 
 from .baseline import (
+    STABLE_UNAVAILABLE,
     BaselineStore,
     StagedBaseline,
     baseline_reference_grade,
@@ -448,7 +449,11 @@ def _reusable(previous, identity: dict, grader: tuple) -> dict | None:
     try:
         validate_scores(previous["scores"])
         if "combined_regression" in previous:
-            validate_combined_regression(previous["combined_regression"])
+            combined = previous["combined_regression"]
+            validate_combined_regression(combined)
+            # A failed or input-shifted comparison is retried, never kept.
+            if not combined["available"] and combined["reason"] not in STABLE_UNAVAILABLE:
+                return None
         datetime.fromisoformat(previous["graded_at"])
     except (InvalidRunRecordError, ValueError):
         return None
@@ -511,12 +516,16 @@ def _regrade_one(
             )
             evaluated = grader.evaluate_run(workspace.parent, benchmark, workspace_source=workspace)
             scores = _scores(evaluated, benchmark)
+            inputs_changed = (
+                staged is not None
+                and grading_inputs(benchmark)["digest"] != digests["grading_inputs_digest"]
+            )
         try:
             validate_scores(scores)
         except InvalidRunRecordError:
             raise GraderError("regrade_scores_invalid") from None
         result["scores"] = scores
-        combined = combined_regression(scores, evaluated, baseline)
+        combined = combined_regression(scores, evaluated, baseline, inputs_changed=inputs_changed)
         if combined is not None:
             result["combined_regression"] = combined
     except Skip as skip:

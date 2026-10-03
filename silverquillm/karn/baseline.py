@@ -29,6 +29,7 @@ from silverquillm.known_defects import (
 
 from .definition import KarnError, canonical
 from .grader import GraderError
+from .grading_inputs import grading_inputs
 from .snapshots import copy_workspace
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -40,6 +41,10 @@ DIMENSION_KEYS = frozenset(
 # Only about a third of the FDN cards have Audited Tests, so this reason describes the
 # population a run and its baseline share, never a grading failure.
 COVERAGE_REASON = "some_cards_have_no_executed_audited_tests"
+INPUTS_CHANGED = "grading_inputs_changed_during_grading"
+# A comparison that is unavailable only for this reason reflects the candidate's own
+# grading, so a regrade may reuse it; every other unavailable comparison is retried.
+STABLE_UNAVAILABLE = frozenset({"regression_not_evaluated"})
 GRADE_LIMIT = 64 * 1024 * 1024
 
 
@@ -91,7 +96,9 @@ class BaselineStore:
         """The stored grade for ``key``, grading and storing it first on a miss.
 
         The lock serializes threads and processes alike, so concurrent runs and regrade
-        workers grade one key once. A failed grade raises and stores nothing.
+        workers grade one key once. A failed grade raises and stores nothing, and an
+        incomplete one is returned for this attempt but never stored, so the next request
+        grades again.
         """
         path = self.path(key)
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -103,7 +110,8 @@ class BaselineStore:
             if stored is not None:
                 return stored
             graded = grade()
-            _write(path, graded)
+            if _reusable(graded):
+                _write(path, graded)
             return graded
         finally:
             os.close(descriptor)
@@ -167,7 +175,16 @@ def _valid_grade(value, key: dict) -> bool:
             or not all(outcome in ("pass", "fail") for outcome in nodes.values())
         ):
             return False
-    return True
+    return _reusable(value)
+
+
+def _reusable(grade: dict) -> bool:
+    """Only a grade complete but for the shared FDN coverage gap is reference data.
+
+    Failing Audited Tests are what a baseline records; a timeout, collection error or
+    unexecuted suite is a failed attempt and must not outlive it.
+    """
+    return all(_baseline_complete(dimension) for dimension in grade["dimensions"].values())
 
 
 def _stored(key: dict, evaluated, scores: dict) -> dict:
@@ -188,6 +205,10 @@ def _stored(key: dict, evaluated, scores: dict) -> dict:
         "graded_at": datetime.now(UTC).isoformat(),
         "dimensions": dimensions,
     }
+
+
+class GradingInputsChanged(KarnError):
+    """The grading inputs differ from the digest the baseline was requested for."""
 
 
 @dataclass(frozen=True)
@@ -227,13 +248,22 @@ def baseline_reference_grade(
                 grader_image_id=grader_image_id,
             )
 
+            def unchanged_inputs() -> None:
+                if grading_inputs(benchmark)["digest"] != grading_inputs_digest:
+                    raise GradingInputsChanged(INPUTS_CHANGED)
+
             def grade() -> dict:
+                # A grade is stored under the requested digest, so it must be graded on it.
+                unchanged_inputs()
                 evaluated = evaluate(staged.path.parent, benchmark, workspace_source=staged.path)
+                unchanged_inputs()
                 return _stored(key, evaluated, score(evaluated, benchmark))
 
             return Baseline(store.get_or_grade(key, grade), None)
     except GraderError as error:
         return Baseline(None, "baseline_grading_failed:" + error.reason)
+    except GradingInputsChanged:
+        return Baseline(None, INPUTS_CHANGED)
     except KarnError as error:
         if str(error) == "baseline_workspace_incomplete":
             return Baseline(None, "baseline_workspace_incomplete")
@@ -264,7 +294,7 @@ def combined_regression(
     if baseline is None:
         return None
     if inputs_changed:
-        return _unavailable("grading_inputs_changed_during_grading")
+        return _unavailable(INPUTS_CHANGED)
     if not all(scores[name]["evaluated"] for name in REGRESSION_DIMENSIONS):
         return _unavailable("regression_not_evaluated")
     if baseline.unavailable is not None:

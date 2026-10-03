@@ -25,7 +25,8 @@ from silverquillm.karn.baseline import (
 from silverquillm.karn.benchmark import load_benchmark, stage_benchmark
 from silverquillm.karn.definition import KarnError
 from silverquillm.karn.execution import _scores, run_benchmark
-from silverquillm.karn.grader import GraderError
+from silverquillm.karn.grader import DockerRun, GraderError
+from silverquillm.karn.grading_inputs import grading_inputs
 from silverquillm.karn.records import read_record, validate_combined_regression, validate_scores
 from silverquillm.karn.regrade import regrade
 from silverquillm.results_repo import InvalidRunRecordError
@@ -489,15 +490,123 @@ def test_an_unexpected_failure_is_reported_by_type(kd, tmp_path):
     def evaluate(*args, **kwargs):
         raise RuntimeError("boom")
 
-    reference = baseline_reference_grade(
-        kd,
+    reference = request(kd, BaselineStore(tmp_path / "store"), evaluate)
+    assert reference == Baseline(None, "baseline_grading_failed:RuntimeError")
+
+
+def request(benchmark, store, evaluate, digest=None):
+    return baseline_reference_grade(
+        benchmark,
         evaluate=evaluate,
         score=_scores,
-        grading_inputs_digest=DIGEST_A,
+        grading_inputs_digest=digest or grading_inputs(benchmark)["digest"],
         grader_image_id=FIXTURE_IMAGE_ID,
-        store=BaselineStore(tmp_path / "store"),
+        store=store,
     )
-    assert reference == Baseline(None, "baseline_grading_failed:RuntimeError")
+
+
+class Scripted:
+    """Real grading; each queued change is applied before (or to) one evaluation in turn."""
+
+    def __init__(self, *before, after=()):
+        self.grader, self.calls = local_grader(), 0
+        self.before, self.after = list(before), list(after)
+
+    def __call__(self, run_dir, benchmark, *, workspace_source):
+        self.calls += 1
+        if self.before:
+            self.before.pop(0)()
+        evaluated = self.grader.evaluate_run(run_dir, benchmark, workspace_source=workspace_source)
+        if self.after:
+            self.after.pop(0)(evaluated)
+        return evaluated
+
+
+def timed_out(evaluated):
+    evaluated.engine_result = EngineResult(errors=["Timeout after 120s"])
+
+
+def stored_grades(store, benchmark):
+    return sorted((store.root / benchmark.id).glob("*.json"))
+
+
+def test_a_timed_out_baseline_is_reported_but_graded_again_next_time(kd, tmp_path):
+    store, evaluate = BaselineStore(tmp_path / "store"), Scripted(after=[timed_out])
+    first = request(kd, store, evaluate)
+    assert first.grade["dimensions"]["engine_regression"]["tests_total"] is None
+    run = evaluation(BASE_FDN, BASE_ENGINE)
+    assert combined_regression(scores_of(run), run, first)["reason"] == "baseline_incomplete"
+    assert stored_grades(store, kd) == []
+
+    healthy = request(kd, store, evaluate)
+    assert evaluate.calls == 2
+    assert healthy.grade["dimensions"]["engine_regression"]["test_nodes"] == {
+        fixture.ENGINE_NODES[0]: "pass",
+        fixture.ENGINE_DEFECT: "fail",
+    }
+    # Failing Known Defect tests and the shared FDN coverage gap are reference data.
+    assert healthy.grade["dimensions"]["fdn_regression"]["missing_reasons"] == [
+        "some_cards_have_no_executed_audited_tests"
+    ]
+    assert request(kd, store, evaluate) == healthy
+    assert evaluate.calls == 2
+    assert len(stored_grades(store, kd)) == 1
+
+
+def test_an_incomplete_stored_grade_is_graded_again(kd, tmp_path):
+    store, evaluate = BaselineStore(tmp_path / "store"), Scripted()
+    healthy = request(kd, store, evaluate)
+    [path] = stored_grades(store, kd)
+    damaged = copy.deepcopy(healthy.grade)
+    damaged["dimensions"]["engine_regression"].update(
+        complete=False,
+        tests_passed=None,
+        tests_total=None,
+        missing_reasons=["Timeout after 120s"],
+        test_nodes={},
+    )
+    path.write_text(json.dumps(damaged))
+    assert request(kd, store, evaluate).grade["dimensions"] == healthy.grade["dimensions"]
+    assert evaluate.calls == 2
+    assert json.loads(path.read_text())["dimensions"] == healthy.grade["dimensions"]
+
+
+def engine_suite_edit(benchmark):
+    """Make the lifegain Audited Test expect the defect, and a way to restore it."""
+    suite = benchmark.root / "data/tests/audited/engine/test_rules.py"
+    original = suite.read_text()
+    edited = original.replace("lifegain(3) == 3", "lifegain(3) == 2")
+    assert edited != original
+    return (lambda: suite.write_text(edited)), (lambda: suite.write_text(original))
+
+
+def test_inputs_changed_before_baseline_grading_are_reported_and_not_graded(kd, tmp_path):
+    store, evaluate = BaselineStore(tmp_path / "store"), Scripted()
+    requested = grading_inputs(kd)["digest"]
+    edit, _ = engine_suite_edit(kd)
+    edit()
+    assert request(kd, store, evaluate, requested) == Baseline(
+        None, "grading_inputs_changed_during_grading"
+    )
+    assert evaluate.calls == 0
+    assert stored_grades(store, kd) == []
+
+
+def test_inputs_changed_during_baseline_grading_store_nothing(kd, tmp_path):
+    store = BaselineStore(tmp_path / "store")
+    requested = grading_inputs(kd)["digest"]
+    edit, restore = engine_suite_edit(kd)
+    evaluate = Scripted(edit)
+    assert request(kd, store, evaluate, requested) == Baseline(
+        None, "grading_inputs_changed_during_grading"
+    )
+    assert stored_grades(store, kd) == []
+
+    restore()
+    assert grading_inputs(kd)["digest"] == requested
+    restored = request(kd, store, evaluate, requested)
+    assert restored.grade["dimensions"]["engine_regression"]["tests_passed"] == 1
+    assert len(stored_grades(store, kd)) == 1
 
 
 # --- Runs and recovery ----------------------------------------------------------------
@@ -693,6 +802,79 @@ def test_regrade_outputs_carry_the_block_beside_scores_and_reuse_it(retained):
     docker = LocalDocker()
     invoke(retained, docker=docker)
     assert docker.runs == []
+
+
+class BaselineDown(LocalDocker):
+    """The grader fails every baseline grading and grades runs normally."""
+
+    def run(self, arguments, *, timeout, stdout_limit=0):
+        if any("sq-regrade-baseline-" in argument for argument in arguments):
+            return DockerRun(125, "grader start failed")
+        return super().run(arguments, timeout=timeout, stdout_limit=stdout_limit)
+
+
+def test_a_failed_regrade_baseline_is_retried_on_the_next_invocation(retained):
+    store = retained.opts["state_root"] / "baseline-grades"
+    for path in store.rglob("*.json"):
+        path.unlink()
+    invoke(retained, docker=BaselineDown())
+    failed = output(retained, "run-a")
+    assert failed["combined_regression"] == {
+        "available": False,
+        "reason": "baseline_grading_failed:exit_125",
+    }
+    validate_scores(failed["scores"])
+    assert not list(store.rglob("*.json"))
+
+    docker = LocalDocker()
+    invoke(retained, docker=docker)
+    # One baseline grade, then both runs again.
+    assert len(docker.runs) == 3
+    assert (
+        output(retained, "run-a")["combined_regression"]
+        == (retained.records[0].run_metadata["combined_regression"])
+    )
+    docker = LocalDocker()
+    invoke(retained, docker=docker)
+    assert docker.runs == []
+
+
+class SuiteEditing(LocalDocker):
+    """Changes an Audited Test while the first run is graded."""
+
+    def __init__(self, edit):
+        super().__init__()
+        self.edit = edit
+
+    def run(self, arguments, *, timeout, stdout_limit=0):
+        if self.edit is not None:
+            self.edit, edit = None, self.edit
+            edit()
+        return super().run(arguments, timeout=timeout, stdout_limit=stdout_limit)
+
+
+def test_inputs_changed_during_a_regrade_make_the_comparison_unavailable_and_retried(retained):
+    benchmark = load_benchmark(retained.opts["bench_root"], fixture.BENCHMARK)
+    store = retained.opts["state_root"] / "baseline-grades"
+    stored = sorted(store.rglob("*.json"))
+    edit, restore = engine_suite_edit(benchmark)
+    invoke(retained, docker=SuiteEditing(edit), workers=1)
+    for record in retained.records:
+        assert output(retained, record.run_id)["combined_regression"] == {
+            "available": False,
+            "reason": "grading_inputs_changed_during_grading",
+        }
+    assert sorted(store.rglob("*.json")) == stored
+
+    restore()
+    docker = LocalDocker()
+    invoke(retained, docker=docker)
+    assert len(docker.runs) == 2
+    for record in retained.records:
+        assert (
+            output(retained, record.run_id)["combined_regression"]
+            == (record.run_metadata["combined_regression"])
+        )
 
 
 def test_a_changed_workspace_misses_the_regrade_cache_and_regrades_the_baseline(retained):
