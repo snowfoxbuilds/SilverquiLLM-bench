@@ -60,11 +60,11 @@ class CatCollector(Creature):
                 return False
             return True
 
-        def _gain_life_effect(game: 'GameState') -> None:
+        def _gain_life_effect(game: 'GameState', controller: Any) -> None:
             """Create a 1/1 white Cat creature token."""
             from cards.fdn.tokens import make_creature_token
             source._cat_collector_last_triggered_turn = getattr(game, 'turn_number', 0)
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             token = make_creature_token('Cat', {'Cat'}, [Color.WHITE], 1, 1)

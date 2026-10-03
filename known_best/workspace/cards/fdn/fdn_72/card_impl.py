@@ -44,9 +44,8 @@ class TinybonesBaubleBurglar(Creature):
         """Tap ability: each opponent discards a card. Activate only as a sorcery."""
         source = self
 
-        def _discard_effect(game: 'GameState') -> None:
+        def _discard_effect(game: 'GameState', controller: Any) -> None:
             from engine.game import discard, exile, add_counter
-            controller = getattr(source, 'controller', None)
             if controller is None:
                 return
             for player in game.players:

@@ -41,8 +41,8 @@ class SylvanScavenging(Enchantment):
         def _condition(game: Any, event: dict) -> bool:
             return game.active_player is controller
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             if not _is_on_battlefield(game, source):

@@ -40,13 +40,11 @@ class RuneSealedWall(ArtifactCreature):
         super().__init__(**kwargs)
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             return _tap_cost(game, src)
 
-        def _effect(game: Any) -> None:
-            controller = source.controller
+        def _effect(game: Any, controller: Any) -> None:
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]

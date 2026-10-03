@@ -32,7 +32,8 @@ def _do_untap_step(game: GameState) -> None:
     active = game.active_player
     bf = active.zones[Zone.BATTLEFIELD]
     for obj in bf.get_all():
-        if hasattr(obj, "is_tapped"):
+        # "doesn't untap during your untap step" (rule 502.3).
+        if hasattr(obj, "is_tapped") and not getattr(obj, "skip_untap", False):
             obj.is_tapped = False
         if hasattr(obj, "summoning_sick"):
             obj.summoning_sick = False
@@ -75,6 +76,8 @@ def cleanup_mechanical(game: GameState) -> None:
                 obj.is_attacking = False
             if hasattr(obj, "is_blocking"):
                 obj.is_blocking = False
+            if hasattr(obj, "combat_damage_prevented"):
+                obj.combat_damage_prevented = False
         if hasattr(player, "cards_drawn_this_turn"):
             player.cards_drawn_this_turn = 0
 

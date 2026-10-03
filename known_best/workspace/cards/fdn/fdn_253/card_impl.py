@@ -78,12 +78,11 @@ class GoldveinPick(Equipment):
                 and event.is_combat
             )
 
-        def _effect(g: "GameState") -> None:
+        def _effect(g: "GameState", controller: Any) -> None:
             from engine.game import create_token
 
             from cards.fdn.tokens import make_treasure_token
 
-            controller = source.controller
             if controller is None:
                 return
             create_token(g, controller, make_treasure_token())

@@ -36,11 +36,9 @@ class DragonTrainer(Creature):
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
         from engine.game import create_token
-        source = self
 
-        def _effect(game: GameState) -> None:
+        def _effect(game: GameState, controller: Any) -> None:
             from cards.fdn.tokens import make_creature_token
-            controller = getattr(source, 'controller', None)
             if controller is not None:
                 token = make_creature_token(
                     'Dragon', {'Dragon'}, [Color.RED], 4, 4, keywords=Keyword.FLYING

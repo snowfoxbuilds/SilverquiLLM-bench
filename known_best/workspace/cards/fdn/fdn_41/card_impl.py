@@ -47,8 +47,8 @@ class HomunculusHorde(Creature):
             source._horde_draws_this_turn += 1
             return source._horde_draws_this_turn == 2
 
-        def _draw_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _draw_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             token = Creature(name='Homunculus Horde', mana_cost=ManaCost.parse('{3}{U}'), subtypes={'Homunculus'}, base_power=2, base_toughness=2)

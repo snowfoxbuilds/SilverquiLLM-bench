@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 from engine.card import Instant
 from engine.types import CardType, ManaCost, TargetRequirement, Zone
-from engine.events import LeavesBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -67,23 +66,11 @@ class Condemn(Instant):
         # Capture characteristics before the creature leaves the battlefield.
         controller = getattr(target, 'controller', None)
         toughness = getattr(target, 'toughness', 0)
-        owner = getattr(target, 'owner', controller)
 
         # Move the creature to the bottom of its owner's library.
-        for player in game.players:
-            bf = game.get_battlefield(player)
-            if bf.contains(target):
-                bf.remove(target)
-                break
-        if owner is not None:
-            owner.zones[Zone.LIBRARY].add(target, position='bottom')
-        game.trigger_manager.fire_event(
-            game,
-            LeavesBattlefieldTriggeredEvent(permanent=target, controller=controller),
-        )
-        game.trigger_manager.unregister(target)
-        if hasattr(game, 'replacement_manager'):
-            game.replacement_manager.unregister(target)
+        from engine.zones import move_to_zone
+
+        move_to_zone(game, target, Zone.BATTLEFIELD, Zone.LIBRARY, position='bottom')
 
         # Its controller gains life equal to its toughness.
         if controller is not None and toughness > 0:

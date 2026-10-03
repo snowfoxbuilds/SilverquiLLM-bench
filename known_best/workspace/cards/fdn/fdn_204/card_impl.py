@@ -41,16 +41,14 @@ class KrenkoMobBoss(Creature):
         super().__init__(**kwargs)
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             return _tap_cost(game, src)
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from cards.fdn.tokens import make_creature_token
             from engine.game import create_token
 
-            controller = source.controller
             if controller is None:
                 return
             # Count Goblins you control

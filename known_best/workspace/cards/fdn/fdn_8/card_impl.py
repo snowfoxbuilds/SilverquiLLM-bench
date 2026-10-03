@@ -44,14 +44,14 @@ class DauntlessVeteran(Creature):
             """Fire when this creature attacks."""
             return event.creature is source
 
-        def _attack_effect(game: 'GameState') -> None:
+        def _attack_effect(game: 'GameState', controller: Any) -> None:
             """Creatures you control get +1/+1 until end of turn."""
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
 
             def _apply_buff(game: Any) -> None:
-                c = getattr(source, 'controller', None)
+                c = controller
                 if c is None:
                     return
                 battlefield = game.get_battlefield(c)

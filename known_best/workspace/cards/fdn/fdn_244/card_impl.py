@@ -5,7 +5,7 @@ from engine.card import Creature
 from engine.protection import ProtectionAbility
 from engine.events import MoveToGraveyardReplacementEvent
 from engine.replacement_effects import ReplacementEffect
-from engine.types import ManaCost, Supertype, Zone
+from engine.types import ManaCost, Supertype
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -52,13 +52,11 @@ class Progenitus(Creature):
         def _condition(game: Any, event: dict) -> bool:
             return event.card is source
 
-        def _replacement(game: Any, event: dict) -> dict:
-            owner = getattr(source, 'owner', None)
-            if owner is not None:
-                library = owner.zones[Zone.LIBRARY]
-                library.add(source)
-                library.shuffle()
-            event.prevented = True
+        def _replacement(game: Any, event: Any) -> Any:
+            # The engine still performs the move — Progenitus leaves the
+            # battlefield as usual (rule 614.6), just into its owner's library.
+            event.destination = 'library'
+            event.position = 'shuffle'
             return event
         controller = getattr(self, 'controller', None)
         game.replacement_manager.register(ReplacementEffect(event_type=MoveToGraveyardReplacementEvent, source=self, condition=_condition, replacement=_replacement, controller=controller))

@@ -57,8 +57,8 @@ class SquadRallier(Creature):
             controller.mana_pool.pay(cost)
             return True
 
-        def _effect(game: Any) -> None:
-            ctrl = getattr(source, "controller", None)
+        def _effect(game: Any, controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             from engine.types import Zone

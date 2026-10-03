@@ -57,11 +57,15 @@ class FiendishPanda(Creature):
             if _is_on_battlefield(game, source):
                 add_counter(game, source, '+1/+1', 1)
 
-        def _dies_effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
+        def _dies_power(game: Any, event: Any, controller: Any) -> int:
+            # "this creature's power" as it last existed, fixed for this
+            # occurrence of the trigger (rules 603.10a, 603.3).
+            return event.last_known.power
+
+        def _dies_effect(game: GameState, controller: Any, power: int) -> None:
+            # The fire-time controller: as the source last existed (603.3a).
             if controller is None:
                 return
-            power = getattr(source, 'power', getattr(source, 'base_power', 3))
             graveyard = controller.zones[Zone.GRAVEYARD]
             candidates = []
             for obj in graveyard.get_all():
@@ -82,4 +86,4 @@ class FiendishPanda(Creature):
                 move_to_zone(game, target, Zone.GRAVEYARD, Zone.BATTLEFIELD)
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_lifegain_condition, effect=_lifegain_effect, source=self, controller=controller))
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_dies_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_dies_effect, source=self, controller=controller, capture=_dies_power))

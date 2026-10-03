@@ -45,23 +45,28 @@ class ValkyrieSCall(Enchantment):
             creature = event.creature
             if creature is None:
                 return False
+            # Read the creature as it last existed on the battlefield (rule
+            # 603.10a): the graveyard card is a new object (400.7).
+            lki = event.last_known
+            if lki is None:
+                return False
             ctrl = getattr(source, 'controller', None)
-            if getattr(creature, 'controller', None) is not ctrl:
+            if lki.controller is not ctrl:
                 return False
-            if getattr(creature, 'is_token', False):
+            if lki.is_token:
                 return False
-            if 'Angel' in getattr(creature, 'subtypes', set()):
+            if 'Angel' in lki.subtypes:
                 return False
             source._valkyrie_dying_queue.append(creature)
             return True
 
-        def _dies_effect(game: 'GameState') -> None:
+        def _dies_effect(game: 'GameState', controller: Any) -> None:
             if not source._valkyrie_dying_queue:
                 return
             creature = source._valkyrie_dying_queue.pop(0)
             if creature is None:
                 return
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             owner = getattr(creature, 'owner', ctrl)
@@ -79,6 +84,6 @@ class ValkyrieSCall(Enchantment):
                     return
                 creature_ref.keywords = creature_ref.keywords | Keyword.FLYING
                 creature_ref.subtypes = creature_ref.subtypes | {'Angel'}
-            effect = game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.ABILITY, sublayer=None, apply=_apply_angel, duration=DURATION_PERMANENT))
+            effect = game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.ABILITY, sublayer=None, bound_to=[creature_ref], apply=_apply_angel, duration=DURATION_PERMANENT))
             source._angel_effects.append(effect)
         game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_dies_condition, effect=_dies_effect, source=self, controller=controller))

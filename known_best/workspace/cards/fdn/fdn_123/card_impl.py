@@ -59,8 +59,8 @@ class NivMizzetVisionary(Creature):
             _amount_queue.append(event.amount)
             return True
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             amount = _amount_queue.popleft() if _amount_queue else 1

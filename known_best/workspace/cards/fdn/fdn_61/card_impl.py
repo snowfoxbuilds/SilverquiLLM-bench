@@ -39,9 +39,8 @@ class HighSocietyHunter(Creature):
             """Fire when this creature attacks."""
             return event.creature is source
 
-        def _attack_effect(game: 'GameState') -> None:
+        def _attack_effect(game: 'GameState', controller: Any) -> None:
             """May sacrifice another creature; if so, add +1/+1 counter."""
-            controller = getattr(source, 'controller', None)
             if controller is None:
                 return
             battlefield = game.get_battlefield(controller)
@@ -63,9 +62,8 @@ class HighSocietyHunter(Creature):
                 return False
             return True
 
-        def _dies_effect(game: 'GameState') -> None:
+        def _dies_effect(game: 'GameState', controller: Any) -> None:
             """Draw a card."""
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
             if controller is not None:
                 draw_card(game, controller)
         controller = getattr(self, 'controller', None) or game.active_player

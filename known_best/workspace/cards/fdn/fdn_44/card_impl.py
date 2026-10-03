@@ -130,6 +130,7 @@ class KaitoCunningInfiltrator(Planeswalker):
                     ContinuousEffect(
                         source=pw,
                         layer=Layer.ABILITY,
+                        bound_to=[target],
                         apply=_apply,
                         duration=DURATION_END_OF_TURN,
                     )
@@ -142,19 +143,17 @@ class KaitoCunningInfiltrator(Planeswalker):
                     card_to_discard = cards_in_hand[-1]
                     discard(game, controller, card_to_discard)
 
-        def _minus2(game: Any) -> None:
+        def _minus2(game: Any, controller: Any) -> None:
             """Create a 2/1 blue Ninja creature token."""
             from engine.game import create_token
-            controller = pw.controller
             if controller is not None:
                 token = Creature(name='Ninja', base_power=2, base_toughness=1, subtypes={'Ninja'})
                 create_token(game, controller, token)
 
-        def _minus9(game: Any) -> None:
+        def _minus9(game: Any, controller: Any) -> None:
             """Emblem — whenever a player casts a spell, create a 2/1 Ninja token."""
             from engine.triggers import TriggerRegistration
             from engine.game import create_token
-            controller = pw.controller
             if controller is None:
                 return
             emblem = type('Emblem', (), {'name': 'Kaito Emblem'})()

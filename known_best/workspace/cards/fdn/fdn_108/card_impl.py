@@ -43,8 +43,8 @@ class NeedletoothPack(Creature):
                 return False
             return getattr(game, 'creature_died_this_turn', False)
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             bf = game.get_battlefield(ctrl)

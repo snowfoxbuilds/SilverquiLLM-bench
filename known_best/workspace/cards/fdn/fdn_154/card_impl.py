@@ -34,8 +34,8 @@ class ExtravagantReplication(Enchantment):
             ctrl = getattr(source, 'controller', None)
             return game.active_player is ctrl
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             bf = game.get_battlefield(ctrl)

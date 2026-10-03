@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Mapping
 
 from engine.types import CardType, Zone
 
@@ -183,6 +183,8 @@ def move_to_zone(
     to_zone: Zone,
     *,
     replacement_event: Any | None = None,
+    with_counters: Mapping[str, int] | None = None,
+    position: str = "top",
 ) -> None:
     """High-level zone transition with trigger/replacement-effect hooks.
 
@@ -218,6 +220,12 @@ def move_to_zone(
             (e.g. ``CreatureDiesReplacementEvent``).  When ``None``,
             no replacement effects are consulted (useful for simple
             moves like casting resolution or exile-from-graveyard).
+            A replacement may also set ``position`` (``"top"``, ``"bottom"``
+            or ``"shuffle"``) for a redirection into a library.
+        position: Where in the destination zone the card goes: ``"top"``,
+            ``"bottom"`` or ``"shuffle"`` (a library), e.g. Condemn.
+        with_counters: Extra counters the card enters the battlefield with
+            (rule 614.1c), e.g. "return it with one fewer revival counter".
     """
     from engine.events import (
         CreatureDiesTriggeredEvent,
@@ -267,6 +275,17 @@ def move_to_zone(
         destination_str = getattr(replacement_event, "destination", "graveyard")
         dest_zone = _DESTINATION_ZONE_MAP.get(destination_str, to_zone)
 
+    # --- Last-known information: the object as it last existed (603.10a) ---
+    lki = None
+    if leaving_battlefield:
+        from engine.last_known import lki_key, snapshot
+
+        lki = snapshot(card, Zone.BATTLEFIELD)
+        game.last_known[lki_key(card)] = lki
+        # Keyed by the stint it ends, before note_zone_change below starts a
+        # new one, so pending abilities of this stint can still find it.
+        game.last_known_by_stint[game.refs.instance_id(card, Zone.BATTLEFIELD.value)] = lki
+
     # --- Perform the zone move ---
     source_container.remove(card)
 
@@ -293,8 +312,20 @@ def move_to_zone(
             controller=dest_player,
             from_zone=from_zone,
         )
+        for counter_type, amount in (with_counters or {}).items():
+            enters_event.counters[counter_type] = (
+                enters_event.counters.get(counter_type, 0) + amount
+            )
 
-    dest_player.zones[dest_zone].add(card)
+    if replacement_event is not None and leaving_battlefield:
+        position = getattr(replacement_event, "position", position)
+    if position not in ("top", "bottom", "shuffle"):
+        raise ValueError(f"Invalid position: {position!r}; expected 'top', 'bottom', or 'shuffle'")
+    if position == "shuffle":
+        dest_player.zones[dest_zone].add(card)
+        dest_player.zones[dest_zone].shuffle()
+    else:
+        dest_player.zones[dest_zone].add(card, position=position)
 
     # A zone change yields a new object: break instance-id continuity in the
     # refs registry even when the new stint is never observed by a query
@@ -305,23 +336,12 @@ def move_to_zone(
     # --- Leaving battlefield hooks ---
     removed_source_effects = False
     if leaving_battlefield:
-        card_types = getattr(card, "card_types", set())
-        is_creature = CardType.CREATURE in card_types
+        assert lki is not None
+        is_creature = CardType.CREATURE in lki.card_types
 
-        # Fire events BEFORE unregistering.
-        game.trigger_manager.fire_event(
-            game,
-            LeavesBattlefieldTriggeredEvent(permanent=card, controller=controller),
-        )
-        if is_creature and dest_zone == Zone.GRAVEYARD:
-            game.trigger_manager.fire_event(
-                game,
-                CreatureDiesTriggeredEvent(creature=card, controller=controller, owner=owner),
-            )
-
-        # Now unregister triggers and replacement effects.
-        game.trigger_manager.unregister(card)
-        game.replacement_manager.unregister(card)
+        # A permanent that leaves the battlefield is removed from combat
+        # (rule 506.4).
+        _remove_from_combat(game, card)
 
         # An Equipment that itself leaves the battlefield detaches: clear
         # attached_to, clear its internal effect references, and run its detach
@@ -349,6 +369,34 @@ def move_to_zone(
             for effect in effect_manager.get_effects_by_source(card):
                 effect_manager.remove(effect)
                 removed_source_effects = True
+            # Effects locked onto this permanent stop applying to it: it
+            # returns, if ever, as a new object (rules 400.7, 611.2c).
+            if effect_manager.release(card):
+                removed_source_effects = True
+
+        _begin_new_object(card)
+
+        # Fire events BEFORE unregistering, so the departing permanent's own
+        # leaves/dies abilities still trigger (rule 603.10a looks back in time).
+        game.trigger_manager.fire_event(
+            game,
+            LeavesBattlefieldTriggeredEvent(
+                permanent=card, controller=controller, last_known=lki
+            ),
+        )
+        if is_creature and dest_zone == Zone.GRAVEYARD:
+            # "Dies" means put into a graveyard from the battlefield (700.4).
+            game.creature_died_this_turn = True
+            game.trigger_manager.fire_event(
+                game,
+                CreatureDiesTriggeredEvent(
+                    creature=card, controller=controller, owner=owner, last_known=lki
+                ),
+            )
+
+        # Now unregister triggers and replacement effects.
+        game.trigger_manager.unregister(card)
+        game.replacement_manager.unregister(card)
 
     # --- Entering battlefield hooks ---
     if entering_battlefield:
@@ -398,6 +446,35 @@ def move_to_zone(
             len(effect_manager) > 0 or removed_source_effects
         ):
             effect_manager.apply_all(game)
+
+
+def _remove_from_combat(game: GameState, card: Any) -> None:
+    """Remove *card* from the combat state (rule 506.4)."""
+    combat = getattr(game, "combat_state", None)
+    if combat is None:
+        return
+    # Identity scans: duck-typed test objects need not be hashable.
+    for mapping in (
+        combat.attackers,
+        combat.blockers,
+        combat.attacker_blockers,
+        combat.damage_assignments,
+    ):
+        for key in [key for key in mapping if key is card]:
+            del mapping[key]
+    for key in [key for key in combat.was_blocked if key is card]:
+        combat.was_blocked.discard(key)
+    for related in (*combat.blockers.values(), *combat.attacker_blockers.values()):
+        related[:] = [obj for obj in related if obj is not card]
+
+
+def _begin_new_object(card: Any) -> None:
+    """Make *card* the new object it becomes on leaving the battlefield
+    (rule 400.7). Its last-known information was snapshotted before the move."""
+    reset = getattr(card, "reset_for_zone_change", None)
+    if callable(reset):
+        # see ADR-016: the zone-change Known Defect is this call
+        reset()
 
 
 # Destination string → Zone for replacement-effect zone redirection.

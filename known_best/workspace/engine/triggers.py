@@ -25,6 +25,20 @@ if TYPE_CHECKING:
     from engine.player import Player
 
 
+def _required_positional(effect: Callable[..., Any]) -> int:
+    """The number of required positional parameters *effect* declares."""
+    try:
+        params = list(inspect.signature(effect).parameters.values())
+    except (TypeError, ValueError):
+        return 1
+    return len([
+        p
+        for p in params
+        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+        and p.default is p.empty
+    ])
+
+
 def _effect_wants_controller(effect: Callable[..., Any]) -> bool:
     """Return ``True`` if an *untargeted* trigger effect accepts the fire-time
     controller as a second positional argument — ``effect(game, controller)``.
@@ -189,7 +203,13 @@ class TriggerManager:
         # target selection, and the ActivationContext — so a source that changed
         # hands after registration triggers, orders, and resolves under its new
         # controller.
+        # A leaves-the-battlefield ability's source is already a new object
+        # (rule 400.7), so its controller is read as it last existed (603.10a).
+        last_known = getattr(event, "last_known", None)
+
         def _fire_controller(trigger: TriggerRegistration) -> Any:
+            if last_known is not None and last_known.card is trigger.source:
+                return last_known.controller or trigger.controller
             return getattr(trigger.source, "controller", None) or trigger.controller
 
         active_player = game.active_player
@@ -283,3 +303,42 @@ class TriggerManager:
     def clear(self) -> None:
         """Remove all registered triggers."""
         self._triggers.clear()
+
+
+def register_delayed_trigger(
+    game: GameState,
+    event_type: type[TriggeredEvent],
+    controller: Player,
+    effect: Callable[..., None],
+    *,
+    condition: Callable[..., bool] | None = None,
+    name: str = "Delayed trigger",
+) -> None:
+    """Create a delayed triggered ability (rule 603.7).
+
+    It triggers only once, the next time an *event_type* event satisfies
+    *condition* (603.7b), and is controlled by *controller* (603.7d-e). It is
+    registered under a marker object of its own, so it survives the creating
+    object leaving the battlefield. *effect* follows the untargeted
+    :class:`TriggerRegistration`
+    contract: ``effect(game)`` or ``effect(game, controller)``.
+    """
+    from engine.card import CardImpl
+
+    marker = CardImpl(name=name, owner=controller)
+
+    def _once(game: GameState, event: TriggeredEvent) -> bool:
+        if condition is not None and not condition(game, event):
+            return False
+        game.trigger_manager.unregister(marker)
+        return True
+
+    game.trigger_manager.register(
+        TriggerRegistration(
+            event_type=event_type,
+            condition=_once,
+            effect=effect,
+            source=marker,
+            controller=controller,
+        )
+    )

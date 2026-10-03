@@ -97,6 +97,7 @@ class SnakeskinVeil(Instant):
             source=self,
             layer=Layer.ABILITY,
             sublayer=None,
+            bound_to=[creature_ref],
             apply=_apply_hexproof,
             duration=DURATION_END_OF_TURN,
         )

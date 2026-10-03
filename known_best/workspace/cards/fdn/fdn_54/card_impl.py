@@ -44,10 +44,9 @@ class AbyssalHarvester(Creature):
 
         source = self
 
-        def _tap_ability_effect(game: "GameState") -> None:
+        def _tap_ability_effect(game: "GameState", controller: Any) -> None:
             from engine.game import create_token, exile
 
-            controller = getattr(source, "controller", None)
             if controller is None:
                 return
 

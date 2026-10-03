@@ -38,10 +38,8 @@ class PridefulParent(Creature):
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
         from engine.game import create_token
-        source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is not None:
                 token = make_creature_token("Cat", {"Cat"}, [Color.WHITE], 1, 1)
                 create_token(game, controller, token)

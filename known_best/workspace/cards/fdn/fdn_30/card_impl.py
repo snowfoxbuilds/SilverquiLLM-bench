@@ -53,8 +53,8 @@ class ArchmageOfRunes(Creature):
             card_types = getattr(spell, 'card_types', set())
             return CardType.INSTANT in card_types or CardType.SORCERY in card_types
 
-        def _spell_cast_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _spell_cast_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             draw_card(game, ctrl)

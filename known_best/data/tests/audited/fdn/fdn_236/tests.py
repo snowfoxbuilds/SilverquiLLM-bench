@@ -29,6 +29,25 @@ class TestWildwoodScourgeProperties:
         assert not game.get_battlefield(player).contains(card)
 
 
+    def test_enters_with_x_counters(self) -> None:
+        """X = 3 is chosen and paid while casting (rules 601.2b, 601.2f), and
+        the permanent enters with three +1/+1 counters (400.7d, 614.1c)."""
+        from engine.decisions import Decision
+        from engine.types import ManaType
+        from test_utils import cast_card, fund_mana_cost, prefer
+
+        game = create_game()
+        player = game.players[0]
+        scourge = WildwoodScourge(owner=player)
+        fund_mana_cost(player, scourge.mana_cost)
+        player.mana_pool.add(ManaType.COLORLESS, 3)
+        prefer(player, Decision.number(3))
+        cast_card(game, player, scourge)
+        assert game.get_battlefield(player).contains(scourge)
+        assert scourge.counters.get("+1/+1", 0) == 3
+        assert player.mana_pool.total() == 0
+
+
 class TestWildwoodScourgeTriggerRegistration:
     """The previously-crashing register_triggers path."""
 

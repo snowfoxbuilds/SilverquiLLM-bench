@@ -1,6 +1,5 @@
-"""Printed characteristics and public protection behavior for Progenitus.
-
-The faulty graveyard replacement is recorded by an unscored baseline diagnostic."""
+"""Printed characteristics, public protection behavior and the graveyard
+replacement for Progenitus."""
 
 from __future__ import annotations
 
@@ -37,3 +36,21 @@ def test_protection_from_everything_prevents_damage():
     deal_damage(game, source, card, 20)
     resolve_stack(game)
     assert card.damage_marked == 0 and game.get_battlefield(player).contains(card)
+
+
+class TestProgenitusGraveyardReplacement:
+    def test_replacement_redirects_to_library_and_prevents(self) -> None:
+        """Destroyed, it is shuffled into its owner's library instead of going
+        to the graveyard (rule 614.1a), and it leaves the battlefield."""
+        from engine.game import destroy
+        from test_utils import enter_permanent, resolve_stack
+
+        game = create_game()
+        player = game.players[0]
+        card = enter_permanent(game, player, Progenitus())
+        destroy(game, card)
+        resolve_stack(game)
+
+        assert not game.get_battlefield(player).contains(card)
+        assert game.get_library(player).contains(card)
+        assert not game.get_graveyard(player).contains(card)

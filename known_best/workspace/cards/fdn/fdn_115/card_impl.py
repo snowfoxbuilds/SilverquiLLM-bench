@@ -58,11 +58,19 @@ class AleshaWhoLaughsAtFate(Creature):
                 attacked = getattr(ctrl, 'attacked_this_turn', False)
             return attacked
 
-        def _raid_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _stint(game: Any, event: Any, controller: Any) -> int | None:
+            from engine.stack import battlefield_stint_id
+            return battlefield_stint_id(game, source)
+
+        def _raid_effect(game: 'GameState', controller: Any, stint: int | None) -> None:
+            from engine.last_known import as_it_exists
+            ctrl = controller
             if ctrl is None:
                 return
-            power = getattr(source, 'power', getattr(source, 'base_power', 2))
+            # "Alesha's power": current while it remains on the battlefield,
+            # otherwise as it last existed there (rule 608.2h).
+            alesha = as_it_exists(game, source, stint)
+            power = alesha.power if alesha is not None else 0
             graveyard = ctrl.zones[Zone.GRAVEYARD]
             candidates = [c for c in graveyard.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and getattr(c, 'mana_cost', None) is not None and (c.mana_cost.cmc <= power)]
             if not candidates:
@@ -72,4 +80,4 @@ class AleshaWhoLaughsAtFate(Creature):
                 return
             chosen.controller = ctrl
             move_to_zone(game, chosen, Zone.GRAVEYARD, Zone.BATTLEFIELD)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_raid_condition, effect=_raid_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_raid_condition, effect=_raid_effect, source=self, controller=controller, capture=_stint))

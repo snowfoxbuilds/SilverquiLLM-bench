@@ -142,6 +142,7 @@ class AjaniCallerOfThePride(Planeswalker):
                 ContinuousEffect(
                     source=pw,
                     layer=Layer.ABILITY,
+                    bound_to=[target],
                     apply=_apply,
                     duration=DURATION_END_OF_TURN,
                 )
@@ -151,10 +152,9 @@ class AjaniCallerOfThePride(Planeswalker):
         # −8: Create X 2/2 white Cat creature tokens (X = your life total).
         # Untargeted.
         # ------------------------------------------------------------------
-        def _minus8(game: Any) -> None:
+        def _minus8(game: Any, controller: Any) -> None:
             from engine.game import create_token
 
-            controller = pw.controller
             if controller is None:
                 return
             life = max(0, getattr(controller, "life", 0))

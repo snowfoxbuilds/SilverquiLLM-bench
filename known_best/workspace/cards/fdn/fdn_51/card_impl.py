@@ -38,8 +38,8 @@ class SphinxOfForgottenLore(Creature):
             attacker = event.attacker or event.creature
             return attacker is source
 
-        def _attack_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _attack_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             graveyard = ctrl.zones[Zone.GRAVEYARD]
