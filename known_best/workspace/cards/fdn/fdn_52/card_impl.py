@@ -33,7 +33,6 @@ class StrixLookout(Creature):
         super().__init__(**kwargs)
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             if getattr(src, "is_tapped", False):
@@ -47,10 +46,9 @@ class StrixLookout(Creature):
             src.is_tapped = True
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from engine.game import draw_card, discard
 
-            controller = source.controller
             if controller is None:
                 return
             drawn = draw_card(game, controller)

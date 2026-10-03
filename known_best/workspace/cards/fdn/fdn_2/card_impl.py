@@ -83,8 +83,8 @@ class ArahboTheFirstFang(Creature):
                 return True
             return False
 
-        def _etb_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _etb_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             token = make_creature_token("Cat", {"Cat"}, [Color.WHITE], 1, 1)

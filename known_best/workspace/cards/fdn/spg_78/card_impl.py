@@ -49,10 +49,9 @@ class GoblinBushwhacker(Creature):
         from engine.triggers import TriggerRegistration
         source = self
 
-        def _etb_effect(g: GameState) -> None:
+        def _etb_effect(g: GameState, controller: Any) -> None:
             if not source.kicked:
                 return
-            controller = source.controller or source.owner
             if controller is None:
                 return
             bf = g.get_battlefield(controller)

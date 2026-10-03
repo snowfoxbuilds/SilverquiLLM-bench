@@ -49,8 +49,8 @@ class MischievousMystic(Creature):
             source._mystic_draws_this_turn += 1
             return source._mystic_draws_this_turn == 2
 
-        def _draw_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _draw_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             token = make_creature_token('Faerie', {'Faerie'}, [Color.BLUE], 1, 1, keywords=Keyword.FLYING)

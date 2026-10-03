@@ -48,8 +48,8 @@ class BalmorBattlemageCaptain(Creature):
             card_types = getattr(spell, 'card_types', set())
             return bool(card_types & {CardType.INSTANT, CardType.SORCERY})
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
 

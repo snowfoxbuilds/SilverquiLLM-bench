@@ -36,8 +36,7 @@ class MidnightSnack(Enchantment):
                 return False
             return getattr(controller, 'attacked_this_turn', False)
 
-        def _effect(game: 'GameState') -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
             if controller is None:
                 return
             from cards.fdn.tokens import make_food_token
@@ -49,9 +48,8 @@ class MidnightSnack(Enchantment):
         """Sacrifice ability: target opponent loses X life."""
         source = self
 
-        def _sac_effect(game: 'GameState') -> None:
+        def _sac_effect(game: 'GameState', controller: Any) -> None:
             from engine.game import sacrifice
-            controller = getattr(source, 'controller', None)
             if controller is None:
                 return
             life_gained = getattr(controller, 'life_gained_this_turn', 0)

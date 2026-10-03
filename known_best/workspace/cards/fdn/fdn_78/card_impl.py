@@ -38,8 +38,8 @@ class BattlesongBerserker(Creature):
             ctrl = getattr(source, 'controller', None)
             return getattr(attacker, 'controller', None) is ctrl and ctrl is not None
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             bf = game.get_battlefield(ctrl)

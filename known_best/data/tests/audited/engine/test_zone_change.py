@@ -10,16 +10,16 @@ effect locked onto it by a resolved spell or ability no longer applies to it
 
 from __future__ import annotations
 
-from engine.card import Creature
+from engine.card import ActivatedAbility, Artifact, Creature
 from engine.continuous_effects import DURATION_END_OF_TURN, DURATION_PERMANENT, ContinuousEffect, Layer, SubLayer
 from engine.events import CreatureDiesTriggeredEvent, LeavesBattlefieldTriggeredEvent
-from engine.game import add_counter, deal_damage, destroy, exile, tap
+from engine.game import add_counter, deal_damage, destroy, exile, gain_life, sacrifice, tap
 from engine.state_based_actions import resolve_state_based_actions
 from engine.triggers import TriggerRegistration
 from engine.turn import untap_step
 from engine.types import Zone
 from engine.zones import move_to_zone
-from test_utils import behavioral_game, declare_attackers, enter_permanent, resolve_stack
+from test_utils import activate_card_ability, behavioral_game, declare_attackers, enter_permanent, resolve_stack
 
 
 def _creature(name: str = "Test Creature", power: int = 1, toughness: int = 1) -> Creature:
@@ -273,3 +273,30 @@ def test_locked_effect_still_ends_at_cleanup():
     cleanup_mechanical(game)
     assert creature.power == 2
 
+
+class _SacrificeForLife(Artifact):
+    """Sacrifice this artifact: you gain 1 life."""
+
+    def get_activated_abilities(self):
+        def _cost(game, source) -> bool:
+            sacrifice(game, source.controller, source)
+            return True
+
+        def _effect(game, controller) -> None:
+            gain_life(game, controller, 1)
+
+        return [ActivatedAbility(cost=_cost, effect=_effect)]
+
+
+def test_ability_of_a_sacrificed_source_resolves_for_the_player_who_activated_it():
+    """The source is sacrificed as a cost and becomes a new object whose
+    controller is its owner (400.7, 108.4a); "you" is still the player who
+    activated the ability (602.2)."""
+    game = behavioral_game()
+    activator, owner = game.players
+    artifact = enter_permanent(game, activator, _SacrificeForLife(name="Borrowed Artifact"))
+    artifact.owner = owner  # an artifact the activator does not own
+    activate_card_ability(game, activator, artifact)
+    assert game.get_graveyard(owner).contains(artifact)
+    resolve_stack(game)
+    assert (activator.life, owner.life) == (21, 20)

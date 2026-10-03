@@ -60,13 +60,13 @@ class ValkyrieSCall(Enchantment):
             source._valkyrie_dying_queue.append(creature)
             return True
 
-        def _dies_effect(game: 'GameState') -> None:
+        def _dies_effect(game: 'GameState', controller: Any) -> None:
             if not source._valkyrie_dying_queue:
                 return
             creature = source._valkyrie_dying_queue.pop(0)
             if creature is None:
                 return
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             owner = getattr(creature, 'owner', ctrl)

@@ -44,9 +44,9 @@ class ArmasaurGuide(Creature):
             attacking = [c for c in battlefield.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and getattr(c, 'is_attacking', False)]
             return len(attacking) >= 3 and attacker is source
 
-        def _attack_effect(game: 'GameState') -> None:
+        def _attack_effect(game: 'GameState', controller: Any) -> None:
             """Put a +1/+1 counter on target creature you control."""
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             chosen = getattr(source, 'chosen_targets', None)

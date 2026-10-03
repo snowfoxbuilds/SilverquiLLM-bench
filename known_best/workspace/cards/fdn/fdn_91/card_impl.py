@@ -76,8 +76,8 @@ class KellanPlanarTrailblazer(Creature):
                 return False
             return getattr(event, 'is_combat', True)
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             library = ctrl.zones[Zone.LIBRARY]

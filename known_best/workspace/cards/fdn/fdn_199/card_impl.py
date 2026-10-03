@@ -36,8 +36,8 @@ class FrenziedGoblin(Creature):
         def _condition(game: Any, event: dict) -> bool:
             return event.creature is source
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             if not query_yes_no(game, ctrl, 'Pay {R} to make a creature unable to block?', source_card=source):

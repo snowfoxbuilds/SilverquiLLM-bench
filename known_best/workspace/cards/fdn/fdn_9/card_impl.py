@@ -43,9 +43,9 @@ class DazzlingAngel(Creature):
                 return False
             return True
 
-        def _etb_effect(game: 'GameState') -> None:
+        def _etb_effect(game: 'GameState', controller: Any) -> None:
             """Gain 1 life."""
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             from engine.game import gain_life

@@ -80,7 +80,7 @@ class RoguesPassage(Land):
             src.is_tapped = True
             return True
 
-        def _effect(game: "GameState") -> None:
+        def _effect(game: "GameState", controller: Any) -> None:
             # The target comes from a Player Query — the protocol's native
             # choice surface (answered by Intents in tests and by
             # replay-derived Intents in validation).
@@ -92,7 +92,6 @@ class RoguesPassage(Land):
             ]
             if not creatures:
                 return
-            controller = source.controller or source.owner
             target = choose_object(
                 game,
                 controller,

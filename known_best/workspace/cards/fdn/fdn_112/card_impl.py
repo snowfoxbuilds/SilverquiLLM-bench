@@ -45,8 +45,7 @@ class SpinnerOfSouls(Creature):
                 return False
             return True
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]

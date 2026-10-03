@@ -41,12 +41,12 @@ class ExemplarOfLight(Creature):
                 return False
             return event.player is ctrl
 
-        def _gain_life_effect(game: 'GameState') -> None:
+        def _gain_life_effect(game: 'GameState', controller: Any) -> None:
             add_counter(game, source, '+1/+1', 1)
             current_turn = getattr(game, 'turn_number', 0)
             if getattr(source, '_exemplar_drew_on_turn', -1) != current_turn:
                 source._exemplar_drew_on_turn = current_turn
-                ctrl = getattr(source, 'controller', None)
+                ctrl = controller
                 if ctrl is not None:
                     draw_card(game, ctrl)
         game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller))

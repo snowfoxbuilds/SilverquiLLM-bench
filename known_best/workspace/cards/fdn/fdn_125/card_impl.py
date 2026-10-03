@@ -43,8 +43,8 @@ class WardensOfTheCycle(Creature):
                 return False
             return getattr(game, 'creature_died_this_turn', False)
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             mode = choose_mode(game, ctrl, ['gain_life', 'draw_card'], 'Choose: gain 2 life or draw a card and lose 1 life', source_card=source)

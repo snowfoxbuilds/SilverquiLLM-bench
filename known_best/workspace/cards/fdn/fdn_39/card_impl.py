@@ -62,8 +62,8 @@ class GrapplingKraken(Creature):
                 return game.get_battlefield(ctrl).contains(permanent)
             return perm_ctrl is ctrl
 
-        def _landfall_effect(game: "GameState") -> None:
-            ctrl = getattr(source, "controller", None)
+        def _landfall_effect(game: "GameState", controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             candidates = [
