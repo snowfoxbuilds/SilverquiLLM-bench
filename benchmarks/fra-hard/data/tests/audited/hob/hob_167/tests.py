@@ -192,17 +192,19 @@ def test_thranduil_cannot_pay_borrowed_tap_cost_twice():
     assert p.life == 22
 
 
-def test_borrowed_mana_can_pay_during_casting():
+def test_borrowed_mana_can_pay_for_a_spell():
     from engine.card import Instant
     from engine.casting import cast_spell
     g, p, _q, king, _donor = setup(ElvenMana)
     spell = Instant(name='Green spell', owner=p, mana_cost=ManaCost.parse('{G}'))
     p.zones[Zone.HAND].add(spell)
-    prefer(p, object_preference(g, king))
+    activate_card_ability(g, p, king)
+    assert king.is_tapped and p.mana_pool.get(ManaType.GREEN) == 1
     cast_spell(g, p, spell)
     resolve_stack(g)
     assert p.zones[Zone.GRAVEYARD].contains(spell)
     assert king.is_tapped
+    assert p.mana_pool.total() == 0
 
 
 def test_borrowed_ability_targets_and_resolves_against_chosen_permanent():
