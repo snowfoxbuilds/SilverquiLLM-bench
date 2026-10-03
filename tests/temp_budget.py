@@ -11,9 +11,13 @@ cleaning up is caught before it fills the tmpfs.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 RETAINED_TEMP_BUDGET_BYTES = 256 * 1024 * 1024
+
+#: The basetemp pytest-xdist gives each worker inside the controller's.
+_XDIST_WORKER = re.compile(r"popen-gw\d+")
 
 
 def tree_bytes(path: Path) -> int:
@@ -28,14 +32,27 @@ def tree_bytes(path: Path) -> int:
     return total
 
 
-def over_budget(basetemp: Path, budget: int = RETAINED_TEMP_BUDGET_BYTES) -> list[str]:
-    """Describe what ``basetemp`` keeps when it exceeds ``budget``; empty when within it."""
+def retained_dirs(basetemp: Path) -> dict[str, Path]:
+    """Name each directory a session kept, looking inside pytest-xdist workers' basetemps."""
+    found: dict[str, Path] = {}
+    for child in _subdirs(basetemp):
+        if _XDIST_WORKER.fullmatch(child.name):
+            found.update({f"{child.name}/{grandchild.name}": grandchild for grandchild in _subdirs(child)})
+        else:
+            found[child.name] = child
+    return found
+
+
+def _subdirs(path: Path) -> list[Path]:
     # pytest's ``<name>current`` entries are symlinks to a numbered directory already counted.
-    sizes = {
-        child.name: tree_bytes(child)
-        for child in basetemp.iterdir()
-        if child.is_dir() and not child.is_symlink()
-    }
+    return [child for child in path.iterdir() if child.is_dir() and not child.is_symlink()]
+
+
+def over_budget(basetemp: Path, budget: int | None = None) -> list[str]:
+    """Describe what ``basetemp`` keeps when it exceeds ``budget``; empty when within it."""
+    if budget is None:
+        budget = RETAINED_TEMP_BUDGET_BYTES
+    sizes = {name: tree_bytes(path) for name, path in retained_dirs(basetemp).items()}
     retained = sum(sizes.values())
     if retained <= budget:
         return []
