@@ -11,6 +11,7 @@ from pathlib import Path
 
 from silverquillm.queue_state import _write_atomically
 
+from .baseline import BaselineStore, baseline_reference_grade, combined_regression
 from .benchmark import load_benchmark
 from .definition import KarnError, canonical, load_candidate
 from .execution import (
@@ -538,6 +539,14 @@ def _recover(
     elif selection and selection["selected"]:
         try:
             metadata["grading_inputs"] = grading_inputs(benchmark)
+            baseline = baseline_reference_grade(
+                benchmark,
+                evaluate=grader.evaluate_run,
+                score=_scores,
+                grading_inputs_digest=metadata["grading_inputs"]["digest"],
+                grader_image_id=grader.isolation()["grader_image_id"],
+                store=BaselineStore(Path(state_root).resolve() / "baseline-grades"),
+            )
             evaluated = grader.evaluate_run(
                 run_dir, benchmark, workspace_source=run_dir / selection["selected"]
             )
@@ -545,6 +554,10 @@ def _recover(
                 canonical(dataclasses.asdict(evaluated)) + b"\n"
             )
             scores = _scores(evaluated, benchmark)
+            changed = grading_inputs(benchmark)["digest"] != metadata["grading_inputs"]["digest"]
+            combined = combined_regression(scores, evaluated, baseline, inputs_changed=changed)
+            if combined is not None:
+                metadata["combined_regression"] = combined
         except GraderError as error:
             grading_failure = error
             scores = missing_scores("grading_container_failed:" + error.reason)

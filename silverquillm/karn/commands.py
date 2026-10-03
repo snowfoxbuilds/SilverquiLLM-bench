@@ -301,6 +301,12 @@ def recover(run_id, stop, **options):
         "host, on this host's grader for the same Python; the output names both images."
     ),
 )
+@click.option(
+    "--state-root",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=lambda: Path.home() / ".local/state/silverquillm",
+    help="Where baseline reference grades are kept, as for run.",
+)
 @BENCH_ROOT_OPTION
 @RESULTS_DIR_OPTION
 @RESULTS_REPO_OPTION

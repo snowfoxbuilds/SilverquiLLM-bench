@@ -12,7 +12,7 @@ re-grade any archived run.
 from __future__ import annotations
 
 import concurrent.futures
-import hashlib
+import contextlib
 import json
 import os
 import re
@@ -25,8 +25,18 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from silverquillm.known_defects import has_known_defects_manifest
 from silverquillm.results_repo import InvalidRunRecordError, iter_run_dirs
 
+from .baseline import (
+    STABLE_UNAVAILABLE,
+    BaselineStore,
+    StagedBaseline,
+    baseline_reference_grade,
+    combined_regression,
+    grading_code_digest,
+    stage_baseline,
+)
 from .benchmark import Benchmark, load_benchmark
 from .definition import KarnError
 from .exclusions import Exclusion, load_exclusions
@@ -40,7 +50,13 @@ from .grader import (
     grader_tag,
 )
 from .grading_inputs import grading_inputs
-from .records import DIMENSIONS, KarnRunRecord, read_record, validate_scores
+from .records import (
+    DIMENSIONS,
+    KarnRunRecord,
+    read_record,
+    validate_combined_regression,
+    validate_scores,
+)
 from .workspace_archive import ArchiveRefused, graded_path, materialize
 
 SUMMARY = "summary.json"
@@ -57,6 +73,7 @@ OUTPUT_KEYS = frozenset(
         "benchmark",
         "grading_inputs_digest",
         "grading_code_digest",
+        "baseline_workspace_digest",
         "benchmark_configuration_changed",
         "source",
         "grading_isolation",
@@ -65,10 +82,9 @@ OUTPUT_KEYS = frozenset(
     }
 )
 #: Present only when this host's grader stood in for an absent recorded image.
-OPTIONAL_OUTPUT_KEYS = frozenset({"grader_substituted_for"})
+OPTIONAL_OUTPUT_KEYS = frozenset({"grader_substituted_for", "combined_regression"})
 WORKSPACE_SOURCES = frozenset({"run_artifacts", "results_repo"})
 STOP_SECONDS = 30
-PACKAGE = Path(__file__).resolve().parents[1]
 
 
 class Skip(Exception):
@@ -354,14 +370,6 @@ class OutputDir:
             raise
 
 
-def grading_code_digest() -> str:
-    """Fingerprint of the package that grades; the grading-inputs digest does not cover it."""
-    hashed = hashlib.sha256()
-    for path in sorted(PACKAGE.rglob("*.py")):
-        hashed.update(str(path.relative_to(PACKAGE)).encode() + b"\0" + path.read_bytes() + b"\0")
-    return "sha256:" + hashed.hexdigest()
-
-
 def _source(record: KarnRunRecord) -> dict:
     """What the record itself says, kept beside the new scores so the two are never mixed."""
     metadata = record.run_metadata
@@ -436,8 +444,16 @@ def _reusable(previous, identity: dict, grader: tuple) -> dict | None:
         or not isinstance(previous["graded_at"], str)
     ):
         return None
+    if ("combined_regression" in previous) != (identity["baseline_workspace_digest"] is not None):
+        return None
     try:
         validate_scores(previous["scores"])
+        if "combined_regression" in previous:
+            combined = previous["combined_regression"]
+            validate_combined_regression(combined)
+            # A failed or input-shifted comparison is retried, never kept.
+            if not combined["available"] and combined["reason"] not in STABLE_UNAVAILABLE:
+                return None
         datetime.fromisoformat(previous["graded_at"])
     except (InvalidRunRecordError, ValueError):
         return None
@@ -456,6 +472,8 @@ def _regrade_one(
     timeout: int,
     force: bool,
     substitute_grader: bool,
+    baseline_store: BaselineStore,
+    staged: StagedBaseline | None,
 ) -> dict:
     candidate, filename = record.candidate.hash, f"{record.run_id}.json"
     result = _identity(record, benchmark, digests)
@@ -482,13 +500,34 @@ def _regrade_one(
                 result["grader_substituted_for"] = record.run_metadata["grading_isolation"][
                     "grader_image_id"
                 ]
+            # Staged only for a benchmark with a Known Defect manifest.
+            baseline = (
+                baseline_reference_grade(
+                    benchmark,
+                    evaluate=grader.evaluate_run,
+                    score=_scores,
+                    grading_inputs_digest=digests["grading_inputs_digest"],
+                    grader_image_id=grader.image_id,
+                    store=baseline_store,
+                    staged=staged,
+                )
+                if staged is not None
+                else None
+            )
             evaluated = grader.evaluate_run(workspace.parent, benchmark, workspace_source=workspace)
             scores = _scores(evaluated, benchmark)
+            inputs_changed = (
+                staged is not None
+                and grading_inputs(benchmark)["digest"] != digests["grading_inputs_digest"]
+            )
         try:
             validate_scores(scores)
         except InvalidRunRecordError:
             raise GraderError("regrade_scores_invalid") from None
         result["scores"] = scores
+        combined = combined_regression(scores, evaluated, baseline, inputs_changed=inputs_changed)
+        if combined is not None:
+            result["combined_regression"] = combined
     except Skip as skip:
         return {**result, "skipped": str(skip)}
     except GraderError as error:
@@ -603,8 +642,15 @@ def regrade(
     grading_timeout: int = DEFAULT_GRADING_TIMEOUT,
     substitute_grader: bool = False,
     docker=None,
+    state_root: Path | None = None,
 ) -> dict:
-    """Re-grade the selected runs into ``out`` and return the summary written beside them."""
+    """Re-grade the selected runs into ``out`` and return the summary written beside them.
+
+    A benchmark with a Known Defect manifest also reports each run's Combined Regression
+    against the baseline reference grade of its current Workspace, kept under
+    ``state_root`` (by default the ``run`` command's).
+    """
+    state_root = Path(state_root or Path.home() / ".local/state/silverquillm")
     out = Path(out).resolve()
     for name, kept in (("results_repo", results_repo), ("results_dir", results_dir)):
         kept = Path(kept).resolve()
@@ -624,24 +670,34 @@ def regrade(
     out.mkdir(parents=True, exist_ok=True)
     output = OutputDir(out)
     try:
-        inputs = grading_inputs(benchmark)
-        digests = {
-            "grading_inputs_digest": inputs["digest"],
-            "grading_code_digest": grading_code_digest(),
-        }
-        results = _grade_all(
-            records,
-            benchmark,
-            digests,
-            LiveContainers(docker or DockerRunner()),
-            workers,
-            out=output,
-            results_dir=results_dir,
-            results_repo=Path(results_repo).resolve(),
-            timeout=grading_timeout,
-            force=force,
-            substitute_grader=substitute_grader,
-        )
+        with contextlib.ExitStack() as cleanup:
+            staged = None
+            if has_known_defects_manifest(benchmark.root):
+                scratch = cleanup.enter_context(
+                    tempfile.TemporaryDirectory(prefix="sq-regrade-baseline-")
+                )
+                staged = stage_baseline(benchmark, Path(scratch))
+            inputs = grading_inputs(benchmark)
+            digests = {
+                "grading_inputs_digest": inputs["digest"],
+                "grading_code_digest": grading_code_digest(),
+                "baseline_workspace_digest": staged.digest if staged is not None else None,
+            }
+            results = _grade_all(
+                records,
+                benchmark,
+                digests,
+                LiveContainers(docker or DockerRunner()),
+                workers,
+                out=output,
+                results_dir=results_dir,
+                results_repo=Path(results_repo).resolve(),
+                timeout=grading_timeout,
+                force=force,
+                substitute_grader=substitute_grader,
+                baseline_store=BaselineStore(state_root.resolve() / "baseline-grades"),
+                staged=staged,
+            )
         results += [{**row, "skipped": row["reason"]} for row in unreadable]
         summary = summarize(results, digests, benchmark_id, exclusions)
         if inputs["problems"]:

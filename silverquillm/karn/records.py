@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from silverquillm.known_defects import REGRESSION_DIMENSIONS
 from silverquillm.results_repo import InvalidRunRecordError, RunRecordExistsError
 
 from .definition import DIGEST, KarnError, canonical, decode_definition, digest
@@ -242,6 +243,8 @@ class KarnRunRecord:
                 or not all(isinstance(value, str) for value in pointer.values())
             ):
                 raise InvalidRunRecordError("invalid artifact pointer")
+        if "combined_regression" in self.run_metadata:
+            validate_combined_regression(self.run_metadata["combined_regression"])
         validate_scores(self.scores)
 
     def index_row(self):
@@ -296,6 +299,97 @@ def validate_scores(scores) -> None:
             or not math.isclose(rate, passed / total, rel_tol=1e-9, abs_tol=1e-12)
         ):
             raise InvalidRunRecordError("impossible grading counts or rate")
+
+
+COMBINED_REGRESSION_KEYS = frozenset(
+    {
+        "available",
+        "tests_passed",
+        "tests_total",
+        "pass_rate",
+        "baseline_score",
+        "known_best_score",
+        "fixed",
+        "regressed",
+        "baseline",
+    }
+)
+COMBINED_REGRESSION_BASELINE = frozenset(
+    {"grading_inputs_digest", "grading_code_digest", "workspace_digest", "grader_image_id"}
+)
+
+
+def _score_counts(value) -> tuple[int, int]:
+    if not isinstance(value, dict) or set(value) != {"tests_passed", "tests_total"}:
+        raise InvalidRunRecordError("invalid combined regression")
+    passed, total = value["tests_passed"], value["tests_total"]
+    if type(passed) is not int or type(total) is not int or total <= 0 or not 0 <= passed <= total:
+        raise InvalidRunRecordError("invalid combined regression")
+    return passed, total
+
+
+def _changed_tests(value) -> int:
+    if not isinstance(value, dict) or set(value) != {"count", "test_nodes"}:
+        raise InvalidRunRecordError("invalid combined regression")
+    nodes = value["test_nodes"]
+    if not isinstance(nodes, dict) or set(nodes) != set(REGRESSION_DIMENSIONS):
+        raise InvalidRunRecordError("invalid combined regression")
+    for listed in nodes.values():
+        if (
+            not isinstance(listed, list)
+            or not all(isinstance(node, str) and node for node in listed)
+            or listed != sorted(set(listed))
+        ):
+            raise InvalidRunRecordError("invalid combined regression")
+    count = value["count"]
+    if type(count) is not int or count != sum(len(listed) for listed in nodes.values()):
+        raise InvalidRunRecordError("invalid combined regression")
+    return count
+
+
+def validate_combined_regression(value) -> None:
+    """Enforce the Combined Regression block's shape (``SCORING.md``)."""
+    if not isinstance(value, dict) or type(value.get("available")) is not bool:
+        raise InvalidRunRecordError("invalid combined regression")
+    if value["available"] is False:
+        if set(value) != {"available", "reason"} or not (
+            isinstance(value["reason"], str) and value["reason"]
+        ):
+            raise InvalidRunRecordError("invalid combined regression")
+        return
+    if set(value) != COMBINED_REGRESSION_KEYS:
+        raise InvalidRunRecordError("invalid combined regression")
+    passed, total = _score_counts(
+        {"tests_passed": value["tests_passed"], "tests_total": value["tests_total"]}
+    )
+    rate = value["pass_rate"]
+    if (
+        type(rate) not in (int, float)
+        # The range check comes first: math.isclose converts, and a huge int overflows.
+        or not 0 <= rate <= 1
+        or not math.isfinite(rate)
+        or not math.isclose(rate, passed / total, rel_tol=1e-9, abs_tol=1e-12)
+    ):
+        raise InvalidRunRecordError("invalid combined regression")
+    baseline_passed, baseline_total = _score_counts(value["baseline_score"])
+    best_passed, best_total = _score_counts(value["known_best_score"])
+    if not best_passed == best_total == baseline_total:
+        raise InvalidRunRecordError("invalid combined regression")
+    if _changed_tests(value["fixed"]) > baseline_total - baseline_passed:
+        raise InvalidRunRecordError("invalid combined regression")
+    if _changed_tests(value["regressed"]) > baseline_passed:
+        raise InvalidRunRecordError("invalid combined regression")
+    baseline = value["baseline"]
+    if (
+        not isinstance(baseline, dict)
+        or set(baseline) != COMBINED_REGRESSION_BASELINE
+        or not all(
+            isinstance(baseline[name], str) and DIGEST.fullmatch(baseline[name])
+            for name in ("grading_inputs_digest", "grading_code_digest", "workspace_digest")
+        )
+        or not (isinstance(baseline["grader_image_id"], str) and baseline["grader_image_id"])
+    ):
+        raise InvalidRunRecordError("invalid combined regression")
 
 
 def missing_scores(reason: str) -> dict:

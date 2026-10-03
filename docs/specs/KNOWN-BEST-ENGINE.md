@@ -87,12 +87,55 @@ CI checks, for every benchmark in scope:
 1. The Test Oracle Workspace passes every Audited Test of all three dimensions.
 2. The unmodified Workspace fails exactly the Audited Tests the manifest lists, and passes the rest of the regression suites.
 
+Both checks are Platform Tests, one call per dimension so each stays within the test timeout: `tests/known_defect_checks.py` provides `oracle_problems` and `workspace_problems`, which return the problems found and `[]` when the check passes.
+
+#### Manifest
+
+```json
+{
+  "schema_version": 1,
+  "benchmark": "fra-hard",
+  "defects": [
+    {
+      "id": "zone-change-keeps-status",
+      "description": "A permanent that changes zones stays the same object and keeps its counters, tapped status and marked damage.",
+      "rules": ["CR 400.7", "CR 603.10a"],
+      "kind": "inherited",
+      "failing_tests": {
+        "engine_regression": ["zone_change/test_lki.py::test_counters_reset"],
+        "fdn_regression": ["fdn_66/tests.py::test_dies_returns_with_one_fewer_revival"]
+      }
+    }
+  ]
+}
+```
+
+- The file is a regular UTF-8 JSON file of at most 1 MiB with no duplicate keys, and every object has exactly the keys shown.
+- `benchmark` is the benchmark's directory name; a benchmark with no Known Defects ships `"defects": []`.
+- `id` is unique, lowercase letters, digits and hyphens, at most 64 characters; `description` is non-empty; `rules` is a non-empty list of distinct citations like `CR 400.7` or `CR 603.10a`; `kind` is `inherited` or `seeded`.
+- `failing_tests` maps `fdn_regression`, `engine_regression` or both to a non-empty list of distinct Audited Test ids. The same test may be listed under two defects; the unmodified Workspace is expected to fail their union.
+
+An Audited Test id is the pytest node id relative to its suite's graded root:
+
+| Suite | Id | Example |
+| --- | --- | --- |
+| Audited Engine Tests | the node id under `data/tests/audited/engine/` | `zone_change/test_lki.py::test_counters_reset` |
+| FDN Audited Tests | `<card_id>/` plus the card suite's node id | `fdn_126/tests.py::TestZimoneDoubleAbility::test_leave_and_return_target_rejected` |
+
+The baseline reference grade and Combined Regression name tests the same way.
+
 ### Baseline reference grade
 
 The Baseline Score is produced, never hand-written: the grader grades the unmodified Workspace once per grading-inputs digest and Workspace content, and that baseline reference grade records the per-test outcomes (grilling 2026-10-02).
 The grading-inputs digest alone does not cover the Workspace's engine or FDN implementations, so a defect fixed in a Beta Workspace must still produce a new baseline reference grade.
 A benchmark reports reference scores only once it has a Known Defect manifest; hob-medium and SOS have none.
 Every run graded under the same digest reports against it (see [SCORING.md](SCORING.md) → Regression reference scores).
+
+The grade's key also covers the grading-code digest and the grader image, since either can change an outcome, so it is the benchmark identity plus those four: grading inputs, grading code, Workspace content and grader image.
+The grade is computed on demand, by the first run, recovery or regrade that needs it, through that caller's own grader, and cached host-side at `<state_root>/baseline-grades/<benchmark>/<sha256 of the key>.json`.
+It records each regression dimension's raw pass/total, missing reasons and per-test outcomes.
+Only a complete grade is cached: failing Audited Tests are what it records, and the FDN coverage gap every run shares does not count against it, but a grading that raised, timed out, failed to collect a suite or executed none is reported for that attempt only and graded again by the next request; a damaged, mismatched or incomplete cached file is graded again too.
+The grading inputs are checked against the requested digest before and after the grading, and a grade whose inputs changed meanwhile is reported as `grading_inputs_changed_during_grading` and never cached, so a cached grade always belongs to the digest it is filed under.
 
 ### Fixing a newly found defect
 
