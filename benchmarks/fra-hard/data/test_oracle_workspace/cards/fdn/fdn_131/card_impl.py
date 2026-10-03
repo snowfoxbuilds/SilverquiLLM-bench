@@ -64,11 +64,15 @@ class RavenousAmulet(Artifact):
             src.is_tapped = True
             return True
 
-        def _drain_effect(game: Any, controller: Any) -> None:
+        def _drain_effect(game: Any, controller: Any, context: Any) -> None:
             from engine.game import sacrifice
+            from engine.last_known import as_it_exists
             if controller is not None:
+                # Its soul counters: current while it remains on the
+                # battlefield, otherwise as it last existed there (608.2h).
+                amulet = as_it_exists(game, source, context.source_instance_id)
+                soul = amulet.counters.get('soul', 0) if amulet is not None else 0
                 # Sacrifice this artifact
-                soul = source.counters.get('soul', 0)
                 sacrifice(game, controller, source)
                 for p in game.players:
                     if p is not controller:

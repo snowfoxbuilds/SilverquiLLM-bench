@@ -282,6 +282,9 @@ def move_to_zone(
 
         lki = snapshot(card, Zone.BATTLEFIELD)
         game.last_known[lki_key(card)] = lki
+        # Keyed by the stint it ends, before note_zone_change below starts a
+        # new one, so pending abilities of this stint can still find it.
+        game.last_known_by_stint[game.refs.instance_id(card, Zone.BATTLEFIELD.value)] = lki
 
     leaving_types = set(getattr(card, 'card_types', ()))
     if leaving_battlefield:

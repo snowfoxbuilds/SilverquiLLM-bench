@@ -300,3 +300,47 @@ def test_ability_of_a_sacrificed_source_resolves_for_the_player_who_activated_it
     assert game.get_graveyard(owner).contains(artifact)
     resolve_stack(game)
     assert (activator.life, owner.life) == (21, 20)
+
+
+def _pending_power_reader(game, player, source):
+    """Register an upkeep trigger on *source* that records "this creature's
+    power" when it resolves, and fire it so it is pending."""
+    from engine.events import BeginningOfUpkeepTriggeredEvent
+    from engine.last_known import as_it_exists
+    from engine.stack import battlefield_stint_id
+
+    seen: list[int] = []
+
+    def _effect(game, controller, stint) -> None:
+        seen.append(as_it_exists(game, source, stint).power)
+
+    game.trigger_manager.register(TriggerRegistration(
+        event_type=BeginningOfUpkeepTriggeredEvent, condition=None, effect=_effect,
+        source=source, controller=player,
+        capture=lambda game, event, controller: battlefield_stint_id(game, source),
+    ))
+    game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    return seen
+
+
+def test_pending_ability_reads_its_source_as_it_exists_on_resolution():
+    game = behavioral_game()
+    p1 = game.players[0]
+    creature = enter_permanent(game, p1, _creature("Source", 1, 1))
+    seen = _pending_power_reader(game, p1, creature)
+    add_counter(game, creature, "+1/+1", 2)
+    resolve_stack(game)
+    assert seen == [3]
+
+
+def test_pending_ability_reads_its_departed_source_from_its_own_stint():
+    game = behavioral_game()
+    p1 = game.players[0]
+    creature = _with_two_plus_one_counters(game, p1, _creature("Source", 1, 1))
+    seen = _pending_power_reader(game, p1, creature)
+    destroy(game, creature)  # left as a 3/3
+    move_to_zone(game, creature, Zone.GRAVEYARD, Zone.BATTLEFIELD)
+    add_counter(game, creature, "+1/+1", 5)  # the new object: a 6/6
+    destroy(game, creature)
+    resolve_stack(game)
+    assert seen == [3]

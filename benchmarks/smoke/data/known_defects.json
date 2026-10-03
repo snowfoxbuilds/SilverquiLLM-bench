@@ -33,6 +33,8 @@
           "test_zone_change.py::test_effect_over_several_creatures_keeps_affecting_the_ones_that_stay",
           "test_zone_change.py::test_locked_effect_still_ends_at_cleanup",
           "test_zone_change.py::test_ability_of_a_sacrificed_source_resolves_for_the_player_who_activated_it",
+          "test_zone_change.py::test_pending_ability_reads_its_departed_source_from_its_own_stint",
+          "test_zone_change.py::test_pending_ability_reads_its_source_as_it_exists_on_resolution",
           "test_combat.py::TestCombatDamage::test_first_strike_deals_damage_first",
           "test_combat.py::TestCombatDamage::test_trample_excess_damage_to_player",
           "test_combat.py::TestCombatDamage::test_trample_with_deathtouch",
@@ -49,7 +51,8 @@
           "fdn_201/tests.py::TestHeartfireImmolatorAbility::test_damage_uses_power_snapshot_at_activation",
           "fdn_223/tests.py::TestGiantGrowth::test_pump_ends_when_the_target_dies_and_returns",
           "fdn_223/tests.py::TestGiantGrowth::test_pump_ends_when_the_target_is_exiled_and_returned",
-          "fdn_61/tests.py::TestHighSocietyHunterDraw::test_pending_draw_ignores_the_hunter_returning_under_its_owner"
+          "fdn_61/tests.py::TestHighSocietyHunterDraw::test_pending_draw_ignores_the_hunter_returning_under_its_owner",
+          "fdn_117/tests.py::TestAshrootAnimistAttack::test_a_later_return_and_departure_do_not_change_the_pending_power"
         ]
       }
     },
@@ -87,7 +90,9 @@
           "test_turn_history.py::test_declaring_an_attacker_records_attacked_this_turn"
         ],
         "fdn_regression": [
-          "fdn_93/tests.py::TestSearslicerGoblinMint::test_raid_end_step_mints_11_red_goblin_token"
+          "fdn_93/tests.py::TestSearslicerGoblinMint::test_raid_end_step_mints_11_red_goblin_token",
+          "fdn_115/tests.py::TestAleshaRaid::test_returns_a_creature_card_with_mana_value_up_to_its_power",
+          "fdn_115/tests.py::TestAleshaRaid::test_uses_its_power_as_it_last_existed_if_it_left"
         ]
       }
     },

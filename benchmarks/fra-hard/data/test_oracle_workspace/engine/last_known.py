@@ -10,6 +10,12 @@ The engine snapshots each departing permanent immediately before it leaves.
 Card code reads departed-object state only through :func:`last_known_info` or
 the ``last_known`` field of :class:`~engine.events.LeavesBattlefieldTriggeredEvent`
 and :class:`~engine.events.CreatureDiesTriggeredEvent`, never off the moved object.
+
+A pending ability that refers to its source ("this creature's power") keeps
+the source's battlefield stint from when it triggered or was activated, and
+reads the source through :func:`as_it_exists` when it resolves: the object
+itself while that stint lasts, otherwise its snapshot from leaving that stint
+(rule 608.2h). A later return and departure never overwrites that snapshot.
 """
 
 from __future__ import annotations
@@ -84,3 +90,29 @@ def last_known_info(game: GameState, card: Any) -> LastKnownInformation | None:
     """Return *card*'s snapshot from its most recent departure from the
     battlefield, or ``None`` if it has never left."""
     return game.last_known.get(lki_key(card))
+
+
+def as_it_exists(game: GameState, card: Any, stint_id: int | None) -> Any | None:
+    """*card* as the object of battlefield stint *stint_id* (rule 608.2h).
+
+    Returns *card* itself while it is still on the battlefield in that stint,
+    so later changes to it count; otherwise the snapshot taken when it left
+    that stint, which a later return and departure do not overwrite. Returns
+    ``None`` if *stint_id* is ``None`` or was never left. Capture *stint_id*
+    with :func:`engine.stack.battlefield_stint_id` when the ability triggers
+    or is activated.
+    """
+    from engine.stack import battlefield_stint_id
+
+    if stint_id is None:
+        return None
+    if battlefield_stint_id(game, card) == stint_id:
+        return card
+    return game.last_known_by_stint.get(stint_id)
+
+
+def is_same_object(game: GameState, card: Any, stint_id: int | None) -> bool:
+    """Whether *card* is still the battlefield object of stint *stint_id*; an
+    ability that acts on "this creature" does nothing to the new object it
+    becomes after leaving (rule 400.7)."""
+    return as_it_exists(game, card, stint_id) is card
