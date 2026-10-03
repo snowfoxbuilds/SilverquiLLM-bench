@@ -7,6 +7,7 @@ imports (``from engine.X import …``, ``from cards.X import …``,
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -59,7 +60,9 @@ def plain_run(tmp_path_factory):
     """One successful simulated benchmark of the toy benchmark, built once; read it, never change it."""
     from .retained_runs import build_plain_run
 
-    return build_plain_run(tmp_path_factory.mktemp("plain-run"))
+    root = tmp_path_factory.mktemp("plain-run")
+    yield build_plain_run(root)
+    shutil.rmtree(root, ignore_errors=True)
 
 
 @pytest.fixture
@@ -75,4 +78,6 @@ def staged_sos_workspace(tmp_path_factory):
     """``stage_workspace(output_dir)`` of the SOS Workspace, staged once; read it, never change it."""
     from silverquillm.workspace import stage_workspace
 
-    return stage_workspace(tmp_path_factory.mktemp("staged-sos"))
+    root = tmp_path_factory.mktemp("staged-sos")
+    yield stage_workspace(root)
+    shutil.rmtree(root, ignore_errors=True)

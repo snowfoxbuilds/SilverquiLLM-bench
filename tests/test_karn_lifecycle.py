@@ -727,7 +727,8 @@ def killed_template(tmp_path_factory):
 
     with building_runs(), pytest.raises(SystemExit):
         run_benchmark(**{**opts, "host": Killed()}, run_id="killed")
-    return SimpleNamespace(root=root, opts=opts)
+    yield SimpleNamespace(root=root, opts=opts)
+    shutil.rmtree(root, ignore_errors=True)
 
 
 @pytest.fixture
@@ -1610,7 +1611,8 @@ def harvest_failed_template(tmp_path_factory):
     root = tmp_path_factory.mktemp("harvest-failed")
     with building_runs():
         harvest_failed_run(root)
-    return root
+    yield root
+    shutil.rmtree(root, ignore_errors=True)
 
 
 @pytest.fixture
@@ -1892,7 +1894,8 @@ def unstopped_template(tmp_path_factory):
     opts = options(root)
     with building_runs():
         run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
-    return SimpleNamespace(root=root, opts=opts)
+    yield SimpleNamespace(root=root, opts=opts)
+    shutil.rmtree(root, ignore_errors=True)
 
 
 @pytest.fixture

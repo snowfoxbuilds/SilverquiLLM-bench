@@ -61,7 +61,8 @@ def retained_template(tmp_path_factory):
             run_benchmark(**opts, run_id="run-b"),
             run_benchmark(**{**opts, "build_output": second.build_output}, run_id="run-c"),
         ]
-    return SimpleNamespace(root=root, opts=opts, records=records)
+    yield SimpleNamespace(root=root, opts=opts, records=records)
+    shutil.rmtree(root, ignore_errors=True)
 
 
 @pytest.fixture
@@ -72,10 +73,12 @@ def retained(retained_template, tmp_path):
 @pytest.fixture(scope="module")
 def regraded_template(retained_template, tmp_path_factory):
     """The retained runs after one re-grade, so cache tests start from a filled cache."""
-    template = clone(retained_template, tmp_path_factory.mktemp("regraded"))
+    directory = tmp_path_factory.mktemp("regraded")
+    template = clone(retained_template, directory)
     with building():
         template.summary = invoke(template)
-    return template
+    yield template
+    shutil.rmtree(directory, ignore_errors=True)
 
 
 @pytest.fixture

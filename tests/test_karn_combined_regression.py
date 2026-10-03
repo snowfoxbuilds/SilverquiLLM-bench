@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 import threading
 import time
 from types import SimpleNamespace
@@ -764,7 +765,8 @@ def retained_template(tmp_path_factory):
     opts = run_options(root, evaluator=None)
     with retained_runs.building():
         records = [run_benchmark(**opts, run_id=run_id) for run_id in ("run-a", "run-b")]
-    return SimpleNamespace(root=root, opts=opts, records=records)
+    yield SimpleNamespace(root=root, opts=opts, records=records)
+    shutil.rmtree(root, ignore_errors=True)
 
 
 @pytest.fixture
@@ -775,10 +777,12 @@ def retained(retained_template, tmp_path):
 @pytest.fixture(scope="module")
 def regraded_template(retained_template, tmp_path_factory):
     """The retained runs after one re-grade, so cache tests start from a filled cache."""
-    template = clone(retained_template, tmp_path_factory.mktemp("regraded"))
+    directory = tmp_path_factory.mktemp("regraded")
+    template = clone(retained_template, directory)
     with retained_runs.building():
         template.summary = invoke(template)
-    return template
+    yield template
+    shutil.rmtree(directory, ignore_errors=True)
 
 
 @pytest.fixture

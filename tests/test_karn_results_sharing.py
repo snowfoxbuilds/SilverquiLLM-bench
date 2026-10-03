@@ -77,7 +77,8 @@ def edited_template(tmp_path_factory):
     readme.write_text("deleted by the agent\n")
     with building():
         record = run_benchmark(**opts, run_id="edited")
-    return SimpleNamespace(root=root, opts=opts, record=record)
+    yield SimpleNamespace(root=root, opts=opts, record=record)
+    shutil.rmtree(root, ignore_errors=True)
 
 
 @pytest.fixture

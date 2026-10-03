@@ -157,10 +157,12 @@ class TestEvaluateRun:
 
 
 @pytest.fixture(scope="module")
-def honest(tmp_path_factory) -> dict:
+def honest(tmp_path_factory):
     """The unpoisoned overlay's grade, computed once for every poison."""
     grading = TestGradingIsolation()
-    return grading._grade(grading._overlay(tmp_path_factory.mktemp("honest"), "none"))
+    directory = tmp_path_factory.mktemp("honest")
+    yield grading._grade(grading._overlay(directory, "none"))
+    shutil.rmtree(directory, ignore_errors=True)
 
 
 class TestGradingIsolation:
