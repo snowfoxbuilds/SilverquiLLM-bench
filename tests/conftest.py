@@ -7,11 +7,43 @@ imports (``from engine.X import …``, ``from cards.X import …``,
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from silverquillm._bootstrap import ensure_workspace_on_path
 
+from .temp_budget import over_budget
+
 ensure_workspace_on_path()
+
+_BASETEMP = pytest.StashKey[Path]()
+_OVER_BUDGET = pytest.StashKey[list[str]]()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _record_basetemp(request, tmp_path_factory):
+    request.config.stash[_BASETEMP] = tmp_path_factory.getbasetemp()
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_sessionfinish(session, exitstatus):
+    """Fail a passing session that leaves more temp data behind than ``tests/temp_budget.py`` allows."""
+    basetemp = session.config.stash.get(_BASETEMP, None)
+    if exitstatus != pytest.ExitCode.OK or basetemp is None or not basetemp.is_dir():
+        return
+    problems = over_budget(basetemp)
+    if problems:
+        session.config.stash[_OVER_BUDGET] = problems
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    problems = config.stash.get(_OVER_BUDGET, None)
+    if problems:
+        terminalreporter.write_sep("=", "temp footprint over budget", red=True)
+        for line in problems:
+            terminalreporter.write_line(line)
 
 
 @pytest.fixture(autouse=True)
