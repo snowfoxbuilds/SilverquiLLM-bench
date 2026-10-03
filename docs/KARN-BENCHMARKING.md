@@ -128,7 +128,7 @@ The budget begins at container start, including initialization.
 There is no `basic`/`planned` option: benchmark files supply task and planning guidance.
 The selected cards and any engine changes are the requested implementation.
 `--native-telemetry codex` requires native Codex journals and the OTel relay, and refuses a definition without `CODEX_HOME`; `claude` does the same for Claude Code and `CLAUDE_CONFIG_DIR`; `none` disables the relay.
-The default `auto` enables them for whichever of `CODEX_HOME` or `CLAUDE_CONFIG_DIR` the definition declares, because the v4 definition has no telemetry field; batch entries accept the same `native_telemetry` key.
+The default `auto` enables them for whichever of `CODEX_HOME` or `CLAUDE_CONFIG_DIR` the definition declares, because the Construct Definition has no telemetry field; batch entries accept the same `native_telemetry` key.
 For Claude Code the relay is configured through the environment (`CLAUDE_CODE_ENABLE_TELEMETRY` and the `OTEL_*` exporter variables, prompts and tool details never logged), since Claude Code reads its exporter nowhere else; the host sets only those variables, and records them.
 A `restricted` network runs its egress proxy with the candidate image's own `python3`; an image without it is refused before launch with `restricted_network_requires_python3`.
 
@@ -164,7 +164,7 @@ Only the relay's fixed telemetry POST route is available in addition to the defi
 Write `batches/hob-learning.toml`:
 
 ```toml
-format = "karn-v4"
+format = "karn-v5"
 
 [[runs]]
 build_output = "/tmp/bench-codex-build"

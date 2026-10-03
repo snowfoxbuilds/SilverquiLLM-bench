@@ -73,8 +73,8 @@ karn/                                       the Karn recipes that build the cand
 
 ## Schema 2: Karn observations
 
-New Karn runs use `schema_version: 2` with candidate scheme `karn-v4`.
-The candidate object records `definition_version: 4`, `definition_id`, `definition_digest`, immutable `image`, and resolved `image_id`.
+New Karn runs use `schema_version: 2` with a candidate scheme naming the Construct Definition version: `karn-v4` with `definition_version: 4`, or `karn-v5` with `definition_version: 5`.
+The candidate object records the scheme, `definition_version`, `definition_id`, `definition_digest`, immutable `image`, and resolved `image_id`; a scheme that does not match its version is malformed.
 Its directory key is the SHA-256 hex digest of that whole candidate object's canonical UTF-8 JSON (sorted keys, minimal separators, non-ASCII preserved).
 The manifest contains `run_id`, `candidate`, `candidate_hash`, `benchmark`, `budget_seconds`, `run_metadata`, and `artifact_pointers`; it contains no mode, proposal, or leaderboard eligibility field.
 

@@ -12,7 +12,7 @@ Operator instructions live in [Karn benchmarking](../docs/KARN-BENCHMARKING.md).
 ## Batch file
 
 ```toml
-format = "karn-v4"
+format = "karn-v5"
 not_before = 2026-10-01T09:00:00Z   # optional, timezone-aware, applies to the whole batch
 
 [[runs]]
@@ -40,5 +40,6 @@ The file is reread before every not-yet-started entry, so appending entries to a
 
 ## Historical batches
 
-Batch files without `format = "karn-v4"` and schema 1 state files belong to the removed Candidate Bundle scheduler.
+Batch files declaring `format = "karn-v4"` predate `karn-v5` and still run unchanged; either format may name v4 or v5 builds.
+Batch files with neither format, and schema 1 state files, belong to the removed Candidate Bundle scheduler.
 They are shown as unsupported, logged once by the scheduler, and never run or rewritten.

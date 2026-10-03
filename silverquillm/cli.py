@@ -1,6 +1,6 @@
 """CLI entry point for the SilverquiLLM benchmark runner.
 
-Karn v4 runs, batches and logins are the top-level commands (see
+Karn runs, batches and logins are the top-level commands (see
 ``silverquillm.karn.commands``); the pre-Karn ``--image`` entrypoint lineage
 lives under ``silverquillm legacy``.
 

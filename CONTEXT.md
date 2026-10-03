@@ -78,7 +78,7 @@ _Avoid_: "job" (the substrate's job dir is a different concept), "queue entry" f
 **Benchmark Candidate**
 
 An executable agent configuration selected for evaluation.
-For Karn v4, the candidate is an immutable image paired with the Construct Definition that selects its runtime behavior (grilling 2026-09-26).
+For Karn, the candidate is an immutable image paired with the Construct Definition, version 4 or 5, that selects its runtime behavior (grilling 2026-09-26).
 Legacy candidates retain their historical representation and identity.
 
 _Avoid_: "recipe" or "image tag" as the complete candidate identity
@@ -86,7 +86,7 @@ _Avoid_: "recipe" or "image tag" as the complete candidate identity
 **Benchmark Mode** *(historical run parameter)*
 
 A bench-owned task-presentation variant recorded by historical runs, independently of candidate identity.
-New Karn v4 runs take their planning and task guidance from the selected benchmark, without a separate basic/planned selector (grilling 2026-09-26).
+New Karn runs take their planning and task guidance from the selected benchmark, without a separate basic/planned selector (grilling 2026-09-26).
 
 _Avoid_: "execution mode" (Automaton versus Vehicle is an upstream distinction), "strategy" (candidate behavior)
 
@@ -346,7 +346,7 @@ _Avoid_: "tags" (working name)
 **Output Snapshot**
 
 A periodic runner-retained copy of the Workspace during a Benchmark Run, used as progress evidence and a possible fallback for grading.
-Karn v4 retains copies with content digests and capture times under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records); historical image runs stored snapshots as host-side Git commits.
+Karn retains copies with content digests and capture times under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records); historical image runs stored snapshots as host-side Git commits.
 
 _Avoid_: "checkpoint" (overloaded with spec checkpoints), "progress log" (that's `progress.jsonl`)
 
@@ -517,7 +517,7 @@ _Avoid_: "workload", "card subset", "filtered run"
 **Workspace**
 
 The agent-writable run copy of `benchmarks/<benchmark>/workspace/`, containing the engine, FDN reference cards, target-card stubs, test scaffolding, and agent-facing documentation.
-Karn v4 runs seed Git history from a trusted benchmark baseline and receive task input through declared file mounts under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#independent-execution).
+Karn runs seed Git history from a trusted benchmark baseline and receive task input through declared file mounts under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#independent-execution).
 Historical image runs wrote `prompt.md` and `run_manifest.json` into the Workspace and preserved the previous run's `.git` when resuming.
 
 _Avoid_: "working directory", "sandbox", "per-card workspace" (deprecated — workspace is per-run), "staged from scratch" (deprecated — workspace is a pre-built directory copied wholesale)
@@ -531,7 +531,7 @@ _Avoid_: "workspace snapshot" (an Output Snapshot taken during the run), "worksp
 **Writable Engine**
 
 The engine source in the Workspace that the agent may modify throughout a Benchmark Run.
-Karn v4 retains and grades the engine from the selected final or fallback Workspace under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records).
+Karn retains and grades the engine from the selected final or fallback Workspace under the [Karn Benchmark Contract](docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records).
 Historical image runs also recorded differences from the host baseline as `engine_diff.patch`.
 
 _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumulation), "shared engine"
@@ -553,18 +553,18 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - All card tests follow a uniform structure: `tests/audited/{set_code}/{collector_number}/tests.py`, importing from `card_impl`. FDN and SOS tests share this structure.
 - The Base Set (FDN 001–291 + SPG 074–083) is validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.
 - A Pipeline Validation Run exercises the orchestration pipeline; its observations are retained as learning data alongside other run outcomes.
-- The existing publication pipeline requires a Promoted Candidate that verifies by recomputation and permits its knowledge to be published; these publication rules do not gate collection or analysis of Karn v4 run data.
+- The existing publication pipeline requires a Promoted Candidate that verifies by recomputation and permits its knowledge to be published; these publication rules do not gate collection or analysis of Karn run data.
 - A Batch holds ordered run specs; the scheduler executes one run at a time, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
 - Filesystem checks (does the file exist, does it differ from the template?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only.
 - `run_summary.json` is automatically generated after evaluation by aggregating per-card `result.json` files. The aggregator is a pure, idempotent function.
 - The runner does NOT orchestrate test iteration — the agent self-manages. The runner stages, launches, harvests, evaluates.
 - On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
-- Historical **Blind** and **Tested** modes varied test instructions. New Karn v4 runs take their guidance from the selected benchmark and have no independent mode selector.
+- Historical **Blind** and **Tested** modes varied test instructions. New Karn runs take their guidance from the selected benchmark and have no independent mode selector.
 - Audited Tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Reference Tests are the agent-visible, editable, ungraded counterpart: FDN Reference Tests at `workspace/cards/fdn/{collector_number}/tests.py` and Engine Reference Tests at `workspace/engine_tests/` (ADR-006). Audited target-card tests live host-side only — there is no `workspace/tests/cards/` directory.
 - hob-medium and SOS predate the Audited Engine Tests suite and grade Engine Regression from the host copy of their Engine Reference Tests; both are frozen (grilling 2026-10-02).
 - The runner is the hard timeout authority. Historical Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
 - Output Snapshots are runner-owned, Workspace-only, and independent of candidate cooperation. The runner may use a prior snapshot as fallback if the final engine state is unusable.
-- Historical image runs write the User Prompt to `/workspace/prompt.md`; Karn v4 task input follows the Construct Definition's declared file mounts.
+- Historical image runs write the User Prompt to `/workspace/prompt.md`; Karn task input follows the Construct Definition's declared file mounts.
 - Hard Timeout and Hang Timeout are independent — either can trigger `docker stop -t 10` to end a benchmark run.
 - A Test Oracle Workspace has an engine independent of the corresponding benchmark's agent-visible baseline; mechanics needed by an oracle do not alter that baseline merely for oracle convenience.
 - Audited tests call only public APIs present in the canonical engine. Tests never depend on extensions present in the Test Oracle Workspace's engine but absent from canonical — otherwise correct agent impls using different primitives would fail tests for non-correctness reasons.
