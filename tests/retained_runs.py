@@ -11,12 +11,13 @@ from __future__ import annotations
 import contextlib
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from . import unit_environment
 from .grader_fixtures import local_grader
-from .test_karn_execution import FixtureHost
+from .test_karn_execution import FixtureHost, options
 
 
 @contextlib.contextmanager
@@ -48,3 +49,26 @@ def rebase_options(opts: dict, template: Path, destination: Path, **fresh) -> di
     rebased["host"] = fresh.pop("host", None) or FixtureHost()
     rebased["grader"] = fresh.pop("grader", None) or local_grader()
     return {**rebased, **fresh}
+
+
+def clone(template: SimpleNamespace, directory: Path, **fresh) -> SimpleNamespace:
+    """A copy of a built template under ``directory``: its ``root`` tree and ``opts`` follow the copy;
+    every other attribute (records, summaries) is the template's own, read-only."""
+    root = clone_tree(template.root, directory / template.root.name)
+    return SimpleNamespace(
+        **{
+            **vars(template),
+            "root": root,
+            "opts": rebase_options(template.opts, template.root, root, **fresh),
+        }
+    )
+
+
+def build_plain_run(root: Path) -> SimpleNamespace:
+    """One successful simulated benchmark of the toy ``example`` benchmark."""
+    from silverquillm.karn.execution import run_benchmark
+
+    opts = options(root)
+    with building():
+        record = run_benchmark(**opts)
+    return SimpleNamespace(root=root, opts=opts, record=record)

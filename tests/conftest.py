@@ -52,3 +52,19 @@ def _unit_environment(request, monkeypatch):
     """Unit tests never reach the grader's Docker client and record a clean run provenance."""
     if not request.node.get_closest_marker("integration"):
         unit_environment.apply(monkeypatch)
+
+
+@pytest.fixture(scope="session")
+def plain_run(tmp_path_factory):
+    """One successful simulated benchmark of the toy benchmark, built once; read it, never change it."""
+    from .retained_runs import build_plain_run
+
+    return build_plain_run(tmp_path_factory.mktemp("plain-run"))
+
+
+@pytest.fixture
+def plain_run_clone(plain_run, tmp_path):
+    """A copy of ``plain_run`` for a test that changes its records or artifacts."""
+    from .retained_runs import clone
+
+    return clone(plain_run, tmp_path)

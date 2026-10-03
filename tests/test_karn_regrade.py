@@ -23,8 +23,9 @@ from silverquillm.karn.records import read_record, validate_scores
 from silverquillm.karn.regrade import LiveContainers, recorded_grader, regrade
 from silverquillm.results_repo import InvalidRunRecordError
 
+from . import retained_runs
 from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
-from .retained_runs import building, clone_tree, rebase_options
+from .retained_runs import building
 from .test_karn_execution import options
 from .test_karn_host import make_candidate
 
@@ -43,13 +44,9 @@ class FailingDocker(LocalDocker):
 
 
 def clone(template, directory: Path) -> SimpleNamespace:
-    root = clone_tree(template.root, directory / "retained")
-    return SimpleNamespace(
-        root=root,
-        opts=rebase_options(template.opts, template.root, root),
-        records=template.records,
-        out=root / "regrade",
-    )
+    cloned = retained_runs.clone(template, directory)
+    cloned.out = cloned.root / "regrade"
+    return cloned
 
 
 @pytest.fixture(scope="module")
