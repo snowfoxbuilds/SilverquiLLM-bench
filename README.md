@@ -166,7 +166,9 @@ MIT — see [LICENSE](LICENSE) for details.
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/
+pytest tests/ -n auto
 ```
+
+`-n auto` runs the suite in parallel with pytest-xdist; leave it off to run serially.
 
 Docker-backed tests are marked `integration` and deselected by default; run them with `pytest -m integration` after `silverquillm grader build`.

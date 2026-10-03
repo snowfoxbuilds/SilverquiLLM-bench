@@ -7,8 +7,6 @@ imports (``from engine.X import …``, ``from cards.X import …``,
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from silverquillm._bootstrap import ensure_workspace_on_path
@@ -17,20 +15,22 @@ from .temp_budget import over_budget
 
 ensure_workspace_on_path()
 
-_BASETEMP = pytest.StashKey[Path]()
 _OVER_BUDGET = pytest.StashKey[list[str]]()
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _record_basetemp(request, tmp_path_factory):
-    request.config.stash[_BASETEMP] = tmp_path_factory.getbasetemp()
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionfinish(session, exitstatus):
-    """Fail a passing session that leaves more temp data behind than ``tests/temp_budget.py`` allows."""
-    basetemp = session.config.stash.get(_BASETEMP, None)
-    if exitstatus != pytest.ExitCode.OK or basetemp is None or not basetemp.is_dir():
+    """Fail a passing session that leaves more temp data behind than ``tests/temp_budget.py`` allows.
+
+    Under pytest-xdist each worker's basetemp is a ``popen-gw<N>`` directory inside the
+    controller's, and a worker's exit status never reaches the run's, so only the controller
+    (or a serial session) checks, once, over the whole tree.
+    """
+    if exitstatus != pytest.ExitCode.OK or hasattr(session.config, "workerinput"):
+        return
+    # The same factory pytest-xdist reads to place each worker's basetemp.
+    basetemp = session.config._tmp_path_factory.getbasetemp()
+    if not basetemp.is_dir():
         return
     problems = over_budget(basetemp)
     if problems:
