@@ -16,13 +16,13 @@ jobs:
   clear-outcome:
     # A new head makes the previous test outcome stale, so both labels come off
     # before the tests start; the test-outcome job labels this head when they end.
-    # It is a job of this workflow, not a workflow of its own, so on the one runner
-    # it queues ahead of this run's tests rather than behind them.
+    # It runs on a GitHub-hosted runner, so a push loses its stale label within
+    # seconds even while another pull request's tests hold the self-hosted runner.
+    # It only calls the GitHub API and never checks out pull request code; a fork's
+    # token is read-only and cannot label, so fork pull requests skip it.
     name: Clear the test outcome
-    # The runner is a developer host and the repository is public: fork
-    # pull requests must never execute on it.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       issues: write
@@ -47,6 +47,8 @@ jobs:
     name: pytest (Python 3.13)
     needs: clear-outcome
     # Runs when clear-outcome succeeded, or was skipped on a push to main.
+    # The runner is a developer host and the repository is public: fork
+    # pull requests must never execute on it.
     if: >-
       !cancelled() && needs.clear-outcome.result != 'failure'
       && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
@@ -113,12 +115,13 @@ jobs:
     # carries `request-review` and `tests-passed`, and nothing but this job adds
     # `tests-passed` or `tests-failed`. A job that timed out or was cancelled on
     # its own counts as failed; a run cancelled whole (a newer push) labels nothing.
+    # Like clear-outcome it only calls the GitHub API, so it runs GitHub-hosted.
     name: Label the test outcome
     needs: test
     if: >-
       !cancelled() && github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       actions: read
