@@ -56,6 +56,9 @@ python_files = ["test_*.py", "tests.py"]
 addopts = "--import-mode=importlib -m \"not integration\""
 markers = ["integration: requires Docker daemon"]
 timeout = 300
+# CI's basetemp sits on the host's small /tmp tmpfs: a passed test's tmp_path
+# is removed at its teardown, so the suite's footprint does not pile up.
+tmp_path_retention_policy = "failed"
 
 [tool.mypy]
 python_version = "3.13"
