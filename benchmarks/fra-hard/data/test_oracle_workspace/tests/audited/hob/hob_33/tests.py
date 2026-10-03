@@ -7,7 +7,7 @@ from engine.combat import declare_attackers_step
 from engine.decisions import Decision
 from engine.game import sacrifice
 from engine.stack import move_spell_off_stack, resolve_top_of_stack
-from engine.types import ManaCost, ManaType, Phase, Step, Zone
+from engine.types import CardType, ManaCost, ManaType, Phase, Step, Zone
 from test_utils import enter_permanent, object_preference, prefer, resolve_stack, scenario_game
 
 
@@ -155,6 +155,43 @@ def test_chosen_spell_leaving_before_trigger_resolves_cannot_be_cast():
     assert p.mana_pool.total() == 1
 
 
+@pytest.mark.parametrize('with_bilbo', [True, False])
+def test_adventure_front_face_from_exile_receives_bilbo_discount(with_bilbo):
+    from cards.hob.hob_174.card_impl import GlamdringFoehammer
+
+    g = scenario_game()
+    g.phase = Phase.PRECOMBAT_MAIN
+    p, _q = g.players
+    if with_bilbo:
+        enter_permanent(g, p, BilboThiefintheNight())
+    sword = GlamdringFoehammer(owner=p)
+    p.zones[Zone.HAND].add(sword)
+    p.mana_pool.add(ManaType.BLUE)
+    p.mana_pool.add(ManaType.COLORLESS, 3)
+    prefer(p, Decision.mode('Gleam of Death'), Decision.yes())
+    cast(g, p, sword)
+    assert sword.name == 'Gleam of Death'
+    assert sword.card_types == {CardType.SORCERY}
+    assert sword.subtypes == {'Adventure'}
+    resolve_stack(g)
+    assert p.zones[Zone.EXILE].contains(sword)
+    assert p.mana_pool.total() == 0
+
+    p.mana_pool.add(ManaType.COLORLESS)
+    prefer(p, Decision.mode('Glamdring, Foe-hammer'), Decision.no())
+    if not with_bilbo:
+        with pytest.raises(CastingError):
+            cast(g, p, sword)
+        assert p.zones[Zone.EXILE].contains(sword)
+        assert p.mana_pool.total() == 1
+        p.mana_pool.add(ManaType.COLORLESS)
+    cast(g, p, sword)
+    resolve_stack(g)
+    assert p.zones[Zone.BATTLEFIELD].contains(sword)
+    assert sword.card_types == {CardType.ARTIFACT}
+    assert p.mana_pool.total() == 0
+
+
 def test_artifact_creature_is_an_eligible_attack_spell():
     from engine.card import ArtifactCreature
     g, p, _q, bilbo, spell = setup(ArtifactCreature)
@@ -163,26 +200,26 @@ def test_artifact_creature_is_an_eligible_attack_spell():
     attack(g, bilbo)
     resolve_stack(g)
     assert p.zones[Zone.BATTLEFIELD].contains(spell)
-
-
-def test_discount_applies_to_creature_cast_from_exile():
-    g, p, _q, _bilbo, spell = setup(Creature)
-    from engine.zones import move_to_zone
-    move_to_zone(g, spell, Zone.GRAVEYARD, Zone.EXILE)
-    spell.base_power = spell.base_toughness = 2
-    p.mana_pool.add(ManaType.BLUE)
-    cast(g, p, spell, from_zone=Zone.EXILE, ignore_timing=True)
-    resolve_stack(g)
-    assert p.zones[Zone.BATTLEFIELD].contains(spell)
     assert p.mana_pool.total() == 0
 
 
-def test_opponents_nonhand_spell_receives_no_discount():
-    g, _p, q, _bilbo, spell = setup(owner_seat=1)
+@pytest.mark.parametrize('generic_mana,cast_succeeds', [(0, False), (1, True)])
+def test_opponents_nonhand_spell_receives_no_discount(generic_mana, cast_succeeds):
+    g, p, q, bilbo, spell = setup(owner_seat=1)
+    opposing_bilbo = enter_permanent(g, q, BilboThiefintheNight())
+    opposing_bilbo.summoning_sick = False
+    g.active_player_index = 1
+    prefer(q, object_preference(g, spell))
     q.mana_pool.add(ManaType.BLUE)
-    with pytest.raises(CastingError):
-        cast(g, q, spell, from_zone=Zone.GRAVEYARD, ignore_timing=True)
-    assert q.zones[Zone.GRAVEYARD].contains(spell)
+    q.mana_pool.add(ManaType.COLORLESS, generic_mana)
+    attack(g, opposing_bilbo)
+    # Its trigger grants the cast; only the other player's discount survives.
+    sacrifice(g, q, opposing_bilbo)
+    resolve_stack(g)
+    expected_zone = Zone.EXILE if cast_succeeds else Zone.GRAVEYARD
+    assert q.zones[expected_zone].contains(spell)
+    assert q.mana_pool.total() == (0 if cast_succeeds else 1)
+    assert p.zones[Zone.BATTLEFIELD].contains(bilbo)
 
 
 def test_declining_trigger_does_not_leave_cast_permission():

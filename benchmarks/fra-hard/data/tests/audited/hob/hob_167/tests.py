@@ -70,6 +70,7 @@ def test_borrows_mana_abilities():
 
 def test_ability_disappears_when_elf_leaves_graveyard():
     g, _p, _q, king, donor = setup()
+    assert len(card_abilities(king)) == 1
     move_to_zone(g, donor, Zone.GRAVEYARD, Zone.EXILE)
     assert card_abilities(king) == []
 
@@ -168,15 +169,17 @@ def test_trigger_remembers_controller_after_source_leaves():
     assert len(p.zones[Zone.LIBRARY]) == 1
 
 
-def test_cached_ability_cannot_activate_after_donor_leaves():
-    from engine.abilities import AbilityError, activate_ability
-    from test_utils import ability_instance
+def test_ability_returns_when_donor_returns_to_graveyard():
     g, p, _q, king, donor = setup()
-    ability = ability_instance(g, p, king)
+    assert len(card_abilities(king)) == 1
     move_to_zone(g, donor, Zone.GRAVEYARD, Zone.EXILE)
-    with pytest.raises(AbilityError):
-        activate_ability(g, p, ability)
-    assert not king.is_tapped
+    assert card_abilities(king) == []
+    move_to_zone(g, donor, Zone.EXILE, Zone.GRAVEYARD)
+    assert len(card_abilities(king)) == 1
+    activate_card_ability(g, p, king)
+    assert king.is_tapped and not donor.is_tapped
+    resolve_stack(g)
+    assert p.life == 22
 
 
 def test_thranduil_cannot_pay_borrowed_tap_cost_twice():
@@ -283,13 +286,10 @@ def test_elf_leaving_after_entry_does_not_cancel_draw_trigger():
 
 
 def test_losing_elf_subtype_removes_borrowed_ability():
-    from engine.abilities import AbilityError, activate_ability
-    from test_utils import ability_instance
-    g, p, _q, king, donor = setup()
-    ability = ability_instance(g, p, king)
+    _g, _p, _q, king, donor = setup()
+    assert len(card_abilities(king)) == 1
     donor.subtypes = {'Human'}
-    with pytest.raises(AbilityError):
-        activate_ability(g, p, ability)
+    assert card_abilities(king) == []
     assert not king.is_tapped
 
 
