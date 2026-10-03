@@ -136,7 +136,7 @@ Existing SOS tests can supply source material, but copying them alone does not e
 Medium's instructions and pitfalls are derived from the oracle work and follow the existing Benchmark Tier locking rules.
 
 Development runs and incomplete observations remain useful data; the integration retains their evidence without a leaderboard eligibility gate (grilling 2026-09-26).
-hob-medium stays in Beta until at least two different candidates have run on the fixed workspace and their failures have been reviewed; the move to Benchmarking is a `config.json`-only PR made on the operator's go-ahead (grilling 2026-09-28).
+hob-medium is Released: its runs are complete, and it moved from Beta straight to Released to freeze it for comparability (grilling 2026-10-02).
 Runs before the 2026-09-28 workspace fixes are pilot test runs, not comparable to later runs.
 
 ## Evaluation

@@ -7,7 +7,7 @@
     "collector_range": "001-271",
     "extra_set_codes": []
   },
-  "tier": "benchmarking",
+  "tier": "Released",
   "cards": ["001", "004", "013", "057", "097", "120", "201", "226", "245", "257"],
   "leaderboard": {
     "requires_full_set": true,
