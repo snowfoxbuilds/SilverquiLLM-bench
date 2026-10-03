@@ -1,9 +1,9 @@
 """Simulated benchmark runs built once per module and cloned into each test that changes them.
 
 A simulated benchmark runs the whole ``run_benchmark`` pipeline and costs seconds, so a module
-builds its runs once and each test works on a byte-for-byte clone of them (see
-docs/specs/TESTING-CONVENTIONS.md). Records name their own artifacts by absolute path, so a
-clone rewrites the template's root to its own inside the JSON it carries.
+builds its runs once and each test works on a clone of them (see
+docs/specs/TESTING-CONVENTIONS.md). Records, login journals and plugin environments name their
+own files by absolute path, so a clone rewrites the template's root to its own in each text file.
 """
 
 from __future__ import annotations
@@ -29,13 +29,16 @@ def building():
 
 
 def clone_tree(template: Path, destination: Path) -> Path:
-    shutil.copytree(template, destination, symlinks=True)
-    old, new = str(template), str(destination)
-    for path in destination.rglob("*.json"):
-        if path.is_file() and not path.is_symlink():
-            text = path.read_text()
-            if old in text:
-                path.write_text(text.replace(old, new))
+    """Copy ``template`` to ``destination`` (absent or empty), rewriting the template's root in
+    every text file that names it; binary files, such as compiled modules, are copied as they are."""
+    shutil.copytree(template, destination, symlinks=True, dirs_exist_ok=True)
+    old, new = str(template).encode(), str(destination).encode()
+    for path in destination.rglob("*"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        data = path.read_bytes()
+        if old in data and b"\0" not in data:
+            path.write_bytes(data.replace(old, new))
     return destination
 
 
