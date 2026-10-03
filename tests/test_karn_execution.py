@@ -253,7 +253,7 @@ def test_batch_uses_shared_runner_and_does_not_replay_completed_entries(tmp_path
     directory = tmp_path / "batches"
     directory.mkdir()
     (directory / "trial.toml").write_text(
-        'format = "karn-v4"\n[[runs]]\nbuild_output = '
+        'format = "karn-v5"\n[[runs]]\nbuild_output = '
         + json.dumps(str(opts["build_output"]))
         + '\nconstruct = "bare"\nbenchmark = "example"\nbudget_seconds = 60\n'
     )
@@ -280,7 +280,7 @@ def test_batch_uses_shared_runner_and_does_not_replay_completed_entries(tmp_path
     assert queue_rows(directory)[0]["status"] == "done"
     outcome = CliRunner().invoke(main, ["queue", "ls", "--batches-dir", str(directory)])
     assert outcome.exit_code == 0, outcome.output
-    assert "[karn-v4]: done" in outcome.output
+    assert "[karn-v5]: done" in outcome.output
 
 
 def test_legacy_batches_and_state_are_reported_once_and_never_rewritten(tmp_path, caplog):
@@ -443,7 +443,7 @@ def test_batch_recovers_finalized_local_record_even_when_batch_file_was_removed(
     directory.mkdir()
     batch_file = directory / "trial.toml"
     batch_file.write_text(
-        'format="karn-v4"\n[[runs]]\nbuild_output='
+        'format="karn-v5"\n[[runs]]\nbuild_output='
         + json.dumps(str(opts["build_output"]))
         + '\nconstruct="bare"\nbenchmark="example"\nbudget_seconds=60\n'
     )
@@ -484,7 +484,7 @@ def test_batch_recovers_finalized_local_record_even_when_batch_file_was_removed(
 def test_mid_run_batch_edit_keeps_completed_state_and_continues_other_batches(tmp_path, edit):
     directory = tmp_path / "batches"
     directory.mkdir()
-    content = 'format="karn-v4"\n[[runs]]\nbuild_output="fixture"\nconstruct="bare"\nbenchmark="example"\n'
+    content = 'format="karn-v5"\n[[runs]]\nbuild_output="fixture"\nconstruct="bare"\nbenchmark="example"\n'
     for name in ("a", "b"):
         (directory / (name + ".toml")).write_text(content)
     calls = []
@@ -542,7 +542,7 @@ def test_operator_interruption_records_state_and_stops_before_next_run(tmp_path)
     directory = tmp_path / "batches"
     directory.mkdir()
     spec = '[[runs]]\nbuild_output="fixture"\nconstruct="bare"\nbenchmark="example"\n'
-    (directory / "trial.toml").write_text('format="karn-v4"\n' + spec + spec)
+    (directory / "trial.toml").write_text('format="karn-v5"\n' + spec + spec)
     calls = []
 
     def execute(**kwargs):
@@ -807,3 +807,24 @@ def test_fingerprint_follows_the_audited_engine_tests(tmp_path):
         ("engine_support", "benchmarks/example/workspace/pytest.ini"),
     ]
     assert not any("workspace/engine_tests" in path for _, path in rows)
+
+
+def test_v5_run_records_karn_v5_identity_beside_v4_records(tmp_path):
+    opts = options(tmp_path)
+    v5 = make_candidate(tmp_path / "v5", definition_version=5)
+    old = run_benchmark(**opts)
+    new = run_benchmark(**{**opts, "build_output": v5.build_output})
+    assert old.manifest["candidate"]["scheme"] == "karn-v4"
+    assert old.manifest["candidate"]["definition_version"] == 4
+    assert new.manifest["candidate"]["scheme"] == "karn-v5"
+    assert new.manifest["candidate"]["definition_version"] == 5
+    assert new.run_metadata["candidate_definition"]["definition_version"] == 5
+    stored = {record.run_id: record for _, record in iter_run_records(opts["results_repo"])}
+    assert {stored[old.run_id].candidate.scheme, stored[new.run_id].candidate.scheme} == {
+        "karn-v4",
+        "karn-v5",
+    }
+    assert {row["run_id"] for row in rebuild_index(opts["results_repo"])} == {
+        old.run_id,
+        new.run_id,
+    }

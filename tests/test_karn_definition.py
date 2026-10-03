@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -166,3 +167,67 @@ def test_install_document_cannot_follow_symlink_outside_build(tmp_path):
 def test_loose_input_encodings_canonicalize_like_karn(encoding):
     value = definition()
     assert canonical(decode_definition(json.dumps(value).encode(encoding))) == canonical(value)
+
+
+def as_v5(value: dict) -> dict:
+    """Karn pins v5 with its v4 vectors: only the version and the bastion mode token differ."""
+    return {
+        **value,
+        "definition_version": 5,
+        "mode": {"vehicle": "bastion"}.get(value["mode"], value["mode"]),
+    }
+
+
+@pytest.mark.parametrize(
+    "vector",
+    [p for p in sorted(VECTORS.iterdir()) if (p / "canonical.bytes").exists()],
+    ids=lambda p: p.name,
+)
+def test_v4_golden_vectors_hold_for_v5(vector):
+    value = as_v5(json.loads((vector / "input.json").read_bytes()))
+    expected = (vector / "canonical.bytes").read_bytes()
+    expected = expected.replace(b'"definition_version":4', b'"definition_version":5', 1)
+    assert canonical(decode_definition(canonical(value))) == expected
+
+
+@pytest.mark.parametrize(("version", "mode"), [(4, "vehicle"), (5, "bastion")])
+def test_each_version_accepts_its_own_mode_tokens(version, mode):
+    value = definition()
+    value["definition_version"], value["mode"] = version, mode
+    assert decode_definition(canonical(value)) == value
+
+
+@pytest.mark.parametrize(("version", "mode"), [(4, "bastion"), (5, "vehicle")])
+def test_mode_tokens_do_not_cross_versions(version, mode):
+    value = definition()
+    value["definition_version"], value["mode"] = version, mode
+    with pytest.raises(KarnError, match="invalid_definition:mode"):
+        decode_definition(canonical(value))
+
+
+@pytest.mark.parametrize("version", [0, 3, 6, True, "5", None])
+def test_other_definition_versions_are_refused(version):
+    value = definition()
+    value["definition_version"] = version
+    with pytest.raises(KarnError, match="invalid_definition:definition_version"):
+        decode_definition(canonical(value))
+
+
+def test_vendored_schemas_match_karn():
+    package = Path(__file__).parents[1] / "silverquillm/karn"
+    pinned = {
+        "definition-v4.schema.json": "025a1da2d7d4febe016c3812fa10a25ad1a58956642e55613bdc735f3f136ae7",
+        "definition-v5.schema.json": "778532311f3ae546bc6b86b80284a6d5400916b09132c03abc9d814cb177ab4d",
+    }
+    for name, expected in pinned.items():
+        assert hashlib.sha256((package / name).read_bytes()).hexdigest() == expected
+
+
+@pytest.mark.parametrize(("version", "scheme"), [(4, "karn-v4"), (5, "karn-v5")])
+def test_candidate_identity_follows_its_definition_version(tmp_path, version, scheme):
+    value = definition()
+    value["definition_version"] = version
+    built(tmp_path, value)
+    candidate = load_candidate(tmp_path, "bare", image_inspector=inspector)
+    assert candidate.scheme == scheme
+    assert candidate.identity()["definition_version"] == version

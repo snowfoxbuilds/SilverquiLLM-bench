@@ -887,3 +887,22 @@ def test_an_absent_historical_digest_is_graded_in_the_unknown_cohort(retained, i
     assert summary["skipped"] == []
     assert len(docker.runs) == 3
     assert output(retained, "run-a")["source"]["grading_inputs_digest"] is None
+
+
+def test_stored_v4_and_v5_records_regrade_side_by_side(tmp_path):
+    opts = options(tmp_path)
+    v5 = make_candidate(tmp_path / "v5", definition_version=5)
+    records = [
+        run_benchmark(**opts, run_id="run-v4"),
+        run_benchmark(**{**opts, "build_output": v5.build_output}, run_id="run-v5"),
+    ]
+    assert [r.candidate.scheme for r in records] == ["karn-v4", "karn-v5"]
+    retained = SimpleNamespace(opts=opts, records=records, out=tmp_path / "regrade")
+    records_before = tree_digest(opts["results_repo"])
+
+    summary = invoke(retained)
+
+    assert summary["skipped"] == summary["errors"] == []
+    for record in records:
+        assert output(retained, record.run_id)["scores"] == record.scores
+    assert tree_digest(opts["results_repo"]) == records_before

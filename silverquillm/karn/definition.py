@@ -1,4 +1,4 @@
-"""Karn v4 artifact intake; no builder or Ozolith daemon imports."""
+"""Karn v4 and v5 artifact intake; no builder or Ozolith daemon imports."""
 
 from __future__ import annotations
 
@@ -20,6 +20,10 @@ from jsonschema.exceptions import SchemaError
 
 MAX_DOCUMENT = 1024 * 1024
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
+# The Construct Definition versions intake accepts, each with its Run Record identity
+# scheme. Karn emits only v5; v4 build outputs and Run Records stay readable.
+SCHEMES = {4: "karn-v4", 5: "karn-v5"}
+LATEST_VERSION = max(SCHEMES)
 
 
 class KarnError(ValueError):
@@ -131,7 +135,12 @@ def decode_definition(raw: bytes) -> dict:
     if len(raw) > MAX_DOCUMENT:
         raise KarnError("definition_size_limit")
     document = strict_json(raw)
-    schema = json.loads(files(__package__).joinpath("definition-v4.schema.json").read_bytes())
+    version = document.get("definition_version") if isinstance(document, dict) else None
+    if type(version) is not int or version not in SCHEMES:
+        version = LATEST_VERSION  # its schema refuses the version with the usual error
+    schema = json.loads(
+        files(__package__).joinpath(f"definition-v{version}.schema.json").read_bytes()
+    )
     errors = list(Draft202012Validator(schema).iter_errors(document))
     if errors:
         location = ".".join(str(part) for part in errors[0].absolute_path)
@@ -267,9 +276,17 @@ class KarnCandidate:
     def runtime(self) -> dict:
         return self.definition["runtime"]
 
+    @property
+    def definition_version(self) -> int:
+        return self.definition["definition_version"]
+
+    @property
+    def scheme(self) -> str:
+        return SCHEMES[self.definition_version]
+
     def identity(self) -> dict:
         return {
-            "definition_version": 4,
+            "definition_version": self.definition_version,
             "definition_id": self.definition_id,
             "definition_digest": self.definition_digest,
             "image": self.image,

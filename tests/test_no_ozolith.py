@@ -79,13 +79,13 @@ mixed = scratch / "mixed"
 for directory in (empty, karn_only, mixed):
     directory.mkdir()
 for directory in (karn_only, mixed):
-    (directory / "trial.toml").write_text('format = "karn-v4"\nruns = []\n')
+    (directory / "trial.toml").write_text('format = "karn-v5"\nruns = []\n')
 (mixed / "old.toml").write_text('[[runs]]\ncandidate = "candidates/x"\nbenchmark = "smoke"\n')
 
 assert invoke("queue", "ls", "--batches-dir", str(empty)).strip() == "no batches"
-assert "trial [karn-v4]: missing_state (0/0)" in invoke("queue", "ls", "--batches-dir", str(karn_only))
+assert "trial [karn-v5]: missing_state (0/0)" in invoke("queue", "ls", "--batches-dir", str(karn_only))
 listed = invoke("queue", "ls", "--batches-dir", str(mixed))
-assert "trial [karn-v4]" in listed and "old [legacy]: unsupported legacy batch" in listed, listed
+assert "trial [karn-v5]" in listed and "old [legacy]: unsupported legacy batch" in listed, listed
 assert '"unsupported_legacy_batch"' in invoke("queue", "ls", "--json", "--batches-dir", str(mixed))
 assert "unsupported legacy batch" in invoke("top", "--batches-dir", str(mixed))
 

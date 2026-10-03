@@ -73,7 +73,7 @@ def cloned_options(template, tmp_path):
 def batch(directory: Path, entries: int = 2) -> Path:
     directory.mkdir()
     spec = '[[runs]]\nbuild_output="fixture"\nconstruct="bare"\nbenchmark="example"\n'
-    (directory / "trial.toml").write_text('format="karn-v4"\n' + spec * entries)
+    (directory / "trial.toml").write_text('format="karn-v5"\n' + spec * entries)
     return directory
 
 
@@ -138,7 +138,7 @@ def test_a_batch_entry_waits_for_a_busy_login_slot_instead_of_deferring(tmp_path
     directory = batch(tmp_path / "batches", entries=1)
     opts = login_options(tmp_path / "fixture")
     (directory / "trial.toml").write_text(
-        'format="karn-v4"\n[[runs]]\nbuild_output='
+        'format="karn-v5"\n[[runs]]\nbuild_output='
         + json.dumps(str(opts["build_output"]))
         + '\nconstruct="bare"\nbenchmark="example"\n'
     )
@@ -165,7 +165,7 @@ def test_batch_entries_select_their_grader_by_the_candidates_python(tmp_path, mo
     directory = batch(tmp_path / "batches", entries=2)
     opts = options(tmp_path / "fixture")
     (directory / "trial.toml").write_text(
-        'format="karn-v4"\n'
+        'format="karn-v5"\n'
         + (
             "[[runs]]\nbuild_output="
             + json.dumps(str(opts["build_output"]))
@@ -1013,9 +1013,9 @@ def test_native_telemetry_is_explicit_with_a_documented_codex_home_fallback(tmp_
     assert record.run_metadata["native_telemetry"]["requested"] == "none"
     spec = '[[runs]]\nbuild_output="b"\nconstruct="bare"\nbenchmark="example"\n'
     path = tmp_path / "telemetry.toml"
-    path.write_text('format="karn-v4"\n' + spec + 'native_telemetry="codex"\n')
+    path.write_text('format="karn-v5"\n' + spec + 'native_telemetry="codex"\n')
     assert load_batch(path)["runs"][0]["native_telemetry"] == "codex"
-    path.write_text('format="karn-v4"\n' + spec + 'native_telemetry="always"\n')
+    path.write_text('format="karn-v5"\n' + spec + 'native_telemetry="always"\n')
     with pytest.raises(KarnError, match="invalid_karn_run_spec"):
         load_batch(path)
 
@@ -1025,7 +1025,7 @@ def test_a_run_spec_cannot_name_a_login(tmp_path):
 
     path = tmp_path / "login.toml"
     path.write_text(
-        'format="karn-v4"\n[[runs]]\nbuild_output="b"\nconstruct="bare"\nbenchmark="example"\n'
+        'format="karn-v5"\n[[runs]]\nbuild_output="b"\nconstruct="bare"\nbenchmark="example"\n'
         'login="x"\n'
     )
     with pytest.raises(KarnError, match="^invalid_karn_run_spec:login.toml$"):
@@ -1196,7 +1196,7 @@ def test_a_batch_entry_interrupted_while_waiting_for_a_slot_stays_pending(tmp_pa
     directory = batch(tmp_path / "batches", entries=1)
     opts = login_options(tmp_path / "fixture")
     (directory / "trial.toml").write_text(
-        'format="karn-v4"\n[[runs]]\nbuild_output='
+        'format="karn-v5"\n[[runs]]\nbuild_output='
         + json.dumps(str(opts["build_output"]))
         + '\nconstruct="bare"\nbenchmark="example"\n'
     )
@@ -1232,7 +1232,7 @@ def pooled_batch(directory, build_output, entries=2):
         + json.dumps(str(build_output))
         + '\nconstruct="bare"\nbenchmark="example"\n'
     )
-    (directory / "pooled.toml").write_text('format="karn-v4"\n' + spec * entries)
+    (directory / "pooled.toml").write_text('format="karn-v5"\n' + spec * entries)
 
 
 def test_an_unusable_pool_defers_only_its_batch_and_other_batches_run(tmp_path):
@@ -1911,7 +1911,7 @@ def batch_with(tmp_path, build_output: Path, entries: int = 2) -> Path:
         + json.dumps(str(build_output))
         + '\nconstruct="bare"\nbenchmark="example"\n'
     )
-    (directory / "trial.toml").write_text('format="karn-v4"\n' + spec * entries)
+    (directory / "trial.toml").write_text('format="karn-v5"\n' + spec * entries)
     return directory
 
 

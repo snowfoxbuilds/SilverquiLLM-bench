@@ -33,11 +33,14 @@ def make_candidate(
     bootstrap=False,
     network=None,
     timeout=None,
+    definition_version=4,
+    mode="automaton",
 ):
     value = json.loads(
         (FIXTURES / "wire-vectors-v4/canonical-definition-id/input.json").read_bytes()
     )
     value["image"] = image or "sha256:" + "1" * 64
+    value["definition_version"], value["mode"] = definition_version, mode
     value["runtime"].update(
         main=main or ["python3", "-c", "pass"],
         initializer=None,
@@ -194,6 +197,26 @@ def test_declared_inputs_and_immutable_image_launch_without_proposal_gate(tmp_pa
     assert "--pull" in create and "never" in create
     assert not any(command[0] in ("build", "pull") for command in docker.commands)
     assert docker.stopped and docker.removed
+
+
+def test_v5_automaton_launches_like_v4(tmp_path):
+    candidate = make_candidate(tmp_path, definition_version=5)
+    assert (candidate.definition_version, candidate.scheme) == (5, "karn-v5")
+    docker = FakeDocker()
+    result = DockerHost(docker=docker).run(candidate, tmp_path / "workspace", tmp_path / "run", "t")
+    assert result.status == "completed"
+    assert docker.commands[0][0] == "create"
+
+
+@pytest.mark.parametrize(("version", "mode"), [(4, "vehicle"), (5, "bastion")])
+def test_non_automaton_mode_refuses_before_launch(tmp_path, version, mode):
+    candidate = make_candidate(tmp_path, definition_version=version, mode=mode)
+    docker = FakeDocker()
+    result = DockerHost(docker=docker).run(
+        candidate, tmp_path / "workspace", tmp_path / "run", "task"
+    )
+    assert (result.status, result.error) == ("host_failed", "automaton_required")
+    assert not docker.created
 
 
 def test_deadline_stops_before_observing_partial_workspace(tmp_path, monkeypatch):
