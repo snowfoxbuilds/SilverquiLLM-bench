@@ -73,11 +73,13 @@ jobs:
       # A job-private basetemp: the host's own pytest sessions share
       # /tmp/pytest-of-<user> and prune each other's numbered directories.
       # It stays under the system temp dir, which redaction tests expect.
+      # pytest-xdist runs it on eight workers, half the host's cores, since the
+      # runner shares the host; worksteal rebalances the long-running tests.
       - name: Test
         run: |
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
-          python -m pytest tests/ -q --basetemp "$tmp/pytest"
+          python -m pytest tests/ -q -n 8 --dist worksteal --basetemp "$tmp/pytest"
 
   test-py314:
     # Grading runs on the candidate's own Python minor version, so SilverquiLLM,
@@ -108,7 +110,7 @@ jobs:
         run: |
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
-          python -m pytest tests/ -q --basetemp "$tmp/pytest"
+          python -m pytest tests/ -q -n 8 --dist worksteal --basetemp "$tmp/pytest"
 
   test-outcome:
     # CI owns the test outcome labels: a Reviewer takes a pull request once it

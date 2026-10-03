@@ -7,7 +7,7 @@ pip install -e ".[dev]"
 # Testing repo
 
 # Repository validation (platform/tooling tests) — from repo root, same as CI:
-python -m pytest tests/ -q
+python -m pytest tests/ -q -n 8 --dist worksteal
 
 # Workspace validation (engine_tests + colocated FDN card tests) — from the workspace dir.
 # Subshell keeps the cd local so later sections still run from repo root:
