@@ -24,6 +24,7 @@ from silverquillm.karn.regrade import LiveContainers, recorded_grader, regrade
 from silverquillm.results_repo import InvalidRunRecordError
 
 from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
+from .retained_runs import building, clone_tree, rebase_options
 from .test_karn_execution import options
 from .test_karn_host import make_candidate
 
@@ -41,17 +42,50 @@ class FailingDocker(LocalDocker):
         return super().run(arguments, timeout=timeout, stdout_limit=stdout_limit)
 
 
+def clone(template, directory: Path) -> SimpleNamespace:
+    root = clone_tree(template.root, directory / "retained")
+    return SimpleNamespace(
+        root=root,
+        opts=rebase_options(template.opts, template.root, root),
+        records=template.records,
+        out=root / "regrade",
+    )
+
+
+@pytest.fixture(scope="module")
+def retained_template(tmp_path_factory):
+    """Two graded runs of one candidate and one of another, recorded as a run would; built once."""
+    root = tmp_path_factory.mktemp("retained")
+    opts = options(root)
+    second = make_candidate(root / "second", main=["python3", "-c", "pass  # second"])
+    with building():
+        records = [
+            run_benchmark(**opts, run_id="run-a"),
+            run_benchmark(**opts, run_id="run-b"),
+            run_benchmark(**{**opts, "build_output": second.build_output}, run_id="run-c"),
+        ]
+    return SimpleNamespace(root=root, opts=opts, records=records)
+
+
 @pytest.fixture
-def retained(tmp_path):
-    """Two graded runs of one candidate and one of another, recorded as a run would."""
-    opts = options(tmp_path)
-    second = make_candidate(tmp_path / "second", main=["python3", "-c", "pass  # second"])
-    records = [
-        run_benchmark(**opts, run_id="run-a"),
-        run_benchmark(**opts, run_id="run-b"),
-        run_benchmark(**{**opts, "build_output": second.build_output}, run_id="run-c"),
-    ]
-    return SimpleNamespace(opts=opts, records=records, out=tmp_path / "regrade")
+def retained(retained_template, tmp_path):
+    return clone(retained_template, tmp_path)
+
+
+@pytest.fixture(scope="module")
+def regraded_template(retained_template, tmp_path_factory):
+    """The retained runs after one re-grade, so cache tests start from a filled cache."""
+    template = clone(retained_template, tmp_path_factory.mktemp("regraded"))
+    with building():
+        template.summary = invoke(template)
+    return template
+
+
+@pytest.fixture
+def regraded(regraded_template, tmp_path):
+    cloned = clone(regraded_template, tmp_path)
+    cloned.summary = regraded_template.summary
+    return cloned
 
 
 def invoke(retained, docker=None, **changes):
@@ -239,21 +273,20 @@ def test_the_command_exits_non_zero_when_a_run_errors(retained, monkeypatch):
     assert "error run-b: exit_125" in result.output
 
 
-def test_graded_runs_are_reused_until_forced_or_the_grading_inputs_change(retained):
-    invoke(retained)
+def test_graded_runs_are_reused_until_forced_or_the_grading_inputs_change(regraded):
     docker = LocalDocker()
-    invoke(retained, docker=docker)
+    invoke(regraded, docker=docker)
     assert docker.runs == []
 
-    invoke(retained, docker=docker, force=True)
+    invoke(regraded, docker=docker, force=True)
     assert len(docker.runs) == 3
 
-    suite = retained.opts["bench_root"] / "benchmarks/example/data/tests/audited/fdn/fdn_2/tests.py"
+    suite = regraded.opts["bench_root"] / "benchmarks/example/data/tests/audited/fdn/fdn_2/tests.py"
     suite.write_text(suite.read_text() + "def test_another(): assert value == 1\n")
     changed = LocalDocker()
-    summary = invoke(retained, docker=changed)
+    summary = invoke(regraded, docker=changed)
     assert len(changed.runs) == 3
-    result = output(retained, "run-a")
+    result = output(regraded, "run-a")
     assert result["grading_inputs_digest"] != result["source"]["grading_inputs_digest"]
     assert result["scores"]["fdn_regression"]["tests_total"] == 2
     assert summary["grading_inputs_digest"] == result["grading_inputs_digest"]
@@ -342,13 +375,12 @@ def test_a_malformed_previous_output_is_graded_again(retained, previous):
     assert output(retained, "run-a")["scores"] == retained.records[0].scores
 
 
-def test_an_output_graded_by_other_grading_code_is_graded_again(retained, monkeypatch):
-    invoke(retained)
+def test_an_output_graded_by_other_grading_code_is_graded_again(regraded, monkeypatch):
     monkeypatch.setattr(regrade_module, "grading_code_digest", lambda: "sha256:" + "9" * 64)
     docker = LocalDocker()
-    invoke(retained, docker=docker)
+    invoke(regraded, docker=docker)
     assert len(docker.runs) == 3
-    assert output(retained, "run-a")["grading_code_digest"] == "sha256:" + "9" * 64
+    assert output(regraded, "run-a")["grading_code_digest"] == "sha256:" + "9" * 64
 
 
 class LateDocker:
@@ -595,27 +627,25 @@ def _bad_timestamp(value):
         _bad_timestamp,
     ],
 )
-def test_a_damaged_cache_with_matching_digests_regrades_only_that_run(retained, damage):
-    invoke(retained)
-    path = output_file(retained, "run-a")
+def test_a_damaged_cache_with_matching_digests_regrades_only_that_run(regraded, damage):
+    path = output_file(regraded, "run-a")
     value = json.loads(path.read_text())
     damage(value)
     path.write_text(json.dumps(value))
     docker = LocalDocker()
 
-    summary = invoke(retained, docker=docker)
+    summary = invoke(regraded, docker=docker)
 
     assert len(docker.runs) == 1
     assert summary["errors"] == []
-    repaired = output(retained, "run-a")
-    assert repaired["scores"] == retained.records[0].scores
-    assert repaired["candidate_name"] == output(retained, "run-b")["candidate_name"]
-    assert json.loads((retained.out / "summary.json").read_text()) == summary
+    repaired = output(regraded, "run-a")
+    assert repaired["scores"] == regraded.records[0].scores
+    assert repaired["candidate_name"] == output(regraded, "run-b")["candidate_name"]
+    assert json.loads((regraded.out / "summary.json").read_text()) == summary
 
 
-def test_a_valid_missing_observation_is_reused_and_left_out_of_that_dimensions_means(retained):
-    invoke(retained)
-    path = output_file(retained, "run-a")
+def test_a_valid_missing_observation_is_reused_and_left_out_of_that_dimensions_means(regraded):
+    path = output_file(regraded, "run-a")
     value = json.loads(path.read_text())
     value["scores"]["card_correctness"] = {
         "evaluated": False,
@@ -628,7 +658,7 @@ def test_a_valid_missing_observation_is_reused_and_left_out_of_that_dimensions_m
     path.write_text(json.dumps(value))
     docker = LocalDocker()
 
-    summary = invoke(retained, docker=docker)
+    summary = invoke(regraded, docker=docker)
 
     assert docker.runs == []
     cohort = next(c for c in summary["cohorts"] if c["runs"] == 2)
@@ -730,12 +760,12 @@ def test_runs_with_an_unknown_original_digest_stay_individual():
     assert len(summary["cohorts"]) == 3
 
 
-def test_reused_outputs_summarize_into_the_same_cohorts(retained):
-    first = invoke(retained)
-    second = invoke(retained)
+def test_reused_outputs_summarize_into_the_same_cohorts(regraded):
+    first = regraded.summary
+    second = invoke(regraded)
     assert first["cohorts"] == second["cohorts"]
     assert {row["source_grading_inputs_digest"] for row in second["cohorts"]} == {
-        retained.records[0].run_metadata["grading_inputs"]["digest"]
+        regraded.records[0].run_metadata["grading_inputs"]["digest"]
     }
 
 
@@ -756,53 +786,52 @@ def test_the_table_names_each_cohorts_original_grading_inputs(retained, monkeypa
     assert digest.removeprefix("sha256:")[:12] in result.output
 
 
-def test_a_fifo_at_a_cache_path_is_a_miss_and_does_not_block(retained):
-    invoke(retained)
-    path = output_file(retained, "run-a")
+def test_a_fifo_at_a_cache_path_is_a_miss_and_does_not_block(regraded):
+    path = output_file(regraded, "run-a")
     path.unlink()
     os.mkfifo(path)
     docker = LocalDocker()
     finished = []
-    worker = threading.Thread(target=lambda: finished.append(invoke(retained, docker=docker)))
+    worker = threading.Thread(target=lambda: finished.append(invoke(regraded, docker=docker)))
     worker.daemon = True
     worker.start()
     worker.join(timeout=60)
 
     assert finished, "a FIFO at the cache path blocked the re-grade"
     assert len(docker.runs) == 1
-    assert path.is_file() and output(retained, "run-a")["scores"] == retained.records[0].scores
+    assert path.is_file() and output(regraded, "run-a")["scores"] == regraded.records[0].scores
 
 
-def test_a_huge_integer_rate_breaks_the_score_invariants_rather_than_overflowing(retained):
-    scores = json.loads(json.dumps(retained.records[0].scores))
+def test_a_huge_integer_rate_breaks_the_score_invariants_rather_than_overflowing(
+    retained_template,
+):
+    scores = json.loads(json.dumps(retained_template.records[0].scores))
     scores["card_correctness"]["pass_rate"] = 10**400
     with pytest.raises(InvalidRunRecordError):
         validate_scores(scores)
 
 
-def test_caches_that_cannot_be_decoded_or_checked_regrade_only_their_runs(retained):
-    invoke(retained)
-    huge = output_file(retained, "run-a")
+def test_caches_that_cannot_be_decoded_or_checked_regrade_only_their_runs(regraded):
+    huge = output_file(regraded, "run-a")
     value = json.loads(huge.read_text())
     value["scores"]["card_correctness"]["pass_rate"] = 10**400
     huge.write_text(json.dumps(value))
-    output_file(retained, "run-b").write_text("[" * 20000 + "]" * 20000)
-    reused = output_file(retained, "run-c").read_bytes()
+    output_file(regraded, "run-b").write_text("[" * 20000 + "]" * 20000)
+    reused = output_file(regraded, "run-c").read_bytes()
     docker = LocalDocker()
 
-    summary = invoke(retained, docker=docker)
+    summary = invoke(regraded, docker=docker)
 
     assert len(docker.runs) == 2
     assert summary["errors"] == []
-    assert output_file(retained, "run-c").read_bytes() == reused
+    assert output_file(regraded, "run-c").read_bytes() == reused
     for index, run_id in enumerate(["run-a", "run-b"]):
-        assert output(retained, run_id)["scores"] == retained.records[index].scores
-    assert json.loads((retained.out / "summary.json").read_text()) == summary
+        assert output(regraded, run_id)["scores"] == regraded.records[index].scores
+    assert json.loads((regraded.out / "summary.json").read_text()) == summary
 
 
-def test_an_output_graded_by_another_image_is_graded_again(retained):
-    invoke(retained)
-    path = output_file(retained, "run-a")
+def test_an_output_graded_by_another_image_is_graded_again(regraded):
+    path = output_file(regraded, "run-a")
     value = json.loads(path.read_text())
     other = "sha256:" + "1" * 64
     assert other != FIXTURE_IMAGE_ID
@@ -810,10 +839,10 @@ def test_an_output_graded_by_another_image_is_graded_again(retained):
     path.write_text(json.dumps(value))
     docker = LocalDocker()
 
-    invoke(retained, docker=docker)
+    invoke(regraded, docker=docker)
 
     assert len(docker.runs) == 1
-    assert output(retained, "run-a")["grading_isolation"]["grader_image_id"] == FIXTURE_IMAGE_ID
+    assert output(regraded, "run-a")["grading_isolation"]["grader_image_id"] == FIXTURE_IMAGE_ID
 
 
 def _set_inputs(value):
