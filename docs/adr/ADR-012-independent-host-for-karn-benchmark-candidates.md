@@ -12,7 +12,7 @@ The bench needs to evaluate those artifacts while owning task delivery, executio
 ## Decision
 
 Karn builds the candidate before execution.
-An independent benchmark host consumes the resulting immutable image and v4 Construct Definition without requiring an Ozolith Node Daemon.
+An independent benchmark host consumes the resulting immutable image and its v4 or v5 Construct Definition without requiring an Ozolith Node Daemon (amended 2026-10-03, #145).
 The benchmark host owns scheduling and task delivery and implements the runtime facilities the selected candidate declares.
 The first implementation covers a limited set of runtime facilities without requiring an exhaustive rejection layer for all other facilities.
 
@@ -38,6 +38,7 @@ The bench never rebuilds a recipe implicitly when a queued run starts, and build
 
 - **2026-09-26**: Recorded the landed producer support for controller-free Automatons, verified by a real bare Codex build with only its login plugin.
 - **2026-09-26 (#85)**: Renumbered from ADR-0012 to the repository's three-digit ADR sequence; the decision is unchanged.
+- **2026-10-03 (#145)**: The host accepts Karn v5 definitions beside v4, because `karn build` now emits only v5 (snowfoxbuilds/karn#559); v5 changes only the version and renames the `vehicle` mode to `bastion`.
 
 ## Relevant PRs
 
@@ -48,3 +49,4 @@ The bench never rebuilds a recipe implicitly when a queued run starts, and build
 - #83 — Native Codex Agent Turns and API-equivalent Estimated Cost.
 - #84 — Public-gameplay grading for hob-medium and FDN regression.
 - #85 — CLI, batches, immutable schema 2 records, and interrupted-run recovery.
+- #145 — v5 Construct Definition intake, the `karn-v5` identity scheme and batch format.
