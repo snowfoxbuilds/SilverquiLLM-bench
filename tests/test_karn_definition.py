@@ -205,7 +205,7 @@ def test_mode_tokens_do_not_cross_versions(version, mode):
         decode_definition(canonical(value))
 
 
-@pytest.mark.parametrize("version", [0, 3, 6, True, "5", None])
+@pytest.mark.parametrize("version", [0, 3, 6, 4.0, 5.0, True, "5", None, [5]])
 def test_other_definition_versions_are_refused(version):
     value = definition()
     value["definition_version"] = version
@@ -231,3 +231,17 @@ def test_candidate_identity_follows_its_definition_version(tmp_path, version, sc
     candidate = load_candidate(tmp_path, "bare", image_inspector=inspector)
     assert candidate.scheme == scheme
     assert candidate.identity()["definition_version"] == version
+
+
+@pytest.mark.parametrize("version", [4.0, 5.0])
+def test_float_encoded_versions_are_refused_like_karn(tmp_path, version):
+    raw = canonical(definition()).replace(
+        b'"definition_version":4', f'"definition_version":{version}'.encode()
+    )
+    with pytest.raises(KarnError, match="invalid_definition:definition_version"):
+        decode_definition(raw)
+    path = tmp_path / "constructs/bare/definition.json"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(raw)
+    with pytest.raises(KarnError, match="invalid_definition:definition_version"):
+        load_candidate(tmp_path, "bare", image_inspector=inspector)

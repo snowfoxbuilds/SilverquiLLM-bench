@@ -30,7 +30,15 @@ def test_each_scheme_pairs_with_its_definition_version(scheme, version):
 
 @pytest.mark.parametrize(
     ("scheme", "version"),
-    [("karn-v4", 5), ("karn-v5", 4), ("karn-v5", True), ("karn-v6", 6), ("karn-v5", "5")],
+    [
+        ("karn-v4", 5),
+        ("karn-v5", 4),
+        ("karn-v5", True),
+        ("karn-v5", 5.0),
+        ("karn-v6", 6),
+        (None, 6),
+        ("karn-v5", "5"),
+    ],
 )
 def test_mismatched_scheme_and_version_are_refused(scheme, version):
     with pytest.raises(InvalidRunRecordError):

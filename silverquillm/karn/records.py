@@ -66,7 +66,8 @@ class KarnIdentity:
     def validate(self):
         if (
             type(self.definition_version) is not int
-            or SCHEMES.get(self.definition_version) != self.scheme
+            or self.definition_version not in SCHEMES
+            or SCHEMES[self.definition_version] != self.scheme
             or not isinstance(self.definition_id, str)
             or str(uuid.UUID(self.definition_id)) != self.definition_id
             or not DIGEST.fullmatch(self.definition_digest)

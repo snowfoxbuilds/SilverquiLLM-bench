@@ -135,9 +135,12 @@ def decode_definition(raw: bytes) -> dict:
     if len(raw) > MAX_DOCUMENT:
         raise KarnError("definition_size_limit")
     document = strict_json(raw)
-    version = document.get("definition_version") if isinstance(document, dict) else None
-    if type(version) is not int or version not in SCHEMES:
-        version = LATEST_VERSION  # its schema refuses the version with the usual error
+    version = LATEST_VERSION  # whose schema refuses a non-object with the usual error
+    if isinstance(document, dict):
+        # Exactly Karn's own rule: an int, never a float or bool that compares equal to one.
+        version = document.get("definition_version")
+        if type(version) is not int or version not in SCHEMES:
+            raise KarnError("invalid_definition:definition_version")
     schema = json.loads(
         files(__package__).joinpath(f"definition-v{version}.schema.json").read_bytes()
     )
