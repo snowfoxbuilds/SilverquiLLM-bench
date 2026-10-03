@@ -382,7 +382,7 @@ def _collect(
     for artifact in candidate.plugins:
         destination = artifact_dir / "plugins" / artifact.install_path.parent.name
         shutil.copytree(artifact.install_path.parent, destination)
-    identity = KarnIdentity.from_dict({"scheme": "karn-v4", **candidate.identity()})
+    identity = KarnIdentity.from_dict({"scheme": candidate.scheme, **candidate.identity()})
     run_input = {
         "run_id": run_id,
         "construct": construct,

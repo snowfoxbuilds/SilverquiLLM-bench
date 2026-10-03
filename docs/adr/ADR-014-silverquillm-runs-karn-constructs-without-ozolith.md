@@ -11,8 +11,8 @@ The bench's purpose is collecting Karn run data, and a second execution lineage 
 
 ## Decision
 
-SilverquiLLM takes a completed Karn build (a v4 Construct Definition and its exact image) and runs, grades, records and recovers it by itself.
-The Karn construct contract, vendored as the v4 schema, is the only thing taken from Karn; no command, module or retained script in the default install imports a `theozolith-*` package, and a test refuses such an import anywhere.
+SilverquiLLM takes a completed Karn build (a v4 or v5 Construct Definition and its exact image) and runs, grades, records and recovers it by itself.
+The Karn construct contract, vendored as the v4 and v5 definition schemas, is the only thing taken from Karn (amended 2026-10-03, #145); no command, module or retained script in the default install imports a `theozolith-*` package, and a test refuses such an import anywhere.
 
 Candidate Bundle execution is removed: its run driver, job-directory staging, Output Proposal handling, contract pin, bundle ingestion, batch scheduler, promotion and publication scripts, and the checked-in `candidates/` tree.
 The Karn commands own the top level (`run`, `scheduler`, `login`, `recover`, `queue ls`, `top`, and `grader build`).
@@ -34,6 +34,11 @@ Batch files and state in the removed format are reported as unsupported and neve
 - **Keep Candidate Bundle execution behind an optional `legacy` extra**: Rejected because shared views still reached Ozolith through it, and it would keep a second lineage alive for data the bench no longer collects.
 - **Quarantine it under a `legacy` command group and delete it later**: Rejected in favor of a clean break while the Karn stack is still unmerged.
 
+## Amendments
+
+- **2026-10-03 (#145)**: Karn v5 definitions are taken beside v4, so the vendored contract is both versions' schemas; the dependency boundary is unchanged.
+
 ## Relevant PRs
 
 - #85 — Removes the Candidate Bundle path and promotes the Karn commands.
+- #145 — Accepts Karn v5 Construct Definitions beside v4.

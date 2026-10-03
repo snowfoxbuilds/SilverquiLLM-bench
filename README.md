@@ -10,7 +10,7 @@ Each task is a small but real software-engineering job: read a spec, understand 
 
 SilverquiLLM-bench is designed to evaluate coding agents the way you'd evaluate a software contributor — by the quality of the code they ship, not by multiple-choice answers.
 
-- **Agent- and model-independent.** Agents run as black-box Docker containers. A Karn candidate pairs a prebuilt immutable image with its complete v4 Construct Definition. The benchmark supplies task data, a fresh workspace, an execution budget, and the selected local login.
+- **Agent- and model-independent.** Agents run as black-box Docker containers. A Karn candidate pairs a prebuilt immutable image with its complete Construct Definition (Karn v5, or an earlier v4 build). The benchmark supplies task data, a fresh workspace, an execution budget, and the selected local login.
 - **Full isolation.** Every run gets a fresh workspace in its own container. There is no shared state between runs, no network dependence on the grader, and no cross-agent leakage.
 - **Low contamination risk.** Targets come from a newly released MTG set that did not exist at training time, and the hidden test suite is never mounted into the container. Agents are scored on code they actually wrote against tasks they could not have memorized.
 - **Mimics a full engineering workflow.** Agents don't emit a single answer — they explore a real codebase, study reference implementations, extend a shared engine, and (optionally) write their own tests. Success requires reusable design and not breaking existing behavior, exactly like contributing to a live project.
@@ -113,7 +113,7 @@ A `--cards` filter is available for development and pipeline validation, but fil
 
 ## Batches
 
-A batch is a `batches/<id>.toml` file with `format = "karn-v4"` and ordered `[[runs]]` of build output, construct, and benchmark.
+A batch is a `batches/<id>.toml` file with `format = "karn-v5"` (earlier `karn-v4` files still run) and ordered `[[runs]]` of build output, construct, and benchmark.
 The scheduler runs batches serially and commits progress to `batches/state/<id>.json`; see [batches/README.md](batches/README.md) and [Karn benchmarking](docs/KARN-BENCHMARKING.md).
 Historical Candidate Bundle batches are shown as unsupported and never run.
 
@@ -127,7 +127,7 @@ A leaderboard-valid run requires the full target set, an unfiltered run, and a s
 
 ## Agent Images
 
-New agents are Karn constructs: a v4 Construct Definition built into an exact image by `karn build`, which SilverquiLLM runs without rebuilding (see [Karn benchmarking](docs/KARN-BENCHMARKING.md)).
+New agents are Karn constructs: a v5 Construct Definition built into an exact image by `karn build`, which SilverquiLLM runs without rebuilding (see [Karn benchmarking](docs/KARN-BENCHMARKING.md)).
 The images under [docker/](docker/) belong to the historical `--image` lineage run by `silverquillm legacy`.
 
 ---

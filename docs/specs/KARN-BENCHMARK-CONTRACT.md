@@ -1,9 +1,9 @@
 Status: DRAFT
-Last updated: 2026-10-02
+Last updated: 2026-10-03
 
 # Karn Benchmark Contract
 
-The bench consumes Karn v4 Construct Definitions through an independent execution host and evaluates implementations produced in the Workspace.
+The bench consumes Karn v4 and v5 Construct Definitions through an independent execution host and evaluates implementations produced in the Workspace.
 
 ## Context
 
@@ -23,11 +23,13 @@ Missing measurements are explained; they do not become zero and do not cause the
 
 The analyst chooses comparisons and filters appropriate to the question being investigated.
 Collection and retention do not depend on a publication or leaderboard gate.
-For Karn v4 execution and observations, this page takes precedence over the older entrypoint-specific runner and telemetry descriptions.
+For Karn execution and observations, this page takes precedence over the older entrypoint-specific runner and telemetry descriptions.
 
 ### Candidate and build boundary
 
-A Karn Benchmark Candidate is the selected immutable image paired with its v4 Construct Definition.
+A Karn Benchmark Candidate is the selected immutable image paired with its Construct Definition, version 4 or 5.
+Karn's `karn build` emits only v5; intake validates each definition against the vendored schema its `definition_version` names, so earlier v4 build outputs still run, and it never migrates one (operators use `karn definition migrate`).
+The two versions differ only in the version number and in renaming the `vehicle` mode to `bastion`; the bench runs `automaton` definitions alone.
 The complete definition matters: different runtime selections can use the same image.
 The bench verifies the supplied definition and selected image before execution and records the selected runtime configuration.
 
@@ -190,10 +192,11 @@ The workstream also covers the CLI and batch paths that retain those observation
 
 `silverquillm run` and `silverquillm scheduler` share the same staging, execution, observation, harvesting, and grading lifecycle, and `silverquillm recover` settles an interrupted run from its retained evidence without rerunning work.
 The `login` command enrolls one Login Profile into the pool of the selected existing plugin, or re-enrolls a named one.
-SilverquiLLM runs a completed Karn build by itself; the vendored v4 construct contract is the only thing it takes from Karn, and no Ozolith package is involved.
+SilverquiLLM runs a completed Karn build by itself; the vendored v4 and v5 construct definition schemas are the only thing it takes from Karn, and no Ozolith package is involved.
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
 
-New immutable Run Records use schema 2 and the `karn-v4` identity scheme.
+New immutable Run Records use schema 2 and an identity scheme that names the definition version: `karn-v4` for a v4 definition, `karn-v5` for a v5 one.
+An identity whose scheme does not match its `definition_version` is invalid, and records of either scheme stay valid side by side.
 They retain the full selected definition, execution observations, three independent grading dimensions, measurement completeness, and artifact pointers.
 An unexecuted grading dimension has null counts and pass rate with a reason.
 Coverage names tested and uncovered cards, so an incomplete FDN suite does not imply full FDN coverage.
@@ -224,10 +227,10 @@ Tables list the excluded runs with their reasons beneath the included ones.
 ### Historical evidence
 
 Existing Run Records retain their original identities and interpretation.
-A historical Candidate Bundle does not become a Karn v4 Construct Definition by relabeling it.
+A historical Candidate Bundle does not become a Karn Construct Definition by relabeling it.
 The vendored [Bench Contract](BENCH-CONTRACT.md) remains the reference for the legacy Candidate Bundle API.
 Candidate Bundles can no longer be executed; their records stay readable without Ozolith.
-This consumer contract governs Karn v4 execution.
+This consumer contract governs Karn v4 and v5 execution.
 
 ## Relevant ADRs
 

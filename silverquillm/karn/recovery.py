@@ -412,7 +412,7 @@ def _recover(
         raise KarnError("original_candidate_identity_unavailable")
     identity = KarnIdentity.from_dict(original)
     candidate = _retained_candidate(run_dir, inputs, identity)
-    retained_identity = KarnIdentity.from_dict({"scheme": "karn-v4", **candidate.identity()})
+    retained_identity = KarnIdentity.from_dict({"scheme": candidate.scheme, **candidate.identity()})
     if retained_identity != identity or (
         previous_record is not None and previous_record.candidate != identity
     ):

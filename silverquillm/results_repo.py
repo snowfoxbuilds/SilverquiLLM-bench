@@ -142,6 +142,9 @@ LEGACY_SCHEME = "legacy"
 #: (base image digest, instruction hash, adapter name) TheOzolith's identity
 #: spec defines, recomputed by its verifier and never trusted from a record.
 OZOLITH_SCHEME = "ozolith-v1"
+#: Identity schemes of Karn runs, one per Construct Definition version; mirrors
+#: ``silverquillm.karn.definition.SCHEMES``, whose package imports this module.
+KARN_SCHEMES = frozenset({"karn-v4", "karn-v5"})
 
 #: The reserved entry under ``results/<candidate-hash>/`` holding the vendored
 #: Candidate Bundle of an ``ozolith-v1`` candidate (never a run id).
@@ -422,7 +425,7 @@ def candidate_hash(identity: CandidateIdentity) -> str:
     directory (:func:`candidate_dirname`).
     """
     identity.validate()
-    if identity.scheme == "karn-v4":
+    if identity.scheme in KARN_SCHEMES:
         return identity.hash
     if identity.scheme == LEGACY_SCHEME:
         return identity.base_image_digest[len(f"{LEGACY_SCHEME}:") :]
@@ -904,7 +907,7 @@ def rebuild_index(repo_root: Path) -> list[dict[str, Any]]:
     repo_root = Path(repo_root)
     rows: list[dict[str, Any]] = []
     for run_dir, record in iter_run_records(repo_root):
-        if record.candidate.scheme == "karn-v4":
+        if record.candidate.scheme in KARN_SCHEMES:
             rows.append(record.index_row())
             continue
         rows.append(

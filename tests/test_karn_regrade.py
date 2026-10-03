@@ -21,7 +21,7 @@ from silverquillm.karn.execution import run_benchmark
 from silverquillm.karn.grader import DockerRun, GraderError
 from silverquillm.karn.records import read_record, validate_scores
 from silverquillm.karn.regrade import LiveContainers, recorded_grader, regrade
-from silverquillm.results_repo import InvalidRunRecordError
+from silverquillm.results_repo import InvalidRunRecordError, iter_run_records
 
 from . import retained_runs
 from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
@@ -51,10 +51,13 @@ def clone(template, directory: Path) -> SimpleNamespace:
 
 @pytest.fixture(scope="module")
 def retained_template(tmp_path_factory):
-    """Two graded runs of one candidate and one of another, recorded as a run would; built once."""
+    """Two graded runs of a v4 candidate and one of a v5 candidate, recorded as a run would; built
+    once."""
     root = tmp_path_factory.mktemp("retained")
     opts = options(root)
-    second = make_candidate(root / "second", main=["python3", "-c", "pass  # second"])
+    second = make_candidate(
+        root / "second", main=["python3", "-c", "pass  # second"], definition_version=5
+    )
     with building():
         records = [
             run_benchmark(**opts, run_id="run-a"),
@@ -128,6 +131,17 @@ def test_unchanged_inputs_reproduce_each_records_scores_and_leave_records_untouc
 
     summary = invoke(retained)
 
+    assert [(r.candidate.scheme, r.candidate.definition_version) for r in retained.records] == [
+        ("karn-v4", 4),
+        ("karn-v4", 4),
+        ("karn-v5", 5),
+    ]
+    stored = iter_run_records(retained.opts["results_repo"])
+    assert sorted((r.run_id, r.candidate.scheme) for _, r in stored) == [
+        ("run-a", "karn-v4"),
+        ("run-b", "karn-v4"),
+        ("run-c", "karn-v5"),
+    ]
     for record in retained.records:
         result = output(retained, record.run_id)
         assert result["scores"] == record.scores

@@ -20,7 +20,7 @@ from pathlib import Path
 from silverquillm.known_defects import REGRESSION_DIMENSIONS
 from silverquillm.results_repo import InvalidRunRecordError, RunRecordExistsError
 
-from .definition import DIGEST, KarnError, canonical, decode_definition, digest
+from .definition import DIGEST, SCHEMES, KarnError, canonical, decode_definition, digest
 from .provenance import valid as provenance_valid
 
 SCHEMA_VERSION = 2
@@ -60,14 +60,14 @@ class KarnIdentity:
     definition_digest: str
     image: str
     image_id: str
-    scheme: str = "karn-v4"
-    definition_version: int = 4
+    scheme: str
+    definition_version: int
 
     def validate(self):
         if (
-            self.scheme != "karn-v4"
-            or type(self.definition_version) is not int
-            or self.definition_version != 4
+            type(self.definition_version) is not int
+            or self.definition_version not in SCHEMES
+            or SCHEMES[self.definition_version] != self.scheme
             or not isinstance(self.definition_id, str)
             or str(uuid.UUID(self.definition_id)) != self.definition_id
             or not DIGEST.fullmatch(self.definition_digest)
@@ -192,6 +192,7 @@ class KarnRunRecord:
             digest(canonical(definition)) != identity.definition_digest
             or definition["definition_id"] != identity.definition_id
             or definition["image"] != identity.image
+            or definition["definition_version"] != identity.definition_version
         ):
             raise InvalidRunRecordError("recorded definition does not match candidate identity")
         execution = self.run_metadata["execution"]

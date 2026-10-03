@@ -129,7 +129,7 @@ def test_direct_and_batch_cli_retain_all_three_dimensions(tmp_path, python_image
     batches = tmp_path / "batches"
     batches.mkdir()
     (batches / "sample.toml").write_text(
-        'format = "karn-v4"\n[[runs]]\nbuild_output = '
+        'format = "karn-v5"\n[[runs]]\nbuild_output = '
         + json.dumps(str(candidate.build_output))
         + '\nconstruct = "bare"\nbenchmark = '
         + json.dumps(benchmark)
@@ -284,7 +284,7 @@ def test_batch_recovers_a_live_orphan_and_grades_partial_work_without_replay(
     batches = tmp_path / "batches"
     batches.mkdir()
     (batches / "interrupted.toml").write_text(
-        'format="karn-v4"\n[[runs]]\nbuild_output='
+        'format="karn-v5"\n[[runs]]\nbuild_output='
         + json.dumps(str(candidate.build_output))
         + '\nconstruct="bare"\nbenchmark="example"\nbudget_seconds=60\n'
     )

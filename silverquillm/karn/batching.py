@@ -20,7 +20,10 @@ from .login import LoginInUseError
 from .login_pool import LoginPoolUnavailableError
 from .records import RecordWritePendingError
 
-FORMAT = "karn-v4"
+# New batch files declare FORMAT; earlier karn-v4 files keep loading unchanged. The batch
+# format is independent of its candidates' Construct Definition versions.
+FORMAT = "karn-v5"
+FORMATS = ("karn-v4", FORMAT)
 
 
 def load_batch(path: Path) -> dict | None:
@@ -28,7 +31,7 @@ def load_batch(path: Path) -> dict | None:
         value = tomllib.loads(path.read_text())
     except (OSError, ValueError):
         raise KarnError("batch_unreadable:" + path.name) from None
-    if value.get("format") != FORMAT:
+    if value.get("format") not in FORMATS:
         return None
     if set(value) - {"format", "not_before", "runs"} or not isinstance(value.get("runs"), list):
         raise KarnError("invalid_karn_batch:" + path.name)
@@ -88,6 +91,7 @@ def read_state(path: Path, batch_id: str) -> dict | None:
 def queue_rows(directory: Path) -> list[dict]:
     rows = []
     for path in sorted(Path(directory).glob("*.toml")):
+        batch = None
         try:
             batch = load_batch(path)
             if batch is None:
@@ -109,7 +113,7 @@ def queue_rows(directory: Path) -> list[dict]:
             rows.append(
                 {
                     "batch": path.stem,
-                    "format": FORMAT,
+                    "format": batch["format"],
                     "status": status,
                     "started": started,
                     "total": len(batch["runs"]),
@@ -118,7 +122,12 @@ def queue_rows(directory: Path) -> list[dict]:
             )
         except KarnError as error:
             rows.append(
-                {"batch": path.stem, "format": FORMAT, "status": "error", "error": str(error)}
+                {
+                    "batch": path.stem,
+                    "format": batch["format"] if batch else FORMAT,
+                    "status": "error",
+                    "error": str(error),
+                }
             )
     return rows
 
