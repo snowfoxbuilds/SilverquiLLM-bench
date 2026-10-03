@@ -30,17 +30,15 @@ from silverquillm.karn.records import KarnRunRecord, RecordWritePendingError, wr
 from silverquillm.results_repo import RunRecordExistsError, iter_run_records
 
 from .grader_fixtures import local_grader
+from .retained_runs import building, clone_tree, rebase_options
 from .test_karn_execution import FixtureHost, benchmark_data, options
 from .test_karn_host import FIXTURES, FakeDocker, make_candidate
 
 REPO = Path(__file__).resolve().parents[1]
 
 
-@pytest.fixture(autouse=True)
-def _grade_without_docker(request, monkeypatch):
-    """Runs, schedulers and recoveries built inside these tests grade through the local stand-in."""
-    if request.node.get_closest_marker("integration"):
-        return
+def grade_locally(monkeypatch):
+    """Runs, schedulers and recoveries grade through the local stand-in."""
     monkeypatch.setattr(
         ContainerGrader,
         "from_image",
@@ -50,6 +48,26 @@ def _grade_without_docker(request, monkeypatch):
         execution, "select_grader", lambda image_id, reference=None, **kw: local_grader(**kw)
     )
     monkeypatch.setattr(recovery, "legacy_grader", lambda reference=None, **kw: local_grader(**kw))
+
+
+@pytest.fixture(autouse=True)
+def _grade_without_docker(request, monkeypatch):
+    if not request.node.get_closest_marker("integration"):
+        grade_locally(monkeypatch)
+
+
+@contextlib.contextmanager
+def building_runs():
+    """The environment a module-scoped template builds its runs in."""
+    with building() as monkeypatch:
+        grade_locally(monkeypatch)
+        yield monkeypatch
+
+
+def cloned_options(template, tmp_path):
+    """A template's run cloned into this test's ``tmp_path``, as its run options."""
+    clone_tree(template.root, tmp_path)
+    return rebase_options(template.opts, template.root, tmp_path)
 
 
 def batch(directory: Path, entries: int = 2) -> Path:
@@ -222,9 +240,9 @@ def test_recovery_grades_on_the_recorded_python_without_running_the_image(tmp_pa
 
 
 def test_recovery_of_a_run_launched_before_versions_were_recorded_keeps_the_313_grader(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, killed_direct_run
 ):
-    opts = killed_direct_run(tmp_path)
+    opts = killed_direct_run
     inputs = json.loads((opts["results_dir"] / "killed/run-input.json").read_text())
     assert "candidate_python" not in inputs
     docker = ContainerDocker(running=False)
@@ -248,13 +266,15 @@ def test_recovery_of_a_run_launched_before_versions_were_recorded_keeps_the_313_
 
 
 @pytest.mark.parametrize(("label", "accepted"), [("3.13", True), ("3.14", False), (None, False)])
-def test_legacy_recovery_requires_a_grader_labeled_313(tmp_path, monkeypatch, label, accepted):
+def test_legacy_recovery_requires_a_grader_labeled_313(
+    tmp_path, monkeypatch, label, accepted, killed_direct_run
+):
     from silverquillm.karn import grader as grader_module
     from silverquillm.karn.grader import GraderError
 
     from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
 
-    opts = killed_direct_run(tmp_path)
+    opts = killed_direct_run
     monkeypatch.setattr(
         recovery,
         "DockerHost",
@@ -288,8 +308,10 @@ def test_legacy_recovery_requires_a_grader_labeled_313(tmp_path, monkeypatch, la
 
 
 @pytest.mark.parametrize("recorded", ["3.14", "3.14.4\n", 3.14, "3.14.4; rm", None])
-def test_recovery_refuses_a_malformed_recorded_python(tmp_path, monkeypatch, recorded):
-    opts = killed_direct_run(tmp_path)
+def test_recovery_refuses_a_malformed_recorded_python(
+    tmp_path, monkeypatch, recorded, killed_direct_run
+):
+    opts = killed_direct_run
     path = opts["results_dir"] / "killed/run-input.json"
     inputs = json.loads(path.read_text())
     path.write_text(json.dumps({**inputs, "candidate_python": recorded}))
@@ -328,8 +350,10 @@ def held_elsewhere(profile):
         thread.join()
 
 
-def test_a_direct_run_waits_for_a_busy_slot_before_creating_evidence(tmp_path):
+def test_a_direct_run_waits_for_a_busy_slot_then_names_the_slot_it_used(tmp_path):
     opts = login_options(tmp_path)
+    constructs = Path(opts["build_output"]) / "constructs"
+    shutil.copytree(constructs / "bare", constructs / "other")
     waited = []
     with held_elsewhere(pool_slot(opts["state_root"])) as release:
 
@@ -338,9 +362,19 @@ def test_a_direct_run_waits_for_a_busy_slot_before_creating_evidence(tmp_path):
             assert not Path(opts["results_dir"]).exists()
             release()
 
-        record = run_benchmark(**opts, login_poll_seconds=0.05, login_wait=wait)
+        record = run_benchmark(
+            **{**opts, "construct": "other"}, login_poll_seconds=0.05, login_wait=wait
+        )
     assert record.run_metadata["execution"]["status"] == "completed"
     assert waited == ["waiting for a login slot: all 1 usable karn-codex-login slots are busy"]
+    # Another construct of the build takes the plugin's pool slot, and its run input names it.
+    run_input = json.loads(
+        (Path(opts["results_dir"]) / record.run_id / "run-input.json").read_text()
+    )
+    assert run_input["login"] == record.run_metadata["login_profile"] == "karn-codex-login/bare"
+    assert login_profile(opts["state_root"], run_input["login"]).directory == (
+        pool_slot(opts["state_root"]).directory
+    )
 
 
 def test_constructs_share_the_plugins_pool_and_take_any_free_slot(tmp_path):
@@ -360,29 +394,26 @@ def test_constructs_share_the_plugins_pool_and_take_any_free_slot(tmp_path):
         pass
 
 
-@pytest.mark.parametrize("construct", ["bare", "other"])
-def test_run_input_names_the_slot_it_used(tmp_path, construct):
-    opts = login_options(tmp_path)
-    constructs = Path(opts["build_output"]) / "constructs"
-    shutil.copytree(constructs / "bare", constructs / "other")
-    record = run_benchmark(**{**opts, "construct": construct})
-    run_input = json.loads(
-        (Path(opts["results_dir"]) / record.run_id / "run-input.json").read_text()
-    )
-    assert run_input["login"] == record.run_metadata["login_profile"] == "karn-codex-login/bare"
-    assert login_profile(opts["state_root"], run_input["login"]).directory == (
-        pool_slot(opts["state_root"]).directory
-    )
-
-
-def test_a_construct_without_a_login_plugin_selects_no_login(tmp_path):
-    opts = options(tmp_path)
-    record = run_benchmark(**opts)
+def test_a_run_without_a_login_plugin_selects_no_login_and_leaves_no_lock_file(plain_run):
+    opts, record = plain_run.opts, plain_run.record
     run_input = json.loads(
         (Path(opts["results_dir"]) / record.run_id / "run-input.json").read_text()
     )
     assert run_input["login"] is None and record.run_metadata["login_profile"] is None
     assert not (Path(opts["state_root"]) / "logins").exists()
+    repository = Path(opts["results_repo"])
+    assert sorted(path.name for path in repository.iterdir()) == [
+        "baselines",
+        "results",
+        "workspaces",
+    ]
+    for tree in ("results", "workspaces"):
+        assert sorted(path.name for path in (repository / tree).iterdir()) == [
+            record.candidate.hash
+        ]
+    assert [path.suffix for path in (repository / "baselines").iterdir()] == [".bundle"]
+    with pytest.raises(RunRecordExistsError):
+        write_record(repository, record, lock_seconds=0.1)
 
 
 def test_record_write_times_out_and_the_scheduler_retries_it(tmp_path, monkeypatch):
@@ -445,23 +476,6 @@ def test_scheduler_marks_and_later_writes_a_pending_record(tmp_path, monkeypatch
     assert retried == [state["runs"][0]["run_id"]]
     assert "record_write_pending" not in state["runs"][0]
     assert "error" not in state["runs"][0]
-
-
-def test_record_lock_leaves_no_file_in_the_results_repository(tmp_path):
-    record = run_benchmark(**options(tmp_path))
-    repository = tmp_path / "records"
-    assert sorted(path.name for path in repository.iterdir()) == [
-        "baselines",
-        "results",
-        "workspaces",
-    ]
-    for tree in ("results", "workspaces"):
-        assert sorted(path.name for path in (repository / tree).iterdir()) == [
-            record.candidate.hash
-        ]
-    assert [path.suffix for path in (repository / "baselines").iterdir()] == [".bundle"]
-    with pytest.raises(RunRecordExistsError):
-        write_record(repository, record, lock_seconds=0.1)
 
 
 # ---- native state ownership -------------------------------------------------------------
@@ -701,16 +715,25 @@ class ContainerDocker(FakeDocker):
         self.running = False
 
 
-def killed_direct_run(tmp_path):
-    opts = options(tmp_path)
+@pytest.fixture(scope="module")
+def killed_template(tmp_path_factory):
+    """A direct run killed during execution, built once."""
+    root = tmp_path_factory.mktemp("killed")
+    opts = options(root)
 
     class Killed(FixtureHost):
         def run(self, *args, **kwargs):
             raise SystemExit(137)
 
-    with pytest.raises(SystemExit):
+    with building_runs(), pytest.raises(SystemExit):
         run_benchmark(**{**opts, "host": Killed()}, run_id="killed")
-    return opts
+    yield SimpleNamespace(root=root, opts=opts)
+    shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.fixture
+def killed_direct_run(killed_template, tmp_path):
+    return cloned_options(killed_template, tmp_path)
 
 
 def invoke_recover(opts, *extra):
@@ -736,8 +759,10 @@ def invoke_recover(opts, *extra):
     )
 
 
-def test_recover_command_refuses_a_running_container_then_recovers_once(tmp_path, monkeypatch):
-    opts = killed_direct_run(tmp_path)
+def test_recover_command_refuses_a_running_container_then_recovers_once(
+    tmp_path, monkeypatch, killed_direct_run
+):
+    opts = killed_direct_run
     docker = ContainerDocker(running=True)
     monkeypatch.setattr(
         recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
@@ -767,10 +792,10 @@ def test_recover_command_refuses_a_running_container_then_recovers_once(tmp_path
     assert len(list(iter_run_records(opts["results_repo"]))) == 1
 
 
-def test_recover_refuses_a_run_that_is_still_executing(tmp_path):
+def test_recover_refuses_a_run_that_is_still_executing(tmp_path, killed_direct_run):
     from silverquillm.karn.execution import run_lock
 
-    opts = killed_direct_run(tmp_path)
+    opts = killed_direct_run
     with (
         run_lock(Path(opts["results_dir"]).resolve() / "killed"),
         pytest.raises(KarnError, match="run_in_progress"),
@@ -1580,6 +1605,39 @@ def harvest_failed_run(tmp_path, *, run_id="run-a", hold_records=False):
     )
 
 
+@pytest.fixture(scope="module")
+def harvest_failed_template(tmp_path_factory):
+    """``harvest_failed_run``, built once."""
+    root = tmp_path_factory.mktemp("harvest-failed")
+    with building_runs():
+        harvest_failed_run(root)
+    yield root
+    shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.fixture
+def harvest_failed(harvest_failed_template, tmp_path):
+    """A clone of the harvest-failed run in this test's ``tmp_path``, as ``harvest_failed_run``
+    returns it."""
+    clone_tree(harvest_failed_template, tmp_path)
+    state = (tmp_path / "state").resolve()
+    retained = json.loads((tmp_path / "runs/run-a/run-record.json").read_text())
+    return SimpleNamespace(
+        candidate=load_candidate(
+            tmp_path / "build", "bare", image_inspector=lambda ref: {"Id": ref}
+        ),
+        profile=pool_slot(state),
+        common={
+            "bench_root": tmp_path / "data",
+            "results_dir": tmp_path / "runs",
+            "results_repo": tmp_path / "records",
+            "state_root": state,
+        },
+        record=KarnRunRecord(retained["manifest"], retained["scores"]),
+        run_id="run-a",
+    )
+
+
 def recovery_docker(monkeypatch, state):
     docker = RecoveryDocker()
     monkeypatch.setattr(
@@ -1596,9 +1654,9 @@ def recover_run_id(run, run_id=None):
 
 @pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
 def test_recovery_settles_a_published_runs_failed_harvest_once_without_replay(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, harvest_failed
 ):
-    run = harvest_failed_run(tmp_path)
+    run = harvest_failed
     published = published_bytes(run.common["results_repo"])
     docker = recovery_docker(monkeypatch, run.common["state_root"])
     first = recover_run_id(run)
@@ -1649,8 +1707,10 @@ def test_recovery_settles_and_publishes_a_retained_only_record(tmp_path, monkeyp
 
 
 @pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
-def test_recovery_uses_the_retained_plugin_after_the_build_and_cache_change(tmp_path, monkeypatch):
-    run = harvest_failed_run(tmp_path)
+def test_recovery_uses_the_retained_plugin_after_the_build_and_cache_change(
+    tmp_path, monkeypatch, harvest_failed
+):
+    run = harvest_failed
     shutil.rmtree(run.candidate.build_output / "plugins")
     shutil.rmtree(run.common["state_root"] / "plugins")
     recovery_docker(monkeypatch, run.common["state_root"])
@@ -1659,12 +1719,14 @@ def test_recovery_uses_the_retained_plugin_after_the_build_and_cache_change(tmp_
 
 
 @pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
-def test_a_failed_settlement_keeps_the_login_pending_and_is_reported(tmp_path, monkeypatch):
+def test_a_failed_settlement_keeps_the_login_pending_and_is_reported(
+    tmp_path, monkeypatch, harvest_failed
+):
     from click.testing import CliRunner
 
     from silverquillm.cli import main
 
-    run = harvest_failed_run(tmp_path)
+    run = harvest_failed
     published = published_bytes(run.common["results_repo"])
     journal = run.profile.pending()
     recovery_docker(monkeypatch, run.common["state_root"])
@@ -1694,8 +1756,10 @@ def test_a_failed_settlement_keeps_the_login_pending_and_is_reported(tmp_path, m
 
 
 @pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
-def test_a_busy_login_leaves_settlement_pending_without_changing_the_record(tmp_path, monkeypatch):
-    run = harvest_failed_run(tmp_path)
+def test_a_busy_login_leaves_settlement_pending_without_changing_the_record(
+    tmp_path, monkeypatch, harvest_failed
+):
+    run = harvest_failed
     published = published_bytes(run.common["results_repo"])
     journal = run.profile.pending()
     recovery_docker(monkeypatch, run.common["state_root"])
@@ -1741,10 +1805,12 @@ def test_any_settlement_failure_still_publishes_the_retained_record(
 
 
 @pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
-def test_a_status_failure_after_settlement_is_not_reported_as_pending(tmp_path, monkeypatch):
+def test_a_status_failure_after_settlement_is_not_reported_as_pending(
+    tmp_path, monkeypatch, harvest_failed
+):
     from silverquillm.karn import login as login_module
 
-    run = harvest_failed_run(tmp_path)
+    run = harvest_failed
     recovery_docker(monkeypatch, run.common["state_root"])
 
     def unavailable(self):
@@ -1756,8 +1822,8 @@ def test_a_status_failure_after_settlement_is_not_reported_as_pending(tmp_path, 
 
 
 @pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
-def test_recovery_leaves_another_runs_pending_login_alone(tmp_path, monkeypatch):
-    run = harvest_failed_run(tmp_path)
+def test_recovery_leaves_another_runs_pending_login_alone(tmp_path, monkeypatch, harvest_failed):
+    run = harvest_failed
     recovery_docker(monkeypatch, run.common["state_root"])
     recover_run_id(run)
     with pytest.raises(SystemExit):
@@ -1819,6 +1885,22 @@ class UnstoppedHost(FixtureHost):
         result = super().run(*args, **kwargs)
         result.status, result.workspace_stopped = "host_failed", False
         return result
+
+
+@pytest.fixture(scope="module")
+def unstopped_template(tmp_path_factory):
+    """A published run whose writers were not confirmed stopped, built once."""
+    root = tmp_path_factory.mktemp("unstopped")
+    opts = options(root)
+    with building_runs():
+        run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
+    yield SimpleNamespace(root=root, opts=opts)
+    shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.fixture
+def unstopped(unstopped_template, tmp_path):
+    return cloned_options(unstopped_template, tmp_path)
 
 
 def batch_with(tmp_path, build_output: Path, entries: int = 2) -> Path:
@@ -1969,10 +2051,9 @@ def test_scheduler_retries_login_settlement_without_replay(tmp_path):
 
 
 def test_a_crash_between_retaining_and_linking_republishes_the_same_record(
-    tmp_path, monkeypatch, held_records
+    tmp_path, monkeypatch, held_records, unstopped
 ):
-    opts = options(tmp_path)
-    run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
+    opts = unstopped
     monkeypatch.setattr(
         recovery,
         "DockerHost",
@@ -1998,9 +2079,8 @@ def test_a_crash_between_retaining_and_linking_republishes_the_same_record(
     assert recovery.recover_benchmark(run_id="unstopped", spec={}, **common).run_id == retained_id
 
 
-def test_a_tampered_recovery_link_is_never_followed(tmp_path, monkeypatch):
-    opts = options(tmp_path)
-    run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
+def test_a_tampered_recovery_link_is_never_followed(tmp_path, monkeypatch, unstopped):
+    opts = unstopped
     monkeypatch.setattr(
         recovery,
         "DockerHost",
@@ -2030,9 +2110,10 @@ def test_a_tampered_recovery_link_is_never_followed(tmp_path, monkeypatch):
     assert "forged" not in {r.run_id for _, r in iter_run_records(tmp_path / "records")}
 
 
-def test_a_recovery_link_cannot_name_a_record_outside_the_results_repository(tmp_path, monkeypatch):
-    opts = options(tmp_path)
-    run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
+def test_a_recovery_link_cannot_name_a_record_outside_the_results_repository(
+    tmp_path, monkeypatch, unstopped
+):
+    opts = unstopped
     recovering_without_workloads(monkeypatch)
     common = {key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")}
     genuine = recovery.recover_benchmark(run_id="unstopped", spec={}, **common)
@@ -2050,9 +2131,10 @@ def test_a_recovery_link_cannot_name_a_record_outside_the_results_repository(tmp
     assert recovery.recover_benchmark(run_id="unstopped", spec={}, **common) == genuine
 
 
-def test_a_published_recovery_is_returned_without_rereading_the_original(tmp_path, monkeypatch):
-    opts = options(tmp_path)
-    run_benchmark(**{**opts, "host": UnstoppedHost()}, run_id="unstopped")
+def test_a_published_recovery_is_returned_without_rereading_the_original(
+    tmp_path, monkeypatch, unstopped
+):
+    opts = unstopped
     recovering_without_workloads(monkeypatch)
     common = {key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")}
     genuine = recovery.recover_benchmark(run_id="unstopped", spec={}, **common)

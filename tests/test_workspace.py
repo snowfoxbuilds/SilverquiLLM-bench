@@ -24,9 +24,9 @@ def engine_dir(repo_root: Path) -> Path:
 
 
 @pytest.fixture()
-def staged(tmp_path: Path):
-    """Run stage_workspace with new signature and return (workspace, output) paths."""
-    return stage_workspace(tmp_path)
+def staged(staged_sos_workspace):
+    """The session's staged SOS Workspace as (workspace, output) paths; read-only."""
+    return staged_sos_workspace
 
 
 # ------------------------------------------------------------------
@@ -55,12 +55,6 @@ class TestStageWorkspaceSignature:
         assert "card_filter" in sig.parameters
         param = sig.parameters["card_filter"]
         assert param.kind == inspect.Parameter.KEYWORD_ONLY
-
-    def test_callable_with_just_output_dir(self, tmp_path):
-        """stage_workspace(output_dir) should work without extra args."""
-        ws, out = stage_workspace(tmp_path)
-        assert ws.exists()
-        assert out.exists()
 
 
 # ------------------------------------------------------------------
@@ -291,20 +285,16 @@ class TestOutputDirectory:
 class TestIdempotency:
     """Calling stage_workspace twice should not fail."""
 
-    def test_can_restage(self, tmp_path):
-        ws1, out1 = stage_workspace(tmp_path)
-        ws2, out2 = stage_workspace(tmp_path)
-        assert ws1 == ws2
-        assert out1 == out2
-        assert ws2.exists()
-
-    def test_independent_copies_with_different_output_dirs(self, tmp_path):
-        """Two calls with different output dirs create independent workspaces."""
+    def test_restaging_reuses_its_paths_and_other_output_dirs_are_independent(self, tmp_path):
+        """Restaging one output dir succeeds in place; another output dir gets its own copy."""
         dir1 = tmp_path / "run1"
         dir1.mkdir()
         dir2 = tmp_path / "run2"
         dir2.mkdir()
         ws1, out1 = stage_workspace(dir1)
+        again, again_out = stage_workspace(dir1)
+        assert (again, again_out) == (ws1, out1)
+        assert again.exists()
         ws2, out2 = stage_workspace(dir2)
         assert ws1 != ws2
         assert out1 != out2

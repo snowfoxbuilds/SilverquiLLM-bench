@@ -11,6 +11,7 @@ import pytest
 
 from silverquillm._bootstrap import ensure_workspace_on_path
 
+from . import unit_environment
 from .temp_budget import over_budget
 
 ensure_workspace_on_path()
@@ -47,43 +48,35 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
 
 @pytest.fixture(autouse=True)
-def _grader_docker_is_integration_only(request, monkeypatch):
-    """Unit tests inject ``tests.grader_fixtures.local_grader()``; only integration tests reach Docker."""
-    if request.node.get_closest_marker("integration"):
-        return
-    from silverquillm.karn import grader
-
-    def refuse(*args, **kwargs):
-        raise AssertionError("unit test reached the grader's Docker client; inject local_grader()")
-
-    for name in ("run", "image_id", "image_python", "build", "remove"):
-        monkeypatch.setattr(grader.DockerRunner, name, refuse)
+def _unit_environment(request, monkeypatch):
+    """Unit tests never reach the grader's Docker client and record a clean run provenance."""
+    if not request.node.get_closest_marker("integration"):
+        unit_environment.apply(monkeypatch)
 
 
-#: The provenance a clean run records; unit tests run from checkouts with work in progress.
-CLEAN_PROVENANCE = {
-    "host_label": "test-host",
-    "host_label_source": "env",
-    "bench": {"commit": "0" * 40, "dirty": False},
-    "benchmark_root": {"commit": "0" * 40, "dirty": False},
-    "recipe_revision": "1" * 40,
-    "allow_dirty": False,
-    "dirty_reasons": [],
-}
+@pytest.fixture(scope="session")
+def plain_run(tmp_path_factory):
+    """One successful simulated benchmark of the toy benchmark, built once; read it, never change it."""
+    from .retained_runs import build_plain_run
+
+    root = tmp_path_factory.mktemp("plain-run")
+    yield build_plain_run(root)
+    shutil.rmtree(root, ignore_errors=True)
 
 
-@pytest.fixture(autouse=True)
-def _runs_record_clean_provenance(request, monkeypatch):
-    """Runs built in unit tests record a clean provenance instead of inspecting this checkout.
+@pytest.fixture
+def plain_run_clone(plain_run, tmp_path):
+    """A copy of ``plain_run`` for a test that changes its records or artifacts."""
+    from .retained_runs import clone
 
-    ``tests/test_karn_provenance.py`` exercises the real rule directly.
-    """
-    if request.node.get_closest_marker("integration"):
-        return
-    from silverquillm.karn import execution
+    return clone(plain_run, tmp_path)
 
-    monkeypatch.setattr(
-        execution,
-        "collect_provenance",
-        lambda labels, bench_root, *, allow_dirty: {**CLEAN_PROVENANCE, "allow_dirty": allow_dirty},
-    )
+
+@pytest.fixture(scope="session")
+def staged_sos_workspace(tmp_path_factory):
+    """``stage_workspace(output_dir)`` of the SOS Workspace, staged once; read it, never change it."""
+    from silverquillm.workspace import stage_workspace
+
+    root = tmp_path_factory.mktemp("staged-sos")
+    yield stage_workspace(root)
+    shutil.rmtree(root, ignore_errors=True)

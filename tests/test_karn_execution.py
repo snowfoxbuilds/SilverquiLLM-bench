@@ -11,7 +11,9 @@ from click.testing import CliRunner
 
 from silverquillm.cli import main
 from silverquillm.evaluator import FullEvalResult
+from silverquillm.karn import execution
 from silverquillm.karn.batching import KarnScheduler, queue_rows
+from silverquillm.karn.benchmark import load_benchmark
 from silverquillm.karn.execution import run_benchmark
 from silverquillm.karn.host import HostResult
 from silverquillm.karn.records import missing_scores, write_record
@@ -108,9 +110,9 @@ def options(tmp_path, **changes):
     }
 
 
-def test_direct_run_records_three_dimensions_and_explicit_missing_measurements(tmp_path):
-    opts = options(tmp_path)
-    record = run_benchmark(**opts)
+def test_a_direct_run_records_its_scores_evidence_and_grading_inputs(plain_run):
+    """End to end: one successful run of the toy benchmark, read without changing it."""
+    opts, record = plain_run.opts, plain_run.record
     assert record.manifest["schema_version"] == 2
     assert "mode" not in record.manifest and "leaderboard_valid" not in record.manifest
     assert all(
@@ -128,6 +130,19 @@ def test_direct_run_records_three_dimensions_and_explicit_missing_measurements(t
     assert record.run_metadata["test_toolchain"] == opts["host"].test_toolchain.to_dict()
     with pytest.raises(RunRecordExistsError):
         write_record(opts["results_repo"], record)
+
+    # Host-side grading inputs are fingerprinted and never enter the workspace.
+    inputs = record.run_metadata["grading_inputs"]
+    kinds = {row["kind"] for row in inputs["files"]}
+    assert kinds == {"target", "fdn", "engine", "test_utils", "replay_token_map", "replay_card_map"}
+    assert all(
+        row["sha256"]
+        for row in inputs["files"]
+        if row["kind"] not in {"replay_token_map", "replay_card_map"}
+    )
+    assert {item["kind"] for item in inputs["problems"]} == {"replay_token_map", "replay_card_map"}
+    assert all(item["reason"] == "grading_input_unavailable" for item in inputs["problems"])
+    assert not (directory / "workspace_final/data/tests/audited").exists()
 
 
 def test_failed_run_uses_proven_snapshot_only_when_final_engine_is_unusable(tmp_path):
@@ -205,9 +220,8 @@ def test_grader_failure_is_absent_not_zero_and_does_not_erase_execution(tmp_path
     )
 
 
-def test_mixed_history_reader_and_index_preserve_original_schema(tmp_path):
-    opts = options(tmp_path)
-    new = run_benchmark(**opts, evaluator=lambda *a, **k: FullEvalResult())
+def test_mixed_history_reader_and_index_preserve_original_schema(plain_run_clone):
+    opts, new = plain_run_clone.opts, plain_run_clone.record
     legacy = RunRecord(
         run_id="old-run",
         candidate=CandidateIdentity.legacy("old-image"),
@@ -324,24 +338,34 @@ def test_the_login_is_the_constructs_and_cannot_be_named(tmp_path):
     assert not (tmp_path / "state").exists()
 
 
-def test_measurement_finalization_failure_does_not_suppress_grading(tmp_path):
+def test_collector_failures_suppress_neither_execution_nor_grading(tmp_path):
     from silverquillm.karn.observations import CodexTelemetryCollector
 
-    class BrokenFinalizer(CodexTelemetryCollector):
+    class Broken(CodexTelemetryCollector):
         def finalize(self, **kwargs):
             raise RuntimeError("collector failed")
 
-    record = run_benchmark(**options(tmp_path), collector_factory=BrokenFinalizer)
+        def __exit__(self, *args):
+            super().__exit__(*args)
+            raise RuntimeError("collector cleanup failed")
+
+    opts = options(tmp_path)
+    record = run_benchmark(**opts, collector_factory=Broken)
     assert record.run_metadata["execution"]["status"] == "completed"
-    assert all(score["pass_rate"] == 1.0 for score in record.scores.values())
+    assert all(
+        score["pass_rate"] == 1.0 and score["tests_passed"] == 1 for score in record.scores.values()
+    )
+    assert (opts["results_dir"] / record.run_id / "workspace_final").is_dir()
     assert (
         "measurement_finalization_failed"
         in record.run_metadata["measurements"]["agent_turns"]["total"]["reasons"]
     )
+    assert "collector_teardown_failed" in record.run_metadata["execution"]["observation_errors"]
 
 
-def test_schema2_rejects_impossible_or_absent_score_numbers(tmp_path):
-    result = run_benchmark(**options(tmp_path), evaluator=lambda *a, **k: FullEvalResult())
+def test_schema2_rejects_impossible_or_absent_score_numbers(plain_run):
+    result = copy.deepcopy(plain_run.record)
+    result.scores.update(missing_scores("grading_did_not_execute"))
     for change in (
         {"tests_passed": 0},
         {"missing_reasons": []},
@@ -506,37 +530,12 @@ def test_failed_assertions_are_observed_zero_scores_not_missing_grading(tmp_path
             )
         )
 
-    result = run_benchmark(**options(tmp_path), evaluator=failed_engine)
-    score = result.scores["engine_regression"]
+    benchmark = load_benchmark(benchmark_data(tmp_path), "example")
+    score = execution._scores(failed_engine(), benchmark)["engine_regression"]
     assert score["evaluated"] and score["complete"]
     assert score["pass_rate"] == 0 and score["tests_passed"] == 0
     assert score["missing_reasons"] == []
     assert score["diagnostics"] == ["FAILED test_engine.py::test_behavior"]
-
-
-def test_audited_card_impl_import_resolves_selected_candidate_after_trusted_support(tmp_path):
-    opts = options(tmp_path)
-    suite = opts["bench_root"] / "benchmarks/example/data/tests/audited/fdn/fdn_1/tests.py"
-    suite.write_text("from card_impl import value\ndef test_candidate_card(): assert value == 1\n")
-    result = run_benchmark(**opts)
-    assert result.scores["card_correctness"]["tests_passed"] == 1
-    assert result.scores["fdn_regression"]["tests_passed"] == 1
-
-
-def test_selected_benchmark_data_root_reaches_grader_without_source_package_import(tmp_path):
-    opts = options(tmp_path)
-    suite = opts["bench_root"] / "benchmarks/example/workspace/engine_tests/test_engine.py"
-    replays = opts["bench_root"] / "data/replays"
-    replays.mkdir(parents=True)
-    (replays / "card_id_map.json").write_text('{"selected": "example"}')
-    suite.write_text(
-        "import json, os\nfrom pathlib import Path\ndef test_data_root():\n"
-        "    root = Path(os.environ['SILVERQUILLM_BENCH_ROOT'])\n"
-        "    selected = json.loads((root / 'data/replays/card_id_map.json').read_text())\n"
-        "    assert selected == {'selected': 'example'}\n"
-    )
-    result = run_benchmark(**opts)
-    assert result.scores["engine_regression"]["tests_passed"] == 1
 
 
 def test_operator_interruption_records_state_and_stops_before_next_run(tmp_path):
@@ -567,22 +566,6 @@ def test_operator_interruption_records_state_and_stops_before_next_run(tmp_path)
     assert len(calls) == 1
     state = json.loads((directory / "state/trial.json").read_text())
     assert len(state["runs"]) == 1 and state["runs"][0]["status"] == "failed"
-
-
-def test_collector_teardown_error_keeps_completed_execution_and_grading(tmp_path):
-    from silverquillm.karn.observations import CodexTelemetryCollector
-
-    class BrokenExit(CodexTelemetryCollector):
-        def __exit__(self, *args):
-            super().__exit__(*args)
-            raise RuntimeError("collector cleanup failed")
-
-    opts = options(tmp_path)
-    result = run_benchmark(**opts, collector_factory=BrokenExit)
-    assert result.run_metadata["execution"]["status"] == "completed"
-    assert all(score["tests_passed"] == 1 for score in result.scores.values())
-    assert (opts["results_dir"] / result.run_id / "workspace_final").is_dir()
-    assert "collector_teardown_failed" in result.run_metadata["execution"]["observation_errors"]
 
 
 def test_recovery_refuses_a_changed_retained_definition_and_preserves_original_input(
@@ -686,9 +669,18 @@ def test_recovery_of_uncertain_record_stops_writers_and_appends_linked_evidence(
     assert again.run_id == recovered.run_id and len(stopped) == 2
 
 
-def test_selected_card_binding_resists_shadow_modules_and_keeps_local_helpers(tmp_path):
+def test_grading_binds_selected_implementations_reference_cards_and_the_data_root(tmp_path):
+    """End to end: one run whose benchmark exercises every grading-binding rule at once.
+
+    The target's audited suite imports the selected candidate after trusted support, past a
+    root ``card_impl.py`` and a card-local ``engine.py`` that must not load, while the card keeps
+    its local and relative helpers. A declared extra-set reference card joins the FDN
+    population, and an engine test reads the selected benchmark data root without importing
+    the source package.
+    """
     opts = options(tmp_path)
-    source = opts["bench_root"] / "benchmarks/example/workspace"
+    root = opts["bench_root"] / "benchmarks/example"
+    source = root / "workspace"
     card = source / "cards/fdn/fdn_1"
     (source / "card_impl.py").write_text(
         "raise AssertionError('root implementation must not load')"
@@ -699,47 +691,36 @@ def test_selected_card_binding_resists_shadow_modules_and_keeps_local_helpers(tm
     (card / "card_impl.py").write_text(
         "from helpers import value as local\nfrom .relative import value as relative\nfrom engine.card import value as engine_value\nvalue = local + relative + engine_value\n"
     )
-    suite = opts["bench_root"] / "benchmarks/example/data/tests/audited/fdn/fdn_1/tests.py"
-    suite.write_text(
+    (root / "data/tests/audited/fdn/fdn_1/tests.py").write_text(
         "from card_impl import value\nfrom engine.card import value as engine_value\ndef test_selected():\n    assert value == 19\n    assert engine_value == 1\n"
     )
-    result = run_benchmark(**opts)
-    assert result.scores["card_correctness"]["tests_passed"] == 1
-    assert result.scores["fdn_regression"]["tests_passed"] == 1
-    assert result.scores["engine_regression"]["tests_passed"] == 1
-
-
-def test_host_grading_inputs_are_fingerprinted_without_entering_workspace(tmp_path):
-    opts = options(tmp_path)
-    result = run_benchmark(**opts)
-    inputs = result.run_metadata["grading_inputs"]
-    kinds = {row["kind"] for row in inputs["files"]}
-    assert kinds == {"target", "fdn", "engine", "test_utils", "replay_token_map", "replay_card_map"}
-    assert all(
-        row["sha256"]
-        for row in inputs["files"]
-        if row["kind"] not in {"replay_token_map", "replay_card_map"}
+    extra = source / "cards/fdn/spg_74"
+    extra.mkdir()
+    (extra / "__init__.py").write_text("")
+    (extra / "card_spec.json").write_text('{"collector_number":"74","name":"Extra reference"}')
+    (extra / "card_impl.py").write_text("value = 9")
+    extra_suite = root / "data/tests/audited/fdn/spg_74/tests.py"
+    extra_suite.parent.mkdir()
+    extra_suite.write_text(
+        "from card_impl import value\ndef test_extra_reference(): assert value == 9\n"
     )
-    assert {item["kind"] for item in inputs["problems"]} == {"replay_token_map", "replay_card_map"}
-    assert all(item["reason"] == "grading_input_unavailable" for item in inputs["problems"])
+    replays = opts["bench_root"] / "data/replays"
+    replays.mkdir(parents=True)
+    (replays / "card_id_map.json").write_text('{"selected": "example"}')
+    (source / "engine_tests/test_data_root.py").write_text(
+        "import json, os\nfrom pathlib import Path\ndef test_data_root():\n"
+        "    root = Path(os.environ['SILVERQUILLM_BENCH_ROOT'])\n"
+        "    selected = json.loads((root / 'data/replays/card_id_map.json').read_text())\n"
+        "    assert selected == {'selected': 'example'}\n"
+    )
 
-    assert not (opts["results_dir"] / result.run_id / "workspace_final/data/tests/audited").exists()
-
-
-def test_reference_extra_set_card_loads_from_its_declared_fdn_population(tmp_path):
-    opts = options(tmp_path)
-    root = opts["bench_root"] / "benchmarks/example"
-    card = root / "workspace/cards/fdn/spg_74"
-    card.mkdir()
-    (card / "__init__.py").write_text("")
-    (card / "card_spec.json").write_text('{"collector_number":"74","name":"Extra reference"}')
-    (card / "card_impl.py").write_text("value = 9")
-    suite = root / "data/tests/audited/fdn/spg_74/tests.py"
-    suite.parent.mkdir()
-    suite.write_text("from card_impl import value\ndef test_extra_reference(): assert value == 9\n")
     result = run_benchmark(**opts)
+
+    assert result.scores["card_correctness"]["tests_passed"] == 1
     assert result.scores["fdn_regression"]["tests_passed"] == 2
     assert result.scores["fdn_regression"]["coverage"]["evaluated_cards"] == ["fdn_2", "spg_74"]
+    assert result.scores["engine_regression"]["tests_passed"] == 2
+    assert result.scores["engine_regression"]["tests_total"] == 2
 
 
 def test_replay_card_map_uses_selected_benchmark_data_root(tmp_path, monkeypatch):

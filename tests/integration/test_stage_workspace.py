@@ -23,9 +23,9 @@ _WORKSPACE_SRC = _REPO_ROOT / "benchmarks" / "sos" / "workspace"
 
 
 @pytest.fixture()
-def staged(tmp_path: Path):
-    """Stage workspace and return (workspace, output) paths."""
-    return stage_workspace(tmp_path)
+def staged(staged_sos_workspace):
+    """The session's staged SOS Workspace as (workspace, output) paths; read-only."""
+    return staged_sos_workspace
 
 
 class TestCopytreeIntegrity:

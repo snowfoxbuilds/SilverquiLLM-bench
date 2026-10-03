@@ -61,7 +61,7 @@ Each benchmark set is fully self-contained: `benchmarks/{target_set}/` is the un
 
 ### Test configuration
 
-Workspace `pytest.ini` is independently configured. `benchmarks/sos/workspace/pytest.ini` sets `timeout = 300` (matching the host-side `pyproject.toml` safety net) and `python_files = test_*.py tests.py` so colocated FDN reference tests (`cards/fdn/fdn_{collector_number}/tests.py`) and agent-written tests (`engine_tests/test_*.py`) are both discovered. Pytest does not inherit config across rootdir boundaries, so the workspace must configure its own timeout; without this, a runaway test inside the container could hang the run or, worse, repeat PR #11-style PID 1 signal kills. [TESTING-CONVENTIONS.md](TESTING-CONVENTIONS.md) itself is not staged into the workspace — it governs bench-authored reference tests only — but the timeout safety net travels with the workspace via `pytest.ini`.
+Workspace `pytest.ini` is independently configured. `benchmarks/sos/workspace/pytest.ini` sets `timeout = 300` (matching the host-side `pyproject.toml` safety net) and `python_files = test_*.py tests.py` so colocated FDN reference tests (`cards/fdn/fdn_{collector_number}/tests.py`) and agent-written tests (`engine_tests/test_*.py`) are both discovered. Pytest does not inherit config across rootdir boundaries, so the workspace must configure its own timeout; without this, a runaway test inside the container could hang the run or, worse, repeat PR #11-style PID 1 signal kills. [AUDITED-TEST-CONVENTIONS.md](AUDITED-TEST-CONVENTIONS.md) itself is not staged into the workspace — it governs maintainer-written Audited and Reference Tests only — but the timeout safety net travels with the workspace via `pytest.ini`.
 
 ### Run Manifest
 

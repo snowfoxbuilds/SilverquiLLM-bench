@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 import threading
 import time
 from types import SimpleNamespace
@@ -32,6 +33,7 @@ from silverquillm.karn.regrade import regrade
 from silverquillm.results_repo import InvalidRunRecordError
 
 from . import known_defect_fixture as fixture
+from . import retained_runs
 from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker, local_grader
 from .test_karn_execution import FixtureHost
 from .test_karn_host import make_candidate
@@ -649,7 +651,13 @@ EXPECTED_FIXED = {"fdn_regression": [], "engine_regression": [fixture.ENGINE_DEF
 EXPECTED_REGRESSED = {"fdn_regression": [fixture.FDN_NODES[0]], "engine_regression": []}
 
 
-def test_a_run_reports_combined_regression_against_a_cached_baseline(tmp_path):
+def test_runs_and_recovery_report_combined_regression_against_one_cached_baseline(
+    tmp_path, monkeypatch
+):
+    """End to end: a run, a second run reusing its cached baseline, a recovered run, and the
+    published record's validation of the block."""
+    from silverquillm.karn import recovery
+
     opts = run_options(tmp_path)
     record = run_benchmark(**opts, run_id="first")
     combined = record.run_metadata["combined_regression"]
@@ -687,13 +695,35 @@ def test_a_run_reports_combined_regression_against_a_cached_baseline(tmp_path):
     assert opts["evaluator"].calls == 3
     assert again.run_metadata["combined_regression"] == combined
 
+    # Recovery reports the same block as the run path.
+    class Killed(EditingHost):
+        def run(self, candidate, workspace, evidence_dir, prompt, **kwargs):
+            fixture.candidate_edits(workspace)
+            raise SystemExit(137)
 
-def test_a_run_without_a_manifest_grades_once_and_reports_no_block(tmp_path):
-    opts = run_options(tmp_path, manifest=False)
-    record = run_benchmark(**opts)
-    assert "combined_regression" not in record.run_metadata
-    assert opts["evaluator"].calls == 1
-    assert not (tmp_path / "state/baseline-grades").exists()
+    with pytest.raises(SystemExit):
+        run_benchmark(**{**opts, "host": Killed()}, run_id="killed")
+    docker = ContainerDocker(running=False)
+    monkeypatch.setattr(
+        recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
+    )
+    recovered = recovery.recover_benchmark(
+        run_id="killed",
+        spec={},
+        **{
+            key: opts[key]
+            for key in ("bench_root", "results_dir", "results_repo", "state_root", "grader")
+        },
+    )
+    assert recovered.run_metadata["combined_regression"] == combined
+    recovered.validate()
+
+    # A published record whose block is malformed does not read.
+    manifest = json.loads((published / "manifest.json").read_text())
+    manifest["run_metadata"]["combined_regression"]["fixed"]["count"] = 7
+    (published / "manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(InvalidRunRecordError):
+        read_record(published)
 
 
 def test_a_failed_baseline_grade_leaves_the_runs_scores_alone(tmp_path):
@@ -719,54 +749,45 @@ def test_a_failed_baseline_grade_leaves_the_runs_scores_alone(tmp_path):
     assert "grading_failure" not in failed.run_metadata
 
 
-def test_recovery_reports_the_same_block_as_the_run_path(tmp_path, monkeypatch):
-    from silverquillm.karn import recovery
-
-    opts = run_options(tmp_path)
-    expected = run_benchmark(**opts, run_id="graded").run_metadata["combined_regression"]
-
-    class Killed(EditingHost):
-        def run(self, candidate, workspace, evidence_dir, prompt, **kwargs):
-            fixture.candidate_edits(workspace)
-            raise SystemExit(137)
-
-    with pytest.raises(SystemExit):
-        run_benchmark(**{**opts, "host": Killed()}, run_id="killed")
-    docker = ContainerDocker(running=False)
-    monkeypatch.setattr(
-        recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
-    )
-    record = recovery.recover_benchmark(
-        run_id="killed",
-        spec={},
-        **{
-            key: opts[key]
-            for key in ("bench_root", "results_dir", "results_repo", "state_root", "grader")
-        },
-    )
-    assert record.run_metadata["combined_regression"] == expected
-    record.validate()
-
-
-def test_a_record_with_a_malformed_block_does_not_read(tmp_path):
-    opts = run_options(tmp_path)
-    record = run_benchmark(**opts)
-    published = opts["results_repo"] / "results" / record.candidate.hash / record.run_id
-    manifest = json.loads((published / "manifest.json").read_text())
-    manifest["run_metadata"]["combined_regression"]["fixed"]["count"] = 7
-    (published / "manifest.json").write_text(json.dumps(manifest))
-    with pytest.raises(InvalidRunRecordError):
-        read_record(published)
-
-
 # --- Regrade --------------------------------------------------------------------------
 
 
+def clone(template, directory):
+    cloned = retained_runs.clone(template, directory)
+    cloned.out = cloned.root / "regrade"
+    return cloned
+
+
+@pytest.fixture(scope="module")
+def retained_template(tmp_path_factory):
+    """Two runs of the Known Defect benchmark, built once."""
+    root = tmp_path_factory.mktemp("retained")
+    opts = run_options(root, evaluator=None)
+    with retained_runs.building():
+        records = [run_benchmark(**opts, run_id=run_id) for run_id in ("run-a", "run-b")]
+    yield SimpleNamespace(root=root, opts=opts, records=records)
+    shutil.rmtree(root, ignore_errors=True)
+
+
 @pytest.fixture
-def retained(tmp_path):
-    opts = run_options(tmp_path, evaluator=None)
-    records = [run_benchmark(**opts, run_id=run_id) for run_id in ("run-a", "run-b")]
-    return SimpleNamespace(opts=opts, records=records, out=tmp_path / "regrade")
+def retained(retained_template, tmp_path):
+    return clone(retained_template, tmp_path)
+
+
+@pytest.fixture(scope="module")
+def regraded_template(retained_template, tmp_path_factory):
+    """The retained runs after one re-grade, so cache tests start from a filled cache."""
+    directory = tmp_path_factory.mktemp("regraded")
+    template = clone(retained_template, directory)
+    with retained_runs.building():
+        template.summary = invoke(template)
+    yield template
+    shutil.rmtree(directory, ignore_errors=True)
+
+
+@pytest.fixture
+def regraded(regraded_template, tmp_path):
+    return clone(regraded_template, tmp_path)
 
 
 def invoke(retained, docker=None, **changes):
@@ -788,19 +809,19 @@ def output(retained, run_id):
     return json.loads(next(retained.out.glob(f"*/{run_id}.json")).read_text())
 
 
-def test_regrade_outputs_carry_the_block_beside_scores_and_reuse_it(retained):
-    summary = invoke(retained)
-    staged = retained.records[0].run_metadata["benchmark_input"]["workspace_digest"]
+def test_regrade_outputs_carry_the_block_beside_scores_and_reuse_it(regraded):
+    summary = regraded.summary
+    staged = regraded.records[0].run_metadata["benchmark_input"]["workspace_digest"]
     assert summary["baseline_workspace_digest"] == staged
-    assert json.loads((retained.out / "summary.json").read_text()) == summary
-    for record in retained.records:
-        result = output(retained, record.run_id)
+    assert json.loads((regraded.out / "summary.json").read_text()) == summary
+    for record in regraded.records:
+        result = output(regraded, record.run_id)
         assert result["baseline_workspace_digest"] == staged
         assert result["combined_regression"] == record.run_metadata["combined_regression"]
         validate_scores(result["scores"])
         assert "combined_regression" not in result["scores"]
     docker = LocalDocker()
-    invoke(retained, docker=docker)
+    invoke(regraded, docker=docker)
     assert docker.runs == []
 
 
@@ -877,16 +898,15 @@ def test_inputs_changed_during_a_regrade_make_the_comparison_unavailable_and_ret
         )
 
 
-def test_a_changed_workspace_misses_the_regrade_cache_and_regrades_the_baseline(retained):
-    invoke(retained)
-    (retained.opts["bench_root"] / "benchmarks/kd/workspace/engine/card.py").write_text(
+def test_a_changed_workspace_misses_the_regrade_cache_and_regrades_the_baseline(regraded):
+    (regraded.opts["bench_root"] / "benchmarks/kd/workspace/engine/card.py").write_text(
         "value = 2\n"
     )
     docker = LocalDocker()
-    summary = invoke(retained, docker=docker)
+    summary = invoke(regraded, docker=docker)
     # One baseline grade for the new Workspace, then each run.
     assert len(docker.runs) == 3
-    result = output(retained, "run-a")
+    result = output(regraded, "run-a")
     assert result["baseline_workspace_digest"] == summary["baseline_workspace_digest"]
     assert (
         result["combined_regression"]["baseline"]["workspace_digest"]
@@ -895,9 +915,8 @@ def test_a_changed_workspace_misses_the_regrade_cache_and_regrades_the_baseline(
 
 
 @pytest.mark.parametrize("damage", ["missing", "malformed"])
-def test_a_cached_output_with_a_missing_or_malformed_block_is_a_miss(retained, damage):
-    invoke(retained)
-    path = next(retained.out.glob("*/run-a.json"))
+def test_a_cached_output_with_a_missing_or_malformed_block_is_a_miss(regraded, damage):
+    path = next(regraded.out.glob("*/run-a.json"))
     value = json.loads(path.read_text())
     if damage == "missing":
         del value["combined_regression"]
@@ -905,15 +924,19 @@ def test_a_cached_output_with_a_missing_or_malformed_block_is_a_miss(retained, d
         value["combined_regression"]["known_best_score"]["tests_passed"] = 1
     path.write_text(json.dumps(value))
     docker = LocalDocker()
-    invoke(retained, docker=docker)
+    invoke(regraded, docker=docker)
     assert len(docker.runs) == 1
-    assert output(retained, "run-a")["combined_regression"]["available"] is True
+    assert output(regraded, "run-a")["combined_regression"]["available"] is True
 
 
-def test_adding_a_manifest_makes_earlier_outputs_misses(tmp_path):
-    opts = run_options(tmp_path, manifest=False, evaluator=None)
+def test_without_a_manifest_a_run_grades_once_and_adding_one_makes_its_outputs_misses(
+    tmp_path,
+):
+    opts = run_options(tmp_path, manifest=False)
     record = run_benchmark(**opts, run_id="run-a")
     assert "combined_regression" not in record.run_metadata
+    assert opts["evaluator"].calls == 1
+    assert not (tmp_path / "state/baseline-grades").exists()
     retained = SimpleNamespace(opts=opts, records=[record], out=tmp_path / "regrade")
     summary = invoke(retained)
     assert summary["baseline_workspace_digest"] is None

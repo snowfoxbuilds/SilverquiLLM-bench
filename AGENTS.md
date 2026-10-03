@@ -39,7 +39,8 @@ All specs, code, and agent instructions use these terms exactly.
 | `AGENT-CONTAINERS.md` | Docker black-box architecture, file-based contract, entrypoint design, isolation guarantees |
 | `WORKSPACE-CONTRACT.md` | Workspace layout, card directory invariant, Run Manifest, writable engine, FDN/SOS structure |
 | `RUN-ARTIFACTS-AND-TELEMETRY.md` | Existing artifact layouts, workspace snapshots and recovery; Karn v4 observations are governed by KARN-BENCHMARK-CONTRACT.md |
-| `TESTING-CONVENTIONS.md` | Test naming, fixtures, assertions, and conventions for audited tests |
+| `AUDITED-TEST-CONVENTIONS.md` | Safety conventions for Audited Tests and the Reference Tests maintainers write |
+| `PLATFORM-TEST-CONVENTIONS.md` | Platform Test safety, and keeping Simulated Benchmarks to end-to-end tests with shared, cloned setup |
 | `17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format for engine correctness validation |
 | `AUDITED-TEST-IMPROVEMENT-WORKFLOW.md` | Harvest script + combined investigation/discovery skill (manual v1 Test Harvester); harvest format, fault-attribution triage, promotion bar, cadence, tier gating |
 | `HOB-BENCHMARKS.md` | The three HOB-generation benchmarks (hob-easy/medium/hard): picked pools (23/5/5, selective subsets of the HOB set), run shape, engine freeze + tests-as-envelope, instruction docs, candidate contract |

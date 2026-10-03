@@ -272,16 +272,16 @@ class TestSmokeLifecyclePIDTagging:
 
 
 class TestTestingConventionsArtifactCleanup:
-    """Verify TESTING-CONVENTIONS.md documents artifact cleanup rule."""
+    """Verify AUDITED-TEST-CONVENTIONS.md documents artifact cleanup rule."""
 
     @pytest.fixture(autouse=True)
     def _load_conventions(self) -> None:
-        self.conventions_path = REPO_ROOT / "docs" / "specs" / "TESTING-CONVENTIONS.md"
-        assert self.conventions_path.exists(), "TESTING-CONVENTIONS.md must exist"
+        self.conventions_path = REPO_ROOT / "docs" / "specs" / "AUDITED-TEST-CONVENTIONS.md"
+        assert self.conventions_path.exists(), "AUDITED-TEST-CONVENTIONS.md must exist"
         self.content = self.conventions_path.read_text(encoding="utf-8")
 
     def test_mentions_pid_tagged_images(self) -> None:
-        """TESTING-CONVENTIONS.md must mention PID-tagged image names."""
+        """AUDITED-TEST-CONVENTIONS.md must mention PID-tagged image names."""
         assert "pid" in self.content.lower() or "getpid" in self.content.lower(), (
-            "TESTING-CONVENTIONS.md must mention PID-tagged image names"
+            "AUDITED-TEST-CONVENTIONS.md must mention PID-tagged image names"
         )

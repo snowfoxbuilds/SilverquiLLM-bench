@@ -191,7 +191,8 @@ Agent Container
 | `WORKSPACE-CONTRACT.md` | Canonical Workspace layout and card/engine edit contract |
 | `RUN-ARTIFACTS-AND-TELEMETRY.md` | `workspace_final/`, Git snapshots, telemetry, fallback, Docker logs |
 | `SCORING.md` | Three evaluation dimensions and leaderboard format |
-| `TESTING-CONVENTIONS.md` | Test safety rules and pytest conventions |
+| `AUDITED-TEST-CONVENTIONS.md` | Audited and Reference Test safety rules |
+| `PLATFORM-TEST-CONVENTIONS.md` | Platform Test safety and cost rules |
 | `17LANDS-REPLAY-SCHEMA.md` | GRE replay JSON schema and parsing strategy |
 
 

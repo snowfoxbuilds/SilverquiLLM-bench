@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
@@ -22,7 +23,7 @@ from silverquillm.karn.exclusions import (
     rule_exclusion,
 )
 from silverquillm.karn.execution import run_benchmark
-from silverquillm.karn.records import KarnRunRecord, read_record
+from silverquillm.karn.records import KarnRunRecord, read_record, write_record
 from silverquillm.karn.regrade import regrade
 from silverquillm.karn.workspace_archive import (
     ArchiveRefused,
@@ -36,6 +37,7 @@ from silverquillm.karn.workspace_archive import (
 from silverquillm.results_repo import InvalidRunRecordError
 
 from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
+from .retained_runs import building, clone_tree, rebase_options
 from .test_karn_execution import FixtureHost, options
 
 
@@ -65,14 +67,27 @@ def tree_bytes(root: Path, *, graded_only: bool = False) -> dict:
     }
 
 
-@pytest.fixture
-def edited(tmp_path):
-    opts = options(tmp_path, host=EditingHost())
+@pytest.fixture(scope="module")
+def edited_template(tmp_path_factory):
+    """A run whose agent edited its workspace, built once; read it, never change it."""
+    root = tmp_path_factory.mktemp("edited")
+    opts = options(root, host=EditingHost())
     readme = opts["bench_root"] / "benchmarks/example/workspace/docs/readme.txt"
     readme.parent.mkdir()
     readme.write_text("deleted by the agent\n")
-    record = run_benchmark(**opts, run_id="edited")
-    return opts, record
+    with building():
+        record = run_benchmark(**opts, run_id="edited")
+    yield SimpleNamespace(root=root, opts=opts, record=record)
+    shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.fixture
+def edited(edited_template, tmp_path):
+    """A clone of the edited run in this test's ``tmp_path``, with its record read from there."""
+    clone_tree(edited_template.root, tmp_path)
+    opts = rebase_options(edited_template.opts, edited_template.root, tmp_path)
+    record = edited_template.record
+    return opts, read_record(opts["results_repo"] / "results" / record.candidate.hash / "edited")
 
 
 # ---- workspace archives ----------------------------------------------------------------------
@@ -409,8 +424,8 @@ def test_a_dirty_run_is_refused_before_any_evidence_exists(tmp_path, checkout, m
     assert not opts["results_repo"].exists()
 
 
-def test_a_record_carries_its_provenance_and_malformed_provenance_is_invalid(edited):
-    opts, record = edited
+def test_a_record_carries_its_provenance_and_malformed_provenance_is_invalid(edited_template):
+    opts, record = edited_template.opts, edited_template.record
     assert record.run_metadata["provenance"]["host_label"] == "test-host"
     run_input = json.loads((opts["results_dir"] / "edited/run-input.json").read_text())
     assert run_input["provenance"] == record.run_metadata["provenance"]
@@ -451,8 +466,8 @@ def measured(turns, threads="absent"):
         (lambda m: m["execution"].update(status="host_failed"), "host_failed"),
     ],
 )
-def test_rules_exclude_only_on_observed_facts(edited, change, reason):
-    _, record = edited
+def test_rules_exclude_only_on_observed_facts(edited_template, change, reason):
+    record = edited_template.record
     matched = rule_exclusion(edit(record, change))
     assert (matched and matched[0]) == reason
 
@@ -465,6 +480,15 @@ def write_record_with(opts, run_id, change):
     change(manifest["run_metadata"])
     path.write_text(json.dumps(manifest))
     return read_record(path.parent)
+
+
+def record_as(opts, record: KarnRunRecord, run_id: str, change) -> KarnRunRecord:
+    """Publish *record* again under *run_id*, changed, without running anything; for checks
+    that read records but never grade their workspaces."""
+    manifest = json.loads(json.dumps(record.manifest))
+    manifest["run_id"] = run_id
+    change(manifest["run_metadata"])
+    return read_record(write_record(opts["results_repo"], KarnRunRecord(manifest, record.scores)))
 
 
 def test_a_run_meeting_a_rule_is_excluded_when_its_record_is_written(tmp_path, monkeypatch):
@@ -483,10 +507,10 @@ def test_a_run_meeting_a_rule_is_excluded_when_its_record_is_written(tmp_path, m
 
 
 def test_operator_exclusions_check_and_rule_backfill(edited):
-    opts, _ = edited
+    opts, record = edited
     repo = opts["results_repo"]
-    write_record_with(opts, "old", measured(40))
-    write_record_with(opts, "retry", measured(40, 0))
+    record_as(opts, record, "old", measured(40))
+    record_as(opts, record, "retry", measured(40, 0))
 
     report = check(repo)
     assert report["unexcluded_rule_matches"] == [
@@ -642,7 +666,7 @@ def test_absent_or_empty_measurements_never_exclude(edited, blank):
 
     assert rule_exclusion(edit(record, failed)) == ("host_failed", "execution status host_failed")
 
-    blank_record = write_record_with(opts, "blank", lambda m: m.update(measurements=blank))
+    blank_record = record_as(opts, record, "blank", lambda m: m.update(measurements=blank))
     report = check(opts["results_repo"], write_rules=True)
     assert "blank" not in [row["run_id"] for row in report["written"]]
     assert "blank" not in load_exclusions(opts["results_repo"])
@@ -651,8 +675,8 @@ def test_absent_or_empty_measurements_never_exclude(edited, blank):
     ).exists()
 
 
-def test_historical_measurements_without_a_thread_count_are_still_uncounted(edited):
-    _, record = edited
+def test_historical_measurements_without_a_thread_count_are_still_uncounted(edited_template):
+    record = edited_template.record
     assert rule_exclusion(edit(record, measured(40)))[0] == "subagents_uncounted"
 
 

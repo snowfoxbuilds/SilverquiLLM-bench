@@ -1,12 +1,13 @@
 Status: SETTLED
 
-Last updated: 2026-09-26
+Last updated: 2026-10-03
 
-# Testing Conventions
+# Audited Test Conventions
 
-Testing conventions for **bench-authored tests** in the SilverquiLLM-bench repository — i.e. Platform tests, Audited tests, Engine tests, and FDN Reference Tests (everything maintainers write), but not Agent tests.
+Safety conventions for **Audited Tests** and the **Reference Tests** maintainers write, but not Agent Tests or Platform Tests.
 
-Scope: tests we write — host-side suites under `tests/`, FDN reference tests staged into the workspace at `benchmarks/sos/workspace/cards/fdn/{collector_number}/tests.py`, and audited SOS grader tests at `benchmarks/sos/data/tests/audited/sos/{collector_number}/tests.py`.
+Scope: the grading suites under `benchmarks/<benchmark>/data/tests/audited/` and the Reference Tests staged into each benchmark's Workspace, such as `cards/fdn/{collector_number}/tests.py`.
+Platform Tests under the repository's top-level `tests/` follow [PLATFORM-TEST-CONVENTIONS.md](PLATFORM-TEST-CONVENTIONS.md) (grilling 2026-10-03).
 
 Out of scope: **Agent tests** inside the workspace (e.g., `engine_tests/test_*.py` authored during a run). The grader is the source of truth for scoring, not agent test hygiene, so we deliberately do not bind the agent to these rules and we do not stage this document into the workspace. The workspace `pytest.ini` carries the `timeout = 300` safety net regardless (see [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md)).
 
@@ -158,60 +159,28 @@ def test_spell_resolves():
 
 Use `test_utils` helpers: `create_game()`, `set_board_state()`, `cast_spell()`, `resolve_top()`, `advance_to_phase()`. These advance game state deterministically without entering the open-ended game loop.
 
-### 6. Never spawn real subprocesses in unit tests
-
-Tests that need to verify subprocess behavior should mock `subprocess.Popen` or use `unittest.mock.patch`. Real subprocess spawning creates orphan processes, port conflicts, and environment-dependent failures.
-
-**Exception:** Integration tests that verify the runner pipeline may use mock adapters, but must not spawn real LLM-calling processes or Docker containers.
-
-### 7. Clean up all resources in test teardown
+### 6. Clean up all resources in test teardown
 
 Use `tmp_path` (pytest fixture) for temporary files. Use context managers or `try/finally` for threads, events, and timers. Never leave background threads running after a test completes.
 
-### 8. Invoke the CLI as a module in integration tests
-
-Integration tests that spawn the CLI as a subprocess must use `[sys.executable, "-m", "silverquillm.cli", ...]`, never `["silverquillm", ...]`. This guarantees the test exercises the current worktree, not a potentially stale installed entry point.
-
-**Bad:**
-
-```python
-subprocess.run(["silverquillm", "run", "--build-output", ...])
-```
-
-**Good:**
-
-```python
-import sys
-subprocess.run([sys.executable, "-m", "silverquillm.cli", "run", "--build-output", ...])
-```
-
-### 9. Grade through the local stand-in; only integration tests reach Docker
-
-Grading runs candidate code in the grader container.
-Unit tests that reach grading inject `tests.grader_fixtures.local_grader()`, which interprets the exact container arguments without Docker; the suite's conftest fails any unit test that reaches the grader's Docker client.
-Tests that need a real daemon or grader image carry the `integration` marker, which the default run deselects.
-
 ---
 
-## Checklist for Reference Test Authors
+## Checklist for Audited and Reference Test Authors
 
-Before committing any bench-authored test file (host-side or staged reference), verify:
+Before committing an Audited Test or Reference Test file, verify:
 
 - [ ] No `while True` loops without a guaranteed exit condition
 - [ ] No `time.sleep()` calls longer than 5 seconds
 - [ ] No real `os.kill*()` or `signal.*()` calls — all patched
 - [ ] All mock PIDs/process attributes set to explicit fake values (not auto-MagicMock)
 - [ ] No `game.run()` or open-ended game loop calls
-- [ ] No real `subprocess.Popen()` in unit tests — all mocked
 - [ ] Test completes in under 10 seconds even if code under test is broken
 - [ ] `tmp_path` used for all filesystem operations
 - [ ] No background threads or timers left running after test
-- [ ] Integration tests invoke CLI as `[sys.executable, "-m", "silverquillm.cli", ...]`
-- [ ] Unit tests that reach grading inject `local_grader()`; Docker-backed tests are marked `integration`
 ---
 
 ## Enforcing These Conventions
 
 1. **`pytest-timeout = 300s`** — global hard limit for the host-side suite in `pyproject.toml`
 2. **CI gate** — `pytest` runs on every PR; any timeout or hang fails the build
-3. **Author scope** — These rules govern bench-authored tests only. Agent tests inside the workspace are not bound by this doc and are not graded; only the Audited tests (host-side grader) determine the score. The workspace `pytest.ini` `timeout = 300` setting is the only safety net that follows tests into the container.
+3. **Author scope** — These rules govern Audited Tests and maintainer-written Reference Tests only. Agent tests inside the workspace are not bound by this doc and are not graded; only the Audited tests (host-side grader) determine the score. The workspace `pytest.ini` `timeout = 300` setting is the only safety net that follows tests into the container.

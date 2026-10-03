@@ -156,6 +156,15 @@ class TestEvaluateRun:
         assert result.sos_results == {}
 
 
+@pytest.fixture(scope="module")
+def honest(tmp_path_factory):
+    """The unpoisoned overlay's grade, computed once for every poison."""
+    grading = TestGradingIsolation()
+    directory = tmp_path_factory.mktemp("honest")
+    yield grading._grade(grading._overlay(directory, "none"))
+    shutil.rmtree(directory, ignore_errors=True)
+
+
 class TestGradingIsolation:
     """The candidate's own ``test_utils`` never influences the score."""
 
@@ -189,8 +198,9 @@ class TestGradingIsolation:
         )
 
     @pytest.mark.parametrize("poison", ["always-pass", "delete", "corrupt"])
-    def test_candidate_test_utils_cannot_change_scores(self, tmp_path: Path, poison: str) -> None:
-        honest = self._grade(self._overlay(tmp_path / "honest", "none"))
+    def test_candidate_test_utils_cannot_change_scores(
+        self, tmp_path: Path, poison: str, honest: dict
+    ) -> None:
         tampered = self._grade(self._overlay(tmp_path / poison, poison))
         # The stub target still fails under every poison; the green target stays green.
         assert honest["fdn_205"].tests_failed > 0

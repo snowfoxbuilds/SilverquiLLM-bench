@@ -11,9 +11,9 @@ from silverquillm.workspace import stage_workspace, _PROMPT_TEXT
 
 
 @pytest.fixture()
-def staged(tmp_path: Path):
-    """Run stage_workspace and return (workspace, output) paths."""
-    return stage_workspace(tmp_path)
+def staged(staged_sos_workspace):
+    """The session's staged SOS Workspace as (workspace, output) paths; read-only."""
+    return staged_sos_workspace
 
 
 @pytest.fixture()
