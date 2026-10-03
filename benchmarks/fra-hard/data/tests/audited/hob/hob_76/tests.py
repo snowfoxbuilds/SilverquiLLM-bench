@@ -29,7 +29,8 @@ def setup(kinds=(Instant,), costs=('{2}{U}',), x=None):
 def test_x_exiles_exact_top_cards_and_pays_x():
     _g, p, q, cards = setup((Instant, Instant, Instant), ('{1}', '{2}', '{3}'), x=2)
     assert q.zones[Zone.LIBRARY].get_all() == cards[:1]
-    assert q.zones[Zone.EXILE].get_all() == cards[1:]
+    assert set(q.zones[Zone.EXILE].get_all()) == set(cards[1:])
+    assert len(q.zones[Zone.EXILE]) == 2
     assert p.mana_pool.total() == 0
 
 

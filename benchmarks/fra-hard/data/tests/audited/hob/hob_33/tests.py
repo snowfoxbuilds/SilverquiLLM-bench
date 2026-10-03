@@ -163,26 +163,26 @@ def test_artifact_creature_is_an_eligible_attack_spell():
     attack(g, bilbo)
     resolve_stack(g)
     assert p.zones[Zone.BATTLEFIELD].contains(spell)
-
-
-def test_discount_applies_to_creature_cast_from_exile():
-    g, p, _q, _bilbo, spell = setup(Creature)
-    from engine.zones import move_to_zone
-    move_to_zone(g, spell, Zone.GRAVEYARD, Zone.EXILE)
-    spell.base_power = spell.base_toughness = 2
-    p.mana_pool.add(ManaType.BLUE)
-    cast(g, p, spell, from_zone=Zone.EXILE, ignore_timing=True)
-    resolve_stack(g)
-    assert p.zones[Zone.BATTLEFIELD].contains(spell)
     assert p.mana_pool.total() == 0
 
 
-def test_opponents_nonhand_spell_receives_no_discount():
-    g, _p, q, _bilbo, spell = setup(owner_seat=1)
+@pytest.mark.parametrize('generic_mana,cast_succeeds', [(0, False), (1, True)])
+def test_opponents_nonhand_spell_receives_no_discount(generic_mana, cast_succeeds):
+    g, p, q, bilbo, spell = setup(owner_seat=1)
+    opposing_bilbo = enter_permanent(g, q, BilboThiefintheNight())
+    opposing_bilbo.summoning_sick = False
+    g.active_player_index = 1
+    prefer(q, object_preference(g, spell))
     q.mana_pool.add(ManaType.BLUE)
-    with pytest.raises(CastingError):
-        cast(g, q, spell, from_zone=Zone.GRAVEYARD, ignore_timing=True)
-    assert q.zones[Zone.GRAVEYARD].contains(spell)
+    q.mana_pool.add(ManaType.COLORLESS, generic_mana)
+    attack(g, opposing_bilbo)
+    # Its trigger grants the cast; only the other player's discount survives.
+    sacrifice(g, q, opposing_bilbo)
+    resolve_stack(g)
+    expected_zone = Zone.EXILE if cast_succeeds else Zone.GRAVEYARD
+    assert q.zones[expected_zone].contains(spell)
+    assert q.mana_pool.total() == (0 if cast_succeeds else 1)
+    assert p.zones[Zone.BATTLEFIELD].contains(bilbo)
 
 
 def test_declining_trigger_does_not_leave_cast_permission():

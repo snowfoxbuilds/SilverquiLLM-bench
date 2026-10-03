@@ -39,8 +39,11 @@ def library(p):
 def adventure(g, p, sword, resolve=True):
     p.mana_pool.add(ManaType.BLUE)
     p.mana_pool.add(ManaType.COLORLESS, 3)
-    prefer(p, Decision.yes())
+    prefer(p, Decision.mode('Gleam of Death'), Decision.yes())
     pending = cast(g, p, sword)
+    assert sword.name == 'Gleam of Death'
+    assert sword.card_types == {CardType.SORCERY}
+    assert sword.subtypes == {'Adventure'}
     if resolve:
         resolve_stack(g)
     return pending
@@ -50,7 +53,7 @@ def test_front_face_casts_as_equipment_without_milling():
     g, p, _q, sword = setup()
     library(p)
     p.mana_pool.add(ManaType.COLORLESS, 2)
-    prefer(p, Decision.no())
+    prefer(p, Decision.mode('Glamdring, Foe-hammer'), Decision.no())
     cast(g, p, sword)
     resolve_stack(g)
     assert p.zones[Zone.BATTLEFIELD].contains(sword)
@@ -73,6 +76,7 @@ def test_adventure_can_then_cast_front_face_from_exile():
     g, p, _q, sword = setup()
     adventure(g, p, sword)
     p.mana_pool.add(ManaType.COLORLESS, 2)
+    prefer(p, Decision.mode('Glamdring, Foe-hammer'), Decision.no())
     cast(g, p, sword)
     resolve_stack(g)
     assert p.zones[Zone.BATTLEFIELD].contains(sword)
@@ -95,7 +99,7 @@ def test_exile_from_other_effect_does_not_grant_adventure_permission():
     g, p, _q, sword = setup()
     move_to_zone(g, sword, Zone.HAND, Zone.EXILE)
     p.mana_pool.add(ManaType.COLORLESS, 2)
-    prefer(p, Decision.no())
+    prefer(p, Decision.mode('Glamdring, Foe-hammer'), Decision.no())
     with pytest.raises(CastingError):
         cast(g, p, sword)
     assert p.zones[Zone.EXILE].contains(sword)
@@ -107,7 +111,7 @@ def test_adventure_exile_permission_expires_after_zone_change():
     move_to_zone(g, sword, Zone.EXILE, Zone.HAND)
     move_to_zone(g, sword, Zone.HAND, Zone.EXILE)
     p.mana_pool.add(ManaType.COLORLESS, 2)
-    prefer(p, Decision.no())
+    prefer(p, Decision.mode('Glamdring, Foe-hammer'), Decision.no())
     with pytest.raises(CastingError):
         cast(g, p, sword)
 
@@ -198,21 +202,25 @@ def test_free_cast_from_graveyard_can_choose_adventure():
     g, p, _q, sword = setup()
     cards = library(p)
     move_to_zone(g, sword, Zone.HAND, Zone.GRAVEYARD)
-    prefer(p, Decision.yes())
+    prefer(p, Decision.mode('Gleam of Death'), Decision.yes())
     cast_spell_free(g, p, sword, Zone.GRAVEYARD)
+    assert sword.name == 'Gleam of Death'
+    assert sword.card_types == {CardType.SORCERY}
+    assert sword.subtypes == {'Adventure'}
     resolve_stack(g)
     assert p.zones[Zone.EXILE].contains(sword)
     assert set(p.zones[Zone.HAND].get_all()) == {cards[1], cards[3], cards[5]}
 
 
-def test_failed_adventure_cast_restores_front_face_in_hand():
+def test_unpayable_card_remains_front_face_in_hand():
     g, p, _q, sword = setup()
-    prefer(p, Decision.yes())
+    prefer(p, Decision.mode('Gleam of Death'), Decision.yes())
     with pytest.raises(CastingError):
         cast(g, p, sword)
     assert p.zones[Zone.HAND].contains(sword)
     assert sword.name == 'Glamdring, Foe-hammer'
     assert sword.card_types == {CardType.ARTIFACT}
+    assert p.mana_pool.total() == 0
 
 
 def test_equipped_creature_power_changes_discount():
@@ -261,7 +269,7 @@ def test_adventure_permission_allows_only_front_face():
     adventure(g, p, sword)
     p.mana_pool.add(ManaType.COLORLESS, 4)
     p.mana_pool.add(ManaType.BLUE)
-    prefer(p, Decision.yes())
+    prefer(p, Decision.mode('Gleam of Death'), Decision.yes())
     cast(g, p, sword)
     resolve_stack(g)
     assert p.zones[Zone.BATTLEFIELD].contains(sword)
@@ -277,6 +285,7 @@ def test_adventure_permission_survives_cleanup():
         g.advance_phase()
     g.phase = Phase.PRECOMBAT_MAIN
     p.mana_pool.add(ManaType.COLORLESS, 2)
+    prefer(p, Decision.mode('Glamdring, Foe-hammer'), Decision.no())
     cast(g, p, sword)
     resolve_stack(g)
     assert p.zones[Zone.BATTLEFIELD].contains(sword)
@@ -348,6 +357,7 @@ def test_countered_front_face_from_adventure_exile_has_no_permission():
     g, p, _q, sword = setup()
     adventure(g, p, sword)
     p.mana_pool.add(ManaType.COLORLESS, 2)
+    prefer(p, Decision.mode('Glamdring, Foe-hammer'), Decision.no())
     pending = cast(g, p, sword)
     move_spell_off_stack(g, pending)
     assert p.zones[Zone.GRAVEYARD].contains(sword)
