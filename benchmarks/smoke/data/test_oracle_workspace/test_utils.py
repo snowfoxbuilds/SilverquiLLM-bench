@@ -8,7 +8,9 @@ Play is driven through Priority Queries (ADR-017): a test gives each player an
 ordered action script (:func:`script` with :func:`act`, :func:`act_illegal` and
 :func:`pass_priority` entries) and drives it with :func:`run_scripts`; the
 engine, not the test, performs each chosen cast, land play or activation. The
-casting and activation helpers are one-entry scripts.
+casting and activation helpers are one-entry scripts. A rejected action or
+choice is retried only with the next of the test's explicit branches
+(``act(branches=[...])``, ``Intent(branches=[...])``).
 
 Functions:
     create_game — convenience wrapper to create a GameState from card lists.
@@ -41,6 +43,7 @@ from engine.intent_player import (  # noqa: F401 — script entries are re-expor
     ScriptEntryError,
     act,
     act_illegal,
+    branch,
     pass_priority,
 )
 from engine.stack import resolve_top_of_stack
@@ -375,13 +378,14 @@ def run_scripts(game: GameState, *, max_priority: int = 1000) -> None:
 
     Rejections follow the engine's attempts (:mod:`engine.attempts`): a
     rejected priority action is retried within its entry, and a rejected choice
-    while an object resolves is retried from before that choice. Under a
+    while an object resolves is retried from before that choice — each with
+    the next branch of the entry or intent that owns the rejection. Under a
     negative Intent (see :class:`~engine.intent_player.Intent`) a rejection
     counts as a pass, and a resolution-time one stops play there.
 
     Raises:
         ScriptEntryError: When an entry's action does not go as it requires.
-        PostconditionError: When a choice exhausts its preferences, or a
+        PostconditionError: When a rejected choice's intent has no branch left, or a
             negative intent's forbidden choice takes effect.
         TestSetupError: If the scripts are not consumed within ``max_priority``
             grants of priority.
@@ -501,7 +505,7 @@ def resolve_stack(game: GameState) -> None:
     Each resolution is the engine's own (:func:`~engine.stack.resolve_top_of_stack`),
     exactly as in :func:`~engine.stack.priority_loop`: a choice the engine
     rejects while an object resolves is retried from before that choice, with
-    the rejected answer's highest-ranked preference dropped; under a negative
+    the owning intent's next branch; under a negative
     Intent the rejection counts as a pass and resolution stops there. The
     active player then holds priority in a fresh round, even when the stack
     was already empty.

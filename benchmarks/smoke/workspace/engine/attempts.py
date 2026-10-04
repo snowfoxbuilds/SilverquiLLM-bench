@@ -52,15 +52,13 @@ AttemptKind = Literal["priority", "resolution", "choice"]
 class AttemptAnswer:
     """One answer given during an attempt.
 
-    ``key`` names the handler of the answering player that chose it, and
-    ``used`` the ranks of that handler's preferences the answer used; both are
-    the player's to fill in. ``forbidden`` marks a choice a negative intent
-    made on purpose.
+    ``key`` names the handler of the answering player that chose it, for the
+    player to fill in. ``forbidden`` marks a choice a negative intent made on
+    purpose.
     """
 
     player: Any
     key: Hashable | None = None
-    used: tuple[int, ...] = ()
     forbidden: bool = False
 
 
@@ -72,8 +70,9 @@ class AttemptContext:
     kind: AttemptKind
     boundary: Any = None
     answers: list[AttemptAnswer] = field(default_factory=list)
-    # Preference ranks rejected tries dropped, per (id(player), handler key).
-    dropped: dict[tuple[int, Hashable], set[int]] = field(default_factory=dict)
+    # The branch each handler answers this attempt's tries with, per
+    # (id(player), handler key); a rejection the handler owns advances it.
+    branch: dict[tuple[int, Hashable], int] = field(default_factory=dict)
     # The Priority Query and its answer, for a priority attempt.
     query: Any = None
     answer: Any = None
@@ -117,15 +116,6 @@ class AttemptContext:
             for other in self.answers
             if other.player is answer.player and other.key == answer.key
         )
-
-    def used_by(self, answer: AttemptAnswer) -> set[int]:
-        """The preference ranks ``answer``'s handler used across this try."""
-        return {
-            rank
-            for other in self.answers
-            if other.player is answer.player and other.key == answer.key
-            for rank in other.used
-        }
 
     def check_forbidden(self) -> None:
         if any(a.forbidden for a in self.answers):

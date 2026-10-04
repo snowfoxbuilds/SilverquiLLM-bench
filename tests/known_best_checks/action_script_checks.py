@@ -33,6 +33,7 @@ from test_utils import (
     act,
     act_illegal,
     activate_card_ability,
+    branch,
     advance_game_to_phase,
     advance_to_phase,
     cast_card,
@@ -189,7 +190,7 @@ def test_act_fails_when_not_offered():
     assert isinstance(failure.value, PostconditionError)
 
 
-def test_act_fails_once_rejection_exhausts_its_preferences_and_is_rolled_back():
+def test_act_fails_once_rejection_exhausts_its_branches_and_is_rolled_back():
     game = _game()
     costly = Costly()
     set_board_state(game, 0, hand=[costly])
@@ -219,11 +220,15 @@ def test_one_entry_answers_every_query_of_its_action(presentation):
 
 
 @pytest.mark.parametrize("presentation", ["one", "two"])
-def test_rejection_drops_the_highest_ranked_preference_used_and_retries(presentation):
+def test_a_rejection_retries_with_the_next_branch(presentation):
     """Gleam is illegal: whether the engine offered Gleam at once (one query)
-    or asked Blade then Gleam (two queries), the retry casts Blade."""
+    or asked Blade then Gleam (two queries), the second branch casts Blade."""
     game, blade = _with_blade(presentation, gleam_legal=False)
-    script(game, 0, act(GleamFace, BladeCard), pass_priority())
+    script(
+        game, 0,
+        act(branches=[[GleamFace, BladeCard], [BladeCard]]),
+        pass_priority(),
+    )
     take_priority(game, game.players[0])
     assert blade.cast_face == "blade" and _on_stack(game, blade)
     # The rejected attempt and its retry were one entry: the next is still pending.
@@ -231,11 +236,50 @@ def test_rejection_drops_the_highest_ranked_preference_used_and_retries(presenta
     assert len(game.players[0].transcript.priority_queries()) == 2
 
 
+@pytest.mark.parametrize("presentation", ["one", "two"])
+def test_one_branch_is_not_retried(presentation):
+    """Preferences that would reach a legal Blade still fail once Gleam is
+    rejected: nothing is retried that the test did not write as a branch."""
+    game, blade = _with_blade(presentation, gleam_legal=False)
+    script(game, 0, act(GleamFace, BladeCard))
+    with pytest.raises(ScriptEntryError) as failure:
+        run_scripts(game)
+    assert failure.value.reason == "rejected"
+    assert game.get_hand(game.players[0]).contains(blade)
+
+
+def test_a_branch_whose_action_is_not_offered_is_skipped():
+    game, blade = _with_blade("one")
+    script(game, 0, act(branches=[[Bolt], [BladeCard]]))
+    run_scripts(game)
+    assert blade.cast_face == "blade" and _on_stack(game, blade)
+
+
+def test_a_branch_carries_its_own_choices():
+    game = _game()
+    keep, bad = _artifact("Keep"), _artifact("Bad")
+    cast = ChoosingCast(illegal={"Bad"})
+    set_board_state(game, 0, hand=[cast], battlefield=[bad, keep])
+    script(game, 0, act(branches=[
+        branch(ChoosingCast, choices=[Decision.obj(instance=bad.instance_id)]),
+        branch(ChoosingCast, choices=[Decision.obj(instance=keep.instance_id)]),
+    ]))
+    run_scripts(game)
+    assert _on_stack(game, cast)
+
+
+def test_an_entry_takes_preferences_or_branches_not_both():
+    with pytest.raises(TypeError):
+        act(BladeCard, branches=[[BladeCard]])
+    with pytest.raises(TypeError):
+        Intent(pattern=GameRef(), preferences=(Decision.yes(),), branches=[[Decision.no()]])
+
+
 def test_rejected_attempt_is_rolled_back_before_the_retry():
     game = _game()
     costly, bolt = Costly(), Bolt()
     set_board_state(game, 0, hand=[costly, bolt])
-    script(game, 0, act(Costly, Bolt))
+    script(game, 0, act(branches=[[Costly], [Bolt]]))
     run_scripts(game)
     assert game.get_hand(game.players[0]).contains(costly)
     assert _on_stack(game, bolt) and len(game.stack) == 1
@@ -276,6 +320,25 @@ def test_act_illegal_hands_the_same_window_to_the_next_entry():
     assert blade.cast_face == "blade" and (game.phase, game.step) == (Phase.PRECOMBAT_MAIN, None)
 
 
+@pytest.mark.parametrize("presentation", ["one", "two"])
+def test_act_illegal_passes_when_every_branch_is_refused_or_not_offered(presentation):
+    game, blade = _with_blade(presentation, gleam_legal=False)
+    costly = Costly()
+    set_board_state(game, 0, hand=[blade, costly])
+    script(game, 0, act_illegal(branches=[[GleamFace], [Costly]]), pass_priority())
+    run_scripts(game)
+    assert game.stack.is_empty() and blade.cast_face is None
+    assert game.players[0].pending_entries == ()
+
+
+def test_act_illegal_fails_when_a_later_branch_takes_effect():
+    game, blade = _with_blade("one", gleam_legal=False)
+    script(game, 0, act_illegal(branches=[[GleamFace], [BladeCard]]))
+    with pytest.raises(ScriptEntryError) as failure:
+        run_scripts(game)
+    assert failure.value.reason == "took effect"
+
+
 def test_pass_entries_skip_priority_windows():
     game = _game()
     bolt = Bolt()
@@ -311,6 +374,17 @@ def test_responses_alternate_priority_and_stop_with_the_stack_in_place():
 # ---------------------------------------------------------------------------
 
 
+def _named_intent(source: str, names, negative: bool, branches) -> Intent:
+    """An intent choosing objects by name: ``names`` is one branch, or
+    ``branches`` lists several, tried in order after each rejection."""
+    return Intent(
+        pattern=GameRef(card=frozenset({("name", source)})),
+        preferences=tuple(Decision.obj(name=name) for name in names),
+        negative=negative,
+        branches=[[Decision.obj(name=name) for name in b] for b in branches],
+    )
+
+
 def _chooser_game(illegal=()):
     game = _game()
     chooser = Chooser(illegal)
@@ -318,12 +392,8 @@ def _chooser_game(illegal=()):
     return game, chooser
 
 
-def _choose(*names, negative=False) -> Intent:
-    return Intent(
-        pattern=GameRef(card=frozenset({("name", "Chooser")})),
-        preferences=tuple(Decision.obj(name=name) for name in names),
-        negative=negative,
-    )
+def _choose(*names, negative=False, branches=()) -> Intent:
+    return _named_intent("Chooser", names, negative, branches)
 
 
 def test_choice_intents_answer_resolution_time_choices():
@@ -335,7 +405,7 @@ def test_choice_intents_answer_resolution_time_choices():
 
 def test_rejected_resolution_choice_retries_from_before_the_object_resolved():
     game, chooser = _chooser_game(illegal={"Bad"})
-    game.players[0].start_intent("choose", _choose("Bad", "Good"))
+    game.players[0].start_intent("choose", _choose(branches=[["Bad"], ["Good"]]))
     cast_card(game, game.players[0], chooser)
     assert chooser.chosen == "Good"
     assert game.get_graveyard(game.players[0]).contains(chooser)
@@ -343,8 +413,15 @@ def test_rejected_resolution_choice_retries_from_before_the_object_resolved():
     assert len(queries) == 2
 
 
-def test_resolution_choice_fails_once_its_preferences_are_exhausted():
+def test_resolution_choice_fails_once_its_branches_are_exhausted():
     game, chooser = _chooser_game(illegal={"Bad", "Good"})
+    game.players[0].start_intent("choose", _choose(branches=[["Bad"], ["Good"]]))
+    with pytest.raises(PostconditionError):
+        cast_card(game, game.players[0], chooser)
+
+
+def test_a_resolution_choice_with_one_branch_fails_on_its_rejection():
+    game, chooser = _chooser_game(illegal={"Bad"})
     game.players[0].start_intent("choose", _choose("Bad", "Good"))
     with pytest.raises(PostconditionError):
         cast_card(game, game.players[0], chooser)
@@ -426,7 +503,7 @@ def test_an_abandoned_choice_keeps_the_effects_before_it():
 def test_a_retried_choice_does_not_repeat_the_effects_before_it():
     game, chooser = _chooser_game(illegal={"Bad"})
     chooser.gain = 3
-    game.players[0].start_intent("choose", _choose("Bad", "Good"))
+    game.players[0].start_intent("choose", _choose(branches=[["Bad"], ["Good"]]))
     cast_card(game, game.players[0], chooser)
     assert _life(game) == 23 and chooser.chosen == "Good"
 
@@ -454,7 +531,7 @@ def _drive_resolve_stack(game, chooser):
 def test_every_driver_retries_a_rejected_resolution_choice_the_same_way(drive):
     game, chooser = _chooser_game(illegal={"Bad"})
     chooser.gain = 3
-    game.players[0].start_intent("choose", _choose("Bad", "Good"))
+    game.players[0].start_intent("choose", _choose(branches=[["Bad"], ["Good"]]))
     drive(game, chooser)
     assert chooser.chosen == "Good" and _life(game) == 23
     assert game.get_graveyard(game.players[0]).contains(chooser)
@@ -490,12 +567,8 @@ def _picker_game(illegal=()):
     return game, picker
 
 
-def _pick(*names, negative=False) -> Intent:
-    return Intent(
-        pattern=GameRef(card=frozenset({("name", "Picker")})),
-        preferences=tuple(Decision.obj(name=name) for name in names),
-        negative=negative,
-    )
+def _pick(*names, negative=False, branches=()) -> Intent:
+    return _named_intent("Picker", names, negative, branches)
 
 
 def test_abandoned_attempts_let_the_resolution_go_on():
@@ -509,15 +582,16 @@ def test_abandoned_attempts_let_the_resolution_go_on():
 
 def test_each_attempt_retries_its_own_rejected_pick():
     game, picker = _picker_game(illegal={"Bad"})
-    game.players[0].start_intent("pick", _pick("Bad", "Good"))
+    game.players[0].start_intent("pick", _pick(branches=[["Bad"], ["Good"]]))
     cast_card(game, game.players[0], picker)
-    # Each pick is a fresh attempt: Bad is rejected and Good taken, twice.
+    # Each pick is a fresh attempt from its first branch: Bad is rejected and
+    # Good taken, twice.
     assert picker.picks == ["Good", "Good"] and _life(game) == 22
 
 
-def test_an_attempt_that_exhausts_its_preferences_fails():
+def test_an_attempt_that_exhausts_its_branches_fails():
     game, picker = _picker_game(illegal={"Bad", "Good"})
-    game.players[0].start_intent("pick", _pick("Bad", "Good"))
+    game.players[0].start_intent("pick", _pick(branches=[["Bad"], ["Good"]]))
     with pytest.raises(PostconditionError):
         cast_card(game, game.players[0], picker)
 
@@ -534,7 +608,7 @@ def test_a_later_rejected_attempt_keeps_an_earlier_successful_one():
     game = _game()
     picker = OnceBadPicker()
     set_board_state(game, 0, hand=[picker], battlefield=[_artifact("Bad"), _artifact("Good")])
-    game.players[0].start_intent("pick", _pick("Bad", "Good"))
+    game.players[0].start_intent("pick", _pick(branches=[["Bad"], ["Good"]]))
     cast_card(game, game.players[0], picker)
     assert picker.picks == ["Bad", "Good"] and _life(game) == 22
 
@@ -562,17 +636,13 @@ def _choosing_cast_game(illegal=("Bad",)):
     return game, spell
 
 
-def _cast_choice(*names, negative=False) -> Intent:
-    return Intent(
-        pattern=GameRef(card=frozenset({("name", "Choosing Cast")})),
-        preferences=tuple(Decision.obj(name=name) for name in names),
-        negative=negative,
-    )
+def _cast_choice(*names, negative=False, branches=()) -> Intent:
+    return _named_intent("Choosing Cast", names, negative, branches)
 
 
-def test_a_choice_intent_during_a_cast_retries_its_own_fallback_and_keeps_the_entry():
+def test_a_choice_intent_during_a_cast_retries_its_next_branch_and_keeps_the_entry():
     game, spell = _choosing_cast_game()
-    game.players[0].start_intent("choose", _cast_choice("Bad", "Good"))
+    game.players[0].start_intent("choose", _cast_choice(branches=[["Bad"], ["Good"]]))
     script(game, 0, act(ChoosingCast), act(Bolt))
     take_priority(game, game.players[0])
     assert _on_stack(game, spell)
@@ -600,12 +670,8 @@ class TwoChooser(Sorcery):
         self.chosen = (a.name, b.name)
 
 
-def _sourced(source: str, *names, negative=False) -> Intent:
-    return Intent(
-        pattern=GameRef(card=frozenset({("name", source)})),
-        preferences=tuple(Decision.obj(name=name) for name in names),
-        negative=negative,
-    )
+def _sourced(source: str, *names, negative=False, branches=()) -> Intent:
+    return _named_intent(source, names, negative, branches)
 
 
 def _two_chooser_game(**kwargs):
@@ -619,7 +685,7 @@ def test_a_resolution_rejection_retries_the_intent_that_owns_it_not_an_earlier_o
     game, card = _two_chooser_game(illegal={"Bad"})
     p0 = game.players[0]
     p0.start_intent("first", _sourced("First Source", "Good"))
-    p0.start_intent("second", _sourced("Second Source", "Bad", "Good"))
+    p0.start_intent("second", _sourced("Second Source", branches=[["Bad"], ["Good"]]))
     cast_card(game, p0, card)
     assert card.chosen == ("Good", "Good")
 
@@ -627,8 +693,8 @@ def test_a_resolution_rejection_retries_the_intent_that_owns_it_not_an_earlier_o
 def test_only_the_player_who_owns_a_rejection_hears_it():
     game, card = _two_chooser_game(first=0, second=1, illegal={"Bad"})
     p0, p1 = game.players
-    p0.start_intent("first", _sourced("First Source", "Bad", "Good"))
-    p1.start_intent("second", _sourced("Second Source", "Bad", "Good"))
+    p0.start_intent("first", _sourced("First Source", branches=[["Bad"], ["Good"]]))
+    p1.start_intent("second", _sourced("Second Source", branches=[["Bad"], ["Good"]]))
     cast_card(game, p0, card)
     # Player 0's Bad was legal and kept; only player 1 fell back to Good.
     assert card.chosen == ("Bad", "Good")
@@ -666,8 +732,8 @@ def test_a_later_unrelated_rejection_does_not_mask_a_forbidden_choice():
     game, card = _two_chooser_game(illegal={"Bad"})
     p0 = game.players[0]
     p0.start_intent("first", _sourced("First Source", "Bad", negative=True))
-    p0.start_intent("second", _sourced("Second Source", "Bad", "Good"))
-    with pytest.raises(PostconditionError):
+    p0.start_intent("second", _sourced("Second Source", branches=[["Bad"], ["Good"]]))
+    with pytest.raises(PostconditionError, match="negative intent forbids"):
         cast_card(game, p0, card)
 
 
@@ -806,7 +872,7 @@ def _opponent_cast_game(*entries):
     spell = OpponentCast()
     artifacts = [_artifact("Bad"), _artifact("Good")]
     set_board_state(game, 0, hand=[spell, Bolt()], battlefield=artifacts)
-    game.players[1].start_intent("choose", _sourced("Opponent Cast", "Bad", "Good"))
+    game.players[1].start_intent("choose", _sourced("Opponent Cast", branches=[["Bad"], ["Good"]]))
     script(game, 0, *entries)
     return game, spell
 
@@ -849,31 +915,44 @@ class PairChooser(Sorcery):
         self.chosen = names
 
 
-def _pair_game(combined: bool, *prefs, negative=False, **kwargs):
+def _pair_game(combined: bool, *prefs, negative=False, branches=(), **kwargs):
     game = _game()
     card = PairChooser(combined, **kwargs)
     artifacts = [_artifact(n) for n in ("Bad", "Good", "Followup", "Filler")]
     set_board_state(game, 0, hand=[card], battlefield=artifacts)
-    game.players[0].start_intent("pair", _sourced("Pair Chooser", *prefs, negative=negative))
+    game.players[0].start_intent(
+        "pair", _sourced("Pair Chooser", *prefs, negative=negative, branches=branches)
+    )
     return game, card
 
 
+_PAIR_BRANCHES = [["Bad", "Followup"], ["Good", "Followup"]]
+
+
 @pytest.mark.parametrize("combined", [True, False], ids=["combined", "decomposed"])
-def test_a_rejection_drops_the_owning_handlers_best_rank_across_its_queries(combined):
-    game, card = _pair_game(combined, "Bad", "Good", "Followup")
+def test_a_rejection_retries_the_owning_handlers_next_branch_across_its_queries(combined):
+    game, card = _pair_game(combined, branches=_PAIR_BRANCHES)
     cast_card(game, game.players[0], card)
     assert card.chosen == ["Followup", "Good"]
 
 
-def test_a_latest_answer_by_mandatory_fill_still_drops_the_handlers_earlier_rank():
-    game, card = _pair_game(False, "Bad", "Good", followup="Filler")
+@pytest.mark.parametrize("combined", [True, False], ids=["combined", "decomposed"])
+def test_a_single_branch_is_not_revised_after_a_rejection(combined):
+    """Good is preferred too, but only in the one branch that chose Bad."""
+    game, card = _pair_game(combined, "Bad", "Good", "Followup")
+    with pytest.raises(PostconditionError):
+        cast_card(game, game.players[0], card)
+
+
+def test_a_rejection_owned_by_a_mandatory_fill_advances_its_handlers_branch():
+    game, card = _pair_game(False, branches=[["Bad"], ["Good"]], followup="Filler")
     cast_card(game, game.players[0], card)
     assert card.chosen == ["Filler", "Good"]
 
 
 @pytest.mark.parametrize("combined", [True, False], ids=["combined", "decomposed"])
-def test_a_handler_that_runs_out_of_preferences_fails(combined):
-    game, card = _pair_game(combined, "Bad", "Good", "Followup", illegal=("Bad", "Good"))
+def test_a_handler_that_runs_out_of_branches_fails(combined):
+    game, card = _pair_game(combined, branches=_PAIR_BRANCHES, illegal=("Bad", "Good"))
     with pytest.raises(PostconditionError):
         cast_card(game, game.players[0], card)
 
@@ -1107,19 +1186,17 @@ class GrantedCaster(Sorcery):
         return cast_spell_free(game, player, card, Zone.HAND)
 
 
-def _granted_game(*names, negative=False):
+def _granted_game(*names, negative=False, branches=()):
     game = _game()
     first, refused, second = Bolt(), Refused(), Bolt()
     caster = GrantedCaster([[first], [refused, second]])
     set_board_state(game, 0, hand=[caster, first, refused, second])
-    game.players[0].start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", "Granted Caster")})),
-        preferences=tuple(Decision.obj(name=n) for n in names), negative=negative))
+    game.players[0].start_intent("cast", _named_intent("Granted Caster", names, negative, branches))
     return game, caster, first, refused, second
 
 
 def test_a_rejected_later_granted_cast_retries_and_keeps_the_earlier_cast():
-    game, caster, first, refused, second = _granted_game("Refused", "Bolt")
+    game, caster, first, refused, second = _granted_game(branches=[["Refused"], ["Bolt"]])
     cast_card(game, game.players[0], caster, resolve=False)
     resolve_top_of_stack(game)
     assert caster.casts == [True, True] and _in_zone(game, refused, Zone.HAND)
@@ -1235,16 +1312,21 @@ def _named(*names):
     return tuple(Decision.obj(name=name) for name in names)
 
 
-def test_the_entry_owns_its_mandatory_fill_and_retries_its_own_fallback():
-    game, spell = _split_game(act(SplitCast, choices=_named("Bad", "Good")), act(Bolt))
+_SPLIT_BRANCHES = [
+    branch(SplitCast, choices=_named("Bad")),
+    branch(SplitCast, choices=_named("Good")),
+]
+
+
+def test_the_entry_owns_its_mandatory_fill_and_retries_its_next_branch():
+    game, spell = _split_game(act(branches=_SPLIT_BRANCHES), act(Bolt))
     assert take_priority(game, game.players[0]) is False
     assert spell.chose == "Good" and _on_stack(game, spell)
     assert [e.describe() for e in game.players[0].pending_entries] == ["act(Bolt)"]
 
 
-def test_the_entry_fails_once_its_choices_are_exhausted():
-    game, _spell = _split_game(act(SplitCast, choices=_named("Bad", "Good")),
-                               illegal=("Bad", "Good"))
+def test_the_entry_fails_once_its_branches_are_exhausted():
+    game, _spell = _split_game(act(branches=_SPLIT_BRANCHES), illegal=("Bad", "Good"))
     with pytest.raises(ScriptEntryError) as failure:
         take_priority(game, game.players[0])
     assert failure.value.reason == "rejected"
@@ -1325,7 +1407,7 @@ class Visitor(Chooser):
         super().on_resolve(game)
 
 
-def _copied_visitor(*prefs, negative=False):
+def _copied_visitor(*prefs, negative=False, branches=()):
     game = _game()
     visitor = Visitor(illegal={"Bad"})
     set_board_state(game, 0, hand=[visitor], battlefield=[_artifact("Bad"), _artifact("Good")])
@@ -1333,14 +1415,12 @@ def _copied_visitor(*prefs, negative=False):
     run_scripts(game)
     copy = copy_spell(game, game.stack.peek(), game.players[0])
     game.stack.push(copy)
-    game.players[0].start_intent("choose", Intent(
-        pattern=GameRef(card=frozenset({("name", "Chooser")})),
-        preferences=_named(*prefs), negative=negative))
+    game.players[0].start_intent("choose", _named_intent("Chooser", prefs, negative, branches))
     return game, visitor, copy
 
 
 def test_a_retried_copy_restores_the_state_only_its_stack_object_reaches():
-    game, visitor, copy = _copied_visitor("Bad", "Good")
+    game, visitor, copy = _copied_visitor(branches=[["Bad"], ["Good"]])
     assert resolve_top_of_stack(game) is True
     assert copy.source.visits == 1 and _life(game) == 21 and copy.source.chosen == "Good"
     assert [obj.source for obj in game.stack._items] == [visitor]  # the original still pending
@@ -1364,7 +1444,7 @@ def test_an_ability_callback_with_captured_state_is_retried_from_its_start():
         chooser.on_resolve(g)
 
     game.stack.push(StackObject(source=None, controller=game.players[0], on_resolve=resolve))
-    game.players[0].start_intent("choose", _choose("Bad", "Good"))
+    game.players[0].start_intent("choose", _choose(branches=[["Bad"], ["Good"]]))
     assert resolve_top_of_stack(game) is True
     assert seen["runs"] == 1 and chooser.chosen == "Good"
 
@@ -1383,7 +1463,7 @@ def test_an_explicit_attempt_restores_state_only_its_callable_reaches():
         assert attempts.attempt(g, pick) == (True, "Good")
 
     game.stack.push(StackObject(source=None, controller=game.players[0], on_resolve=resolve))
-    game.players[0].start_intent("pick", _pick("Bad", "Good"))
+    game.players[0].start_intent("pick", _pick(branches=[["Bad"], ["Good"]]))
     resolve_top_of_stack(game)
     assert calls == [1]
 
