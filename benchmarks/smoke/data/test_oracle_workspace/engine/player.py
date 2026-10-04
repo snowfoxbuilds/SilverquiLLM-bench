@@ -128,6 +128,21 @@ class Player(ABC):
         """
         raise error
 
+    def on_attempt_rejected(self, context: Any, answer: Any, error: InvalidPlayerChoiceError) -> str:
+        """Hear that a rejection belongs to ``answer``, one this player gave
+        during ``context`` (an :class:`~engine.attempts.AttemptContext`), after
+        the game was rolled back (see ADR-017).
+
+        Return ``"retry"`` to try again — for a priority action, the same
+        Priority Query is asked again — or ``"pass"`` to abandon the attempt;
+        raise to stop play with an error. The default hands a rejected priority
+        action to :meth:`on_choice_rejected` and raises any other rejection.
+        """
+        if context.kind == "priority":
+            self.on_choice_rejected(context.query, context.answer, error)
+            return "retry"
+        raise error
+
     def on_action_taken(self, query: PlayerQuery, answer: Answer, result: Any) -> None:
         """Hear that the action chosen in ``answer`` to Priority Query ``query``
         took effect — the spell or ability is on the stack, the land played, or

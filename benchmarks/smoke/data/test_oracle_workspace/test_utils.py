@@ -31,7 +31,7 @@ from engine.combat import (
     declare_attackers_step,
     declare_blockers_step,
 )
-from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError
+from engine.decisions import Decision, GameRef
 from engine.game import create_game as _engine_create_game
 from engine.game_state import _TURN_SEQUENCE, GameState
 from engine.intent_player import (  # noqa: F401 — script entries are re-exported for tests
@@ -43,6 +43,7 @@ from engine.intent_player import (  # noqa: F401 — script entries are re-expor
     act_illegal,
     pass_priority,
 )
+from engine.stack import resolve_top_of_stack
 from engine.types import ManaType, Phase, Step, Zone
 
 
@@ -365,85 +366,70 @@ def run_scripts(game: GameState, *, max_priority: int = 1000) -> None:
     stack, move the game to the next step that grants priority. A player whose
     script is dry passes.
 
-    A rejected priority action is retried within its entry, dropping the
-    highest-ranked preference the rejected attempt used; a rejected choice
-    while an object resolves is retried the same way from before the object
-    resolved (see :func:`resolve_stack`). Under a negative Intent (see
-    :class:`~engine.intent_player.Intent`) a rejection counts as a pass, and a
-    resolution-time one stops play there.
+    The priority round is kept with the game between calls: when the scripts
+    run out, the next priority holder and the passes already made in a row are
+    stored, and the next call carries on from there — with a pending
+    resolution or step change made first if both players had passed. An
+    action, a resolution, :func:`resolve_stack` and :func:`advance_to_phase`
+    start a fresh round.
+
+    Rejections follow the engine's attempts (:mod:`engine.attempts`): a
+    rejected priority action is retried within its entry, and a rejected choice
+    while an object resolves is retried from before that choice. Under a
+    negative Intent (see :class:`~engine.intent_player.Intent`) a rejection
+    counts as a pass, and a resolution-time one stops play there.
 
     Raises:
         ScriptEntryError: When an entry's action does not go as it requires.
-        PostconditionError: When a resolution-time choice exhausts its preferences.
+        PostconditionError: When a choice exhausts its preferences, or a
+            negative intent's forbidden choice takes effect.
         TestSetupError: If the scripts are not consumed within ``max_priority``
             grants of priority.
     """
     from engine.priority import take_priority
-    from engine.stack import resolve_top_of_stack
 
     current = game.priority_player_index
-    passes = 0
-    for _ in range(max_priority):
+    passes = _priority_passes(game)
+    grants = 0
+    while True:
         if not _scripts_remain(game):
+            _set_priority_round(game, current, passes)
             return
-        game.priority_player_index = current
-        if not take_priority(game, game.players[current]):
+        if passes >= 2:
             passes = 0
+            if game.stack.is_empty():
+                _enter_next_priority_step(game)
+            elif not resolve_top_of_stack(game):
+                _set_priority_round(game, game.active_player_index, 0)
+                return
+            current = game.active_player_index
             continue
-        passes += 1
-        current = 1 - current
-        if passes < 2 or not _scripts_remain(game):
-            continue
-        passes = 0
-        if game.stack.is_empty():
-            _enter_next_priority_step(game)
-        elif not _resolve_with_choice_retry(game, resolve_top_of_stack):
-            return
-        current = game.active_player_index
-    raise TestSetupError(f"scripts not consumed within {max_priority} grants of priority")
+        if grants == max_priority:
+            raise TestSetupError(f"scripts not consumed within {max_priority} grants of priority")
+        grants += 1
+        game.priority_player_index = current
+        if take_priority(game, game.players[current]):
+            passes += 1
+            current = 1 - current
+        else:
+            passes = 0
+
+
+_PRIORITY_PASSES = "scripted_priority_passes"
+
+
+def _priority_passes(game: GameState) -> int:
+    """Passes in a row already made in the current priority round."""
+    return getattr(game, _PRIORITY_PASSES, 0)
+
+
+def _set_priority_round(game: GameState, holder: int, passes: int) -> None:
+    game.priority_player_index = holder
+    setattr(game, _PRIORITY_PASSES, passes)
 
 
 def _scripts_remain(game: GameState) -> bool:
     return any(isinstance(p, DeterministicPlayer) and p.pending_entries for p in game.players)
-
-
-def _resolve_with_choice_retry(game: GameState, resolve: Any) -> bool:
-    """Resolve one object, retrying a choice the engine rejects.
-
-    A choice raised while the object resolves has its own rollback point: on
-    ``InvalidPlayerChoiceError`` the game is rolled back to before the object
-    began resolving and resolved again, with the player having dropped the
-    highest-ranked preference the rejected attempt used (see ADR-017). Returns
-    ``False`` if a negative Intent answered, so the rejection counts as a pass:
-    the game stays rolled back and play stops.
-
-    Raises:
-        PostconditionError: if the choice's preferences are exhausted.
-    """
-    from engine.rollback import take_snapshot
-
-    players = [p for p in game.players if isinstance(p, DeterministicPlayer)]
-    retryable = any(p.has_choice_preferences() for p in players)
-    for player in players:
-        player.begin_choice_window()
-    try:
-        while True:
-            snapshot = take_snapshot(game) if retryable else None
-            try:
-                resolve(game)
-                return True
-            except InvalidPlayerChoiceError as error:
-                if snapshot is None:
-                    raise
-                snapshot.restore()
-                outcomes = {p.on_resolution_choice_rejected(error) for p in players}
-                if "pass" in outcomes:
-                    return False
-                if "retry" not in outcomes:
-                    raise
-    finally:
-        for player in players:
-            player.end_choice_window()
 
 
 def _enter_next_priority_step(game: GameState) -> None:
@@ -466,6 +452,7 @@ def _take_action(game: GameState, player: Any, entry: ScriptEntry) -> Any:
     from engine.priority import take_priority
 
     player = _deterministic(game, player)
+    _set_priority_round(game, game.players.index(player), 0)
     saved = player.set_script([entry])
     player.last_action_result = None
     try:
@@ -532,16 +519,16 @@ def resolve_stack(game: GameState) -> None:
     """Resolve the entire stack with every player passing; consumes no script
     entries.
 
-    Each resolution settles the game exactly as
-    :func:`~engine.stack.priority_loop` does. A choice the engine rejects while
-    an object resolves is retried from before that object resolved, with the
-    rejected attempt's highest-ranked preference dropped; under a negative
-    Intent the rejection counts as a pass and resolution stops there.
+    Each resolution is the engine's own (:func:`~engine.stack.resolve_top_of_stack`),
+    exactly as in :func:`~engine.stack.priority_loop`: a choice the engine
+    rejects while an object resolves is retried from before that choice, with
+    the rejected answer's highest-ranked preference dropped; under a negative
+    Intent the rejection counts as a pass and resolution stops there. The
+    active player then holds priority in a fresh round.
     """
-    from engine.stack import resolve_top_of_stack
-
     while not game.stack.is_empty():
-        if not _resolve_with_choice_retry(game, resolve_top_of_stack):
+        _set_priority_round(game, game.active_player_index, 0)
+        if not resolve_top_of_stack(game):
             return
 
 
@@ -645,6 +632,7 @@ def advance_to_phase(
     for _ in range(max_advances):
         game.advance_phase()
         if (game.phase, game.step) == target:
+            _set_priority_round(game, game.active_player_index, 0)
             return
 
     raise TestSetupError(

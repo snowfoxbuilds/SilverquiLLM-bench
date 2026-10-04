@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from engine import attempts
 from engine.decisions import (
     DecisionKind,
     GameRef,
@@ -118,6 +119,9 @@ def ask(player: object, query: PlayerQuery) -> Answer:
     engine applies it.
     """
     validate_query(query)
+    context = attempts.current()
+    if context is not None:
+        context.before_query(player)
     answer = player.answer(query)  # type: ignore[attr-defined]
     validate_answer(query, answer)
     return answer

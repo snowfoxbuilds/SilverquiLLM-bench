@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable
 
+from engine import attempts
+from engine.attempts import AttemptAnswer
 from engine.decisions import (
     AmbiguousIntentError,
     Decision,
@@ -51,9 +53,12 @@ class Intent:
     ``end_intent``. The registry name is passed to ``start_intent``, not stored
     here.
 
-    A ``negative`` intent prefers a choice the rules forbid: an
-    ``InvalidPlayerChoiceError`` raised after it answers counts as a pass rather
-    than a failure (see ADR-017).
+    A ``negative`` intent prefers a choice the rules forbid: when the engine
+    rejects that choice with ``InvalidPlayerChoiceError``, the rejection counts
+    as a pass; when the choice takes effect, the test fails with
+    ``PostconditionError`` — at the end of the attempt it was made in, or at
+    ``end_intent`` (see ADR-017). If no forbidden choice is offered, nothing
+    is checked.
     """
 
     pattern: GameRef
@@ -263,17 +268,8 @@ class _EntryAttempt:
         return [(i, p) for i, p in enumerate(prefs[:limit]) if i not in self.dropped]
 
 
-@dataclass
-class _ChoiceAttempt:
-    """A resolution-time choice window: which intent preferences the current
-    attempt used, and which earlier rejected attempts dropped (by intent key)."""
-
-    dropped: dict[str, set[int]] = field(default_factory=dict)
-    used: list[tuple[str, int]] = field(default_factory=list)
-    answered: bool = False
-
-
 _BASELINE_KEY = "<baseline>"
+_ENTRY_KEY = "<script entry>"
 
 
 class DeterministicPlayer(Player):
@@ -285,17 +281,20 @@ class DeterministicPlayer(Player):
     never takes an action, whatever its preferences.
 
     A rejected choice is retried without depending on how the engine presents
-    it (see ADR-017): the player drops the highest-ranked preference the
-    rejected attempt used and answers the re-asked query with the rest, so
-    ``act(GleamOfDeath, GlamdringFoehammer)`` falls back to Glamdring whether
+    it (see ADR-017): the handler that owns the rejected answer — the script
+    entry, or the routed intent that answered — drops the highest-ranked
+    preference it used in the rejected attempt and answers again with the rest,
+    so ``act(GleamOfDeath, GlamdringFoehammer)`` falls back to Glamdring whether
     the engine offered Gleam of Death at once or asked for the face after the
-    card. Script position and attempt bookkeeping are decision-side state, so a
-    rollback leaves them alone (``rollback_exempt``).
+    card, and a choice intent's fallback is tried while its entry's action is
+    kept. A negative intent's choice that is rejected counts as a pass; one
+    that takes effect fails. Script position and attempt bookkeeping are
+    decision-side state, so a rollback leaves them alone (``rollback_exempt``).
     """
 
     rollback_exempt = frozenset({
         "_intents", "_baseline", "transcript", "game", "_script", "_attempt",
-        "_choices", "_negative_answered", "_pass_next", "last_action_result",
+        "_forbidden_outside", "last_action_result",
     })
 
     def __init__(self, name: str, life: int = 20) -> None:
@@ -307,9 +306,8 @@ class DeterministicPlayer(Player):
         self.game: Any = None
         self._script: list[ScriptEntry] = []
         self._attempt: _EntryAttempt | None = None
-        self._choices: _ChoiceAttempt | None = None
-        self._negative_answered = False
-        self._pass_next = False
+        # Negative intents whose forbidden choice was accepted outside any attempt.
+        self._forbidden_outside: set[str] = set()
         self.last_action_result: Any = None
 
     # ------------------------------------------------------------------
@@ -325,9 +323,15 @@ class DeterministicPlayer(Player):
 
         Raises:
             KeyError: if ``name`` was never started.
-            PostconditionError: if the intent's postcondition returns falsey.
+            PostconditionError: if the intent's postcondition returns falsey,
+                or a negative intent's forbidden choice took effect.
         """
         intent = self._intents.pop(name)
+        if name in self._forbidden_outside:
+            self._forbidden_outside.discard(name)
+            raise PostconditionError(
+                f"negative intent {name!r}: a forbidden choice took effect"
+            )
         if intent.postcondition is not None:
             g = game if game is not None else self.game
             if not intent.postcondition(g):
@@ -364,26 +368,56 @@ class DeterministicPlayer(Player):
         """Whether a scripted action is being taken right now."""
         return self._attempt is not None
 
-    def on_choice_rejected(
-        self, query: PlayerQuery, answer: Answer, error: InvalidPlayerChoiceError
-    ) -> None:
+    def on_attempt_rejected(
+        self, context: Any, answer: AttemptAnswer, error: InvalidPlayerChoiceError
+    ) -> str:
+        if answer.key is None:
+            # Answered outside this player's handlers (a subclass's own answer).
+            return super().on_attempt_rejected(context, answer, error)
+        if answer.forbidden:
+            # A negative intent's choice was refused, as the rules require.
+            return "pass"
+        if answer.key == _ENTRY_KEY:
+            return self._entry_rejected(error)
+        return self._choice_rejected(context, answer, error)
+
+    def _entry_rejected(self, error: InvalidPlayerChoiceError) -> str:
         attempt = self._attempt
         if attempt is None:
-            if not self._negative_answered:
-                raise error
-            # A card intent chose this action; asked again it would choose it
-            # again, so the re-asked query is passed.
-            self._pass_next = True
-            return
-        if self._negative_answered or attempt.entry.kind is EntryKind.ILLEGAL:
+            raise error
+        if attempt.entry.kind is EntryKind.ILLEGAL:
+            # Rejected as it must be: the re-asked query goes to the next entry.
             self._attempt = None
-            return
+            return "retry"
         if not attempt.used:
             self._attempt = None
             raise ScriptEntryError(attempt.entry, "rejected", error) from error
         attempt.dropped.add(min(attempt.used))
         attempt.error = error
         attempt.retrying = True
+        return "retry"
+
+    def _choice_rejected(
+        self, context: Any, answer: AttemptAnswer, error: InvalidPlayerChoiceError
+    ) -> str:
+        if not answer.used:
+            raise PostconditionError(
+                f"choice rejected with no preference left to drop: {error}"
+            ) from error
+        dropped = context.dropped.setdefault((id(self), answer.key), set())
+        dropped.add(min(answer.used))
+        intent = self._baseline if answer.key == _BASELINE_KEY else self._intents.get(answer.key)
+        if intent is None or len(dropped) >= len(intent.preferences):
+            if context.kind == "priority" and context.answers and context.answers[0] is answer:
+                # A card intent chose this priority action and has no other.
+                raise error
+            raise PostconditionError(
+                f"choice intent {answer.key!r} exhausted its preferences: {error}"
+            ) from error
+        if self._attempt is not None:
+            # The entry's action stays the same; only the choice is revised.
+            self._attempt.retrying = True
+        return "retry"
 
     def on_action_taken(self, query: PlayerQuery, answer: Answer, result: Any) -> None:
         attempt, self._attempt = self._attempt, None
@@ -396,55 +430,16 @@ class DeterministicPlayer(Player):
             raise ScriptEntryError(attempt.entry, "missed goal")
 
     # ------------------------------------------------------------------
-    # Resolution-time choices
+    # Retrying choices
     # ------------------------------------------------------------------
 
-    def has_choice_preferences(self) -> bool:
-        """Whether an intent with preferences could answer a choice now — the
-        only case in which a rejected choice can be retried."""
+    def can_retry_choices(self) -> bool:
+        """Whether a rejected choice could be answered differently — only then
+        is an attempt worth rolling back and retrying."""
         intents = [*self._intents.values(), self._baseline]
-        return any(intent is not None and intent.preferences for intent in intents)
-
-    def begin_choice_window(self) -> None:
-        """Start tracking the choices raised while one object resolves."""
-        self._choices = _ChoiceAttempt()
-        self._negative_answered = False
-
-    def end_choice_window(self) -> None:
-        self._choices = None
-
-    def on_resolution_choice_rejected(self, error: InvalidPlayerChoiceError) -> str:
-        """Hear that a choice this player made while an object resolved was
-        rejected and the game rolled back to before that object resolved.
-
-        Returns ``"pass"`` when a negative intent answered (the rejection counts
-        as a pass), ``"retry"`` after dropping the highest-ranked preference the
-        first intent to answer used, or ``"none"`` if this player made no choice.
-
-        Raises:
-            PostconditionError: if the choice's preferences are exhausted.
-        """
-        window = self._choices
-        if window is None or not window.answered:
-            return "none"
-        if self._negative_answered:
-            return "pass"
-        if not window.used:
-            raise PostconditionError(
-                f"choice rejected with no preference left to drop: {error}"
-            ) from error
-        key = window.used[0][0]
-        dropped = window.dropped.setdefault(key, set())
-        dropped.add(min(i for k, i in window.used if k == key))
-        intent = self._baseline if key == _BASELINE_KEY else self._intents.get(key)
-        if intent is None or len(dropped) >= len(intent.preferences):
-            raise PostconditionError(
-                f"choice intent {key!r} exhausted its preferences: {error}"
-            ) from error
-        window.used = []
-        window.answered = False
-        self._negative_answered = False
-        return "retry"
+        return self._attempt is not None or any(
+            intent is not None and intent.preferences for intent in intents
+        )
 
     # ------------------------------------------------------------------
     # Answering
@@ -457,37 +452,37 @@ class DeterministicPlayer(Player):
 
     def _answer(self, query: PlayerQuery, record: QueryRecord) -> Answer:
         claimed = self._card_intents_for(query)
+        noted = attempts.current_answer(self)
         if is_priority_query(query):
-            self._negative_answered = False
-            if self._pass_next:
-                self._pass_next = False
-                return Answer()
             attempt = self._attempt
             if attempt is not None and attempt.retrying:
                 attempt.retrying = False
                 attempt.used = set()
+                _note(noted, _ENTRY_KEY)
                 return self._choose_action(attempt, query)
             self._attempt = None
             if self._script and not claimed:
+                _note(noted, _ENTRY_KEY)
                 return self._answer_from_script(query)
         elif self._attempt is not None and not claimed:
             ranked = self._attempt.ranked()
             if _first_preferred([p for _, p in ranked], query.options) is not None:
                 answer, used = _select(ranked, query)
                 self._attempt.used.update(used)
+                _note(noted, _ENTRY_KEY)
                 return answer
 
         name, intent = self._route(query, claimed)
-        if intent.negative:
-            self._negative_answered = True
-        window = self._choices
         key = _BASELINE_KEY if name is None else name
-        skip = window.dropped.get(key, set()) if window is not None else set()
+        context = attempts.current()
+        skip = context.dropped.get((id(self), key), set()) if context is not None else set()
         ranked = [(i, p) for i, p in enumerate(intent.preferences) if i not in skip]
         answer, used = _select(ranked, query)
-        if window is not None and not is_priority_query(query):
-            window.answered = True
-            window.used.extend((key, i) for i in used)
+        forbidden = intent.negative and bool(used)
+        if noted is not None:
+            _note(noted, key, used, forbidden)
+        elif forbidden and name is not None:
+            self._forbidden_outside.add(name)
         if name is not None and intent.preferences and not used and query.min > 0:
             # A routed card intent answered purely by first-offered fill —
             # probable wrong option set or typo'd preference. Flagged in the
@@ -562,6 +557,14 @@ def _first_preferred(
             if satisfies(option, pref):
                 return option
     return None
+
+
+def _note(
+    noted: AttemptAnswer | None, key: str, used: Any = (), forbidden: bool = False
+) -> None:
+    """Record which handler gave the answer being given inside an attempt."""
+    if noted is not None:
+        noted.key, noted.used, noted.forbidden = key, tuple(used), forbidden
 
 
 def _intent_matches(intent: Intent, query: PlayerQuery) -> bool:

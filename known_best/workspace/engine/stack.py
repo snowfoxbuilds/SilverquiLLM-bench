@@ -557,8 +557,9 @@ def settle_after_resolution(game: GameState) -> None:
             break
 
 
-def resolve_top_of_stack(game: GameState) -> None:
-    """Pop and resolve exactly one stack object, then settle the game.
+def resolve_top_of_stack(game: GameState) -> bool:
+    """Pop and resolve exactly one stack object, then settle the game; return
+    ``False`` if a rejected choice was abandoned and the resolution ended there.
 
     This is the single, canonical normal-game resolution primitive shared by
     :func:`priority_loop` (the normal-game path), :func:`engine.casting.resolve_top`
@@ -575,12 +576,21 @@ def resolve_top_of_stack(game: GameState) -> None:
        continuous characteristics current before priority returns.
 
     See :func:`settle_after_resolution` for the ordering rationale.
+
+    The effect runs as an attempt (:func:`engine.attempts.resolve`): a choice
+    the engine rejects while it resolves is rolled back and, if its player
+    retries, the effect runs again with every state before the rejected choice
+    restored; an abandoned choice ends the resolution there, keeping the
+    effects before its first query (see ADR-017).
     """
+    from engine import attempts
+
     if game.stack.is_empty():
-        return
+        return True
     obj = game.stack.pop()
-    obj.on_resolve(game)
+    completed = attempts.resolve(game, lambda: obj.on_resolve(game))
     settle_after_resolution(game)
+    return completed
 
 
 def _handle_priority(game: GameState, player: Player) -> bool:

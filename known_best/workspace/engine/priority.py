@@ -24,9 +24,9 @@ is not part of any test contract.
 
 Offering an illegal option is allowed; letting it take effect is not. When the
 chosen action fails, the game is rolled back to the beginning of the Priority
-Query (:mod:`engine.rollback`), the player hears the
-:class:`~engine.decisions.InvalidPlayerChoiceError` through
-:meth:`~engine.player.Player.on_choice_rejected`, and is asked again.
+Query (:mod:`engine.attempts`, :mod:`engine.rollback`), and the player who
+owns the rejection hears the :class:`~engine.decisions.InvalidPlayerChoiceError`
+and decides whether the query is asked again.
 """
 
 from __future__ import annotations
@@ -45,8 +45,9 @@ from engine.abilities import (
 from engine.card import LoyaltyAbility, ManaAbility
 from engine.casting import CastingError, CastMode, is_sorcery_speed, play_land
 from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, PlayerDecision
+from engine import attempts
+from engine.attempts import AttemptContext
 from engine.queries import PRIORITY_WINDOW, PlayerQuery, ask
-from engine.rollback import take_snapshot
 from engine.stack import settle_after_resolution
 from engine.types import CardType, Zone
 from engine.zones import IllegalMoveError
@@ -64,31 +65,43 @@ REJECTED_ACTION_ERRORS = (CastingError, AbilityError, IllegalMoveError, InvalidP
 def take_priority(game: GameState, player: Player) -> bool:
     """Ask *player* for an action and take it; return ``True`` if they passed.
 
-    A rejected action is rolled back and the same Priority Query is asked again
-    until the player passes, an action takes effect, or the player's
-    :meth:`~engine.player.Player.on_choice_rejected` raises.
+    The action is an attempt (:mod:`engine.attempts`) whose rejection boundary
+    is the beginning of the Priority Query: a rejected action is rolled back
+    there and the player who owns the rejection decides, through
+    :meth:`~engine.player.Player.on_attempt_rejected`, whether the same query
+    is asked again, the rejection counts as a pass, or play stops with an error.
     """
-    while True:
-        # CR 117.5: the game settles before a player receives priority, also
-        # when an action leaves the stack empty or pays a cost that kills.
-        settle_after_resolution(game)
-        query, actions = priority_query(game, player)
-        answer = ask(player, query)
-        if not answer.selected:
-            return True
-        # Answering changes no game state, so this is the state the query began in.
-        snapshot = take_snapshot(game)
-        try:
-            result = actions[answer.selected[0]]()
-        except REJECTED_ACTION_ERRORS as exc:
-            snapshot.restore()
-            error = exc if isinstance(exc, InvalidPlayerChoiceError) else InvalidPlayerChoiceError(str(exc))
-            if error is not exc:
-                error.__cause__ = exc
-            player.on_choice_rejected(query, answer, error)
-            continue
-        player.on_action_taken(query, answer, result)
-        return False
+    context = AttemptContext(game, "priority")
+    with attempts.active(context):
+        while True:
+            # CR 117.5: the game settles before a player receives priority, also
+            # when an action leaves the stack empty or pays a cost that kills.
+            settle_after_resolution(game)
+            context.begin_try()
+            query, actions = priority_query(game, player)
+            answer = ask(player, query)
+            context.query, context.answer = query, answer
+            if not answer.selected:
+                return True
+            try:
+                result = actions[answer.selected[0]]()
+            except REJECTED_ACTION_ERRORS as exc:
+                context.boundary.restore()
+                if context.reject(as_choice_error(exc)) == "pass":
+                    return True
+                continue
+            context.check_forbidden()
+            player.on_action_taken(query, answer, result)
+            return False
+
+
+def as_choice_error(exc: Exception) -> InvalidPlayerChoiceError:
+    """``exc`` as the ``InvalidPlayerChoiceError`` a player hears, caused by it."""
+    if isinstance(exc, InvalidPlayerChoiceError):
+        return exc
+    error = InvalidPlayerChoiceError(str(exc))
+    error.__cause__ = exc
+    return error
 
 
 def priority_query(

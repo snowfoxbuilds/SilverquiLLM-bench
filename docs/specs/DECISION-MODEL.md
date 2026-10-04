@@ -176,14 +176,18 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
   The engine then asks the same query again and play continues from it; a rejected attempt consumes no further action-script entry.
   `InvalidPlayerChoiceError` is a rules rejection, distinct from the ProtocolError and IntentError families, which report malformed queries and test-authoring faults.
 - **Rejection scenarios**: implementation tests check, after each rejection, that the state at the boundary is restored, that effects before it stand, and that play continues without consuming another script entry — for a failed ordinary cast followed by a legal cast, a rejected later Uldaros copy after an earlier copy was cast, and an illegal combat declaration followed by a legal one.
-- **Hearing a rejection**: after the rollback the player hears the error through `Player.on_choice_rejected`.
-  Returning lets the engine ask the same query again; raising ends the game loop with the error.
-  The default raises, so a player that cannot revise its choice is never asked forever.
-  Decision-side state — a player's intents, transcript and script position — is not game state, and the rollback leaves it alone.
-- **Retrying a rejected choice**: a rejected attempt drops the highest-ranked preference it used, across every query answered in that attempt, and the re-asked query is answered with the remaining preferences, so the retry does not depend on how the engine presented the choice.
+- **Owning a rejection**: each priority action, resolution, and cast or choice made while an object resolves is an attempt, and a rejection belongs to one answer given during it.
+  A choice the card or engine refuses belongs to the attempt's latest answer; an action the rules forbid as a whole (a casting, activation or zone-move error) belongs to the answer that chose the action.
+  Only that answer's player hears the error, through `Player.on_attempt_rejected`, after the rollback, and answers retry, pass, or raises to stop play; the default raises for anything but a priority action, which it hands to `Player.on_choice_rejected`.
+  Decision-side state — a player's intents, transcript, script position and attempt bookkeeping — is not game state, and the rollback leaves it alone.
+- **Retrying a rejected choice**: the handler that owns the rejected answer — a script entry, or the choice Intent that answered — drops the highest-ranked preference it used in that attempt, across every query it answered there, and answers again with its remaining preferences, so the retry does not depend on how the engine presented the choice.
+  A choice Intent's rejection while an entry's action is cast leaves the entry's action as it was and retries only the choice.
   With preferences Gleam of Death then Glamdring and Gleam of Death illegal, an engine that offers Gleam of Death at once casts Glamdring on the retry, and so does one that asked Glamdring and then Gleam of Death (grilling 2026-10-04).
 - **Resolution-time choices**: a choice raised while an object resolves, or while casting outside a Priority Query action, rolls back to its own rejection boundary — just before that cast or choice asked its first query — and is re-asked under the same drop-the-preference rule.
   It never re-asks the Priority Query before it, which would replay the passes and resolve the object again (grilling 2026-10-04).
+  A resolution is one attempt whose boundary is its first query: a retry runs the effect again from the state before it, and an abandoned choice ends the resolution there, keeping the effects that came before.
+  Card code that makes several casts or choices while resolving, such as Uldaros's copies, runs each as its own attempt, so a rejected later one keeps the earlier ones and the resolution goes on without it.
+  The normal priority loop and the test helpers resolve through the same engine attempt.
 - **Testing choices whose presentation varies**: tests never dictate how an engine presents a choice; they are built to draw out the intended choice and to fail when an illegal one takes effect.
   Uldaros's targets are up to one card of each card type, judged by the graveyard characteristics of each card: the chosen cards must be distinct cards that can be assigned to distinct card types they have, though their type sets may overlap.
   Glamdring in the graveyard is an artifact card, never a sorcery (CR 715.4), whatever object an engine presents for it, so with Divination, Glamdring and Leyline Axe in the graveyard an engine fails if it lets all three be exiled; Divination with either artifact is legal.
@@ -199,8 +203,10 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
   An expected-illegal entry (`act_illegal`, the successor to SOS `perform_illegal_action`) passes if its action is not offered or is rejected, and fails if it takes effect and play reaches the next Priority Query (grilling 2026-10-04).
 - **Driving**: tests insert explicit pass entries for priority windows they skip, and a dry script passes through the Baseline Intent, which never takes an action at priority whatever its preferences.
   `advance_to_phase` consumes no entries; `run_scripts` stops once every script is consumed and leaves the stack in place, and `resolve_stack` then resolves with every player passing (grilling 2026-10-04).
+  The priority round carries over between `run_scripts` calls — the next priority holder, the passes already made, and a resolution or step change both passes made due — and an action, a resolution, `resolve_stack` or `advance_to_phase` starts a fresh one.
 - **Choices outside the script**: choices raised while casting or resolving, including effect-granted casts such as Uldaros's or Bilbo's, go to choice Intents routed by source.
   A rejected choice is retried as above; once its preferences are exhausted the choice Intent fails, except that an `InvalidPlayerChoiceError` raised under a negative choice Intent counts as a pass once the engine has rolled back to the choice's rejection boundary, and the resolution continues from there (grilling 2026-10-04).
+  A negative choice Intent's forbidden choice that takes effect fails the test with `PostconditionError` when its attempt completes, or at `end_intent` for a choice made outside any attempt; if the forbidden choice is never offered, nothing is checked.
 
 ### Rigor (three independent layers)
 
