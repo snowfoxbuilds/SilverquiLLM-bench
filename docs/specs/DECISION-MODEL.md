@@ -159,12 +159,20 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 
 #### Legality
 
-- **Offering is legal, allowing is not**: an engine may present and let the player choose an illegal option; it must then reject it by raising `InvalidPlayerChoiceError` and roll the game back to the beginning of the Priority Query in which the rejected action began.
+- **Offering is legal, allowing is not**: an engine may present and let the player choose an illegal option; it must then reject it by raising `InvalidPlayerChoiceError` and roll the game back to the start of the rejected action.
   An engine that never presents illegal choices never needs the error.
   A test fails only when an illegal choice is allowed to take effect and play proceeds to the next priority (grilling 2026-10-04).
+- **Rejection boundary**: the start of the rejected action is the beginning of the Priority Query in which an ordinary priority action began, the beginning of the declaration for a combat declaration, and, for an effect-granted cast or another choice made while an object resolves, the point just before that cast or choice.
+  A rollback never reverses what came before that boundary: a resolving Uldaros keeps its exiled cards, its copies and any copy already cast when a later copy's cast is rejected, as CR 733 reverses only the illegal action (grilling 2026-10-04).
+  The engine then asks the same query again and play continues from it; a rejected attempt consumes no further action-script entry.
+  `InvalidPlayerChoiceError` is a rules rejection, distinct from the ProtocolError and IntentError families, which report malformed queries and test-authoring faults.
+- **Rejection scenarios**: implementation tests check, after each rejection, that the state at the boundary is restored, that effects before it stand, and that play continues without consuming another script entry — for a failed ordinary cast followed by a legal cast, a rejected later Uldaros copy after an earlier copy was cast, and an illegal combat declaration followed by a legal one.
 - **Testing choices whose presentation varies**: tests never dictate how an engine presents a choice; they are built to draw out the intended choice and to fail when an illegal one takes effect.
-  With Glamdring and Divination in the graveyard, Uldaros's "one card of each card type" fails if the engine accepts Divination and Gleam of Death as its choices, or accepts Divination and Glamdring and then lets the player choose Gleam of Death between Glamdring and Gleam of Death — Glamdring in the graveyard is an artifact card (CR 715.4).
-  When presentation can change which legal outcome results, the postcondition asserts the rule's invariant (no two exiled cards share a card type) plus the intended part, never one exact outcome (grilling 2026-10-04).
+  Uldaros's targets are up to one card of each card type, judged by the graveyard characteristics of each card: the chosen cards must be distinct cards that can be assigned to distinct card types they have, though their type sets may overlap.
+  Glamdring in the graveyard is an artifact card, never a sorcery (CR 715.4), whatever object an engine presents for it, so with Divination, Glamdring and Leyline Axe in the graveyard an engine fails if it lets all three be exiled; Divination with either artifact is legal.
+  Choosing which face to cast happens later and separately, when a copy is cast (CR 715.3a): with Divination and Glamdring exiled, casting only the copy as Gleam of Death (mana value 4) and declining Divination stays within the budget of 6.
+  When presentation can change which legal outcome results, the postcondition asserts the rule's invariant (the exiled cards can be assigned to distinct card types) plus the intended part, never one exact outcome (grilling 2026-10-04).
+- **Uldaros acceptance cases**: two artifact creatures fill the artifact and creature slots; one card is never chosen twice, so a single multi-type card is exiled and copied once; two cards that are only sorceries are never both chosen; and a copy's face is chosen while it is cast, whether the engine offers the faces in one query or across two.
 
 #### Action scripts
 
@@ -175,7 +183,7 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 - **Driving**: tests insert explicit pass entries for priority windows they skip, and a dry script passes through the Baseline Intent.
   `advance_to_phase` consumes no entries; `run_scripts` stops once every script is consumed and leaves the stack in place, and `resolve_stack` then resolves with every player passing (grilling 2026-10-04).
 - **Choices outside the script**: choices raised while casting or resolving, including effect-granted casts such as Uldaros's or Bilbo's, go to choice Intents routed by source.
-  An `InvalidPlayerChoiceError` raised under a negative choice Intent counts as a pass (grilling 2026-10-04).
+  An `InvalidPlayerChoiceError` raised under a negative choice Intent counts as a pass once the engine has rolled back to the choice's rejection boundary, and the resolution continues from there (grilling 2026-10-04).
 
 ### Rigor (three independent layers)
 
