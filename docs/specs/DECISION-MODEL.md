@@ -67,9 +67,11 @@ class GameRef:
 | prompt | string | human-readable description |
 | options | ordered tuple of Player Decisions | the legal choices; implementation-provided stable order is part of the contract |
 | min / max | int | how many must / may be chosen; `min=0` = legally declinable |
-| question | tuple of objects | what the query asks for, attached by the engine when that is a specific kind of thing; empty otherwise |
+| question | tuple of canonical objects | an optional annotation of what the query asks for; empty when the engine attaches none |
 
-The question payload is open: the engine attaches whatever objects say what it asks for — a Game Symbols constant such as `CardType.ARTIFACT` for "choose an artifact card", a predefined class, a Game Ref, or a Player Decision — and never a string (grilling 2026-10-04).
+The question payload is an optional contextual annotation that helps a player tell what a question asks when several valid questions are possible in one situation, such as `CardType.ARTIFACT` on "choose an artifact card" when an effect asks for a card of each type in turn (grilling 2026-10-04).
+Engines need not attach it, and tests read it best-effort.
+Its values must be canonical — the engine's Game Symbols, predefined classes, Game Refs, or Player Decisions built from them; a raw string or a custom symbol is a protocol error, rejected when the query is raised (grilling 2026-10-04).
 A test names what a query asks for with the same objects and matches them as preferences match options: a Player Decision by `satisfies()`, any other object by identity or equality.
 
 ### Extension policy
@@ -215,9 +217,11 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
   An expected-illegal entry (`act_illegal`, the successor to SOS `perform_illegal_action`) tries each of its branches the same way: it passes if every branch is not offered or is rejected, and fails if any takes effect and play reaches the next Priority Query (grilling 2026-10-04).
   A rejection inside an expected-illegal branch's action settles that branch for the acting player before anyone else hears it (`Player.settle_rejected_action`), whoever answered the refused choice: the entry tries its next branch, or hands the same Priority Query to the next entry, without passing priority.
   The exception is a refused choice whose owner would retry it with another branch (`Player.would_retry`), since the action may then still take effect — and if it does, the entry fails.
-- **Per-question preferences**: a branch may map what a query asks for to the preferences that answer that query, `branch(A, B, per_query={CardType.ARTIFACT: [A], CardType.CREATURE: [B]})`, matched against the query's question payload as above (grilling 2026-10-04).
-  A query whose payload matches none of them — a combined question for every type, or a question without a payload — is answered by the branch's own preferences, so one branch covers an engine that asks one question per type, whether it filters what it offers or offers everything and rejects a repeated pick, and one that asks a single combined question.
-  The mapping is part of the branch: a rejection still moves to the next branch, and `act` and `act_illegal` take `per_query` for every branch as they take `choices`.
+- **Per-question preferences**: a branch may map keys to the preferences that answer a query a key matches, `branch(A, B, per_query={CardType.ARTIFACT: [A], CardType.CREATURE: [B]})`, on any query — a Priority Query, a combat declaration, or a choice while casting or resolving (grilling 2026-10-04).
+  A key is an object the query's question payload holds, matched as above, or any predicate over the query — its payload, offered options, source or bounds — so a test can infer the question best-effort when the engine attaches no payload; keys are tried in mapping order and the first match wins, so several matching keys are not an error (grilling 2026-10-04).
+  A query no key matches, such as a single combined question for every type, is answered by the branch's own preferences.
+  Presentation independence still holds: a test using per-question preferences passes for an engine that asks one annotated question per type, one that asks unannotated questions it can tell apart by what they offer, one that filters what it offers or offers everything and rejects a repeated pick, and one that asks a single combined question, wherever those presentations can be told apart (grilling 2026-10-04).
+  The mapping is part of the branch: a rejection still moves to the next branch, and `act`, `act_illegal` and `Intent` take `per_query` for every branch as they take `choices`.
 - **Driving**: tests insert explicit pass entries for priority windows they skip, and a dry script passes through the Baseline Intent, which never takes an action at priority whatever its preferences.
   `advance_to_phase` consumes no entries; `run_scripts` stops once every script is consumed and leaves the stack in place, and `resolve_stack` then resolves with every player passing (grilling 2026-10-04).
   The priority round carries over between `run_scripts` calls — the next priority holder, the passes already made, and a resolution or step change both passes made due.

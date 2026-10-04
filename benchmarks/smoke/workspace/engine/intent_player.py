@@ -114,14 +114,17 @@ class Branch:
     is being taken, ``preferences`` and then ``choices`` answer every query no
     card intent claims (targets, modes, X, payment).
 
-    ``per_query`` pairs what a query asks for — an object its question
-    payload holds (:func:`~engine.queries.asks_for`), such as
-    ``CardType.ARTIFACT`` — with the preferences that answer that query
-    instead, so one branch can choose A for the question asking for an
-    artifact and B for the one asking for a creature. A query whose payload
-    holds none of them, such as one combined question for every type, is
-    answered by the branch's own preferences, so the same branch fits either
-    presentation.
+    ``per_query`` pairs a key with the preferences that answer, instead, a
+    query the key matches — so one branch can choose A for the question
+    asking for an artifact and B for the one asking for a creature, on any
+    query: priority, a declaration or a choice while casting or resolving. A
+    key is an object the query's optional question payload holds
+    (:func:`~engine.queries.asks_for`), such as ``CardType.ARTIFACT``, or a
+    predicate over the query — its payload, options, source or bounds — to
+    infer the question best-effort when the engine attaches no payload. Keys
+    are tried in order and the first match wins. A query no key matches, such
+    as one combined question for every type, is answered by the branch's own
+    preferences, so the same branch fits every presentation.
     """
 
     preferences: tuple[PlayerDecision, ...] = ()
@@ -130,10 +133,17 @@ class Branch:
 
     def answers_for(self, query: PlayerQuery) -> tuple[PlayerDecision, ...]:
         """The preferences that answer ``query`` inside this branch's attempt."""
-        for wanted, preferences in self.per_query:
-            if asks_for(query, wanted):
+        return self._per_query(query) or self.preferences + self.choices
+
+    def action_for(self, query: PlayerQuery) -> tuple[PlayerDecision, ...]:
+        """The preferences that choose this branch's action in ``query``."""
+        return self._per_query(query) or self.preferences
+
+    def _per_query(self, query: PlayerQuery) -> tuple[PlayerDecision, ...]:
+        for key, preferences in self.per_query:
+            if _per_query_matches(key, query):
                 return preferences
-        return self.preferences + self.choices
+        return ()
 
 
 def branch(
@@ -151,13 +161,21 @@ def _as_branch(item: Any) -> Branch:
     return item if isinstance(item, Branch) else Branch(_decisions(item))
 
 
+def _per_query_matches(key: Any, query: PlayerQuery) -> bool:
+    """A predicate key is called with the query; any other key must be held
+    by its question payload."""
+    if callable(key) and not isinstance(key, type):
+        return bool(key(query))
+    return asks_for(query, key)
+
+
 def _per_query(mapping: Any) -> tuple[tuple[Any, tuple[PlayerDecision, ...]], ...]:
     if isinstance(mapping, tuple):
         return mapping
     pairs = []
     for wanted, preferences in (mapping or {}).items():
         if isinstance(wanted, str):
-            raise TypeError(f"a per_query key names what a query asks for, not a string: {wanted!r}")
+            raise TypeError(f"a per_query key is a payload object or a predicate, not a string: {wanted!r}")
         values = preferences if isinstance(preferences, (list, tuple)) else (preferences,)
         pairs.append((wanted, _decisions(values)))
     return tuple(pairs)
@@ -657,7 +675,7 @@ class DeterministicPlayer(Player):
         no branch is left; an :func:`act` then fails the test."""
         branches = attempt.entry.branches
         while attempt.branch < len(branches):
-            for pref in branches[attempt.branch].preferences:
+            for pref in branches[attempt.branch].action_for(query):
                 for option in query.options:
                     if satisfies(option, pref):
                         self._attempt = attempt

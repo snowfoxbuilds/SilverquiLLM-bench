@@ -12,6 +12,7 @@ validates every Answer before applying it. An answer violation is a *test* bug
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -39,12 +40,12 @@ class PlayerQuery:
     ``source`` = the Player Decisions that raised it (routing matches on their
     refs). ``options`` = the legal choices in implementation-provided stable
     order (part of the contract). ``min``/``max`` = how many must / may be
-    chosen; ``min == 0`` means legally declinable. ``question`` = whatever
-    objects the engine attaches to say what a query asks for — a Game Symbols
-    constant such as ``CardType.ARTIFACT``, a predefined class, a Game Ref or a
-    Player Decision; never a string — so a test can answer one of several
-    queries from the same source differently without depending on their order
-    (see :func:`asks_for`).
+    chosen; ``min == 0`` means legally declinable. ``question`` = an optional
+    annotation of what the query asks for, when several questions are possible
+    in one situation — canonical objects only: Game Symbols such as
+    ``CardType.ARTIFACT``, predefined classes, Game Refs, or Player Decisions
+    built from them (see :func:`asks_for`). An engine need not attach one;
+    tests read it best-effort.
     """
 
     source: tuple[PlayerDecision, ...]
@@ -68,11 +69,26 @@ def asks_for(query: PlayerQuery, wanted: Any) -> bool:
     return False
 
 
-def _has_string(value: Any) -> bool:
-    if isinstance(value, str):
+# The modules whose enums are the engine's Game Symbols.
+_SYMBOL_MODULES = frozenset({"engine.types", "engine.decisions"})
+
+
+def _canonical(value: Any) -> bool:
+    """Whether ``value`` may annotate a question: a Game Symbol, a predefined
+    class, a Game Ref, or a Player Decision with valid attrs — never a raw
+    string or a custom symbol."""
+    if isinstance(value, enum.Enum):
+        return type(value).__module__ in _SYMBOL_MODULES
+    if isinstance(value, type):
+        return value.__module__ != "builtins" and not issubclass(value, enum.Enum)
+    if isinstance(value, GameRef):
         return True
-    if isinstance(value, (tuple, list, frozenset, set)):
-        return any(_has_string(item) for item in value)
+    if isinstance(value, PlayerDecision):
+        try:
+            validate_attrs(value.kind, dict(value.attrs), strict=False)
+        except MalformedAttrsError:
+            return False
+        return True
     return False
 
 
@@ -109,9 +125,10 @@ def is_priority_query(query: PlayerQuery) -> bool:
 
 def validate_query(query: PlayerQuery) -> None:
     """Boundary-validate a query as it is raised (engine-fault on failure)."""
-    if not isinstance(query.question, tuple) or _has_string(query.question):
+    if not isinstance(query.question, tuple) or not all(map(_canonical, query.question)):
         raise MalformedAttrsError(
-            f"question payload {query.question!r} must be a tuple of non-string objects"
+            f"question payload {query.question!r} must hold only Game Symbols, predefined "
+            "classes, Game Refs or Player Decisions"
         )
     if query.min < 0 or query.max < query.min:
         raise InvalidOptionsError(

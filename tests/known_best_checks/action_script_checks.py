@@ -1755,7 +1755,8 @@ class TypedPicker(Sorcery):
     """Resolving, chooses one artifact and one creature — distinct cards — as
     Uldaros chooses a card of each type. ``presentation`` is how the engine
     asks: ``"offer"`` offers every candidate for each type and rejects a
-    wrong or repeated pick, ``"filter"`` offers only the legal ones, and
+    wrong or repeated pick, ``"filter"`` offers only the legal ones,
+    ``"bare"`` filters without annotating which type it asks for, and
     ``"combined"`` asks one question for both types."""
 
     TYPES = (CardType.ARTIFACT, CardType.CREATURE)
@@ -1779,8 +1780,9 @@ class TypedPicker(Sorcery):
                 c for c in candidates
                 if self.presentation == "offer" or (card_type in c.card_types and c not in self.picked)
             ]
+            question = None if self.presentation == "bare" else card_type
             card = choose_object(game, self.controller, offered, "Choose a card of the type",
-                                 source_card=self, question=card_type)
+                                 source_card=self, question=question)
             if card_type not in card.card_types or card in self.picked:
                 raise InvalidPlayerChoiceError(f"{card.name} cannot be chosen as {card_type.value}")
             self.picked.append(card)
@@ -1835,3 +1837,94 @@ def test_a_question_payload_matches_a_decision_by_satisfies_and_refuses_strings(
                                    question=("artifact",)))
     with pytest.raises(TypeError):
         branch(Bolt, per_query={"artifact": [Bolt]})
+
+
+# ---- the question payload is canonical and optional --------------------------
+
+
+def test_a_question_payload_refuses_custom_symbols():
+    import enum
+
+    from engine.decisions import MalformedAttrsError
+    from engine.queries import validate_query
+
+    class Custom(enum.Enum):
+        THING = 1
+
+    for payload in ((Custom.THING,), (object(),), (3,), (str,), ("artifact",)):
+        with pytest.raises(MalformedAttrsError):
+            validate_query(PlayerQuery(source=(), prompt="", options=(), min=0, max=0,
+                                       question=payload))
+    validate_query(PlayerQuery(source=(), prompt="", options=(), min=0, max=0,
+                               question=(CardType.ARTIFACT, Bolt, GameRef(), Decision.obj(printed=Bolt))))
+
+
+class Rock(Artifact):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(name="Rock", mana_cost=ManaCost(), **kwargs)
+
+
+class Golem(ArtifactCreature):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(name="Golem", mana_cost=ManaCost(), base_power=1, base_toughness=1, **kwargs)
+
+
+class Cub(Creature):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(name="Cub", mana_cost=ManaCost(), base_power=1, base_toughness=1, **kwargs)
+
+
+def _offers(cls, but_not=None):
+    """A predicate key: the query offers an object of ``cls`` (and none of
+    ``but_not``)."""
+    def offered(query, wanted):
+        return any(dict(o.attrs).get("printed") is wanted for o in query.options)
+
+    return lambda query: offered(query, cls) and not (but_not and offered(query, but_not))
+
+
+@pytest.mark.parametrize("presentation", ["offer", "filter", "bare", "combined"])
+def test_one_branch_infers_each_question_when_no_payload_says_it(presentation):
+    """Rock as the artifact, Golem as the creature: payload keys answer an
+    annotated engine, predicate keys infer the questions an unannotated one
+    asks from what it offers, and the base preferences answer one combined
+    question."""
+    game = _game()
+    picker = TypedPicker(presentation)
+    rock, golem, cub = Rock(), Golem(), Cub()
+    set_board_state(game, 0, hand=[picker], battlefield=[golem, rock, cub])
+    game.players[0].start_intent("pick", Intent(
+        pattern=GameRef(card=frozenset({("name", "Typed Picker")})),
+        branches=[branch(Golem, Rock, per_query={
+            CardType.ARTIFACT: [Rock],
+            CardType.CREATURE: [Golem],
+            _offers(Rock, but_not=Cub): [Rock],
+            _offers(Cub, but_not=Rock): [Golem],
+        })],
+    ))
+    cast_card(game, game.players[0], picker)
+    assert {type(c) for c in picker.picked} == {Rock, Golem}
+
+
+def test_the_first_matching_per_query_key_wins():
+    game, picker, first, second = _golems("filter")
+    a, b = Decision.obj(instance=first.instance_id), Decision.obj(instance=second.instance_id)
+    game.players[0].start_intent("pick", Intent(
+        pattern=GameRef(card=frozenset({("name", "Typed Picker")})),
+        branches=[branch(a, b, per_query={
+            (lambda query: True): [b],
+            CardType.ARTIFACT: [a],
+        })],
+    ))
+    cast_card(game, game.players[0], picker)
+    # The always-true predicate came first, so the artifact question took b.
+    assert picker.picked[0] is second
+
+
+def test_per_query_chooses_a_priority_action():
+    game = _game()
+    blade = BladeCard("one")
+    set_board_state(game, 0, hand=[blade])
+    script(game, 0, act(branches=[branch(BladeCard, per_query={_offers(GleamFace): [GleamFace]})]))
+    run_scripts(game)
+    assert blade.cast_face == "gleam"
