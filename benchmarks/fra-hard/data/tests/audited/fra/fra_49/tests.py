@@ -96,9 +96,14 @@ def test_pending_spell_survives_source_leaving():
 
 def test_blink_does_not_preserve_preparation():
     game, player, source = arrange()
+    old_spell = copies(player)[0]
     move_to_zone(game, source, Zone.BATTLEFIELD, Zone.EXILE)
     move_to_zone(game, source, Zone.EXILE, Zone.BATTLEFIELD)
+    resolve_stack(game)
     assert not copies(player)
+    player.mana_pool.add(ManaType.BLACK)
+    with pytest.raises(CastingError):
+        cast_spell(game, player, old_spell)
 
 
 def test_multiple_prepare_events_do_not_accumulate_copies():
