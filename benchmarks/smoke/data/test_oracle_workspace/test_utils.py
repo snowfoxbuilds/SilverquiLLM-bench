@@ -528,11 +528,23 @@ def resolve_stack(game: GameState) -> None:
     Intent the rejection counts as a pass and resolution stops there. The
     active player then holds priority in a fresh round, even when the stack
     was already empty.
+
+    In a cleanup step's priority window the cleanup step is then finished
+    too, with every player passing (:func:`finish_cleanup`): another cleanup
+    follows the window, and so on until one grants no priority (CR 514.3a).
     """
+    if _drain_stack(game) and game.step == Step.CLEANUP:
+        finish_cleanup(game)
+
+
+def _drain_stack(game: GameState) -> bool:
+    """Resolve the stack with every player passing, in a fresh round; return
+    ``False`` if a resolution was abandoned and stopped there."""
     game.start_priority_round()
     while not game.stack.is_empty():
         if not resolve_top_of_stack(game):
-            return
+            return False
+    return True
 
 
 def card_abilities(card: Any) -> list:
@@ -929,11 +941,13 @@ def cast_card(game, player, card, resolve=True):
 
 def finish_cleanup(game):
     """Perform cleanup iterations until one grants no priority, resolving what
-    each puts on the stack with every player passing; consumes no entries."""
+    each puts on the stack with every player passing; consumes no entries.
+    Stops where a resolution is abandoned."""
     from engine.turn import cleanup_iteration
 
     while cleanup_iteration(game):
-        resolve_stack(game)
+        if not _drain_stack(game):
+            return
 
 
 def scenario_game(*args, **kwargs):

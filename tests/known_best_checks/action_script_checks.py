@@ -1928,3 +1928,177 @@ def test_per_query_chooses_a_priority_action():
     script(game, 0, act(branches=[branch(BladeCard, per_query={_offers(GleamFace): [GleamFace]})]))
     run_scripts(game)
     assert blade.cast_face == "gleam"
+
+
+# ---------------------------------------------------------------------------
+# Review round 5: fresh choice branches per entry, forced cleanup completion,
+# explicit per-question overrides
+# ---------------------------------------------------------------------------
+
+
+def _two_choosing_casts(first_illegal, second_illegal):
+    game = _game()
+    first, second = ChoosingCast(illegal=first_illegal), ChoosingCast(illegal=second_illegal)
+    set_board_state(game, 0, hand=[first, second], battlefield=[_artifact("Bad"), _artifact("Good")])
+    entry = lambda spell: Decision.obj(instance=spell.instance_id)  # noqa: E731
+    return game, first, second, entry
+
+
+@pytest.mark.parametrize("owner", ["intent", "baseline"])
+def test_a_successor_entry_starts_its_choices_from_their_first_branch(owner):
+    game, first, second, entry = _two_choosing_casts({"Bad", "Good"}, {"Good"})
+    branches = [[Decision.obj(name="Bad")], [Decision.obj(name="Good")]]
+    if owner == "intent":
+        game.players[0].start_intent("choose", _cast_choice(branches=[["Bad"], ["Good"]]))
+    else:
+        game.players[0].set_baseline(Intent(pattern=GameRef(), branches=branches))
+    script(game, 0, act_illegal(entry(first)), act(entry(second)))
+    run_scripts(game)
+    assert _on_stack(game, second) and not _on_stack(game, first)
+    assert (game.phase, game.step) == (Phase.PRECOMBAT_MAIN, None)
+
+
+def test_a_successor_illegal_entry_tries_its_legal_first_choice():
+    game, first, second, entry = _two_choosing_casts({"Bad", "Good"}, {"Good"})
+    game.players[0].start_intent("choose", _cast_choice(branches=[["Bad"], ["Good"]]))
+    script(game, 0, act_illegal(entry(first)), act_illegal(entry(second)))
+    with pytest.raises(ScriptEntryError) as failure:
+        run_scripts(game)
+    assert failure.value.reason == "took effect"
+
+
+class PickyOpponentCast(OpponentCast):
+    """An opponent's choice while casting, refusing the ``illegal`` artifacts."""
+
+    def __init__(self, illegal, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.illegal = set(illegal)
+
+    def _cast(self, game, player):
+        opponent = game.players[1 - game.players.index(player)]
+        candidates = [c for p in game.players for c in game.get_battlefield(p).get_all()]
+        chosen = choose_object(game, opponent, candidates, "Opponent chooses", source_card=self)
+        if chosen.name in self.illegal:
+            raise InvalidPlayerChoiceError(f"{chosen.name} cannot be chosen")
+        return cast_spell(game, player, self)
+
+
+def test_an_opponents_choice_starts_from_its_first_branch_for_a_successor_entry():
+    game = _game()
+    first, second = PickyOpponentCast({"Bad", "Good"}), PickyOpponentCast({"Good"})
+    set_board_state(game, 0, hand=[first, second], battlefield=[_artifact("Bad"), _artifact("Good")])
+    game.players[1].start_intent("choose", _sourced("Opponent Cast", branches=[["Bad"], ["Good"]]))
+    script(game, 0, act_illegal(Decision.obj(instance=first.instance_id)),
+           act(Decision.obj(instance=second.instance_id)))
+    run_scripts(game)
+    assert _on_stack(game, second) and not _on_stack(game, first)
+
+
+def test_a_retried_entry_keeps_its_choices_branch():
+    game, spell = _choosing_cast_game()
+    game.players[0].start_intent("choose", _cast_choice(branches=[["Bad"], ["Good"]]))
+    script(game, 0, act(ChoosingCast))
+    run_scripts(game)
+    assert _on_stack(game, spell)
+
+
+def _paused_in_cleanup(second_effect):
+    """A script responds in cleanup with Bolt above a death trigger whose
+    effect is ``second_effect``; play stops there with both pending."""
+    game = _game()
+    game.phase, game.step = Phase.ENDING, Step.END
+    set_board_state(game, 0, hand=[Bolt()])
+    made = []
+
+    def on_death(g):
+        if not made:
+            made.append(second_effect(g))
+
+    _watch_deaths(game, on_death)
+    _doomed(game, game.players[0])
+    script(game, 0, pass_priority(), act(Bolt))
+    run_scripts(game)
+    assert game.step == Step.CLEANUP and len(game.stack) == 2
+    return game, made
+
+
+@pytest.mark.parametrize("finish", ["resolve_stack", "advance_game_to_phase"])
+def test_a_forced_helper_finishes_the_cleanup_its_window_left_pending(finish):
+    game, made = _paused_in_cleanup(lambda g: _doomed(g, g.players[0]))
+    if finish == "resolve_stack":
+        resolve_stack(game)
+    else:
+        advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    (second,) = made
+    # The cleanup after the window removed the new until-end-of-turn boost.
+    assert not game.get_battlefield(game.players[0]).contains(second)
+
+
+def test_resolve_stack_outside_cleanup_only_resolves():
+    game = _game()
+    set_board_state(game, 0, hand=[Bolt()])
+    script(game, 0, act(Bolt))
+    run_scripts(game)
+    resolve_stack(game)
+    assert game.stack.is_empty() and (game.phase, game.step) == (Phase.PRECOMBAT_MAIN, None)
+
+
+def test_an_empty_matching_per_query_entry_declines_an_optional_choice():
+    game = _game()
+    rock = _artifact("Rock")
+    set_board_state(game, 0, battlefield=[rock])
+    player = game.players[0]
+    player.set_baseline(Intent(pattern=GameRef(), branches=[
+        branch(Decision.obj(name="Rock"), per_query={CardType.ARTIFACT: []}),
+    ]))
+    chosen = choose_object(game, player, [rock], "Choose", optional=True, question=CardType.ARTIFACT)
+    assert chosen is None
+
+
+def test_an_empty_matching_per_query_entry_still_fills_a_mandatory_choice():
+    game = _game()
+    rock = _artifact("Rock")
+    set_board_state(game, 0, battlefield=[rock])
+    player = game.players[0]
+    player.set_baseline(Intent(pattern=GameRef(), per_query={CardType.ARTIFACT: []}))
+    assert choose_object(game, player, [rock], "Choose", question=CardType.ARTIFACT) is rock
+
+
+def test_an_empty_matching_per_query_entry_offers_no_action():
+    game = _game()
+    set_board_state(game, 0, hand=[Bolt()])
+    script(game, 0, act_illegal(Bolt, per_query={(lambda query: True): []}))
+    run_scripts(game)
+    assert game.stack.is_empty()
+
+
+def test_the_first_matching_key_wins_even_when_empty():
+    game = _game()
+    rock = _artifact("Rock")
+    set_board_state(game, 0, battlefield=[rock])
+    player = game.players[0]
+    player.set_baseline(Intent(pattern=GameRef(), per_query={
+        CardType.ARTIFACT: [], (lambda query: True): [Decision.obj(name="Rock")],
+    }))
+    assert choose_object(game, player, [rock], "Choose", optional=True,
+                         question=CardType.ARTIFACT) is None
+
+
+def test_a_canonical_string_enum_is_a_per_query_key_but_a_string_is_not():
+    from engine.decisions import Role
+
+    branch(Bolt, per_query={Role.CONTROLLER: [Bolt]})
+    with pytest.raises(TypeError):
+        branch(Bolt, per_query={"controller": [Bolt]})
+
+
+def test_an_intent_applies_shared_per_query_after_each_branchs_own():
+    intent = Intent(pattern=GameRef(), branches=[
+        [Decision.yes()],
+        branch(Decision.no(), per_query={CardType.CREATURE: [Decision.yes()]}),
+    ], per_query={CardType.ARTIFACT: [Decision.no()]})
+    first, second = intent.plans
+    assert [k for k, _ in first.per_query] == [CardType.ARTIFACT]
+    assert [k for k, _ in second.per_query] == [CardType.CREATURE, CardType.ARTIFACT]
+    with pytest.raises(TypeError):
+        Intent(pattern=GameRef(), preferences=(Decision.yes(),), branches=[[Decision.no()]])

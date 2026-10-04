@@ -81,11 +81,16 @@ class Intent:
     per_query: Any = ()
 
     def __post_init__(self) -> None:
-        if self.branches and (self.preferences or self.per_query):
+        if self.branches and self.preferences:
             raise TypeError("an Intent takes preferences or branches, not both")
+        shared = _per_query(self.per_query) if self.per_query else ()
+        object.__setattr__(self, "per_query", shared)
         if self.branches:
-            object.__setattr__(self, "branches", tuple(_as_branch(b) for b in self.branches))
-        object.__setattr__(self, "per_query", _per_query(self.per_query) if self.per_query else ())
+            # Like an entry's, a shared ``per_query`` follows each branch's own.
+            object.__setattr__(self, "branches", tuple(
+                Branch(b.preferences, b.choices, b.per_query + shared)
+                for b in map(_as_branch, self.branches)
+            ))
 
     @property
     def plans(self) -> tuple[Branch, ...]:
@@ -133,17 +138,21 @@ class Branch:
 
     def answers_for(self, query: PlayerQuery) -> tuple[PlayerDecision, ...]:
         """The preferences that answer ``query`` inside this branch's attempt."""
-        return self._per_query(query) or self.preferences + self.choices
+        matched = self._per_query(query)
+        return self.preferences + self.choices if matched is None else matched
 
     def action_for(self, query: PlayerQuery) -> tuple[PlayerDecision, ...]:
         """The preferences that choose this branch's action in ``query``."""
-        return self._per_query(query) or self.preferences
+        matched = self._per_query(query)
+        return self.preferences if matched is None else matched
 
-    def _per_query(self, query: PlayerQuery) -> tuple[PlayerDecision, ...]:
+    def _per_query(self, query: PlayerQuery) -> tuple[PlayerDecision, ...] | None:
+        """The first matching key's preferences — an empty list among them, so
+        that an optional choice declines — or ``None`` when no key matches."""
         for key, preferences in self.per_query:
             if _per_query_matches(key, query):
                 return preferences
-        return ()
+        return None
 
 
 def branch(
@@ -174,7 +183,7 @@ def _per_query(mapping: Any) -> tuple[tuple[Any, tuple[PlayerDecision, ...]], ..
         return mapping
     pairs = []
     for wanted, preferences in (mapping or {}).items():
-        if isinstance(wanted, str):
+        if isinstance(wanted, str) and not isinstance(wanted, Enum):
             raise TypeError(f"a per_query key is a payload object or a predicate, not a string: {wanted!r}")
         values = preferences if isinstance(preferences, (list, tuple)) else (preferences,)
         pairs.append((wanted, _decisions(values)))
@@ -660,8 +669,13 @@ class DeterministicPlayer(Player):
         An :func:`act_illegal` entry whose action is not offered is consumed
         and the query goes to the next entry; a dry script passes.
         """
+        context = attempts.current()
         while self._script:
             entry = self._script.pop(0)
+            if context is not None:
+                # A new entry is a new action: its choices start from their
+                # first branches, whatever an earlier entry's retries reached.
+                context.branch.clear()
             if entry.kind is EntryKind.PASS:
                 return Answer()
             answer = self._choose_action(_EntryAttempt(entry), query)
