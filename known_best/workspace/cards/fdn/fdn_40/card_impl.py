@@ -16,6 +16,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class HighFaeTricksterAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class HighFaeTricksterAbility2:
+    text = 'Flying'
+
+
+class HighFaeTricksterAbility3:
+    text = 'You may cast spells as though they had flash.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
     for player in game.players:

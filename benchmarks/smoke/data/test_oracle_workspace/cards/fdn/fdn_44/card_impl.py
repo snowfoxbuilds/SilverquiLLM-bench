@@ -17,6 +17,28 @@ if TYPE_CHECKING:
     from cards.registry import CardRegistry
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class KaitoCunningInfiltratorAbility1:
+    text = 'Whenever a creature you control deals combat damage to a player, put a loyalty counter on Kaito.'
+
+
+class KaitoCunningInfiltratorAbility2:
+    text = "+1: Up to one target creature you control can't be blocked this turn. Draw a card, then discard a card."
+
+
+class KaitoCunningInfiltratorAbility3:
+    text = '−2: Create a 2/1 blue Ninja creature token.'
+
+
+class KaitoCunningInfiltratorAbility4:
+    text = '−9: You get an emblem with "Whenever a player casts a spell, you create a 2/1 blue Ninja creature token."'
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     """Return ``True`` if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -173,15 +195,18 @@ class KaitoCunningInfiltrator(Planeswalker):
                 effect=_plus1,
                 targeting=_plus1_targeting,
                 description="+1: Up to one target creature you control can't be blocked. Draw, then discard.",
+                printed=KaitoCunningInfiltratorAbility2,
             ),
             LoyaltyAbility(
                 loyalty_cost=-2,
                 effect=_minus2,
                 description='−2: Create a 2/1 blue Ninja creature token.',
+                printed=KaitoCunningInfiltratorAbility3,
             ),
             LoyaltyAbility(
                 loyalty_cost=-9,
                 effect=_minus9,
                 description='−9: Emblem — whenever a player casts a spell, create 2/1 Ninja token.',
+                printed=KaitoCunningInfiltratorAbility4,
             ),
         ]

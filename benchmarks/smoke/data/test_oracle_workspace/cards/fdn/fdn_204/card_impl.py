@@ -10,6 +10,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class KrenkoMobBossAbility1:
+    text = '{T}: Create X 1/1 red Goblin creature tokens, where X is the number of Goblins you control.'
+
+
+# endregion Printed abilities
+
+
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
     if getattr(source, "is_tapped", False):
@@ -66,4 +77,5 @@ class KrenkoMobBoss(Creature):
             effect=_effect,
             description="{T}: Create X 1/1 red Goblin creature tokens, "
             "where X is the number of Goblins you control.",
+            printed=KrenkoMobBossAbility1,
         )]

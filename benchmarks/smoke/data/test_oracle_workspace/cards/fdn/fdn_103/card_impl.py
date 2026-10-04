@@ -8,6 +8,21 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ElfswornGiantAbility1:
+    text = 'Reach (This creature can block creatures with flying.)'
+
+
+class ElfswornGiantAbility2:
+    text = 'Landfall — Whenever a land you control enters, create a 1/1 green Elf Warrior creature token.'
+
+
+# endregion Printed abilities
+
+
 class ElfswornGiant(Creature):
     """Elfsworn Giant — {3}{G}{G} — 5/3 — Giant — Reach.
 

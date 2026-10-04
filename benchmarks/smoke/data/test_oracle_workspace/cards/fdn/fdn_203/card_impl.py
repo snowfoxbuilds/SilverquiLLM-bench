@@ -16,6 +16,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class InvoluntaryEmploymentAbility1:
+    text = 'Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. Create a Treasure token. (It\'s an artifact with "{T}, Sacrifice this token: Add one mana of any color.")'
+
+
+# endregion Printed abilities
+
+
 class InvoluntaryEmployment(Sorcery):
     """Involuntary Employment — {3}{R} — Sorcery.
 

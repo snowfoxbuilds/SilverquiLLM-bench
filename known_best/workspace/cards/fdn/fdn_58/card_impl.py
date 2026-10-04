@@ -7,6 +7,25 @@ from engine.events import LosesLifeTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BloodthirstyConquerorAbility1:
+    text = 'Flying'
+
+
+class BloodthirstyConquerorAbility2:
+    text = 'deathtouch'
+
+
+class BloodthirstyConquerorAbility3:
+    text = 'Whenever an opponent loses life, you gain that much life. (Damage causes loss of life.)'
+
+
+# endregion Printed abilities
+
+
 class BloodthirstyConqueror(Creature):
     """Bloodthirsty Conqueror — {3}{B}{B} — 5/5 — Vampire Knight.
 

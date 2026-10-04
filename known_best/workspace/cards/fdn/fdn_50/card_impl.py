@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SkyshipBuccaneerAbility1:
+    text = 'Flying'
+
+
+class SkyshipBuccaneerAbility2:
+    text = 'Raid — When this creature enters, if you attacked this turn, draw a card.'
+
+
+# endregion Printed abilities
+
+
 class SkyshipBuccaneer(Creature):
     """Skyship Buccaneer — {3}{U}{U} — 4/3 — Human Pirate — Flying.
 

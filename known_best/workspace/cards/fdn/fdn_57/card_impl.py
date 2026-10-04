@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BlasphemousEdictAbility1:
+    text = "You may pay {B} rather than pay this spell's mana cost if there are thirteen or more creatures on the battlefield."
+
+
+class BlasphemousEdictAbility2:
+    text = 'Each player sacrifices thirteen creatures of their choice.'
+
+
+# endregion Printed abilities
+
+
 class BlasphemousEdict(Sorcery):
     """Blasphemous Edict — {3}{B}{B} — Sorcery.
 
@@ -21,6 +35,8 @@ class BlasphemousEdict(Sorcery):
 
     FDN collector number 57.
     """
+
+    alternative_cost_printed = (BlasphemousEdictAbility1,)
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Blasphemous Edict")

@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GhaltaPrimalHungerAbility1:
+    text = 'This spell costs {X} less to cast, where X is the total power of creatures you control.'
+
+
+class GhaltaPrimalHungerAbility2:
+    text = "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)"
+
+
+# endregion Printed abilities
+
+
 class GhaltaPrimalHunger(Creature):
     """Ghalta, Primal Hunger — {10}{G}{G} — 12/12 — Legendary Elder Dinosaur.
 

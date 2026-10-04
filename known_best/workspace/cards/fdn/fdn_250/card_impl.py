@@ -10,6 +10,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BurnishedHartAbility1:
+    text = '{3}, Sacrifice this creature: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.'
+
+
+# endregion Printed abilities
+
+
 class BurnishedHart(ArtifactCreature):
     """Burnished Hart — {3} — 2/2 — Elk
 
@@ -93,4 +104,5 @@ class BurnishedHart(ArtifactCreature):
             description="{3}, Sacrifice this creature: Search your library "
             "for up to two basic land cards, put them onto the battlefield "
             "tapped, then shuffle.",
+            printed=BurnishedHartAbility1,
         )]

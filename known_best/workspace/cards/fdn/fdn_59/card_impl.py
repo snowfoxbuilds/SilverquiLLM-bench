@@ -8,6 +8,21 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CryptFeasterAbility1:
+    text = "Menace (This creature can't be blocked except by two or more creatures.)"
+
+
+class CryptFeasterAbility2:
+    text = 'Threshold — Whenever this creature attacks, if there are seven or more cards in your graveyard, this creature gets +2/+0 until end of turn.'
+
+
+# endregion Printed abilities
+
+
 class CryptFeaster(Creature):
     """Crypt Feaster — {3}{ 3/4 — Zombie — Menace.B} 
 

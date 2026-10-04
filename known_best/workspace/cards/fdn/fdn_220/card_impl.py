@@ -10,6 +10,25 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GarruksUprisingAbility1:
+    text = 'When this enchantment enters, if you control a creature with power 4 or greater, draw a card.'
+
+
+class GarruksUprisingAbility2:
+    text = "Creatures you control have trample. (Each of those creatures can deal excess combat damage to the player or planeswalker it's attacking.)"
+
+
+class GarruksUprisingAbility3:
+    text = 'Whenever a creature you control with power 4 or greater enters, draw a card.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Check if *obj* is on any player's battlefield."""
     for player in game.players:

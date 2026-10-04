@@ -8,6 +8,17 @@ from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CracklingCyclopsAbility1:
+    text = 'Whenever you cast a noncreature spell, this creature gets +3/+0 until end of turn.'
+
+
+# endregion Printed abilities
+
+
 class CracklingCyclops(Creature):
     """Crackling Cyclops — {2}{R} — 0/4 — Cyclops Wizard.
 

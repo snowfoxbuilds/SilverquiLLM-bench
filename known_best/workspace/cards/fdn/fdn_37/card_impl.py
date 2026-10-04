@@ -7,6 +7,17 @@ from engine.events import DrawsCardTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class EruditeWizardAbility1:
+    text = 'Whenever you draw your second card each turn, put a +1/+1 counter on this creature.'
+
+
+# endregion Printed abilities
+
+
 class EruditeWizard(Creature):
     """Erudite Wizard — {2}{U} — 2/3 — Human Wizard.
 

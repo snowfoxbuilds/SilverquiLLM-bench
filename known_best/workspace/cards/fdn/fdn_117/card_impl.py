@@ -9,6 +9,21 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AshrootAnimistAbility1:
+    text = 'Trample'
+
+
+class AshrootAnimistAbility2:
+    text = "Whenever this creature attacks, another target creature you control gains trample and gets +X/+X until end of turn, where X is this creature's power."
+
+
+# endregion Printed abilities
+
+
 class AshrootAnimist(Creature):
     """Ashroot Animist — {2}{R}{G} — 4/4 — Lizard Druid.
 

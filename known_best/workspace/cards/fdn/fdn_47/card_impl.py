@@ -8,6 +8,21 @@ from engine.events import DrawsCardTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MischievousMysticAbility1:
+    text = 'Flying'
+
+
+class MischievousMysticAbility2:
+    text = 'Whenever you draw your second card each turn, create a 1/1 blue Faerie creature token with flying.'
+
+
+# endregion Printed abilities
+
+
 class MischievousMystic(Creature):
     """Mischievous Mystic — {1}{U} — 2/1 — Human Wizard — Flying.
 

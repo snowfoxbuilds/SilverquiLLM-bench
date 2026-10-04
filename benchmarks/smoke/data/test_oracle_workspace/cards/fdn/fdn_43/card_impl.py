@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class InspirationFromBeyondAbility1:
+    text = 'Mill three cards, then return an instant or sorcery card from your graveyard to your hand.'
+
+
+class InspirationFromBeyondAbility2:
+    text = 'Flashback {5}{U}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)'
+
+
+# endregion Printed abilities
+
+
 class InspirationFromBeyond(Sorcery):
     """Inspiration from Beyond — {2}{U} — Sorcery.
 

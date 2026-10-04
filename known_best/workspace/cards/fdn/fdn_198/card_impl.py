@@ -8,6 +8,29 @@ from engine.events import BeginningOfCombatTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FlamewakePhoenixAbility1:
+    text = 'Flying'
+
+
+class FlamewakePhoenixAbility2:
+    text = 'haste'
+
+
+class FlamewakePhoenixAbility3:
+    text = 'This creature attacks each combat if able.'
+
+
+class FlamewakePhoenixAbility4:
+    text = 'Ferocious — At the beginning of combat on your turn, if you control a creature with power 4 or greater, you may pay {R}. If you do, return this card from your graveyard to the battlefield.'
+
+
+# endregion Printed abilities
+
+
 class FlamewakePhoenix(Creature):
     """Flamewake Phoenix — {1}{R}{R} — 2/2 — Phoenix — Flying, Haste.
 

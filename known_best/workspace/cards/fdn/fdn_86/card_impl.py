@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FieryAnnihilationAbility1:
+    text = 'Fiery Annihilation deals 5 damage to target creature. Exile up to one target Equipment attached to that creature. If that creature would die this turn, exile it instead.'
+
+
+# endregion Printed abilities
+
+
 def _is_creature(obj: Any) -> bool:
     return CardType.CREATURE in getattr(obj, "card_types", set())
 

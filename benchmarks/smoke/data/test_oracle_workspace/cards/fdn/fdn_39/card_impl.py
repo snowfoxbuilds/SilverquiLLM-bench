@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GrapplingKrakenAbility1:
+    text = 'Landfall — Whenever a land you control enters, tap target creature an opponent controls and put a stun counter on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)'
+
+
+# endregion Printed abilities
+
+
 class GrapplingKraken(Creature):
     """Grappling Kraken — {4}{U}{U} — 5/6 — Kraken.
 

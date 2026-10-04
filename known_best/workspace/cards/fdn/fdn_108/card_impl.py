@@ -8,6 +8,17 @@ from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class NeedletoothPackAbility1:
+    text = 'Morbid — At the beginning of your end step, if a creature died this turn, put two +1/+1 counters on target creature you control.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     for player in game.players:
         if game.get_battlefield(player).contains(obj):

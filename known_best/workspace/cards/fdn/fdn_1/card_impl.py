@@ -11,6 +11,40 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SireOfSevenDeathsAbility1:
+    text = 'First strike'
+
+
+class SireOfSevenDeathsAbility2:
+    text = 'vigilance'
+
+
+class SireOfSevenDeathsAbility3:
+    text = 'Menace'
+
+
+class SireOfSevenDeathsAbility4:
+    text = 'trample'
+
+
+class SireOfSevenDeathsAbility5:
+    text = 'Reach'
+
+
+class SireOfSevenDeathsAbility6:
+    text = 'lifelink'
+
+
+class SireOfSevenDeathsAbility7:
+    text = 'Ward—Pay 7 life.'
+
+
+# endregion Printed abilities
+
+
 class SireOfSevenDeaths(Creature):
     """Sire of Seven Deaths — {7} — 7/7 — Eldrazi.
 

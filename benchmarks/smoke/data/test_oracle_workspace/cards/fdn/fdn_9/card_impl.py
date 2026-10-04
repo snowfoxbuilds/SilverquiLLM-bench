@@ -7,6 +7,21 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DazzlingAngelAbility1:
+    text = 'Flying'
+
+
+class DazzlingAngelAbility2:
+    text = 'Whenever another creature you control enters, you gain 1 life.'
+
+
+# endregion Printed abilities
+
+
 class DazzlingAngel(Creature):
     """Dazzling Angel — {2}{W} — 2/3 — Angel — Flying.
 

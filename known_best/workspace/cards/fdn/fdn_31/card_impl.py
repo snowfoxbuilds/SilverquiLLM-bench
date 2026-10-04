@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BigfinBouncerAbility1:
+    text = "When this creature enters, return target creature an opponent controls to its owner's hand."
+
+
+# endregion Printed abilities
+
+
 class BigfinBouncer(Creature):
     """Bigfin Bouncer — {3}{U} — 3/2 — Shark Pirate.
 

@@ -8,6 +8,21 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DrakusethMawOfFlamesAbility1:
+    text = 'Flying'
+
+
+class DrakusethMawOfFlamesAbility2:
+    text = 'Whenever Drakuseth attacks, it deals 4 damage to any target and 3 damage to each of up to two other targets.'
+
+
+# endregion Printed abilities
+
+
 class DrakusethMawOfFlames(Creature):
     """Drakuseth, Maw of Flames — {4}{R}{R}{R} — 7/7 — Legendary Dragon.
 

@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class StrongboxRaiderAbility1:
+    text = 'Raid — When this creature enters, if you attacked this turn, exile the top two cards of your library. Choose one of them. Until the end of your next turn, you may play that card.'
+
+
+# endregion Printed abilities
+
+
 class StrongboxRaider(Creature):
     """Strongbox Raider — {2}{R}{R} — 5/2 — Orc Pirate.
 

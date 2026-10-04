@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GutlessPlundererAbility1:
+    text = 'Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)'
+
+
+class GutlessPlundererAbility2:
+    text = 'Raid — When this creature enters, if you attacked this turn, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.'
+
+
+# endregion Printed abilities
+
+
 class GutlessPlunderer(Creature):
     """Gutless Plunderer — {2}{B} — 2/2 — Skeleton Pirate — Deathtouch.
 

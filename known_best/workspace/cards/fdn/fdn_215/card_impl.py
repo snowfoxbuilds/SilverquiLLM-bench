@@ -12,6 +12,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BushwhackAbility1:
+    text = 'Choose one —'
+
+
+class BushwhackAbility2:
+    text = '• Search your library for a basic land card, reveal it, put it into your hand, then shuffle.'
+
+
+class BushwhackAbility3:
+    text = "• Target creature you control fights target creature you don't control. (Each deals damage equal to its power to the other.)"
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     return any(game.get_battlefield(p).contains(obj) for p in game.players)
 
@@ -53,18 +71,20 @@ class Bushwhack(Sorcery):
                 name="Search",
                 description="Search your library for a basic land card, reveal "
                 "it, put it into your hand, then shuffle.",
+                printed=BushwhackAbility2,
             ),
             Mode(
                 name="Fight",
                 description="Target creature you control fights target creature "
                 "you don't control.",
+                printed=BushwhackAbility3,
             ),
         ]
 
     def get_targets(self, game: "GameState") -> list[Any]:
         """Choose the mode. Fight targets two creatures; Search is non-target."""
         controller = self.controller or getattr(self, "owner", None)
-        chosen = choose_mode(game, controller, _MODE_NAMES, "Choose one", source_card=self)
+        chosen = choose_mode(game, controller, _MODE_NAMES, "Choose one", source_card=self, printed=[mode.printed for mode in self.get_modes()])
         self._chosen_mode_index = _MODE_NAMES.index(chosen)
 
         if self._chosen_mode_index != _MODE_FIGHT:

@@ -9,6 +9,21 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class KioraTheRisingTideAbility1:
+    text = 'When Kiora enters, draw two cards, then discard two cards.'
+
+
+class KioraTheRisingTideAbility2:
+    text = 'Threshold — Whenever Kiora attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.'
+
+
+# endregion Printed abilities
+
+
 class KioraTheRisingTide(Creature):
     """Kiora, the Rising Tide — {2}{U} — 3/2 — Merfolk Noble — Legendary.
 

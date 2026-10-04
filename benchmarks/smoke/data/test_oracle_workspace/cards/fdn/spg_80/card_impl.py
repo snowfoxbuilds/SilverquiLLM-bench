@@ -24,6 +24,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ParadiseDruidAbility1:
+    text = "This creature has hexproof as long as it's untapped. (It can't be the target of spells or abilities your opponents control.)"
+
+
+class ParadiseDruidAbility2:
+    text = '{T}: Add one mana of any color.'
+
+
+# endregion Printed abilities
+
+
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
     if getattr(source, "is_tapped", False):
@@ -103,6 +118,7 @@ class ParadiseDruid(Creature):
                 cost=_tap_cost,
                 mana_produced=_make_effect(),
                 description=f"{{T}}: Add {{{color_name}}}.",
+                printed=ParadiseDruidAbility2,
             ))
 
         return abilities

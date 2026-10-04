@@ -12,6 +12,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SecludedCourtyardAbility1:
+    text = 'As this land enters, choose a creature type.'
+
+
+class SecludedCourtyardAbility2:
+    text = '{T}: Add {C}.'
+
+
+class SecludedCourtyardAbility3:
+    text = '{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type.'
+
+
+# endregion Printed abilities
+
+
 class SecludedCourtyard(Land):
     """Secluded Courtyard — Land
 
@@ -107,10 +125,12 @@ class SecludedCourtyard(Land):
                 cost=_tap_cost,
                 mana_produced=_colorless_effect,
                 description="{T}: Add {C}.",
+                printed=SecludedCourtyardAbility2,
             ),
             ManaAbility(
                 cost=_tap_cost,
                 mana_produced=_any_color_effect,
                 description="{T}: Add one mana of any color (restricted).",
+                printed=SecludedCourtyardAbility3,
             ),
         ]

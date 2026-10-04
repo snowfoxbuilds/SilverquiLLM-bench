@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GoblinBoardersAbility1:
+    text = 'Raid — This creature enters with a +1/+1 counter on it if you attacked this turn.'
+
+
+# endregion Printed abilities
+
+
 class GoblinBoarders(Creature):
     """Goblin Boarders — {2}{R} — 3/2 — Goblin Pirate.
 

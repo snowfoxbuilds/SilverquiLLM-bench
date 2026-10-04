@@ -25,6 +25,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GrimTutorAbility1:
+    text = 'Search your library for a card, put that card into your hand, then shuffle. You lose 3 life.'
+
+
+# endregion Printed abilities
+
+
 class GrimTutor(Sorcery):
     """Grim Tutor — {1}{B}{B} — Sorcery
 

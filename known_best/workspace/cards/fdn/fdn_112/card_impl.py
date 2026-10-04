@@ -8,6 +8,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SpinnerOfSoulsAbility1:
+    text = 'Reach'
+
+
+class SpinnerOfSoulsAbility2:
+    text = 'Whenever another nontoken creature you control dies, you may reveal cards from the top of your library until you reveal a creature card. Put that card into your hand and the rest on the bottom of your library in a random order.'
+
+
+# endregion Printed abilities
+
+
 class SpinnerOfSouls(Creature):
     """Spinner of Souls — {2}{G} — 4/3 — Spider Spirit — Reach
 

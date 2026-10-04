@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class HidetsugusSecondRiteAbility1:
+    text = "If target player has exactly 10 life, Hidetsugu's Second Rite deals 10 damage to that player."
+
+
+# endregion Printed abilities
+
+
 class HidetsugusSecondRite(Instant):
     """Hidetsugu's Second Rite — {3}{R} — Instant.
 

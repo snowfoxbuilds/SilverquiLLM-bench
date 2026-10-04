@@ -11,6 +11,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SunBlessedHealerAbility1:
+    text = 'Kicker {1}{W} (You may pay an additional {1}{W} as you cast this spell.)'
+
+
+class SunBlessedHealerAbility2:
+    text = 'Lifelink (Damage dealt by this creature also causes you to gain that much life.)'
+
+
+class SunBlessedHealerAbility3:
+    text = 'When this creature enters, if it was kicked, return target nonland permanent card with mana value 2 or less from your graveyard to the battlefield.'
+
+
+# endregion Printed abilities
+
+
 class SunBlessedHealer(Creature):
     """Sun-Blessed Healer — {1}{W} — 3/1 — Human Cleric.
 

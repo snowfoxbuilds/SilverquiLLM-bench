@@ -10,6 +10,25 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SpectralSailorAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class SpectralSailorAbility2:
+    text = 'Flying'
+
+
+class SpectralSailorAbility3:
+    text = '{3}{U}: Draw a card.'
+
+
+# endregion Printed abilities
+
+
 class SpectralSailor(Creature):
     """Spectral Sailor — {U} — 1/1 — Spirit Pirate
 
@@ -56,4 +75,5 @@ class SpectralSailor(Creature):
             cost=_cost,
             effect=_effect,
             description="{3}{U}: Draw a card.",
+            printed=SpectralSailorAbility3,
         )]

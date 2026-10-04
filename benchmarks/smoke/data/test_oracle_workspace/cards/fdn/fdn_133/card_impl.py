@@ -17,6 +17,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SoulstoneSanctuaryAbility1:
+    text = '{T}: Add {C}.'
+
+
+class SoulstoneSanctuaryAbility2:
+    text = "{4}: This land becomes a 3/3 creature with vigilance and all creature types. It's still a land."
+
+
+# endregion Printed abilities
+
+
 class SoulstoneSanctuary(Land):
     """Soulstone Sanctuary — Land.
 
@@ -80,6 +94,7 @@ class SoulstoneSanctuary(Land):
                 cost=_tap_cost,
                 mana_produced=_add_colorless,
                 description="{T}: Add {C}.",
+                printed=SoulstoneSanctuaryAbility1,
             )
         ]
 
@@ -148,5 +163,6 @@ class SoulstoneSanctuary(Land):
                 effect=_effect,
                 description="{4}: This land becomes a 3/3 creature with "
                 "vigilance and all creature types. It's still a land.",
+                printed=SoulstoneSanctuaryAbility2,
             )
         ]

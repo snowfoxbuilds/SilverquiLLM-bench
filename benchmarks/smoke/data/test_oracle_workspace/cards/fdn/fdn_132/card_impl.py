@@ -15,6 +15,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ScrawlingCrawlerAbility1:
+    text = 'At the beginning of your upkeep, each player draws a card.'
+
+
+class ScrawlingCrawlerAbility2:
+    text = 'Whenever an opponent draws a card, that player loses 1 life.'
+
+
+# endregion Printed abilities
+
+
 class ScrawlingCrawler(ArtifactCreature):
     """Scrawling Crawler — {3} — 3/2 Phyrexian Construct.
     Upkeep: each player draws. Opponent draws → loses 1 life."""

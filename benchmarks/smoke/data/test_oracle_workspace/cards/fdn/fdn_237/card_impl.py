@@ -8,6 +8,21 @@ from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BalmorBattlemageCaptainAbility1:
+    text = 'Flying'
+
+
+class BalmorBattlemageCaptainAbility2:
+    text = 'Whenever you cast an instant or sorcery spell, creatures you control get +1/+0 and gain trample until end of turn.'
+
+
+# endregion Printed abilities
+
+
 class BalmorBattlemageCaptain(Creature):
     """Balmor, Battlemage Captain — {U}{R} — 1/3 — Legendary Bird Wizard.
 

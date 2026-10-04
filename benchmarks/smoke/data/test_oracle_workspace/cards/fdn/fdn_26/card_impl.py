@@ -16,6 +16,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class TwinbladeBlessingAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class TwinbladeBlessingAbility2:
+    text = 'Enchant creature'
+
+
+class TwinbladeBlessingAbility3:
+    text = 'Enchanted creature has double strike. (It deals both first-strike and regular combat damage.)'
+
+
+# endregion Printed abilities
+
+
 def _creature_targets(game: Any) -> list[Any]:
     """Return all creatures on the battlefield."""
     targets: list[Any] = []

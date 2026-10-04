@@ -8,6 +8,25 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class RubyDaringTrackerAbility1:
+    text = 'Haste (This creature can attack and {T} as soon as it comes under your control.)'
+
+
+class RubyDaringTrackerAbility2:
+    text = 'Whenever Ruby attacks while you control a creature with power 4 or greater, Ruby gets +2/+2 until end of turn.'
+
+
+class RubyDaringTrackerAbility3:
+    text = '{T}: Add {R} or {G}.'
+
+
+# endregion Printed abilities
+
+
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
     if getattr(source, 'is_tapped', False):
@@ -76,4 +95,4 @@ class RubyDaringTracker(Creature):
                 if controller is not None:
                     controller.mana_pool.add(mtype, 1)
             return _effect
-        return [ManaAbility(cost=_tap_cost, mana_produced=_make_effect(ManaType.RED), description='{T}: Add {R}.'), ManaAbility(cost=_tap_cost, mana_produced=_make_effect(ManaType.GREEN), description='{T}: Add {G}.')]
+        return [ManaAbility(cost=_tap_cost, mana_produced=_make_effect(ManaType.RED), description='{T}: Add {R}.', printed=RubyDaringTrackerAbility3), ManaAbility(cost=_tap_cost, mana_produced=_make_effect(ManaType.GREEN), description='{T}: Add {G}.', printed=RubyDaringTrackerAbility3)]

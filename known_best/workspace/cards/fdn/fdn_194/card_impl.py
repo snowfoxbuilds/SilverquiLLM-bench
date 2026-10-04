@@ -8,6 +8,17 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class EtaliPrimalStormAbility1:
+    text = "Whenever Etali attacks, exile the top card of each player's library, then you may cast any number of spells from among those cards without paying their mana costs."
+
+
+# endregion Printed abilities
+
+
 class EtaliPrimalStorm(Creature):
     """Etali, Primal Storm — {4}{R}{R} — 6/6 — Legendary Elder Dinosaur.
 

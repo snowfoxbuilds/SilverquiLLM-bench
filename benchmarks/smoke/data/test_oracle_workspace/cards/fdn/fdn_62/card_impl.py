@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class HungryGhoulAbility1:
+    text = '{1}, Sacrifice another creature: Put a +1/+1 counter on this creature.'
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     """Return ``True`` if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -100,5 +110,6 @@ class HungryGhoul(Creature):
                 can_activate=_can_activate,
                 description="{1}, Sacrifice another creature: Put a +1/+1 "
                 "counter on this creature.",
+                printed=HungryGhoulAbility1,
             )
         ]

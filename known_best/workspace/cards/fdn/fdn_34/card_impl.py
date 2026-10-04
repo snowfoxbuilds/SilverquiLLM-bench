@@ -12,6 +12,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CuratorOfDestiniesAbility1:
+    text = "This spell can't be countered."
+
+
+class CuratorOfDestiniesAbility2:
+    text = 'Flying'
+
+
+class CuratorOfDestiniesAbility3:
+    text = 'When this creature enters, look at the top five cards of your library and separate them into a face-down pile and a face-up pile. An opponent chooses one of those piles. Put that pile into your hand and the other into your graveyard.'
+
+
+# endregion Printed abilities
+
+
 class CuratorOfDestinies(Creature):
     """Curator of Destinies — {4}{U}{U} — 5/5 — Sphinx — Flying.
 

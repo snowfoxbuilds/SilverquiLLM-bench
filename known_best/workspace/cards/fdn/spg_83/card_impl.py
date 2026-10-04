@@ -10,6 +10,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FiendArtisanAbility1:
+    text = 'This creature gets +1/+1 for each creature card in your graveyard.'
+
+
+class FiendArtisanAbility2:
+    text = '{X}{B/G}, {T}, Sacrifice another creature: Search your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle. Activate only as a sorcery.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, card: Any) -> bool:
     """Check if *card* is on any player's battlefield."""
     for player in game.players:
@@ -140,4 +155,4 @@ class FiendArtisan(Creature):
                     chosen.register_triggers(game)
                 game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=chosen, controller=controller))
             library.shuffle()
-        return [ActivatedAbility(cost=_cost, effect=_effect, description='{X}{B/G}, {T}, Sacrifice another creature: Search your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle. Activate only as a sorcery.')]
+        return [ActivatedAbility(cost=_cost, effect=_effect, description='{X}{B/G}, {T}, Sacrifice another creature: Search your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle. Activate only as a sorcery.', printed=FiendArtisanAbility2)]

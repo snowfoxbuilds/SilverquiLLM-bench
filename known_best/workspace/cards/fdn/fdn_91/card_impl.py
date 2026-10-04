@@ -7,6 +7,21 @@ from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class KellanPlanarTrailblazerAbility1:
+    text = '{1}{R}: If Kellan is a Scout, it becomes a Human Faerie Detective and gains "Whenever Kellan deals combat damage to a player, exile the top card of your library. You may play that card this turn."'
+
+
+class KellanPlanarTrailblazerAbility2:
+    text = '{2}{R}: If Kellan is a Detective, it becomes a 3/2 Human Faerie Rogue and gains double strike.'
+
+
+# endregion Printed abilities
+
+
 class KellanPlanarTrailblazer(Creature):
     """Kellan, Planar Trailblazer — {R} — 2/1 — Legendary Human Faerie Scout.
 
@@ -58,7 +73,7 @@ class KellanPlanarTrailblazer(Creature):
             source.modified_power = 3
             source.modified_toughness = 2
             source.keywords = (getattr(source, 'keywords', None) or Keyword(0)) | Keyword.DOUBLE_STRIKE
-        return [ActivatedAbility(cost=_cost_scout, effect=_effect_scout, description='{1}{R}: Become Detective with combat damage exile ability.'), ActivatedAbility(cost=_cost_detective, effect=_effect_detective, description='{2}{R}: Become 3/2 Rogue with double strike.')]
+        return [ActivatedAbility(cost=_cost_scout, effect=_effect_scout, description='{1}{R}: Become Detective with combat damage exile ability.', printed=KellanPlanarTrailblazerAbility1), ActivatedAbility(cost=_cost_detective, effect=_effect_detective, description='{2}{R}: Become 3/2 Rogue with double strike.', printed=KellanPlanarTrailblazerAbility2)]
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register combat damage trigger for Detective mode."""

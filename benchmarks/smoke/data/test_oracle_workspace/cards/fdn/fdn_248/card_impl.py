@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.stack import StackObject
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ThousandYearStormAbility1:
+    text = "Whenever you cast an instant or sorcery spell, copy it for each other instant and sorcery spell you've cast before it this turn. You may choose new targets for the copies."
+
+
+# endregion Printed abilities
+
+
 @dataclass(frozen=True)
 class _StormTriggerState:
     """Immutable facts one Storm trigger captured when it went on the stack.

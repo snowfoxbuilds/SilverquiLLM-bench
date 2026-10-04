@@ -9,6 +9,17 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BattlesongBerserkerAbility1:
+    text = "Whenever you attack, target creature you control gets +1/+0 and gains menace until end of turn. (It can't be blocked except by two or more creatures.)"
+
+
+# endregion Printed abilities
+
+
 class BattlesongBerserker(Creature):
     """Battlesong Berserker — {3}{R} — 3/4 — Human Berserker.
 

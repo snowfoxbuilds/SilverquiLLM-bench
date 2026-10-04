@@ -15,6 +15,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class EatenAliveAbility1:
+    text = 'As an additional cost to cast this spell, sacrifice a creature or pay {3}{B}.'
+
+
+class EatenAliveAbility2:
+    text = 'Exile target creature or planeswalker.'
+
+
+# endregion Printed abilities
+
+
 def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
 

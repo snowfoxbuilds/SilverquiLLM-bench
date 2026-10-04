@@ -9,6 +9,21 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ArahboTheFirstFangAbility1:
+    text = 'Other Cats you control get +1/+1.'
+
+
+class ArahboTheFirstFangAbility2:
+    text = 'Whenever Arahbo or another nontoken Cat you control enters, create a 1/1 white Cat creature token.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
     for player in game.players:

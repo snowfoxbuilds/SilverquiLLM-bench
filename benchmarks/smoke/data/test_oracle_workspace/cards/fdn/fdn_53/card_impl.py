@@ -13,6 +13,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class UnchartedVoyageAbility1:
+    text = "Target creature's owner puts it on their choice of the top or bottom of their library."
+
+
+class UnchartedVoyageAbility2:
+    text = 'Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)'
+
+
+# endregion Printed abilities
+
+
 class UnchartedVoyage(Instant):
     """Uncharted Voyage — {3}{U} — Instant.
 

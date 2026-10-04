@@ -8,6 +8,29 @@ from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class KomaWorldEaterAbility1:
+    text = "This spell can't be countered."
+
+
+class KomaWorldEaterAbility2:
+    text = 'Trample'
+
+
+class KomaWorldEaterAbility3:
+    text = 'ward {4}'
+
+
+class KomaWorldEaterAbility4:
+    text = "Whenever Koma deals combat damage to a player, create four 3/3 blue Serpent creature tokens named Koma's Coil."
+
+
+# endregion Printed abilities
+
+
 class KomaWorldEater(Creature):
     """Koma, World-Eater — {3}{G}{G}{U}{U} — 8/12 — Legendary Serpent.
 

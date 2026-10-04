@@ -8,6 +8,17 @@ from engine.events import BeginningOfUpkeepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ExtravagantReplicationAbility1:
+    text = "At the beginning of your upkeep, create a token that's a copy of another target nonland permanent you control."
+
+
+# endregion Printed abilities
+
+
 class ExtravagantReplication(Enchantment):
     """Extravagant Replication — {4}{U}{U} — Enchantment.
 

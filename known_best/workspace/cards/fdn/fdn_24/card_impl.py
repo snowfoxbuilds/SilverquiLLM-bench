@@ -13,6 +13,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SquadRallierAbility1:
+    text = '{2}{W}: Look at the top four cards of your library. You may reveal a creature card with power 2 or less from among them and put it into your hand. Put the rest on the bottom of your library in a random order.'
+
+
+# endregion Printed abilities
+
+
 class SquadRallier(Creature):
     """Squad Rallier — {3}{W} — 3/4 — Human Scout.
 
@@ -106,4 +116,5 @@ class SquadRallier(Creature):
             cost=_cost,
             effect=_effect,
             description="{2}{W}: Look at top four, may take a creature with power 2 or less.",
+            printed=SquadRallierAbility1,
         )]

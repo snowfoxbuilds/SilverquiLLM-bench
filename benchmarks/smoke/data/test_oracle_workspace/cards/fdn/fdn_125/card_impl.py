@@ -8,6 +8,25 @@ from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class WardensOfTheCycleAbility1:
+    text = 'Morbid — At the beginning of your end step, if a creature died this turn, choose one —'
+
+
+class WardensOfTheCycleAbility2:
+    text = '• You gain 2 life.'
+
+
+class WardensOfTheCycleAbility3:
+    text = '• You draw a card and you lose 1 life.'
+
+
+# endregion Printed abilities
+
+
 class WardensOfTheCycle(Creature):
     """Wardens of the Cycle — {1}{B}{G}{G} — 3/4 — Elf Warlock.
 
@@ -47,7 +66,7 @@ class WardensOfTheCycle(Creature):
             ctrl = controller
             if ctrl is None:
                 return
-            mode = choose_mode(game, ctrl, ['gain_life', 'draw_card'], 'Choose: gain 2 life or draw a card and lose 1 life', source_card=source)
+            mode = choose_mode(game, ctrl, ['gain_life', 'draw_card'], 'Choose: gain 2 life or draw a card and lose 1 life', source_card=source, printed=[WardensOfTheCycleAbility2, WardensOfTheCycleAbility3])
             if mode == 'draw_card':
                 draw_card(game, ctrl)
                 from engine.game import lose_life

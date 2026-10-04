@@ -17,6 +17,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class WitnessProtectionAbility1:
+    text = 'Enchant creature'
+
+
+class WitnessProtectionAbility2:
+    text = 'Enchanted creature loses all abilities and is a green and white Citizen creature with base power and toughness 1/1 named Legitimate Businessperson. (It loses all other colors, card types, creature types, and names.)'
+
+
+# endregion Printed abilities
+
+
 def _creature_targets(game: Any) -> list[Any]:
     """Return all creatures on the battlefield."""
     targets: list[Any] = []

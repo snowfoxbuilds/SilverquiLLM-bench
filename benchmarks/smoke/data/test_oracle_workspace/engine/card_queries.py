@@ -126,10 +126,20 @@ def choose_mode(
     prompt: str,
     *,
     source_card: Any = None,
+    printed: Iterable[type] | None = None,
 ) -> Any:
-    """Raise a MODE Player Query over named modes; return the chosen name."""
+    """Raise a MODE Player Query over named modes; return the chosen name.
+
+    ``printed`` lists each mode's predefined class, in ``mode_names`` order.
+    """
     names = list(mode_names)
-    options = tuple(Decision.mode(str(n), index=i) for i, n in enumerate(names))
+    classes = list(printed) if printed is not None else [None] * len(names)
+    if len(classes) != len(names):
+        raise InvalidOptionsError("choose_mode: one printed class per mode")
+    options = tuple(
+        Decision.mode(str(n), index=i, printed=cls)
+        for i, (n, cls) in enumerate(zip(names, classes))
+    )
     query = PlayerQuery(
         source=_source(source_card),
         prompt=prompt,

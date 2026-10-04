@@ -7,6 +7,21 @@ from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class EagerTrufflesnoutAbility1:
+    text = "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)"
+
+
+class EagerTrufflesnoutAbility2:
+    text = 'Whenever this creature deals combat damage to a player, create a Food token. (It\'s an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")'
+
+
+# endregion Printed abilities
+
+
 class EagerTrufflesnout(Creature):
     """Eager Trufflesnout — {2}{G} — 4/2 — Boar — Trample.
 

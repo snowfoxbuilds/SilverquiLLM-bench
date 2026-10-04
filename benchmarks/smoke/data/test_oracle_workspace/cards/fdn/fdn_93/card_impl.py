@@ -7,6 +7,17 @@ from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SearslicerGoblinAbility1:
+    text = 'Raid — At the beginning of your end step, if you attacked this turn, create a 1/1 red Goblin creature token.'
+
+
+# endregion Printed abilities
+
+
 class SearslicerGoblin(Creature):
     """Searslicer Goblin — {1}{R} — 2/1 — Goblin Warrior.
 

@@ -13,6 +13,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class HeartfireImmolatorAbility1:
+    text = 'Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)'
+
+
+class HeartfireImmolatorAbility2:
+    text = '{R}, Sacrifice this creature: It deals damage equal to its power to target creature or planeswalker.'
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     """Return ``True`` if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -119,5 +133,6 @@ class HeartfireImmolator(Creature):
                 can_activate=_can_activate,
                 description="{R}, Sacrifice this creature: It deals damage "
                 "equal to its power to target creature or planeswalker.",
+                printed=HeartfireImmolatorAbility2,
             )
         ]

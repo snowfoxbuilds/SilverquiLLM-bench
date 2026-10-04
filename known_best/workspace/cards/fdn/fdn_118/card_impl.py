@@ -9,6 +9,25 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DreadwingScavengerAbility1:
+    text = 'Flying'
+
+
+class DreadwingScavengerAbility2:
+    text = 'Whenever this creature enters or attacks, draw a card, then discard a card.'
+
+
+class DreadwingScavengerAbility3:
+    text = 'Threshold — This creature gets +1/+1 and has deathtouch as long as there are seven or more cards in your graveyard.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
     for player in game.players:

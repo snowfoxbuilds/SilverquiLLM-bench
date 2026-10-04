@@ -1,11 +1,22 @@
 """Card implementation for Homunculus Horde."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.types import ManaCost
 from engine.events import DrawsCardTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class HomunculusHordeAbility1:
+    text = "Whenever you draw your second card each turn, create a token that's a copy of this creature."
+
+
+# endregion Printed abilities
+
 
 class HomunculusHorde(Creature):
     """Homunculus Horde — {3}{U} — 2/2 — Homunculus.
@@ -52,5 +63,6 @@ class HomunculusHorde(Creature):
             if ctrl is None:
                 return
             token = Creature(name='Homunculus Horde', mana_cost=ManaCost.parse('{3}{U}'), subtypes={'Homunculus'}, base_power=2, base_toughness=2)
+            token.printed_as = printed_class(source)
             create_token(game, ctrl, token)
         game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller))

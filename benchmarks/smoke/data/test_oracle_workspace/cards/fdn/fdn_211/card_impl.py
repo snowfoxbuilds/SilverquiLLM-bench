@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AffectionateIndrikAbility1:
+    text = "When this creature enters, you may have it fight target creature you don't control. (Each deals damage equal to its power to the other.)"
+
+
+# endregion Printed abilities
+
+
 class AffectionateIndrik(Creature):
     """Affectionate Indrik — {5}{G} — 4/4 — Beast.
 

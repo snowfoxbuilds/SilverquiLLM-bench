@@ -7,6 +7,17 @@ from engine.events import BeginningOfCombatTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class NessianHornbeetleAbility1:
+    text = 'At the beginning of combat on your turn, if you control another creature with power 4 or greater, put a +1/+1 counter on this creature.'
+
+
+# endregion Printed abilities
+
+
 class NessianHornbeetle(Creature):
     """Nessian Hornbeetle — {1}{G} — 2/2 — Insect.
 

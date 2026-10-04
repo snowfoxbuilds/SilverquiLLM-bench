@@ -8,6 +8,17 @@ from engine.events import CreatureDiesTriggeredEvent, EndOfTurnTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FakeYourOwnDeathAbility1:
+    text = 'Until end of turn, target creature gets +2/+0 and gains "When this creature dies, return it to the battlefield tapped under its owner\'s control and you create a Treasure token." (It\'s an artifact with "{T}, Sacrifice this token: Add one mana of any color.")'
+
+
+# endregion Printed abilities
+
+
 class FakeYourOwnDeath(Instant):
     """Fake Your Own Death — {1}{B} — Instant.
 

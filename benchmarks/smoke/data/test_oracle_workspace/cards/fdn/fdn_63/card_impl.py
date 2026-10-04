@@ -8,6 +8,17 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class InfernalVesselAbility1:
+    text = "When this creature dies, if it wasn't a Demon, return it to the battlefield under its owner's control with two +1/+1 counters on it. It's a Demon in addition to its other types."
+
+
+# endregion Printed abilities
+
+
 class InfernalVessel(Creature):
     """Infernal Vessel — {2}{B} — 2/1 — Human Cleric
 

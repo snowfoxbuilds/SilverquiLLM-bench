@@ -10,6 +10,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ShivanDragonAbility1:
+    text = 'Flying'
+
+
+class ShivanDragonAbility2:
+    text = '{R}: This creature gets +1/+0 until end of turn.'
+
+
+# endregion Printed abilities
+
+
 class ShivanDragon(Creature):
     """Shivan Dragon — {4}{R}{R} — 5/5 — Dragon
 
@@ -53,4 +68,5 @@ class ShivanDragon(Creature):
             cost=_cost,
             effect=_effect,
             description="{R}: This creature gets +1/+0 until end of turn.",
+            printed=ShivanDragonAbility2,
         )]

@@ -15,6 +15,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BannerOfKinshipAbility1:
+    text = 'As this artifact enters, choose a creature type. This artifact enters with a fellowship counter on it for each creature you control of the chosen type.'
+
+
+class BannerOfKinshipAbility2:
+    text = 'Creatures you control of the chosen type get +1/+1 for each fellowship counter on this artifact.'
+
+
+# endregion Printed abilities
+
+
 class BannerOfKinship(Artifact):
     """Banner of Kinship — {5} — As enters, choose a creature type.
     Enters with fellowship counters. Chosen type gets +1/+1 per counter."""

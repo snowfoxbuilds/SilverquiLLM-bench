@@ -8,6 +8,21 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ArmasaurGuideAbility1:
+    text = "Vigilance (Attacking doesn't cause this creature to tap.)"
+
+
+class ArmasaurGuideAbility2:
+    text = 'Whenever you attack with three or more creatures, put a +1/+1 counter on target creature you control.'
+
+
+# endregion Printed abilities
+
+
 class ArmasaurGuide(Creature):
     """Armasaur Guide — {4}{W} — 4/4 — Dinosaur — Vigilance.
 

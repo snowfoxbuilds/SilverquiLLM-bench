@@ -7,6 +7,25 @@ from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class NivMizzetVisionaryAbility1:
+    text = 'Flying'
+
+
+class NivMizzetVisionaryAbility2:
+    text = 'You have no maximum hand size.'
+
+
+class NivMizzetVisionaryAbility3:
+    text = 'Whenever a source you control deals noncombat damage to an opponent, you draw that many cards.'
+
+
+# endregion Printed abilities
+
+
 class NivMizzetVisionary(Creature):
     """Niv-Mizzet, Visionary — {4}{U}{R} — 5/5 — Legendary Dragon Wizard.
 

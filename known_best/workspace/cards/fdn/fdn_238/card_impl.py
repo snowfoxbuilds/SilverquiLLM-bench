@@ -8,6 +8,21 @@ from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ConsumingAberrationAbility1:
+    text = "Consuming Aberration's power and toughness are each equal to the number of cards in your opponents' graveyards."
+
+
+class ConsumingAberrationAbility2:
+    text = 'Whenever you cast a spell, each opponent reveals cards from the top of their library until they reveal a land card, then puts those cards into their graveyard.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     for player in game.players:
         if game.get_battlefield(player).contains(obj):

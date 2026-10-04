@@ -9,6 +9,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GoblinBushwhackerAbility1:
+    text = 'Kicker {R} (You may pay an additional {R} as you cast this spell.)'
+
+
+class GoblinBushwhackerAbility2:
+    text = 'When this creature enters, if it was kicked, creatures you control get +1/+0 and gain haste until end of turn.'
+
+
+# endregion Printed abilities
+
+
 def _self_etb_condition(source: Any):
     """Return a condition callable that matches only when *source* enters."""
 

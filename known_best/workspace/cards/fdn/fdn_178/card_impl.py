@@ -7,6 +7,17 @@ from engine.events import GainsLifeTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MaraudingBlightPriestAbility1:
+    text = 'Whenever you gain life, each opponent loses 1 life.'
+
+
+# endregion Printed abilities
+
+
 class MaraudingBlightPriest(Creature):
     """Marauding Blight-Priest — {2}{B} — 3/2 — Vampire Cleric.
 

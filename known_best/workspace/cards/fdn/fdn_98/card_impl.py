@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AmbushWolfAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class AmbushWolfAbility2:
+    text = 'When this creature enters, exile up to one target card from a graveyard.'
+
+
+# endregion Printed abilities
+
+
 class AmbushWolf(Creature):
     """Ambush Wolf — {2}{G} — 4/2 — Wolf — Flash.
 

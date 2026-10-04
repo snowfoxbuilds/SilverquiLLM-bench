@@ -10,6 +10,25 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ArbiterOfWoeAbility1:
+    text = 'As an additional cost to cast this spell, sacrifice a creature.'
+
+
+class ArbiterOfWoeAbility2:
+    text = 'Flying'
+
+
+class ArbiterOfWoeAbility3:
+    text = 'When this creature enters, each opponent discards a card and loses 2 life. You draw a card and gain 2 life.'
+
+
+# endregion Printed abilities
+
+
 def _self_etb_condition(source: Any):
     """Return a condition callable that matches only when *source* enters."""
 

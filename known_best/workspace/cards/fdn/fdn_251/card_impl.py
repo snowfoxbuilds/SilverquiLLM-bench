@@ -15,6 +15,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CampusGuideAbility1:
+    text = 'When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.'
+
+
+# endregion Printed abilities
+
+
 class CampusGuide(ArtifactCreature):
     """Campus Guide — {2} — 2/1 Golem. ETB: search for basic land on top."""
 

@@ -18,6 +18,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AdventuringGearAbility1:
+    text = 'Landfall — Whenever a land you control enters, equipped creature gets +2/+2 until end of turn.'
+
+
+class AdventuringGearAbility2:
+    text = 'Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)'
+
+
+# endregion Printed abilities
+
+
 class AdventuringGear(Equipment):
     """Adventuring Gear — {1} — Artifact — Equipment.
 
@@ -27,6 +41,8 @@ class AdventuringGear(Equipment):
 
     FDN collector number 249.
     """
+
+    equip_printed = AdventuringGearAbility2
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Adventuring Gear")

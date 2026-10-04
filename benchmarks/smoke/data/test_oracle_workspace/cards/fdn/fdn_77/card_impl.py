@@ -8,6 +8,21 @@ from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ZulAshurLichLordAbility1:
+    text = 'Ward—Pay 2 life. (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays 2 life.)'
+
+
+class ZulAshurLichLordAbility2:
+    text = '{T}: You may cast target Zombie creature card from your graveyard this turn.'
+
+
+# endregion Printed abilities
+
+
 class ZulAshurLichLord(Creature):
     """Zul Ashur, Lich Lord — {1}{B} — 2/2 — Legendary Zombie Warlock.
 
@@ -61,6 +76,6 @@ class ZulAshurLichLord(Creature):
             if chosen is not None:
                 chosen._castable_from_graveyard = True
                 source._granted_castable.append(chosen)
-        ability = ActivatedAbility(cost=lambda game, src=self: not getattr(src, 'is_tapped', False), effect=_tap_effect, description='{T}: You may cast target Zombie creature card from your graveyard this turn.')
+        ability = ActivatedAbility(cost=lambda game, src=self: not getattr(src, 'is_tapped', False), effect=_tap_effect, description='{T}: You may cast target Zombie creature card from your graveyard this turn.', printed=ZulAshurLichLordAbility2)
         ability.tap_cost = True
         return [ability]

@@ -7,6 +7,25 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MossbornHydraAbility1:
+    text = "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)"
+
+
+class MossbornHydraAbility2:
+    text = 'This creature enters with a +1/+1 counter on it.'
+
+
+class MossbornHydraAbility3:
+    text = 'Landfall — Whenever a land you control enters, double the number of +1/+1 counters on this creature.'
+
+
+# endregion Printed abilities
+
+
 class MossbornHydra(Creature):
     """Mossborn Hydra — {2}{G} — 0/0 — Elemental Hydra — Trample.
 

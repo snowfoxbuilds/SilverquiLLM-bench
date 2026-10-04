@@ -15,6 +15,25 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GoblinSurpriseAbility1:
+    text = 'Choose one —'
+
+
+class GoblinSurpriseAbility2:
+    text = '• Creatures you control get +2/+0 until end of turn.'
+
+
+class GoblinSurpriseAbility3:
+    text = '• Create two 1/1 red Goblin creature tokens.'
+
+
+# endregion Printed abilities
+
+
 def _get_controller(card: Any) -> Any:
     """Return the controller of a card, or None."""
     return getattr(card, "controller", None)
@@ -42,8 +61,8 @@ class GoblinSurprise(Instant):
 
     def get_modes(self) -> list[Mode]:
         return [
-            Mode(name="Pump", description="Creatures you control get +2/+0 until end of turn."),
-            Mode(name="Tokens", description="Create two 1/1 red Goblin creature tokens."),
+            Mode(name="Pump", description="Creatures you control get +2/+0 until end of turn.", printed=GoblinSurpriseAbility2),
+            Mode(name="Tokens", description="Create two 1/1 red Goblin creature tokens.", printed=GoblinSurpriseAbility3),
         ]
 
     def get_targets(self, game: GameState) -> list[Any]:
@@ -52,7 +71,7 @@ class GoblinSurprise(Instant):
 
         controller = _get_controller(self) or getattr(self, "owner", None)
         names = [mode.name for mode in self.get_modes()]
-        chosen = choose_mode(game, controller, names, "Choose one", source_card=self)
+        chosen = choose_mode(game, controller, names, "Choose one", source_card=self, printed=[mode.printed for mode in self.get_modes()])
         self.chosen_mode = names.index(chosen)
         return []
 

@@ -13,6 +13,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ZimoneParadoxSculptorAbility1:
+    text = 'At the beginning of combat on your turn, put a +1/+1 counter on each of up to two target creatures you control.'
+
+
+class ZimoneParadoxSculptorAbility2:
+    text = '{G}{U}, {T}: Double the number of each kind of counter on up to two target creatures and/or artifacts you control.'
+
+
+# endregion Printed abilities
+
+
 def _controls(controller: Any, obj: Any) -> bool:
     """Return ``True`` if *obj* is currently controlled by *controller*."""
     return getattr(obj, "controller", None) is controller
@@ -205,6 +219,7 @@ class ZimoneParadoxSculptor(Creature):
             targeting=_targeting,
             can_activate=_can_activate,
             description='{G}{U}, {T}: Double counters on up to two target creatures/artifacts you control.',
+            printed=ZimoneParadoxSculptorAbility2,
         )
         ability.tap_cost = True
         return [ability]

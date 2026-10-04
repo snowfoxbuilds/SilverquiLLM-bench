@@ -10,6 +10,29 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class LilianaDreadhordeGeneralAbility1:
+    text = 'Whenever a creature you control dies, draw a card.'
+
+
+class LilianaDreadhordeGeneralAbility2:
+    text = '+1: Create a 2/2 black Zombie creature token.'
+
+
+class LilianaDreadhordeGeneralAbility3:
+    text = '−4: Each player sacrifices two creatures of their choice.'
+
+
+class LilianaDreadhordeGeneralAbility4:
+    text = '−9: Each opponent chooses a permanent they control of each permanent type and sacrifices the rest.'
+
+
+# endregion Printed abilities
+
+
 class LilianaDreadhordeGeneral(Planeswalker):
     """Liliana, Dreadhorde General — {4}{B}{B} — 6 loyalty.
 
@@ -71,7 +94,7 @@ class LilianaDreadhordeGeneral(Planeswalker):
             pass
 
         return [
-            LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description="+1: Create a 2/2 black Zombie creature token."),
-            LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description="-4: Each player sacrifices two creatures of their choice."),
-            LoyaltyAbility(loyalty_cost=-9, effect=_minus9, description="-9: Opponents keep one of each type, sacrifice rest."),
+            LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description="+1: Create a 2/2 black Zombie creature token.", printed=LilianaDreadhordeGeneralAbility2),
+            LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description="-4: Each player sacrifices two creatures of their choice.", printed=LilianaDreadhordeGeneralAbility3),
+            LoyaltyAbility(loyalty_cost=-9, effect=_minus9, description="-9: Opponents keep one of each type, sacrifice rest.", printed=LilianaDreadhordeGeneralAbility4),
         ]

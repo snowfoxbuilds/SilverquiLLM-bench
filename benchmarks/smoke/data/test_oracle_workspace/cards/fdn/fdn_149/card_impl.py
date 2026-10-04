@@ -7,6 +7,21 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class YouthfulValkyrieAbility1:
+    text = 'Flying'
+
+
+class YouthfulValkyrieAbility2:
+    text = 'Whenever another Angel you control enters, put a +1/+1 counter on this creature.'
+
+
+# endregion Printed abilities
+
+
 class YouthfulValkyrie(Creature):
     """Youthful Valkyrie — {1}{W} — 1/3 — Angel — Flying.
 

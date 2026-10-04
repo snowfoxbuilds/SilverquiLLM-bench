@@ -8,6 +8,25 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DwynenGiltLeafDaenAbility1:
+    text = 'Reach (This creature can block creatures with flying.)'
+
+
+class DwynenGiltLeafDaenAbility2:
+    text = 'Other Elf creatures you control get +1/+1.'
+
+
+class DwynenGiltLeafDaenAbility3:
+    text = 'Whenever Dwynen attacks, you gain 1 life for each attacking Elf you control.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     for player in game.players:
         if game.get_battlefield(player).contains(obj):

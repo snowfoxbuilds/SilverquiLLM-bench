@@ -24,6 +24,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BloomTenderAbility1:
+    text = 'Vivid — {T}: For each color among permanents you control, add one mana of that color.'
+
+
+# endregion Printed abilities
+
+
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
     if getattr(source, "is_tapped", False):
@@ -92,4 +103,5 @@ class BloomTender(Creature):
             mana_produced=_effect,
             description="{T}: For each color among permanents you control, "
                         "add one mana of that color.",
+            printed=BloomTenderAbility1,
         )]

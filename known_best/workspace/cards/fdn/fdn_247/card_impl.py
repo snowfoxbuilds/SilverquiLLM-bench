@@ -7,6 +7,17 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class TatyovaBenthicDruidAbility1:
+    text = 'Landfall — Whenever a land you control enters, you gain 1 life and draw a card.'
+
+
+# endregion Printed abilities
+
+
 class TatyovaBenthicDruid(Creature):
     """Tatyova, Benthic Druid — {3}{G}{U} — 3/3 — Legendary Merfolk Druid.
 

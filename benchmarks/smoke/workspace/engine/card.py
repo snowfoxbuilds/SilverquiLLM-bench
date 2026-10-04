@@ -39,6 +39,7 @@ class Mode:
 
     name: str = ""
     description: str = ""
+    printed: type | None = None
 
 
 @dataclass
@@ -131,6 +132,7 @@ class ActivatedAbility:
     targeting: Callable[..., Any] | None = None
     can_activate: Callable[..., Any] | None = None
     predicted_outcome: Callable[..., Any] | None = None
+    printed: type | None = None
 
 
 @dataclass
@@ -163,6 +165,7 @@ class LoyaltyAbility:
     effect: Callable[..., Any]
     description: str = ""
     targeting: Callable[..., Any] | None = None
+    printed: type | None = None
 
 
 @dataclass
@@ -178,6 +181,7 @@ class ManaAbility:
     cost: Callable[..., Any]
     mana_produced: Callable[..., Any]
     description: str = ""
+    printed: type | None = None
 
 
 @dataclass

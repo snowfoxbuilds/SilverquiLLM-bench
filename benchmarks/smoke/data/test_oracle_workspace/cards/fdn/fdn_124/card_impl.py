@@ -8,6 +8,21 @@ from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class PerforatingArtistAbility1:
+    text = 'Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)'
+
+
+class PerforatingArtistAbility2:
+    text = 'Raid — At the beginning of your end step, if you attacked this turn, each opponent loses 3 life unless that player sacrifices a nonland permanent of their choice or discards a card.'
+
+
+# endregion Printed abilities
+
+
 class PerforatingArtist(Creature):
     """Perforating Artist — {1}{B}{R} — 3/2 — Devil.
 

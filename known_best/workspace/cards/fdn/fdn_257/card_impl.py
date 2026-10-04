@@ -9,6 +9,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SolemnSimulacrumAbility1:
+    text = 'When this creature enters, you may search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.'
+
+
+class SolemnSimulacrumAbility2:
+    text = 'When this creature dies, you may draw a card.'
+
+
+# endregion Printed abilities
+
+
 def _self_dies_condition(source: Any):
     """Return a condition callable that matches only when *source* dies."""
 

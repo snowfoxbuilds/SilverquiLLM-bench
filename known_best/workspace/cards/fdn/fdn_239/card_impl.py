@@ -17,6 +17,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class EmpyreanEagleAbility1:
+    text = 'Flying'
+
+
+class EmpyreanEagleAbility2:
+    text = 'Other creatures you control with flying get +1/+1.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     for player in game.players:
         if game.get_battlefield(player).contains(obj):

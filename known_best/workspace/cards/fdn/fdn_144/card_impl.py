@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MischievousPupAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class MischievousPupAbility2:
+    text = "When this creature enters, return up to one other target permanent you control to its owner's hand."
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     return any(game.get_battlefield(p).contains(obj) for p in game.players)
 

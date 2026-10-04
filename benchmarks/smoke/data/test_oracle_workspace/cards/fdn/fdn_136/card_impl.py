@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AngelOfFinalityAbility1:
+    text = 'Flying'
+
+
+class AngelOfFinalityAbility2:
+    text = "When this creature enters, exile target player's graveyard."
+
+
+# endregion Printed abilities
+
+
 class AngelOfFinality(Creature):
     """Angel of Finality — {3}{W} — 3/4 — Angel — Flying.
 

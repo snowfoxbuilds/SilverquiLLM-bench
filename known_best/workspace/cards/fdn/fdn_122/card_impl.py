@@ -9,6 +9,29 @@ from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class KykarZephyrAwakenerAbility1:
+    text = 'Flying'
+
+
+class KykarZephyrAwakenerAbility2:
+    text = 'Whenever you cast a noncreature spell, choose one —'
+
+
+class KykarZephyrAwakenerAbility3:
+    text = "• Exile another target creature you control. Return that card to the battlefield under its owner's control at the beginning of the next end step."
+
+
+class KykarZephyrAwakenerAbility4:
+    text = '• Create a 1/1 white Spirit creature token with flying.'
+
+
+# endregion Printed abilities
+
+
 class KykarZephyrAwakener(Creature):
     """Kykar, Zephyr Awakener — {2}{W}{U} — 3/4 — Legendary Bird Wizard.
 
@@ -60,7 +83,7 @@ class KykarZephyrAwakener(Creature):
             candidates = [c for c in bf.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and c is not source]
             mode_choice = None
             if candidates:
-                mode_choice = choose_mode(game, ctrl, ['flicker', 'token'], 'Choose mode for Kykar trigger', source_card=source)
+                mode_choice = choose_mode(game, ctrl, ['flicker', 'token'], 'Choose mode for Kykar trigger', source_card=source, printed=[KykarZephyrAwakenerAbility3, KykarZephyrAwakenerAbility4])
             else:
                 mode_choice = 'token'
             if mode_choice == 'flicker' and candidates:

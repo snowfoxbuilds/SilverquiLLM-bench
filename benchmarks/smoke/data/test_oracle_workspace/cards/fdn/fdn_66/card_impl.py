@@ -8,6 +8,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class NineLivesFamiliarAbility1:
+    text = 'This creature enters with eight revival counters on it if you cast it.'
+
+
+class NineLivesFamiliarAbility2:
+    text = 'When this creature dies, if it had a revival counter on it, return it to the battlefield with one fewer revival counter on it at the beginning of the next end step.'
+
+
+# endregion Printed abilities
+
+
 class NineLivesFamiliar(Creature):
     """Nine-Lives Familiar — {1}{B}{B} — 1/1 — Cat
 

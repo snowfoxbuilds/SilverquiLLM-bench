@@ -15,6 +15,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class RavenousAmuletAbility1:
+    text = '{1}, {T}, Sacrifice a creature: Draw a card and put a soul counter on this artifact. Activate only as a sorcery.'
+
+
+class RavenousAmuletAbility2:
+    text = '{4}, {T}, Sacrifice this artifact: Each opponent loses life equal to the number of soul counters on this artifact.'
+
+
+# endregion Printed abilities
+
+
 class RavenousAmulet(Artifact):
     """Ravenous Amulet — {2} — Sacrifice creature to draw; sac self to drain."""
 
@@ -84,10 +99,12 @@ class RavenousAmulet(Artifact):
                 cost=_sac_creature_cost,
                 effect=_sac_creature_effect,
                 description="{1}, {T}, Sacrifice a creature: Draw a card and put a soul counter.",
+                printed=RavenousAmuletAbility1,
             ),
             ActivatedAbility(
                 cost=_drain_cost,
                 effect=_drain_effect,
                 description="{4}, {T}, Sacrifice: Each opponent loses life equal to soul counters.",
+                printed=RavenousAmuletAbility2,
             ),
         ]

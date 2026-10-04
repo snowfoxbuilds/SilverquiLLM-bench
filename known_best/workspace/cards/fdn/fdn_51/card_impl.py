@@ -8,6 +8,25 @@ from engine.events import AttacksTriggeredEvent, EndOfTurnTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SphinxOfForgottenLoreAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class SphinxOfForgottenLoreAbility2:
+    text = 'Flying'
+
+
+class SphinxOfForgottenLoreAbility3:
+    text = "Whenever this creature attacks, target instant or sorcery card in your graveyard gains flashback until end of turn. The flashback cost is equal to that card's mana cost. (You may cast that card from your graveyard for its flashback cost. Then exile it.)"
+
+
+# endregion Printed abilities
+
+
 class SphinxOfForgottenLore(Creature):
     """Sphinx of Forgotten Lore — {2}{U}{U} — 3/3 — Sphinx — Flash, Flying.
 

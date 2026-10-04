@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class RaiseThePastAbility1:
+    text = 'Return all creature cards with mana value 2 or less from your graveyard to the battlefield.'
+
+
+# endregion Printed abilities
+
+
 class RaiseThePast(Sorcery):
     """Raise the Past — {2}{W}{W} — Sorcery.
 

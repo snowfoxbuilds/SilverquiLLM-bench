@@ -8,6 +8,21 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SkyknightSquireAbility1:
+    text = 'Whenever another creature you control enters, put a +1/+1 counter on this creature.'
+
+
+class SkyknightSquireAbility2:
+    text = 'As long as this creature has three or more +1/+1 counters on it, it has flying and is a Knight in addition to its other types.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
     for player in game.players:

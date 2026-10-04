@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DiregrafGhoulAbility1:
+    text = 'This creature enters tapped.'
+
+
+# endregion Printed abilities
+
+
 class DiregrafGhoul(Creature):
     """Diregraf Ghoul — {B} — 2/2 — Zombie.
 

@@ -8,6 +8,17 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CourageousGoblinAbility1:
+    text = "Whenever this creature attacks while you control a creature with power 4 or greater, this creature gets +1/+0 and gains menace until end of turn. (It can't be blocked except by two or more creatures.)"
+
+
+# endregion Printed abilities
+
+
 class CourageousGoblin(Creature):
     """Courageous Goblin — {1}{R} — 2/2 — Goblin.
 

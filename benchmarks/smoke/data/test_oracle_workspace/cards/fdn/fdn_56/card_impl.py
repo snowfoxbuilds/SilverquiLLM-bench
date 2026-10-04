@@ -12,6 +12,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BillowingShriekmassAbility1:
+    text = 'Flying'
+
+
+class BillowingShriekmassAbility2:
+    text = 'When this creature enters, mill three cards. (Put the top three cards of your library into your graveyard.)'
+
+
+class BillowingShriekmassAbility3:
+    text = 'Threshold — This creature gets +2/+1 as long as there are seven or more cards in your graveyard.'
+
+
+# endregion Printed abilities
+
+
 class BillowingShriekmass(Creature):
     """Billowing Shriekmass — {3}{B} — 2/3 — Spirit — Flying.
 

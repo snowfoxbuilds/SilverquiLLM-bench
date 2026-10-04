@@ -18,6 +18,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GoldveinPickAbility1:
+    text = 'Equipped creature gets +1/+1.'
+
+
+class GoldveinPickAbility2:
+    text = 'Whenever equipped creature deals combat damage to a player, create a Treasure token. (It\'s an artifact with "{T}, Sacrifice this token: Add one mana of any color.")'
+
+
+class GoldveinPickAbility3:
+    text = 'Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)'
+
+
+# endregion Printed abilities
+
+
 class GoldveinPick(Equipment):
     """Goldvein Pick — {2} — Artifact — Equipment.
 
@@ -28,6 +46,8 @@ class GoldveinPick(Equipment):
 
     FDN collector number 253.
     """
+
+    equip_printed = GoldveinPickAbility3
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Goldvein Pick")

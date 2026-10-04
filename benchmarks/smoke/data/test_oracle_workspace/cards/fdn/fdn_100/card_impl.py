@@ -8,6 +8,21 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BeastKinRangerAbility1:
+    text = "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)"
+
+
+class BeastKinRangerAbility2:
+    text = 'Whenever another creature you control enters, this creature gets +1/+0 until end of turn.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     for player in game.players:
         if game.get_battlefield(player).contains(obj):

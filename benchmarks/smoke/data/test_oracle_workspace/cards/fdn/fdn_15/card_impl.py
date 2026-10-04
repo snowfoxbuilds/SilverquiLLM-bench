@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class HareApparentAbility1:
+    text = 'When this creature enters, create a number of 1/1 white Rabbit creature tokens equal to the number of other creatures you control named Hare Apparent.'
+
+
+class HareApparentAbility2:
+    text = 'A deck can have any number of cards named Hare Apparent.'
+
+
+# endregion Printed abilities
+
+
 class HareApparent(Creature):
     """Hare Apparent — {1}{W} — 2/2 — Rabbit Noble.
 

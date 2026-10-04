@@ -451,7 +451,15 @@ def _choose_cost(
     from engine.decisions import Decision
     from engine.queries import PlayerQuery, ask
 
-    options = tuple(Decision.ability(index=i) for i, _ in payable)
+    # Index 0 is the normal mana cost; each alternative carries the printed
+    # ability that grants it.
+    alternative_printed = dict(enumerate(card.alternative_cost_printed, start=1))
+    options = tuple(
+        Decision.ability(index=i, printed=alternative_printed[i])
+        if i in alternative_printed
+        else Decision.ability(index=i)
+        for i, _ in payable
+    )
     query = PlayerQuery(
         source=(_source_decision(game, card),),
         prompt="Choose a cost to pay",

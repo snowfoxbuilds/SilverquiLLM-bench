@@ -8,6 +8,25 @@ from engine.events import AttacksTriggeredEvent, EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AleshaWhoLaughsAtFateAbility1:
+    text = 'First strike'
+
+
+class AleshaWhoLaughsAtFateAbility2:
+    text = 'Whenever Alesha attacks, put a +1/+1 counter on it.'
+
+
+class AleshaWhoLaughsAtFateAbility3:
+    text = "Raid — At the beginning of your end step, if you attacked this turn, return target creature card with mana value less than or equal to Alesha's power from your graveyard to the battlefield."
+
+
+# endregion Printed abilities
+
+
 class AleshaWhoLaughsAtFate(Creature):
     """Alesha, Who Laughs at Fate — {1}{B}{R} — 2/2 — Legendary Human Warrior.
 

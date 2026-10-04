@@ -8,6 +8,17 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class VampireGourmandAbility1:
+    text = "Whenever this creature attacks, you may sacrifice another creature. If you do, draw a card and this creature can't be blocked this turn."
+
+
+# endregion Printed abilities
+
+
 class VampireGourmand(Creature):
     """Vampire Gourmand — {1}{B} — 2/2 — Vampire.
 

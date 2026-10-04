@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DwynensEliteAbility1:
+    text = 'When this creature enters, if you control another Elf, create a 1/1 green Elf Warrior creature token.'
+
+
+# endregion Printed abilities
+
+
 class DwynensElite(Creature):
     """Dwynen's Elite — {1}{G} — 2/2 — Elf Warrior.
 

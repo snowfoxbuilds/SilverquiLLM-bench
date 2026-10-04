@@ -7,6 +7,21 @@ from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FirespitterWhelpAbility1:
+    text = 'Flying'
+
+
+class FirespitterWhelpAbility2:
+    text = 'Whenever you cast a noncreature or Dragon spell, this creature deals 1 damage to each opponent.'
+
+
+# endregion Printed abilities
+
+
 class FirespitterWhelp(Creature):
     """Firespitter Whelp — {2}{R} — 2/2 — Dragon — Flying.
 
