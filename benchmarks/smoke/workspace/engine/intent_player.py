@@ -374,7 +374,7 @@ class DeterministicPlayer(Player):
         if answer.key is None:
             # Answered outside this player's handlers (a subclass's own answer).
             return super().on_attempt_rejected(context, answer, error)
-        if answer.forbidden:
+        if context.forbidden_by(answer):
             # A negative intent's choice was refused, as the rules require.
             return "pass"
         if answer.key == _ENTRY_KEY:
@@ -400,12 +400,13 @@ class DeterministicPlayer(Player):
     def _choice_rejected(
         self, context: Any, answer: AttemptAnswer, error: InvalidPlayerChoiceError
     ) -> str:
-        if not answer.used:
+        used = context.used_by(answer)
+        if not used:
             raise PostconditionError(
                 f"choice rejected with no preference left to drop: {error}"
             ) from error
         dropped = context.dropped.setdefault((id(self), answer.key), set())
-        dropped.add(min(answer.used))
+        dropped.add(min(used))
         intent = self._baseline if answer.key == _BASELINE_KEY else self._intents.get(answer.key)
         if intent is None or len(dropped) >= len(intent.preferences):
             if context.kind == "priority" and context.answers and context.answers[0] is answer:
@@ -414,10 +415,18 @@ class DeterministicPlayer(Player):
             raise PostconditionError(
                 f"choice intent {answer.key!r} exhausted its preferences: {error}"
             ) from error
-        if self._attempt is not None:
-            # The entry's action stays the same; only the choice is revised.
-            self._attempt.retrying = True
         return "retry"
+
+    def on_action_retried(self, context: Any) -> None:
+        attempt = self._attempt
+        if attempt is None:
+            return
+        if attempt.entry.kind is EntryKind.ILLEGAL:
+            # Its action was rejected, as it must be: the next entry takes over.
+            self._attempt = None
+            return
+        # The entry's action stays the same; only the choice inside it is revised.
+        attempt.retrying = True
 
     def on_action_taken(self, query: PlayerQuery, answer: Answer, result: Any) -> None:
         attempt, self._attempt = self._attempt, None
@@ -428,18 +437,6 @@ class DeterministicPlayer(Player):
             raise ScriptEntryError(attempt.entry, "took effect")
         if attempt.entry.goal is not None and not attempt.entry.goal(self.game):
             raise ScriptEntryError(attempt.entry, "missed goal")
-
-    # ------------------------------------------------------------------
-    # Retrying choices
-    # ------------------------------------------------------------------
-
-    def can_retry_choices(self) -> bool:
-        """Whether a rejected choice could be answered differently — only then
-        is an attempt worth rolling back and retrying."""
-        intents = [*self._intents.values(), self._baseline]
-        return self._attempt is not None or any(
-            intent is not None and intent.preferences for intent in intents
-        )
 
     # ------------------------------------------------------------------
     # Answering

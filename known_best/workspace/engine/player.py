@@ -137,11 +137,20 @@ class Player(ABC):
         Priority Query is asked again — or ``"pass"`` to abandon the attempt;
         raise to stop play with an error. The default hands a rejected priority
         action to :meth:`on_choice_rejected` and raises any other rejection.
+
+        A retry rolls the game back again after this hook returns, so state the
+        player keeps for its decisions must be listed in ``rollback_exempt``.
         """
         if context.kind == "priority":
             self.on_choice_rejected(context.query, context.answer, error)
             return "retry"
         raise error
+
+    def on_action_retried(self, context: Any) -> None:
+        """Hear that a choice someone made while this player's priority action
+        was being taken was rejected and will be made again: the same Priority
+        Query is asked again and the player should choose the same action. The
+        default does nothing."""
 
     def on_action_taken(self, query: PlayerQuery, answer: Answer, result: Any) -> None:
         """Hear that the action chosen in ``answer`` to Priority Query ``query``

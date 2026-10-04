@@ -110,6 +110,9 @@ class StackObject:
     prior_qualifying_casts: int | None = None
     departure_zone: Zone | None = None
     is_spell: bool = False
+    # Finishes a resolution whose effect was abandoned at a rejected choice —
+    # for a spell, its departure from the stack (see engine.attempts).
+    on_abandon: Callable[[GameState], None] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -580,8 +583,10 @@ def resolve_top_of_stack(game: GameState) -> bool:
     The effect runs as an attempt (:func:`engine.attempts.resolve`): a choice
     the engine rejects while it resolves is rolled back and, if its player
     retries, the effect runs again with every state before the rejected choice
-    restored; an abandoned choice ends the resolution there, keeping the
-    effects before its first query (see ADR-017).
+    restored; an abandoned choice ends the effect there, keeping the effects
+    before its first query, and the object still finishes resolving through
+    its ``on_abandon`` — a spell leaves the stack (see ADR-017). Either way a
+    fresh priority round begins.
     """
     from engine import attempts
 
@@ -589,7 +594,10 @@ def resolve_top_of_stack(game: GameState) -> bool:
         return True
     obj = game.stack.pop()
     completed = attempts.resolve(game, lambda: obj.on_resolve(game))
+    if not completed and obj.on_abandon is not None:
+        obj.on_abandon(game)
     settle_after_resolution(game)
+    game.start_priority_round()
     return completed
 
 

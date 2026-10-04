@@ -366,12 +366,12 @@ def run_scripts(game: GameState, *, max_priority: int = 1000) -> None:
     stack, move the game to the next step that grants priority. A player whose
     script is dry passes.
 
-    The priority round is kept with the game between calls: when the scripts
-    run out, the next priority holder and the passes already made in a row are
-    stored, and the next call carries on from there — with a pending
-    resolution or step change made first if both players had passed. An
-    action, a resolution, :func:`resolve_stack` and :func:`advance_to_phase`
-    start a fresh round.
+    The priority round is kept with the game (``game.priority_player_index``
+    and ``game.priority_passes``), so a later call carries on from where the
+    scripts ran out — with a pending resolution or step change made first if
+    both players had passed. The engine starts a fresh round whenever an
+    action is taken, an object resolves or the game moves to another step, and
+    :func:`resolve_stack` always starts one.
 
     Rejections follow the engine's attempts (:mod:`engine.attempts`): a
     rejected priority action is retried within its entry, and a rejected choice
@@ -388,44 +388,23 @@ def run_scripts(game: GameState, *, max_priority: int = 1000) -> None:
     """
     from engine.priority import take_priority
 
-    current = game.priority_player_index
-    passes = _priority_passes(game)
     grants = 0
     while True:
         if not _scripts_remain(game):
-            _set_priority_round(game, current, passes)
             return
-        if passes >= 2:
-            passes = 0
+        if game.priority_passes >= 2:
             if game.stack.is_empty():
                 _enter_next_priority_step(game)
             elif not resolve_top_of_stack(game):
-                _set_priority_round(game, game.active_player_index, 0)
                 return
-            current = game.active_player_index
             continue
         if grants == max_priority:
             raise TestSetupError(f"scripts not consumed within {max_priority} grants of priority")
         grants += 1
-        game.priority_player_index = current
+        current = game.priority_player_index
         if take_priority(game, game.players[current]):
-            passes += 1
-            current = 1 - current
-        else:
-            passes = 0
-
-
-_PRIORITY_PASSES = "scripted_priority_passes"
-
-
-def _priority_passes(game: GameState) -> int:
-    """Passes in a row already made in the current priority round."""
-    return getattr(game, _PRIORITY_PASSES, 0)
-
-
-def _set_priority_round(game: GameState, holder: int, passes: int) -> None:
-    game.priority_player_index = holder
-    setattr(game, _PRIORITY_PASSES, passes)
+            game.priority_passes += 1
+            game.priority_player_index = 1 - current
 
 
 def _scripts_remain(game: GameState) -> bool:
@@ -452,7 +431,7 @@ def _take_action(game: GameState, player: Any, entry: ScriptEntry) -> Any:
     from engine.priority import take_priority
 
     player = _deterministic(game, player)
-    _set_priority_round(game, game.players.index(player), 0)
+    game.priority_player_index = game.players.index(player)
     saved = player.set_script([entry])
     player.last_action_result = None
     try:
@@ -524,10 +503,11 @@ def resolve_stack(game: GameState) -> None:
     rejects while an object resolves is retried from before that choice, with
     the rejected answer's highest-ranked preference dropped; under a negative
     Intent the rejection counts as a pass and resolution stops there. The
-    active player then holds priority in a fresh round.
+    active player then holds priority in a fresh round, even when the stack
+    was already empty.
     """
+    game.start_priority_round()
     while not game.stack.is_empty():
-        _set_priority_round(game, game.active_player_index, 0)
         if not resolve_top_of_stack(game):
             return
 
@@ -632,7 +612,6 @@ def advance_to_phase(
     for _ in range(max_advances):
         game.advance_phase()
         if (game.phase, game.step) == target:
-            _set_priority_round(game, game.active_player_index, 0)
             return
 
     raise TestSetupError(

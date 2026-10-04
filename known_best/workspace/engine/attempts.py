@@ -77,6 +77,8 @@ class AttemptContext:
     # The Priority Query and its answer, for a priority attempt.
     query: Any = None
     answer: Any = None
+    # The answer that owned the latest rejection.
+    owner_answer: AttemptAnswer | None = None
 
     def begin_try(self) -> None:
         self.boundary = None
@@ -103,7 +105,25 @@ class AttemptContext:
         owner = self.owner(error)
         if owner is None:
             raise error
+        self.owner_answer = owner
         return owner.player.on_attempt_rejected(self, owner, error)
+
+    def forbidden_by(self, answer: AttemptAnswer) -> bool:
+        """Whether ``answer``'s handler made a forbidden choice in this try."""
+        return any(
+            other.forbidden
+            for other in self.answers
+            if other.player is answer.player and other.key == answer.key
+        )
+
+    def used_by(self, answer: AttemptAnswer) -> set[int]:
+        """The preference ranks ``answer``'s handler used across this try."""
+        return {
+            rank
+            for other in self.answers
+            if other.player is answer.player and other.key == answer.key
+            for rank in other.used
+        }
 
     def check_forbidden(self) -> None:
         if any(a.forbidden for a in self.answers):
@@ -138,12 +158,6 @@ def active(context: AttemptContext):
         _active.reset(token)
 
 
-def can_retry(game: Any) -> bool:
-    """Whether any player could answer a rejected choice differently — only then
-    is a resolution worth snapshotting."""
-    return any(getattr(p, "can_retry_choices", lambda: False)() for p in game.players)
-
-
 def resolve(game: Any, operation: Callable[[], Any]) -> bool:
     """Run a resolving object's effect as an attempt; return ``False`` if a
     rejected choice was abandoned, ending the resolution at that choice."""
@@ -161,8 +175,6 @@ def _run(game: Any, kind: AttemptKind, operation: Callable[[], Any]) -> tuple[bo
     from engine.priority import REJECTED_ACTION_ERRORS, as_choice_error
     from engine.rollback import take_snapshot
 
-    if not can_retry(game):
-        return True, operation()
     context = AttemptContext(game, kind)
     start = take_snapshot(game)
     with active(context):

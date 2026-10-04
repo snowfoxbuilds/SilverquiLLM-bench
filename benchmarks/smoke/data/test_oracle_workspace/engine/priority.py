@@ -89,8 +89,12 @@ def take_priority(game: GameState, player: Player) -> bool:
                 context.boundary.restore()
                 if context.reject(as_choice_error(exc)) == "pass":
                     return True
+                if context.owner_answer is not context.answers[0]:
+                    # A choice inside the action was rejected, not the action.
+                    player.on_action_retried(context)
                 continue
             context.check_forbidden()
+            game.priority_passes = 0
             player.on_action_taken(query, answer, result)
             return False
 

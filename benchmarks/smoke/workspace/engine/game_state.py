@@ -69,6 +69,9 @@ class GameState:
             self.refs.register_player(player, seat)
         self.active_player_index: int = 0
         self.priority_player_index: int = 0
+        # Passes in a row in the current priority round, for a driver that
+        # stops mid-round and resumes later; see start_priority_round.
+        self.priority_passes: int = 0
         self.phase: Phase = Phase.BEGINNING
         self.step: Step | None = Step.UNTAP
         self.turn_number: int = 1
@@ -177,6 +180,14 @@ class GameState:
                 effect_manager.apply_all(self)
 
         self.empty_mana_pools()
+        self.start_priority_round()
+
+    def start_priority_round(self) -> None:
+        """Begin a fresh priority round: the active player receives priority
+        and no one has passed yet — as at the start of a step and after an
+        object resolves (rule 117.3b)."""
+        self.priority_player_index = self.active_player_index
+        self.priority_passes = 0
 
     def empty_mana_pools(self) -> None:
         """Empty all players' mana pools — called on each phase/step transition."""
