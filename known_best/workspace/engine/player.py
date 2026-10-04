@@ -152,6 +152,11 @@ class Player(ABC):
         Query is asked again and the player should choose the same action. The
         default does nothing."""
 
+    def on_action_ended(self, context: Any) -> None:
+        """Hear that the priority action attempted in ``context`` is over —
+        taken, abandoned, passed, or ended by an error — so nothing of it should
+        answer later queries. The default does nothing."""
+
     def on_action_taken(self, query: PlayerQuery, answer: Answer, result: Any) -> None:
         """Hear that the action chosen in ``answer`` to Priority Query ``query``
         took effect — the spell or ability is on the stack, the land played, or

@@ -148,15 +148,17 @@ class GameSnapshot:
             _restore(saved)
 
 
-def take_snapshot(game: Any) -> GameSnapshot:
-    """Record the state of everything reachable from ``game``.
+def take_snapshot(game: Any, *roots: Any) -> GameSnapshot:
+    """Record the state of everything reachable from ``game`` and ``roots``.
 
-    Module-level engine state that a priority action can change (the
-    loyalty-activated-this-turn tracker) is recorded too.
+    ``roots`` are what is running outside the game — a resolving effect's
+    callable and the StackObject already popped for it — whose state the game
+    does not reach. Module-level engine state that a priority action can
+    change (the loyalty-activated-this-turn tracker) is recorded too.
     """
     seen: set[int] = set()
     saved: list[_Saved] = []
-    pending: list[Any] = [game, abilities._loyalty_activated_this_turn]
+    pending: list[Any] = [game, abilities._loyalty_activated_this_turn, *roots]
     while pending:
         obj = pending.pop()
         if isinstance(obj, _ATOMIC) or id(obj) in seen:

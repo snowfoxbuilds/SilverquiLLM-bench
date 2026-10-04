@@ -254,12 +254,16 @@ class _EntryAttempt:
     """The script entry whose action is being taken, and how its attempts went.
 
     Preferences are ranked ``entry.preferences`` then ``entry.choices``; a
-    rejected attempt drops the highest-ranked one it used.
+    rejected attempt drops the highest-ranked one it used — among the answers
+    inside the action when a choice there was refused, so the action itself
+    is kept and only that choice is revised.
     """
 
     entry: ScriptEntry
     dropped: set[int] = field(default_factory=set)
     used: set[int] = field(default_factory=set)
+    # The rank that chose the action in the Priority Query of this try.
+    action_rank: int | None = None
     error: InvalidPlayerChoiceError | None = None
     retrying: bool = False
 
@@ -378,10 +382,12 @@ class DeterministicPlayer(Player):
             # A negative intent's choice was refused, as the rules require.
             return "pass"
         if answer.key == _ENTRY_KEY:
-            return self._entry_rejected(error)
+            return self._entry_rejected(context, answer, error)
         return self._choice_rejected(context, answer, error)
 
-    def _entry_rejected(self, error: InvalidPlayerChoiceError) -> str:
+    def _entry_rejected(
+        self, context: Any, answer: AttemptAnswer, error: InvalidPlayerChoiceError
+    ) -> str:
         attempt = self._attempt
         if attempt is None:
             raise error
@@ -389,10 +395,14 @@ class DeterministicPlayer(Player):
             # Rejected as it must be: the re-asked query goes to the next entry.
             self._attempt = None
             return "retry"
-        if not attempt.used:
+        used = attempt.used
+        if context.answers and answer is not context.answers[0]:
+            # A choice inside the action was refused: revise the choices, keep the action.
+            used = (used - {attempt.action_rank}) or used
+        if not used:
             self._attempt = None
             raise ScriptEntryError(attempt.entry, "rejected", error) from error
-        attempt.dropped.add(min(attempt.used))
+        attempt.dropped.add(min(used))
         attempt.error = error
         attempt.retrying = True
         return "retry"
@@ -427,6 +437,10 @@ class DeterministicPlayer(Player):
             return
         # The entry's action stays the same; only the choice inside it is revised.
         attempt.retrying = True
+
+    def on_action_ended(self, context: Any) -> None:
+        # Whatever ended the action, its entry answers nothing after it.
+        self._attempt = None
 
     def on_action_taken(self, query: PlayerQuery, answer: Answer, result: Any) -> None:
         attempt, self._attempt = self._attempt, None
@@ -463,7 +477,15 @@ class DeterministicPlayer(Player):
                 return self._answer_from_script(query)
         elif self._attempt is not None and not claimed:
             ranked = self._attempt.ranked()
-            if _first_preferred([p for _, p in ranked], query.options) is not None:
+            baseline_prefers = self._baseline is not None and _first_preferred(
+                list(self._baseline.preferences), query.options
+            ) is not None
+            if _first_preferred([p for _, p in ranked], query.options) is not None or (
+                not baseline_prefers
+            ):
+                # Inside its action the entry answers every query nothing else
+                # claims — by its preferences, or by mandatory fill — so it owns
+                # those answers when one of them is rejected.
                 answer, used = _select(ranked, query)
                 self._attempt.used.update(used)
                 _note(noted, _ENTRY_KEY)
@@ -509,6 +531,7 @@ class DeterministicPlayer(Player):
             for option in query.options:
                 if satisfies(option, pref):
                     attempt.used.add(index)
+                    attempt.action_rank = index
                     self._attempt = attempt
                     return Answer(selected=(option,))
         self._attempt = None

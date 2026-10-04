@@ -71,31 +71,39 @@ def take_priority(game: GameState, player: Player) -> bool:
     is asked again, the rejection counts as a pass, or play stops with an error.
     """
     context = AttemptContext(game, "priority")
-    with attempts.active(context):
-        while True:
-            # CR 117.5: the game settles before a player receives priority, also
-            # when an action leaves the stack empty or pays a cost that kills.
-            settle_after_resolution(game)
-            context.begin_try()
-            query, actions = priority_query(game, player)
-            answer = ask(player, query)
-            context.query, context.answer = query, answer
-            if not answer.selected:
+    try:
+        with attempts.active(context):
+            return _attempt_action(game, player, context)
+    finally:
+        # Taken, abandoned, passed or ended by an error: the action is over.
+        player.on_action_ended(context)
+
+
+def _attempt_action(game: GameState, player: Player, context: AttemptContext) -> bool:
+    while True:
+        # CR 117.5: the game settles before a player receives priority, also
+        # when an action leaves the stack empty or pays a cost that kills.
+        settle_after_resolution(game)
+        context.begin_try()
+        query, actions = priority_query(game, player)
+        answer = ask(player, query)
+        context.query, context.answer = query, answer
+        if not answer.selected:
+            return True
+        try:
+            result = actions[answer.selected[0]]()
+        except REJECTED_ACTION_ERRORS as exc:
+            context.boundary.restore()
+            if context.reject(as_choice_error(exc)) == "pass":
                 return True
-            try:
-                result = actions[answer.selected[0]]()
-            except REJECTED_ACTION_ERRORS as exc:
-                context.boundary.restore()
-                if context.reject(as_choice_error(exc)) == "pass":
-                    return True
-                if context.owner_answer is not context.answers[0]:
-                    # A choice inside the action was rejected, not the action.
-                    player.on_action_retried(context)
-                continue
-            context.check_forbidden()
-            game.priority_passes = 0
-            player.on_action_taken(query, answer, result)
-            return False
+            if context.owner_answer is not context.answers[0]:
+                # A choice inside the action was rejected, not the action.
+                player.on_action_retried(context)
+            continue
+        context.check_forbidden()
+        game.priority_passes = 0
+        player.on_action_taken(query, answer, result)
+        return False
 
 
 def as_choice_error(exc: Exception) -> InvalidPlayerChoiceError:

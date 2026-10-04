@@ -79,6 +79,8 @@ class AttemptContext:
     answer: Any = None
     # The answer that owned the latest rejection.
     owner_answer: AttemptAnswer | None = None
+    # What runs outside the game during the attempt, snapshotted with it.
+    roots: tuple[Any, ...] = ()
 
     def begin_try(self) -> None:
         self.boundary = None
@@ -90,7 +92,7 @@ class AttemptContext:
         if self.boundary is None:
             from engine.rollback import take_snapshot
 
-            self.boundary = take_snapshot(self.game)
+            self.boundary = take_snapshot(self.game, *self.roots)
         record = AttemptAnswer(player)
         self.answers.append(record)
         return record
@@ -158,25 +160,29 @@ def active(context: AttemptContext):
         _active.reset(token)
 
 
-def resolve(game: Any, operation: Callable[[], Any]) -> bool:
+def resolve(game: Any, operation: Callable[[], Any], *roots: Any) -> bool:
     """Run a resolving object's effect as an attempt; return ``False`` if a
-    rejected choice was abandoned, ending the resolution at that choice."""
-    return _run(game, "resolution", operation)[0]
+    rejected choice was abandoned, ending the resolution at that choice.
+    ``roots`` — the popped StackObject — are rolled back with the game."""
+    return _run(game, "resolution", operation, roots)[0]
 
 
 def attempt(game: Any, operation: Callable[[], Any]) -> tuple[bool, Any]:
     """Run one cast or choice ``operation`` as its own attempt while an object
     resolves; return ``(True, result)``, or ``(False, None)`` if it was rejected
     and abandoned — rolled back, with everything before it kept."""
-    return _run(game, "choice", operation)
+    return _run(game, "choice", operation, ())
 
 
-def _run(game: Any, kind: AttemptKind, operation: Callable[[], Any]) -> tuple[bool, Any]:
+def _run(
+    game: Any, kind: AttemptKind, operation: Callable[[], Any], roots: tuple[Any, ...]
+) -> tuple[bool, Any]:
     from engine.priority import REJECTED_ACTION_ERRORS, as_choice_error
     from engine.rollback import take_snapshot
 
-    context = AttemptContext(game, kind)
-    start = take_snapshot(game)
+    # The operation's own state (its closure) is part of what a retry restores.
+    context = AttemptContext(game, kind, roots=(operation, *roots))
+    start = take_snapshot(game, *context.roots)
     with active(context):
         while True:
             context.begin_try()

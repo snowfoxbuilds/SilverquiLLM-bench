@@ -593,7 +593,7 @@ def resolve_top_of_stack(game: GameState) -> bool:
     if game.stack.is_empty():
         return True
     obj = game.stack.pop()
-    completed = attempts.resolve(game, lambda: obj.on_resolve(game))
+    completed = attempts.resolve(game, lambda: obj.on_resolve(game), obj)
     if not completed and obj.on_abandon is not None:
         obj.on_abandon(game)
     settle_after_resolution(game)
@@ -618,8 +618,9 @@ def priority_loop(game: GameState) -> None:
 
     Flow
     ----
-    1. Active player gets priority.  They may play spells/abilities
-       (pushed to stack) or pass.
+    1. The player holding priority in the game's round — the active player
+       when a round begins — may play spells/abilities (pushed to stack) or
+       pass.
     2. When a player takes an action they **retain** priority (MTG rule:
        the player who just acted gets to respond first).
     3. When a player passes, priority moves to the other player.
@@ -637,33 +638,28 @@ def priority_loop(game: GameState) -> None:
     Each time a player receives priority the engine raises a Priority
     Query offering the actions they may take; declining passes (see
     :mod:`engine.priority` and ADR-017).
+
+    The round is the game's own (``game.priority_player_index`` and
+    ``game.priority_passes``), shared with any other driver: the loop carries
+    on a round already in progress, and one whose two passes are already due
+    resolves or returns at once. A new step or a resolution starts a fresh
+    round (:meth:`~engine.game_state.GameState.start_priority_round`).
     """
     while True:
-        # Active player receives priority at the start of each
-        # resolution round.
-        current_index = game.active_player_index
-        game.priority_player_index = current_index
-        consecutive_passes = 0
-
-        while consecutive_passes < 2:
-            player = game.players[current_index]
-            game.priority_player_index = current_index
-
-            passed = _handle_priority(game, player)
-
-            if passed:
-                consecutive_passes += 1
+        while game.priority_passes < 2:
+            current = game.priority_player_index
+            if _handle_priority(game, game.players[current]):
                 # Priority moves to the other player.
-                current_index = 1 - current_index
-            else:
-                # Player took an action — they retain priority.
-                consecutive_passes = 0
+                game.priority_passes += 1
+                game.priority_player_index = 1 - current
+            # A player who took an action retains priority; taking it began
+            # a fresh count of passes.
 
         # Both players passed consecutively.
         if game.stack.is_empty():
             return  # Advance to next phase/step
 
         # Resolve top of stack (LIFO) — settles SBAs and re-derives continuous
-        # effects so a just-registered mid-turn effect applies immediately.
+        # effects so a just-registered mid-turn effect applies immediately —
+        # and the active player receives priority in a fresh round.
         resolve_top_of_stack(game)
-        # Active player receives priority again — outer loop continues.
