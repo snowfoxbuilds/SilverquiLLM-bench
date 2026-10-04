@@ -57,6 +57,13 @@ bear = put_on_battlefield(game, game.players[1],
                                    base_power=2, base_toughness=2))
 ```
 
+## Ability inspection
+
+`loyalty_abilities(card) -> list` returns the card's current loyalty ability descriptors.
+Their order is unspecified; tests can select an ability by its public `loyalty_cost`
+when that distinguishes the intended ability in the fixture, then pass its current
+index to `activate_loyalty_ability`. Re-enumerate after a grant or revocation.
+
 ## Actions
 
 ### `cast_spell`

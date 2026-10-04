@@ -339,3 +339,33 @@ def test_new_hall_can_attack_only_if_copy_has_haste(haste):
     resolve_stack(game)
     declare_attackers_step(game, [hall])
     assert hall.is_attacking is haste
+
+
+def test_copied_recollector_prepares_and_casts_its_inset_spell():
+    from cards.fra.fra_49.card_impl import BloodlineRecollector
+    from engine.casting import cast_spell
+    from engine.decisions import Decision
+    from engine.game import sacrifice
+
+    game, player, hall, _ = arrange()
+    target = enter_permanent(game, player, BloodlineRecollector())
+    prefer(player, object_preference(game, target))
+    activate_card_ability(game, player, hall)
+    resolve_stack(game)
+    exile(game, target)
+    for i in range(3):
+        victim = enter_permanent(game, player, Creature(
+            name=f"Victim {i}", base_power=1, base_toughness=1))
+        sacrifice(game, player, victim)
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+    resolve_stack(game)
+    spells = [c for c in player.zones[Zone.EXILE].get_all()
+              if c.name == "Ancestral Craving"]
+    assert len(spells) == 1
+    player.mana_pool.add(ManaType.BLACK)
+    prefer(player, Decision.player(seat=0))
+    cast_spell(game, player, spells[0])
+    resolve_stack(game)
+    assert player.life == 17 and len(game.get_hand(player).get_all()) == 3
+    assert game.get_battlefield(player).contains(hall)
+    assert all(not player.zones[zone].contains(spells[0]) for zone in Zone)
