@@ -1,9 +1,8 @@
 """The Priority Query — what a player does with priority (see ADR-017).
 
-Before a player receives priority the game is settled: continuous effects are
-re-derived and state-based actions performed (CR 117.5). The engine then asks
-the player, through one Player Query, for the action to take — the set of
-choices a user interface would offer a real player at that moment:
+When a player receives priority the engine asks them, through one Player Query,
+for the action to take — the set of choices a user interface would offer a real
+player at that moment:
 
 * an OBJECT option for every spell they may begin casting (from their hand, or
   from their graveyard under flashback or a cast permission) and every land they
@@ -12,15 +11,11 @@ choices a user interface would offer a real player at that moment:
   loyalty abilities included;
 * declining (``min=0``) passes priority.
 
-Options follow timing, zone and cast-permission rules; costs, targets and
-``can_cast`` conditions are not pre-checked, so an action they forbid is
-offered and then rejected. The engine picks the zone and cast permission and
-each card's :meth:`~engine.card.CardImpl.cast_offers` decides which of its
-faces may begin casting at this moment, so a multi-face card judges timing by
-the face being cast (CR 715.3a). Every option carries the predefined class it
-stands for in its ``printed`` attr. The engine, not the player, turns the
-chosen option into its own cast, land play or activation, so the casting call
-is not part of any test contract.
+Options follow timing, zone and cast-permission rules; costs and targets are
+not pre-checked. Every option carries the predefined class it stands for in its
+``printed`` attr. The engine, not the player, turns the chosen option into its
+own cast, land play or activation, so the casting call is not part of any test
+contract.
 
 Offering an illegal option is allowed; letting it take effect is not. When the
 chosen action fails, the game is rolled back to the beginning of the Priority
@@ -32,7 +27,6 @@ Query (:mod:`engine.rollback`), the player hears the
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
 from engine.abilities import (
@@ -43,11 +37,16 @@ from engine.abilities import (
     activate_ability,
 )
 from engine.card import LoyaltyAbility, ManaAbility
-from engine.casting import CastingError, CastMode, is_sorcery_speed, play_land
+from engine.casting import (
+    CastingError,
+    CastMode,
+    can_cast_at_instant_speed,
+    is_sorcery_speed,
+    play_land,
+)
 from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, PlayerDecision
 from engine.queries import PRIORITY_WINDOW, PlayerQuery, ask
 from engine.rollback import take_snapshot
-from engine.stack import settle_after_resolution
 from engine.types import CardType, Zone
 from engine.zones import IllegalMoveError
 
@@ -68,10 +67,12 @@ def take_priority(game: GameState, player: Player) -> bool:
     until the player passes, an action takes effect, or the player's
     :meth:`~engine.player.Player.on_choice_rejected` raises.
     """
+    from engine.state_based_actions import resolve_state_based_actions
+
     while True:
-        # CR 117.5: the game settles before a player receives priority, also
-        # when an action leaves the stack empty or pays a cost that kills.
-        settle_after_resolution(game)
+        # CR 117.5: state-based actions are performed before a player receives
+        # priority (triggered abilities are already put on the stack as they trigger).
+        resolve_state_based_actions(game)
         query, actions = priority_query(game, player)
         answer = ask(player, query)
         if not answer.selected:
@@ -144,63 +145,31 @@ def _seat(game: GameState, player: Player) -> int:
     return next(seat for seat, p in enumerate(game.players) if p is player)
 
 
+def _may_begin_casting(game: GameState, player: Player, card: Any) -> bool:
+    timely = can_cast_at_instant_speed(card) or is_sorcery_speed(game, player)
+    return timely and card.can_cast(game)
+
+
 def _cast_and_play_offers(game: GameState, player: Player):
     """``(presented object, zone, action)`` for each spell and land on offer."""
     for card in game.get_hand(player).get_all():
         if CardType.LAND in card.card_types:
             if is_sorcery_speed(game, player) and player.land_plays_remaining > 0:
                 yield card, Zone.HAND, (lambda c=card: play_land(game, player, c))
-        else:
+        elif _may_begin_casting(game, player, card):
             for obj, action in card.cast_offers(game, player, Zone.HAND, CastMode.NORMAL):
                 yield obj, Zone.HAND, action
     for card in game.get_graveyard(player).get_all():
-        mode = _graveyard_cast_mode(game, player, card)
-        if mode is not None:
+        mode = _graveyard_cast_mode(player, card)
+        if mode is not None and _may_begin_casting(game, player, card):
             for obj, action in card.cast_offers(game, player, Zone.GRAVEYARD, mode):
                 yield obj, Zone.GRAVEYARD, action
 
 
-@dataclass(frozen=True)
-class GraveyardCastPermission:
-    """"You may cast it from your graveyard this turn", held by one card.
-
-    It belongs to the player it was granted to and ends at the next cleanup
-    step, when "this turn" effects end (CR 514.2) — a grant made in a priority
-    window opened during cleanup lasts until the next cleanup iteration — or
-    when the card leaves the graveyard: a card that returns is a new object
-    (CR 400.7) the permission never named.
-    """
-
-    player: Any
-    turn: int
-    stint: int
-
-
-def grant_graveyard_cast(game: GameState, player: Player, card: Any) -> None:
-    """Let *player* cast *card* from their graveyard this turn."""
-    card._castable_from_graveyard = GraveyardCastPermission(
-        player, game.turn_number, game.refs.instance_id(card, Zone.GRAVEYARD.value)
-    )
-    game.graveyard_cast_grants.append(card)
-
-
-def expire_graveyard_cast_grants(game: GameState) -> None:
-    """End every "cast it from your graveyard this turn" grant (CR 514.2)."""
-    for card in game.graveyard_cast_grants:
-        if isinstance(getattr(card, "_castable_from_graveyard", None), GraveyardCastPermission):
-            del card._castable_from_graveyard
-    game.graveyard_cast_grants.clear()
-
-
-def _graveyard_cast_mode(game: GameState, player: Player, card: Any) -> CastMode | None:
+def _graveyard_cast_mode(player: Player, card: Any) -> CastMode | None:
     """How *card* may be cast from *player*'s graveyard, if at all."""
-    permission = getattr(card, "_castable_from_graveyard", None)
-    if (
-        isinstance(permission, GraveyardCastPermission)
-        and permission.player is player
-        and permission.turn == game.turn_number
-        and permission.stint == game.refs.instance_id(card, Zone.GRAVEYARD.value)
-    ):
+    # Set by an effect that grants "you may cast it from your graveyard" (Zul Ashur).
+    if getattr(card, "_castable_from_graveyard", False):
         return CastMode.NORMAL
     owner = getattr(card, "owner", None)
     if getattr(card, "flashback_cost", None) is not None and owner in (None, player):

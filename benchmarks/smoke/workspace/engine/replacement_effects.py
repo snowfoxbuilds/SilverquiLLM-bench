@@ -48,6 +48,8 @@ class ReplacementEffect:
         replacement: Callable ``(game, event) -> event`` that receives the
             current event object and returns a (possibly modified) version.
         controller: The player who controls the source.
+        printed: The predefined class of the printed ability generating this
+            effect (see ADR-017).
     """
 
     event_type: type[ReplacementEvent]
@@ -55,6 +57,7 @@ class ReplacementEffect:
     condition: Callable[..., bool] | None
     replacement: Callable[..., ReplacementEvent]
     controller: Any = None
+    printed: type | None = None
 
 
 class ReplacementManager:
@@ -173,14 +176,20 @@ def _choose_replacement_order(game: object, player: object, matching: list) -> o
     """Raise a Player Query to pick the next replacement effect to apply.
 
     Replacement effects are not game objects, so they are offered as ABILITY
-    decisions carrying an ``index`` into ``matching``; the Answer's index maps
-    back to the chosen effect. Routed to the player's Baseline Intent in tests
-    (empty source — a system-level query).
+    decisions carrying an ``index`` into ``matching`` and, when known, the
+    generating ability's ``printed`` class; the Answer's index maps back to the
+    chosen effect. Routed to the player's Baseline Intent in tests (empty
+    source — a system-level query).
     """
     from engine.decisions import Decision
     from engine.queries import PlayerQuery, ask
 
-    options = tuple(Decision.ability(index=i) for i in range(len(matching)))
+    options = tuple(
+        Decision.ability(index=i, printed=effect.printed)
+        if effect.printed is not None
+        else Decision.ability(index=i)
+        for i, effect in enumerate(matching)
+    )
     query = PlayerQuery(
         source=(),
         prompt="Choose replacement effect to apply next",

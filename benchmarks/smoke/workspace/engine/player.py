@@ -15,6 +15,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from engine.decisions import InvalidPlayerChoiceError
 from engine.mana import ManaPool
 from engine.queries import Answer, PlayerQuery
 from engine.zones import Zones
@@ -107,6 +108,28 @@ class Player(ABC):
         if self._instant_sorcery_cast_turn != turn_number:
             return []
         return list(self._instant_sorcery_casts)
+
+    # Decision-side attributes a rejected action's rollback leaves alone
+    # (engine.rollback): what the player saw and chose is not game state.
+    rollback_exempt: frozenset[str] = frozenset()
+
+    def on_choice_rejected(
+        self, query: PlayerQuery, answer: Answer, error: InvalidPlayerChoiceError
+    ) -> None:
+        """Hear that the action chosen in ``answer`` to Priority Query ``query``
+        was illegal and has been rolled back (see ADR-017).
+
+        Returning lets the engine ask the same Priority Query again; raising
+        ends the game loop with that error. The default raises ``error``, so a
+        player that cannot revise its choice is never asked forever.
+        """
+        raise error
+
+    def on_action_taken(self, query: PlayerQuery, answer: Answer, result: Any) -> None:
+        """Hear that the action chosen in ``answer`` to Priority Query ``query``
+        took effect — the spell or ability is on the stack, the land played, or
+        the mana ability resolved. ``result`` is what the engine's call
+        returned. The default does nothing."""
 
     @abstractmethod
     def answer(self, query: PlayerQuery) -> Answer:

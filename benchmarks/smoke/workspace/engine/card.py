@@ -35,6 +35,7 @@ class Mode:
     Attributes:
         name: Short label for this mode (e.g. ``"Destroy target creature"``).
         description: Detailed rules text for the mode.
+        printed: The predefined class of the printed mode (see ADR-017).
     """
 
     name: str = ""
@@ -124,6 +125,7 @@ class ActivatedAbility:
             :class:`PredictedOutcome` on the compared surfaces, or ``None`` when
             the ability is not currently applicable. Must not mutate game state.
         description: Human-readable description of the ability.
+        printed: The predefined class of the printed ability (see ADR-017).
     """
 
     cost: Callable[..., Any]
@@ -159,6 +161,7 @@ class LoyaltyAbility:
             to signal a *required* target has no legal choice, in which case the
             ability cannot be activated. The result is stored on the stack object
             and passed to ``effect`` at resolution — never re-selected.
+        printed: The predefined class of the printed ability (see ADR-017).
     """
 
     loyalty_cost: int
@@ -176,6 +179,7 @@ class ManaAbility:
         cost: A callable that checks/pays the cost.
         mana_produced: A callable that returns the mana added.
         description: Human-readable description.
+        printed: The predefined class of the printed ability (see ADR-017).
     """
 
     cost: Callable[..., Any]
@@ -213,9 +217,12 @@ class GameObject:
         object_id: Unique integer identifier (auto-assigned).
         owner: The player who owns this object.
         controller: The player who currently controls this object.
+        printed_as: The predefined class a copy stands for — set on an object
+            built as a copy of another, so it presents the copied card's class.
     """
 
     _next_id: int = 1
+    printed_as: type | None = None
 
     def __init__(self, owner: Player | None = None, controller: Player | None = None) -> None:
         self.object_id: int = GameObject._next_id
@@ -227,6 +234,22 @@ class GameObject:
     def reset_id_counter(cls) -> None:
         """Reset the auto-incrementing counter (useful in tests)."""
         cls._next_id = 1
+
+
+def printed_class(obj: Any) -> type | None:
+    """The predefined class ``obj`` stands for, or ``None`` if it has none.
+
+    A copy stands for what it copies; any other object for its own class, unless
+    that class is one of this module's generic card types (a token built from a
+    bare ``Creature``), which stand for no printed card (see ADR-017).
+    """
+    copied = getattr(obj, "printed_as", None)
+    if copied is not None:
+        return copied
+    cls = type(obj)
+    if not issubclass(cls, GameObject) or cls.__module__ == __name__:
+        return None
+    return cls
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +270,11 @@ class CardImpl(GameObject):
         supertypes: Set of :class:`~engine.types.Supertype` values.
         keywords: Combination of :class:`~engine.types.Keyword` flags.
         rules_text: The card's rules text string.
+        alternative_cost_printed: The predefined classes of the printed
+            abilities granting :meth:`alternative_costs`, in the same order.
     """
+
+    alternative_cost_printed: tuple[type, ...] = ()
 
     def __init__(
         self,
@@ -312,6 +339,23 @@ class CardImpl(GameObject):
         """Return ``True`` if this card can currently be cast."""
         return True
 
+    def cast_offers(
+        self, game: GameState, player: Player, from_zone: Any, mode: Any
+    ) -> list[tuple[Any, Callable[[], Any]]]:
+        """The objects a Priority Query offers for casting this card, each with
+        the call that casts it once chosen.
+
+        The default offers the card itself, cast from *from_zone* in *mode*
+        (an :class:`~engine.casting.CastMode`). A multi-face card may offer one
+        object per face, or offer the card and ask which face while casting it
+        (see ADR-017).
+        """
+        from engine.casting import cast_spell
+
+        return [
+            (self, lambda: cast_spell(game, player, self, from_zone=from_zone, mode=mode))
+        ]
+
     def cost_reduction(self, game: GameState, targets: list[Any] | None = None) -> int:
         """Return this card's *self* generic-mana reduction for casting it.
 
@@ -348,7 +392,8 @@ class CardImpl(GameObject):
 
         Each entry fully replaces the mana cost when chosen. Return an empty
         list (the default) when no alternative is available — the caster is
-        only offered a choice when this is non-empty.
+        only offered a choice when this is non-empty. Each entry's printed
+        ability is the matching entry of :attr:`alternative_cost_printed`.
         """
         return []
 
@@ -645,9 +690,11 @@ class Equipment(Artifact):
             duck-type).
         attached_to: The creature this Equipment is attached to, or ``None``.
         equip_cost: The mana cost of the equip activated ability.
+        equip_printed: The predefined class of the printed equip ability.
     """
 
     is_equipment: bool = True
+    equip_printed: type | None = None
 
     def __init__(self, *, equip_cost: ManaCost | None = None, **kwargs: Any) -> None:
         kwargs["subtypes"] = (kwargs.get("subtypes") or set()) | {"Equipment"}
@@ -874,6 +921,7 @@ class Equipment(Artifact):
             targeting=_targeting,
             can_activate=_can_activate,
             description=f"Equip {equipment.equip_cost}",
+            printed=equipment.equip_printed,
         )
 
 

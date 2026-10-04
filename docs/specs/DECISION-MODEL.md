@@ -180,6 +180,10 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
   Returning lets the engine ask the same query again; raising ends the game loop with the error.
   The default raises, so a player that cannot revise its choice is never asked forever.
   Decision-side state — a player's intents, transcript and script position — is not game state, and the rollback leaves it alone.
+- **Retrying a rejected choice**: a rejected attempt drops the highest-ranked preference it used, across every query answered in that attempt, and the re-asked query is answered with the remaining preferences, so the retry does not depend on how the engine presented the choice.
+  With preferences Gleam of Death then Glamdring and Gleam of Death illegal, an engine that offers Gleam of Death at once casts Glamdring on the retry, and so does one that asked Glamdring and then Gleam of Death (grilling 2026-10-04).
+- **Resolution-time choices**: a choice raised while an object resolves, or while casting outside a Priority Query action, rolls back to its own rejection boundary — just before that cast or choice asked its first query — and is re-asked under the same drop-the-preference rule.
+  It never re-asks the Priority Query before it, which would replay the passes and resolve the object again (grilling 2026-10-04).
 - **Testing choices whose presentation varies**: tests never dictate how an engine presents a choice; they are built to draw out the intended choice and to fail when an illegal one takes effect.
   Uldaros's targets are up to one card of each card type, judged by the graveyard characteristics of each card: the chosen cards must be distinct cards that can be assigned to distinct card types they have, though their type sets may overlap.
   Glamdring in the graveyard is an artifact card, never a sorcery (CR 715.4), whatever object an engine presents for it, so with Divination, Glamdring and Leyline Axe in the graveyard an engine fails if it lets all three be exiled; Divination with either artifact is legal.
@@ -189,14 +193,14 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 
 #### Turn structure
 
-How Audited Tests script the players' answers is part of the [Test Interface](TEST-INTERFACE.md); the engine side follows.
-
-- **Passing is an answer**: declining a Priority Query is the player's answer, a pass, and an attempt reports no separate outcome; the window reads the answer to move the round on, and `run_game` ends with a winner or a draw (grilling 2026-10-05).
-- **Priority round**: a step's open priority window holds the round — who holds priority and how many players have passed in succession — and only the rules change it (CR 117.3–117.4): the window opens with the active player holding priority, a player who acts receives priority again, a pass moves it on, a resolution returns it to the active player, and every player passing in succession resolves the top object or, on an empty stack, ends the step (grilling 2026-10-05).
-  No driver starts or resets a round; a paused `run` leaves the window as it is and the next call carries on from it.
-  A cleanup step opens a window only when its actions performed state-based actions or put triggers on the stack (CR 514.3a), and another cleanup step follows once it ends.
-- **One step lifecycle**: the game owns where the current step is — its turn-based actions pending, its priority window open, or complete — and only the engine's one stepping entry advances it, whether `run` or the turn loop calls it, so a step's turn-based actions happen once, a step with no window (untap, a cleanup step that opens none) is never opened, and a completed step is never reopened (grilling 2026-10-05).
-  Playing with every player passing is a priority policy over that lifecycle, not a separate path; no helper writes the lifecycle, and only construction chooses the step play starts in.
+- **Entries**: each player has an ordered script of action entries, and each Priority Query or combat declaration the player receives consumes the next one.
+  An entry is one action and answers every query within it (choosing Glamdring and then Gleam of Death, or Gleam of Death at once); its goal is checked when the action completes (grilling 2026-10-04).
+- **Positive and expected-illegal entries**: a positive entry (`act`) fails the test with `PostconditionError` if its action is not offered, if rejections with `InvalidPlayerChoiceError` exhaust its preferences, or if it misses its goal (grilling 2026-10-04).
+  An expected-illegal entry (`act_illegal`, the successor to SOS `perform_illegal_action`) passes if its action is not offered or is rejected, and fails if it takes effect and play reaches the next Priority Query (grilling 2026-10-04).
+- **Driving**: tests insert explicit pass entries for priority windows they skip, and a dry script passes through the Baseline Intent, which never takes an action at priority whatever its preferences.
+  `advance_to_phase` consumes no entries; `run_scripts` stops once every script is consumed and leaves the stack in place, and `resolve_stack` then resolves with every player passing (grilling 2026-10-04).
+- **Choices outside the script**: choices raised while casting or resolving, including effect-granted casts such as Uldaros's or Bilbo's, go to choice Intents routed by source.
+  A rejected choice is retried as above; once its preferences are exhausted the choice Intent fails, except that an `InvalidPlayerChoiceError` raised under a negative choice Intent counts as a pass once the engine has rolled back to the choice's rejection boundary, and the resolution continues from there (grilling 2026-10-04).
 
 ### Rigor (three independent layers)
 

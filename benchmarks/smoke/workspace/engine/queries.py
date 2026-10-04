@@ -16,12 +16,16 @@ from dataclasses import dataclass, field
 
 from engine.decisions import (
     DecisionKind,
+    GameRef,
     InvalidAnswerError,
     InvalidOptionsError,
     PlayerDecision,
     UnknownKindError,
     validate_attrs,
 )
+
+# The ``ability`` ref entry that marks a Priority Query's source (see ADR-017).
+PRIORITY_WINDOW: tuple[str, str] = ("window", "priority")
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,26 @@ class Answer:
     """
 
     selected: tuple[PlayerDecision, ...] = field(default_factory=tuple)
+
+
+def priority_pattern(seat: int | None = None) -> GameRef:
+    """The Intent pattern that matches Priority Queries, optionally for one seat.
+
+    A Priority Query's single source is the PLAYER decision for the player
+    receiving priority; its ref carries that player's seat and
+    :data:`PRIORITY_WINDOW`, so a card intent patterned on card identity never
+    matches it.
+    """
+    player = frozenset({("seat", seat)}) if seat is not None else frozenset()
+    return GameRef(player=player, ability=frozenset({PRIORITY_WINDOW}))
+
+
+def is_priority_query(query: PlayerQuery) -> bool:
+    """Whether ``query`` is a Priority Query — the player's choice of action."""
+    return any(
+        source.ref is not None and PRIORITY_WINDOW in source.ref.ability
+        for source in query.source
+    )
 
 
 def validate_query(query: PlayerQuery) -> None:

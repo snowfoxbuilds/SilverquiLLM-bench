@@ -36,6 +36,7 @@ from engine.events import (
 )
 from engine.game import add_counter, create_token, gain_life, lose_life, remove_counter
 from engine.intent_player import Intent
+from engine.queries import is_priority_query
 from engine.replacement_effects import ReplacementEffect
 from engine.stack import priority_loop
 from engine.state_based_actions import check_state_based_actions
@@ -94,12 +95,14 @@ def _push_equip_activation(game, player, equipment, target):
 
 def _spy_on_answer(player):
     """Replace ``player.answer`` with a spy; return (calls, restore) so a test
-    can assert no Player Query was raised (``calls == []``)."""
+    can assert the activation raised no Player Query (``calls == []``). The
+    Priority Query in which the player chooses the activation is not counted."""
     calls: list = []
     original = player.answer
 
     def _spy(query):
-        calls.append(query)
+        if not is_priority_query(query):
+            calls.append(query)
         return original(query)
 
     player.answer = _spy

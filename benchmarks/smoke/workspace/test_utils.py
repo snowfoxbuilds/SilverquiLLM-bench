@@ -4,10 +4,17 @@ Provides convenience functions for setting up game states, casting spells,
 advancing phases, and managing combat in tests.  Each function raises
 descriptive errors on failure.
 
+Play is driven through Priority Queries (ADR-017): a test gives each player an
+ordered action script (:func:`script` with :func:`act`, :func:`act_illegal` and
+:func:`pass_priority` entries) and drives it with :func:`run_scripts`; the
+engine, not the test, performs each chosen cast, land play or activation. The
+casting and activation helpers are one-entry scripts.
+
 Functions:
     create_game — convenience wrapper to create a GameState from card lists.
     set_board_state — directly set zone contents and player state.
-    cast_spell — find card in hand by name, cast, and resolve.
+    script / run_scripts — give players action scripts and play them out.
+    cast_spell — find card in hand by name, cast it through priority, and resolve.
     advance_to_phase — fast-forward game state to a given phase/step.
     declare_attackers — advance to combat and declare attackers by name.
     declare_blockers — assign blockers by name mapping.
@@ -17,16 +24,25 @@ from __future__ import annotations
 
 from typing import Any
 
+from engine.abilities import AbilityError
 from engine.card import CardImpl
-from engine.casting import cast_spell as _engine_cast_spell
+from engine.casting import CastingError
 from engine.combat import (
     declare_attackers_step,
     declare_blockers_step,
 )
-from engine.decisions import Decision, GameRef
+from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError
 from engine.game import create_game as _engine_create_game
 from engine.game_state import _TURN_SEQUENCE, GameState
-from engine.intent_player import DeterministicPlayer, Intent
+from engine.intent_player import (  # noqa: F401 — script entries are re-exported for tests
+    DeterministicPlayer,
+    Intent,
+    ScriptEntry,
+    ScriptEntryError,
+    act,
+    act_illegal,
+    pass_priority,
+)
 from engine.types import ManaType, Phase, Step, Zone
 
 
@@ -222,7 +238,8 @@ def cast_spell(
     The function:
     1. Locates the first card matching *card_name* in the player's hand.
     2. Sets up the game phase/priority for sorcery-speed casting if needed.
-    3. Calls :func:`engine.casting.cast_spell`.
+    3. Casts it as a one-entry :func:`act` script: the player chooses the card
+       in a Priority Query and the engine casts it.
     4. Passes priority for both players so the spell resolves.
 
     Parameters:
@@ -295,7 +312,10 @@ def cast_spell(
         )
 
     try:
-        _engine_cast_spell(game, player, card)
+        _take_action(game, player, act(_hand_preference(game, card)))
+    except ScriptEntryError as exc:
+        reason = _rejection_cause(exc) or f"it is not offered at priority ({exc})"
+        raise TestSetupError(f"Failed to cast {card_name!r}: {reason}") from exc
     except Exception as exc:
         raise TestSetupError(f"Failed to cast {card_name!r}: {exc}") from exc
     finally:
@@ -303,7 +323,7 @@ def cast_spell(
             player.end_intent(intent_name)
 
     # Pass priority for both players to resolve the spell
-    _resolve_top_of_stack(game)
+    resolve_stack(game)
 
 
 def _target_preference(game: GameState, target: Any) -> Any:
@@ -316,6 +336,182 @@ def _target_preference(game: GameState, target: Any) -> Any:
         # Best effort: mint for the battlefield (the common targeting zone).
         instance_id = game.refs.instance_id(target, "battlefield")
     return Decision.obj(instance=instance_id)
+
+
+# ---------------------------------------------------------------------------
+# Action scripts (ADR-017)
+# ---------------------------------------------------------------------------
+
+
+def script(game: GameState, player_index: int, *entries: ScriptEntry) -> None:
+    """Give player ``player_index`` an ordered action script, replacing any
+    entries left from an earlier one.
+
+    Each Priority Query the player receives consumes the next entry:
+    :func:`act` (an action that must take effect), :func:`act_illegal` (one the
+    rules forbid) or :func:`pass_priority`. Preferences name predefined classes
+    or Player Decisions, e.g. ``act(GleamOfDeath, GlamdringFoehammer)`` or
+    ``act(Decision.ability(printed=LlanowarElvesAbility1))``.
+    """
+    _deterministic(game, game.players[player_index]).set_script(entries)
+
+
+def run_scripts(game: GameState, *, max_priority: int = 1000) -> None:
+    """Play until every player's script is consumed, leaving the stack in place.
+
+    Priority starts with ``game.priority_player_index`` and moves as in a real
+    game: a player who acts keeps priority, two passes in a row resolve the top
+    of the stack (the active player then receives priority) or, on an empty
+    stack, move the game to the next step that grants priority. A player whose
+    script is dry passes.
+
+    A rejected priority action is retried within its entry, dropping the
+    highest-ranked preference the rejected attempt used; a rejected choice
+    while an object resolves is retried the same way from before the object
+    resolved (see :func:`resolve_stack`). Under a negative Intent (see
+    :class:`~engine.intent_player.Intent`) a rejection counts as a pass, and a
+    resolution-time one stops play there.
+
+    Raises:
+        ScriptEntryError: When an entry's action does not go as it requires.
+        PostconditionError: When a resolution-time choice exhausts its preferences.
+        TestSetupError: If the scripts are not consumed within ``max_priority``
+            grants of priority.
+    """
+    from engine.priority import take_priority
+    from engine.stack import resolve_top_of_stack
+
+    current = game.priority_player_index
+    passes = 0
+    for _ in range(max_priority):
+        if not _scripts_remain(game):
+            return
+        game.priority_player_index = current
+        if not take_priority(game, game.players[current]):
+            passes = 0
+            continue
+        passes += 1
+        current = 1 - current
+        if passes < 2 or not _scripts_remain(game):
+            continue
+        passes = 0
+        if game.stack.is_empty():
+            _enter_next_priority_step(game)
+        elif not _resolve_with_choice_retry(game, resolve_top_of_stack):
+            return
+        current = game.active_player_index
+    raise TestSetupError(f"scripts not consumed within {max_priority} grants of priority")
+
+
+def _scripts_remain(game: GameState) -> bool:
+    return any(isinstance(p, DeterministicPlayer) and p.pending_entries for p in game.players)
+
+
+def _resolve_with_choice_retry(game: GameState, resolve: Any) -> bool:
+    """Resolve one object, retrying a choice the engine rejects.
+
+    A choice raised while the object resolves has its own rollback point: on
+    ``InvalidPlayerChoiceError`` the game is rolled back to before the object
+    began resolving and resolved again, with the player having dropped the
+    highest-ranked preference the rejected attempt used (see ADR-017). Returns
+    ``False`` if a negative Intent answered, so the rejection counts as a pass:
+    the game stays rolled back and play stops.
+
+    Raises:
+        PostconditionError: if the choice's preferences are exhausted.
+    """
+    from engine.rollback import take_snapshot
+
+    players = [p for p in game.players if isinstance(p, DeterministicPlayer)]
+    retryable = any(p.has_choice_preferences() for p in players)
+    for player in players:
+        player.begin_choice_window()
+    try:
+        while True:
+            snapshot = take_snapshot(game) if retryable else None
+            try:
+                resolve(game)
+                return True
+            except InvalidPlayerChoiceError as error:
+                if snapshot is None:
+                    raise
+                snapshot.restore()
+                outcomes = {p.on_resolution_choice_rejected(error) for p in players}
+                if "pass" in outcomes:
+                    return False
+                if "retry" not in outcomes:
+                    raise
+    finally:
+        for player in players:
+            player.end_choice_window()
+
+
+def _enter_next_priority_step(game: GameState) -> None:
+    from engine.turn import _NO_PRIORITY_STEPS
+
+    _enter_next_step(game)
+    while (game.phase, game.step) in _NO_PRIORITY_STEPS:
+        _enter_next_step(game)
+
+
+def _deterministic(game: GameState, player: Any) -> DeterministicPlayer:
+    if not isinstance(player, DeterministicPlayer):
+        raise TestSetupError(f"{player!r} is not a DeterministicPlayer and has no action script")
+    return player
+
+
+def _take_action(game: GameState, player: Any, entry: ScriptEntry) -> Any:
+    """Give *player* priority once with *entry* as their whole script; return
+    what the engine's action returned. Their own script is left untouched."""
+    from engine.priority import take_priority
+
+    player = _deterministic(game, player)
+    saved = player.set_script([entry])
+    player.last_action_result = None
+    try:
+        take_priority(game, player)
+    finally:
+        player.set_script(saved)
+    return player.last_action_result
+
+
+def _rejection_cause(error: ScriptEntryError) -> BaseException | None:
+    """The engine error behind a rejected entry, if it was rejected."""
+    if error.error is None:
+        return None
+    return error.error.__cause__ or error.error
+
+
+def _hand_preference(game: GameState, card: Any) -> Any:
+    return Decision.obj(instance=game.refs.instance_id(card, Zone.HAND.value))
+
+
+def _ability_preference(game: GameState, source: Any, index: int) -> Any:
+    return Decision.ability(
+        source=game.refs.instance_id(source, Zone.BATTLEFIELD.value), index=index
+    )
+
+
+def _activate(game: GameState, player: Any, source: Any, index: int) -> Any:
+    try:
+        return _take_action(game, player, act(_ability_preference(game, source, index)))
+    except ScriptEntryError as exc:
+        cause = _rejection_cause(exc)
+        if cause is not None:
+            raise cause
+        raise AbilityError(
+            f"{getattr(source, 'name', source)!r} ability {index} cannot be activated now"
+        ) from exc
+
+
+def _cast(game: GameState, player: Any, card: Any) -> Any:
+    try:
+        return _take_action(game, player, act(_hand_preference(game, card)))
+    except ScriptEntryError as exc:
+        cause = _rejection_cause(exc)
+        if cause is not None:
+            raise cause
+        raise CastingError(f"{getattr(card, 'name', card)!r} cannot be cast now") from exc
 
 
 def put_on_battlefield(game: GameState, player: Any, card: Any) -> Any:
@@ -333,8 +529,20 @@ def put_on_battlefield(game: GameState, player: Any, card: Any) -> Any:
 
 
 def resolve_stack(game: GameState) -> None:
-    """Resolve the entire stack (public alias for the internal resolver)."""
-    _resolve_top_of_stack(game)
+    """Resolve the entire stack with every player passing; consumes no script
+    entries.
+
+    Each resolution settles the game exactly as
+    :func:`~engine.stack.priority_loop` does. A choice the engine rejects while
+    an object resolves is retried from before that object resolved, with the
+    rejected attempt's highest-ranked preference dropped; under a negative
+    Intent the rejection counts as a pass and resolution stops there.
+    """
+    from engine.stack import resolve_top_of_stack
+
+    while not game.stack.is_empty():
+        if not _resolve_with_choice_retry(game, resolve_top_of_stack):
+            return
 
 
 def card_abilities(card: Any) -> list:
@@ -353,36 +561,19 @@ def activate_card_ability(
     index: int = 0,
 ) -> None:
     """Activate ability ``index`` of :func:`card_abilities` (``source_card``'s
-    activated abilities, then its other mana abilities) through the real engine
-    path.
+    activated abilities, then its other mana abilities) as a one-entry
+    :func:`act` script: *player* chooses the ability in a Priority Query and
+    the engine activates it — choosing targets **before** paying costs and
+    putting it on the stack (a mana ability resolves at once). The caller
+    resolves the stack afterward (e.g. via :func:`resolve_stack`) to run the
+    ability's effect.
 
-    Builds an :class:`~engine.abilities.ActivatedAbilityInstance` from the
-    card's :class:`~engine.card.ActivatedAbility` (threading its ``targeting``
-    hook) and calls :func:`~engine.abilities.activate_ability`, which chooses
-    the ability's targets **before** paying costs, stores them on the stack
-    object, and pushes the effect. The caller resolves the stack afterward
-    (e.g. via :func:`resolve_stack`) to run the ability's effect.
-
-    Raises :class:`~engine.abilities.AbilityError` when the ability cannot be
-    activated (no legal target, unmet timing, or unpayable cost) — no cost is
-    spent in that case.
+    Raises :class:`~engine.abilities.AbilityError` when the ability is not
+    offered or the engine rejects it (no legal target, unmet timing, or
+    unpayable cost) — the rejected activation is rolled back, so no cost is
+    spent.
     """
-    from engine.abilities import ActivatedAbilityInstance, activate_ability
-    from engine.card import ManaAbility
-
-    ability = card_abilities(source_card)[index]
-    is_mana = isinstance(ability, ManaAbility)
-    instance = ActivatedAbilityInstance(
-        source=source_card,
-        controller=player,
-        cost=ability.cost,
-        effect=ability.mana_produced if is_mana else ability.effect,
-        is_mana_ability=is_mana,
-        description=ability.description,
-        targeting=getattr(ability, "targeting", None),
-        can_activate=getattr(ability, "can_activate", None),
-    )
-    activate_ability(game, player, instance)
+    _activate(game, player, source_card, index)
 
 
 def activate_loyalty_ability(
@@ -391,47 +582,23 @@ def activate_loyalty_ability(
     source_card: Any,
     index: int = 0,
 ) -> None:
-    """Activate ``source_card``'s loyalty ability ``index`` through the real
-    engine path.
+    """Activate ``source_card``'s loyalty ability ``index`` as a one-entry
+    :func:`act` script: *player* chooses it in a Priority Query (offered only
+    at sorcery speed and once per turn) and the engine activates it, choosing
+    targets **before** paying the loyalty cost. The caller resolves the stack
+    afterward (e.g. via :func:`resolve_stack`) to run the ability's effect.
 
-    Builds a :class:`~engine.abilities.LoyaltyAbilityInstance` from the
-    planeswalker's :class:`~engine.card.LoyaltyAbility` (threading its
-    ``targeting`` hook) and calls :func:`~engine.abilities.activate_ability`,
-    which enforces sorcery-speed timing and once-per-turn, chooses the ability's
-    targets **before** paying the loyalty cost, stores them on the stack object,
-    and pushes the effect. The caller resolves the stack afterward (e.g. via
-    :func:`resolve_stack`) to run the ability's effect.
-
-    Raises :class:`~engine.abilities.AbilityError` when the ability cannot be
-    activated (wrong timing, already activated this turn, insufficient loyalty,
-    or a required target with no legal choice) — no loyalty is spent in that case.
+    Raises :class:`~engine.abilities.AbilityError` when the ability is not
+    offered or the engine rejects it (wrong timing, already activated this
+    turn, insufficient loyalty, or a required target with no legal choice) —
+    no loyalty is spent in that case.
     """
-    from engine.abilities import LoyaltyAbilityInstance, activate_ability
+    from engine.priority import activatable_abilities
 
-    ability = source_card.get_loyalty_abilities()[index]
-    instance = LoyaltyAbilityInstance(
-        source=source_card,
-        controller=player,
-        loyalty_cost=ability.loyalty_cost,
-        effect=ability.effect,
-        description=ability.description,
-        targeting=getattr(ability, "targeting", None),
+    loyalty_offset = len(activatable_abilities(source_card, game)) - len(
+        source_card.get_loyalty_abilities()
     )
-    activate_ability(game, player, instance)
-
-
-def _resolve_top_of_stack(game: GameState) -> None:
-    """Resolve the whole stack via the engine's resolution primitive.
-
-    Delegates to :func:`engine.stack.resolve_top_of_stack` so tests settle the
-    stack exactly as :func:`~engine.stack.priority_loop` does — state-based
-    actions run and continuous effects re-derive after each resolution (no
-    per-test ``apply_all``). Repeats until the stack is empty.
-    """
-    from engine.stack import resolve_top_of_stack
-
-    while not game.stack.is_empty():
-        resolve_top_of_stack(game)
+    _activate(game, player, source_card, loyalty_offset + index)
 
 
 # ---------------------------------------------------------------------------
@@ -621,7 +788,21 @@ def enter_permanent(game, player, card):
 
 
 def advance_game_to_phase(game, phase, step=None):
-    """Drive canonical phase transitions and their public boundary events."""
+    """Drive canonical phase transitions and their public boundary events.
+
+    Consumes no script entries: the stack is resolved with every player
+    passing before each transition.
+    """
+    for _ in range(len(_TURN_SEQUENCE) + 1):
+        if (game.phase, game.step) == (phase, step):
+            return
+        resolve_stack(game)
+        _enter_next_step(game)
+    raise TestSetupError("phase boundary was not reached")
+
+
+def _enter_next_step(game: GameState) -> None:
+    """Advance to the next step and perform its turn-based actions."""
     from engine.combat import combat_damage_step, end_combat_step
     from engine.events import (
         BeginningOfCombatTriggeredEvent,
@@ -632,30 +813,25 @@ def advance_game_to_phase(game, phase, step=None):
     from engine.game import draw_card
     from engine.turn import untap_step
 
-    for _ in range(len(_TURN_SEQUENCE) + 1):
-        if (game.phase, game.step) == (phase, step):
-            return
-        resolve_stack(game)
-        game.advance_phase()
-        if game.step == Step.UNTAP:
-            untap_step(game)
-        elif game.step == Step.UPKEEP:
-            game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
-        elif game.step == Step.DRAW:
-            if game.get_library(game.active_player).get_all():
-                draw_card(game, game.active_player)
-        elif game.step == Step.BEGIN_COMBAT:
-            game.trigger_manager.fire_event(game, BeginningOfCombatTriggeredEvent())
-        elif game.step == Step.COMBAT_DAMAGE:
-            combat_damage_step(game)
-        elif game.step == Step.END_COMBAT:
-            end_combat_step(game)
-        elif game.step == Step.END:
-            game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=game.active_player))
-            game.trigger_manager.fire_event(game, EndOfTurnTriggeredEvent())
-        elif game.step == Step.CLEANUP:
-            finish_cleanup(game)
-    raise TestSetupError("phase boundary was not reached")
+    game.advance_phase()
+    if game.step == Step.UNTAP:
+        untap_step(game)
+    elif game.step == Step.UPKEEP:
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    elif game.step == Step.DRAW:
+        if game.get_library(game.active_player).get_all():
+            draw_card(game, game.active_player)
+    elif game.step == Step.BEGIN_COMBAT:
+        game.trigger_manager.fire_event(game, BeginningOfCombatTriggeredEvent())
+    elif game.step == Step.COMBAT_DAMAGE:
+        combat_damage_step(game)
+    elif game.step == Step.END_COMBAT:
+        end_combat_step(game)
+    elif game.step == Step.END:
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=game.active_player))
+        game.trigger_manager.fire_event(game, EndOfTurnTriggeredEvent())
+    elif game.step == Step.CLEANUP:
+        finish_cleanup(game)
 
 
 def behavioral_game():
@@ -703,7 +879,6 @@ def object_preference(game, card):
 
 def cast_vanilla_spell(game, seat, value=2):
     from engine.card import Instant
-    from engine.casting import cast_spell as cast
     from engine.types import ManaCost
 
     spell = Instant(
@@ -711,7 +886,7 @@ def cast_vanilla_spell(game, seat, value=2):
     )
     game.get_hand(game.players[seat]).add(spell)
     game.players[seat].mana_pool.add(ManaType.COLORLESS, value)
-    return cast(game, game.players[seat], spell)
+    return _cast(game, game.players[seat], spell)
 
 
 def ability_instance(game, player, source, index=0):
@@ -734,9 +909,13 @@ def ability_instance(game, player, source, index=0):
 
 
 def cast_card(game, player, card, resolve=True):
-    """Stage an unzoned card and cast it; the test supplies mana and Intents."""
+    """Stage an unzoned card and cast it as a one-entry :func:`act` script; the
+    test supplies mana and Intents. Returns what the engine's cast returned.
+
+    Raises :class:`~engine.casting.CastingError` when the card is not offered
+    at priority or the engine rejects the cast (rolled back).
+    """
     from engine.casting import can_cast_at_instant_speed
-    from engine.casting import cast_spell as cast
     from engine.stack import object_current_zone
 
     if card.owner is None:
@@ -750,7 +929,7 @@ def cast_card(game, player, card, resolve=True):
     if not can_cast_at_instant_speed(card):
         game.active_player_index = game.players.index(player)
         game.phase, game.step = Phase.PRECOMBAT_MAIN, None
-    result = cast(game, player, card)
+    result = _cast(game, player, card)
     if resolve:
         resolve_stack(game)
     return result

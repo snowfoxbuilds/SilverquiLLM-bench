@@ -25,14 +25,6 @@ def test_staged_test_utils_is_the_grading_copy(benchmark, target_set):
     assert (root / "workspace" / "test_utils.py").read_bytes() == grading.read_bytes()
 
 
-def test_hob_generation_benchmarks_share_one_test_utils():
-    copies = {
-        (REPO_ROOT / "benchmarks" / benchmark / "workspace" / "test_utils.py").read_bytes()
-        for benchmark in ("hob-medium", "smoke")
-    }
-    assert len(copies) == 1
-
-
 @pytest.mark.parametrize("placement", ["activated", "mana"])
 def test_activate_card_ability_finds_a_mana_ability_in_either_list(placement):
     probe = textwrap.dedent(

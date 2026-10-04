@@ -79,7 +79,7 @@ def take_priority(game: GameState, player: Player) -> bool:
         # Answering changes no game state, so this is the state the query began in.
         snapshot = take_snapshot(game)
         try:
-            actions[answer.selected[0]]()
+            result = actions[answer.selected[0]]()
         except REJECTED_ACTION_ERRORS as exc:
             snapshot.restore()
             error = exc if isinstance(exc, InvalidPlayerChoiceError) else InvalidPlayerChoiceError(str(exc))
@@ -87,6 +87,7 @@ def take_priority(game: GameState, player: Player) -> bool:
                 error.__cause__ = exc
             player.on_choice_rejected(query, answer, error)
             continue
+        player.on_action_taken(query, answer, result)
         return False
 
 

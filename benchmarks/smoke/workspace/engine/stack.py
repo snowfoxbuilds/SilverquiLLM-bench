@@ -583,28 +583,16 @@ def resolve_top_of_stack(game: GameState) -> None:
     settle_after_resolution(game)
 
 
-def _get_legal_actions(game: GameState, player: Player) -> list[Any]:
-    """Return the legal actions available to *player*.
-
-    Placeholder — returns an empty list until spells/abilities are
-    implemented in later items.
-    """
-    return []
-
-
 def _handle_priority(game: GameState, player: Player) -> bool:
-    """Give priority to *player* and let them act or pass.
+    """Give priority to *player* through a Priority Query and let them act or pass.
 
     Returns ``True`` if the player passed priority, ``False`` if they
-    took an action (in which case the priority loop restarts).
-
-    Priority is *action-layer* and directive-driven: the engine never elicits a
-    proactive priority action from the player through a Player Query. Spells and
-    abilities are cast/activated imperatively (by a test or the replay
-    executor), not via a priority choice, so the player simply passes priority
-    here. Only the *choice* layer (targets, modes, ordering, …) is query-driven.
+    took an action (in which case the player retains priority). See
+    :mod:`engine.priority`.
     """
-    return True
+    from engine.priority import take_priority
+
+    return take_priority(game, player)
 
 
 def priority_loop(game: GameState) -> None:
@@ -628,12 +616,9 @@ def priority_loop(game: GameState) -> None:
     :pyattr:`GameState.priority_player` always reflects who currently
     holds priority.
 
-    Priority is action-layer and directive-driven: the engine never
-    elicits a proactive priority action via a Player Query — the player
-    simply passes priority here (see :func:`_handle_priority`). Spells
-    and abilities are cast/activated imperatively by callers (tests or a
-    replay executor), and the *choice* layer (targets, modes, ordering,
-    …) is the only query-driven surface.
+    Each time a player receives priority the engine raises a Priority
+    Query offering the actions they may take; declining passes (see
+    :mod:`engine.priority` and ADR-017).
     """
     while True:
         # Active player receives priority at the start of each

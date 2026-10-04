@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Hashable, Mapping
 
+from engine.card import printed_class
 from engine.decisions import Decision, DecisionKind, GameRef, PlayerDecision
 
 
@@ -45,6 +46,9 @@ def multi_attrs(obj: Any) -> list[tuple[str, Hashable]]:
     multiple times — exactly how the frozenset attr-set stores them.
     """
     pairs: list[tuple[str, Hashable]] = []
+    printed = printed_class(obj)
+    if printed is not None:
+        pairs.append(("printed", printed))
     name = getattr(obj, "name", None)
     if isinstance(name, str) and name:
         pairs.append(("name", name))
@@ -124,6 +128,9 @@ class GameRefsRegistry:
     Ids are sequential ints — opaque to tests, which can only observe
     stability/uniqueness, never predict a value.
     """
+
+    # Ids stay unique across a rolled-back action (engine.rollback).
+    rollback_exempt = frozenset({"_counter"})
 
     def __init__(self) -> None:
         # object identity -> (last observed zone token, current stint id)

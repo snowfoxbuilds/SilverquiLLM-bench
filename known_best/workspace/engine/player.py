@@ -128,6 +128,12 @@ class Player(ABC):
         """
         raise error
 
+    def on_action_taken(self, query: PlayerQuery, answer: Answer, result: Any) -> None:
+        """Hear that the action chosen in ``answer`` to Priority Query ``query``
+        took effect — the spell or ability is on the stack, the land played, or
+        the mana ability resolved. ``result`` is what the engine's call
+        returned. The default does nothing."""
+
     @abstractmethod
     def answer(self, query: PlayerQuery) -> Answer:
         """Answer a Player Query.
