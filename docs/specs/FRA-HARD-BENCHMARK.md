@@ -1,10 +1,10 @@
 Status: DRAFT
 
-Last updated: 2026-10-03
+Last updated: 2026-10-04
 
 # FRA Hard Benchmark
 
-`fra-hard` is a ten-card implementation benchmark combining five Reality Fracture cards with the five previously selected HOB hard cards.
+`fra-hard-v2` is a ten-card implementation benchmark combining five Reality Fracture cards with the five previously selected HOB hard cards.
 
 ## Context
 
@@ -32,7 +32,7 @@ Collector numbers identify the original printings, not alternate treatments.
 | HOB | 167 | Thranduil, the Elvenking |
 | HOB | 174 | Glamdring, Foe-hammer // Gleam of Death |
 
-`benchmarks/fra-hard/config.json` records each selected card as a qualified `set:collector_number` identifier.
+`benchmarks/fra-hard-v2/config.json` records each selected card as a qualified `set:collector_number` identifier.
 The primary set is FRA and the additional set is HOB.
 An unqualified collector number in an existing benchmark still denotes its primary set.
 Staging, oracle selection, grading, and result reporting preserve the set of each card.
@@ -43,11 +43,13 @@ Collector numbers in different sets are distinct targets even when their numbers
 The candidate Workspace is a self-contained copy of the HOB-generation V2 engine and FDN reference baseline.
 It contains ten behavior-free card stubs with Card Specs under `cards/fra/fra_<N>/` and `cards/hob/hob_<N>/`.
 Both parts of preparation and Adventure cards belong to their one target card.
+Each stub predefines one behavior-free class per face and per printed line of text, such as `GlamdringFoehammer` and `GleamOfDeath`, or `EmrakultheExigentDoomAbility1`; how those classes relate is the candidate's design (grilling 2026-10-04).
 Each Benchmark Run implements the entire ten-card pool in one Workspace.
 
 Hard-tier guidance supplies workspace conventions and Card Specs without per-card implementation hints.
 Candidates may change the engine, but their implementations must preserve FDN and engine behavior.
 The Player Query / Player Decision protocol is described in [Decision Model](DECISION-MODEL.md).
+The workspace documents describe the Priority Query as how the game runs — the set of choices a real player may make at that moment — state that every option carries the predefined class it stands for in its `printed` attr and that an illegal choice is rejected with `InvalidPlayerChoiceError`, and say nothing about how a multi-face card should be modelled or presented (grilling 2026-10-04).
 
 The host-only Test Oracle Workspace is independent of the candidate Workspace.
 Oracle-specific engine extensions and target implementations live under `data/test_oracle_workspace/`.
@@ -74,6 +76,10 @@ Selected per-card hidden suites also exercise explicit cross-card interactions: 
 These interactions intentionally depend on both selected implementations; a failure can originate in either card or the shared engine.
 The test envelope uses the baseline engine's two-player games; multiplayer variants and arbitrary additional casting costs are outside the validated scope.
 
+Play is driven through Priority Queries, so the casting call's signature is not part of the test contract (grilling 2026-10-04).
+Adopting them made fra-hard-v2 a separate benchmark, `benchmarks/fra-hard-v2/`, with the same pool, ported from the Known-Best Workspace and starting in Beta.
+fra-hard v1 stays read-only with its runs and grades: it takes no fixes and no new runs, and its runs are never regraded against fra-hard-v2's suites (grilling 2026-10-04).
+
 Execution and network-less candidate grading follow [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md).
 The benchmark starts in Beta while candidate calibration is pending.
 Completing the oracle and tests does not by itself promote the benchmark to Benchmarking or claim that candidate calibration has occurred.
@@ -85,3 +91,4 @@ Completing the oracle and tests does not by itself promote the benchmark to Benc
 | [ADR-010](../adr/ADR-010-test-oracle-workspace-uses-independent-engine.md) | Oracle mechanics use an independent engine while audited behavior remains portable |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Benchmark tier locking |
 | [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Independent execution of prebuilt Karn candidates |
+| [ADR-017](../adr/ADR-017-priority-actions-are-player-queries.md) | Priority actions are Player Queries chosen through Intents |

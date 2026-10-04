@@ -174,6 +174,7 @@ _Avoid_: "test player", "mock player", using it unscoped — say DeterministicPl
 **DeterministicPlayer (V2)**
 
 The V2 (HOB-generation) workspace's intent-driven test player — same class name as the SOS player by decision; the two live in per-benchmark workspaces that never import each other. Holds the test's active Intents, receives structured Player Queries from the engine, routes each query to an Intent by pattern-matching on source refs, and answers by preference over Player Decisions: greedy, first option that is both intended and valid in the implementation-provided order, no search. Queries matched by no card Intent fall to the Baseline Intent; matched by neither is an explicit failure. The SOS dry-script failure mode (ScriptExhaustedError) is replaced by boundary validation plus the "no offered option satisfies the intent" signal.
+From fra-hard-v2 onward it also holds an ordered action script per player, consuming one entry per Priority Query; a dry script passes (grilling 2026-10-04).
 
 _Avoid_: "IntentPlayer" (rejected rename), "test player", "mock player", the SOS two-channel semantics (see DeterministicPlayer (SOS))
 
@@ -373,6 +374,13 @@ _Avoid_: "Symbol" (working name), "option" alone (an option is a Player Decision
 A question an engine raises to a player: source (set of Player Decisions identifying what raised it), human-readable prompt, an ordered options tuple of Player Decisions (the implementation-provided order is part of the contract), and min/max counts. `min=0` marks a legally declinable query.
 
 _Avoid_: "Question" (working name), "prompt" alone (one field of a query)
+
+**Priority Query**
+
+The Player Query a player receives with priority, from fra-hard-v2 onward: the set of choices a real player could make at that moment — spells to cast, lands to play, abilities to activate — where declining passes priority (ADR-017).
+One action may span several Player Queries within the same priority, such as choosing a card and then which of its faces to cast.
+
+_Avoid_: "action query", "cast offer" (a Priority Query also offers abilities and passing), "directive" (the SOS and HOB-tier mechanism it replaces)
 
 **Promoted Candidate** *(historical)*
 

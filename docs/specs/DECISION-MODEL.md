@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-06-10
+Last updated: 2026-10-03
 
 # V2 Player Choice / Decision Model
 
@@ -97,6 +97,8 @@ class IntentError(Exception): ...              # test-authoring failure
 class AmbiguousIntentError(IntentError): ...
 class UnmatchedQueryError(IntentError): ...
 class InvalidAnswerError(IntentError): ...     # answer violates min/max or options membership
+
+class InvalidPlayerChoiceError(Exception): ... # fra-hard-v2 onward: the engine rejects a chosen option as illegal under the rules
 class PostconditionError(IntentError): ...
 ```
 
@@ -123,9 +125,61 @@ The MSH player keeps the name `DeterministicPlayer` (grilling 2026-06-10): bench
 - **Preference misses are transcript data, not errors**: when a card intent matches a query but none of its preferences match any offered option (and `min > 0`), the player still answers deterministically (first valid option) and flags `preference_miss` on the transcript record. The exception hierarchy stays locked; audited tests that need a miss to be a failure assert it over the query transcript.
 - **Routing**: queries route to intents by pattern-matching on structured source refs; most patterns are statically writable (card identity is known a priori). Dynamic binding is reserved for opaque instance ids. An ambiguous match is a hard test-authoring error.
 - **Baseline Intent**: always-active defaults for system-level query patterns (trigger ordering, replacement choice); card intents take precedence; a query matched by neither is an explicit failure. The baseline is part of the frozen benchmark contract.
+### Priority actions (fra-hard-v2 onward)
+
+When a player receives priority, the engine raises a Priority Query offering that player's available actions.
+Audited tests choose one through an Intent, and the engine turns the chosen action into its own casting or activation call (grilling 2026-10-03).
+The Priority Query is how the game runs, not a test hook: it corresponds to the set of choices a user interface would offer a real player at that moment (grilling 2026-10-04).
+This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; fra-hard v1, the HOB tiers and SOS keep directive-driven priority.
+
+#### Options
+
+- **Option shape**: no new Decision kind.
+  Casting a spell or playing a land is an OBJECT option for the object cast or played; activating an ability, mana abilities included, is an ABILITY option.
+  Passing priority is a decline (`min=0`), and an X value stays a NUMBER choice made during casting (grilling 2026-10-04).
+- **What is offered**: every action the player may begin under timing, zone and cast-permission rules; costs and targets are not pre-checked (grilling 2026-10-04).
+- **Combat declarations**: declaring attackers and declaring blockers are Player Queries too — a multi-select of OBJECT options for the creatures that could attack or block, with whom each attacks or blocks.
+  They replace the imperative `declare_attackers` / `declare_blockers` calls and the convention that the engine silently filters illegal attackers and blockers (grilling 2026-10-04).
+- **Multi-face cards**: the benchmark predefines no face structure — Glamdring, Foe-hammer is one object and Gleam of Death another, and the candidate decides how they relate (grilling 2026-10-04).
+  Any Player Query that can present such a card — a Priority Query, a target or graveyard selection such as Uldaros's, an effect-granted cast — may offer it as one object or as one object per face.
+  Within one priority, Gleam of Death may be offered at once and chosen in one query, or Glamdring may be chosen first and a second query then asks Glamdring or Gleam of Death.
+  A test's ordered preferences (Gleam of Death, otherwise Glamdring) answer either, and the test judges the outcome: the intended face on the stack (grilling 2026-10-04).
+
+#### Printed identity
+
+- **Predefined classes**: every card, every face of a multi-face card, and every printed ability has its own predefined class in the Workspace, such as `GlamdringFoehammer` and `GleamOfDeath` for an Adventure card, or `EmrakultheExigentDoomAbility1` for "When you cast this spell, untap all lands you control."
+  Each printed line is one ability, except that keywords sharing a line are separate abilities ("Flying, trample" is two); abilities, modes included, are numbered in printed order, so Emrakul's Flying is `EmrakultheExigentDoomAbility2` and its trample `EmrakultheExigentDoomAbility3`.
+  Face classes subclass the engine's card type class and ability classes are plain classes carrying their printed text; nothing links them, and how they relate is the candidate's design.
+  The classes are generated from each Card Spec's printed text into the card's `card_impl.py`, for every card in the Workspace, FDN included — first in the Known-Best Workspace, then ported to fra-hard-v2 (grilling 2026-10-04).
+- **`printed` attr**: OBJECT, ABILITY and MODE decisions carry a blessed `printed` attr whose value is the predefined class the option stands for, and tests match on it (`Decision.obj(printed=GleamOfDeath)`).
+  An instance id identifies one object in play, but implementations differ in which objects they present for a face; `printed` picks the intended choice in any valid implementation, and instance ids remain only to tell identical objects apart.
+  A copy carries the class of what it copies (grilling 2026-10-04).
+- **No raw strings**: tests place, choose and assert by predefined classes, never by a name string.
+  Game Symbols values stay a closed, validated vocabulary exposed as named constants (grilling 2026-10-04).
+
+#### Legality
+
+- **Offering is legal, allowing is not**: an engine may present and let the player choose an illegal option; it must then reject it by raising `InvalidPlayerChoiceError` and roll the game back to the beginning of the Priority Query in which the rejected action began.
+  An engine that never presents illegal choices never needs the error.
+  A test fails only when an illegal choice is allowed to take effect and play proceeds to the next priority (grilling 2026-10-04).
+- **Testing choices whose presentation varies**: tests never dictate how an engine presents a choice; they are built to draw out the intended choice and to fail when an illegal one takes effect.
+  With Glamdring and Divination in the graveyard, Uldaros's "one card of each card type" fails if the engine accepts Divination and Gleam of Death as its choices, or accepts Divination and Glamdring and then lets the player choose Gleam of Death between Glamdring and Gleam of Death — Glamdring in the graveyard is an artifact card (CR 715.4).
+  When presentation can change which legal outcome results, the postcondition asserts the rule's invariant (no two exiled cards share a card type) plus the intended part, never one exact outcome (grilling 2026-10-04).
+
+#### Action scripts
+
+- **Entries**: each player has an ordered script of action entries, and each Priority Query or combat declaration the player receives consumes the next one.
+  An entry is one action and answers every query within it (choosing Glamdring and then Gleam of Death, or Gleam of Death at once); its goal is checked when the action completes (grilling 2026-10-04).
+- **Positive and expected-illegal entries**: a positive entry (`act`) fails the test with `PostconditionError` if its action is not offered, is rejected with `InvalidPlayerChoiceError`, or misses its goal.
+  An expected-illegal entry (`act_illegal`, the successor to SOS `perform_illegal_action`) passes if its action is not offered or is rejected, and fails if it takes effect and play reaches the next Priority Query (grilling 2026-10-04).
+- **Driving**: tests insert explicit pass entries for priority windows they skip, and a dry script passes through the Baseline Intent.
+  `advance_to_phase` consumes no entries; `run_scripts` stops once every script is consumed and leaves the stack in place, and `resolve_stack` then resolves with every player passing (grilling 2026-10-04).
+- **Choices outside the script**: choices raised while casting or resolving, including effect-granted casts such as Uldaros's or Bilbo's, go to choice Intents routed by source.
+  An `InvalidPlayerChoiceError` raised under a negative choice Intent counts as a pass (grilling 2026-10-04).
+
 ### Rigor (three independent layers)
 
-1. **Option-set invariants over the query transcript** — the harness logs every query raised (source, options, min/max, answer); tests assert pattern-based invariants over the log (e.g. every creature offered to sacrifice has controller = player0). Decomposition-robust; catches engines that offer illegal options even when the intent never picks one.
+1. **Option-set invariants over the query transcript** — the harness logs every query raised (source, options, min/max, answer); tests assert pattern-based invariants over the log (e.g. every creature offered to sacrifice has controller = player0). Decomposition-robust; catches engines that offer illegal options even when the intent never picks one. From fra-hard-v2 onward, what was offered never fails a test; only an illegal choice allowed to take effect does (grilling 2026-10-04).
 2. **Postconditions** checked at `end_intent`.
 3. **Intent spreads as suite design**: each audited test asserts a single must-achieve intent; optionality is covered by separate tests per option (one test per color for "any color", plus a decline test where legal), including negative/impossible intents that must fail cleanly.
 ### Minimal engine enforcement
@@ -143,3 +197,9 @@ For "T, Pay 1 life: Add one mana of any color. Spend this mana only to cast an i
 - **Query**: source = the land's decisions; options = five MANA decisions (W, U, B, R, G), each carrying the `spend: instant_or_sorcery` Modifier; min = max = 1.
 - **Intent**: preference = the general RED mana decision; postcondition = pool gains a red mana. The player picks the offered restricted-red because it satisfies RED (extra Modifiers never block matching). The Modifier is the spend restriction.
 - **Suite spread**: one test per color (each must succeed — proves genuinely any-color), plus a spend-time check that the restricted mana cannot pay for a creature.
+
+## Relevant ADRs
+
+| ADR | Decision |
+| --- | --- |
+| [ADR-017](../adr/ADR-017-priority-actions-are-player-queries.md) | Priority actions are Player Queries chosen through Intents |
