@@ -9,7 +9,7 @@ suite cannot import in-process alongside other workspaces.
 from __future__ import annotations
 
 import pytest
-from engine.card import Artifact, Instant, Sorcery
+from engine.card import Artifact, ArtifactCreature, Creature, Instant, Sorcery
 from engine.player import Player
 from engine.card_queries import choose_object
 from engine.casting import CastingError, cast_spell, cast_spell_free
@@ -26,7 +26,7 @@ from engine import attempts
 from engine.priority import take_priority
 from engine.stack import StackObject, copy_spell, priority_loop, resolve_top_of_stack
 from engine.queries import Answer, PlayerQuery, ask
-from engine.types import ManaCost, Phase, Step, Zone
+from engine.types import CardType, ManaCost, Phase, Step, Zone
 from engine.zones import move_to_zone
 import test_utils
 from test_utils import (
@@ -1529,3 +1529,309 @@ def test_zero_passes_start_the_same_round_in_either_driver():
         script(game, 0, act(Bolt))
         drive(game)
         assert game.players[0].pending_entries == ()
+
+
+# ---------------------------------------------------------------------------
+# Review round 4: final nested rejections, expected-illegal branches,
+# cleanup priority windows, per-question preferences
+# ---------------------------------------------------------------------------
+
+
+# ---- a final rejection passes enclosing attempts untouched ------------------
+
+
+def test_a_final_nested_rejection_keeps_the_earlier_attempt():
+    p0 = PlainPlayer("Player1")
+    game = _plain_game(p0)
+
+    def resolve(g):
+        for name in ("Good", "Bad"):
+            p0.picks = [name]
+            attempts.attempt(g, lambda: _gain_choose_gain(g, p0))
+
+    with pytest.raises(InvalidPlayerChoiceError):
+        _resolve_plain(game, resolve)
+    # The Good attempt (+5) stays; the Bad one rolled back to its own start.
+    assert p0.life == 25 and p0.heard == [25]
+
+
+def test_a_final_nested_rejection_is_heard_once():
+    p0 = PlainPlayer("Player1")
+    game = _plain_game(p0)
+
+    def resolve(g):
+        p0.picks = ["Good"]
+        choose_object(g, p0, g.get_battlefield(p0).get_all(), "Outer", source_card=None)
+        gain_life(g, p0, 5)
+        p0.picks = ["Bad"]
+        attempts.attempt(g, lambda: _gain_choose_gain(g, p0))
+
+    with pytest.raises(InvalidPlayerChoiceError) as failure:
+        _resolve_plain(game, resolve)
+    assert p0.heard == [25] and p0.life == 25
+    assert str(failure.value) == "Bad cannot be chosen"
+
+
+def test_a_final_nested_rejection_keeps_an_earlier_granted_cast():
+    p0 = PlainPlayer("Player1", picks=["Refused"])
+    game = _plain_game(p0)
+    first, refused, second = Bolt(), Refused(), Bolt()
+    caster = GrantedCaster([[first], [refused, second]])
+    caster.controller = p0
+    set_board_state(game, 0, hand=[first, refused, second])
+    with pytest.raises(InvalidPlayerChoiceError):
+        _resolve_plain(game, caster.on_resolve)
+    assert [obj.source for obj in game.stack._items] == [first] and len(p0.heard) == 1
+
+
+def test_a_final_rejection_two_attempts_deep_keeps_both_outer_effects():
+    p0 = PlainPlayer("Player1")
+    game = _plain_game(p0)
+
+    def resolve(g):
+        gain_life(g, p0, 1)
+
+        def middle():
+            gain_life(g, p0, 10)
+            p0.picks = ["Bad"]
+            attempts.attempt(g, lambda: _gain_choose_gain(g, p0))
+
+        attempts.attempt(g, middle)
+
+    with pytest.raises(InvalidPlayerChoiceError):
+        _resolve_plain(game, resolve)
+    assert p0.life == 31 and p0.heard == [31]
+
+
+# ---- act_illegal settles each branch before the next entry ------------------
+
+
+def _bolt_cast_in_main(game) -> bool:
+    return (game.phase, game.step) == (Phase.PRECOMBAT_MAIN, None) and any(
+        isinstance(obj.source, Bolt) for obj in game.stack._items
+    )
+
+
+@pytest.mark.parametrize("negative", [False, True], ids=["positive", "negative"])
+def test_act_illegal_settles_a_refused_choice_its_intent_cannot_retry(negative):
+    game, spell = _choosing_cast_game()
+    game.players[0].start_intent("choose", _cast_choice("Bad", negative=negative))
+    script(game, 0, act_illegal(ChoosingCast), act(Bolt))
+    run_scripts(game)
+    assert _bolt_cast_in_main(game) and not _on_stack(game, spell)
+
+
+def test_act_illegal_settles_a_refused_baseline_choice():
+    game, spell = _choosing_cast_game()
+    game.players[0].set_baseline(Intent(pattern=GameRef(), preferences=_named("Bad")))
+    script(game, 0, act_illegal(ChoosingCast), act(Bolt))
+    run_scripts(game)
+    assert _bolt_cast_in_main(game) and not _on_stack(game, spell)
+
+
+def test_act_illegal_settles_a_refused_choice_the_opponent_cannot_retry():
+    game, spell = _opponent_cast_game(act_illegal(OpponentCast), act(Bolt))
+    game.players[1].end_intent("choose")
+    game.players[1].start_intent("choose", _sourced("Opponent Cast", "Bad"))
+    run_scripts(game)
+    assert _bolt_cast_in_main(game) and not _on_stack(game, spell)
+
+
+def test_act_illegal_without_a_successor_entry_ends_its_window():
+    game, spell = _choosing_cast_game()
+    game.players[0].start_intent("choose", _cast_choice("Bad"))
+    script(game, 0, act_illegal(ChoosingCast))
+    run_scripts(game)
+    assert game.stack.is_empty() and game.players[0].pending_entries == ()
+
+
+def test_act_illegal_tries_its_later_branch_after_an_in_action_rejection():
+    game, spell = _choosing_cast_game()
+    script(game, 0, act_illegal(branches=[
+        branch(ChoosingCast, choices=_named("Bad")),
+        branch(ChoosingCast, choices=_named("Good")),
+    ]))
+    with pytest.raises(ScriptEntryError) as failure:
+        run_scripts(game)
+    assert failure.value.reason == "took effect"
+
+
+def test_act_illegal_lets_an_intent_retry_and_fails_when_the_action_takes_effect():
+    game, spell = _choosing_cast_game()
+    game.players[0].start_intent("choose", _cast_choice(branches=[["Bad"], ["Good"]]))
+    script(game, 0, act_illegal(ChoosingCast))
+    with pytest.raises(ScriptEntryError) as failure:
+        run_scripts(game)
+    assert failure.value.reason == "took effect"
+
+
+# ---- cleanup grants priority in a fresh window each time --------------------
+
+
+def _doomed(game, player) -> Creature:
+    """A 2/1 with a -1/-1 counter, kept alive until end of turn by +0/+1."""
+    from engine.continuous_effects import (
+        DURATION_END_OF_TURN,
+        ContinuousEffect,
+        Layer,
+        SubLayer,
+    )
+
+    doomed = Creature(name="Doomed", mana_cost=ManaCost(), base_power=2, base_toughness=1)
+    set_board_state(game, game.players.index(player), battlefield=[doomed])
+    doomed.minus_one_counters = 1
+    doomed._base_minus_one_counters = 1
+    game.effect_manager.add(ContinuousEffect(
+        source=doomed,
+        layer=Layer.POWER_TOUGHNESS,
+        sublayer=SubLayer.MODIFY_PT,
+        apply=lambda g: setattr(doomed, "modified_toughness", doomed.base_toughness + 1),
+        duration=DURATION_END_OF_TURN,
+    ))
+    game.effect_manager.apply_all(game)
+    return doomed
+
+
+def _watch_deaths(game, effect) -> None:
+    """Whenever a creature dies, a trigger of player 0's resolves ``effect``."""
+    from engine.events import CreatureDiesTriggeredEvent
+    from engine.triggers import TriggerRegistration
+
+    watcher = _artifact("Watcher")
+    set_board_state(game, 0, battlefield=[watcher])
+    game.trigger_manager.register(TriggerRegistration(
+        event_type=CreatureDiesTriggeredEvent, condition=None, effect=effect,
+        source=watcher, controller=game.players[0],
+    ))
+
+
+def test_a_script_responds_in_a_cleanup_step_that_grants_priority():
+    game = _game()
+    game.phase, game.step = Phase.ENDING, Step.END
+    bolt = Bolt()
+    set_board_state(game, 0, hand=[bolt])
+    _watch_deaths(game, lambda g: gain_life(g, g.players[0], 1))
+    _doomed(game, game.players[0])
+    script(game, 0, pass_priority(), act(Bolt))
+    run_scripts(game)
+    assert (game.phase, game.step) == (Phase.ENDING, Step.CLEANUP)
+    assert game.stack.peek().source is bolt and len(game.stack) == 2
+    assert _life(game) == 20
+
+
+def test_each_cleanup_that_grants_priority_starts_a_fresh_round():
+    from engine.turn import _do_cleanup_step
+
+    game = _game()
+    game.phase, game.step = Phase.ENDING, Step.CLEANUP
+    p0 = game.players[0]
+    seen: list[int] = []
+
+    def on_death(g):
+        seen.append(len(p0.transcript.priority_queries()))
+        if len(seen) == 1:
+            _doomed(g, p0)
+
+    _watch_deaths(game, on_death)
+    _doomed(game, p0)
+    _do_cleanup_step(game)
+    # Each trigger resolves after both players passed in its own window.
+    assert seen == [1, 3]
+
+
+def test_a_cleanup_without_priority_moves_on_to_the_next_turn():
+    game = _game()
+    game.phase, game.step = Phase.ENDING, Step.END
+    turn = game.turn_number
+    script(game, 1, pass_priority(), pass_priority())
+    run_scripts(game)
+    assert game.turn_number == turn + 1 and game.step != Step.CLEANUP
+
+
+# ---- per-question preferences -----------------------------------------------
+
+
+class TypedPicker(Sorcery):
+    """Resolving, chooses one artifact and one creature — distinct cards — as
+    Uldaros chooses a card of each type. ``presentation`` is how the engine
+    asks: ``"offer"`` offers every candidate for each type and rejects a
+    wrong or repeated pick, ``"filter"`` offers only the legal ones, and
+    ``"combined"`` asks one question for both types."""
+
+    TYPES = (CardType.ARTIFACT, CardType.CREATURE)
+
+    def __init__(self, presentation: str, **kwargs) -> None:
+        super().__init__(name="Typed Picker", mana_cost=ManaCost(), **kwargs)
+        self.presentation = presentation
+        self.picked: list = []
+
+    def on_resolve(self, game) -> None:
+        candidates = game.get_battlefield(self.controller).get_all()
+        if self.presentation == "combined":
+            picked = choose_object(game, self.controller, candidates, "Choose one of each type",
+                                   source_card=self, min=0, max=2)
+            if not _assignable(picked, self.TYPES):
+                raise InvalidPlayerChoiceError("the cards cannot fill distinct types")
+            self.picked = picked
+            return
+        for card_type in self.TYPES:
+            offered = [
+                c for c in candidates
+                if self.presentation == "offer" or (card_type in c.card_types and c not in self.picked)
+            ]
+            card = choose_object(game, self.controller, offered, "Choose a card of the type",
+                                 source_card=self, question=card_type)
+            if card_type not in card.card_types or card in self.picked:
+                raise InvalidPlayerChoiceError(f"{card.name} cannot be chosen as {card_type.value}")
+            self.picked.append(card)
+
+
+def _assignable(cards, types) -> bool:
+    return len(set(map(id, cards))) == len(cards) == 2 and any(
+        types[0] in a.card_types and types[1] in b.card_types
+        for a, b in (cards, cards[::-1])
+    )
+
+
+def _golems(presentation):
+    game = _game()
+    picker = TypedPicker(presentation)
+    first, second = (ArtifactCreature(name="Golem", base_power=1, base_toughness=1) for _ in range(2))
+    set_board_state(game, 0, hand=[picker], battlefield=[first, second])
+    return game, picker, first, second
+
+
+@pytest.mark.parametrize("presentation", ["offer", "filter", "combined"])
+def test_one_branch_answers_each_question_by_what_it_asks_for(presentation):
+    game, picker, first, second = _golems(presentation)
+    a, b = Decision.obj(instance=first.instance_id), Decision.obj(instance=second.instance_id)
+    game.players[0].start_intent("pick", Intent(
+        pattern=GameRef(card=frozenset({("name", "Typed Picker")})),
+        branches=[branch(a, b, per_query={CardType.ARTIFACT: [a], CardType.CREATURE: [b]})],
+    ))
+    cast_card(game, game.players[0], picker)
+    assert {id(c) for c in picker.picked} == {id(first), id(second)}
+
+
+def test_without_per_question_preferences_a_repeated_offer_is_rejected():
+    game, picker, first, second = _golems("offer")
+    a, b = Decision.obj(instance=first.instance_id), Decision.obj(instance=second.instance_id)
+    game.players[0].start_intent("pick", Intent(
+        pattern=GameRef(card=frozenset({("name", "Typed Picker")})), preferences=(a, b),
+    ))
+    with pytest.raises(PostconditionError):
+        cast_card(game, game.players[0], picker)
+
+
+def test_a_question_payload_matches_a_decision_by_satisfies_and_refuses_strings():
+    from engine.decisions import MalformedAttrsError
+    from engine.queries import asks_for, validate_query
+
+    query = PlayerQuery(source=(), prompt="", options=(), min=0, max=0,
+                        question=(Decision.obj(printed=Bolt, zone="hand"),))
+    assert asks_for(query, Decision.obj(printed=Bolt)) and not asks_for(query, CardType.ARTIFACT)
+    with pytest.raises(MalformedAttrsError):
+        validate_query(PlayerQuery(source=(), prompt="", options=(), min=0, max=0,
+                                   question=("artifact",)))
+    with pytest.raises(TypeError):
+        branch(Bolt, per_query={"artifact": [Bolt]})

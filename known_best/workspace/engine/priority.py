@@ -95,7 +95,10 @@ def _attempt_action(game: GameState, player: Player, context: AttemptContext) ->
             result = actions[answer.selected[0]]()
         except REJECTED_ACTION_ERRORS as exc:
             context.boundary.restore()
-            if context.reject(as_choice_error(exc)) == "pass":
+            error = as_choice_error(exc)
+            if player.settle_rejected_action(context, error):
+                continue
+            if context.reject(error) == "pass":
                 return True
             if context.owner_answer is not context.answers[0]:
                 # A choice inside the action was rejected, not the action.

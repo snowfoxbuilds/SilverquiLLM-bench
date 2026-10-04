@@ -13,6 +13,7 @@ validates every Answer before applying it. An answer violation is a *test* bug
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from engine import attempts
 from engine.decisions import (
@@ -20,8 +21,10 @@ from engine.decisions import (
     GameRef,
     InvalidAnswerError,
     InvalidOptionsError,
+    MalformedAttrsError,
     PlayerDecision,
     UnknownKindError,
+    satisfies,
     validate_attrs,
 )
 
@@ -36,7 +39,12 @@ class PlayerQuery:
     ``source`` = the Player Decisions that raised it (routing matches on their
     refs). ``options`` = the legal choices in implementation-provided stable
     order (part of the contract). ``min``/``max`` = how many must / may be
-    chosen; ``min == 0`` means legally declinable.
+    chosen; ``min == 0`` means legally declinable. ``question`` = whatever
+    objects the engine attaches to say what a query asks for — a Game Symbols
+    constant such as ``CardType.ARTIFACT``, a predefined class, a Game Ref or a
+    Player Decision; never a string — so a test can answer one of several
+    queries from the same source differently without depending on their order
+    (see :func:`asks_for`).
     """
 
     source: tuple[PlayerDecision, ...]
@@ -44,6 +52,28 @@ class PlayerQuery:
     options: tuple[PlayerDecision, ...]
     min: int
     max: int
+    question: tuple[Any, ...] = ()
+
+
+def asks_for(query: PlayerQuery, wanted: Any) -> bool:
+    """Whether ``query``'s question payload holds ``wanted``: a payload
+    Player Decision that satisfies it, as an option satisfies a preference, or
+    the same object otherwise."""
+    for item in query.question:
+        if isinstance(wanted, PlayerDecision) and isinstance(item, PlayerDecision):
+            if satisfies(item, wanted):
+                return True
+        elif item is wanted or item == wanted:
+            return True
+    return False
+
+
+def _has_string(value: Any) -> bool:
+    if isinstance(value, str):
+        return True
+    if isinstance(value, (tuple, list, frozenset, set)):
+        return any(_has_string(item) for item in value)
+    return False
 
 
 @dataclass(frozen=True)
@@ -79,6 +109,10 @@ def is_priority_query(query: PlayerQuery) -> bool:
 
 def validate_query(query: PlayerQuery) -> None:
     """Boundary-validate a query as it is raised (engine-fault on failure)."""
+    if not isinstance(query.question, tuple) or _has_string(query.question):
+        raise MalformedAttrsError(
+            f"question payload {query.question!r} must be a tuple of non-string objects"
+        )
     if query.min < 0 or query.max < query.min:
         raise InvalidOptionsError(
             f"invalid bounds: min={query.min}, max={query.max}"

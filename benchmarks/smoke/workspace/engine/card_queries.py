@@ -35,6 +35,12 @@ def _zone_token(game: Any, obj: Any) -> str:
     return "battlefield"
 
 
+def _payload(question: Any) -> tuple:
+    if question is None:
+        return ()
+    return question if isinstance(question, tuple) else (question,)
+
+
 def choose_object(
     game: Any,
     player: Any,
@@ -45,12 +51,15 @@ def choose_object(
     min: int = 1,
     max: int = 1,
     optional: bool = False,
+    question: Any = None,
 ) -> Any:
     """Raise an OBJECT Player Query over ``candidates``; return chosen object(s).
 
     ``max == 1`` returns a single object (or ``None`` if declined / no
     candidates); ``max > 1`` returns a list. ``optional`` (or ``min == 0``)
-    allows a decline.
+    allows a decline. ``question`` is the query's payload when it asks for a
+    specific kind of object — an object or a tuple of them, such as
+    ``CardType.ARTIFACT`` (see :class:`~engine.queries.PlayerQuery`).
     """
     cands = list(candidates)
     items = [
@@ -72,6 +81,7 @@ def choose_object(
         options=options,
         min=lo,
         max=hi,
+        question=_payload(question),
     )
     answer = ask(player, query)
     chosen = [by_decision[d] for d in answer.selected]

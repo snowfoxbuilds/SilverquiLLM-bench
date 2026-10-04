@@ -143,6 +143,19 @@ class Player(ABC):
             return "retry"
         raise error
 
+    def settle_rejected_action(self, context: Any, error: InvalidPlayerChoiceError) -> bool:
+        """Settle a rejection of this player's priority action before its owner
+        hears it, returning ``True`` if the player expected the rules to refuse
+        the action (see ADR-017); the engine then asks the same Priority Query
+        again. The default settles nothing."""
+        return False
+
+    def would_retry(self, context: Any, answer: Any) -> bool:
+        """Whether a rejection owned by ``answer`` would be retried with another
+        choice rather than passed or raised. The default never retries, as
+        :meth:`on_attempt_rejected` raises by default."""
+        return False
+
     def on_action_retried(self, context: Any) -> None:
         """Hear that a choice someone made while this player's priority action
         was being taken was rejected and will be made again: the same Priority

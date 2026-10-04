@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from engine import attempts
 from engine.attempts import AttemptAnswer
@@ -44,7 +44,7 @@ from engine.decisions import (
     satisfies,
 )
 from engine.player import Player
-from engine.queries import Answer, PlayerQuery, is_priority_query, priority_pattern
+from engine.queries import Answer, PlayerQuery, asks_for, is_priority_query, priority_pattern
 
 
 @dataclass(frozen=True)
@@ -59,10 +59,11 @@ class Intent:
     here.
 
     ``branches`` replaces ``preferences`` when a rejected choice should be
-    retried: each branch is a preference list, the first answers the attempt,
-    and each rejection the intent owns retries the attempt with the next one.
-    With ``preferences`` alone there is one branch, and its rejection fails
-    the test (see ADR-017).
+    retried: each branch is a preference list or a :func:`branch`, the first
+    answers the attempt, and each rejection the intent owns retries the
+    attempt with the next one. With ``preferences`` alone there is one branch,
+    and its rejection fails the test (see ADR-017). ``per_query`` maps what a
+    query asks for to the preferences that answer it, as in :func:`branch`.
 
     A ``negative`` intent prefers a choice the rules forbid: when the engine
     rejects that choice with ``InvalidPlayerChoiceError``, the rejection counts
@@ -76,17 +77,21 @@ class Intent:
     preferences: tuple[PlayerDecision, ...] = ()
     postcondition: Callable[[Any], bool] | None = None
     negative: bool = False
-    branches: tuple[tuple[PlayerDecision, ...], ...] = ()
+    branches: tuple[Any, ...] = ()
+    per_query: Any = ()
 
     def __post_init__(self) -> None:
-        if self.branches and self.preferences:
+        if self.branches and (self.preferences or self.per_query):
             raise TypeError("an Intent takes preferences or branches, not both")
-        object.__setattr__(self, "branches", tuple(_decisions(b) for b in self.branches))
+        if self.branches:
+            object.__setattr__(self, "branches", tuple(_as_branch(b) for b in self.branches))
+        object.__setattr__(self, "per_query", _per_query(self.per_query) if self.per_query else ())
 
     @property
-    def plans(self) -> tuple[tuple[PlayerDecision, ...], ...]:
-        """The intent's branches, in order — ``(preferences,)`` without any."""
-        return self.branches or (self.preferences,)
+    def plans(self) -> tuple[Branch, ...]:
+        """The intent's branches, in order — one made of ``preferences`` and
+        ``per_query`` without any."""
+        return self.branches or (Branch(self.preferences, per_query=self.per_query),)
 
 
 _PASS_PRIORITY = Intent(pattern=priority_pattern())
@@ -108,18 +113,54 @@ class Branch:
     Glamdring and then, when asked which face, Gleam of Death. While the action
     is being taken, ``preferences`` and then ``choices`` answer every query no
     card intent claims (targets, modes, X, payment).
+
+    ``per_query`` pairs what a query asks for — an object its question
+    payload holds (:func:`~engine.queries.asks_for`), such as
+    ``CardType.ARTIFACT`` — with the preferences that answer that query
+    instead, so one branch can choose A for the question asking for an
+    artifact and B for the one asking for a creature. A query whose payload
+    holds none of them, such as one combined question for every type, is
+    answered by the branch's own preferences, so the same branch fits either
+    presentation.
     """
 
     preferences: tuple[PlayerDecision, ...] = ()
     choices: tuple[PlayerDecision, ...] = ()
+    per_query: tuple[tuple[Any, tuple[PlayerDecision, ...]], ...] = ()
+
+    def answers_for(self, query: PlayerQuery) -> tuple[PlayerDecision, ...]:
+        """The preferences that answer ``query`` inside this branch's attempt."""
+        for wanted, preferences in self.per_query:
+            if asks_for(query, wanted):
+                return preferences
+        return self.preferences + self.choices
 
 
 def branch(
     *preferences: PlayerDecision | type,
     choices: tuple[PlayerDecision | type, ...] | list[PlayerDecision | type] = (),
+    per_query: Mapping[Any, Any] | None = None,
 ) -> Branch:
-    """A branch for :func:`act` or :func:`act_illegal` with its own ``choices``."""
-    return Branch(_decisions(preferences), _decisions(choices))
+    """A branch for :func:`act`, :func:`act_illegal` or an ``Intent`` with its
+    own ``choices`` and ``per_query`` preferences, e.g.
+    ``branch(A, B, per_query={CardType.ARTIFACT: [A], CardType.CREATURE: [B]})``."""
+    return Branch(_decisions(preferences), _decisions(choices), _per_query(per_query))
+
+
+def _as_branch(item: Any) -> Branch:
+    return item if isinstance(item, Branch) else Branch(_decisions(item))
+
+
+def _per_query(mapping: Any) -> tuple[tuple[Any, tuple[PlayerDecision, ...]], ...]:
+    if isinstance(mapping, tuple):
+        return mapping
+    pairs = []
+    for wanted, preferences in (mapping or {}).items():
+        if isinstance(wanted, str):
+            raise TypeError(f"a per_query key names what a query asks for, not a string: {wanted!r}")
+        values = preferences if isinstance(preferences, (list, tuple)) else (preferences,)
+        pairs.append((wanted, _decisions(values)))
+    return tuple(pairs)
 
 
 @dataclass(frozen=True)
@@ -169,6 +210,7 @@ def act(
     goal: Callable[[Any], bool] | None = None,
     label: str = "",
     branches: Any = None,
+    per_query: Mapping[Any, Any] | None = None,
 ) -> ScriptEntry:
     """An action the player must take: it fails the test with
     :class:`ScriptEntryError` (a ``PostconditionError``) if no branch's action
@@ -176,9 +218,9 @@ def act(
     no branch is left to retry it with, or if ``goal(game)`` is falsey once it
     has taken effect.
 
-    ``preferences`` and ``choices`` make one branch; ``branches`` lists several
-    instead, each a list of preferences or a :func:`branch`, with ``choices``
-    appended to every one. A rejected attempt is retried with the next branch
+    ``preferences``, ``choices`` and ``per_query`` make one branch; ``branches``
+    lists several instead, each a list of preferences or a :func:`branch`, with
+    ``choices`` and ``per_query`` appended to every one. A rejected attempt is retried with the next branch
     and never otherwise: ``act(branches=[[GleamOfDeath, GlamdringFoehammer],
     [GlamdringFoehammer]])`` casts Glamdring when Gleam of Death is rejected,
     while ``act(GleamOfDeath, GlamdringFoehammer)`` fails.
@@ -187,7 +229,9 @@ def act(
     face class stands for ``Decision.obj(printed=cls)``, an ability or mode
     class for ``Decision.ability(printed=cls)`` or ``Decision.mode(printed=cls)``.
     """
-    return ScriptEntry(EntryKind.ACT, _branches(preferences, choices, branches), goal, label)
+    return ScriptEntry(
+        EntryKind.ACT, _branches(preferences, choices, branches, per_query), goal, label
+    )
 
 
 def act_illegal(
@@ -195,27 +239,30 @@ def act_illegal(
     choices: tuple[PlayerDecision | type, ...] | list[PlayerDecision | type] = (),
     label: str = "",
     branches: Any = None,
+    per_query: Mapping[Any, Any] | None = None,
 ) -> ScriptEntry:
     """An action the rules forbid: it passes if, for every branch in turn, no
     offered option satisfies the branch or the engine rejects it, and fails the
     test with :class:`ScriptEntryError` if any branch takes effect. Either way
     the entry is consumed, and the same Priority Query goes to the next entry.
-    ``branches`` works as for :func:`act`."""
-    return ScriptEntry(EntryKind.ILLEGAL, _branches(preferences, choices, branches), None, label)
+    ``branches`` and ``per_query`` work as for :func:`act`."""
+    return ScriptEntry(
+        EntryKind.ILLEGAL, _branches(preferences, choices, branches, per_query), None, label
+    )
 
 
-def _branches(preferences: Any, choices: Any, branches: Any) -> tuple[Branch, ...]:
-    shared = _decisions(choices)
+def _branches(preferences: Any, choices: Any, branches: Any, per_query: Any) -> tuple[Branch, ...]:
+    shared, shared_per_query = _decisions(choices), _per_query(per_query)
     if branches is None:
-        return (Branch(_decisions(preferences), shared),)
+        return (Branch(_decisions(preferences), shared, shared_per_query),)
     if preferences:
         raise TypeError("a script entry takes preferences or branches, not both")
     if not branches:
         raise TypeError("a script entry needs at least one branch")
     return tuple(
-        Branch(b.preferences, b.choices + shared)
+        Branch(b.preferences, b.choices + shared, b.per_query + shared_per_query)
         if isinstance(b, Branch)
-        else Branch(_decisions(b), shared)
+        else Branch(_decisions(b), shared, shared_per_query)
         for b in branches
     )
 
@@ -328,9 +375,8 @@ class _EntryAttempt:
     error: InvalidPlayerChoiceError | None = None
     retrying: bool = False
 
-    def ranked(self) -> list[tuple[int, PlayerDecision]]:
-        current = self.entry.branches[self.branch]
-        return list(enumerate(current.preferences + current.choices))
+    def ranked(self, query: PlayerQuery) -> list[tuple[int, PlayerDecision]]:
+        return list(enumerate(self.entry.branches[self.branch].answers_for(query)))
 
 
 _BASELINE_KEY = "<baseline>"
@@ -480,15 +526,42 @@ class DeterministicPlayer(Player):
         context.branch[handler] = following
         return "retry"
 
+    def settle_rejected_action(self, context: Any, error: InvalidPlayerChoiceError) -> bool:
+        """Settle a rejection of the :func:`act_illegal` branch being taken:
+        the rules refused it, as the entry expects, so the entry moves to its
+        next branch, or hands the re-asked query to the next entry. A refused
+        choice whose owner can still retry it with another branch is left to
+        that owner, since the action may yet take effect."""
+        attempt = self._attempt
+        if attempt is None or attempt.entry.kind is not EntryKind.ILLEGAL:
+            return False
+        owner = context.owner(error)
+        if owner is not None and owner.key != _ENTRY_KEY and owner.player.would_retry(context, owner):
+            return False
+        attempt.error = error
+        if attempt.branch + 1 < len(attempt.entry.branches):
+            attempt.branch += 1
+            attempt.retrying = True
+        else:
+            self._attempt = None
+        return True
+
+    def would_retry(self, context: Any, answer: AttemptAnswer) -> bool:
+        if answer.key is None or context.forbidden_by(answer):
+            return False
+        if answer.key == _ENTRY_KEY:
+            attempt = self._attempt
+            return attempt is not None and attempt.branch + 1 < len(attempt.entry.branches)
+        intent = self._baseline if answer.key == _BASELINE_KEY else self._intents.get(answer.key)
+        following = context.branch.get((id(self), answer.key), 0) + 1
+        return intent is not None and following < len(intent.plans)
+
     def on_action_retried(self, context: Any) -> None:
         attempt = self._attempt
         if attempt is None:
             return
-        if attempt.entry.kind is EntryKind.ILLEGAL:
-            # Its action was rejected, as it must be: the next entry takes over.
-            self._attempt = None
-            return
-        # The entry's action stays the same; only the choice inside it is revised.
+        # The entry's action and branch stay the same; only the choice inside
+        # it is revised.
         attempt.retrying = True
 
     def on_action_ended(self, context: Any) -> None:
@@ -530,9 +603,9 @@ class DeterministicPlayer(Player):
                 _note(noted, _ENTRY_KEY)
                 return self._answer_from_script(query)
         elif self._attempt is not None and not claimed:
-            ranked = self._attempt.ranked()
+            ranked = self._attempt.ranked(query)
             baseline_prefers = self._baseline is not None and _first_preferred(
-                list(self._baseline.plans[0]), query.options
+                list(self._baseline.plans[0].answers_for(query)), query.options
             ) is not None
             if _first_preferred([p for _, p in ranked], query.options) is not None or (
                 not baseline_prefers
@@ -549,7 +622,7 @@ class DeterministicPlayer(Player):
         context = attempts.current()
         plans = intent.plans
         current = context.branch.get((id(self), key), 0) if context is not None else 0
-        preferences = plans[min(current, len(plans) - 1)]
+        preferences = plans[min(current, len(plans) - 1)].answers_for(query)
         answer, used = _select(list(enumerate(preferences)), query)
         forbidden = intent.negative and bool(used)
         if noted is not None:

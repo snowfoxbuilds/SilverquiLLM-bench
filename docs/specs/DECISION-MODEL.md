@@ -67,6 +67,10 @@ class GameRef:
 | prompt | string | human-readable description |
 | options | ordered tuple of Player Decisions | the legal choices; implementation-provided stable order is part of the contract |
 | min / max | int | how many must / may be chosen; `min=0` = legally declinable |
+| question | tuple of objects | what the query asks for, attached by the engine when that is a specific kind of thing; empty otherwise |
+
+The question payload is open: the engine attaches whatever objects say what it asks for — a Game Symbols constant such as `CardType.ARTIFACT` for "choose an artifact card", a predefined class, a Game Ref, or a Player Decision — and never a string (grilling 2026-10-04).
+A test names what a query asks for with the same objects and matches them as preferences match options: a Player Decision by `satisfies()`, any other object by identity or equality.
 
 ### Extension policy
 
@@ -179,6 +183,7 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 - **Owning a rejection**: each priority action, resolution, and cast or choice made while an object resolves is an attempt, and a rejection belongs to one answer given during it.
   A choice the card or engine refuses belongs to the attempt's latest answer; an action the rules forbid as a whole (a casting, activation or zone-move error) belongs to the answer that chose the action.
   Only that answer's player hears the error, through `Player.on_attempt_rejected`, after the rollback, and answers retry, pass, or raises to stop play; the default raises for anything but a priority action, which it hands to `Player.on_choice_rejected`.
+  A rejection its owner raises, or one no answer owns, is final: the attempt has already rolled back to its own boundary, so the error passes every enclosing attempt without another rollback or notification, keeping what those attempts completed before it, and reaches the caller unchanged.
   Every Player hears rejections this way, whatever its preferences; state it keeps for its decisions is listed in its `rollback_exempt`, since a retry rolls the game back again.
   When the rejected choice inside a priority action is not the action itself — another player's choice, or a choice Intent's — the acting player hears `Player.on_action_retried` and chooses the same action again.
   Decision-side state — a player's intents, transcript, script position and attempt bookkeeping — is not game state, and the rollback leaves it alone.
@@ -208,11 +213,17 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 - **Positive and expected-illegal entries**: a positive entry (`act`) fails the test with `PostconditionError` if no branch's action is offered, if a rejection with `InvalidPlayerChoiceError` leaves it no branch to retry with, or if it misses its goal (grilling 2026-10-04).
   A branch whose action is not offered is skipped, so the entry is "not offered" only when no branch can start.
   An expected-illegal entry (`act_illegal`, the successor to SOS `perform_illegal_action`) tries each of its branches the same way: it passes if every branch is not offered or is rejected, and fails if any takes effect and play reaches the next Priority Query (grilling 2026-10-04).
+  A rejection inside an expected-illegal branch's action settles that branch for the acting player before anyone else hears it (`Player.settle_rejected_action`), whoever answered the refused choice: the entry tries its next branch, or hands the same Priority Query to the next entry, without passing priority.
+  The exception is a refused choice whose owner would retry it with another branch (`Player.would_retry`), since the action may then still take effect — and if it does, the entry fails.
+- **Per-question preferences**: a branch may map what a query asks for to the preferences that answer that query, `branch(A, B, per_query={CardType.ARTIFACT: [A], CardType.CREATURE: [B]})`, matched against the query's question payload as above (grilling 2026-10-04).
+  A query whose payload matches none of them — a combined question for every type, or a question without a payload — is answered by the branch's own preferences, so one branch covers an engine that asks one question per type, whether it filters what it offers or offers everything and rejects a repeated pick, and one that asks a single combined question.
+  The mapping is part of the branch: a rejection still moves to the next branch, and `act` and `act_illegal` take `per_query` for every branch as they take `choices`.
 - **Driving**: tests insert explicit pass entries for priority windows they skip, and a dry script passes through the Baseline Intent, which never takes an action at priority whatever its preferences.
   `advance_to_phase` consumes no entries; `run_scripts` stops once every script is consumed and leaves the stack in place, and `resolve_stack` then resolves with every player passing (grilling 2026-10-04).
   The priority round carries over between `run_scripts` calls — the next priority holder, the passes already made, and a resolution or step change both passes made due.
   The engine keeps that round with the game and starts a fresh one whenever an action is taken, an object resolves or the game moves to another step, and `resolve_stack` always starts one, even on an empty stack.
   The normal priority loop shares the same round, so handing play between it and `run_scripts` neither repeats nor skips a priority window.
+  A cleanup step grants priority only when its actions performed state-based actions or put triggers on the stack (CR 514.3a): each such window starts a fresh round, both the turn loop and `run_scripts` give players priority in it — a script entry may act there — and another cleanup step follows once it ends; `advance_game_to_phase` and `resolve_stack` still finish cleanup with every player passing.
 - **Choices outside the script**: choices raised while casting or resolving, including effect-granted casts such as Uldaros's or Bilbo's, go to choice Intents routed by source.
   A rejected choice is retried with the Intent's next branch as above; once its branches are exhausted the choice Intent fails, except that an `InvalidPlayerChoiceError` raised under a negative choice Intent counts as a pass once the engine has rolled back to the choice's rejection boundary, and the resolution continues from there (grilling 2026-10-04).
   A negative choice Intent's forbidden choice that takes effect fails the test with `PostconditionError` when its attempt completes, or at `end_intent` for a choice made outside any attempt; if the forbidden choice is never offered, nothing is checked.

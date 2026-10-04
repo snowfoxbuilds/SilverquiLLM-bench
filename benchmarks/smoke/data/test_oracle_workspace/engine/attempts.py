@@ -26,6 +26,17 @@ Only that answer's player hears the rejection, through
 :meth:`~engine.player.Player.on_attempt_rejected`, and decides: ``"retry"``,
 ``"pass"`` (abandon the attempt, restored), or raise to fail.
 
+A rejection its owner raises, or one with no answer to own it, is final: the
+attempt has already restored its own boundary, so the error passes every
+enclosing attempt without another rollback or notification — effects and casts
+those attempts completed earlier stay in place — and the outermost attempt
+re-raises it unchanged.
+
+Before the owner hears a rejection in a priority action, the acting player may
+settle it (:meth:`~engine.player.Player.settle_rejected_action`): an action its
+script expected the rules to refuse is settled there, whoever answered the
+refused choice.
+
 An answer may also mark a *forbidden* choice — one a negative intent made on
 purpose. If such an attempt takes effect, the attempt fails with
 ``PostconditionError``.
@@ -102,12 +113,16 @@ class AttemptContext:
         return self.answers[0] if _rejects_whole_action(error) else self.answers[-1]
 
     def reject(self, error: InvalidPlayerChoiceError) -> Verdict:
-        """Let the owning answer's player decide what follows a rejection."""
+        """Let the owning answer's player decide what follows a rejection; a
+        rejection it raises, or one nobody owns, is final (:class:`_Final`)."""
         owner = self.owner(error)
         if owner is None:
-            raise error
+            raise _Final(error)
         self.owner_answer = owner
-        return owner.player.on_attempt_rejected(self, owner, error)
+        try:
+            return owner.player.on_attempt_rejected(self, owner, error)
+        except InvalidPlayerChoiceError as refused:
+            raise _Final(refused) from refused
 
     def forbidden_by(self, answer: AttemptAnswer) -> bool:
         """Whether ``answer``'s handler made a forbidden choice in this try."""
@@ -141,11 +156,29 @@ def current_answer(player: Any) -> AttemptAnswer | None:
     return context.answers[-1]
 
 
+class _Final(Exception):
+    """A rejection no one retried or passed, on its way out of every attempt.
+
+    It is not one of the errors that reject an action, so an enclosing attempt
+    neither rolls back for it nor notifies anyone again; the outermost attempt
+    re-raises the original ``error``.
+    """
+
+    def __init__(self, error: InvalidPlayerChoiceError) -> None:
+        super().__init__(str(error))
+        self.error = error
+
+
 @contextmanager
 def active(context: AttemptContext):
+    outermost = not _active.get()
     token = _active.set((*_active.get(), context))
     try:
         yield context
+    except _Final as final:
+        if outermost:
+            raise final.error from final.error.__cause__
+        raise
     finally:
         _active.reset(token)
 

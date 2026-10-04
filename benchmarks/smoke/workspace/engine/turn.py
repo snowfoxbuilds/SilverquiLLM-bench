@@ -127,9 +127,19 @@ def _do_combat_step(game: GameState, step: Step) -> None:
 
 
 def _do_cleanup_step(game: GameState) -> None:
-    """Perform the cleanup step (MTG rule §514).
+    """Perform the cleanup step (MTG rule §514): cleanup iterations
+    (:func:`cleanup_iteration`) until one grants no priority, each that does
+    followed by a priority window in a fresh round (rule 514.3a)."""
+    while cleanup_iteration(game):
+        game.start_priority_round()
+        priority_loop(game)
 
-    The cleanup step executes the following actions in order:
+
+def cleanup_iteration(game: GameState) -> bool:
+    """Perform one cleanup step's actions; return whether players receive
+    priority before another cleanup step (rule 514.3a).
+
+    The actions, in order:
 
     1. Active player discards down to maximum hand size (7) via a
        Player Query (one OBJECT query per discard).
@@ -141,8 +151,10 @@ def _do_cleanup_step(game: GameState) -> None:
        ``is_attacking``, ``is_blocking``) and reset the combat state.
     5. Empty all players' mana pools.
     6. Check state-based actions.
-    7. If triggers fired during cleanup (e.g. from discarding), process
-       them (give priority, resolve stack) and perform another cleanup step.
+
+    Priority is granted only if state-based actions were performed or
+    abilities triggered (their triggers are on the stack); the caller then
+    gives priority and, once it ends, performs another cleanup step.
     """
     from engine.game import discard as _discard
     from engine.state_based_actions import resolve_state_based_actions
@@ -167,14 +179,7 @@ def _do_cleanup_step(game: GameState) -> None:
     # --- Step 6: Check state-based actions ---
     sba_happened = resolve_state_based_actions(game)
 
-    # --- Step 7: If SBAs were performed or triggers fired, process & repeat ---
-    # Rule 514.3a: if state-based actions were performed or triggered abilities
-    # triggered during cleanup, another cleanup step occurs.
-    if sba_happened or not game.stack.is_empty():
-        # Triggers were placed on the stack — give priority and resolve.
-        priority_loop(game)
-        # After resolving, perform another cleanup step (recursive).
-        _do_cleanup_step(game)
+    return bool(sba_happened) or not game.stack.is_empty()
 
 
 def run_turn(game: GameState) -> None:

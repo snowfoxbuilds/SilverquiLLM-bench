@@ -397,10 +397,11 @@ def run_scripts(game: GameState, *, max_priority: int = 1000) -> None:
         if not _scripts_remain(game):
             return
         if game.priority_passes >= 2:
-            if game.stack.is_empty():
+            if not game.stack.is_empty():
+                if not resolve_top_of_stack(game):
+                    return
+            elif not _cleanup_grants_priority(game):
                 _enter_next_priority_step(game)
-            elif not resolve_top_of_stack(game):
-                return
             continue
         if grants == max_priority:
             raise TestSetupError(f"scripts not consumed within {max_priority} grants of priority")
@@ -416,11 +417,29 @@ def _scripts_remain(game: GameState) -> bool:
 
 
 def _enter_next_priority_step(game: GameState) -> None:
+    """Advance to the next step where players receive priority: one outside
+    the untap and cleanup steps, or a cleanup step whose actions grant
+    priority (rule 514.3a)."""
     from engine.turn import _NO_PRIORITY_STEPS
 
-    _enter_next_step(game)
-    while (game.phase, game.step) in _NO_PRIORITY_STEPS:
-        _enter_next_step(game)
+    while True:
+        _enter_next_step(game, finish_cleanup_step=False)
+        if game.step == Step.CLEANUP:
+            if _cleanup_grants_priority(game):
+                return
+        elif (game.phase, game.step) not in _NO_PRIORITY_STEPS:
+            return
+
+
+def _cleanup_grants_priority(game: GameState) -> bool:
+    """In a cleanup step, perform another cleanup iteration; return whether it
+    grants priority, in a fresh round. Outside cleanup, ``False``."""
+    from engine.turn import cleanup_iteration
+
+    if game.step != Step.CLEANUP or not cleanup_iteration(game):
+        return False
+    game.start_priority_round()
+    return True
 
 
 def _deterministic(game: GameState, player: Any) -> DeterministicPlayer:
@@ -772,8 +791,10 @@ def advance_game_to_phase(game, phase, step=None):
     raise TestSetupError("phase boundary was not reached")
 
 
-def _enter_next_step(game: GameState) -> None:
-    """Advance to the next step and perform its turn-based actions."""
+def _enter_next_step(game: GameState, *, finish_cleanup_step: bool = True) -> None:
+    """Advance to the next step and perform its turn-based actions; a cleanup
+    step is finished with every player passing unless ``finish_cleanup_step``
+    is false, leaving its iterations to the caller."""
     from engine.combat import combat_damage_step, end_combat_step
     from engine.events import (
         BeginningOfCombatTriggeredEvent,
@@ -801,7 +822,7 @@ def _enter_next_step(game: GameState) -> None:
     elif game.step == Step.END:
         game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=game.active_player))
         game.trigger_manager.fire_event(game, EndOfTurnTriggeredEvent())
-    elif game.step == Step.CLEANUP:
+    elif game.step == Step.CLEANUP and finish_cleanup_step:
         finish_cleanup(game)
 
 
@@ -907,21 +928,11 @@ def cast_card(game, player, card, resolve=True):
 
 
 def finish_cleanup(game):
-    from engine.card_queries import choose_object
-    from engine.game import discard
-    from engine.state_based_actions import resolve_state_based_actions
-    from engine.turn import MAX_HAND_SIZE, cleanup_mechanical
+    """Perform cleanup iterations until one grants no priority, resolving what
+    each puts on the stack with every player passing; consumes no entries."""
+    from engine.turn import cleanup_iteration
 
-    while True:
-        player = game.active_player
-        hand = game.get_hand(player)
-        while len(hand) > MAX_HAND_SIZE:
-            card = choose_object(game, player, hand.get_all(), "Discard to maximum hand size")
-            discard(game, player, card)
-        cleanup_mechanical(game)
-        changed = resolve_state_based_actions(game)
-        if not changed and game.stack.is_empty():
-            return
+    while cleanup_iteration(game):
         resolve_stack(game)
 
 
