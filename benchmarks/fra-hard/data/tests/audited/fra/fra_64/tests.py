@@ -10,6 +10,7 @@ from test_utils import (
     behavioral_game,
     cast_card,
     enter_permanent,
+    loyalty_abilities,
     put_on_battlefield,
     resolve_stack,
 )
@@ -22,6 +23,13 @@ def arrange():
     resolve_stack(game)
     jace = next(c for c in game.get_battlefield(player).get_all() if "Jace" in c.subtypes)
     return game, player, lurker, jace
+
+
+def activate_loyalty_cost(game, player, source, cost):
+    matches = [index for index, ability in enumerate(loyalty_abilities(source))
+               if ability.loyalty_cost == cost]
+    assert matches, f"Missing loyalty ability with cost {cost}"
+    activate_loyalty_ability(game, player, source, matches[0])
 
 
 def test_enters_creates_jace_with_one_loyalty():
@@ -41,7 +49,7 @@ def test_second_empower_reuses_token():
 
 def test_granted_plus_two_drains_and_gains():
     game, player, _, jace = arrange()
-    activate_loyalty_ability(game, player, jace, 2)
+    activate_loyalty_cost(game, player, jace, 2)
     assert jace.loyalty == 3 and game.players[1].life == 20
     resolve_stack(game)
     assert player.life == 21 and game.players[1].life == 19
@@ -49,10 +57,10 @@ def test_granted_plus_two_drains_and_gains():
 
 def test_granted_ability_obeys_once_per_turn():
     game, player, _, jace = arrange()
-    activate_loyalty_ability(game, player, jace, 2)
+    activate_loyalty_cost(game, player, jace, 2)
     resolve_stack(game)
     with pytest.raises(AbilityError):
-        activate_loyalty_ability(game, player, jace, 0)
+        activate_loyalty_cost(game, player, jace, -1)
     assert jace.loyalty == 3
 
 
@@ -60,7 +68,7 @@ def test_granted_ability_obeys_sorcery_timing():
     game, player, _, jace = arrange()
     advance_game_to_phase(game, Phase.ENDING, Step.END)
     with pytest.raises(AbilityError):
-        activate_loyalty_ability(game, player, jace, 2)
+        activate_loyalty_cost(game, player, jace, 2)
     assert jace.loyalty == 1
 
 
@@ -88,18 +96,18 @@ def test_zero_loyalty_protection_does_not_prevent_sacrifice():
 def test_minus_three_draws_but_cannot_pay_insufficient_loyalty():
     game, player, _, jace = arrange()
     with pytest.raises(AbilityError):
-        activate_loyalty_ability(game, player, jace, 1)
+        activate_loyalty_cost(game, player, jace, -3)
     assert jace.loyalty == 1
     from engine.game import add_counter
     add_counter(game, jace, "loyalty", 2)
-    activate_loyalty_ability(game, player, jace, 1)
+    activate_loyalty_cost(game, player, jace, -3)
     resolve_stack(game)
     assert jace.loyalty == 0 and len(game.get_hand(player).get_all()) == 1
 
 
 def test_pending_drain_survives_planeswalker_leaving():
     game, player, _, jace = arrange()
-    activate_loyalty_ability(game, player, jace, 2)
+    activate_loyalty_cost(game, player, jace, 2)
     exile(game, jace)
     resolve_stack(game)
     assert player.life == 21 and game.players[1].life == 19
@@ -119,7 +127,7 @@ def test_opposing_jace_token_is_not_empowered():
 
 def test_zero_loyalty_token_survives_minus_one():
     game, player, _, jace = arrange()
-    activate_loyalty_ability(game, player, jace, 0)
+    activate_loyalty_cost(game, player, jace, -1)
     resolve_stack(game)
     assert jace.loyalty == 0 and game.get_battlefield(player).contains(jace)
     assert len(player.zones[Zone.GRAVEYARD].get_all()) == 1
@@ -150,7 +158,7 @@ def test_nontoken_planeswalker_also_gets_protection_and_ability():
     game, player, _, _ = arrange()
     walker = enter_permanent(game, player, Planeswalker(name="Visitor", starting_loyalty=0))
     resolve_stack(game)
-    activate_loyalty_ability(game, player, walker)
+    activate_loyalty_cost(game, player, walker, 2)
     resolve_stack(game)
     assert walker.loyalty == 2 and player.life == 21
 
@@ -173,14 +181,21 @@ def test_existing_nontoken_jace_does_not_replace_token_creation():
     assert len([c for c in game.get_battlefield(player).get_all() if CardType.PLANESWALKER in c.card_types]) == 2
 
 
-def test_grant_disappears_but_pending_ability_resolves():
+def test_pending_granted_ability_resolves_after_lurker_leaves():
     game, player, lurker, jace = arrange()
-    activate_loyalty_ability(game, player, jace, 2)
+    activate_loyalty_cost(game, player, jace, 2)
     exile(game, lurker)
     resolve_stack(game)
-    assert player.life == 21
-    with pytest.raises(IndexError):
-        activate_loyalty_ability(game, player, jace, 2)
+    assert player.life == 21 and game.players[1].life == 19
+
+
+def test_lurker_leaving_removes_grant_and_preserves_native_abilities():
+    game, player, lurker, jace = arrange()
+    assert sorted(ability.loyalty_cost for ability in loyalty_abilities(jace)) == [-3, -1, 2]
+    exile(game, lurker)
+    resolve_stack(game)
+    assert sorted(ability.loyalty_cost for ability in loyalty_abilities(jace)) == [-3, -1]
+    assert jace.loyalty == 1 and player.life == 20 and game.players[1].life == 20
 
 
 def test_granted_damage_uses_planeswalker_as_lifelink_source():
@@ -194,7 +209,7 @@ def test_granted_damage_uses_planeswalker_as_lifelink_source():
         duration=DURATION_END_OF_TURN,
     ))
     game.effect_manager.apply_all(game)
-    activate_loyalty_ability(game, player, jace, 2)
+    activate_loyalty_cost(game, player, jace, 2)
     resolve_stack(game)
     assert game.players[1].life == 19 and player.life == 22
 
@@ -224,7 +239,7 @@ class ControlChange(Instant):
 
 def test_pending_drain_keeps_activating_controller_after_jace_is_stolen():
     game, player, _, jace = arrange()
-    activate_loyalty_ability(game, player, jace, 2)
+    activate_loyalty_cost(game, player, jace, 2)
     opponent = game.players[1]
     cast_card(game, opponent, ControlChange(jace))
     assert jace.controller is opponent

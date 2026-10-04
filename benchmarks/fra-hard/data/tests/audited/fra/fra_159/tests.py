@@ -342,3 +342,72 @@ def test_exile_selected_original_but_decline_casting_its_copy():
     cast_card(game, player, UldarosTheorix())
     assert player.zones[Zone.EXILE].get_all() == [original]
     assert len(game.get_battlefield(player).get_all()) == 1
+
+
+def test_planeswalker_copy_starts_with_printed_loyalty_and_can_activate():
+    from engine.card import LoyaltyAbility, Planeswalker
+    from engine.game import gain_life
+    from test_utils import activate_loyalty_ability
+
+    class MemoryWalker(Planeswalker):
+        def __init__(self, **kwargs):
+            super().__init__(name="Memory walker", mana_cost=ManaCost(generic=3),
+                             starting_loyalty=4, **kwargs)
+
+        def get_loyalty_abilities(self):
+            return [LoyaltyAbility(1, lambda g: gain_life(g, self.controller, 2))]
+
+    game, player = arrange()
+    original = MemoryWalker(owner=player)
+    original.loyalty = 1
+    player.zones[Zone.GRAVEYARD].add(original)
+    cast_card(game, player, UldarosTheorix())
+    copied = next(c for c in game.get_battlefield(player).get_all()
+                  if c.name == original.name)
+    assert copied is not original and copied.is_token and copied.loyalty == 4
+    activate_loyalty_ability(game, player, copied)
+    assert copied.loyalty == 5 and player.life == 20
+    resolve_stack(game)
+    assert player.life == 22 and player.zones[Zone.EXILE].contains(original)
+
+
+def test_copy_registers_trigger_and_replacement_bound_to_copy():
+    from engine.events import AddCounterReplacementEvent, GainsLifeTriggeredEvent
+    from engine.game import add_counter, gain_life
+    from engine.replacement_effects import ReplacementEffect
+    from engine.triggers import TriggerRegistration
+
+    class GrowingMemory(Creature):
+        def __init__(self, **kwargs):
+            super().__init__(name="Growing memory", mana_cost=ManaCost(generic=2),
+                             base_power=2, base_toughness=2, **kwargs)
+
+        def register_triggers(self, game):
+            game.trigger_manager.register(TriggerRegistration(
+                GainsLifeTriggeredEvent,
+                lambda g, event: event.player is self.controller,
+                lambda g: add_counter(g, self, "+1/+1", 1),
+                self, self.controller,
+            ))
+
+        def register_replacement_effects(self, game):
+            def double(g, event):
+                event.amount *= 2
+                return event
+
+            game.replacement_manager.register(ReplacementEffect(
+                AddCounterReplacementEvent, self,
+                lambda g, event: event.permanent is self and event.counter_type == "+1/+1",
+                double, self.controller,
+            ))
+
+    game, player = arrange()
+    original = GrowingMemory(owner=player)
+    player.zones[Zone.GRAVEYARD].add(original)
+    cast_card(game, player, UldarosTheorix())
+    copied = next(c for c in game.get_battlefield(player).get_all()
+                  if c.name == original.name)
+    gain_life(game, player, 1)
+    resolve_stack(game)
+    assert copied.counters.get("+1/+1") == 2 and copied.power == 4
+    assert not original.counters and player.zones[Zone.EXILE].contains(original)

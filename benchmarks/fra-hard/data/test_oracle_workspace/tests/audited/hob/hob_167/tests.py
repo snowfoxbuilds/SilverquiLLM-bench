@@ -75,6 +75,28 @@ def test_ability_disappears_when_elf_leaves_graveyard():
     assert card_abilities(king) == []
 
 
+@pytest.mark.parametrize('donor_class', [ElvenHealer, ElvenMana])
+def test_new_thranduil_does_not_inherit_old_thranduils_borrowed_abilities(donor_class):
+    from engine.game import sacrifice
+
+    g, p, _q, old_king, donor = setup(donor_class)
+    assert len(card_abilities(old_king)) == 1
+    activate_card_ability(g, p, old_king)
+    resolve_stack(g)
+    if donor_class is ElvenHealer:
+        assert p.life == 22
+    else:
+        assert p.mana_pool.get(ManaType.GREEN) == 1
+    sacrifice(g, p, old_king)
+    move_to_zone(g, donor, Zone.GRAVEYARD, Zone.EXILE)
+    assert p.zones[Zone.GRAVEYARD].get_all() == [old_king]
+
+    new_king = enter_permanent(g, p, ThranduiltheElvenking())
+    resolve_stack(g)
+    assert p.zones[Zone.BATTLEFIELD].contains(new_king)
+    assert card_abilities(new_king) == []
+
+
 def test_already_activated_ability_survives_donor_leaving():
     g, p, _q, king, donor = setup()
     activate_card_ability(g, p, king)
@@ -192,17 +214,19 @@ def test_thranduil_cannot_pay_borrowed_tap_cost_twice():
     assert p.life == 22
 
 
-def test_borrowed_mana_can_pay_during_casting():
+def test_borrowed_mana_can_pay_for_a_spell():
     from engine.card import Instant
     from engine.casting import cast_spell
     g, p, _q, king, _donor = setup(ElvenMana)
     spell = Instant(name='Green spell', owner=p, mana_cost=ManaCost.parse('{G}'))
     p.zones[Zone.HAND].add(spell)
-    prefer(p, object_preference(g, king))
+    activate_card_ability(g, p, king)
+    assert king.is_tapped and p.mana_pool.get(ManaType.GREEN) == 1
     cast_spell(g, p, spell)
     resolve_stack(g)
     assert p.zones[Zone.GRAVEYARD].contains(spell)
     assert king.is_tapped
+    assert p.mana_pool.total() == 0
 
 
 def test_borrowed_ability_targets_and_resolves_against_chosen_permanent():

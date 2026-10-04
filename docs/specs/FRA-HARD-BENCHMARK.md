@@ -70,8 +70,8 @@ The oracle must also pass FDN and engine regression checks.
 
 The audited coverage includes target legality and zone changes, permission lifetimes, mana and life payment boundaries, copy characteristics, countered spells and abilities, and effects whose controller changes before resolution.
 Separate oracle regression tests exercise interactions between selected cards.
-Bilbo's per-card hidden suite also imports the Workspace's Glamdring implementation to test the discount on a legal cast from exile after its Adventure resolves, with a payment control without Bilbo (grilling 2026-10-03).
-This interaction intentionally depends on both selected implementations; a failure in Bilbo's result can originate in Glamdring or the shared casting engine as well as Bilbo.
+Selected per-card hidden suites also exercise explicit cross-card interactions: Bilbo imports the Workspace's Glamdring implementation to test the discount on a legal cast from exile after its Adventure resolves, with a payment control without Bilbo; Hall imports Bloodline Recollector to test preparing and casting the copied inset spell (grilling 2026-10-03).
+These interactions intentionally depend on both selected implementations; a failure can originate in either card or the shared engine.
 The test envelope uses the baseline engine's two-player games; multiplayer variants and arbitrary additional casting costs are outside the validated scope.
 
 Execution and network-less candidate grading follow [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md).

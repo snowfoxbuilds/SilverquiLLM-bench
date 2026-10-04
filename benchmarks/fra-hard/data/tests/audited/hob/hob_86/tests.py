@@ -145,19 +145,24 @@ def test_opponent_owned_creature_dying_under_your_control_is_eligible():
 def test_returned_card_keeps_its_other_abilities():
     from engine.card import ActivatedAbility
     from engine.game import gain_life
+    from test_utils import card_abilities
 
     class Healer(Creature):
         def get_activated_abilities(self):
             return [ActivatedAbility(cost=lambda g, s: True,
-                                     effect=lambda g: gain_life(g, self.controller, 1))]
+                                     effect=lambda g: gain_life(g, self.controller, 1),
+                                     description="Heal")]
     g = scenario_game()
     p, q = g.players
     victim = enter_permanent(g, q, Healer(name='Healer', base_power=1, base_toughness=1))
     sacrifice(g, q, victim)
     supper(g, p)
-    activate_card_ability(g, p, victim, 0)
+    index = next(i for i, ability in enumerate(card_abilities(victim))
+                 if ability.description == "Heal")
+    activate_card_ability(g, p, victim, index)
     resolve_stack(g)
-    assert p.life == 21
+    assert p.life == 21 and q.life == 20
+    assert victim.card_types == {CardType.ARTIFACT}
 
 
 def test_food_ability_benefits_its_new_controller():
@@ -265,3 +270,50 @@ def test_food_ability_countered_keeps_cost_paid_without_life_gain():
     assert p.life == 20
     assert p.mana_pool.total() == 0
     assert q.zones[Zone.GRAVEYARD].contains(victim)
+
+
+def test_food_cannot_block_but_an_ordinary_creature_can():
+    from engine.combat import declare_attackers_step, declare_blockers_step
+
+    g, p, q, victim = setup()
+    supper(g, p)
+    attacker = enter_permanent(g, q, Creature(
+        name='Attacker', base_power=2, base_toughness=2))
+    blocker = enter_permanent(g, p, Creature(
+        name='Blocker', base_power=2, base_toughness=2))
+    g.active_player_index = 1
+    g.phase, g.step = Phase.COMBAT, Step.DECLARE_ATTACKERS
+    attacker.summoning_sick = False
+    declare_attackers_step(g, [attacker])
+    assert attacker.is_attacking
+    declare_blockers_step(g, {victim: attacker, blocker: attacker})
+    assert not victim.is_blocking and blocker.is_blocking
+    assert victim not in g.combat_state.blockers
+
+
+def test_food_is_not_a_legal_creature_spell_target():
+    from engine.card import Instant
+    from engine.casting import CastingError, cast_spell
+    from engine.types import TargetRequirement
+
+    class CreatureSpell(Instant):
+        def __init__(self, **kwargs):
+            super().__init__(name='Creature spell', mana_cost=ManaCost(), **kwargs)
+
+        def get_targets(self, game):
+            return [TargetRequirement(
+                lambda card: CardType.CREATURE in getattr(card, 'card_types', set()),
+                'Target creature', Zone.BATTLEFIELD)]
+
+    g, p, _q, victim = setup()
+    supper(g, p)
+    spell = CreatureSpell(owner=p)
+    p.zones[Zone.HAND].add(spell)
+    with pytest.raises(CastingError):
+        cast_spell(g, p, spell)
+    assert p.zones[Zone.HAND].contains(spell)
+    assert p.zones[Zone.BATTLEFIELD].contains(victim)
+    enter_permanent(g, p, Creature(name='Legal target', base_power=1, base_toughness=1))
+    cast_spell(g, p, spell)
+    resolve_stack(g)
+    assert p.zones[Zone.GRAVEYARD].contains(spell)

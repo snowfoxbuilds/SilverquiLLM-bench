@@ -388,6 +388,11 @@ def activate_card_ability(
     activate_ability(game, player, instance)
 
 
+def loyalty_abilities(card: Any) -> list:
+    """Return the card's current loyalty descriptors; their order is unspecified."""
+    return list(card.get_loyalty_abilities())
+
+
 def activate_loyalty_ability(
     game: GameState,
     player: Any,
@@ -411,7 +416,7 @@ def activate_loyalty_ability(
     """
     from engine.abilities import LoyaltyAbilityInstance, activate_ability
 
-    ability = source_card.get_loyalty_abilities()[index]
+    ability = loyalty_abilities(source_card)[index]
     instance = LoyaltyAbilityInstance(
         source=source_card,
         controller=player,

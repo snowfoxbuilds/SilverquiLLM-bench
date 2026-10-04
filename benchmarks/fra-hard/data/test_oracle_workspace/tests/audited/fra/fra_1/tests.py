@@ -17,7 +17,6 @@ from test_utils import (
     enter_permanent,
     mana_ability_instance,
     object_preference,
-    payment_preference,
     prefer,
     resolve_stack,
 )
@@ -76,8 +75,11 @@ def test_granted_mana_can_pay_for_emrakul_before_it_expires():
     game, player, emrakul, land = arrange()
     exile_ability(game, player, emrakul)
     player.mana_pool.add(ManaType.COLORLESS, 8)
-    prefer(player, Decision.number(1), *payment_preference(game, land))
+    activate_ability(game, player, mana_ability_instance(game, player, land, 1))
+    assert land.is_tapped and player.mana_pool.total() == 10
+    assert len(card_abilities(land)) == 2
     cast_spell(game, player, emrakul)
+    assert len(card_abilities(land)) == 1
     resolve_stack(game)
     assert game.get_battlefield(player).contains(emrakul) and player.mana_pool.total() == 0
     assert not land.is_tapped and len(card_abilities(land)) == 1

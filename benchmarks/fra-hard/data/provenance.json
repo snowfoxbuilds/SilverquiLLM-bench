@@ -741,8 +741,8 @@
   "oracle_engine_base": "known_best/workspace",
   "test_helpers": {
     "derived_from": "benchmarks/hob-medium/workspace/test_utils.py",
-    "adaptation": "resolve_stack checks state-based actions before resolving the stack",
-    "sha256": "371a07ad5aecde6e1771bc40505d13b14336b2caa6f6fdf3b2bd1fbff96d9193"
+    "adaptation": "resolve_stack checks state-based actions before resolving the stack; loyalty_abilities exposes current public loyalty descriptors without assuming their order",
+    "sha256": "ade0a7bc89a8a9181d0c86e6249ee863701fb20b5fa02f6ef0173a0476084d05"
   },
   "rules": {
     "source": "https://media.wizards.com/2026/downloads/MagicCompRules%2020260925.txt",
