@@ -764,13 +764,19 @@ class TestEquipmentLifecycle:
         game = create_game()
         p1 = game.players[0]
         protected = _creature("Protected", p1, 2, 2)
-        protected.protections = [ProtectionAbility(
-            quality="artifacts",
-            predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
-        )]
         boots = SwiftfootBoots(owner=p1, controller=p1)  # an artifact
         set_board_state(game, 0, battlefield=[protected, boots],
                         mana={ManaType.COLORLESS: 1})
+        # Protection from artifacts as a static ability, so it survives re-derivation.
+        protection = ProtectionAbility(
+            quality="artifacts",
+            predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
+        )
+        game.effect_manager.add(ContinuousEffect(
+            source=protected, layer=Layer.ABILITY, duration=DURATION_PERMANENT,
+            apply=lambda _game: setattr(protected, "protections", [protection]),
+        ))
+        game.effect_manager.apply_all(game)
         game.phase = Phase.PRECOMBAT_MAIN
         with pytest.raises(AbilityError):
             activate_card_ability(game, p1, boots)  # only creature is protected

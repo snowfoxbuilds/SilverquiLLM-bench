@@ -11,7 +11,7 @@ bare ``copy.copy`` that shared the original's ``object_id`` while both were live
 from __future__ import annotations
 
 from cards.fdn.fdn_163.card_impl import SelfReflection
-from engine.card import Creature, Sorcery
+from engine.card import Artifact, Creature, Sorcery
 from engine.game import add_counter
 from engine.types import ManaCost
 from test_utils import (
@@ -117,10 +117,11 @@ class TestSelfReflectionCopyToken:
     def test_no_target_is_a_noop(self) -> None:
         import pytest
         from engine.casting import CastingError
-        from engine.types import CardType
 
-        game, p1, bear, spell = self._setup()
-        bear.card_types = {CardType.ARTIFACT}
+        game = create_game()
+        p1 = game.players[0]
+        set_board_state(game, 0, battlefield=[Artifact(name="Relic", owner=p1, controller=p1)])
+        spell = SelfReflection(owner=p1, controller=p1)
         fund_mana_cost(p1, spell.mana_cost)
         with pytest.raises(CastingError):
             cast_card(game, p1, spell)

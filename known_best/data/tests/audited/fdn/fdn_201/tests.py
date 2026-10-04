@@ -13,11 +13,25 @@ import pytest
 from cards.fdn.fdn_201.card_impl import HeartfireImmolator
 from engine.abilities import AbilityError
 from engine.card import Creature, Planeswalker
+from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer, SubLayer
 from engine.decisions import Decision, GameRef
 from engine.intent_player import Intent
 from engine.types import Keyword, ManaCost, ManaType, Zone
 from engine.zones import move_to_zone
 from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
+
+
+def _pump_power(game, creature, amount):
+    """Give *creature* +amount/+0 until end of turn as a layer-7c effect."""
+
+    def apply(_game):
+        if creature in effect.bound_to:
+            creature.modified_power += amount
+
+    effect = ContinuousEffect(source=creature, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT,
+                              bound_to=[creature], apply=apply, duration=DURATION_END_OF_TURN)
+    game.effect_manager.add(effect)
+    game.effect_manager.apply_all(game)
 
 
 def _bear(p, name="Bear", power=2):
@@ -75,7 +89,7 @@ class TestHeartfireImmolatorAbility:
         """The snapshot captures power before the sacrifice, so a pumped power
         is reflected even though the source is gone at resolution."""
         game, p1, _p2, immo, target = self._setup()
-        immo.modified_power = 5  # e.g. prowess pump
+        _pump_power(game, immo, 3)  # e.g. a prowess pump: 2 -> 5
         _activate_targeting(game, p1, immo, target)
         resolve_stack(game)
         # Five damage kills the 2/3, so read it as it last existed (rule 603.10a).

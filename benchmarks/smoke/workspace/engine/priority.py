@@ -1,8 +1,9 @@
 """The Priority Query — what a player does with priority (see ADR-017).
 
-When a player receives priority the engine asks them, through one Player Query,
-for the action to take — the set of choices a user interface would offer a real
-player at that moment:
+Before a player receives priority the game is settled: continuous effects are
+re-derived and state-based actions performed (CR 117.5). The engine then asks
+the player, through one Player Query, for the action to take — the set of
+choices a user interface would offer a real player at that moment:
 
 * an OBJECT option for every spell they may begin casting (from their hand, or
   from their graveyard under flashback or a cast permission) and every land they
@@ -11,11 +12,15 @@ player at that moment:
   loyalty abilities included;
 * declining (``min=0``) passes priority.
 
-Options follow timing, zone and cast-permission rules; costs and targets are
-not pre-checked. Every option carries the predefined class it stands for in its
-``printed`` attr. The engine, not the player, turns the chosen option into its
-own cast, land play or activation, so the casting call is not part of any test
-contract.
+Options follow timing, zone and cast-permission rules; costs, targets and
+``can_cast`` conditions are not pre-checked, so an action they forbid is
+offered and then rejected. The engine picks the zone and cast permission and
+each card's :meth:`~engine.card.CardImpl.cast_offers` decides which of its
+faces may begin casting at this moment, so a multi-face card judges timing by
+the face being cast (CR 715.3a). Every option carries the predefined class it
+stands for in its ``printed`` attr. The engine, not the player, turns the
+chosen option into its own cast, land play or activation, so the casting call
+is not part of any test contract.
 
 Offering an illegal option is allowed; letting it take effect is not. When the
 chosen action fails, the game is rolled back to the beginning of the Priority
@@ -37,16 +42,11 @@ from engine.abilities import (
     activate_ability,
 )
 from engine.card import LoyaltyAbility, ManaAbility
-from engine.casting import (
-    CastingError,
-    CastMode,
-    can_cast_at_instant_speed,
-    is_sorcery_speed,
-    play_land,
-)
+from engine.casting import CastingError, CastMode, is_sorcery_speed, play_land
 from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, PlayerDecision
 from engine.queries import PRIORITY_WINDOW, PlayerQuery, ask
 from engine.rollback import take_snapshot
+from engine.stack import settle_after_resolution
 from engine.types import CardType, Zone
 from engine.zones import IllegalMoveError
 
@@ -67,12 +67,10 @@ def take_priority(game: GameState, player: Player) -> bool:
     until the player passes, an action takes effect, or the player's
     :meth:`~engine.player.Player.on_choice_rejected` raises.
     """
-    from engine.state_based_actions import resolve_state_based_actions
-
     while True:
-        # CR 117.5: state-based actions are performed before a player receives
-        # priority (triggered abilities are already put on the stack as they trigger).
-        resolve_state_based_actions(game)
+        # CR 117.5: the game settles before a player receives priority, also
+        # when an action leaves the stack empty or pays a cost that kills.
+        settle_after_resolution(game)
         query, actions = priority_query(game, player)
         answer = ask(player, query)
         if not answer.selected:
@@ -145,23 +143,18 @@ def _seat(game: GameState, player: Player) -> int:
     return next(seat for seat, p in enumerate(game.players) if p is player)
 
 
-def _may_begin_casting(game: GameState, player: Player, card: Any) -> bool:
-    timely = can_cast_at_instant_speed(card) or is_sorcery_speed(game, player)
-    return timely and card.can_cast(game)
-
-
 def _cast_and_play_offers(game: GameState, player: Player):
     """``(presented object, zone, action)`` for each spell and land on offer."""
     for card in game.get_hand(player).get_all():
         if CardType.LAND in card.card_types:
             if is_sorcery_speed(game, player) and player.land_plays_remaining > 0:
                 yield card, Zone.HAND, (lambda c=card: play_land(game, player, c))
-        elif _may_begin_casting(game, player, card):
+        else:
             for obj, action in card.cast_offers(game, player, Zone.HAND, CastMode.NORMAL):
                 yield obj, Zone.HAND, action
     for card in game.get_graveyard(player).get_all():
         mode = _graveyard_cast_mode(player, card)
-        if mode is not None and _may_begin_casting(game, player, card):
+        if mode is not None:
             for obj, action in card.cast_offers(game, player, Zone.GRAVEYARD, mode):
                 yield obj, Zone.GRAVEYARD, action
 
