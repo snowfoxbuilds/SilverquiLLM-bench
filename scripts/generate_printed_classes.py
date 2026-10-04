@@ -9,6 +9,13 @@ ADR-017). This script writes them into the card's ``card_impl.py``:
 - with ``--stub`` (or when ``card_impl.py`` is missing), one behavior-free face
   class per face, subclassing the engine's card type class.
 
+A face stub carries its face's printed characteristics as constructor
+defaults: name, mana cost (``ManaCost()`` when it has none), every card type
+the engine supports (an artifact creature subclasses ``ArtifactCreature``),
+subtypes, the Basic, Legendary and Snow supertypes, rules text, and power,
+toughness or starting loyalty, with a symbolic value such as ``*`` stubbed as
+0. A type line naming no supported card type is rejected.
+
 Each printed line is one ability, except that keywords sharing a line are
 separate abilities ("Flying, trample" is two); abilities, modes included, are
 numbered in printed order per face. Re-running on an unchanged spec is a no-op.
@@ -39,8 +46,10 @@ EVERGREEN_KEYWORDS = frozenset({
     "protection", "prowess", "reach", "trample", "vigilance", "ward",
 })
 
-_CARD_TYPE_BASES = ("Creature", "Planeswalker", "Artifact", "Enchantment",
+_CARD_TYPE_BASES = ("ArtifactCreature", "Creature", "Planeswalker", "Artifact", "Enchantment",
                     "Instant", "Sorcery", "Land")
+_CARD_TYPES = ("Artifact", "Creature", "Enchantment", "Instant", "Land", "Planeswalker", "Sorcery")
+_SUPERTYPES = ("Basic", "Legendary", "Snow")
 
 
 def class_name(printed_name: str) -> str:
@@ -95,20 +104,35 @@ def ability_block(face_classes: list[tuple[str, list[str]]]) -> str:
     return BLOCK_START + "\n\n\n" + "\n\n".join(classes) + "\n\n" + BLOCK_END + "\n"
 
 
+def _stat(value: str | None) -> int:
+    """A printed power, toughness or loyalty; a symbolic one (``*``, ``1+*``, ``X``) is a zero placeholder."""
+    return int(value) if value is not None and re.fullmatch(r"-?\d+", value) else 0
+
+
 def _stub_face(face: dict) -> tuple[str, str]:
     name = face["name"]
     types, _, subtypes = face["type_line"].partition(" — ")
-    base = next(t for t in _CARD_TYPE_BASES if t in types)
-    values = {"name": repr(name), "mana_cost": f"ManaCost.parse({face.get('mana_cost', '')!r})",
+    words = types.split()
+    card_types = [t for t in _CARD_TYPES if t in words]
+    if not card_types:
+        raise ValueError(f"{name!r}: type line {face['type_line']!r} names no supported card type")
+    base = "ArtifactCreature" if {"Artifact", "Creature"} <= set(card_types) else next(
+        t for t in _CARD_TYPE_BASES if t in card_types)
+    cost = face.get("mana_cost") or ""
+    values = {"name": repr(name),
+              "mana_cost": f"ManaCost.parse({cost!r})" if cost else "ManaCost()",
+              "card_types": "{" + ", ".join(f"CardType.{t.upper()}" for t in card_types) + "}",
               "rules_text": repr(face.get("oracle_text", ""))}
-    if base == "Creature":
-        values.update(base_power=repr(int(face["power"])), base_toughness=repr(int(face["toughness"])))
+    if "Creature" in card_types:
+        values.update(base_power=repr(_stat(face.get("power"))),
+                      base_toughness=repr(_stat(face.get("toughness"))))
     if base == "Planeswalker":
-        values["starting_loyalty"] = repr(int(face["loyalty"]))
+        values["starting_loyalty"] = repr(_stat(face.get("loyalty")))
     if subtypes:
         values["subtypes"] = "{" + ", ".join(repr(s) for s in subtypes.split()) + "}"
-    if "Legendary" in types:
-        values["supertypes"] = "{Supertype.LEGENDARY}"
+    supertypes = [t for t in _SUPERTYPES if t in words]
+    if supertypes:
+        values["supertypes"] = "{" + ", ".join(f"Supertype.{t.upper()}" for t in supertypes) + "}"
     defaults = "\n".join(f"            {key!r}: {value}," for key, value in values.items())
     source = (f"class {class_name(name)}({base}):\n"
               '    """Implementation task: see card_spec.json."""\n\n'
@@ -122,7 +146,7 @@ def stub(spec: dict) -> str:
     rendered = [_stub_face(face) for face in faces(spec)]
     bases = sorted({base for base, _ in rendered}, key=_CARD_TYPE_BASES.index)
     return (f"from engine.card import {', '.join(bases)}\n"
-            "from engine.types import ManaCost, Supertype\n\n\n"
+            "from engine.types import CardType, ManaCost, Supertype\n\n\n"
             + "\n\n".join(source for _, source in rendered))
 
 
