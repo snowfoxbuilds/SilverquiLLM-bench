@@ -10,14 +10,17 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from cards.fdn.fdn_2.card_impl import ArahboTheFirstFang
+from cards.fdn.fdn_48.card_impl import Refute
+from cards.fdn.fdn_131.card_impl import RavenousAmulet, RavenousAmuletAbility1
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride
 from cards.fdn.fdn_163.card_impl import SelfReflection
 from cards.fdn.fdn_165.card_impl import ThinkTwice
 from cards.fdn.fdn_223.card_impl import GiantGrowth
 from cards.fdn.fdn_227.card_impl import LlanowarElves, LlanowarElvesAbility1
 from cards.fdn.fdn_280.card_impl import Forest, ForestAbility1
-from engine.card import Creature, Sorcery
-from engine.casting import CastingError, cast_spell
+from engine.card import Artifact, Creature, Instant, ManaAbility, Sorcery
+from engine.casting import CastingError, can_cast_at_instant_speed, cast_spell, is_sorcery_speed
 from engine.decisions import (
     Decision,
     DecisionKind,
@@ -26,11 +29,12 @@ from engine.decisions import (
     PlayerDecision,
 )
 from engine.game import create_game as engine_create_game
+from engine.game import sacrifice
 from engine.intent_player import DeterministicPlayer, Intent
 from engine.priority import priority_query, take_priority
 from engine.queries import Answer, PlayerQuery, ask, is_priority_query, priority_pattern
 from engine.rollback import take_snapshot
-from engine.stack import StackObject, priority_loop
+from engine.stack import StackObject, priority_loop, settle_after_resolution
 from engine.triggers import TriggerRegistration
 from engine.types import CardType, ManaCost, ManaType, Phase, Step, Zone
 from test_utils import create_game, resolve_stack, set_board_state
@@ -457,3 +461,221 @@ def test_ordered_preferences_cast_the_intended_face_in_either_presentation(per_f
     assert game.stack.peek().source is card and card.cast_face is _FaceB
     asked = [r.query for r in p0.transcript.all()]
     assert len(asked) == (1 if per_face else 2)
+
+
+# ---------------------------------------------------------------------------
+# Settling before priority (CR 117.5)
+# ---------------------------------------------------------------------------
+
+
+class _Watcher(ScriptedPlayer):
+    """Records the board each time it receives a Priority Query."""
+
+    rollback_exempt = ScriptedPlayer.rollback_exempt | {"boards"}
+
+    def __init__(self, name: str, script: list[PlayerDecision | None]) -> None:
+        super().__init__(name, script)
+        self.boards: list[dict[str, Any]] = []
+
+    def answer(self, query: PlayerQuery) -> Answer:
+        if is_priority_query(query):
+            game = self.game
+            self.boards.append({
+                "battlefield": [o.name for o in game.get_battlefield(self).get_all()],
+                "graveyard": [o.name for o in game.get_graveyard(self).get_all()],
+                "stack": len(game.stack),
+            })
+        return super().answer(query)
+
+
+def _cat() -> Creature:
+    return Creature(name="Test Cat", subtypes={"Cat"}, base_power=1, base_toughness=1)
+
+
+def _lethally_held_cat(p0: _Watcher, *extra):
+    """Arahbo holds a damaged 1/1 Cat alive at 2/2; the Cat dies once Arahbo leaves."""
+    game = _game(p0)
+    cat = _cat()
+    arahbo = ArahboTheFirstFang()
+    set_board_state(game, 0, battlefield=[arahbo, cat, *extra])
+    arahbo.register_triggers(game)
+    settle_after_resolution(game)
+    cat.damage_marked = 1
+    assert cat.toughness == 2
+    return game, cat
+
+
+def test_a_sacrifice_cost_settles_the_board_before_the_next_priority_query():
+    p0 = _Watcher("Player1", [Decision.ability(printed=RavenousAmuletAbility1), None])
+    game, _ = _lethally_held_cat(p0, RavenousAmulet())
+    p0.mana_pool.add(ManaType.COLORLESS, 1)
+
+    assert take_priority(game, p0) is False
+    assert take_priority(game, p0) is True
+
+    assert p0.boards[1]["battlefield"] == ["Ravenous Amulet"]
+    assert sorted(p0.boards[1]["graveyard"]) == ["Arahbo, the First Fang", "Test Cat"]
+    assert p0.boards[1]["stack"] == 1  # the Amulet's ability is still pending
+
+
+class _SacrificeOutletAbility1:
+    text = "Sacrifice a creature: Add {C}."
+
+
+class _SacrificeOutlet(Artifact):
+    """Test card: a mana ability whose cost sacrifices the first creature, and
+    then reports the cost unpaid unless *pays*."""
+
+    def __init__(self, pays: bool = True, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Sacrifice Outlet")
+        super().__init__(**kwargs)
+        self.pays = pays
+
+    def get_mana_abilities(self) -> list[ManaAbility]:
+        def cost(game, src):
+            creatures = [o for o in game.get_battlefield(src.controller).get_all()
+                         if CardType.CREATURE in o.card_types]
+            sacrifice(game, src.controller, creatures[0])
+            return self.pays
+
+        return [ManaAbility(cost=cost,
+                            mana_produced=lambda game: self.controller.mana_pool.add(ManaType.COLORLESS, 1),
+                            description=_SacrificeOutletAbility1.text, printed=_SacrificeOutletAbility1)]
+
+
+def test_an_immediate_action_with_an_empty_stack_settles_the_board_before_the_next_query():
+    p0 = _Watcher("Player1", [Decision.ability(printed=_SacrificeOutletAbility1), None])
+    game, _ = _lethally_held_cat(p0, _SacrificeOutlet())
+
+    assert take_priority(game, p0) is False
+    assert take_priority(game, p0) is True
+
+    assert p0.boards[1] == {"battlefield": ["Sacrifice Outlet"],
+                            "graveyard": ["Arahbo, the First Fang", "Test Cat"], "stack": 0}
+    assert p0.mana_pool.get(ManaType.COLORLESS) == 1
+
+
+def test_a_stable_board_is_unchanged_by_settling_before_priority():
+    p0 = _Watcher("Player1", [None])
+    game, cat = _lethally_held_cat(p0)
+    before = _fingerprint(game)
+
+    assert take_priority(game, p0) is True
+
+    assert _fingerprint(game) == before
+    assert cat.damage_marked == 1 and cat.toughness == 2
+
+
+def test_a_rejected_sacrifice_restores_the_board_it_began_from():
+    p0 = _Watcher("Player1", [Decision.ability(printed=_SacrificeOutletAbility1), None])
+    game, cat = _lethally_held_cat(p0, _SacrificeOutlet(pays=False))
+    before = _fingerprint(game)
+
+    assert take_priority(game, p0) is True
+
+    assert len(p0.rejections) == 1
+    assert _fingerprint(game) == before
+    assert p0.boards[1]["battlefield"] == p0.boards[0]["battlefield"]
+    assert cat.toughness == 2
+
+
+# ---------------------------------------------------------------------------
+# Who decides what may begin casting
+# ---------------------------------------------------------------------------
+
+
+class _InstantFace(Instant):
+    pass
+
+
+class _CreatureFace(Creature):
+    pass
+
+
+class _CreatureWithInstantAdventure(Creature):
+    """Test card: a creature whose second face is an instant, offered per face
+    or behind a follow-up query."""
+
+    def __init__(self, per_face: bool, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Adventurer")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{0}"))
+        super().__init__(**kwargs)
+        self.per_face = per_face
+        self.faces = (_CreatureFace(name="Adventurer"), _InstantFace(name="Quick Quest"))
+        self.cast_face: type | None = None
+
+    def _cast(self, game, player, face):
+        self.cast_face = type(face)
+        self.card_types = set(face.card_types)  # cast with the face's characteristics (CR 715.3a)
+        return cast_spell(game, player, self)
+
+    def cast_offers(self, game, player, from_zone, mode):
+        timely = [face for face in self.faces
+                  if can_cast_at_instant_speed(face) or is_sorcery_speed(game, player)]
+        if self.per_face:
+            return [(face, lambda f=face: self._cast(game, player, f)) for face in timely]
+        if not timely:
+            return []
+
+        def ask_face():
+            options = tuple(game.refs.object_decision(face, zone=from_zone.value) for face in timely)
+            source = game.refs.object_decision(self, zone=from_zone.value)
+            answer = ask(player, PlayerQuery(source=(source,), prompt="Which face?",
+                                             options=options, min=1, max=1))
+            return self._cast(game, player, timely[options.index(answer.selected[0])])
+
+        return [(self, ask_face)]
+
+
+def _instant_window(game, opponents_turn: bool):
+    if opponents_turn:
+        game.active_player_index = 1
+    else:
+        game.stack.push(StackObject(source=None, controller=game.players[1], on_resolve=lambda g: None))
+
+
+@pytest.mark.parametrize("opponents_turn", [False, True], ids=["nonempty-stack", "opponents-turn"])
+@pytest.mark.parametrize("per_face", [True, False], ids=["per-face", "follow-up"])
+def test_an_instant_face_of_a_creature_card_can_be_cast_at_instant_speed(per_face, opponents_turn):
+    game = _game()
+    card = _CreatureWithInstantAdventure(per_face)
+    set_board_state(game, 0, hand=[card, SelfReflection()])
+    _instant_window(game, opponents_turn)
+    p0 = game.players[0]
+    p0.start_intent("face", Intent(pattern=GameRef(), preferences=(
+        Decision.obj(printed=_InstantFace), Decision.obj(printed=_CreatureWithInstantAdventure),
+    )))
+    query, _ = priority_query(game, p0)
+
+    assert SelfReflection not in _printed(query, DecisionKind.OBJECT)
+    assert _CreatureFace not in _printed(query, DecisionKind.OBJECT)
+
+    assert take_priority(game, p0) is False
+    assert game.stack.peek().source is card and card.cast_face is _InstantFace
+
+
+def test_a_graveyard_card_is_offered_only_under_a_cast_permission():
+    game = _game()
+    growth = GiantGrowth()
+    set_board_state(game, 0, graveyard=[growth])
+    query, _ = priority_query(game, game.players[0])
+    assert _printed(query, DecisionKind.OBJECT) == []
+
+    growth._castable_from_graveyard = True
+    query, _ = priority_query(game, game.players[0])
+    assert _printed(query, DecisionKind.OBJECT) == [GiantGrowth]
+
+
+def test_a_spell_without_a_legal_target_is_offered_but_rejected():
+    p0 = ScriptedPlayer("Player1", [Decision.obj(printed=Refute), None])
+    game = _game(p0)
+    set_board_state(game, 0, hand=[Refute()])
+    p0.mana_pool.add(ManaType.BLUE, 3)
+    before = _fingerprint(game)
+    query, _ = priority_query(game, p0)
+    assert _printed(query, DecisionKind.OBJECT) == [Refute]
+
+    assert take_priority(game, p0) is True
+
+    assert len(p0.rejections) == 1
+    assert _fingerprint(game) == before

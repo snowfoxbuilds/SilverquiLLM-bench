@@ -368,12 +368,17 @@ class CardImpl(GameObject):
         the call that casts it once chosen.
 
         The default offers the card itself, cast from *from_zone* in *mode*
-        (an :class:`~engine.casting.CastMode`). A multi-face card may offer one
-        object per face, or offer the card and ask which face while casting it
-        (see ADR-017).
+        (an :class:`~engine.casting.CastMode`), when its timing allows casting
+        it now. A multi-face card may offer one object per face, or offer the
+        card and ask which face while casting it, judging each face's timing by
+        that face's characteristics (CR 715.3a; see ADR-017). Offers never
+        check costs, targets or :meth:`can_cast`: casting does, and a rejected
+        cast is rolled back.
         """
-        from engine.casting import cast_spell
+        from engine.casting import can_cast_at_instant_speed, cast_spell, is_sorcery_speed
 
+        if not (can_cast_at_instant_speed(self) or is_sorcery_speed(game, player)):
+            return []
         return [
             (self, lambda: cast_spell(game, player, self, from_zone=from_zone, mode=mode))
         ]
