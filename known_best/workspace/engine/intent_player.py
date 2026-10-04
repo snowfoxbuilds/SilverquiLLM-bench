@@ -26,7 +26,7 @@ from engine.decisions import (
     satisfies,
 )
 from engine.player import Player
-from engine.queries import Answer, PlayerQuery
+from engine.queries import Answer, PlayerQuery, is_priority_query, priority_pattern
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,9 @@ class Intent:
     pattern: GameRef
     preferences: tuple[PlayerDecision, ...] = ()
     postcondition: Callable[[Any], bool] | None = None
+
+
+_PASS_PRIORITY = Intent(pattern=priority_pattern())
 
 
 @dataclass
@@ -101,7 +104,14 @@ class Transcript:
 
 
 class DeterministicPlayer(Player):
-    """Intent-based deterministic player (V2). See module docstring."""
+    """Intent-based deterministic player (V2). See module docstring.
+
+    A Priority Query goes to a card intent whose pattern matches it (see
+    :func:`~engine.queries.priority_pattern`); with none, the player passes —
+    the Baseline Intent never takes an action, whatever its preferences.
+    """
+
+    rollback_exempt = frozenset({"_intents", "_baseline", "transcript", "game"})
 
     def __init__(self, name: str, life: int = 20) -> None:
         super().__init__(name, life)
@@ -175,6 +185,8 @@ class DeterministicPlayer(Player):
             )
         if len(matched) == 1:
             return matched[0], True
+        if is_priority_query(query):
+            return _PASS_PRIORITY, False
         if self._baseline is not None:
             return self._baseline, False
         raise UnmatchedQueryError(

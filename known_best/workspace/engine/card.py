@@ -361,6 +361,23 @@ class CardImpl(GameObject):
         """Return ``True`` if this card can currently be cast."""
         return True
 
+    def cast_offers(
+        self, game: GameState, player: Player, from_zone: Any, mode: Any
+    ) -> list[tuple[Any, Callable[[], Any]]]:
+        """The objects a Priority Query offers for casting this card, each with
+        the call that casts it once chosen.
+
+        The default offers the card itself, cast from *from_zone* in *mode*
+        (an :class:`~engine.casting.CastMode`). A multi-face card may offer one
+        object per face, or offer the card and ask which face while casting it
+        (see ADR-017).
+        """
+        from engine.casting import cast_spell
+
+        return [
+            (self, lambda: cast_spell(game, player, self, from_zone=from_zone, mode=mode))
+        ]
+
     def cost_reduction(self, game: GameState, targets: list[Any] | None = None) -> int:
         """Return this card's *self* generic-mana reduction for casting it.
 

@@ -129,6 +129,9 @@ class GameRefsRegistry:
     stability/uniqueness, never predict a value.
     """
 
+    # Ids stay unique across a rolled-back action (engine.rollback).
+    rollback_exempt = frozenset({"_counter"})
+
     def __init__(self) -> None:
         # object identity -> (last observed zone token, current stint id)
         self._current: dict[int, tuple[Hashable, int]] = {}

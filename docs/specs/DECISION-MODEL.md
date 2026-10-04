@@ -140,6 +140,8 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 - **Option shape**: no new Decision kind.
   Casting a spell or playing a land is an OBJECT option for the object cast or played; activating an ability, mana abilities included, is an ABILITY option.
   Passing priority is a decline (`min=0`), and an X value stays a NUMBER choice made during casting (grilling 2026-10-04).
+- **Recognizing the query**: a Priority Query's one source is the PLAYER decision for the player receiving priority, whose ref carries that player's seat and the `("window", "priority")` entry in its `ability` field.
+  `priority_pattern(seat)` is the Intent pattern that matches it; a card intent patterned on card identity never does.
 - **What is offered**: every action the player may begin under timing, zone and cast-permission rules; costs and targets are not pre-checked (grilling 2026-10-04).
 - **Combat declarations**: declaring attackers and declaring blockers are Player Queries too — a multi-select of OBJECT options for the creatures that could attack or block, with whom each attacks or blocks.
   They replace the imperative `declare_attackers` / `declare_blockers` calls and the convention that the engine silently filters illegal attackers and blockers (grilling 2026-10-04).
@@ -150,8 +152,8 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 
 #### Printed identity
 
-- **Predefined classes**: every card, every face of a multi-face card, and every printed ability has its own predefined class in the Workspace, such as `GlamdringFoehammer` and `GleamOfDeath` for an Adventure card, or `EmrakultheExigentDoomAbility1` for "When you cast this spell, untap all lands you control."
-  Each printed line is one ability, except that keywords sharing a line are separate abilities ("Flying, trample" is two); abilities, modes included, are numbered in printed order, so Emrakul's Flying is `EmrakultheExigentDoomAbility2` and its trample `EmrakultheExigentDoomAbility3`.
+- **Predefined classes**: every card, every face of a multi-face card, and every printed ability has its own predefined class in the Workspace, such as `GlamdringFoehammer` and `GleamOfDeath` for an Adventure card, or `EmrakulTheExigentDoomAbility1` for "When you cast this spell, untap all lands you control."
+  Each printed line is one ability, except that keywords sharing a line are separate abilities ("Flying, trample" is two); abilities, modes included, are numbered in printed order, so Emrakul's Flying is `EmrakulTheExigentDoomAbility2` and its trample `EmrakulTheExigentDoomAbility3`.
   Face classes subclass the engine's card type class and ability classes are plain classes carrying their printed text; nothing links them, and how they relate is the candidate's design.
   The classes are generated from each Card Spec's printed text into the card's `card_impl.py`, for every card in the Workspace, FDN included — first in the Known-Best Workspace, then ported to fra-hard-v2 (grilling 2026-10-04).
 - **`printed` attr**: OBJECT, ABILITY and MODE decisions carry a blessed `printed` attr whose value is the predefined class the option stands for, and tests match on it (`Decision.obj(printed=GleamOfDeath)`).
@@ -170,6 +172,10 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
   The engine then asks the same query again and play continues from it; a rejected attempt consumes no further action-script entry.
   `InvalidPlayerChoiceError` is a rules rejection, distinct from the ProtocolError and IntentError families, which report malformed queries and test-authoring faults.
 - **Rejection scenarios**: implementation tests check, after each rejection, that the state at the boundary is restored, that effects before it stand, and that play continues without consuming another script entry — for a failed ordinary cast followed by a legal cast, a rejected later Uldaros copy after an earlier copy was cast, and an illegal combat declaration followed by a legal one.
+- **Hearing a rejection**: after the rollback the player hears the error through `Player.on_choice_rejected`.
+  Returning lets the engine ask the same query again; raising ends the game loop with the error.
+  The default raises, so a player that cannot revise its choice is never asked forever.
+  Decision-side state — a player's intents, transcript and script position — is not game state, and the rollback leaves it alone.
 - **Testing choices whose presentation varies**: tests never dictate how an engine presents a choice; they are built to draw out the intended choice and to fail when an illegal one takes effect.
   Uldaros's targets are up to one card of each card type, judged by the graveyard characteristics of each card: the chosen cards must be distinct cards that can be assigned to distinct card types they have, though their type sets may overlap.
   Glamdring in the graveyard is an artifact card, never a sorcery (CR 715.4), whatever object an engine presents for it, so with Divination, Glamdring and Leyline Axe in the graveyard an engine fails if it lets all three be exiled; Divination with either artifact is legal.

@@ -43,7 +43,7 @@ Collector numbers in different sets are distinct targets even when their numbers
 The candidate Workspace is a self-contained copy of the HOB-generation V2 engine and FDN reference baseline.
 It contains ten behavior-free card stubs with Card Specs under `cards/fra/fra_<N>/` and `cards/hob/hob_<N>/`.
 Both parts of preparation and Adventure cards belong to their one target card.
-Each stub predefines one behavior-free class per face and per printed line of text, such as `GlamdringFoehammer` and `GleamOfDeath`, or `EmrakultheExigentDoomAbility1`; how those classes relate is the candidate's design (grilling 2026-10-04).
+Each stub predefines one behavior-free class per face and per printed line of text, such as `GlamdringFoehammer` and `GleamOfDeath`, or `EmrakulTheExigentDoomAbility1`; how those classes relate is the candidate's design (grilling 2026-10-04).
 Each Benchmark Run implements the entire ten-card pool in one Workspace.
 
 Hard-tier guidance supplies workspace conventions and Card Specs without per-card implementation hints.
