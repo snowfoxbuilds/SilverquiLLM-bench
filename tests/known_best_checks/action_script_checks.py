@@ -2102,3 +2102,115 @@ def test_an_intent_applies_shared_per_query_after_each_branchs_own():
     assert [k for k, _ in second.per_query] == [CardType.CREATURE, CardType.ARTIFACT]
     with pytest.raises(TypeError):
         Intent(pattern=GameRef(), preferences=(Decision.yes(),), branches=[[Decision.no()]])
+
+
+# ---------------------------------------------------------------------------
+# Review round 6: handlers answer with their current branch, explicit
+# overrides own their answer, forced helpers stop where play was abandoned
+# ---------------------------------------------------------------------------
+
+
+class TwoStepCast(Sorcery):
+    """While being cast, asks Bad or Good, then Wrong or Right; refuses Bad
+    and Wrong."""
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(name="Two Step Cast", mana_cost=ManaCost(), **kwargs)
+
+    def cast_offers(self, game, player, from_zone, mode):
+        return [(self, lambda: self._cast(game, player))]
+
+    def _cast(self, game, player):
+        cards = {c.name: c for c in game.get_battlefield(player).get_all()}
+        for pair in (("Bad", "Good"), ("Wrong", "Right")):
+            chosen = choose_object(game, player, [cards[n] for n in pair], "Pick", source_card=self)
+            if chosen.name in ("Bad", "Wrong"):
+                raise InvalidPlayerChoiceError(f"{chosen.name} refused")
+        return cast_spell(game, player, self)
+
+
+def test_the_baseline_answers_with_its_current_branch_inside_an_entrys_action():
+    game = _game()
+    spell = TwoStepCast()
+    set_board_state(game, 0, hand=[spell],
+                    battlefield=[_artifact(n) for n in ("Bad", "Good", "Wrong", "Right")])
+    game.players[0].set_baseline(Intent(pattern=GameRef(), branches=[
+        _named("Bad"), _named("Good", "Right"),
+    ]))
+    script(game, 0, act(TwoStepCast))
+    run_scripts(game)
+    assert _on_stack(game, spell)
+
+
+class OptionalPick(Sorcery):
+    """While being cast, may choose an artifact (``optional``) or must."""
+
+    def __init__(self, optional: bool, **kwargs) -> None:
+        super().__init__(name="Optional Pick", mana_cost=ManaCost(), **kwargs)
+        self.optional = optional
+        self.chosen = "unset"
+
+    def cast_offers(self, game, player, from_zone, mode):
+        return [(self, lambda: self._cast(game, player))]
+
+    def _cast(self, game, player):
+        candidates = [c for c in game.get_battlefield(player).get_all()]
+        chosen = choose_object(game, player, candidates, "Pick", source_card=self,
+                               optional=self.optional, question=CardType.ARTIFACT)
+        self.chosen = chosen.name if chosen is not None else None
+        return cast_spell(game, player, self)
+
+
+@pytest.mark.parametrize(("optional", "chosen"), [(True, None), (False, "Bad")])
+def test_an_entrys_explicit_override_beats_a_baseline_preference(optional, chosen):
+    game = _game()
+    spell = OptionalPick(optional)
+    set_board_state(game, 0, hand=[spell], battlefield=[_artifact("Bad"), _artifact("Rock")])
+    game.players[0].set_baseline(Intent(pattern=GameRef(), preferences=_named("Rock")))
+    script(game, 0, act(OptionalPick, per_query={CardType.ARTIFACT: []}))
+    run_scripts(game)
+    # Declined when optional; a mandatory choice fills its first option.
+    assert spell.chosen == chosen
+
+
+def test_without_an_override_the_baseline_preference_still_answers():
+    game = _game()
+    spell = OptionalPick(True)
+    set_board_state(game, 0, hand=[spell], battlefield=[_artifact("Bad"), _artifact("Rock")])
+    game.players[0].set_baseline(Intent(pattern=GameRef(), preferences=_named("Rock")))
+    script(game, 0, act(OptionalPick))
+    run_scripts(game)
+    assert spell.chosen == "Rock"
+
+
+def _abandoned_above_paused_cleanup():
+    """Paused in cleanup with Bolt above a death trigger (which makes a
+    second doomed creature), plus a resolving choice a negative intent's
+    refusal abandons on top."""
+    game, made = _paused_in_cleanup(lambda g: _doomed(g, g.players[0]))
+    p0 = game.players[0]
+    set_board_state(game, 0, battlefield=[_artifact("Bad"), _artifact("Good")])
+    chooser = Chooser({"Bad"})
+    chooser.controller = p0
+    game.stack.push(StackObject(source=None, controller=p0, on_resolve=chooser.on_resolve))
+    p0.start_intent("choose", _choose("Bad", negative=True))
+    return game, made
+
+
+def test_a_phase_helper_stops_where_a_cleanup_resolution_is_abandoned():
+    game, made = _abandoned_above_paused_cleanup()
+    turn = game.turn_number
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    assert (game.turn_number, game.step) == (turn, Step.CLEANUP) and len(game.stack) == 2
+    assert made == []
+
+
+def test_a_phase_helper_resumes_the_cleanup_it_stopped_in():
+    game, made = _abandoned_above_paused_cleanup()
+    turn = game.turn_number
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    game.players[0].end_intent("choose")
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    assert (game.turn_number, game.step) == (turn + 1, Step.UPKEEP)
+    (second,) = made
+    assert not game.get_battlefield(game.players[0]).contains(second)

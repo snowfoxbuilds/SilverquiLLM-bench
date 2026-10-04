@@ -146,9 +146,13 @@ class Branch:
         matched = self._per_query(query)
         return self.preferences if matched is None else matched
 
+    def matched(self, query: PlayerQuery) -> tuple[PlayerDecision, ...] | None:
+        """The first matching ``per_query`` key's preferences — an empty list
+        among them, so that an optional choice declines — or ``None`` when no
+        key matches."""
+        return self._per_query(query)
+
     def _per_query(self, query: PlayerQuery) -> tuple[PlayerDecision, ...] | None:
-        """The first matching key's preferences — an empty list among them, so
-        that an optional choice declines — or ``None`` when no key matches."""
         for key, preferences in self.per_query:
             if _per_query_matches(key, query):
                 return preferences
@@ -402,8 +406,9 @@ class _EntryAttempt:
     error: InvalidPlayerChoiceError | None = None
     retrying: bool = False
 
-    def ranked(self, query: PlayerQuery) -> list[tuple[int, PlayerDecision]]:
-        return list(enumerate(self.entry.branches[self.branch].answers_for(query)))
+    @property
+    def current(self) -> Branch:
+        return self.entry.branches[self.branch]
 
 
 _BASELINE_KEY = "<baseline>"
@@ -630,26 +635,25 @@ class DeterministicPlayer(Player):
                 _note(noted, _ENTRY_KEY)
                 return self._answer_from_script(query)
         elif self._attempt is not None and not claimed:
-            ranked = self._attempt.ranked(query)
-            baseline_prefers = self._baseline is not None and _first_preferred(
-                list(self._baseline.plans[0].answers_for(query)), query.options
-            ) is not None
-            if _first_preferred([p for _, p in ranked], query.options) is not None or (
-                not baseline_prefers
+            current = self._attempt.current
+            override = current.matched(query)  # evaluated once per decision
+            preferences = current.preferences + current.choices if override is None else override
+            if (
+                override is not None
+                or _first_preferred(list(preferences), query.options) is not None
+                or not self._baseline_prefers(query)
             ):
                 # Inside its action the entry answers every query nothing else
-                # claims — by its branch, or by mandatory fill — so it owns
-                # those answers when one of them is rejected.
-                answer, _ = _select(ranked, query)
+                # claims — by an explicit override, by its branch, or by
+                # mandatory fill — so it owns those answers when one of them
+                # is rejected.
+                answer, _ = _select(list(enumerate(preferences)), query)
                 _note(noted, _ENTRY_KEY)
                 return answer
 
         name, intent = self._route(query, claimed)
         key = _BASELINE_KEY if name is None else name
-        context = attempts.current()
-        plans = intent.plans
-        current = context.branch.get((id(self), key), 0) if context is not None else 0
-        preferences = plans[min(current, len(plans) - 1)].answers_for(query)
+        preferences = self._current_plan(key, intent).answers_for(query)
         answer, used = _select(list(enumerate(preferences)), query)
         forbidden = intent.negative and bool(used)
         if noted is not None:
@@ -662,6 +666,20 @@ class DeterministicPlayer(Player):
             # transcript so audits can catch it; not a hard failure.
             record.preference_miss = True
         return answer
+
+    def _current_plan(self, key: str, intent: Intent) -> Branch:
+        """The branch ``intent`` answers the current attempt with."""
+        context = attempts.current()
+        plans = intent.plans
+        current = context.branch.get((id(self), key), 0) if context is not None else 0
+        return plans[min(current, len(plans) - 1)]
+
+    def _baseline_prefers(self, query: PlayerQuery) -> bool:
+        """Whether the baseline's current branch prefers one of ``query``'s options."""
+        if self._baseline is None:
+            return False
+        preferences = self._current_plan(_BASELINE_KEY, self._baseline).answers_for(query)
+        return _first_preferred(list(preferences), query.options) is not None
 
     def _answer_from_script(self, query: PlayerQuery) -> Answer:
         """Consume entries until one answers this Priority Query.

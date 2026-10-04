@@ -533,8 +533,16 @@ def resolve_stack(game: GameState) -> None:
     too, with every player passing (:func:`finish_cleanup`): another cleanup
     follows the window, and so on until one grants no priority (CR 514.3a).
     """
-    if _drain_stack(game) and game.step == Step.CLEANUP:
-        finish_cleanup(game)
+    _finish_forced(game)
+
+
+def _finish_forced(game: GameState) -> bool:
+    """Resolve the stack with every player passing and, in a cleanup step,
+    finish the cleanup; return ``False`` if a resolution was abandoned, which
+    stops play there."""
+    if not _drain_stack(game):
+        return False
+    return game.step != Step.CLEANUP or _finish_cleanup(game)
 
 
 def _drain_stack(game: GameState) -> bool:
@@ -798,15 +806,18 @@ def advance_game_to_phase(game, phase, step=None):
     for _ in range(len(_TURN_SEQUENCE) + 1):
         if (game.phase, game.step) == (phase, step):
             return
-        resolve_stack(game)
-        _enter_next_step(game)
+        # An abandoned resolution stops play where it is, as in any driver;
+        # a later call resumes from there.
+        if not _finish_forced(game) or not _enter_next_step(game):
+            return
     raise TestSetupError("phase boundary was not reached")
 
 
-def _enter_next_step(game: GameState, *, finish_cleanup_step: bool = True) -> None:
+def _enter_next_step(game: GameState, *, finish_cleanup_step: bool = True) -> bool:
     """Advance to the next step and perform its turn-based actions; a cleanup
     step is finished with every player passing unless ``finish_cleanup_step``
-    is false, leaving its iterations to the caller."""
+    is false, leaving its iterations to the caller. Returns ``False`` if
+    finishing the cleanup stopped at an abandoned resolution."""
     from engine.combat import combat_damage_step, end_combat_step
     from engine.events import (
         BeginningOfCombatTriggeredEvent,
@@ -835,7 +846,8 @@ def _enter_next_step(game: GameState, *, finish_cleanup_step: bool = True) -> No
         game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=game.active_player))
         game.trigger_manager.fire_event(game, EndOfTurnTriggeredEvent())
     elif game.step == Step.CLEANUP and finish_cleanup_step:
-        finish_cleanup(game)
+        return _finish_cleanup(game)
+    return True
 
 
 def behavioral_game():
@@ -943,11 +955,16 @@ def finish_cleanup(game):
     """Perform cleanup iterations until one grants no priority, resolving what
     each puts on the stack with every player passing; consumes no entries.
     Stops where a resolution is abandoned."""
+    _finish_cleanup(game)
+
+
+def _finish_cleanup(game: GameState) -> bool:
     from engine.turn import cleanup_iteration
 
     while cleanup_iteration(game):
         if not _drain_stack(game):
-            return
+            return False
+    return True
 
 
 def scenario_game(*args, **kwargs):
