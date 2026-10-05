@@ -771,11 +771,16 @@ index 0000000..ab6190c
 +                card.get_loyalty_abilities = _with_granted_abilities(card, game)
 diff --git b/engine/preparation.py b/engine/preparation.py
 new file mode 100644
-index 0000000..9e568d7
+index 0000000..c48f54b
 --- /dev/null
 +++ b/engine/preparation.py
-@@ -0,0 +1,36 @@
-+"""Prepared designations and their linked exiled spell copies (rule 722)."""
+@@ -0,0 +1,41 @@
++"""Prepared designations and the spell copies they let their controller cast.
++
++A prepared permanent's spell copy is held in its controller's command zone, out
++of every zone a player sees, until it is cast: the rules create the copy only as
++it is cast, so nothing about it may show before then.
++"""
 +
 +from engine.casting import grant_cast_permission
 +from engine.types import Zone
@@ -786,7 +791,7 @@ index 0000000..9e568d7
 +    spell = getattr(card, "prepared_copy", None)
 +    if spell is not None:
 +        for player in game.players:
-+            zone = player.zones[Zone.EXILE]
++            zone = player.zones[Zone.COMMAND]
 +            if zone.contains(spell):
 +                zone.remove(spell)
 +    card.prepared_copy = None
@@ -802,8 +807,8 @@ index 0000000..9e568d7
 +    spell.is_card_copy = True
 +    spell.prepared_source = card
 +    card.prepared_copy = spell
-+    card.controller.zones[Zone.EXILE].add(spell)
-+    grant_cast_permission(game, card.controller, spell, controller_source=card)
++    card.controller.zones[Zone.COMMAND].add(spell)
++    grant_cast_permission(game, card.controller, spell, from_zone=Zone.COMMAND, controller_source=card)
 +
 +
 +def consume_preparation(game, spell):

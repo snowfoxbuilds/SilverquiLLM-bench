@@ -1,4 +1,9 @@
-"""Prepared designations and their linked exiled spell copies (rule 722)."""
+"""Prepared designations and the spell copies they let their controller cast.
+
+A prepared permanent's spell copy is held in its controller's command zone, out
+of every zone a player sees, until it is cast: the rules create the copy only as
+it is cast, so nothing about it may show before then.
+"""
 
 from engine.casting import grant_cast_permission
 from engine.types import Zone
@@ -9,7 +14,7 @@ def clear_preparation(game, card):
     spell = getattr(card, "prepared_copy", None)
     if spell is not None:
         for player in game.players:
-            zone = player.zones[Zone.EXILE]
+            zone = player.zones[Zone.COMMAND]
             if zone.contains(spell):
                 zone.remove(spell)
     card.prepared_copy = None
@@ -25,8 +30,8 @@ def prepare(game, card, factory):
     spell.is_card_copy = True
     spell.prepared_source = card
     card.prepared_copy = spell
-    card.controller.zones[Zone.EXILE].add(spell)
-    grant_cast_permission(game, card.controller, spell, controller_source=card)
+    card.controller.zones[Zone.COMMAND].add(spell)
+    grant_cast_permission(game, card.controller, spell, from_zone=Zone.COMMAND, controller_source=card)
 
 
 def consume_preparation(game, spell):
