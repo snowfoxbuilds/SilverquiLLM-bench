@@ -19,7 +19,7 @@ import pytest
 
 from engine.game_state import GameState
 from engine.mana import ManaPool
-from engine.intent_player import DeterministicPlayer
+from test_utils import DeterministicPlayer
 from engine.turn import run_turn
 from engine.types import ManaType, Phase, Step, Zone
 from engine.zones import ZoneContainer
@@ -33,6 +33,17 @@ def _make_game() -> GameState:
     p1 = DeterministicPlayer("Alice")
     p2 = DeterministicPlayer("Bob")
     return GameState([p1, p2])
+
+
+def _stocked_game() -> GameState:
+    """A game whose libraries last several turns, so no draw step ends it."""
+    from engine.card import Creature
+
+    game = _make_game()
+    for player in game.players:
+        for i in range(10):
+            player.zones[Zone.LIBRARY].add(Creature(name=f"Card {i}", owner=player))
+    return game
 
 
 # The canonical MTG turn sequence as a list of (Phase, Step|None).
@@ -468,7 +479,7 @@ class TestRunTurn:
 
     def test_run_turn_twice_alternates_active_player(self) -> None:
         """Two run_turn calls should bring active player back to player 0."""
-        game = _make_game()
+        game = _stocked_game()
         run_turn(game)
         assert game.active_player.name == "Bob"
         run_turn(game)
@@ -485,14 +496,14 @@ class TestRunTurn:
 
     def test_run_turn_multiple_turns_turn_number(self) -> None:
         """Running 5 turns should yield turn_number == 6."""
-        game = _make_game()
+        game = _stocked_game()
         for _ in range(5):
             run_turn(game)
         assert game.turn_number == 6
 
     def test_run_turn_multiple_turns_active_player(self) -> None:
         """After an odd number of run_turn calls, active player should be player 1."""
-        game = _make_game()
+        game = _stocked_game()
         for _ in range(3):
             run_turn(game)
         assert game.active_player_index == 1  # 0 → 1 → 0 → 1

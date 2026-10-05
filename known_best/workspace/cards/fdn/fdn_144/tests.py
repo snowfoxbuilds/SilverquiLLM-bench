@@ -13,7 +13,7 @@ from cards.fdn.fdn_144.card_impl import MischievousPup
 from engine.card import Creature
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import Keyword, ManaCost, ManaType, Phase, Zone
 from test_utils import cast_spell, create_game, set_board_state

@@ -133,7 +133,7 @@ a planeswalker's loyalty abilities.
 ## Intents (the choice channel)
 
 ```python
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.decisions import Decision, GameRef
 ```
 
@@ -157,15 +157,12 @@ Preference helpers:
 - `prefer(player, *decisions)` — set the player's Baseline Intent to prefer
   `decisions`, in order.
 - `object_preference(game, card)` — a preference for `card` in its current zone.
-- `payment_preference(game, source)` — preferences that activate `source`'s mana
-  ability while paying a cost, whether the engine asks for the permanent or for
-  one of its abilities. Use it as `prefer(player, *payment_preference(game, source))`.
 
 ## Canonical test shape
 
 ```python
 from test_utils import create_game, put_on_battlefield, set_board_state, cast_spell, resolve_stack
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.decisions import Decision, GameRef, DecisionKind
 from cards.fdn.fdn_215.card_impl import Bushwhack
 

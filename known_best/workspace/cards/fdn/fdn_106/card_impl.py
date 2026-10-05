@@ -72,7 +72,6 @@ class LootExuberantExplorer(Creature):
             return True
 
         def _effect(game: Any, controller: Any) -> None:
-            import random
             from engine.game import create_token, move_to_zone
             ctrl = controller
             if ctrl is None:
@@ -97,7 +96,7 @@ class LootExuberantExplorer(Creature):
                 game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=chosen, controller=ctrl))
                 if hasattr(chosen, 'register_triggers'):
                     chosen.register_triggers(game)
-            random.shuffle(rest)
+            rest[:] = game.shuffle(rest)
             for card in rest:
                 library.add(card, position='bottom')
         return [ActivatedAbility(cost=_cost, effect=_effect, description='{4}{G}{G}, {T}: Look at top six, put creature onto battlefield.', printed=LootExuberantExplorerAbility2)]

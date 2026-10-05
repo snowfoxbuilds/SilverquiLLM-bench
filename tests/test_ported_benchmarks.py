@@ -71,7 +71,10 @@ def test_smoke_oracle_is_the_known_best_workspace() -> None:
     """With identical grading inputs, `test_known_best_workspace.py` already shows
     smoke's oracle passes both regression dimensions (CI check 1)."""
     smoke = REPO / "benchmarks/smoke"
-    for item in ("engine", "cards", "conftest.py", "pytest.ini", "test_utils.py"):
+    for item in (
+        "engine", "cards", "conftest.py", "pytest.ini", "test_utils.py",
+        "test_interface.py", "test_interface.md", "test_test_interface.py",
+    ):
         _assert_same_tree(KNOWN_BEST / "workspace" / item, smoke / "data/test_oracle_workspace" / item)
     audited = KNOWN_BEST / "data/tests/audited"
     _assert_same_tree(audited / "engine", smoke / "data/tests/audited/engine")

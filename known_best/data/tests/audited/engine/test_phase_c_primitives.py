@@ -35,7 +35,7 @@ from engine.events import (
     LosesLifeTriggeredEvent,
 )
 from engine.game import add_counter, create_token, gain_life, lose_life, remove_counter
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.queries import is_priority_query
 from engine.replacement_effects import ReplacementEffect
 from engine.stack import priority_loop

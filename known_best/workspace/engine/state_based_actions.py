@@ -396,4 +396,9 @@ def resolve_state_based_actions(game: GameState) -> bool:
         if not sba_this_round and not triggers_queued:
             break
 
+    if any(player.has_lost for player in game.players):
+        # A player who lost leaves the game at once, which ends it (CR 104.2a).
+        from engine.game import _check_game_over
+
+        _check_game_over(game)
     return any_performed

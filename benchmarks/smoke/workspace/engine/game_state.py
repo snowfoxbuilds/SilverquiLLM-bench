@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+import random
 from dataclasses import dataclass
 
 from typing import Any
@@ -172,6 +173,26 @@ class GameState:
     def non_active_player(self) -> Player:
         """Return the non-active player (2-player assumption for v1)."""
         return self.players[1 - self.active_player_index]
+
+    # ------------------------------------------------------------------
+    # Chance
+    # ------------------------------------------------------------------
+    # Every random event goes through these three hooks, so a test can decide
+    # its result (the Test Interface replaces them on the game it plays).
+
+    def shuffle(self, cards: list[Any]) -> list[Any]:
+        """``cards`` in a random order; a library is given and returned top first."""
+        order = list(cards)
+        random.shuffle(order)
+        return order
+
+    def choose_at_random(self, options: list[Any], n: int) -> list[Any]:
+        """``n`` of ``options`` chosen at random."""
+        return random.sample(list(options), n)
+
+    def flip_coin(self) -> bool:
+        """Flip a coin; ``True`` is heads."""
+        return random.random() < 0.5
 
     # ------------------------------------------------------------------
     # Zone accessors

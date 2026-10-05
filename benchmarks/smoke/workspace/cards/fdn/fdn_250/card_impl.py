@@ -1,7 +1,6 @@
 """Card implementation for Burnished Hart."""
 
 from __future__ import annotations
-import random
 from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
@@ -84,7 +83,7 @@ class BurnishedHart(ArtifactCreature):
                 bf = game.get_battlefield(controller)
                 bf.add(basic)
             if len(library) > 0:
-                library.shuffle()
+                library.shuffle(game)
 
         return [ActivatedAbility(
             cost=_cost,

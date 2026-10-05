@@ -77,8 +77,7 @@ class SpinnerOfSouls(Creature):
                 revealed.append(card)
             if found_creature is not None:
                 hand.add(found_creature)
-            import random
-            random.shuffle(revealed)
+            revealed[:] = game.shuffle(revealed)
             for card in revealed:
                 library.add(card, position='bottom')
         controller = getattr(self, 'controller', None) or game.active_player

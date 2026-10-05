@@ -47,7 +47,6 @@ class VivienReid(Planeswalker):
 
         def _plus1(game: Any) -> None:
             """Look at top 4 cards, may reveal a creature or land to hand."""
-            import random
 
             controller = pw.controller
             if controller is None:
@@ -90,7 +89,7 @@ class VivienReid(Planeswalker):
             remaining = [c for c in top_cards if library.contains(c)]
             for c in remaining:
                 library.remove(c)
-            random.shuffle(remaining)
+            remaining[:] = game.shuffle(remaining)
             for c in remaining:
                 library.add(c, position="bottom")
 

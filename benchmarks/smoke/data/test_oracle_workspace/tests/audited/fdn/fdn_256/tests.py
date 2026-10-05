@@ -13,7 +13,7 @@ from engine.basic_lands import Forest
 from engine.card import Artifact, Creature
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, DecisionKind, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from engine.zones import move_to_zone

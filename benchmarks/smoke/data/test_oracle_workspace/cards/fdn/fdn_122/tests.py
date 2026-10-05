@@ -16,7 +16,7 @@ from cards.fdn.fdn_122.card_impl import KykarZephyrAwakener
 from engine.card import Creature, Instant
 from engine.decisions import Decision, GameRef, UnmatchedQueryError
 from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.protection import get_colors
 from engine.types import Color, Keyword, ManaCost, Phase, Zone
 from test_utils import create_game, set_board_state, start_step

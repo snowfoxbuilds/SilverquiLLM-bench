@@ -10,7 +10,7 @@ from __future__ import annotations
 from cards.fdn.fdn_177.card_impl import MacabreWaltz
 from engine.card import Creature, Instant
 from engine.decisions import GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import ManaCost, ManaType
 from test_utils import cast_spell, set_board_state
 from test_utils import scenario_game as create_game

@@ -35,7 +35,9 @@ Tests answer those queries with **Intents** (see `test_utils.md`).
    refactor, or delete anything inside `engine/`. Prefer generic, reusable
    extensions over card-specific hacks. Existing cards and engine behavior must
    keep working, including public names such as `engine.card.CardImpl`,
-   `engine.game` and the Player Query machinery.
+   `engine.game` and the Player Query machinery, and the engine surface
+   `test_interface.md` names. `test_interface.py` and `test_interface.md`
+   are fixed: do not change them.
 
 3. **Life changes go through `gain_life` / `lose_life`** — A card
    implementation changes a player's life **only** by calling
@@ -97,7 +99,7 @@ Standard imports inside per-card tests:
 from cards.fdn.fdn_<N>.card_impl import <ClassName>
 from engine.card import Creature, Instant                  # or whichever base
 from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.decisions import Decision, GameRef, DecisionKind
 from test_utils import create_game, set_board_state, put_on_battlefield, cast_spell
 ```

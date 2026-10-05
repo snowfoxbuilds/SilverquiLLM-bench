@@ -22,7 +22,7 @@ from __future__ import annotations
 import pytest
 from engine.card import CardImpl, Creature
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer
+from test_utils import DeterministicPlayer
 from engine.stack import StackObject
 from engine.triggers import TriggerManager, TriggerRegistration
 from engine.types import Zone

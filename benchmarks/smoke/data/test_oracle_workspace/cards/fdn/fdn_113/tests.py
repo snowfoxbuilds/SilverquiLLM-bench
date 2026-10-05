@@ -13,7 +13,7 @@ from cards.fdn.fdn_113.card_impl import SylvanScavenging
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
 from engine.events import EndStepTriggeredEvent
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.protection import get_colors
 from engine.stack import priority_loop
 from engine.types import Color, Phase

@@ -12,7 +12,7 @@ from __future__ import annotations
 from cards.fdn.fdn_69.card_impl import SeekersFolly
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import ManaCost, ManaType, Phase, Zone
 from test_utils import cast_spell, create_game, set_board_state
 

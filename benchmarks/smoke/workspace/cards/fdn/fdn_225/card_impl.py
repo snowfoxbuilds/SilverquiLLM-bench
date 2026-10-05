@@ -68,4 +68,4 @@ class GrowFromTheAshes(Sorcery):
                 move_to_zone(game, chosen, Zone.LIBRARY, Zone.BATTLEFIELD)
 
         # Shuffle library
-        library.shuffle()
+        library.shuffle(game)

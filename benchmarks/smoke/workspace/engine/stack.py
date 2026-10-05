@@ -98,6 +98,8 @@ class StackObject:
             is not that spell — "counter target spell" effects and
             ``Zone.STACK`` target enumeration select spell occurrences by this
             flag, never by inspecting the shared source card.
+        printed: For an activated or loyalty ability, the predefined class of
+            the printed ability it comes from (see ADR-017); ``None`` otherwise.
     """
 
     source: Any
@@ -110,6 +112,7 @@ class StackObject:
     prior_qualifying_casts: int | None = None
     departure_zone: Zone | None = None
     is_spell: bool = False
+    printed: type | None = None
 
 
 # ---------------------------------------------------------------------------

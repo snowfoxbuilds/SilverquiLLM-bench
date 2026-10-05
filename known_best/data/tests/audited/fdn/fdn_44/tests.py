@@ -21,7 +21,7 @@ from cards.fdn.fdn_44.card_impl import KaitoCunningInfiltrator
 from engine.abilities import AbilityError, clear_loyalty_tracking
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import ManaCost, Phase, Supertype, Zone
 from test_utils import (
     activate_loyalty_ability,

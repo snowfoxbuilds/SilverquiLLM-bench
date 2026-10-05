@@ -64,7 +64,7 @@ class SolemnSimulacrum(ArtifactCreature):
             chosen.is_tapped = True
             bf = game.get_battlefield(controller)
             bf.add(chosen)
-            library.shuffle()
+            library.shuffle(game)
 
         def _dies_effect(game: GameState) -> None:
             controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)

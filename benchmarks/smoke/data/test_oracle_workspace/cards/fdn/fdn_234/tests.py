@@ -21,7 +21,7 @@ from cards.fdn.fdn_234.card_impl import VivienReid
 from engine.abilities import AbilityError, clear_loyalty_tracking
 from engine.card import Artifact, Creature, Enchantment
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import CardType, Keyword, ManaCost, Phase, Supertype, Zone
 from test_utils import (
     activate_loyalty_ability,

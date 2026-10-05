@@ -82,7 +82,7 @@ class GrimTutor(Sorcery):
             hand.add(target_card)
 
         # Shuffle library
-        library.shuffle()
+        library.shuffle(game)
 
         # Lose 3 life
         from engine.game import lose_life

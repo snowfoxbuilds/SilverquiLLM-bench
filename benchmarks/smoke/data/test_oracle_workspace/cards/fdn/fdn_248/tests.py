@@ -28,7 +28,7 @@ from cards.fdn.fdn_86.card_impl import FieryAnnihilation
 from engine.card import Creature, Equipment, Instant
 from engine.casting import cast_spell as engine_cast_spell, cast_spell_free
 from engine.decisions import Decision, DecisionKind, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.protection import ProtectionAbility
 from engine.stack import resolve_top_of_stack
 from engine.types import (

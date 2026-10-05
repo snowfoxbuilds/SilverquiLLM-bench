@@ -76,4 +76,4 @@ class Micromancer(Creature):
         library.remove(chosen)
         controller.zones[Zone.HAND].add(chosen)
         # Shuffle library
-        library.shuffle()
+        library.shuffle(game)

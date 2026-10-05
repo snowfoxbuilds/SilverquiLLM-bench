@@ -11,7 +11,7 @@ from __future__ import annotations
 from cards.fdn.spg_77.card_impl import Embercleave
 from engine.card import Creature, Equipment
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import Keyword, ManaCost, Supertype, Zone
 from test_utils import create_game, set_board_state
 

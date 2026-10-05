@@ -78,7 +78,7 @@ class SolemnSimulacrum(ArtifactCreature):
             chosen.is_tapped = True
             bf = game.get_battlefield(controller)
             bf.add(chosen)
-            library.shuffle()
+            library.shuffle(game)
 
         def _dies_effect(game: GameState, controller: Any) -> None:
             # The fire-time controller: as the source last existed if it died

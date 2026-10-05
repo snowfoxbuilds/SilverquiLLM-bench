@@ -206,11 +206,13 @@ def run_turn(game: GameState) -> None:
     no step's turn-based actions are repeated and a completed step is never
     reopened.
 
+    A game that ends during the turn ends the turn with it.
+
     Parameters:
         game: The game state to advance through one complete turn.
     """
     start_turn = game.turn_number
-    while game.turn_number == start_turn:
+    while game.turn_number == start_turn and not game.is_game_over:
         advance(game)
 
 
@@ -226,7 +228,9 @@ def advance(game: GameState, *, all_pass: bool = False, forced: bool = False) ->
       in succession, the top object resolves or, on an empty stack, the
       window closes and the step is complete — in cleanup, another cleanup
       step follows.
-    * A completed step moves the game to the next one.
+    * A completed step moves the game to the next one — past the declare
+      blockers and combat damage steps when nothing attacks (CR 508.8).
+    * Once the game is over, nothing happens.
 
     ``all_pass`` is the priority policy of every player passing without
     being asked; it is not a separate path through the lifecycle.
@@ -234,12 +238,19 @@ def advance(game: GameState, *, all_pass: bool = False, forced: bool = False) ->
     declarations, and its draw takes a card from a nonempty library with no
     first-turn exception. Live play never sets it.
     """
+    if game.is_game_over:
+        return
     if game.step_state is StepState.PENDING:
         _enter_step(game, forced)
     elif game.step_state is StepState.WINDOW:
         _play_priority(game, all_pass)
     else:
         game.advance_phase()
+        if game.step is Step.DECLARE_BLOCKERS and not game.combat_state.attackers:
+            # CR 508.8: with no attackers, the declare blockers and combat
+            # damage steps are skipped.
+            game.advance_phase()
+            game.advance_phase()
 
 
 def start_step(game: GameState) -> None:

@@ -13,7 +13,7 @@ from cards.fdn.fdn_104.card_impl import ElvishRegrower
 from engine.card import Creature, Instant, Land
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from test_utils import (

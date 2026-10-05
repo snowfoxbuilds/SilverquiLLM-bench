@@ -20,7 +20,7 @@ from engine.card import Creature
 from engine.events import EntersBattlefieldTriggeredEvent
 from engine.game import create_token
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer
+from test_utils import DeterministicPlayer
 from engine.triggers import TriggerRegistration
 from engine.types import CardType, Zone
 from engine.zones import move_to_zone

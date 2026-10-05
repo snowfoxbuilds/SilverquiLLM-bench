@@ -57,9 +57,13 @@ class ZoneContainer:
                 return
         raise ValueError(f"{obj!r} not in zone")
 
-    def shuffle(self) -> None:
-        """Randomly shuffle the contents of this zone (used for libraries)."""
-        random.shuffle(self._objects)
+    def shuffle(self, game: Any = None) -> None:
+        """Shuffle this zone (a library) through ``game``'s chance hook, which
+        sees it top first; with no game, by Python's ``random``."""
+        if game is None:
+            random.shuffle(self._objects)
+            return
+        self._objects[:] = reversed(game.shuffle(list(reversed(self._objects))))
 
     # ------------------------------------------------------------------
     # Queries

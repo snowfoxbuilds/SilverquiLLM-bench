@@ -32,7 +32,7 @@ from engine.decisions import (
 )
 from engine.game import create_game as engine_create_game
 from engine.game import sacrifice
-from engine.intent_player import DeterministicPlayer, Intent
+from test_utils import DeterministicPlayer, Intent
 from engine.priority import grant_graveyard_cast, priority_query, take_priority
 from engine.queries import Answer, PlayerQuery, ask, is_priority_query, priority_pattern
 from engine.rollback import take_snapshot

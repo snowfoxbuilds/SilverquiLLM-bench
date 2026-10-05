@@ -34,7 +34,7 @@ from engine.abilities import (
 from engine.card import Land, Planeswalker
 from engine.game_state import GameState
 from engine.mana import ManaPool
-from engine.intent_player import DeterministicPlayer
+from test_utils import DeterministicPlayer
 from engine.stack import StackObject
 from engine.types import ManaType, Phase, Step
 

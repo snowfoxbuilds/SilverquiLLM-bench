@@ -15,7 +15,7 @@ from __future__ import annotations
 from cards.fdn.fdn_45.card_impl import KioraTheRisingTide
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.protection import get_colors
 from engine.types import Color, Supertype
 from test_utils import scenario_game as create_game

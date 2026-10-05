@@ -15,7 +15,7 @@ from cards.fdn.fdn_75.card_impl import VampireSoulcaller
 from engine.card import Creature, Instant
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Zone
 from test_utils import (

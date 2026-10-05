@@ -10,7 +10,7 @@ from engine.card import Creature, Equipment, Instant
 from engine.casting import cast_spell as engine_cast_spell
 from engine.casting import cast_spell_free
 from engine.decisions import Decision, DecisionKind, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.protection import ProtectionAbility
 from engine.stack import move_spell_off_stack, resolve_top_of_stack
 from engine.types import (

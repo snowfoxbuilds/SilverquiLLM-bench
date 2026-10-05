@@ -14,7 +14,7 @@ from __future__ import annotations
 from cards.fdn.fdn_184.card_impl import RuneScarredDemon
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import ManaType, Zone
 from test_utils import cast_spell, create_game, set_board_state
 

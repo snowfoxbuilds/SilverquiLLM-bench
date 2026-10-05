@@ -15,7 +15,7 @@ from engine.abilities import AbilityError
 from engine.card import Creature, Planeswalker
 from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer, SubLayer
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import Keyword, ManaCost, ManaType, Zone
 from engine.zones import move_to_zone
 from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state

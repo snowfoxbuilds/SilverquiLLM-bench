@@ -131,7 +131,7 @@ class Bushwhack(Sorcery):
             if chosen is not None and library.contains(chosen):
                 library.remove(chosen)
                 controller.zones[Zone.HAND].add(chosen)
-        library.shuffle()
+        library.shuffle(game)
 
     def _resolve_fight(self, game: "GameState") -> None:
         """The two targeted creatures each deal damage equal to their power."""

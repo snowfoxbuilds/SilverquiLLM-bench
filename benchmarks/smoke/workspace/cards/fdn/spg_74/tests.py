@@ -15,7 +15,7 @@ from cards.fdn.spg_74.card_impl import Condemn
 from engine.card import Creature
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import ManaCost, ManaType, Phase, TargetRequirement, Zone
 from test_utils import TestSetupError as _CastError

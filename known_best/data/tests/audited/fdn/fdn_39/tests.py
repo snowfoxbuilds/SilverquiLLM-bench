@@ -13,7 +13,7 @@ from __future__ import annotations
 from cards.fdn.fdn_39.card_impl import GrapplingKraken
 from engine.card import Creature, Land
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import ManaCost, Phase, Zone
 from engine.zones import move_to_zone
 from test_utils import create_game, enter_permanent, resolve_stack, set_board_state

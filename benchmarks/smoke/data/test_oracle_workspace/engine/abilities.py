@@ -334,6 +334,7 @@ def _activate_regular_ability(
             targets=chosen_targets,
             is_mana_ability=False,
             activation_context=context,
+            printed=ability.printed,
         )
         if ability.targeting is not None:
             effect = ability.effect
@@ -438,6 +439,7 @@ def _activate_loyalty_ability(
         targets=chosen_targets,
         is_mana_ability=False,
         activation_context=context,
+        printed=ability.printed,
     )
     if ability.targeting is not None:
         effect = ability.effect

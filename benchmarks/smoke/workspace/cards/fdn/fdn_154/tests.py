@@ -16,7 +16,7 @@ from engine.card import Creature, Enchantment
 from engine.decisions import Decision, GameRef
 from engine.events import BeginningOfUpkeepTriggeredEvent
 from engine.game import add_counter
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.stack import priority_loop
 from engine.types import ManaCost, Phase, Zone
 from test_utils import create_game, set_board_state

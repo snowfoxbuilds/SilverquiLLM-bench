@@ -40,7 +40,7 @@ from engine.combat import (
 from engine.decisions import Decision, GameRef
 from engine.events import AttacksTriggeredEvent, DealsDamageTriggeredEvent
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer, Intent
+from test_utils import DeterministicPlayer, Intent
 from engine.triggers import TriggerRegistration
 from engine.types import Keyword, Zone
 

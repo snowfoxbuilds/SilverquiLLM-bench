@@ -15,7 +15,7 @@ from cards.fdn.fdn_153.card_impl import EssenceScatter
 from engine.card import Creature, Instant
 from engine.casting import CastingError, cast_spell_free
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.stack import (
     StackObject,
     copy_spell,

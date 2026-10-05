@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from engine.card import Creature, Instant
 from engine.decisions import Decision, DecisionKind, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import CardType, ManaCost, Zone
 from test_utils import (
     cast_spell,

@@ -6,8 +6,8 @@ the engine's native interaction surface for the *choice* layer. There is no V1
 option satisfies is a test-authoring failure (``IntentError`` family), and a
 malformed/unanswerable query is an engine failure (``ProtocolError`` family).
 
-The concrete intent-based ``DeterministicPlayer`` lives in
-``engine/intent_player.py`` (and is re-exported from ``engine/__init__.py``).
+The players that answer from a test's scripts belong to the tests: the Test
+Interface's ``ScriptedPlayer`` and ``test_utils``' ``DeterministicPlayer``.
 """
 
 from __future__ import annotations

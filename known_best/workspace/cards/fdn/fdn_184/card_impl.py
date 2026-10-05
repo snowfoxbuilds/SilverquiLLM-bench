@@ -56,7 +56,7 @@ class RuneScarredDemon(Creature):
             return
         library.remove(chosen)
         controller.zones[Zone.HAND].add(chosen)
-        library.shuffle()
+        library.shuffle(game)
 
     # The tutor is handled by the self-ETB trigger below. Phase F flipped the
     # engine order so an own-enters trigger registers before the ETB event

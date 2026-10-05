@@ -18,7 +18,7 @@ from cards.fdn.fdn_48.card_impl import Refute
 from engine.card import Creature, Instant
 from engine.casting import CastingError, CastMode, cast_spell_free
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.stack import StackObject, move_spell_off_stack, resolve_top_of_stack
 from engine.types import ManaCost, Zone
 from test_utils import scenario_game as create_game

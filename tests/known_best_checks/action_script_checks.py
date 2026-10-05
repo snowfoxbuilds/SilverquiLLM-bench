@@ -21,7 +21,7 @@ from engine.decisions import (
     InvalidPlayerChoiceError,
     PostconditionError,
 )
-from engine.intent_player import Intent, ScriptEntryError
+from test_utils import Intent, ScriptEntryError
 from engine.game_state import StepState
 from engine import attempts
 from engine.priority import take_priority
@@ -1007,6 +1007,8 @@ def _plain_game(p0):
     game.phase, game.step = Phase.PRECOMBAT_MAIN, None
     for player in game.players:
         player.game = game
+        # The empty decks' opening draws would end the game (CR 704.5b).
+        player.drawn_from_empty_library = False
     set_board_state(game, 0, battlefield=[_artifact("Bad"), _artifact("Good")])
     return game
 
@@ -2230,7 +2232,9 @@ def test_scripted_play_draws_from_an_empty_library_on_a_later_turn():
     script(game, 0, pass_priority(), pass_priority())
     script(game, 1, pass_priority())
     run_scripts(game)
+    # Drawing from the empty library loses the game (CR 704.5b), which ends it.
     assert game.step == Step.DRAW and game.players[0].drawn_from_empty_library
+    assert game.is_game_over and game.winner is game.players[1]
 
 
 def test_a_forced_exceptional_cleanup_is_not_reopened_by_the_next_driver():
