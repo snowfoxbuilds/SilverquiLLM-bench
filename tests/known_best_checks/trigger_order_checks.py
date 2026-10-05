@@ -22,10 +22,18 @@ class Bear(Creature):
         super().__init__(mana_cost=ManaCost(), base_power=2, base_toughness=2, **kwargs)
 
 
-def _upkeep_trigger(source, controller) -> TriggerRegistration:
+class BearAbility1:
+    """When an upkeep begins, nothing happens."""
+
+
+class BearAbility2:
+    """When an upkeep begins, nothing else happens."""
+
+
+def _upkeep_trigger(source, controller, printed=None) -> TriggerRegistration:
     return TriggerRegistration(
         event_type=BeginningOfUpkeepTriggeredEvent, condition=None,
-        effect=lambda game: None, source=source, controller=controller,
+        effect=lambda game: None, source=source, controller=controller, printed=printed,
     )
 
 
@@ -104,3 +112,18 @@ def test_two_triggers_of_one_source_are_told_apart_by_index():
     (ordering,) = _orderings(p0)
     assert sorted(dict(o.attrs)["index"] for o in ordering.options) == [0, 1]
     assert len(game.stack.objects()) == 2
+
+
+def test_a_trigger_is_offered_and_chosen_by_its_printed_ability_class():
+    bear = Bear()
+    game = _game([bear])
+    p0 = game.players[0]
+    game.trigger_manager.register(_upkeep_trigger(bear, p0, BearAbility1))
+    game.trigger_manager.register(_upkeep_trigger(bear, p0, BearAbility2))
+    p0.set_baseline(Intent(pattern=GameRef(), preferences=(Decision.ability(printed=BearAbility2),)))
+    _fire(game)
+    (ordering,) = _orderings(p0)
+    assert [dict(o.attrs)["printed"] for o in ordering.options] == [BearAbility1, BearAbility2]
+    # Top first: the second ability went on first, so the first is on top.
+    assert [o.printed for o in game.stack.objects()] == [BearAbility1, BearAbility2]
+

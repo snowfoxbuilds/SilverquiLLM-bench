@@ -304,7 +304,7 @@ def _chosen_order(game: GameState, group: list[tuple[TriggerRegistration, Any]])
     by_decision: dict[Any, tuple[TriggerRegistration, Any]] = {}
     ordinals: dict[int, int] = {}
     for item in group:
-        source, printed = item[0].source, item[0].printed
+        source, printed = item[0].source, getattr(item[0], "printed", None)
         ordinal = ordinals[id(source)] = ordinals.get(id(source), -1) + 1
         instance = game.refs.instance_id(source, _zone_of(game, source))
         attrs: dict[str, Any] = {"source": instance, "index": ordinal}
