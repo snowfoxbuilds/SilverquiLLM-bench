@@ -14,6 +14,7 @@ absorb how the questions come.
 
 from card_impl import UldarosTheorix, UldarosTheorixAbility2
 from cards.fdn.fdn_9.card_impl import DazzlingAngel, DazzlingAngelAbility2
+from cards.fdn.fdn_79.card_impl import Boltwave
 from cards.fdn.fdn_98.card_impl import AmbushWolf, AmbushWolfAbility2
 from cards.fdn.fdn_116.card_impl import AnthemOfChampions
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride, AjaniCallerOfThePrideAbility2
@@ -27,10 +28,30 @@ from cards.fdn.fdn_196.card_impl import FirebrandArcher, FirebrandArcherAbility1
 from cards.fdn.fdn_212.card_impl import BiteDown
 from cards.fdn.fdn_250.card_impl import BurnishedHart
 from cards.fdn.fdn_272.card_impl import Plains
-from cards.fdn.fdn_79.card_impl import Boltwave
-from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game, player, token
+from test_interface import (
+    ManaType,
+    Phase,
+    Side,
+    Step,
+    Zone,
+    branch,
+    card,
+    create_game,
+    player,
+    token,
+)
 
-from silverquillm.table import Table, appears, ceases, copied, life, moves, off_stack, on_stack, taps
+from silverquillm.table import (
+    Table,
+    appears,
+    ceases,
+    copied,
+    life,
+    moves,
+    off_stack,
+    on_stack,
+    taps,
+)
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 TRIGGER = UldarosTheorixAbility2

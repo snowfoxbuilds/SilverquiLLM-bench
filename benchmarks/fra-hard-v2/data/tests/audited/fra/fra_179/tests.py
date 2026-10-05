@@ -9,8 +9,8 @@ its copied abilities do.
 from card_impl import HallOfEchoes, HallOfEchoesAbility1, HallOfEchoesAbility2
 from cards.fdn.fdn_16.card_impl import HelpfulHunter
 from cards.fdn.fdn_76.card_impl import VengefulBloodwitch, VengefulBloodwitchAbility1
-from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride, AjaniCallerOfThePrideAbility1
 from cards.fdn.fdn_77.card_impl import ZulAshurLichLord
+from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride, AjaniCallerOfThePrideAbility1
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_195.card_impl import FanaticalFirebrand
@@ -18,7 +18,11 @@ from cards.fdn.fdn_249.card_impl import AdventuringGear
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_276.card_impl import Swamp
 from cards.fdn.fdn_278.card_impl import Mountain
-from cards.fra.fra_49.card_impl import AncestralCraving, BloodlineRecollector, BloodlineRecollectorAbility1
+from cards.fra.fra_49.card_impl import (
+    AncestralCraving,
+    BloodlineRecollector,
+    BloodlineRecollectorAbility1,
+)
 from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game, player
 
 from silverquillm.table import Table, becomes, copied, life, moves, off_stack, on_stack, taps

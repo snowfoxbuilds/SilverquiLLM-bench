@@ -18,9 +18,32 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_274.card_impl import Island
 from cards.fdn.fdn_276.card_impl import Swamp
 from cards.fdn.fdn_278.card_impl import Mountain
-from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game, player, spell_copy, token
+from test_interface import (
+    ManaType,
+    Phase,
+    Side,
+    Step,
+    Zone,
+    branch,
+    card,
+    create_game,
+    player,
+    spell_copy,
+    token,
+)
 
-from silverquillm.table import Table, appears, ceases, copied, gains_control, life, moves, off_stack, on_stack, taps
+from silverquillm.table import (
+    Table,
+    appears,
+    ceases,
+    copied,
+    gains_control,
+    life,
+    moves,
+    off_stack,
+    on_stack,
+    taps,
+)
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 PREPARE = BloodlineRecollectorAbility1

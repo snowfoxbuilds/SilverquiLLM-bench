@@ -18,7 +18,17 @@ from cards.fdn.fdn_278.card_impl import Mountain
 from cards.fra.tokens import JaceTokenAbility1, JaceTokenAbility2
 from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game, token
 
-from silverquillm.table import Table, appears, ceases, gains_control, life, moves, off_stack, on_stack, taps
+from silverquillm.table import (
+    Table,
+    appears,
+    ceases,
+    gains_control,
+    life,
+    moves,
+    off_stack,
+    on_stack,
+    taps,
+)
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 DRAIN = SanctumLurkerAbility3

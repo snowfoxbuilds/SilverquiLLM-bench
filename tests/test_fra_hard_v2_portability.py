@@ -323,5 +323,5 @@ def test_hall_suite_accepts_a_copied_halls_removed_ability_rejected() -> None:
     ("fra_64", LOYALTY_EVERY_TIME),
 ])
 def test_suite_catches_an_illegal_action_taking_effect(card: str, suffix: str) -> None:
-    passed, failed, output = run_suite(card, suffix)
+    _passed, failed, output = run_suite(card, suffix)
     assert failed, output[-4000:]

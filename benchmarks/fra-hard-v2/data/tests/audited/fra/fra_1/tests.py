@@ -5,8 +5,12 @@ Emrakul by what the players can see: where Emrakul is, which lands are tapped,
 what the granted mana pays for, which spells the rules allow, and combat.
 """
 
-from card_impl import EmrakulTheExigentDoom, EmrakulTheExigentDoomAbility1, EmrakulTheExigentDoomAbility4
-from card_impl import EmrakulTheExigentDoomAbility5
+from card_impl import (
+    EmrakulTheExigentDoom,
+    EmrakulTheExigentDoomAbility1,
+    EmrakulTheExigentDoomAbility4,
+    EmrakulTheExigentDoomAbility5,
+)
 from cards.fdn.fdn_130.card_impl import QuickDrawKatana
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_153.card_impl import EssenceScatter
