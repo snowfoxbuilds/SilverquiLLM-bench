@@ -2312,3 +2312,197 @@ def test_an_opponent_owned_priority_retry_starts_from_the_restored_boundary():
     opponent.on_attempt_rejected = mutate_then_hear
     take_priority(game, game.players[0])
     assert _on_stack(game, spell) and opponent.life == 20
+
+
+# ---------------------------------------------------------------------------
+# Review round 8: one step lifecycle, advanced by every driver
+# ---------------------------------------------------------------------------
+
+
+def _fresh_game():
+    """A game at the start of turn 1: untap step, its actions pending."""
+    game = create_game()
+    for player in game.players:
+        player.drawn_from_empty_library = False
+    return game
+
+
+def test_a_script_starts_after_the_untap_step():
+    game = _fresh_game()
+    rock = _artifact("Rock")
+    set_board_state(game, 0, battlefield=[rock], hand=[Bolt()])
+    rock.is_tapped = True
+    script(game, 0, act(Bolt))
+    run_scripts(game)
+    assert (game.phase, game.step) == (Phase.BEGINNING, Step.UPKEEP)
+    assert not rock.is_tapped and len(game.stack) == 1
+
+
+def _completed_cleanup():
+    game = _game()
+    set_board_state(game, 0, hand=[Bolt()])
+    advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
+    return game
+
+
+def test_run_turn_does_not_reopen_a_completed_cleanup():
+    from engine.turn import run_turn
+
+    game = _completed_cleanup()
+    script(game, 0, act(Bolt))
+    assert run_turn(game) is True
+    assert game.turn_number == 2 and game.stack.is_empty()
+    assert len(game.players[0].pending_entries) == 1
+
+
+def test_run_scripts_does_not_reopen_a_completed_cleanup():
+    game = _completed_cleanup()
+    script(game, 1, act(Bolt))
+    set_board_state(game, 1, hand=[Bolt()])
+    run_scripts(game)
+    assert (game.turn_number, game.step) == (2, Step.UPKEEP) and len(game.stack) == 1
+
+
+def _library(game, seat, cards):
+    library = game.get_library(game.players[seat])
+    for _ in range(cards):
+        library.add(_artifact("Card"))
+    return library
+
+
+def test_scripted_play_skips_the_starting_players_first_draw():
+    game = _fresh_game()
+    library = _library(game, 0, 2)
+    script(game, 0, pass_priority(), pass_priority())
+    script(game, 1, pass_priority())
+    run_scripts(game)
+    assert game.step == Step.DRAW and len(library.get_all()) == 2
+
+
+def test_scripted_play_draws_from_an_empty_library_on_a_later_turn():
+    game = _fresh_game()
+    game.turn_number = 2
+    advance_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    script(game, 0, pass_priority(), pass_priority())
+    script(game, 1, pass_priority())
+    run_scripts(game)
+    assert game.step == Step.DRAW and game.players[0].drawn_from_empty_library
+
+
+def test_a_forced_exceptional_cleanup_is_not_reopened_by_the_next_driver():
+    from engine.turn import run_turn
+
+    game, made = _paused_in_cleanup(lambda g: _doomed(g, g.players[0]))
+    resolve_stack(game)  # finishes the cleanup with every player passing
+    set_board_state(game, 0, hand=[Bolt()])
+    script(game, 0, act(Bolt))
+    assert run_turn(game) is True
+    assert game.turn_number == 2 and len(game.players[0].pending_entries) == 1
+
+
+def test_run_turn_resumes_an_abandoned_cleanup_window():
+    from engine.turn import run_turn
+
+    game, made = _abandoned_above_paused_cleanup()
+    assert run_turn(game) is False and game.step == Step.CLEANUP
+    game.players[0].end_intent("choose")
+    game.players[0].set_baseline(Intent(pattern=GameRef()))
+    game.players[1].set_baseline(Intent(pattern=GameRef()))
+    assert run_turn(game) is True and game.turn_number == 2
+    (second,) = made
+    assert not game.get_battlefield(game.players[0]).contains(second)
+
+
+# ---- every driver hands off to every other ------------------------------------
+
+
+def _counting(game, event_type):
+    """Count the times *event_type* fires, without triggering anything."""
+    from engine.triggers import TriggerRegistration
+
+    seen = []
+    holder = _artifact("Counter")
+    set_board_state(game, 0, battlefield=[*game.get_battlefield(game.players[0]).get_all(), holder])
+    game.trigger_manager.register(TriggerRegistration(
+        event_type=event_type, condition=lambda g, e: seen.append(1) and False,
+        effect=lambda g: None, source=holder, controller=game.players[0],
+    ))
+    return seen
+
+
+def _start_end_step(game):
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+
+
+def _start_mid_end_round(game):
+    advance_game_to_phase(game, Phase.ENDING, Step.END)
+    script(game, 0, pass_priority())
+    run_scripts(game)
+
+
+def _start_completed_cleanup(game):
+    advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
+
+
+_STARTS = {
+    "end step": (_start_end_step, ([pass_priority], [pass_priority, pass_priority])),
+    "mid end round": (_start_mid_end_round, ([], [pass_priority, pass_priority])),
+    "completed cleanup": (_start_completed_cleanup, ([], [pass_priority])),
+}
+
+
+def _finish_by_run_turn(game, entries):
+    from engine.turn import run_turn
+
+    for player in game.players:
+        player.set_baseline(Intent(pattern=GameRef()))
+    assert run_turn(game) is True
+    return False
+
+
+def _finish_by_scripts(game, entries):
+    p0, p1 = entries
+    script(game, 0, *(make() for make in p0))
+    script(game, 1, *(make() for make in p1))
+    run_scripts(game)
+    return True
+
+
+def _finish_by_phase_helper(game, entries):
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+    return True
+
+
+@pytest.mark.parametrize("finish", [_finish_by_run_turn, _finish_by_scripts, _finish_by_phase_helper],
+                         ids=["run_turn", "run_scripts", "phase helper"])
+@pytest.mark.parametrize("start", list(_STARTS))
+def test_each_driver_finishes_the_turn_another_began_exactly_once(start, finish):
+    from engine.events import BeginningOfUpkeepTriggeredEvent, EndStepTriggeredEvent
+
+    game = _game()
+    for player in game.players:
+        player.drawn_from_empty_library = False
+    bear = Creature(name="Bear", mana_cost=ManaCost(), base_power=2, base_toughness=3)
+    set_board_state(game, 0, battlefield=[bear])
+    bear.damage_marked = 1
+    end_steps = _counting(game, EndStepTriggeredEvent)
+    upkeeps = _counting(game, BeginningOfUpkeepTriggeredEvent)
+    begin, entries = _STARTS[start]
+    begin(game)
+    reaches_upkeep = finish(game, entries)
+    assert game.turn_number == 2 and bear.damage_marked == 0
+    assert len(end_steps) == 1
+    assert len(upkeeps) == (1 if reaches_upkeep else 0)
+    if reaches_upkeep:
+        assert (game.phase, game.step) == (Phase.BEGINNING, Step.UPKEEP)
+    assert all(not p.pending_entries for p in game.players)
+
+
+def test_setup_only_phase_advance_performs_no_step_actions_for_later_drivers():
+    game = _fresh_game()
+    game.turn_number = 2
+    library = _library(game, 0, 2)
+    advance_to_phase(game, Phase.BEGINNING, Step.DRAW)
+    script(game, 0, pass_priority())
+    run_scripts(game)
+    assert game.step == Step.DRAW and len(library.get_all()) == 2

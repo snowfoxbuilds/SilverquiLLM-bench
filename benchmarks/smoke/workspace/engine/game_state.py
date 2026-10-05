@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import enum
+
 from typing import Any
 
 from engine.combat import CombatState
@@ -35,6 +37,25 @@ _TURN_SEQUENCE: list[tuple[Phase, Step | None]] = [
     (Phase.ENDING, Step.CLEANUP),
 ]
 
+
+
+class StepState(enum.Enum):
+    """Where the current step is in its lifecycle.
+
+    Every driver — the turn loop, ``run_scripts`` and the test helpers —
+    advances this one engine-owned state through
+    :func:`engine.turn.enter_step`, :func:`engine.turn.close_window` and
+    :meth:`GameState.advance_phase`, so none keeps lifecycle bookkeeping of
+    its own.
+    """
+
+    # The step's turn-based actions are still to come — in cleanup, its next
+    # cleanup iteration (rule 514.3a).
+    PENDING = "pending"
+    # The step's priority window is open.
+    WINDOW = "window"
+    # The step is complete; the game moves to the next one.
+    DONE = "done"
 
 class GameState:
     """Central game-state object tracking all mutable game information.
@@ -72,11 +93,9 @@ class GameState:
         # Passes in a row in the current priority round, for a driver that
         # stops mid-round and resumes later; see start_priority_round.
         self.priority_passes: int = 0
-        # A driver has performed the current step's turn-based actions, so
-        # run_turn carries on its priority window instead of repeating them —
-        # after any driver stopped there, at an abandoned resolution or a dry
-        # script. advance_phase clears it.
-        self.step_actions_done: bool = False
+        # Where the current step is in its lifecycle; every driver advances
+        # this one state through engine.turn (see StepState).
+        self.step_state: StepState = StepState.PENDING
         self.phase: Phase = Phase.BEGINNING
         self.step: Step | None = Step.UNTAP
         self.turn_number: int = 1
@@ -151,7 +170,7 @@ class GameState:
         active player swaps (2-player assumption).  Mana pools are
         emptied on every transition.
         """
-        self.step_actions_done = False
+        self.step_state = StepState.PENDING
         current = (self.phase, self.step)
         idx = _TURN_SEQUENCE.index(current)
 

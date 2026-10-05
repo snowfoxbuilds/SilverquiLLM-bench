@@ -35,7 +35,7 @@ from engine.combat import (
 )
 from engine.decisions import Decision, GameRef
 from engine.game import create_game as _engine_create_game
-from engine.game_state import _TURN_SEQUENCE, GameState
+from engine.game_state import _TURN_SEQUENCE, GameState, StepState
 from engine.intent_player import (  # noqa: F401 — script entries are re-exported for tests
     DeterministicPlayer,
     Intent,
@@ -47,6 +47,7 @@ from engine.intent_player import (  # noqa: F401 — script entries are re-expor
     pass_priority,
 )
 from engine.stack import resolve_top_of_stack
+from engine.turn import _NO_PRIORITY_STEPS, close_window, enter_step
 from engine.types import ManaType, Phase, Step, Zone
 
 
@@ -396,12 +397,20 @@ def run_scripts(game: GameState, *, max_priority: int = 1000) -> None:
     while True:
         if not _scripts_remain(game):
             return
+        if game.step_state is not StepState.WINDOW:
+            # Pending turn-based actions happen once; a step with no window
+            # (untap, a completed cleanup) is moved past before any entry.
+            if game.step_state is StepState.PENDING:
+                enter_step(game)
+            else:
+                game.advance_phase()
+            continue
         if game.priority_passes >= 2:
             if not game.stack.is_empty():
                 if not resolve_top_of_stack(game):
                     return
-            elif not _cleanup_grants_priority(game):
-                _enter_next_priority_step(game)
+            else:
+                close_window(game)
             continue
         if grants == max_priority:
             raise TestSetupError(f"scripts not consumed within {max_priority} grants of priority")
@@ -414,32 +423,6 @@ def run_scripts(game: GameState, *, max_priority: int = 1000) -> None:
 
 def _scripts_remain(game: GameState) -> bool:
     return any(isinstance(p, DeterministicPlayer) and p.pending_entries for p in game.players)
-
-
-def _enter_next_priority_step(game: GameState) -> None:
-    """Advance to the next step where players receive priority: one outside
-    the untap and cleanup steps, or a cleanup step whose actions grant
-    priority (rule 514.3a)."""
-    from engine.turn import _NO_PRIORITY_STEPS
-
-    while True:
-        _enter_next_step(game, finish_cleanup_step=False)
-        if game.step == Step.CLEANUP:
-            if _cleanup_grants_priority(game):
-                return
-        elif (game.phase, game.step) not in _NO_PRIORITY_STEPS:
-            return
-
-
-def _cleanup_grants_priority(game: GameState) -> bool:
-    """In a cleanup step, perform another cleanup iteration; return whether it
-    grants priority, in a fresh round. Outside cleanup, ``False``."""
-    from engine.turn import cleanup_iteration
-
-    if game.step != Step.CLEANUP or not cleanup_iteration(game):
-        return False
-    game.start_priority_round()
-    return True
 
 
 def _deterministic(game: GameState, player: Any) -> DeterministicPlayer:
@@ -542,7 +525,11 @@ def _finish_forced(game: GameState) -> bool:
     stops play there."""
     if not _drain_stack(game):
         return False
-    return game.step != Step.CLEANUP or _finish_cleanup(game)
+    if game.step != Step.CLEANUP:
+        return True
+    if game.step_state is StepState.WINDOW:
+        close_window(game)
+    return _finish_cleanup(game)
 
 
 def _drain_stack(game: GameState) -> bool:
@@ -655,6 +642,9 @@ def advance_to_phase(
     for _ in range(max_advances):
         game.advance_phase()
         if (game.phase, game.step) == target:
+            # Setup only: the step counts as entered without its actions.
+            no_window = target in _NO_PRIORITY_STEPS
+            game.step_state = StepState.DONE if no_window else StepState.WINDOW
             return
 
     raise TestSetupError(
@@ -803,52 +793,25 @@ def advance_game_to_phase(game, phase, step=None):
     Consumes no script entries: the stack is resolved with every player
     passing before each transition.
     """
-    for _ in range(len(_TURN_SEQUENCE) + 1):
-        if (game.phase, game.step) == (phase, step):
+    first = True
+    for _ in range(3 * len(_TURN_SEQUENCE) + 3):
+        # Arriving at the target performs its turn-based actions first.
+        at_target = (game.phase, game.step) == (phase, step)
+        if at_target and (first or game.step_state is not StepState.PENDING):
             return
-        # An abandoned resolution stops play where it is, as in any driver;
-        # a later call resumes from there.
-        if not _finish_forced(game) or not _enter_next_step(game):
-            return
+        first = False
+        if game.step_state is StepState.PENDING:
+            enter_step(game, forced=True)
+        elif game.step_state is StepState.WINDOW:
+            # An abandoned resolution stops play where it is, as in any
+            # driver; a later call resumes from there.
+            if not _finish_forced(game):
+                return
+            if game.step_state is StepState.WINDOW:
+                close_window(game)
+        else:
+            game.advance_phase()
     raise TestSetupError("phase boundary was not reached")
-
-
-def _enter_next_step(game: GameState, *, finish_cleanup_step: bool = True) -> bool:
-    """Advance to the next step and perform its turn-based actions; a cleanup
-    step is finished with every player passing unless ``finish_cleanup_step``
-    is false, leaving its iterations to the caller. Returns ``False`` if
-    finishing the cleanup stopped at an abandoned resolution."""
-    from engine.combat import combat_damage_step, end_combat_step
-    from engine.events import (
-        BeginningOfCombatTriggeredEvent,
-        BeginningOfUpkeepTriggeredEvent,
-        EndOfTurnTriggeredEvent,
-        EndStepTriggeredEvent,
-    )
-    from engine.game import draw_card
-    from engine.turn import untap_step
-
-    game.advance_phase()
-    game.step_actions_done = True
-    if game.step == Step.UNTAP:
-        untap_step(game)
-    elif game.step == Step.UPKEEP:
-        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
-    elif game.step == Step.DRAW:
-        if game.get_library(game.active_player).get_all():
-            draw_card(game, game.active_player)
-    elif game.step == Step.BEGIN_COMBAT:
-        game.trigger_manager.fire_event(game, BeginningOfCombatTriggeredEvent())
-    elif game.step == Step.COMBAT_DAMAGE:
-        combat_damage_step(game)
-    elif game.step == Step.END_COMBAT:
-        end_combat_step(game)
-    elif game.step == Step.END:
-        game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=game.active_player))
-        game.trigger_manager.fire_event(game, EndOfTurnTriggeredEvent())
-    elif game.step == Step.CLEANUP and finish_cleanup_step:
-        return _finish_cleanup(game)
-    return True
 
 
 def behavioral_game():
@@ -960,11 +923,12 @@ def finish_cleanup(game):
 
 
 def _finish_cleanup(game: GameState) -> bool:
-    from engine.turn import cleanup_iteration
-
-    while cleanup_iteration(game):
-        if not _drain_stack(game):
-            return False
+    while game.step_state is StepState.PENDING:
+        enter_step(game, forced=True)
+        if game.step_state is StepState.WINDOW:
+            if not _drain_stack(game):
+                return False
+            close_window(game)
     return True
 
 
