@@ -55,6 +55,8 @@ def test_layout():
         "workspace/conftest.py",
         "workspace/pytest.ini",
         "workspace/test_utils.py",
+        "workspace/test_interface.py",
+        "workspace/test_interface.md",
         "data/tests/audited/fdn",
         "data/tests/audited/engine",
     ):
@@ -70,6 +72,7 @@ def test_layout():
     assert PATHS.engine_tests == KNOWN_BEST / "data/tests/audited/engine"
     assert PATHS.engine_support == KNOWN_BEST / "workspace"
     assert PATHS.test_utils == KNOWN_BEST / "workspace/test_utils.py"
+    assert PATHS.test_interface == KNOWN_BEST / "workspace/test_interface.py"
     assert len(FDN_CARDS) > 0
 
 
@@ -77,7 +80,7 @@ def test_layout():
 def test_fdn_audited_tests_pass_on_known_best(overlay, card_id):
     result = _grade_audited_card(
         card_id, PATHS.audited_fdn / card_id / "tests.py", overlay, 120,
-        test_utils=PATHS.test_utils, card_set="fdn",
+        test_utils=PATHS.test_utils, card_set="fdn", test_interface=PATHS.test_interface,
     )
     failing = _failing(result.test_nodes)
     assert result.tests_total > 0, result.errors
@@ -90,6 +93,7 @@ def test_audited_engine_tests_pass_on_known_best(overlay):
     result = _eval_engine(
         overlay / "engine", PATHS.engine_tests, timeout=240,
         support_dir=PATHS.engine_support, test_utils=PATHS.test_utils,
+        test_interface=PATHS.test_interface,
     )
     failing = _failing(result.test_nodes)
     assert result.tests_total > 0, result.errors

@@ -1,8 +1,11 @@
-"""The agent-visible test_utils.py is the one grading uses (AUDITED-TEST-SUITE.md).
+"""The agent-visible grading support is the one grading uses.
 
-In hob-medium, smoke and fra-hard the staged copy is byte-identical to the grading copy,
-so an agent's own tests can use every helper, and the same activation
-semantics, that the grading suites rely on.
+A benchmark with a Test Interface (smoke onward) stages the very
+``test_interface.py`` grading pairs with the candidate's engine
+(TEST-INTERFACE.md); one without (hob-medium, fra-hard v1) stages a
+``test_utils.py`` byte-identical to the grading copy (AUDITED-TEST-SUITE.md), so
+an agent's own tests can use every helper, and the same activation semantics,
+that the grading suites rely on.
 """
 
 import subprocess
@@ -19,10 +22,19 @@ BENCHMARKS = {"hob-medium": "hob", "smoke": "fdn", "fra-hard": "fra"}
 
 
 @pytest.mark.parametrize("benchmark,target_set", BENCHMARKS.items())
-def test_staged_test_utils_is_the_grading_copy(benchmark, target_set):
+def test_staged_grading_support_is_the_grading_copy(benchmark, target_set):
     root = REPO_ROOT / "benchmarks" / benchmark
-    grading = resolve_eval_paths(root, target_set).test_utils
-    assert (root / "workspace" / "test_utils.py").read_bytes() == grading.read_bytes()
+    paths = resolve_eval_paths(root, target_set)
+    if paths.test_interface is not None:
+        staged, grading = root / "workspace" / "test_interface.py", paths.test_interface
+    else:
+        staged, grading = root / "workspace" / "test_utils.py", paths.test_utils
+    assert staged.read_bytes() == grading.read_bytes()
+
+
+def test_smoke_grades_with_its_test_interface():
+    assert resolve_eval_paths(REPO_ROOT / "benchmarks" / "smoke", "fdn").test_interface is not None
+    assert resolve_eval_paths(REPO_ROOT / "benchmarks" / "hob-medium", "hob").test_interface is None
 
 
 @pytest.mark.parametrize("placement", ["activated", "mana"])
