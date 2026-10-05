@@ -134,13 +134,21 @@ def _do_combat_step(game: GameState, step: Step) -> None:
 
 
 def _do_cleanup_step(game: GameState) -> bool:
-    """Perform the cleanup step (MTG rule §514): cleanup iterations
+    """Play the cleanup step (MTG rule §514) to completion through the step
+    lifecycle (:func:`advance_step`): cleanup iterations
     (:func:`cleanup_iteration`) until one grants no priority, each that does
-    followed by a priority window in a fresh round (rule 514.3a). Returns
-    ``False`` if a window stopped at an abandoned resolution."""
-    while cleanup_iteration(game):
-        game.start_priority_round()
-        if not priority_loop(game):
+    followed by a priority window in a fresh round (rule 514.3a).
+
+    It carries on from the game's step state: an open cleanup window is
+    played out before the next iteration, and a completed cleanup is left
+    alone. Called outside cleanup, it moves the game into a fresh cleanup
+    step first. Returns ``False`` if a window stopped at an abandoned
+    resolution; calling it again resumes from there."""
+    if (game.phase, game.step) != (Phase.ENDING, Step.CLEANUP):
+        game.phase, game.step = Phase.ENDING, Step.CLEANUP
+        game.step_state = StepState.PENDING
+    while game.step_state is not StepState.DONE:
+        if not advance_step(game):
             return False
     return True
 

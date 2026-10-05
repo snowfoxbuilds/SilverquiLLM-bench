@@ -525,10 +525,8 @@ def _finish_forced(game: GameState) -> bool:
     stops play there."""
     if not _drain_stack(game):
         return False
-    if game.step != Step.CLEANUP:
+    if not _in_cleanup(game):
         return True
-    if game.step_state is StepState.WINDOW:
-        close_window(game)
     return _finish_cleanup(game)
 
 
@@ -791,12 +789,17 @@ def advance_game_to_phase(game, phase, step=None):
     """Drive canonical phase transitions and their public boundary events.
 
     Consumes no script entries: the stack is resolved with every player
-    passing before each transition.
+    passing before each transition. Arriving at the target step performs its
+    turn-based actions and returns with its window open — except cleanup,
+    which as the target is completed (:func:`finish_cleanup`), including
+    when a later call resumes a cleanup an abandoned resolution stopped.
     """
     first = True
     for _ in range(3 * len(_TURN_SEQUENCE) + 3):
-        # Arriving at the target performs its turn-based actions first.
         at_target = (game.phase, game.step) == (phase, step)
+        if at_target and _in_cleanup(game):
+            _finish_cleanup(game)
+            return
         if at_target and (first or game.step_state is not StepState.PENDING):
             return
         first = False
@@ -916,18 +919,35 @@ def cast_card(game, player, card, resolve=True):
 
 
 def finish_cleanup(game):
-    """Perform cleanup iterations until one grants no priority, resolving what
-    each puts on the stack with every player passing; consumes no entries.
-    Stops where a resolution is abandoned."""
+    """Complete the current cleanup step with every player passing; consumes
+    no entries.
+
+    It carries on from the step state: an open window's stack is resolved
+    and the window closed, then cleanup iterations follow until one grants
+    no priority (CR 514.3a); a completed cleanup is left alone. Stops where
+    a resolution is abandoned, and a later call resumes from there.
+
+    Raises:
+        TestSetupError: Outside a cleanup step.
+    """
+    if not _in_cleanup(game):
+        raise TestSetupError("finish_cleanup is called in a cleanup step")
     _finish_cleanup(game)
 
 
+def _in_cleanup(game: GameState) -> bool:
+    return (game.phase, game.step) == (Phase.ENDING, Step.CLEANUP)
+
+
 def _finish_cleanup(game: GameState) -> bool:
-    while game.step_state is StepState.PENDING:
-        enter_step(game, forced=True)
-        if game.step_state is StepState.WINDOW:
-            if not _drain_stack(game):
-                return False
+    """Advance the current cleanup step to DONE with every player passing;
+    return ``False`` if a resolution was abandoned, which stops play there."""
+    while game.step_state is not StepState.DONE:
+        if game.step_state is StepState.PENDING:
+            enter_step(game, forced=True)
+        elif not _drain_stack(game):
+            return False
+        else:
             close_window(game)
     return True
 

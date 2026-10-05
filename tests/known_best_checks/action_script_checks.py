@@ -22,6 +22,7 @@ from engine.decisions import (
     PostconditionError,
 )
 from engine.intent_player import Intent, ScriptEntryError
+from engine.game_state import StepState
 from engine import attempts
 from engine.priority import take_priority
 from engine.stack import StackObject, copy_spell, priority_loop, resolve_top_of_stack
@@ -38,6 +39,7 @@ from test_utils import (
     advance_to_phase,
     cast_card,
     create_game,
+    finish_cleanup,
     pass_priority,
     resolve_stack,
     run_scripts,
@@ -2506,3 +2508,226 @@ def test_setup_only_phase_advance_performs_no_step_actions_for_later_drivers():
     script(game, 0, pass_priority())
     run_scripts(game)
     assert game.step == Step.DRAW and len(library.get_all()) == 2
+
+
+# ---------------------------------------------------------------------------
+# Review round 9: every cleanup entrypoint advances the one step lifecycle
+# ---------------------------------------------------------------------------
+
+
+def _scripted_both(game):
+    """Pending entries for both players, which forced helpers must keep."""
+    script(game, 0, pass_priority())
+    script(game, 1, pass_priority())
+
+
+def _pending_counts(game):
+    return [len(p.pending_entries) for p in game.players]
+
+
+def _cleanup_pending_with_doomed():
+    """In cleanup with its first iteration still to come; the doomed creature
+    dies once its until-end-of-turn boost expires, gaining player 0 a life."""
+    game = _game()
+    _watch_deaths(game, lambda g: gain_life(g, g.players[0], 1))
+    _doomed(game, game.players[0])
+    game.phase, game.step = Phase.ENDING, Step.CLEANUP
+    game.step_state = StepState.PENDING
+    return game
+
+
+def _done_cleanup():
+    game = _cleanup_pending_with_doomed()
+    finish_cleanup(game)
+    assert game.step_state is StepState.DONE
+    return game
+
+
+def test_finish_cleanup_resumes_an_open_window():
+    game, made = _paused_in_cleanup(lambda g: _doomed(g, g.players[0]))
+    _scripted_both(game)
+    finish_cleanup(game)
+    (second,) = made
+    assert game.stack.is_empty() and game.step_state is StepState.DONE
+    assert not game.get_battlefield(game.players[0]).contains(second)
+    assert game.step == Step.CLEANUP and _pending_counts(game) == [1, 1]
+
+
+def test_finish_cleanup_from_a_pending_cleanup_runs_its_iterations():
+    game = _cleanup_pending_with_doomed()
+    _scripted_both(game)
+    finish_cleanup(game)
+    assert game.step_state is StepState.DONE and _life(game) == 21
+    assert _pending_counts(game) == [1, 1]
+
+
+def test_finish_cleanup_leaves_a_completed_cleanup_alone():
+    game = _done_cleanup()
+    game.players[0].cards_drawn_this_turn = 3
+    finish_cleanup(game)
+    assert game.players[0].cards_drawn_this_turn == 3 and _life(game) == 21
+
+
+def test_finish_cleanup_outside_cleanup_is_a_setup_error():
+    with pytest.raises(test_utils.TestSetupError):
+        finish_cleanup(_game())
+
+
+def test_finish_cleanup_stops_at_an_abandoned_resolution_and_resumes():
+    game, made = _abandoned_above_paused_cleanup()
+    game.players[0].cards_drawn_this_turn = 3
+    finish_cleanup(game)
+    assert len(game.stack) == 2 and made == [] and game.step_state is StepState.WINDOW
+    assert game.players[0].cards_drawn_this_turn == 3
+    game.players[0].end_intent("choose")
+    finish_cleanup(game)
+    (second,) = made
+    assert game.step_state is StepState.DONE and game.stack.is_empty()
+    assert not game.get_battlefield(game.players[0]).contains(second)
+
+
+@pytest.mark.parametrize("target", ["cleanup", "next upkeep"])
+def test_the_phase_helper_completes_cleanup_as_target_or_on_the_way(target):
+    game = _game()
+    _watch_deaths(game, lambda g: gain_life(g, g.players[0], 1))
+    _doomed(game, game.players[0])
+    _scripted_both(game)
+    turn = game.turn_number
+    if target == "cleanup":
+        advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
+        assert (game.turn_number, game.step) == (turn, Step.CLEANUP)
+        assert game.step_state is StepState.DONE
+    else:
+        advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+        assert (game.turn_number, game.step) == (turn + 1, Step.UPKEEP)
+    assert game.stack.is_empty() and _life(game) == 21
+    assert _pending_counts(game) == [1, 1]
+
+
+def test_the_phase_helper_resumes_an_abandoned_target_cleanup():
+    game, made = _abandoned_above_paused_cleanup()
+    turn = game.turn_number
+    advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
+    assert len(game.stack) == 2 and made == [] and game.step_state is StepState.WINDOW
+    game.players[0].end_intent("choose")
+    advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
+    (second,) = made
+    assert (game.turn_number, game.step_state) == (turn, StepState.DONE)
+    assert not game.get_battlefield(game.players[0]).contains(second)
+
+
+def test_native_cleanup_does_not_repeat_mechanics_in_an_open_window():
+    from engine.turn import _do_cleanup_step
+
+    game, made = _abandoned_above_paused_cleanup()
+    game.players[0].cards_drawn_this_turn = 3
+    assert _do_cleanup_step(game) is False
+    assert game.players[0].cards_drawn_this_turn == 3
+    assert len(game.stack) == 2 and made == []
+
+
+def test_native_cleanup_resumes_its_window_then_completes():
+    from engine.turn import _do_cleanup_step
+
+    game, made = _abandoned_above_paused_cleanup()
+    assert _do_cleanup_step(game) is False
+    game.players[0].end_intent("choose")
+    for player in game.players:
+        player.set_baseline(Intent(pattern=GameRef()))
+    assert _do_cleanup_step(game) is True
+    (second,) = made
+    assert game.step_state is StepState.DONE and game.stack.is_empty()
+    assert not game.get_battlefield(game.players[0]).contains(second)
+
+
+def test_native_cleanup_leaves_a_completed_cleanup_alone():
+    from engine.turn import _do_cleanup_step
+
+    game = _done_cleanup()
+    game.players[0].cards_drawn_this_turn = 3
+    assert _do_cleanup_step(game) is True
+    assert game.players[0].cards_drawn_this_turn == 3
+
+
+# ---- cleanup entry and resumption, across drivers -----------------------------
+
+
+def _cleanup_start(state):
+    """A cleanup step at ``state``: pending, an open window with a nonempty
+    stack, an open window with an empty one, or complete."""
+    if state == "window":
+        return _paused_in_cleanup(lambda g: _doomed(g, g.players[0]))
+    if state == "empty window":
+        game = _cleanup_pending_with_doomed()
+        game.step_state = StepState.WINDOW
+        return game, None
+    if state == "done":
+        return _done_cleanup(), None
+    return _cleanup_pending_with_doomed(), None
+
+
+def _drive_finish_cleanup(game):
+    finish_cleanup(game)
+
+
+def _drive_resolve_stack(game):
+    resolve_stack(game)
+
+
+def _drive_target_cleanup(game):
+    advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
+
+
+def _drive_next_upkeep(game):
+    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
+
+
+def _drive_native(game):
+    from engine.turn import _do_cleanup_step
+
+    for player in game.players:
+        player.set_baseline(Intent(pattern=GameRef()))
+    assert _do_cleanup_step(game) is True
+
+
+def _drive_run_turn(game):
+    from engine.turn import run_turn
+
+    for player in game.players:
+        player.set_baseline(Intent(pattern=GameRef()))
+    assert run_turn(game) is True
+
+
+# name -> (driver, whether it leaves cleanup, whether it is a forced helper)
+_CLEANUP_DRIVERS = {
+    "finish_cleanup": (_drive_finish_cleanup, False, True),
+    "resolve_stack": (_drive_resolve_stack, False, True),
+    "phase helper to cleanup": (_drive_target_cleanup, False, True),
+    "phase helper past cleanup": (_drive_next_upkeep, True, True),
+    "native cleanup": (_drive_native, False, False),
+    "run_turn": (_drive_run_turn, True, False),
+}
+
+
+@pytest.mark.parametrize("driver", list(_CLEANUP_DRIVERS))
+@pytest.mark.parametrize("state", ["pending", "window", "empty window", "done"])
+def test_each_driver_completes_cleanup_from_any_stage(state, driver):
+    game, made = _cleanup_start(state)
+    turn = game.turn_number
+    drive, leaves_cleanup, forced = _CLEANUP_DRIVERS[driver]
+    if forced:
+        _scripted_both(game)
+    drive(game)
+    assert game.stack.is_empty()
+    if leaves_cleanup:
+        assert game.turn_number == turn + 1
+    else:
+        assert (game.turn_number, game.step, game.step_state) == (turn, Step.CLEANUP, StepState.DONE)
+    if made is not None:
+        (second,) = made
+        assert not game.get_battlefield(game.players[0]).contains(second)
+    else:
+        # The doomed creature died and its trigger resolved exactly once.
+        assert _life(game) == 21
+    if forced:
+        assert _pending_counts(game) == [1, 1]
