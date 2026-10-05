@@ -9,6 +9,9 @@ answers given during the attempt, and which answer owns a rejection:
 
 * a **priority** action (:func:`engine.priority.take_priority`) starts at the
   beginning of its Priority Query;
+* a combat **declaration** (:mod:`engine.combat`) starts at the beginning of
+  the declaration, and a rejection belongs to the declaring answer, since a
+  declaration is legal or illegal as a whole;
 * a **resolution** (:func:`resolve`, used by
   :func:`engine.stack.resolve_top_of_stack`) keeps every effect that came
   before its first choice, and runs again from there;
@@ -22,7 +25,9 @@ again (CR 733.2): nothing is passed, ended or skipped on a player's behalf.
 The owner of the rejection answers the re-asked query differently — another
 action, another choice, or declining where that is legal — or raises.
 
-A rejection belongs to one answer. A choice the card or engine refuses
+A rejection belongs to one answer that made a decision; an answer to a query
+that offered only one possible answer is ``forced`` and owns one only when no
+answer of the attempt made a decision. A choice the card or engine refuses
 (``InvalidPlayerChoiceError`` raised directly) belongs to the latest answer of
 the attempt; an action the rules forbid as a whole (a casting, activation or
 zone-move error) belongs to the answer that chose the action, the first one.
@@ -50,7 +55,7 @@ from typing import Any, Literal
 
 from engine.decisions import InvalidPlayerChoiceError
 
-AttemptKind = Literal["priority", "resolution", "choice"]
+AttemptKind = Literal["priority", "declaration", "resolution", "choice"]
 
 
 @dataclass(eq=False)
@@ -63,6 +68,9 @@ class AttemptAnswer:
 
     player: Any
     key: Hashable | None = None
+    # The query offered only one possible answer, so no decision was made
+    # and the answer owns a rejection only when no other answer does.
+    forced: bool = False
 
 
 @dataclass(eq=False)
@@ -85,7 +93,7 @@ class AttemptContext:
     # The branch each handler answers this attempt's tries with, per
     # (id(player), handler key); a rejection the handler owns advances it.
     branch: dict[tuple[int, Hashable], int] = field(default_factory=dict)
-    # The Priority Query and its latest answer, for a priority attempt, and
+    # The Priority Query or declaration and its latest answer, and
     # whether the chosen action took effect, with what the engine returned.
     query: Any = None
     answer: Any = None
@@ -103,26 +111,31 @@ class AttemptContext:
         self.boundary = None
         self.answers = []
 
-    def before_query(self, player: Any) -> AttemptAnswer:
+    def before_query(self, player: Any, *, forced: bool = False) -> AttemptAnswer:
         """Note that ``player`` is being asked; the first query of a try is the
         rejection boundary of a resolution or priority attempt."""
         if self.boundary is None:
             from engine.rollback import take_snapshot
 
             self.boundary = take_snapshot(self.game, *self.roots)
-        record = AttemptAnswer(player)
+        record = AttemptAnswer(player, forced=forced)
         self.answers.append(record)
         return record
 
     def owner(self, error: InvalidPlayerChoiceError) -> AttemptAnswer | None:
-        if not self.answers:
+        # A forced answer owns a rejection only when no answer made a decision.
+        decisions = [a for a in self.answers if not a.forced] or self.answers
+        if not decisions:
             return None
-        return self.answers[0] if _rejects_whole_action(error) else self.answers[-1]
+        # A combat declaration is legal or illegal as a whole (rules 508.1, 509.1).
+        whole = self.kind == "declaration" or _rejects_whole_action(error)
+        return decisions[0] if whole else decisions[-1]
 
     @property
     def action_answer(self) -> AttemptAnswer | None:
-        """The answer that chose a priority action, in the current try."""
-        return self.answers[0] if self.kind == "priority" and self.answers else None
+        """The answer that chose a priority action or a declaration, in the
+        current try."""
+        return self.answers[0] if self.kind in ("priority", "declaration") and self.answers else None
 
     def reject(self, error: InvalidPlayerChoiceError) -> None:
         """Tell the owning answer's player about a rejection, after the

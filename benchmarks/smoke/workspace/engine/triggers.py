@@ -139,9 +139,8 @@ class TriggerManager:
     * Active player's triggers are pushed first (end up on the bottom
       of the batch).
     * Non-active player's triggers are pushed second (end up on top).
-    * Within the same player, triggers are pushed in registration order
-      (controller would normally choose; for now we use registration
-      order as a deterministic default).
+    * A player with two or more of them chooses the order they are put on
+      the stack in, through an ordering Player Query (rule 603.3b).
     """
 
     def __init__(self) -> None:
@@ -165,8 +164,8 @@ class TriggerManager:
 
         Matching triggers are pushed in APNAP order:
 
-        1. Active player's matching triggers (in registration order).
-        2. Non-active player's matching triggers (in registration order).
+        1. Active player's matching triggers, in the order they choose.
+        2. Non-active player's matching triggers, in the order they choose.
         """
         matching: list[TriggerRegistration] = []
         for trigger in self._triggers:
@@ -196,7 +195,7 @@ class TriggerManager:
         matched = [(trigger, _fire_controller(trigger)) for trigger in matching]
         active_triggers = [(t, c) for (t, c) in matched if c is active_player]
         non_active_triggers = [(t, c) for (t, c) in matched if c is not active_player]
-        ordered = active_triggers + non_active_triggers
+        ordered = _chosen_order(game, active_triggers) + _chosen_order(game, non_active_triggers)
 
         for trigger, fire_controller in ordered:
             if trigger.targeting is not None:
@@ -283,3 +282,56 @@ class TriggerManager:
     def clear(self) -> None:
         """Remove all registered triggers."""
         self._triggers.clear()
+
+def _chosen_order(game: GameState, group: list[tuple[TriggerRegistration, Any]]) -> list[tuple[TriggerRegistration, Any]]:
+    """*group* — one player's triggered abilities that triggered together — in
+    the order its controller puts them on the stack (rule 603.3b).
+
+    Two or more are an ordering Player Query to their controller: an ABILITY
+    option per triggered ability, naming its printed ability class, its
+    source's instance and its place among that source's abilities in the
+    group, every option to be chosen,
+    and the first chosen is put on the stack first. Registration order is the
+    offered order.
+    """
+    if len(group) < 2:
+        return group
+    from engine.decisions import Decision, GameRef
+    from engine.queries import PlayerQuery, ask
+
+    controller = group[0][1]
+    seat = game.refs.seat_of(controller)
+    by_decision: dict[Any, tuple[TriggerRegistration, Any]] = {}
+    ordinals: dict[int, int] = {}
+    for item in group:
+        source, printed = item[0].source, item[0].printed
+        ordinal = ordinals[id(source)] = ordinals.get(id(source), -1) + 1
+        instance = game.refs.instance_id(source, _zone_of(game, source))
+        attrs: dict[str, Any] = {"source": instance, "index": ordinal}
+        if printed is not None:
+            attrs["printed"] = printed
+        decision = Decision.ability(
+            ref=GameRef(object=frozenset({("instance", instance)}), ability=frozenset({("index", ordinal)})),
+            **attrs,
+        )
+        by_decision[decision] = item
+    query = PlayerQuery(
+        source=(game.refs.player_decision(controller, seat=seat),),
+        prompt="order your triggered abilities: the first chosen is put on the stack first",
+        options=tuple(by_decision),
+        min=len(by_decision),
+        max=len(by_decision),
+    )
+    return [by_decision[d] for d in ask(controller, query).selected]
+
+
+def _zone_of(game: GameState, obj: Any) -> str:
+    """The zone *obj* is in — the stack when it is in no player's zone."""
+    from engine.types import Zone
+
+    for player in game.players:
+        for zone in Zone:
+            if zone in player.zones and player.zones[zone].contains(obj):
+                return zone.value
+    return "stack"
+

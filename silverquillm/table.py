@@ -6,7 +6,9 @@ expected view and its plain-English narration. The test states only what its
 answers change on the board — a card moves, a token appears, a permanent taps,
 a life total changes, the game ends — and the table works out the rest from
 the rules: who is asked next (CR 117), the steps and turns that follow when
-everyone passes, the untap step and each turn's draw from the known library.
+everyone passes, who declares attackers and blockers and whether the declare
+blockers and combat damage steps happen (CR 508.8), the untap step and each
+turn's draw from the known library.
 
 These helpers need no engine. They live with the Audited Tests on the host and
 never enter the Workspace; they import the benchmark's ``test_interface``,
@@ -149,6 +151,12 @@ class Table:
     :meth:`act_illegal` and :meth:`pass_` take ``then``, the changes the
     entry's answers cause before the next action question, and ``note``, what
     the entry checks. :meth:`run` plays the scripts.
+
+    Entering the declare attackers step — and the declare blockers step when
+    something attacks — the next entry answers that step's declaration: an
+    :meth:`act` names the creatures declared (``scoped`` says what each
+    attacks or blocks), and :meth:`pass_` declares none. The step's priority
+    window follows.
     """
 
     def __init__(self, game: Any) -> None:
@@ -167,6 +175,10 @@ class Table:
         self._turn = 1 if start.active == 0 else 2
         self._passes = 0
         self._tokens = 0
+        # The declaration being asked ("attackers" or "blockers"), and whether
+        # anything attacks this combat.
+        self._declaring: str | None = None
+        self._attacking = False
         self._over = False
         self._winner: int | None = None
         self.scripts: list[list[Any]] = [[] for _ in start.players]
@@ -189,6 +201,8 @@ class Table:
         ``test_interface.act`` (``choices``, ``per_query``, ``distinct``,
         ``branches``)."""
         entry = _ti().act(*preferences, **options)
+        if self._declaring:
+            return self._write(seat, entry, then, note, f"declares {self._declaring}: " + _wants(entry))
         return self._write(seat, entry, then, note, "acts: " + _wants(entry))
 
     def act_illegal(self, seat: int, *preferences: Any, then: Iterable[Change] = (), note: str = "", **options: Any) -> Any:
@@ -201,13 +215,15 @@ class Table:
         """``seat`` passes; ``options`` are those of ``test_interface.pass_priority``."""
         entry = _ti().pass_priority(**options)
         choices = entry.branches[0].choices
-        text = "passes" + (f", answering {', '.join(map(_name, choices))}" if choices else "")
+        text = f"declares no {self._declaring}" if self._declaring else "passes"
+        text += f", answering {', '.join(map(_name, choices))}" if choices else ""
         return self._write(seat, entry, then, note, text)
 
     def pass_to(self, step: Any, active: int | None = None) -> None:
-        """Every player passes, on an empty stack, until the game next
-        reaches ``step`` — a ``Step``, or a main ``Phase`` — of ``active``'s
-        turn (of any turn when ``active`` is ``None``)."""
+        """Every player passes, on an empty stack, and declares nothing, until
+        the game next reaches ``step`` — a ``Step``, or a main ``Phase`` — of
+        ``active``'s turn (of any turn when ``active`` is ``None``): at its
+        declaration, for a declaration step."""
         if self._stack:
             raise ScriptError("pass_to needs an empty stack")
         for _ in range(4 * len(_TURN) * len(self._sides)):
@@ -239,7 +255,16 @@ class Table:
         for change in changes:
             self._apply(change)
         self._derived = []
-        if not self._over:
+        if not self._over and self._declaring:
+            if entry.kind is not ti.Kind.ILLEGAL:
+                # The declaration is made — or declines — and the step's
+                # priority window opens with the active player (CR 508.2, 509.2).
+                if self._declaring == "attackers":
+                    self._attacking = entry.kind is ti.Kind.ACT and any(b.preferences for b in entry.branches)
+                self._declaring = None
+                self._asked = self._active
+                self._passes = 0
+        elif not self._over:
             if entry.kind is ti.Kind.ACT:
                 self._passes = 0
             elif entry.kind is ti.Kind.PASS:
@@ -270,9 +295,18 @@ class Table:
                 index = 0
                 self._derived.append(f"player {self._active}'s turn {self._turn} begins")
             self._step = _TURN[index]
-            if self._step == "DECLARE_BLOCKERS":
+            if self._step == "DECLARE_BLOCKERS" and not self._attacking:
                 # Nothing was declared as an attacker (CR 508.8).
                 self._step = "END_COMBAT"
+            if self._step == "END_COMBAT":
+                self._attacking = False
+            if self._step in ("DECLARE_ATTACKERS", "DECLARE_BLOCKERS"):
+                # The declaration is the step's turn-based action, asked of the
+                # active player for attackers and the other for blockers.
+                self._declaring = "attackers" if self._step == "DECLARE_ATTACKERS" else "blockers"
+                self._asked = self._active if self._declaring == "attackers" else 1 - self._active
+                self._derived.append(f"the game moves to {self._step.lower().replace('_', ' ')}")
+                return
             if self._step == "UNTAP":
                 for i, seen in enumerate(self._sides[self._active]["battlefield"]):
                     if seen.tapped:
@@ -395,6 +429,8 @@ def _wants(entry: Any) -> str:
         text = ", ".join(map(_name_preference, b.preferences)) or "nothing"
         if b.choices:
             text += f" (answering {', '.join(map(_name_preference, b.choices))})"
+        for key, values in b.scoped:
+            text += f" ({_name_preference(key)} at {', '.join(map(_name_preference, values))})"
         parts.append(text)
     return " or else ".join(parts)
 

@@ -19,25 +19,21 @@ Functions:
     cast_spell — find card in hand by name, cast it through priority, and resolve.
     advance_to_phase — fast-forward game state to a given phase/step.
     declare_attackers — advance to combat and declare attackers by name.
-    declare_blockers — assign blockers by name mapping.
+    declare_blockers — declare blockers by name mapping.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Any
+from typing import Any, NoReturn
 
 from engine import attempts
 from engine.abilities import AbilityError
 from engine.attempts import AttemptAnswer
 from engine.card import CardImpl
 from engine.casting import CastingError
-from engine.combat import (
-    declare_attackers_step,
-    declare_blockers_step,
-)
 from engine.decisions import (
     AmbiguousIntentError,
     Decision,
@@ -52,7 +48,14 @@ from engine.decisions import (
 )
 from engine.game import create_game as _engine_create_game
 from engine.game_state import _TURN_SEQUENCE, GameState, StepState
-from engine.queries import Answer, PlayerQuery, is_priority_query, priority_pattern
+from engine.queries import (
+    Answer,
+    PlayerQuery,
+    is_action_query,
+    is_declaration_query,
+    is_priority_query,
+    priority_pattern,
+)
 from engine.stack import resolve_top_of_stack
 from engine.turn import advance, start_step
 from engine.types import ManaType, Phase, Step, Zone
@@ -113,7 +116,7 @@ class Intent:
         if self.branches:
             # Like an entry's, a shared ``per_query`` follows each branch's own.
             object.__setattr__(self, "branches", tuple(
-                Branch(b.preferences, b.choices, b.per_query + shared, b.distinct)
+                replace(b, per_query=b.per_query + shared)
                 for b in map(_as_branch, self.branches)
             ))
 
@@ -124,7 +127,8 @@ class Intent:
         return self.branches or (Branch(self.preferences, per_query=self.per_query),)
 
 
-_PASS_PRIORITY = Intent(pattern=priority_pattern())
+# Declines a Priority Query (passing) or a combat declaration (declaring none).
+_DECLINE = Intent(pattern=priority_pattern())
 
 
 class EntryKind(Enum):
@@ -138,11 +142,15 @@ def branch(
     choices: tuple[PlayerDecision | type, ...] | list[PlayerDecision | type] = (),
     per_query: Mapping[Any, Any] | None = None,
     distinct: bool = False,
+    scoped: Mapping[Any, Any] | None = None,
 ) -> Branch:
     """A branch for :func:`act`, :func:`act_illegal` or an ``Intent`` with its
-    own ``choices`` and ``per_query`` preferences, e.g.
+    own ``choices``, ``per_query`` preferences and ``scoped`` answers, e.g.
     ``branch(A, B, per_query={CardType.ARTIFACT: [A], CardType.CREATURE: [B]})``."""
-    return Branch(_decisions(preferences), _decisions(choices), _per_query(per_query), distinct)
+    return Branch(
+        _decisions(preferences), _decisions(choices), _per_query(per_query), distinct,
+        _scoped(scoped),
+    )
 
 
 def _answers_for(plan: Branch, query: PlayerQuery) -> tuple[PlayerDecision, ...]:
@@ -193,6 +201,16 @@ class ScriptEntry:
         return self.kind.value + " | ".join(_describe(b.preferences) for b in self.branches)
 
 
+class ScopedChoiceUnavailable(InvalidPlayerChoiceError):
+    """The player withdraws a branch whose scoped answer is not offered.
+
+    The engine refused nothing — the branch's action is simply not on offer —
+    but withdrawing it the way a rejection is handled rolls the attempt back
+    before anything takes effect, and the re-asked query goes to the entry's
+    next branch, or to the next entry for an :func:`act_illegal` with none.
+    """
+
+
 class ScriptEntryError(PostconditionError):
     """A script entry's action did not go as the entry requires.
 
@@ -221,6 +239,7 @@ def act(
     label: str = "",
     branches: Any = None,
     per_query: Mapping[Any, Any] | None = None,
+    scoped: Mapping[Any, Any] | None = None,
 ) -> ScriptEntry:
     """An action the player must take: it fails the test with
     :class:`ScriptEntryError` (a ``PostconditionError``) if no branch's action
@@ -238,9 +257,15 @@ def act(
     A preference may be a Player Decision or a predefined class: a card or
     face class stands for ``Decision.obj(printed=cls)``, an ability or mode
     class for ``Decision.ability(printed=cls)`` or ``Decision.mode(printed=cls)``.
+
+    For a combat declaration the preferences are the creatures declared, all
+    of them; ``scoped`` maps a creature to what it attacks or blocks (a
+    decision, a predefined class, or a list of them), e.g.
+    ``act(wall, scoped={wall: bear})`` blocks the bear with the wall. Like
+    ``choices``, ``scoped`` is appended to every branch.
     """
     return ScriptEntry(
-        EntryKind.ACT, _branches(preferences, choices, branches, per_query), goal, label
+        EntryKind.ACT, _branches(preferences, choices, branches, per_query, scoped), goal, label
     )
 
 
@@ -250,29 +275,38 @@ def act_illegal(
     label: str = "",
     branches: Any = None,
     per_query: Mapping[Any, Any] | None = None,
+    scoped: Mapping[Any, Any] | None = None,
 ) -> ScriptEntry:
     """An action the rules forbid: it passes if, for every branch in turn, no
     offered option satisfies the branch or the engine rejects it, and fails the
     test with :class:`ScriptEntryError` if any branch takes effect. Either way
-    the entry is consumed, and the same Priority Query goes to the next entry.
-    ``branches`` and ``per_query`` work as for :func:`act`."""
+    the entry is consumed, and the same Priority Query or declaration goes to
+    the next entry. ``branches``, ``per_query`` and ``scoped`` work as for
+    :func:`act`."""
     return ScriptEntry(
-        EntryKind.ILLEGAL, _branches(preferences, choices, branches, per_query), None, label
+        EntryKind.ILLEGAL, _branches(preferences, choices, branches, per_query, scoped), None, label
     )
 
 
-def _branches(preferences: Any, choices: Any, branches: Any, per_query: Any) -> tuple[Branch, ...]:
-    shared, shared_per_query = _decisions(choices), _per_query(per_query)
+def _branches(
+    preferences: Any, choices: Any, branches: Any, per_query: Any, scoped: Any
+) -> tuple[Branch, ...]:
+    shared, shared_per_query, shared_scoped = (
+        _decisions(choices), _per_query(per_query), _scoped(scoped)
+    )
     if branches is None:
-        return (Branch(_decisions(preferences), shared, shared_per_query),)
+        return (Branch(_decisions(preferences), shared, shared_per_query, scoped=shared_scoped),)
     if preferences:
         raise TypeError("a script entry takes preferences or branches, not both")
     if not branches:
         raise TypeError("a script entry needs at least one branch")
     return tuple(
-        Branch(b.preferences, b.choices + shared, b.per_query + shared_per_query, b.distinct)
+        replace(
+            b, choices=b.choices + shared, per_query=b.per_query + shared_per_query,
+            scoped=b.scoped + shared_scoped,
+        )
         if isinstance(b, Branch)
-        else Branch(_decisions(b), shared, shared_per_query)
+        else Branch(_decisions(b), shared, shared_per_query, scoped=shared_scoped)
         for b in branches
     )
 
@@ -294,6 +328,16 @@ def _decisions(items: Any) -> tuple[PlayerDecision, ...]:
                 f"a script preference is a Player Decision or a predefined class, not {item!r}"
             )
     return tuple(decisions)
+
+
+def _scoped(
+    scoped: Mapping[Any, Any] | None,
+) -> tuple[tuple[tuple[PlayerDecision, ...], tuple[PlayerDecision, ...]], ...]:
+    pairs = []
+    for key, value in (scoped or {}).items():
+        values = value if isinstance(value, (list, tuple)) else (value,)
+        pairs.append((_decisions((key,)), _decisions(values)))
+    return tuple(pairs)
 
 
 def _printed_decisions(cls: type) -> tuple[PlayerDecision, ...]:
@@ -386,6 +430,8 @@ class _EntryAttempt:
     branch: int = 0
     error: InvalidPlayerChoiceError | None = None
     context: Any = None
+    # A combat declaration's preferences are a set, not alternatives.
+    declaration: bool = False
 
     @property
     def current(self) -> Branch:
@@ -563,18 +609,26 @@ class DeterministicPlayer(ScriptedPlayer):
     def _answer(self, query: PlayerQuery, record: QueryRecord) -> Answer:
         claimed = self._card_intents_for(query)
         noted = attempts.current_answer(self)
-        if is_priority_query(query):
+        if is_action_query(query):
             attempt = self._attempt
             if attempt is not None and attempt.context is attempts.current():
-                # The same Priority Query, asked again after a rejection.
+                # The same Priority Query or declaration, asked again after a
+                # rejection.
                 _note(noted, _ENTRY_KEY)
-                answer = self._choose_action(attempt, query)
+                choose = self._choose_declaration if attempt.declaration else self._choose_action
+                answer = choose(attempt, query)
                 if answer is not None:
                     return answer
             self._attempt = None
             if self._script and not claimed:
                 _note(noted, _ENTRY_KEY)
                 return self._answer_from_script(query)
+        elif self._attempt is not None and (
+            pair := _scoped_pair(self._attempt.current, query)
+        ) is not None:
+            # The entry names this source explicitly, ahead of any card intent.
+            _note(noted, _ENTRY_KEY)
+            return self._answer_scoped(self._attempt, pair, query)
         elif self._attempt is not None and not claimed:
             current = self._attempt.current
             override = current.matched(query)  # evaluated once per decision
@@ -591,6 +645,14 @@ class DeterministicPlayer(ScriptedPlayer):
                 answer, _ = _select(list(enumerate(preferences)), query)
                 _note(noted, _ENTRY_KEY)
                 return answer
+
+        if not claimed and self._baseline is None and 0 < len(query.options) <= query.min:
+            # A forced choice — every offered option must be chosen — needs no
+            # decision, such as an attacker whose only defender is the player.
+            _note(noted, _BASELINE_KEY)
+            if noted is not None:
+                noted.forced = True
+            return Answer(selected=query.options)
 
         name, intent = self._route(query, claimed)
         key = _BASELINE_KEY if name is None else name
@@ -619,11 +681,13 @@ class DeterministicPlayer(ScriptedPlayer):
         return _first_preferred(list(preferences), query.options) is not None
 
     def _answer_from_script(self, query: PlayerQuery) -> Answer:
-        """Consume entries until one answers this Priority Query.
+        """Consume entries until one answers this Priority Query or declaration.
 
         An :func:`act_illegal` entry whose action is not offered is consumed
-        and the query goes to the next entry; a dry script passes.
+        and the query goes to the next entry; a dry script passes, or declares
+        nothing.
         """
+        declaration = is_declaration_query(query)
         context = attempts.current()
         while self._script:
             entry = self._script.pop(0)
@@ -633,10 +697,33 @@ class DeterministicPlayer(ScriptedPlayer):
                 context.branch.clear()
             if entry.kind is EntryKind.PASS:
                 return Answer()
-            answer = self._choose_action(_EntryAttempt(entry), query)
+            attempt = _EntryAttempt(entry, declaration=declaration)
+            choose = self._choose_declaration if declaration else self._choose_action
+            answer = choose(attempt, query)
             if answer is not None:
                 return answer
         return Answer()
+
+    def _choose_declaration(self, attempt: _EntryAttempt, query: PlayerQuery) -> Answer | None:
+        """Choose every creature ``attempt``'s current branch names, skipping
+        branches naming one that is not offered. ``None`` means no branch is
+        left; an :func:`act` then fails the test."""
+        branches = attempt.entry.branches
+        while attempt.branch < len(branches):
+            selected: list[PlayerDecision] = []
+            remaining = list(query.options)
+            for pref in _action_for(branches[attempt.branch], query):
+                option = next((o for o in remaining if satisfies(o, pref)), None)
+                if option is None:
+                    break
+                selected.append(option)
+                remaining.remove(option)
+            else:
+                attempt.context = attempts.current()
+                self._attempt = attempt
+                return Answer(selected=tuple(selected))
+            attempt.branch += 1
+        return self._no_branch_left(attempt)
 
     def _choose_action(self, attempt: _EntryAttempt, query: PlayerQuery) -> Answer | None:
         """Choose ``attempt``'s action from a Priority Query with its current
@@ -651,12 +738,57 @@ class DeterministicPlayer(ScriptedPlayer):
                         self._attempt = attempt
                         return Answer(selected=(option,))
             attempt.branch += 1
+        return self._no_branch_left(attempt)
+
+    def _no_branch_left(self, attempt: _EntryAttempt) -> None:
         self._attempt = None
         if attempt.entry.kind is EntryKind.ACT:
             if attempt.error is not None:
                 raise ScriptEntryError(attempt.entry, "rejected", attempt.error) from attempt.error
             raise ScriptEntryError(attempt.entry, "not offered")
-        return None
+
+    def _answer_scoped(self, attempt: _EntryAttempt, pair: int, query: PlayerQuery) -> Answer:
+        """Answer with exactly the decisions of the current branch's ``scoped[pair]``."""
+        _, values = attempt.current.scoped[pair]
+        selected: list[PlayerDecision] = []
+        remaining = list(query.options)
+        for value in values:
+            option = next((o for o in remaining if satisfies(o, value)), None)
+            if option is None:
+                break
+            selected.append(option)
+            remaining.remove(option)
+        else:
+            if query.min <= len(selected) <= query.max:
+                return Answer(selected=tuple(selected))
+        self._scoped_unavailable(attempt, f"its scoped answer to {query.prompt!r} is not offered")
+
+    def _scoped_unavailable(self, attempt: _EntryAttempt, detail: str) -> NoReturn:
+        """The branch's action, with its scoped answers, is not offered: an
+        :func:`act` on its last branch fails; otherwise the branch is withdrawn
+        before anything takes effect."""
+        if attempt.entry.kind is EntryKind.ACT and attempt.branch + 1 >= len(attempt.entry.branches):
+            self._attempt = None
+            raise ScriptEntryError(attempt.entry, "not offered")
+        raise ScopedChoiceUnavailable(f"{attempt.entry.describe()}: {detail}")
+
+    def confirm_declaration(
+        self, query: PlayerQuery, answer: Answer, outcome: tuple[Any, ...] = ()
+    ) -> None:
+        """Withdraw a scripted declaration whose outcome differs from its
+        scoped answers — a declared creature attacking or blocking something
+        other than what the branch names. Judged on the declaration that would
+        take effect, never on which follow-up questions were asked: an engine
+        may skip a question with only one possible answer (see ADR-017)."""
+        attempt = self._attempt
+        if attempt is None or not attempt.declaration:
+            return
+        for keys, values in attempt.current.scoped:
+            for creature, targets in outcome:
+                if any(satisfies(creature, key) for key in keys) and not _exactly(targets, values):
+                    self._scoped_unavailable(
+                        attempt, "a declared creature's declaration differs from its scoped answer"
+                    )
 
     def _card_intents_for(self, query: PlayerQuery) -> list[tuple[str, Intent]]:
         return [
@@ -675,13 +807,33 @@ class DeterministicPlayer(ScriptedPlayer):
             )
         if len(matched) == 1:
             return matched[0]
-        if is_priority_query(query):
-            return None, _PASS_PRIORITY
+        if is_action_query(query):
+            return None, _DECLINE
         if self._baseline is not None:
             return None, self._baseline
         raise UnmatchedQueryError(
             f"no card intent and no baseline matched query {query.prompt!r}"
         )
+
+
+def _exactly(targets: tuple[PlayerDecision, ...], values: tuple[PlayerDecision, ...]) -> bool:
+    """Whether each of ``values`` is met by its own one of ``targets``, with none left over."""
+    remaining = list(targets)
+    for value in values:
+        match = next((t for t in remaining if satisfies(t, value)), None)
+        if match is None:
+            return False
+        remaining.remove(match)
+    return not remaining
+
+
+def _scoped_pair(current: Branch, query: PlayerQuery) -> int | None:
+    """The index of the branch's ``scoped`` pair whose key matches a source of
+    ``query``, if any."""
+    for index, (keys, _) in enumerate(current.scoped):
+        if any(satisfies(source, key) for source in query.source for key in keys):
+            return index
+    return None
 
 
 def _first_preferred(
@@ -1333,52 +1485,51 @@ def advance_to_phase(
 
 def declare_attackers(
     game: GameState,
-    attacker_names: list[str],
+    attacker_names: list[Any],
+    *,
+    illegal: bool = False,
 ) -> None:
-    """Advance to combat and declare attackers by name.
+    """Advance to combat and declare attackers.
 
     1. Advances to the Declare Attackers step if not already there.
-    2. Finds creatures on the active player's battlefield matching the
-       given names.
-    3. Calls :func:`engine.combat.declare_attackers_step` with the
-       attackers as an action-layer directive (no Player Query is
-       raised — this is the imperative action channel).
+    2. Finds the creatures on the active player's battlefield matching the
+       given names (a creature object may be given instead of a name).
+    3. Declares exactly those attackers as a one-entry :func:`act` script: the
+       engine asks the active player which creatures attack — and what each
+       attacks, which this helper answers with the defending player — and
+       registers them.
+
+    With ``illegal=True`` the declaration is one the rules forbid, scripted as
+    :func:`act_illegal`: the engine may decline to offer it or reject it, and
+    then no attackers are declared.
 
     Parameters:
         game: The game state.
         attacker_names: Names of creatures to declare as attackers.
+        illegal: Whether the declaration is expected to be illegal.
 
     Raises:
         TestSetupError: If any named creature is not found on the
-            active player's battlefield, or if the creature cannot attack.
+            active player's battlefield.
+        ScriptEntryError: If the engine does not offer a named creature or
+            rejects the declaration (a creature that can't attack) — or, with
+            ``illegal=True``, if it lets the declaration take effect.
     """
-    # Advance to declare attackers step
+    from engine.combat import declare_attackers_step
+
     if (game.phase, game.step) != (Phase.COMBAT, Step.DECLARE_ATTACKERS):
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_ATTACKERS)
 
     active = game.active_player
-    bf = game.get_battlefield(active)
-
-    # Resolve attacker names to objects
-    attackers: list[Any] = []
-    bf_objects = bf.get_all()
-    for name in attacker_names:
-        found = None
-        for obj in bf_objects:
-            if getattr(obj, "name", None) == name and obj not in attackers:
-                found = obj
-                break
-        if found is None:
-            bf_names = [getattr(c, "name", repr(c)) for c in bf_objects]
-            raise TestSetupError(
-                f"Attacker {name!r} not found on active player's battlefield. "
-                f"Battlefield contains: {bf_names}"
-            )
-        attackers.append(found)
-
-    # Declaring attackers is an action-layer directive (not a query).
-    game.combat_state.in_combat = True
-    declare_attackers_step(game, attackers)
+    attackers = _battlefield_objects(
+        game, active, attacker_names, "Attacker", "active", listing="Battlefield contains"
+    )
+    defending_seat = game.refs.seat_of(game.non_active_player)
+    entry = (act_illegal if illegal else act)(
+        *(_battlefield_preference(game, a) for a in attackers),
+        choices=(Decision.player(seat=defending_seat),),
+    )
+    _declare(game, active, entry, declare_attackers_step)
 
 
 # ---------------------------------------------------------------------------
@@ -1388,65 +1539,131 @@ def declare_attackers(
 
 def declare_blockers(
     game: GameState,
-    assignments: dict[str, list[str]],
+    assignments: dict[Any, list[Any]],
+    *,
+    illegal: bool = False,
 ) -> None:
-    """Assign blockers by name mapping.
+    """Declare blockers by name mapping.
+
+    The blocks are declared as a one-entry :func:`act` script: the engine asks
+    the defending player which creatures block and then what each blocks, and
+    registers them. When an attacker is multi-blocked the engine raises a
+    damage-order Player Query to the attacker's controller — set a Baseline
+    Intent on that player if so.
+
+    With ``illegal=True`` the blocks are ones the rules forbid, scripted as
+    :func:`act_illegal`: the engine may decline to offer them or reject them,
+    and then no blockers are declared.
 
     Parameters:
         game: The game state.
         assignments: A mapping of ``{"attacker_name": ["blocker_name", ...]}``.
             Each attacker on the active player's battlefield is matched by
             name, and each blocker on the defending player's battlefield is
-            matched by name.
+            matched by name (creature objects may be given instead of names).
+        illegal: Whether the declaration is expected to be illegal.
 
     Raises:
         TestSetupError: If any named creature is not found.
+        ScriptEntryError: If the engine does not offer a named blocker or
+            rejects the declaration (evasion, menace, "can't block") — or,
+            with ``illegal=True``, if it lets the declaration take effect.
     """
+    from engine.combat import declare_blockers_step
+
     if (game.phase, game.step) != (Phase.COMBAT, Step.DECLARE_BLOCKERS):
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
 
     active = game.active_player
     defending = game.non_active_player
 
-    active_bf = game.get_battlefield(active)
-    defending_bf = game.get_battlefield(defending)
-
-    active_objects = active_bf.get_all()
-    defending_objects = defending_bf.get_all()
-
-    # Build mapping of blocker_obj → attacker_obj
-    block_map: dict[Any, Any] = {}
-
+    # Each blocker once, with every attacker it is to block: a creature given
+    # under several attackers multi-blocks, and the engine judges whether it may.
+    blocks: dict[Any, list[Any]] = {}
     for attacker_name, blocker_names in assignments.items():
-        # Find attacker
-        attacker = None
-        for obj in active_objects:
-            if getattr(obj, "name", None) == attacker_name:
-                attacker = obj
-                break
-        if attacker is None:
+        (attacker,) = _battlefield_objects(game, active, [attacker_name], "Attacker", "active")
+        for blocker in _battlefield_objects(
+            game, defending, blocker_names, "Blocker", "defending", exclude=blocks
+        ):
+            blocked = blocks.setdefault(blocker, [])
+            if attacker not in blocked:
+                blocked.append(attacker)
+
+    entry = (act_illegal if illegal else act)(
+        *(_battlefield_preference(game, b) for b in blocks),
+        scoped={
+            _battlefield_preference(game, b): [_battlefield_preference(game, a) for a in attackers]
+            for b, attackers in blocks.items()
+        },
+    )
+    _declare(game, defending, entry, declare_blockers_step)
+
+
+def _battlefield_objects(
+    game: GameState,
+    player: Any,
+    names: list[Any],
+    role: str,
+    side: str,
+    exclude: Any = (),
+    listing: str = "Available",
+) -> list[Any]:
+    """The creatures on *player*'s battlefield named by *names*, each found
+    once (a creature object stands for itself). A name prefers a creature not
+    in *exclude*, and otherwise falls back to one that is — so a blocker named
+    under two attackers is one blocker blocking both when there is only one."""
+    objects = game.get_battlefield(player).get_all()
+    found: list[Any] = []
+    for name in names:
+        if not isinstance(name, str):
+            found.append(name)
+            continue
+        named = [obj for obj in objects if getattr(obj, "name", None) == name and obj not in found]
+        match = next((obj for obj in named if obj not in exclude), named[0] if named else None)
+        if match is None:
             raise TestSetupError(
-                f"Attacker {attacker_name!r} not found on active player's battlefield. "
-                f"Available: {[getattr(c, 'name', repr(c)) for c in active_objects]}"
+                f"{role} {name!r} not found on {side} player's battlefield. "
+                f"{listing}: {[getattr(c, 'name', repr(c)) for c in objects]}"
             )
+        found.append(match)
+    return found
 
-        for blocker_name in blocker_names:
-            blocker = None
-            for obj in defending_objects:
-                if getattr(obj, "name", None) == blocker_name and obj not in block_map:
-                    blocker = obj
-                    break
-            if blocker is None:
-                raise TestSetupError(
-                    f"Blocker {blocker_name!r} not found on defending player's battlefield. "
-                    f"Available: {[getattr(c, 'name', repr(c)) for c in defending_objects]}"
-                )
-            block_map[blocker] = attacker
 
-    # Declaring blockers is an action-layer directive (not a query). When an
-    # attacker is multi-blocked the engine raises a damage-order Player Query to
-    # the attacker's controller — set a Baseline Intent on that player if so.
-    declare_blockers_step(game, block_map)
+def _battlefield_preference(game: GameState, obj: Any) -> Any:
+    return Decision.obj(instance=game.refs.instance_id(obj, Zone.BATTLEFIELD.value))
+
+
+def _declare(game: GameState, player: Any, entry: ScriptEntry, step: Any) -> None:
+    """Run combat declaration *step* with *entry* as *player*'s whole script;
+    their own script is left untouched.
+
+    The declaration is the step's turn-based action, so it goes through the
+    step lifecycle: a step whose actions are pending is entered (declaring
+    once and opening its window); one already marked entered by setup
+    declares now and keeps, or opens, its window — so no driver declares
+    again afterwards."""
+    player = _deterministic(game, player)
+    saved = player.set_script([entry])
+    try:
+        if game.step_state is StepState.PENDING:
+            advance(game)
+        else:
+            step(game)
+            if game.step_state is not StepState.WINDOW:
+                game.open_window()
+        unconsumed = player.pending_entries
+    finally:
+        player.set_script(saved)
+    if unconsumed and entry.kind is EntryKind.ACT and any(map(_declares, entry.branches)):
+        # The step raised no declaration (blockers with nothing attacking),
+        # yet a branch named creatures to declare.
+        raise ScriptEntryError(entry, "not offered")
+
+
+def _declares(branch: Any) -> bool:
+    """Whether *branch* names any creature to declare; one naming none
+    declares nothing, which a step raising no declaration fulfils."""
+    return bool(branch.preferences) or any(prefs for _, prefs in branch.per_query)
 
 
 def enter_permanent(game, player, card):

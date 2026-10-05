@@ -31,6 +31,12 @@ from engine.decisions import (
 
 # The ``ability`` ref entry that marks a Priority Query's source (see ADR-017).
 PRIORITY_WINDOW: tuple[str, str] = ("window", "priority")
+# The ``ability`` ref entries that mark a combat declaration's source.
+DECLARE_ATTACKERS_WINDOW: tuple[str, str] = ("window", "declare_attackers")
+DECLARE_BLOCKERS_WINDOW: tuple[str, str] = ("window", "declare_blockers")
+DECLARATION_WINDOWS: frozenset[tuple[str, str]] = frozenset(
+    {DECLARE_ATTACKERS_WINDOW, DECLARE_BLOCKERS_WINDOW}
+)
 
 
 @dataclass(frozen=True)
@@ -117,8 +123,37 @@ def priority_pattern(seat: int | None = None) -> GameRef:
 
 def is_priority_query(query: PlayerQuery) -> bool:
     """Whether ``query`` is a Priority Query — the player's choice of action."""
+    return _has_window(query, PRIORITY_WINDOW)
+
+
+def declaration_pattern(window: tuple[str, str], seat: int | None = None) -> GameRef:
+    """The Intent pattern that matches a combat declaration — which creatures
+    attack (:data:`DECLARE_ATTACKERS_WINDOW`) or block
+    (:data:`DECLARE_BLOCKERS_WINDOW`) — optionally for one seat.
+
+    Like a Priority Query, a declaration's single source is the PLAYER decision
+    for the declaring player, with the window in its ref's ``ability``. The
+    follow-up questions inside a declaration (what an attacker attacks, what a
+    blocker blocks) are sourced by that creature's OBJECT decision instead.
+    """
+    player = frozenset({("seat", seat)}) if seat is not None else frozenset()
+    return GameRef(player=player, ability=frozenset({window}))
+
+
+def is_declaration_query(query: PlayerQuery) -> bool:
+    """Whether ``query`` declares attackers or blockers (see ADR-017)."""
+    return any(_has_window(query, window) for window in DECLARATION_WINDOWS)
+
+
+def is_action_query(query: PlayerQuery) -> bool:
+    """Whether ``query`` consumes an action-script entry: a Priority Query or
+    a combat declaration."""
+    return is_priority_query(query) or is_declaration_query(query)
+
+
+def _has_window(query: PlayerQuery, window: tuple[str, str]) -> bool:
     return any(
-        source.ref is not None and PRIORITY_WINDOW in source.ref.ability
+        source.ref is not None and window in source.ref.ability
         for source in query.source
     )
 
@@ -172,7 +207,9 @@ def ask(player: object, query: PlayerQuery) -> Answer:
     validate_query(query)
     context = attempts.current()
     if context is not None:
-        context.before_query(player)
+        # Only one answer is possible: no decision is made (see engine.attempts).
+        forced = len(query.options) == query.min and len(query.options) <= 1
+        context.before_query(player, forced=forced)
     answer = player.answer(query)  # type: ignore[attr-defined]
     validate_answer(query, answer)
     return answer

@@ -1,5 +1,5 @@
 """Phase 2 protocol tests for the non-targeting converted call sites:
-ordering query (combat damage order), discard query (cleanup), and the
+damage-division query (combat damage), discard query (cleanup), and the
 legend-rule OBJECT query.
 """
 
@@ -42,18 +42,33 @@ def _put(game, player, zone, card):
     player.zones[zone].add(card)
 
 
-class TestOrderingQuery:
-    def test_damage_order_query_applies_answer_order(self):
-        from engine.combat import declare_attackers_step, declare_blockers_step
+class TestDamageDivisionQuery:
+    def test_damage_division_query_applies_the_chosen_share(self):
+        from engine.combat import (
+            combat_damage_step,
+            declare_attackers_step,
+            declare_blockers_step,
+        )
+        from engine.queries import is_declaration_query
 
-        # p0 (attacker controller) reverses any ordering query it receives.
-        def reverse_orderings(query):
-            if query.min == query.max == len(query.options) and len(query.options) > 1:
-                return Answer(selected=tuple(reversed(query.options)))
+        # Each player declares every creature it is offered (the attacker; both
+        # blockers, each blocking the attacker).
+        def declare_all(query):
+            if is_declaration_query(query):
+                return Answer(selected=query.options)
             return None
 
-        p0 = FnPlayer("P0", fn=reverse_orderings)
-        p1 = FnPlayer("P1")
+        def is_division(query):
+            return bool(query.options) and all(o.kind is DecisionKind.NUMBER for o in query.options)
+
+        # p0 (attacker controller) assigns the first blocker all it can.
+        def all_to_the_first(query):
+            if is_division(query):
+                return Answer(selected=(query.options[-1],))
+            return declare_all(query)
+
+        p0 = FnPlayer("P0", fn=all_to_the_first)
+        p1 = FnPlayer("P1", fn=declare_all)
         game = GameState([p0, p1])
 
         attacker = _creature("Attacker")
@@ -64,16 +79,15 @@ class TestOrderingQuery:
         _put(game, p1, Zone.BATTLEFIELD, b1)
         _put(game, p1, Zone.BATTLEFIELD, b2)
 
-        declare_attackers_step(game, [attacker])
-        declare_blockers_step(game, {b1: attacker, b2: attacker})
+        declare_attackers_step(game)
+        declare_blockers_step(game)
+        combat_damage_step(game)
 
-        # An ordering query (min == max == len) was raised to the attacker's
-        # controller, and the Answer's order is the damage-assignment order.
-        ordering_queries = [
-            q for q in p0.transcript if q.min == q.max == len(q.options) > 1
-        ]
-        assert len(ordering_queries) == 1
-        assert game.combat_state.attacker_blockers[attacker] == [b2, b1]
+        # One NUMBER query — the first blocker's share — went to the attacker's
+        # controller; the last blocker takes the rest, none, unasked.
+        assert len([q for q in p0.transcript if is_division(q)]) == 1
+        assert p1.zones[Zone.GRAVEYARD].contains(b1)
+        assert p1.zones[Zone.BATTLEFIELD].contains(b2) and b2.damage_marked == 0
 
 
 class TestDiscardQuery:

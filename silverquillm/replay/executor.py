@@ -32,23 +32,47 @@ from silverquillm.replay.types import (
 logger = logging.getLogger(__name__)
 
 
+def _declarations_are_queries() -> bool:
+    """Whether the workspace engine asks combat declarations as Player Queries
+    (ADR-017) rather than taking them as arguments."""
+    from engine import queries
+
+    return hasattr(queries, "is_declaration_query")
+
+
+def _intent_api() -> Any:
+    """The module holding the workspace's intent-based player, ``Intent`` and
+    script entries: ``engine.intent_player`` in the hob-medium engine, or the
+    Workspace's ``test_utils`` in the Known-Best lineage, whose engine keeps
+    only the base Player (see ADR-018). Raises ``ImportError`` for an engine
+    with neither, the frozen SOS (V1) engine."""
+    try:
+        import engine.intent_player as api
+    except ImportError:
+        import test_utils as api
+
+        if not hasattr(api, "Intent"):
+            raise ImportError("the workspace has no intent-based player") from None
+    return api
+
+
 def _make_replay_player(name: str, life: int) -> Any:
     """Create a DeterministicPlayer for whichever workspace engine is on sys.path.
 
     Benchmark-parameterized: the frozen SOS (V1) engine has a scripted
     ``engine.player.DeterministicPlayer`` (replay drives its actions, not a
-    script); the hob-medium engine has the intent-based ``engine.intent_player.
-    DeterministicPlayer``, which gets a permissive Baseline Intent so any query
+    script); the hob-medium engine and the Known-Best lineage have the
+    intent-based ``DeterministicPlayer`` (:func:`_intent_api`), which gets a permissive Baseline Intent so any query
     the replay raises is answered in GRE-observed (first-offered) order rather
     than crashing. A genuinely unanswerable query surfaces as a
     ``QUERY_UNANSWERED`` divergence, not an exception.
     """
     try:
-        from engine.intent_player import DeterministicPlayer as _IntentPlayer
-        from engine.intent_player import Intent
+        api = _intent_api()
         from engine.decisions import GameRef
 
-        player = _IntentPlayer(name=name, life=life)
+        Intent = api.Intent
+        player = api.DeterministicPlayer(name=name, life=life)
         player.set_baseline(Intent(pattern=GameRef(), preferences=()))
         return player
     except ImportError:
@@ -1360,9 +1384,8 @@ class ReplayExecutor:
                 and (card := self._engine_cards.get(obj.instance_id)) is not None
             ]
             if attackers:
-                from engine.combat import declare_attackers_step
                 try:
-                    declare_attackers_step(self.game, attackers)
+                    self._declare_attackers(attackers)
                     self._combat_active = True
                 except Exception as exc:
                     result.engine_failures.append(
@@ -1386,9 +1409,8 @@ class ReplayExecutor:
                     assignments[blocker] = attackers_blocked
             if assignments or step in self._COMBAT_DAMAGE_STEPS:
                 if assignments:
-                    from engine.combat import declare_blockers_step
                     try:
-                        declare_blockers_step(self.game, assignments)
+                        self._declare_blockers(assignments)
                     except Exception as exc:
                         result.engine_failures.append(
                             f"declare_blockers_step: {type(exc).__name__}: {exc}"
@@ -1435,7 +1457,7 @@ class ReplayExecutor:
         resulting divergence.
         """
         from engine.decisions import Decision, GameRef
-        from engine.intent_player import Intent
+        Intent = _intent_api().Intent
 
         by_attacker: dict[int, list[int]] = {}
         for obj in curr_snapshot.get_zone_objects("ZoneType_Battlefield"):
@@ -2099,6 +2121,54 @@ class ReplayExecutor:
         refs = getattr(self.game, "refs", None) if self.game is not None else None
         zone_epoch = getattr(refs, "zone_epoch", None)
         return zone_epoch(obj) if callable(zone_epoch) else 0
+
+    def _declare_attackers(self, attackers: list[Any]) -> None:
+        """Declare the observed attackers, each attacking the defending player."""
+        from engine.combat import declare_attackers_step
+
+        if not _declarations_are_queries():
+            declare_attackers_step(self.game, attackers)
+            return
+        from engine.decisions import Decision
+
+        defending = self.game.non_active_player
+        defender = Decision.player(seat=self.game.refs.seat_of(defending))
+        refs = [self._battlefield_ref(card) for card in attackers]
+        self._scripted_declaration(
+            self.game.active_player, declare_attackers_step, refs, {r: defender for r in refs}
+        )
+
+    def _declare_blockers(self, assignments: dict[Any, list[Any]]) -> None:
+        """Declare the observed blocks, each blocker with every attacker it blocks."""
+        from engine.combat import declare_blockers_step
+
+        if not _declarations_are_queries():
+            declare_blockers_step(self.game, assignments)
+            return
+        scoped = {
+            self._battlefield_ref(blocker): [self._battlefield_ref(a) for a in blocked]
+            for blocker, blocked in assignments.items()
+        }
+        self._scripted_declaration(
+            self.game.non_active_player, declare_blockers_step, list(scoped), scoped
+        )
+
+    def _battlefield_ref(self, card: Any) -> Any:
+        from engine.decisions import Decision
+
+        return Decision.obj(instance=self.game.refs.instance_id(card, "battlefield"))
+
+    def _scripted_declaration(self, player: Any, step: Any, chosen: list, scoped: dict) -> None:
+        """Run a combat step whose declaration is a Player Query, answered by
+        a one-entry action script naming exactly the observed creatures; the
+        player's own script is restored however the step ends."""
+        act = _intent_api().act
+
+        saved = player.set_script([act(*chosen, scoped=scoped)])
+        try:
+            step(self.game)
+        finally:
+            player.set_script(saved)
 
     def _engine_bf_stints(self) -> dict[tuple[Any, int], tuple[int, Any]]:
         """``counter key -> (zone epoch, object)`` for every permanent
@@ -2905,7 +2975,7 @@ class ReplayExecutor:
         """
         from engine.casting import cast_spell
         from engine.decisions import GameRef
-        from engine.intent_player import Intent
+        Intent = _intent_api().Intent
         from engine.types import Zone
 
         player = self.players.get(action.player_seat_id)
@@ -3578,7 +3648,7 @@ class ReplayExecutor:
         if not preferences:
             return thunk()
         from engine.decisions import GameRef
-        from engine.intent_player import Intent
+        Intent = _intent_api().Intent
 
         intent_name = f"replay_ability_{action.instance_id}"
         player.start_intent(intent_name, Intent(

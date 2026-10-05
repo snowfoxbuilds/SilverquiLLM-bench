@@ -109,7 +109,7 @@ class TestKaitoPlusOne:
         assert kaito.loyalty == 4 and len(game.get_hand(p1)) == hand_before
         mine.summoning_sick = False
         declare_attackers(game, [mine.name])
-        declare_blockers(game, {mine.name: [blocker.name]})
+        declare_blockers(game, {mine.name: [blocker.name]}, illegal=True)
         combat_damage_step(game)
         resolve_stack(game)
         assert p2.life == 18 and game.get_battlefield(p1).contains(mine)

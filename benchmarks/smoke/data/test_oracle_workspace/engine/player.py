@@ -133,9 +133,22 @@ class Player(ABC):
         raise error
 
     def on_action_ended(self, context: Any) -> None:
-        """Hear that the priority action attempted in ``context`` is over —
-        taken, passed, or ended by an error — so nothing of it should answer
-        later queries. The default does nothing."""
+        """Hear that the priority action or declaration attempted in
+        ``context`` is over — taken, passed, or ended by an error — so nothing
+        of it should answer later queries. The default does nothing."""
+
+    def confirm_declaration(
+        self, query: PlayerQuery, answer: Answer, outcome: tuple[Any, ...] = ()
+    ) -> None:
+        """Hear that the combat declaration chosen in ``answer`` to ``query``
+        has had every question answered and is about to take effect.
+        ``outcome`` pairs each declared creature's option with the decisions
+        for what it attacks or blocks — the declaration as it will stand,
+        whichever follow-up questions the engine asked.
+
+        Raising ``InvalidPlayerChoiceError`` withdraws it: it is rolled back
+        like a rejected declaration, before any combat state is committed, and
+        the same declaration is asked again. The default does nothing."""
 
     @abstractmethod
     def answer(self, query: PlayerQuery) -> Answer:

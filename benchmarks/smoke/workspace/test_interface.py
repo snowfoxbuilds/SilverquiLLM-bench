@@ -17,7 +17,7 @@ import threading
 import time
 import weakref
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Self
 
 from engine.card import printed_class
@@ -25,7 +25,7 @@ from engine.decisions import Decision, InvalidPlayerChoiceError, PlayerDecision,
 from engine.game import Side as _EngineSide
 from engine.game import create_game as _engine_create_game
 from engine.player import Player
-from engine.queries import Answer, PlayerQuery, asks_for, is_priority_query
+from engine.queries import Answer, PlayerQuery, asks_for, is_action_query, is_declaration_query
 from engine.turn import advance
 from engine.types import ManaType, Phase, Step, Zone
 
@@ -441,12 +441,18 @@ class Branch:
     tried in order and the first match wins. With ``distinct``, the branch
     never chooses an object that an answer of this entry still in effect
     already chose for a question from the same source object.
+
+    At a combat declaration ``preferences`` are the creatures declared, every
+    one of them, and ``scoped`` pairs a creature with exactly what it attacks
+    or blocks: never filled in or trimmed, judged on the declaration that
+    would take effect, and the branch is withdrawn when it cannot be met.
     """
 
     preferences: tuple[Any, ...] = ()
     choices: tuple[Any, ...] = ()
     per_query: tuple[tuple[Any, tuple[Any, ...]], ...] = ()
     distinct: bool = False
+    scoped: tuple[tuple[Any, tuple[Any, ...]], ...] = ()
 
     def matched(self, query: PlayerQuery) -> tuple[Any, ...] | None:
         """The first matching ``per_query`` key's preferences, or ``None``."""
@@ -464,10 +470,14 @@ def branch(
     choices: Iterable[Any] = (),
     per_query: Mapping[Any, Any] | None = None,
     distinct: bool = False,
+    scoped: Mapping[Any, Any] | None = None,
 ) -> Branch:
     """A branch, e.g. ``branch(A, B, per_query={CardType.ARTIFACT: [A],
-    CardType.CREATURE: [B]})``."""
-    return Branch(_items(preferences), _items(choices), _per_query(per_query), distinct)
+    CardType.CREATURE: [B]})``, or at a declaration
+    ``branch(wall, scoped={wall: bear})``."""
+    return Branch(
+        _items(preferences), _items(choices), _per_query(per_query), distinct, _scoped(scoped)
+    )
 
 
 @dataclass(frozen=True)
@@ -501,21 +511,26 @@ def act(
     choices: Iterable[Any] = (),
     per_query: Mapping[Any, Any] | None = None,
     distinct: bool = False,
+    scoped: Mapping[Any, Any] | None = None,
     branches: Iterable[Any] | None = None,
     view: View | None = None,
     note: str = "",
 ) -> Entry:
     """An action the player must take.
 
-    ``preferences``, ``choices``, ``per_query`` and ``distinct`` make one
-    branch; ``branches`` lists several instead, each a list of preferences or
-    a :func:`branch`, with ``choices`` and ``per_query`` added to every one.
-    A branch whose action is not offered is skipped, and each rejection of an
-    answer the entry gave moves it to its next branch. A preference is a
-    Player Decision, a predefined class, a :func:`card` handle or a
-    :func:`player`.
+    ``preferences``, ``choices``, ``per_query``, ``distinct`` and ``scoped``
+    make one branch; ``branches`` lists several instead, each a list of
+    preferences or a :func:`branch`, with ``choices``, ``per_query`` and
+    ``scoped`` added to every one. A branch whose action is not offered is
+    skipped, and each rejection of an answer the entry gave moves it to its
+    next branch. A preference is a Player Decision, a predefined class, a
+    :func:`card` handle or a :func:`player`.
+
+    At a combat declaration the preferences are every creature declared, and
+    ``scoped`` maps a creature to what it attacks or blocks, e.g.
+    ``act(wall, scoped={wall: bear})`` blocks the bear with the wall.
     """
-    return Entry(Kind.ACT, _branches(preferences, choices, per_query, distinct, branches), view, note)
+    return Entry(Kind.ACT, _branches(preferences, choices, per_query, distinct, branches, scoped), view, note)
 
 
 def act_illegal(
@@ -523,14 +538,16 @@ def act_illegal(
     choices: Iterable[Any] = (),
     per_query: Mapping[Any, Any] | None = None,
     distinct: bool = False,
+    scoped: Mapping[Any, Any] | None = None,
     branches: Iterable[Any] | None = None,
     view: View | None = None,
     note: str = "",
 ) -> Entry:
-    """An action the rules forbid: satisfied when every branch is not offered
-    or rejected, after which the same question goes to the next entry; play
-    diverges if any branch takes effect."""
-    return Entry(Kind.ILLEGAL, _branches(preferences, choices, per_query, distinct, branches), view, note)
+    """An action the rules forbid — a cast, an activation or a declaration:
+    satisfied when every branch is not offered or rejected, after which the
+    same question goes to the next entry; play diverges if any branch takes
+    effect."""
+    return Entry(Kind.ILLEGAL, _branches(preferences, choices, per_query, distinct, branches, scoped), view, note)
 
 
 def pass_priority(
@@ -542,8 +559,8 @@ def pass_priority(
     view: View | None = None,
     note: str = "",
 ) -> Entry:
-    """Pass, with ``choices`` for the questions that follow before the
-    player's next action question — or ``branches`` of them, each a
+    """Pass — or, at a combat declaration, declare nothing — with ``choices``
+    for the questions that follow before the player's next action question — or ``branches`` of them, each a
     :func:`branch` or a list of choices, tried in turn after rejections."""
     if branches is None:
         return Entry(Kind.PASS, (Branch((), _items(choices), _per_query(per_query), distinct),), view, note)
@@ -590,17 +607,22 @@ def player(seat: int) -> PlayerDecision:
 
 
 def _branches(
-    preferences: Any, choices: Any, per_query: Any, distinct: bool, branches: Any
+    preferences: Any, choices: Any, per_query: Any, distinct: bool, branches: Any, scoped: Any = None
 ) -> tuple[Branch, ...]:
-    shared, shared_per_query = _items(choices), _per_query(per_query)
+    shared, shared_per_query, shared_scoped = _items(choices), _per_query(per_query), _scoped(scoped)
     if branches is None:
-        return (Branch(_items(preferences), shared, shared_per_query, distinct),)
+        return (Branch(_items(preferences), shared, shared_per_query, distinct, shared_scoped),)
     if preferences:
         raise TypeError("an entry takes preferences or branches, not both")
     built = tuple(
-        Branch(b.preferences, b.choices + shared, b.per_query + shared_per_query, b.distinct)
+        replace(
+            b,
+            choices=b.choices + shared,
+            per_query=b.per_query + shared_per_query,
+            scoped=b.scoped + shared_scoped,
+        )
         if isinstance(b, Branch)
-        else Branch(_items(b), shared, shared_per_query, distinct)
+        else Branch(_items(b), shared, shared_per_query, distinct, shared_scoped)
         for b in branches
     )
     if not built:
@@ -627,6 +649,14 @@ def _per_query(mapping: Mapping[Any, Any] | None) -> tuple[tuple[Any, tuple[Any,
             raise TypeError(f"a per_query key is a payload object or a predicate, not a string: {key!r}")
         values = preferences if isinstance(preferences, (list, tuple)) else (preferences,)
         pairs.append((key, _items(values)))
+    return tuple(pairs)
+
+
+def _scoped(mapping: Mapping[Any, Any] | None) -> tuple[tuple[Any, tuple[Any, ...]], ...]:
+    pairs = []
+    for key, values in (mapping or {}).items():
+        values = values if isinstance(values, (list, tuple)) else (values,)
+        pairs.append((_items((key,))[0], _items(values)))
     return tuple(pairs)
 
 
@@ -750,6 +780,13 @@ class _Stopped(BaseException):
     """Every script has run out."""
 
 
+class _Withdrawn(InvalidPlayerChoiceError):
+    """A player withdraws a declaration branch whose scoped answers cannot be
+    met. The engine refused nothing, but withdrawing it as a rejection rolls
+    the declaration back before anything takes effect, and the re-asked
+    declaration goes to the entry's next branch."""
+
+
 class PlayDiverged(AssertionError):
     """Play left the test's scripts or views; the message narrates the script
     up to where it diverged, the question then asked, and the expected view
@@ -770,6 +807,8 @@ class _Playing:
     branch: int = 0
     reasked: bool = False
     rejected: InvalidPlayerChoiceError | None = None
+    # A declaration's preferences are a set of creatures, not alternatives.
+    declaration: bool = False
 
     @property
     def current(self) -> Branch:
@@ -801,7 +840,7 @@ class ScriptedPlayer(Player):
         if run is None:
             raise RuntimeError("a ScriptedPlayer answers only while run() plays")
         run.asked(query)
-        if is_priority_query(query):
+        if is_action_query(query):
             return self._action_question(run, query)
         return self._question(run, query)
 
@@ -809,12 +848,12 @@ class ScriptedPlayer(Player):
         playing, run = self._playing, self._run
         if playing is None or run is None:
             raise error
-        priority = getattr(context, "kind", None) == "priority"
+        action = getattr(context, "kind", None) in ("priority", "declaration")
         actor = getattr(context, "actor", None)
-        if priority and isinstance(actor, ScriptedPlayer) and actor._playing is not None:
-            # The actor's Priority Query is asked again, whoever owns the rejection.
+        if action and isinstance(actor, ScriptedPlayer) and actor._playing is not None:
+            # The actor's action question is asked again, whoever owns the rejection.
             actor._playing.reasked = True
-        whole_action = priority and actor is self
+        whole_action = action and actor is self
         playing.rejected = error
         playing.branch += 1
         if playing.branch < len(playing.entry.branches):
@@ -846,7 +885,7 @@ class ScriptedPlayer(Player):
         while True:
             if not self.script:
                 run.out_of_script(self.seat)
-            playing = self._start(self.script.pop(0))
+            playing = self._start(self.script.pop(0), declaration=is_declaration_query(query))
             run.started(self.seat, playing)
             if playing.entry.kind is Kind.PASS:
                 return Answer()
@@ -855,26 +894,33 @@ class ScriptedPlayer(Player):
                 return chosen
             run.completed(playing)
 
-    def _start(self, entry: Entry) -> _Playing:
+    def _start(self, entry: Entry, *, declaration: bool = False) -> _Playing:
         """Play ``entry`` next, under a generation no earlier entry had. Only
         the entry being played answers, so the choices earlier entries made
         are forgotten."""
         self._entries += 1
-        self._playing = _Playing(entry, self._entries)
+        self._playing = _Playing(entry, self._entries, declaration=declaration)
         self._chosen = []
         return self._playing
 
     def _choose_action(self, run: _Run, playing: _Playing, query: PlayerQuery) -> Answer | None:
-        """The current branch's action, skipping branches whose action is not
-        offered; ``None`` once an ``act_illegal`` entry has no branch left."""
+        """The current branch's action — at a declaration, every creature it
+        names — skipping branches whose action is not offered; ``None`` once
+        an ``act_illegal`` entry has no branch left."""
         branches = playing.entry.branches
         while playing.branch < len(branches):
             current = branches[playing.branch]
-            matched = current.matched(query)
-            for preference in self._matchers(matched if matched is not None else current.preferences):
-                for option in query.options:
-                    if self._matches(option, preference):
-                        return Answer((option,))
+            matched = self._matched(current, query)
+            preferences = matched if matched is not None else current.preferences
+            if playing.declaration:
+                declared = self._exactly(query.options, preferences)
+                if declared is not None:
+                    return Answer(declared)
+            else:
+                for preference in self._matchers(preferences):
+                    for option in query.options:
+                        if self._matches(option, preference):
+                            return Answer((option,))
             playing.branch += 1
         if playing.entry.kind is Kind.ACT:
             reason = "was rejected with no branch left" if playing.rejected else "is not offered"
@@ -887,9 +933,70 @@ class ScriptedPlayer(Player):
         if playing is None:
             return self._select(run, query, (), None)
         current = playing.current
-        matched = current.matched(query)
+        for key, values in current.scoped:
+            if any(self._satisfied(source, key) for source in query.source):
+                answer = self._exactly(query.options, values)
+                if answer is None or not query.min <= len(answer) <= query.max:
+                    self._withdraw(run, playing, f"its scoped answer to {query.prompt!r} is not offered", query)
+                return Answer(answer)
+        matched = self._matched(current, query)
         preferences = current.preferences + current.choices if matched is None else matched
         return self._select(run, query, preferences, playing)
+
+    def _matched(self, current: Branch, query: PlayerQuery) -> tuple[Any, ...] | None:
+        """The first matching ``per_query`` key's preferences, or ``None``; a
+        handle or class key matches a question whose payload names its card,
+        as an option would."""
+        for key, preferences in current.per_query:
+            if callable(key) and not isinstance(key, type):
+                hit = key(query)
+            else:
+                hit = asks_for(query, key) or (
+                    isinstance(key, (Handle, Token, type))
+                    and any(isinstance(i, PlayerDecision) and self._satisfied(i, key) for i in query.question)
+                )
+            if hit:
+                return preferences
+        return None
+
+    def confirm_declaration(self, query: PlayerQuery, answer: Answer, outcome: tuple[Any, ...] = ()) -> None:
+        """Withdraw a declaration that would give a declared creature something
+        other than its scoped answer, whichever questions the engine asked."""
+        playing, run = self._playing, self._run
+        if playing is None or run is None or not playing.declaration:
+            return
+        for key, values in playing.current.scoped:
+            for creature, targets in outcome:
+                if self._satisfied(creature, key) and self._exactly(targets, values, every=True) is None:
+                    self._withdraw(run, playing, "a declared creature's declaration differs from its scoped answer", query)
+
+    def _withdraw(self, run: _Run, playing: _Playing, detail: str, query: PlayerQuery) -> None:
+        """The branch's declaration is not offered as scoped: an ``act`` on its
+        last branch diverges; otherwise the branch is withdrawn before anything
+        takes effect, and the entry answers the re-asked declaration with its
+        next branch."""
+        if playing.entry.kind is Kind.ACT and playing.branch + 1 >= len(playing.entry.branches):
+            run.diverge(f"player {self.seat}'s {playing.entry.describe()} is not offered: {detail}", query)
+        raise _Withdrawn(f"{playing.entry.describe()}: {detail}")
+
+    def _exactly(
+        self, options: Sequence[PlayerDecision], wanted: Sequence[Any], *, every: bool = False
+    ) -> tuple[PlayerDecision, ...] | None:
+        """One option for each of ``wanted``, each a different one, or ``None``
+        when one is missing; with ``every``, also ``None`` when an option is
+        left over."""
+        remaining = list(options)
+        chosen = []
+        for item in wanted:
+            option = next((o for o in remaining if self._satisfied(o, item)), None)
+            if option is None:
+                return None
+            chosen.append(option)
+            remaining.remove(option)
+        return None if every and remaining else tuple(chosen)
+
+    def _satisfied(self, option: PlayerDecision, item: Any) -> bool:
+        return any(self._matches(option, matcher) for matcher in self._matchers((item,)))
 
     def _select(
         self,

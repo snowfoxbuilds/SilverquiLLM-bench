@@ -553,10 +553,12 @@ def settle_after_resolution(game: GameState) -> None:
     SBAs only remove permanents / decrement counters, and re-derivation is
     deterministic, so the state cannot oscillate.
     """
+    from engine.combat import note_planeswalker_departures
     from engine.state_based_actions import resolve_state_based_actions
 
     while True:
         _rederive_continuous_effects(game)
+        note_planeswalker_departures(game)
         if not resolve_state_based_actions(game):
             break
 

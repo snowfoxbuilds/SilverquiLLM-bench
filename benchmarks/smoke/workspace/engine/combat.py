@@ -2,18 +2,26 @@
 
 Implements the four substeps of the MTG combat phase:
 
-1. **Declare Attackers** — Active player chooses creatures to attack with.
-   Attackers are tapped (unless they have vigilance).  Creatures with
-   summoning sickness (without haste) or the defender keyword cannot attack.
+1. **Declare Attackers** — Active player chooses creatures to attack with,
+   and what each attacks, through Player Queries.  Attackers are tapped
+   (unless they have vigilance).  Creatures with summoning sickness (without
+   haste) or the defender keyword cannot attack.
 
-2. **Declare Blockers** — Defending player assigns blockers.  Creatures
-   with flying can only be blocked by creatures with flying or reach.
-   Creatures with menace require 2+ blockers.  The attacker's controller
-   orders the blockers for damage assignment.
+2. **Declare Blockers** — Defending player chooses blockers, and what each
+   blocks, through Player Queries.  Creatures with flying can only be blocked
+   by creatures with flying or reach.  Creatures with menace require 2+
+   blockers.
+
+A declaration is a Player Query like the Priority Query (see ADR-017): the
+engine offers every untapped creature the declaring player controls, and a
+declaration the rules forbid is rejected with ``InvalidPlayerChoiceError`` and
+asked again, never silently trimmed.
 
 3. **Combat Damage** — First strike / double strike creatures deal damage
-   first, then state-based actions are checked, then normal damage.
-   Trample excess goes to the defending player.  Lifelink heals the
+   first, then state-based actions are checked, then normal damage.  The
+   controller of an attacker blocked by two or more creatures divides its
+   damage among them through Player Queries.  Trample excess goes to the
+   defending player.  Lifelink heals the
    controller.  Deathtouch makes any nonzero damage lethal.  Unblocked
    attackers deal damage to the defending player.
 
@@ -24,11 +32,22 @@ References: MTG Comprehensive Rules §506–§511.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from engine import attempts
+from engine.attempts import AttemptContext
+from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, PlayerDecision
 from engine.events import AttacksTriggeredEvent, DealsDamageTriggeredEvent
-from engine.types import Keyword
+from engine.queries import (
+    DECLARE_ATTACKERS_WINDOW,
+    DECLARE_BLOCKERS_WINDOW,
+    PlayerQuery,
+    ask,
+)
+from engine.refs_registry import object_options
+from engine.types import CardType, Keyword, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -53,6 +72,9 @@ class CombatState:
         was_blocked: Set of attackers that were declared as blocked.  Per
             MTG rule 509.1h, once a creature is blocked it stays blocked
             even if all its blockers are removed before damage.
+        attacked_planeswalkers: Mapping of each attacked planeswalker → its
+            zone epoch and controller when attackers were declared, so it is
+            known to have left combat once either changes (rule 506.4).
         in_combat: Whether the combat phase is currently active.
     """
 
@@ -61,6 +83,9 @@ class CombatState:
     attacker_blockers: dict[Any, list[Any]] = field(default_factory=dict)
     damage_assignments: dict[Any, list[tuple[Any, int]]] = field(default_factory=dict)
     was_blocked: set[Any] = field(default_factory=set)
+    attacked_planeswalkers: dict[Any, tuple[int, Any]] = field(default_factory=dict)
+    # Attacked planeswalkers that have left combat; they never rejoin it (rule 506.4).
+    departed_planeswalkers: list[Any] = field(default_factory=list)
     in_combat: bool = False
 
     def clear(self) -> None:
@@ -70,6 +95,8 @@ class CombatState:
         self.attacker_blockers.clear()
         self.damage_assignments.clear()
         self.was_blocked.clear()
+        self.attacked_planeswalkers.clear()
+        self.departed_planeswalkers.clear()
         self.in_combat = False
 
 
@@ -193,15 +220,24 @@ def _deal_damage(
         # Target is a player
         target.life -= amount
         is_damage_recipient = True
-    elif hasattr(target, "damage_marked"):
-        # Target is a creature
-        target.damage_marked += amount
-        is_damage_recipient = True
+    else:
+        # A permanent gets every result of damage that applies to it: a
+        # creature-planeswalker loses loyalty and is marked with damage alike.
+        if CardType.PLANESWALKER in getattr(target, "card_types", ()):
+            # Damage dealt to a planeswalker removes that many loyalty counters (rule 120.3c).
+            from engine.game import remove_counter
 
-        # Track deathtouch damage for SBA rule 704.5h
-        source_kw_dt = getattr(source, "keywords", Keyword(0))
-        if Keyword.DEATHTOUCH in source_kw_dt:
-            target.dealt_deathtouch_damage = True
+            remove_counter(game, target, "loyalty", amount)
+            is_damage_recipient = True
+        if hasattr(target, "damage_marked"):
+            # Damage dealt to a creature is marked on it (rule 120.3e).
+            target.damage_marked += amount
+            is_damage_recipient = True
+
+            # Track deathtouch damage for SBA rule 704.5h
+            source_kw_dt = getattr(source, "keywords", Keyword(0))
+            if Keyword.DEATHTOUCH in source_kw_dt:
+                target.dealt_deathtouch_damage = True
 
     # Fire the combat-damage trigger (rule 510.2 — after damage is dealt, its
     # triggered abilities go on the stack). ``is_combat``/``combat`` both mark
@@ -232,80 +268,220 @@ def _deal_damage(
 # Combat steps
 # ---------------------------------------------------------------------------
 
-def _order_blockers(
-    game: GameState, controller: Any, attacker: Any, blocker_list: list[Any]
-) -> list[Any]:
-    """Raise an ordering Player Query so ``controller`` orders blockers.
+def _divide_damage(
+    game: GameState, attacker: Any, blockers: list[Any], power: int, trample: bool
+) -> tuple[list[tuple[Any, int]], int]:
+    """How the controller of *attacker*, blocked by two or more creatures,
+    divides its *power* combat damage among *blockers* (rule 510.1c); return
+    each blocker's share and, with trample, what is left for the player or
+    planeswalker it attacks (rule 702.19c).
 
-    Ordering query: ``min == max == len(options)``; the Answer's order is the
-    damage-assignment order. Maps the answer back to the blocker objects.
+    Each blocker in turn is a NUMBER Player Query sourced by the attacker,
+    with that blocker's OBJECT decision as its question payload: how much of
+    the damage still undivided it is assigned. Without trample the last
+    blocker is assigned the rest unasked. A division the rules forbid —
+    damage left over while a blocker is assigned less than lethal damage — is
+    rejected and the division asked again (an explicit attempt, see ADR-017).
     """
-    from engine.queries import PlayerQuery, ask
-    from engine.refs_registry import object_options
+    controller = getattr(attacker, "controller", None) or game.active_player
+    asked = blockers if trample else blockers[:-1]
 
-    items = [
-        (b, "battlefield", game.refs.seat_of(getattr(b, "controller", None)))
-        for b in blocker_list
-    ]
-    options, by_decision = object_options(game.refs, items)
-    source = game.refs.object_decision(
-        attacker,
-        zone="battlefield",
-        controller_seat=game.refs.seat_of(getattr(attacker, "controller", None)),
-    )
+    def divide() -> tuple[list[tuple[Any, int]], int]:
+        remaining = power
+        division: list[tuple[Any, int]] = []
+        for blocker in asked:
+            amount = _choose_share(game, controller, attacker, blocker, remaining)
+            division.append((blocker, amount))
+            remaining -= amount
+        if not trample:
+            division.append((blockers[-1], remaining))
+            remaining = 0
+        if remaining and any(amount < _get_lethal_damage(b, attacker) for b, amount in division):
+            raise InvalidPlayerChoiceError(
+                f"{getattr(attacker, 'name', attacker)!r} can't assign trample damage "
+                "past a blocker assigned less than lethal damage"
+            )
+        return division, remaining
+
+    return attempts.attempt(game, divide)
+
+
+def _choose_share(game: GameState, controller: Any, attacker: Any, blocker: Any, remaining: int) -> int:
+    """Ask how much of *attacker*'s *remaining* damage *blocker* is assigned."""
+    (blocker_option,), _ = object_options(game.refs, _battlefield_items(game, [blocker]))
     query = PlayerQuery(
-        source=(source,),
-        prompt="order blockers for damage assignment",
-        options=options,
-        min=len(options),
-        max=len(options),
+        source=(_object_source(game, attacker),),
+        prompt=(
+            f"assign {getattr(attacker, 'name', 'the attacker')}'s combat damage: "
+            f"how much of {remaining} to {getattr(blocker, 'name', 'this blocker')}"
+        ),
+        options=tuple(Decision.number(n) for n in range(remaining + 1)),
+        min=1,
+        max=1,
+        question=(blocker_option,),
     )
-    answer = ask(controller, query)
-    return [by_decision[d] for d in answer.selected]
+    return dict(ask(controller, query).selected[0].attrs)["value"]
 
 
-def declare_attackers_step(game: GameState, attackers: Any = None) -> None:
-    """Declare attackers step: register the active player's attackers.
+def _battlefield_items(game: GameState, objs: list[Any]) -> list[tuple[Any, str, int | None]]:
+    return [
+        (obj, Zone.BATTLEFIELD.value, game.refs.seat_of(getattr(obj, "controller", None)))
+        for obj in objs
+    ]
 
-    Declaring attackers is an *action-layer* decision: it is directive-driven,
-    so the chosen attackers are passed in (``attackers`` — a list of creature
-    objects) rather than elicited through a Player Query. ``None`` means no
-    attackers are declared (autonomous play with no directive). Each registered
-    attacker is tapped (unless it has vigilance) and its ``is_attacking`` flag
-    is set.
 
-    Parameters:
-        game: The current game state.  ``game.combat_state`` must exist.
-        attackers: The creatures to declare as attackers, or ``None``.
+def _object_source(game: GameState, obj: Any) -> PlayerDecision:
+    return game.refs.object_decision(
+        obj,
+        zone=Zone.BATTLEFIELD.value,
+        controller_seat=game.refs.seat_of(getattr(obj, "controller", None)),
+    )
+
+
+def _declaration_outcome(
+    game: GameState, declaration: dict[Any, Any], chosen: dict[int, PlayerDecision]
+) -> tuple[tuple[PlayerDecision, tuple[PlayerDecision, ...]], ...]:
+    """The declaration as decisions: each declared creature's option with the
+    defender it attacks, or the attackers it blocks."""
+    outcome = []
+    for creature, targets in declaration.items():
+        targets = targets if isinstance(targets, list) else [targets]
+        decisions = tuple(
+            game.refs.player_decision(t, seat=game.refs.seat_of(t)) if hasattr(t, "life")
+            else object_options(game.refs, _battlefield_items(game, [t]))[0][0]
+            for t in targets
+        )
+        outcome.append((chosen[id(creature)], decisions))
+    return tuple(outcome)
+
+
+def _declaration_source(game: GameState, player: Player, window: tuple[str, str]) -> PlayerDecision:
+    seat = game.refs.seat_of(player)
+    return Decision.player(
+        ref=GameRef(player=frozenset({("seat", seat)}), ability=frozenset({window})),
+        seat=seat,
+        name=player.name,
+    )
+
+
+def _untapped_creatures(player: Player) -> list[Any]:
+    return [
+        c for c in player.zones[Zone.BATTLEFIELD].get_all()
+        if hasattr(c, "base_power") and not getattr(c, "is_tapped", False)
+    ]
+
+
+def _declare(
+    game: GameState,
+    context: AttemptContext,
+    player: Player,
+    window: tuple[str, str],
+    prompt: str,
+    candidates: list[Any],
+    follow_up: Callable[[list[Any]], Any],
+) -> Any:
+    """Ask *player* for a declaration until they give one the rules allow.
+
+    The declaration query is a multi-select of OBJECT options for
+    *candidates* — asked even when there are none, since the declaration
+    still happens; declining declares nothing. ``follow_up(chosen)`` asks the
+    per-creature questions and returns the declaration, raising
+    ``InvalidPlayerChoiceError`` when the rules forbid it. Once every question
+    is answered, :meth:`~engine.player.Player.confirm_declaration` shows the
+    player the declaration that would take effect — each declared creature
+    with what it attacks or blocks — and lets them withdraw it first.
+
+    The declaration is an attempt (:mod:`engine.attempts`) whose rejection
+    boundary is its own start: a rejected declaration is rolled back there, the
+    owner of the rejection hears it through
+    :meth:`~engine.player.Player.on_attempt_rejected`, and the same
+    declaration is asked again (CR 733.2, see ADR-017). ``context`` is the
+    declaration's attempt, which the caller ends.
+    """
+    with attempts.active(context):
+        while True:
+            context.begin_try()
+            options, by_decision = object_options(game.refs, _battlefield_items(game, candidates))
+            query = PlayerQuery(
+                source=(_declaration_source(game, player, window),),
+                prompt=prompt,
+                options=options,
+                min=0,
+                max=len(options),
+            )
+            answer = ask(player, query)
+            context.query, context.answer = query, answer
+            try:
+                declaration = follow_up([by_decision[d] for d in answer.selected])
+                chosen = {id(by_decision[d]): d for d in answer.selected}
+                player.confirm_declaration(
+                    query, answer, _declaration_outcome(game, declaration, chosen)
+                )
+            except InvalidPlayerChoiceError as error:
+                context.boundary.restore()
+                context.reject(error)
+                # What the hook changed outside its rollback-exempt state is
+                # not part of what follows (see Player.on_attempt_rejected).
+                context.boundary.restore()
+                continue
+            context.taken, context.result = True, declaration
+            return declaration
+
+
+def declare_attackers_step(game: GameState) -> None:
+    """Declare attackers step: the active player declares attackers.
+
+    The active player is asked which creatures attack — a multi-select of
+    OBJECT options for every untapped creature they control, declining to
+    attack with none — and then what each attacker attacks: the defending
+    player (a PLAYER option) or a planeswalker they control (OBJECT options),
+    asked even when the defending player is the only choice. The declaration's
+    source is the active player's PLAYER decision carrying
+    :data:`~engine.queries.DECLARE_ATTACKERS_WINDOW`; each follow-up question
+    is sourced by the attacking creature's OBJECT decision.
+
+    A declaration naming a creature that can't attack is rejected and asked
+    again. Each registered attacker is tapped (unless it has vigilance) and
+    its ``is_attacking`` flag is set.
     """
     combat = game.combat_state
     combat.in_combat = True
     active = game.active_player
     defending = game.non_active_player
 
-    # Gather legal attackers from the active player's battlefield
-    from engine.types import Zone
-    bf = active.zones[Zone.BATTLEFIELD]
-    eligible = [
-        c for c in bf.get_all()
-        if hasattr(c, "base_power") and _can_attack(c)
-    ]
+    candidates = _untapped_creatures(active)
 
-    if not eligible:
-        return
+    def follow_up(chosen: list[Any]) -> dict[Any, Any]:
+        for creature in chosen:
+            if not _can_attack(creature):
+                raise InvalidPlayerChoiceError(
+                    f"{getattr(creature, 'name', creature)!r} can't attack"
+                )
+        return {creature: _choose_defender(game, active, defending, creature) for creature in chosen}
 
-    # Directive: which creatures attack (no query — action layer).
-    chosen = list(attackers) if attackers else []
+    context = AttemptContext(game, "declaration", actor=active)
+    try:
+        attacks = _declare(
+            game, context, active, DECLARE_ATTACKERS_WINDOW, "declare attackers",
+            candidates, follow_up,
+        )
+        _register_attacks(game, attacks)
+    finally:
+        # Registered or ended by an error: the declaration is over.
+        active.on_action_ended(context)
 
-    # Validate and register attackers
+
+def _register_attacks(game: GameState, attacks: dict) -> None:
+    combat = game.combat_state
+    defending = game.non_active_player
     declared: list[Any] = []
-    for attacker in chosen:
-        if attacker not in eligible:
-            continue
-        if not _can_attack(attacker):
-            continue
-
-        combat.attackers[attacker] = defending
+    for attacker, defender in attacks.items():
+        if defender is not defending:
+            combat.attacked_planeswalkers[defender] = (
+                game.refs.zone_epoch(defender),
+                getattr(defender, "controller", None),
+            )
+        combat.attackers[attacker] = defender
         combat.attacker_blockers[attacker] = []
         attacker.is_attacking = True
         declared.append(attacker)
@@ -326,21 +502,43 @@ def declare_attackers_step(game: GameState, attackers: Any = None) -> None:
         )
 
 
-def declare_blockers_step(game: GameState, block_assignments: Any = None) -> None:
-    """Declare blockers step: register the defending player's blocks.
+def _choose_defender(game: GameState, active: Player, defending: Player, attacker: Any) -> Any:
+    """What *attacker* attacks: the defending player, or a planeswalker they
+    control (rule 508.1b). Always asked, even when the defending player is the
+    only choice, so the answer names the defender the attack really has."""
+    planeswalkers = [
+        p for p in defending.zones[Zone.BATTLEFIELD].get_all()
+        if CardType.PLANESWALKER in getattr(p, "card_types", ())
+    ]
+    player_option = game.refs.player_decision(defending, seat=game.refs.seat_of(defending))
+    walker_options, by_decision = object_options(game.refs, _battlefield_items(game, planeswalkers))
+    query = PlayerQuery(
+        source=(_object_source(game, attacker),),
+        prompt=f"choose what {getattr(attacker, 'name', 'the attacker')} attacks",
+        options=(player_option, *walker_options),
+        min=1,
+        max=1,
+    )
+    choice = ask(active, query).selected[0]
+    return defending if choice == player_option else by_decision[choice]
 
-    Declaring blockers is an *action-layer* decision: it is directive-driven, so
-    the block assignments are passed in (``block_assignments`` — a dict mapping
-    blocker → attacker, or blocker → list of attackers for multi-block) rather
-    than elicited through a Player Query. ``None`` means no blocks are declared.
 
-    After blockers are registered the attacking player *does* order multi-block
-    assignments for damage — that ordering IS a Player Query (an ordering query
-    with ``min == max == len``).
+def declare_blockers_step(game: GameState) -> None:
+    """Declare blockers step: the defending player declares blockers.
 
-    Parameters:
-        game: The current game state.
-        block_assignments: The blocker → attacker(s) mapping, or ``None``.
+    The defending player is asked which creatures block — a multi-select of
+    OBJECT options for every untapped creature they control, declining to
+    block with none — and then, for each chosen blocker, which attackers it
+    blocks: OBJECT options for the attacking creatures, choosing at least one
+    and at most as many as the blocker may block. The declaration's source is
+    the defending player's PLAYER decision carrying
+    :data:`~engine.queries.DECLARE_BLOCKERS_WINDOW`; each follow-up question
+    is sourced by the blocking creature's OBJECT decision.
+
+    A declaration the rules forbid — a blocker that can't block the attacker
+    it names (evasion, "can't block", protection), more attackers than the
+    blocker may block, or a menace attacker blocked by a single creature — is
+    rejected and asked again.
     """
     combat = game.combat_state
 
@@ -348,58 +546,32 @@ def declare_blockers_step(game: GameState, block_assignments: Any = None) -> Non
         return
 
     defending = game.non_active_player
-    active = game.active_player
+    candidates = _untapped_creatures(defending)
 
-    from engine.types import Zone
-    bf_defending = defending.zones[Zone.BATTLEFIELD]
-    eligible_blockers = [
-        c for c in bf_defending.get_all()
-        if hasattr(c, "base_power") and not getattr(c, "is_tapped", False)
-    ]
+    def follow_up(chosen: list[Any]) -> dict[Any, list[Any]]:
+        blocks = {blocker: _choose_blocked(game, defending, blocker) for blocker in chosen}
+        _check_blocks(blocks)
+        return blocks
 
-    if not eligible_blockers:
-        return
+    context = AttemptContext(game, "declaration", actor=defending)
+    try:
+        blocks = _declare(
+            game, context, defending, DECLARE_BLOCKERS_WINDOW, "declare blockers",
+            candidates, follow_up,
+        )
+        _register_blocks(game, blocks)
+    finally:
+        # Registered or ended by an error: the declaration is over.
+        defending.on_action_ended(context)
 
-    # Directive: blocker → attacker(s) (no query — action layer).
-    if block_assignments is None or not isinstance(block_assignments, dict):
-        return
 
-    # Process block assignments
-    for blocker, target in block_assignments.items():
-        # Validate that the blocker is in the eligible set
-        if blocker not in eligible_blockers:
-            continue
-        targets = target if isinstance(target, list) else [target]
-        valid_targets = []
-        max_blocked = getattr(blocker, "_max_attackers_blocked", 1)
-        for attacker in targets:
-            if len(valid_targets) >= max_blocked:
-                break
-            if attacker in combat.attackers and _can_block(blocker, attacker):
-                valid_targets.append(attacker)
-        if valid_targets:
-            combat.blockers[blocker] = valid_targets
-            blocker.is_blocking = True
-            for attacker in valid_targets:
-                if attacker not in combat.attacker_blockers:
-                    combat.attacker_blockers[attacker] = []
-                combat.attacker_blockers[attacker].append(blocker)
-
-    # Menace check: attackers with menace that have fewer than 2 blockers
-    # are treated as unblocked (remove the single blocker assignment).
-    for attacker, blocker_list in list(combat.attacker_blockers.items()):
-        kw = getattr(attacker, "keywords", Keyword(0))
-        if Keyword.MENACE in kw and len(blocker_list) < 2 and len(blocker_list) > 0:
-            # Illegal block — remove these blockers
-            for b in blocker_list:
-                if b in combat.blockers:
-                    combat.blockers[b] = [
-                        a for a in combat.blockers[b] if a is not attacker
-                    ]
-                    if not combat.blockers[b]:
-                        del combat.blockers[b]
-                        b.is_blocking = False
-            combat.attacker_blockers[attacker] = []
+def _register_blocks(game: GameState, blocks: dict) -> None:
+    combat = game.combat_state
+    for blocker, blocked in blocks.items():
+        combat.blockers[blocker] = blocked
+        blocker.is_blocking = True
+        for attacker in blocked:
+            combat.attacker_blockers.setdefault(attacker, []).append(blocker)
 
     # Mark attackers that have at least one blocker as "was_blocked".
     # Per MTG rule 509.1h, once a creature is blocked it remains blocked
@@ -408,14 +580,38 @@ def declare_blockers_step(game: GameState, block_assignments: Any = None) -> Non
         if blocker_list:
             combat.was_blocked.add(attacker)
 
-    # Controller of each attacker orders the blockers for damage assignment.
-    # This IS a Player Query — an ordering query (min == max == len(options),
-    # the Answer's order is the damage-assignment order).
-    for attacker, blocker_list in combat.attacker_blockers.items():
-        if len(blocker_list) > 1:
-            controller = getattr(attacker, "controller", active)
-            combat.attacker_blockers[attacker] = _order_blockers(
-                game, controller, attacker, blocker_list
+
+
+def _choose_blocked(game: GameState, defending: Player, blocker: Any) -> list[Any]:
+    """Ask which attackers *blocker* blocks."""
+    attackers = list(game.combat_state.attackers)
+    options, by_decision = object_options(game.refs, _battlefield_items(game, attackers))
+    query = PlayerQuery(
+        source=(_object_source(game, blocker),),
+        prompt=f"choose what {getattr(blocker, 'name', 'the blocker')} blocks",
+        options=options,
+        min=1,
+        max=min(len(options), max(1, getattr(blocker, "_max_attackers_blocked", 1))),
+    )
+    return [by_decision[d] for d in ask(defending, query).selected]
+
+
+def _check_blocks(blocks: dict[Any, list[Any]]) -> None:
+    """Raise ``InvalidPlayerChoiceError`` unless the rules allow *blocks*."""
+    blockers_of: dict[Any, list[Any]] = {}
+    for blocker, blocked in blocks.items():
+        for attacker in blocked:
+            if not _can_block(blocker, attacker):
+                raise InvalidPlayerChoiceError(
+                    f"{getattr(blocker, 'name', blocker)!r} can't block "
+                    f"{getattr(attacker, 'name', attacker)!r}"
+                )
+            blockers_of.setdefault(attacker, []).append(blocker)
+    for attacker, blockers in blockers_of.items():
+        if Keyword.MENACE in getattr(attacker, "keywords", Keyword(0)) and len(blockers) < 2:
+            raise InvalidPlayerChoiceError(
+                f"{getattr(attacker, 'name', attacker)!r} has menace and can't be "
+                "blocked except by two or more creatures"
             )
 
 
@@ -521,7 +717,7 @@ def _assign_combat_damage(
                 if not bf.contains(attacker):
                     attacker_deals = False
 
-        defending_player = combat.attackers[attacker]
+        defending_player = _attacked(game, combat, attacker)
         blocker_list = combat.attacker_blockers.get(attacker, [])
         attacker_kw = getattr(attacker, "keywords", Keyword(0))
 
@@ -534,43 +730,35 @@ def _assign_combat_damage(
 
             if not is_blocked and not blocker_list:
                 # Truly unblocked → damage to defending player
-                _deal_damage(attacker, defending_player, power, game, combat)
+                if defending_player is not None:
+                    _deal_damage(attacker, defending_player, power, game, combat)
             elif is_blocked and not blocker_list:
                 # Was blocked but all blockers removed.
                 # Without trample: deals no damage.
                 # With trample: all damage tramples to defending player.
                 has_trample = Keyword.TRAMPLE in attacker_kw
-                if has_trample:
+                if has_trample and defending_player is not None:
                     _deal_damage(attacker, defending_player, power, game, combat)
                 # else: no damage dealt
             else:
-                # Blocked → assign damage to blockers in order
                 has_trample = Keyword.TRAMPLE in attacker_kw
-                remaining_damage = power
+                if len(blocker_list) > 1:
+                    division, remaining_damage = _divide_damage(
+                        game, attacker, blocker_list, power, has_trample
+                    )
+                else:
+                    # One blocker: lethal to it, and with trample the rest
+                    # tramples over; without trample, all of it.
+                    (blocker,) = blocker_list
+                    share = min(_get_lethal_damage(blocker, attacker), power) if has_trample else power
+                    division, remaining_damage = [(blocker, share)], power - share
 
-                for i, blocker in enumerate(blocker_list):
-                    if remaining_damage <= 0:
-                        break
-
-                    lethal = _get_lethal_damage(blocker, attacker)
-
-                    if i < len(blocker_list) - 1:
-                        # Not the last blocker — assign lethal damage
-                        assign = min(lethal, remaining_damage)
-                    else:
-                        # Last blocker
-                        if has_trample:
-                            # With trample: assign lethal, rest tramples through
-                            assign = min(lethal, remaining_damage)
-                        else:
-                            # Without trample: all remaining damage to last blocker
-                            assign = remaining_damage
-
-                    _deal_damage(attacker, blocker, assign, game, combat)
-                    remaining_damage -= assign
+                for blocker, assign in division:
+                    if assign > 0:
+                        _deal_damage(attacker, blocker, assign, game, combat)
 
                 # Trample: excess damage to defending player
-                if has_trample and remaining_damage > 0:
+                if has_trample and remaining_damage > 0 and defending_player is not None:
                     _deal_damage(attacker, defending_player, remaining_damage, game, combat)
 
         # Blockers deal damage back to the attacker
@@ -598,6 +786,42 @@ def _assign_combat_damage(
                     blocker_power = getattr(blocker, "power", 0)
                     _deal_damage(blocker, attacker, blocker_power, game, combat)
                     blockers_dealt.add(id(blocker))
+
+
+def _attacked(game: GameState, combat: CombatState, attacker: Any) -> Any:
+    """What *attacker* is attacking — ``None`` once the planeswalker it attacks
+    has left combat by changing zones, controller or card type (rule 506.4).
+
+    The attacker stays attacking and blockable, but deals no combat damage to
+    the departed planeswalker or anyone in its place (rules 506.4c, 510.1b).
+    """
+    defender = combat.attackers[attacker]
+    if defender not in combat.attacked_planeswalkers:
+        return defender
+    note_planeswalker_departures(game)
+    return None if any(d is defender for d in combat.departed_planeswalkers) else defender
+
+
+def note_planeswalker_departures(game: GameState) -> None:
+    """Record each attacked planeswalker that has left combat — by changing
+    zones, controller or card type since attackers were declared (rule 506.4).
+
+    Called whenever the game settles, on its settled characteristics, and
+    before combat damage. A recorded departure is permanent for this combat:
+    regaining the controller or type does not rejoin it.
+    """
+    combat = getattr(game, "combat_state", None)
+    if combat is None:
+        return
+    for defender, (epoch, controller) in combat.attacked_planeswalkers.items():
+        if any(d is defender for d in combat.departed_planeswalkers):
+            continue
+        if (
+            game.refs.zone_epoch(defender) != epoch
+            or getattr(defender, "controller", None) is not controller
+            or CardType.PLANESWALKER not in getattr(defender, "card_types", ())
+        ):
+            combat.departed_planeswalkers.append(defender)
 
 
 def end_combat_step(game: GameState) -> None:

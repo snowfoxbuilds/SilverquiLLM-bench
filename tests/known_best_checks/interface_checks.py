@@ -26,7 +26,8 @@ from engine.card import Artifact, Creature, ManaAbility, Sorcery
 from engine.card_queries import choose_object, query_yes_no
 from engine.decisions import Decision, InvalidPlayerChoiceError
 from engine.game import gain_life
-from engine.types import CardType, ManaType, Phase, Step, Zone
+from engine.decisions import Decision
+from engine.types import CardType, Keyword, ManaType, Phase, Step, Zone
 from test_interface import (
     PlayDiverged,
     ScriptedPlayer,
@@ -222,6 +223,16 @@ class RandomPlayerLoses(Sorcery):
     def on_resolve(self, game):
         for chosen in game.choose_at_random(list(game.players), 1):
             chosen.life -= 3
+
+
+class Hawk(Creature):
+    def __init__(self, **kwargs):
+        super().__init__(name="Hawk", base_power=1, base_toughness=1, keywords=Keyword.FLYING, **kwargs)
+
+
+class Ogre(Creature):
+    def __init__(self, **kwargs):
+        super().__init__(name="Ogre", base_power=3, base_toughness=3, **kwargs)
 
 
 def _main(p0=None, p1=None, active=0):
@@ -1112,3 +1123,107 @@ def test_an_ability_needs_a_handle_or_token_and_a_class():
         ability(SharedFirst, SharedAbility)
     with pytest.raises(TypeError):
         ability(card(SharedFirst), "SharedAbility")
+
+
+# ---------------------------------------------------------------------------
+# Combat declarations
+# ---------------------------------------------------------------------------
+
+
+def _to_attacks(attacker, *blockers):
+    game = _main(Side(battlefield=[attacker]), Side(battlefield=list(blockers)))
+    t = Table(game)
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    return t
+
+
+def test_an_unblocked_attack_is_declared_by_an_entry_and_deals_its_damage():
+    bear = card(Bear)
+    t = _to_attacks(bear)
+    assert t.expected.asked == 0 and t.expected.step is Step.DECLARE_ATTACKERS
+    t.act(0, bear, then=[taps(bear)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)  # declares no blockers
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 18)])
+    final = t.run()
+    assert (final.step, final.asked, final.players[1].life) == (Step.COMBAT_DAMAGE, 0, 18)
+    assert any("declares attackers: " in e.narration for e in t.scripts[0])
+
+
+def test_a_scoped_block_trades_and_nothing_else_is_asked():
+    bear, wall = card(Bear), card(Bear)
+    t = _to_attacks(bear, wall)
+    t.act(0, bear, then=[taps(bear)])
+    t.pass_(0)
+    t.pass_(1)
+    t.act(1, wall, scoped={wall: bear})
+    t.pass_(0)
+    t.pass_(1, then=[moves(bear, Zone.GRAVEYARD), moves(wall, Zone.GRAVEYARD)])
+    t.run()
+
+
+def test_a_scoped_answer_that_cannot_be_met_withdraws_its_branch():
+    bear, wall, idle = card(Bear), card(Bear), card(Bear)
+    game = _main(Side(battlefield=[bear, idle]), Side(battlefield=[wall]))
+    t = Table(game)
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, bear, then=[taps(bear)])
+    t.pass_(0)
+    t.pass_(1)
+    # The idle Bear does not attack, so the first branch cannot be declared.
+    t.act(1, branches=[branch(wall, scoped={wall: idle}), branch(wall, scoped={wall: bear})])
+    t.pass_(0)
+    t.pass_(1, then=[moves(bear, Zone.GRAVEYARD), moves(wall, Zone.GRAVEYARD)])
+    t.run()
+
+
+def test_a_scoped_answer_that_cannot_be_met_on_the_last_branch_diverges():
+    bear, wall, idle = card(Bear), card(Bear), card(Bear)
+    game = _main(Side(battlefield=[bear, idle]), Side(battlefield=[wall]))
+    t = Table(game)
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, bear, then=[taps(bear)])
+    t.pass_(0)
+    t.pass_(1)
+    t.act(1, wall, scoped={wall: idle})
+    with pytest.raises(PlayDiverged, match="not offered"):
+        t.run()
+
+
+def test_a_ground_creature_cannot_block_a_flyer():
+    hawk, bear = card(Hawk), card(Bear)
+    t = _to_attacks(hawk, bear)
+    t.act(0, hawk, then=[taps(hawk)])
+    t.pass_(0)
+    t.pass_(1)
+    t.act_illegal(1, bear, scoped={bear: hawk}, note="flying")
+    t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 19)])
+    t.run()
+
+
+def test_the_attacker_divides_its_damage_among_two_blockers():
+    ogre, b1, b2 = card(Ogre), card(Bear), card(Bear)
+    t = _to_attacks(ogre, b1, b2)
+    t.act(0, ogre, then=[taps(ogre)])
+    t.pass_(0)
+    t.pass_(1)
+    t.act(1, b1, b2, scoped={b1: ogre, b2: ogre})
+    # The first blocker's share is 1, so it survives; the second takes 2.
+    t.pass_(0, per_query={b1: [Decision.number(1)]})
+    t.pass_(1, then=[moves(ogre, Zone.GRAVEYARD), moves(b2, Zone.GRAVEYARD)])
+    t.run()
+
+
+def test_without_attackers_the_blockers_and_damage_steps_are_skipped():
+    bear = card(Bear)
+    t = _to_attacks(bear)
+    t.pass_(0)  # declares no attackers
+    t.pass_(0)
+    t.pass_(1)
+    final = t.run()
+    assert (final.step, final.asked) == (Step.END_COMBAT, 0)
+
