@@ -63,7 +63,7 @@ class GameRef:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| source | set of Player Decisions | what raised it — routing matches on source refs |
+| source | tuple of Player Decisions | what raised it — routing matches on source refs (grilling 2026-10-05) |
 | prompt | string | human-readable description |
 | options | ordered tuple of Player Decisions | the legal choices; implementation-provided stable order is part of the contract |
 | min / max | int | how many must / may be chosen; `min=0` = legally declinable |
@@ -81,7 +81,7 @@ A test names what a query asks for with the same objects and matches them as pre
 - **Modifiers: open but canonical-when-audited.** Engines may invent private Modifiers freely; any Modifier an audited test asserts on must use the canonical name.
 ### Boundary validation
 
-Validation is engine-side: the query layer validates every query as it is raised — an option with an unknown kind or malformed attrs, or an unstable/empty option order, is an explicit, attributable engine failure (the `ProtocolError` family) — distinct from "no offered option satisfies the intent" (the `IntentError` family, attributable to the test). These two signal families replace `ScriptExhaustedError`.
+Validation is engine-side: the query layer validates every query as it is raised — an option with an unknown kind or malformed attrs, or empty options where a choice is required, is an explicit, attributable engine failure (the `ProtocolError` family) — distinct from "no offered option satisfies the intent" (the `IntentError` family, attributable to the test). These two signal families replace `ScriptExhaustedError`.
 
 Fault attribution requires propagation: card implementations must never catch exceptions raised by the query helpers (`choose_*` / `query_*`) — an `except Exception` wrapper silently converts a protocol or intent fault into a wrong game action (an unanswerable query becoming a default choice). Guards are legitimate only around APIs that signal failure by return value (e.g. `mana_pool.pay()` returns `False`, never raises).
 
@@ -97,7 +97,7 @@ Locked alongside the Task #1 implementation prompt; recorded here so the spec, n
 class ProtocolError(Exception): ...            # engine-side protocol failure
 class UnknownKindError(ProtocolError): ...
 class MalformedAttrsError(ProtocolError): ...
-class InvalidOptionsError(ProtocolError): ...  # empty options with min > 0, malformed option, unstable order
+class InvalidOptionsError(ProtocolError): ...  # empty options with min > 0, malformed option
 
 class IntentError(Exception): ...              # test-authoring failure
 class AmbiguousIntentError(IntentError): ...
@@ -184,23 +184,20 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 - **Rejection scenarios**: implementation tests check, after each rejection, that the state at the boundary is restored, that effects before it stand, and that play continues without consuming another script entry — for a failed ordinary cast followed by a legal cast, a rejected later Uldaros copy after an earlier copy was cast, and an illegal combat declaration followed by a legal one.
 - **Owning a rejection**: each priority action, resolution, and cast or choice made while an object resolves is an attempt, and a rejection belongs to one answer given during it.
   A choice the card or engine refuses belongs to the attempt's latest answer; an action the rules forbid as a whole (a casting, activation or zone-move error) belongs to the answer that chose the action.
-  Only that answer's player hears the error, through `Player.on_attempt_rejected`, after the rollback, and answers retry, pass, or raises to stop play; the default raises for anything but a priority action, which it hands to `Player.on_choice_rejected`.
+  Only that answer's player hears the error, through `Player.on_attempt_rejected(context, answer, error)`, after the rollback; it returns nothing, or raises to stop play, and the default raises.
+  The engine then asks the same query again, as CR 733.2 leaves the player free to redo the action legally, take another or pass: a rejection never passes, ends or skips anything on the player's behalf, and the owner answers the re-asked query differently — its next branch, the next script entry, or declining — or raises (grilling 2026-10-05).
+  The `context` names the attempt, the action it belongs to and that action's player, so no player is asked beforehand whether it would retry (grilling 2026-10-05).
   A rejection its owner raises, or one no answer owns, is final: the attempt has already rolled back to its own boundary, so the error passes every enclosing attempt without another rollback or notification, keeping what those attempts completed before it, and reaches the caller unchanged.
   Every Player hears rejections this way, whatever its preferences; state it keeps for its decisions is listed in its `rollback_exempt`, since a retry rolls the game back again — to the same boundary, after every hook has returned, for a priority action as for a resolution or explicit attempt.
-  When the rejected choice inside a priority action is not the action itself — another player's choice, or a choice Intent's — the acting player hears `Player.on_action_retried` and chooses the same action again.
-  Decision-side state — a player's intents, transcript, script position and attempt bookkeeping — is not game state, and the rollback leaves it alone.
-- **Retrying a rejected choice**: a retry is never inferred; each test writes out every way it may be retried (grilling 2026-10-04).
-  A script entry or choice Intent holds ordered branches, each an ordinary preference list that answers every query of an attempt, and the handler that owns the rejected answer — the entry, or the choice Intent that answered — retries the attempt with its next branch.
-  A handler with one preference list has one branch, so its rejection fails the test, and one that runs out of branches fails the same way.
-  Because each branch answers every query of the attempt, the retry does not depend on how the engine presented the choice: with branches [Gleam of Death, Glamdring] then [Glamdring] and Gleam of Death illegal, an engine that offers Gleam of Death at once casts Glamdring on the retry, and so does one that asked Glamdring and then Gleam of Death (grilling 2026-10-04).
-  A choice Intent's rejection while an entry's action is cast leaves the entry's action and branch as they were and retries the choice with the Intent's next branch.
-  Choice branches belong to one action: when a script entry is consumed — including a successor that takes over a window an expected-illegal entry handed on — every handler's choices, the opponent's and the baseline's included, start again from their first branch, while a retry of the same entry keeps where they had reached.
-  Inside its action the entry answers every query that no choice Intent claims and no baseline preference picks, mandatory fills included, so it owns those answers and a refusal of any of them moves the entry to its next branch; once the action is over — taken, abandoned or ended by an error — the entry answers nothing more.
-- **Resolution-time choices**: a choice raised while an object resolves, or while casting outside a Priority Query action, rolls back to its own rejection boundary — just before that cast or choice asked its first query — and is re-asked with the owning Intent's next branch; each such attempt starts again from the Intent's first branch.
+  When the rejected choice inside a priority action is not the action itself, but another player's choice, that player's retry re-asks the Priority Query and the acting player chooses the same action again.
+  Each action ends with exactly one `Player.on_action_ended(context)` to its acting player, and that is where the player lets go of the entry it acted on; these two hooks and `confirm_declaration` are the Player's whole rejection protocol (grilling 2026-10-05).
+  Decision-side state — a player's script, transcript, script position and attempt bookkeeping — is not game state, and the rollback leaves it alone.
+- **Retrying a rejected choice**: a retry is never inferred; the answer's owner answers the re-asked query from its next branch, as the [Test Interface](TEST-INTERFACE.md) describes for scripts (grilling 2026-10-04).
+- **Resolution-time choices**: a choice raised while an object resolves, or while casting outside a Priority Query action, rolls back to its own rejection boundary — just before that cast or choice asked its first query — and is re-asked, answered from the owner's next branch.
   It never re-asks the Priority Query before it, which would replay the passes and resolve the object again (grilling 2026-10-04).
   What a resolution or explicit attempt runs outside the game — its callable and the popped StackObject, such as a spell copy that occupies no zone — is rolled back with the game.
-  A resolution is one attempt whose boundary is its first query: a retry runs the effect again from the state before it, and an abandoned choice ends the effect there, keeping the effects that came before, while the object still finishes resolving — a spell leaves the stack for its usual destination, or exile after a flashback cast, unless its effect already moved it.
-  Card code that makes several casts or choices while resolving, such as Uldaros's copies, runs each as its own attempt, so a rejected later one keeps the earlier ones and the resolution goes on without it.
+  A resolution is one attempt whose boundary is its first query: a rejection runs the effect again from the state before it, re-asking the same query, and nothing is ever abandoned (grilling 2026-10-05).
+  Card code that makes several casts or choices while resolving, such as Uldaros's copies, runs each as its own attempt (`attempts.attempt`), so a rejected later one keeps the earlier ones and is asked again — where it is optional, such as a cast the card allows, the player may then decline it and the resolution goes on without it.
   The normal priority loop and the test helpers resolve through the same engine attempt.
 - **Testing choices whose presentation varies**: tests never dictate how an engine presents a choice; they are built to draw out the intended choice and to fail when an illegal one takes effect.
   Uldaros's targets are up to one card of each card type, judged by the graveyard characteristics of each card: the chosen cards must be distinct cards that can be assigned to distinct card types they have, though their type sets may overlap.
@@ -211,37 +208,14 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 
 #### Turn structure
 
-- **Entries**: each player has an ordered script of action entries, and each Priority Query or combat declaration the player receives consumes the next one.
-  An entry is one action and answers every query within it (choosing Glamdring and then Gleam of Death, or Gleam of Death at once); its goal is checked when the action completes (grilling 2026-10-04).
-- **Positive and expected-illegal entries**: a positive entry (`act`) fails the test with `PostconditionError` if no branch's action is offered, if a rejection with `InvalidPlayerChoiceError` leaves it no branch to retry with, or if it misses its goal (grilling 2026-10-04).
-  A branch whose action is not offered is skipped, so the entry is "not offered" only when no branch can start.
-  An expected-illegal entry (`act_illegal`, the successor to SOS `perform_illegal_action`) tries each of its branches the same way: it passes if every branch is not offered or is rejected, and fails if any takes effect and play reaches the next Priority Query (grilling 2026-10-04).
-  A rejection inside an expected-illegal branch's action settles that branch for the acting player before anyone else hears it (`Player.settle_rejected_action`), whoever answered the refused choice: the entry tries its next branch, or hands the same Priority Query to the next entry, without passing priority.
-  The exception is a refused choice whose owner would retry it with another branch (`Player.would_retry`), since the action may then still take effect — and if it does, the entry fails.
-- **Per-question preferences**: a branch may map keys to the preferences that answer a query a key matches, `branch(A, B, per_query={CardType.ARTIFACT: [A], CardType.CREATURE: [B]})`, on any query — a Priority Query, a combat declaration, or a choice while casting or resolving (grilling 2026-10-04).
-  A key is an object the query's question payload holds, matched as above, or any predicate over the query — its payload, offered options, source or bounds — so a test can infer the question best-effort when the engine attaches no payload; keys are tried in mapping order and the first match wins, so several matching keys are not an error (grilling 2026-10-04).
-  A matching key's list is used as given, even when empty: an optional choice then declines, a mandatory one fills to its minimum as usual, and an action branch with no matching preference is not offered.
-  An entry's explicitly matching override answers its query ahead of any baseline preference, and otherwise each handler — the baseline included — weighs a query by the branch it has currently reached.
-  A query no key matches, such as a single combined question for every type, is answered by the branch's own preferences.
-  Presentation independence still holds: a test using per-question preferences passes for an engine that asks one annotated question per type, one that asks unannotated questions it can tell apart by what they offer, one that filters what it offers or offers everything and rejects a repeated pick, and one that asks a single combined question, wherever those presentations can be told apart (grilling 2026-10-04).
-  The mapping is part of the branch: a rejection still moves to the next branch, and `act`, `act_illegal` and `Intent` take `per_query` for every branch as they take `choices`, after each branch's own.
-  A key is a canonical object or a predicate; a raw string is refused.
-- **Driving**: tests insert explicit pass entries for priority windows they skip, and a dry script passes through the Baseline Intent, which never takes an action at priority whatever its preferences.
-  `advance_to_phase` consumes no entries; `run_scripts` stops once every script is consumed and leaves the stack in place, and `resolve_stack` then resolves with every player passing (grilling 2026-10-04).
-  The priority round carries over between `run_scripts` calls — the next priority holder, the passes already made, and a resolution or step change both passes made due.
-  The engine keeps that round with the game and starts a fresh one whenever an action is taken, an object resolves or the game moves to another step, and `resolve_stack` always starts one, even on an empty stack.
-  The normal priority loop shares the same round, so handing play between it and `run_scripts` neither repeats nor skips a priority window.
-  A cleanup step grants priority only when its actions performed state-based actions or put triggers on the stack (CR 514.3a): each such window starts a fresh round, both the turn loop and `run_scripts` give players priority in it — a script entry may act there — and another cleanup step follows once it ends; `advance_game_to_phase` and `resolve_stack` still finish cleanup with every player passing — leaving a window `run_scripts` paused in, they resolve what is pending and then perform the cleanup steps that follow until one grants no priority.
-  An abandoned resolution stops every driver where it is — `priority_loop`, the turn's cleanup, `run_turn` and `run_game` as well as `run_scripts` and the forced helpers: none grants priority again, resolves what lies below, starts another cleanup, advances a step or fires a later event, and pending script entries stay pending.
-  A later call resumes from there.
-- **One step lifecycle**: the game owns where the current step is — its turn-based actions pending, its priority window open, or complete — and every driver, the turn loop, `run_scripts` and the test helpers alike, advances that one state, so a step's turn-based actions happen once whichever driver performs them, a step with no window (untap, a cleanup iteration that grants no priority) is never opened, and a completed step is never reopened.
-  Live play shares one implementation of the turn-based actions — the starting player's first draw is skipped and a draw from an empty library is attempted; only the forced helpers' fast-forward skips combat declarations and draws just from a nonempty library, consuming no entries.
-  `advance_to_phase` stays setup only: it marks the target step entered without its actions.
-  Every cleanup entrypoint — `finish_cleanup`, `resolve_stack`, `advance_game_to_phase` and the turn's own cleanup — carries on from that state: an open window is played out before the next cleanup iteration, a completed cleanup is left alone, and cleanup as `advance_game_to_phase`'s destination is completed before it returns, so a later call resumes a cleanup an abandoned resolution stopped without repeating its actions.
-  The thin action wrappers act only in an open window: a sorcery-speed cast that moves the game to a main phase opens that phase's window in a fresh round, and a wrapper acting where the current step's window is not open opens it first, so every driver carries on from that window rather than past the action.
-- **Choices outside the script**: choices raised while casting or resolving, including effect-granted casts such as Uldaros's or Bilbo's, go to choice Intents routed by source.
-  A rejected choice is retried with the Intent's next branch as above; once its branches are exhausted the choice Intent fails, except that an `InvalidPlayerChoiceError` raised under a negative choice Intent counts as a pass once the engine has rolled back to the choice's rejection boundary, and the resolution continues from there (grilling 2026-10-04).
-  A negative choice Intent's forbidden choice that takes effect fails the test with `PostconditionError` when its attempt completes, or at `end_intent` for a choice made outside any attempt; if the forbidden choice is never offered, nothing is checked.
+How Audited Tests script the players' answers is part of the [Test Interface](TEST-INTERFACE.md); the engine side follows.
+
+- **Passing is an answer**: declining a Priority Query is the player's answer, a pass, and an attempt reports no separate outcome; the window reads the answer to move the round on, and `run_game` ends with a winner or a draw (grilling 2026-10-05).
+- **Priority round**: a step's open priority window holds the round — who holds priority and how many players have passed in succession — and only the rules change it (CR 117.3–117.4): the window opens with the active player holding priority, a player who acts receives priority again, a pass moves it on, a resolution returns it to the active player, and every player passing in succession resolves the top object or, on an empty stack, ends the step (grilling 2026-10-05).
+  No driver starts or resets a round; a paused `run` leaves the window as it is and the next call carries on from it.
+  A cleanup step opens a window only when its actions performed state-based actions or put triggers on the stack (CR 514.3a), and another cleanup step follows once it ends.
+- **One step lifecycle**: the game owns where the current step is — its turn-based actions pending, its priority window open, or complete — and only the engine's one stepping entry advances it, whether `run` or the turn loop calls it, so a step's turn-based actions happen once, a step with no window (untap, a cleanup step that opens none) is never opened, and a completed step is never reopened (grilling 2026-10-05).
+  Playing with every player passing is a priority policy over that lifecycle, not a separate path; no helper writes the lifecycle, and only construction chooses the step play starts in.
 
 ### Rigor (three independent layers)
 
