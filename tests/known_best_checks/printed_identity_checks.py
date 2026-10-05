@@ -22,7 +22,7 @@ from engine.card import (
     ManaAbility,
     printed_class,
 )
-from engine.card_queries import choose_mode, choose_object
+from engine.card_queries import choose_mode, choose_object, query_yes_no
 from engine.decisions import (
     Decision,
     IntentError,
@@ -117,6 +117,28 @@ def test_object_options_carry_the_card_class():
     assert choose_object(game, player, [elves, ooze], "choose") is ooze
     offered = player.transcript.all()[-1].options
     assert [dict(option.attrs)["printed"] for option in offered] == [Elves, Ooze]
+
+
+def test_card_query_sources_carry_the_card_instance_and_class():
+    Elves = _card("fdn_227", "LlanowarElves")
+    Ooze = _card("fdn_232", "ScavengingOoze")
+    game = behavioral_game()
+    player = game.players[0]
+    elves = Elves(owner=player)
+    elves.controller = player
+    game.get_battlefield(player).add(elves)
+    prefer(player, Decision.yes())
+    query_yes_no(game, player, "ok?", source_card=elves)
+    (source,) = player.transcript.all()[-1].source
+    attrs = dict(source.attrs)
+    assert attrs["printed"] is Elves
+    assert attrs["zone"] == "battlefield"
+    assert attrs["instance"] == game.refs.instance_id(elves, "battlefield")
+
+    spell = Ooze(owner=player)
+    query_yes_no(game, player, "ok?", source_card=spell)
+    (source,) = player.transcript.all()[-1].source
+    assert dict(source.attrs)["zone"] == "stack"
 
 
 def test_copies_stand_for_what_they_copy_and_generic_tokens_for_nothing():
