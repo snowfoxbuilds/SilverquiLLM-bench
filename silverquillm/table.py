@@ -57,6 +57,8 @@ class Change:
             return f"{name} moves to {place}{position}"
         if self.kind == "gains_control":
             return f"player {self.seat} gains control of {name}"
+        if self.kind == "becomes":
+            return f"{name} becomes {_name(self.value)}"
         if self.kind == "appears":
             return f"{name} appears on player {self.seat}'s battlefield"
         if self.kind == "ceases":
@@ -102,6 +104,13 @@ def gains_control(item: Any, seat: int) -> Change:
     """Player ``seat`` gains control of the permanent ``item``: it moves to
     their side of the battlefield, still owned and tapped as it was."""
     return Change("gains_control", item, seat=seat)
+
+
+def becomes(item: Any, cls: type) -> Change:
+    """The permanent ``item`` now shows as predefined class ``cls``, as a
+    permanent that becomes a copy of another (CR 707.2) or stops being one
+    does."""
+    return Change("becomes", item, value=cls)
 
 
 def appears(seat: int) -> Change:
@@ -517,6 +526,9 @@ class Table:
             if remaining:
                 raise ScriptError(f"a shuffle of player {change.seat}'s library leaves out {', '.join(map(repr, remaining))}")
             library[:] = ordered
+        elif change.kind == "becomes":
+            zone, index, seen = self._find(change.item, None, ti.Zone.BATTLEFIELD)
+            zone[index] = replace(seen, card=change.value)
         elif change.kind == "gains_control":
             zone, index, seen = self._find(change.item, None, ti.Zone.BATTLEFIELD)
             del zone[index]
