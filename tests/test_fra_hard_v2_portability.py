@@ -75,8 +75,8 @@ def _card_then_face(game, player):
     seat = _priority._seat(game, player)
     rewritten = {}
     for decision, action in actions.items():
-        spell = next((card for card in player.zones[_Zone.EXILE].get_all()
-                      if game.refs.object_decision(card, zone="exile", controller_seat=seat) == decision
+        spell = next((card for card in player.zones[_Zone.COMMAND].get_all()
+                      if game.refs.object_decision(card, zone="command", controller_seat=seat) == decision
                       and getattr(card, "prepared_source", None) is not None), None)
         if spell is None:
             rewritten[decision] = action
@@ -111,7 +111,7 @@ _card_then_face_only = _priority.priority_query
 def _every_source(game, player):
     query, actions = _card_then_face_only(game, player)
     seat = _priority._seat(game, player)
-    kinds = {_printed_class(card) for card in player.zones[_Zone.EXILE].get_all()
+    kinds = {_printed_class(card) for card in player.zones[_Zone.COMMAND].get_all()
              if getattr(card, "prepared_source", None) is not None}
     kinds |= {_printed_class(card) for card in game.get_battlefield(player).get_all()
               if hasattr(card, "prepared")}
@@ -179,7 +179,7 @@ _card_then_face_only = _priority.priority_query
 def _exiled_first(game, player):
     query, actions = _card_then_face_only(game, player)
     seat = _priority._seat(game, player)
-    kinds = {_printed_class(card.prepared_source) for card in player.zones[_Zone.EXILE].get_all()
+    kinds = {_printed_class(card.prepared_source) for card in player.zones[_Zone.COMMAND].get_all()
              if getattr(card, "prepared_source", None) is not None}
 
     def no_permission():
@@ -230,7 +230,8 @@ def _removed_first(game, player):
 _priority.priority_query = _removed_first
 '''
 
-# Faulty: a card in exile may be cast with no permission at all.
+# Faulty: a card in exile, or a spell copy held for a later cast, may be cast
+# with no permission at all.
 CASTS_ANYTHING_IN_EXILE = '''
 import engine.casting as _casting
 from engine.types import Zone as _Zone
@@ -240,13 +241,27 @@ _original_permission = _casting.cast_permission
 
 def _always(game, player, card):
     permission = _original_permission(game, player, card)
-    if permission is None and player.zones[_Zone.EXILE].contains(card):
-        return dict(player=player, card=card, zone=_Zone.EXILE, life_cost=False,
-                    departure_zone=None, source=None, normal_face_only=False)
+    for zone in (_Zone.EXILE, _Zone.COMMAND):
+        if permission is None and player.zones[zone].contains(card):
+            return dict(player=player, card=card, zone=zone, life_cost=False,
+                        departure_zone=None, source=None, normal_face_only=False)
     return permission
 
 
 _casting.cast_permission = _always
+'''
+
+# Faulty: casting a prepared permanent's spell copy leaves it prepared.
+PREPARED_AFTER_CASTING = '''
+import engine.preparation as _preparation
+
+
+def consume_preparation(game, spell):
+    source = getattr(spell, "prepared_source", None)
+    if source is not None:
+        source.prepared = False
+        source.prepared_copy = None
+        _preparation.prepare(game, source, type(spell))
 '''
 
 # Faulty: a planeswalker's loyalty abilities may be activated any number of times a turn.
@@ -267,9 +282,8 @@ def run_suite(card: str, suffix: str) -> tuple[int, int, str]:
         tmp = Path(tmp_dir)
         impl = (ORACLE / "cards" / code / card / "card_impl.py").read_text()
         (tmp / "card_impl.py").write_text(impl + "\n" + suffix)
-        shutil.copy2(ORACLE / "test_utils.py", tmp / "test_utils.py")
         shutil.copy2(BENCH / "data/tests/audited" / code / card / "tests.py", tmp / "tests.py")
-        env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp), str(ORACLE)]),
+        env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp), str(ORACLE), str(ROOT)]),
                "PYTHONDONTWRITEBYTECODE": "1"}
         result = subprocess.run(
             [sys.executable, "-m", "pytest", str(tmp / "tests.py"), "-q", "--no-header",
@@ -304,8 +318,8 @@ def test_hall_suite_accepts_a_copied_halls_removed_ability_rejected() -> None:
 
 
 @pytest.mark.parametrize("card,suffix", [
-    ("fra_1", CASTS_ANYTHING_IN_EXILE),
-    ("fra_49", CASTS_ANYTHING_IN_EXILE),
+    ("fra_1", OFFER_THEN_REJECT + CASTS_ANYTHING_IN_EXILE),
+    ("fra_49", PREPARED_AFTER_CASTING),
     ("fra_64", LOYALTY_EVERY_TIME),
 ])
 def test_suite_catches_an_illegal_action_taking_effect(card: str, suffix: str) -> None:

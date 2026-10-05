@@ -298,3 +298,16 @@ def test_exiling_with_swamps_also_works():
     _exile(t, emrakul, target)
     t.act(0, GRANTED, then=[taps(target)])
     t.run()
+
+
+def test_an_emrakul_exiled_some_other_way_cannot_be_cast():
+    """Only exiling Emrakul with its own ability lets it be cast from exile."""
+    emrakul = card(EmrakulTheExigentDoom)
+    game = create_game(
+        Side(exile=[emrakul], library=_library(), mana={ManaType.COLORLESS: 10}),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act_illegal(0, emrakul)
+    t.run()

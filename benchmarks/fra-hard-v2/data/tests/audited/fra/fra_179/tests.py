@@ -19,12 +19,17 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_276.card_impl import Swamp
 from cards.fdn.fdn_278.card_impl import Mountain
 from cards.fra.fra_49.card_impl import AncestralCraving, BloodlineRecollector, BloodlineRecollectorAbility1
-from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, player
+from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game, player
 
 from silverquillm.table import Table, becomes, copied, life, moves, off_stack, on_stack, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 COPY = HallOfEchoesAbility2
+
+
+def offers_craving(query) -> bool:
+    """A question that offers Ancestral Craving among its options."""
+    return any(dict(getattr(option, "attrs", ())).get("printed") is AncestralCraving for option in query.options)
 
 
 def _library(n: int = 3) -> list:
@@ -266,7 +271,9 @@ def test_a_copied_recollector_prepares_and_casts_its_spell():
     t.pass_(0)
     t.pass_(1, then=[off_stack(BloodlineRecollectorAbility1)])
     t.act(0, swamp, then=[taps(swamp)])
-    t.act(0, AncestralCraving, choices=[player(1)], then=[copied(AncestralCraving, 0)])
+    t.act(0, branches=[branch(AncestralCraving, choices=[player(1)]),
+                       branch(hall, choices=[player(1)], per_query={offers_craving: [AncestralCraving]})],
+          then=[copied(AncestralCraving, 0)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(AncestralCraving), *[moves(c, Zone.HAND) for c in library], life(1, 17)])
     t.run()

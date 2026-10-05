@@ -18,7 +18,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_274.card_impl import Island
 from cards.fdn.fdn_276.card_impl import Swamp
 from cards.fdn.fdn_278.card_impl import Mountain
-from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, player, spell_copy, token
+from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game, player, spell_copy, token
 
 from silverquillm.table import Table, appears, ceases, copied, gains_control, life, moves, off_stack, on_stack, taps
 
@@ -53,10 +53,24 @@ def _into_end_step(t: Table, seat: int = 0, *, triggers: int = 1) -> None:
         t.pass_(1 - seat, then=[off_stack(PREPARE)])
 
 
-def _cast_craving(t: Table, seat: int, swamp, target: int, *, n: int = 1) -> None:
+def offers_craving(query) -> bool:
+    """A question that offers Ancestral Craving among its options."""
+    return any(dict(getattr(option, "attrs", ())).get("printed") is AncestralCraving for option in query.options)
+
+
+def craving(target: int, *recollectors) -> list:
+    """Branches that cast a copy of Ancestral Craving at player ``target``,
+    whether the engine offers the spell itself or a prepared Recollector
+    followed by which of the two to cast."""
+    return [branch(AncestralCraving, choices=[player(target)]),
+            *[branch(source, choices=[player(target)], per_query={offers_craving: [AncestralCraving]})
+              for source in recollectors]]
+
+
+def _cast_craving(t: Table, seat: int, swamp, target: int, *recollectors) -> None:
     """``seat`` taps ``swamp`` and casts a copy of Ancestral Craving at player ``target``."""
     t.act(seat, swamp, then=[taps(swamp)])
-    t.act(seat, AncestralCraving, choices=[player(target)], then=[copied(AncestralCraving, seat)],
+    t.act(seat, branches=craving(target, *recollectors), then=[copied(AncestralCraving, seat)],
           note="the prepared Recollector lets its controller cast a copy of its spell")
 
 
@@ -82,28 +96,28 @@ def _three_deaths(recollector=None, *, extra_hand=(), lands=(), seat1: Side | No
 def test_three_deaths_prepare_and_the_copy_draws_three_and_loses_three():
     swamp = card(Swamp)
     library = _library()
-    game, _, lions, bolts = _three_deaths(lands=[swamp], seat1=Side(library=library))
+    game, recollector, lions, bolts = _three_deaths(lands=[swamp], seat1=Side(library=library))
     t = Table(game)
     _kill(t, 0, bolts, lions)
     _into_end_step(t)
-    _cast_craving(t, 0, swamp, 1)
+    _cast_craving(t, 0, swamp, 1, recollector)
     _resolve_craving(t, 0, 1, library[:3], 17)
     t.run()
 
 
 def test_the_copy_can_target_its_caster():
-    swamp, library = card(Swamp), _library(6)
+    swamp, library, recollector = card(Swamp), _library(6), card(BloodlineRecollector)
     lions = [card(SavannahLions) for _ in range(3)]
     bolts = [card(BurstLightning) for _ in range(3)]
     game = create_game(
-        Side(hand=bolts, battlefield=[BloodlineRecollector, swamp, *lions], library=library, mana={ManaType.RED: 3}),
+        Side(hand=bolts, battlefield=[recollector, swamp, *lions], library=library, mana={ManaType.RED: 3}),
         Side(library=_library()),
         start=MAIN,
     )
     t = Table(game)
     _kill(t, 0, bolts, lions)
     _into_end_step(t)
-    _cast_craving(t, 0, swamp, 0)
+    _cast_craving(t, 0, swamp, 0, recollector)
     _resolve_craving(t, 0, 0, library[:3], 17)
     t.run()
 
@@ -113,28 +127,28 @@ def test_casting_the_copy_unprepares_the_recollector():
     Recollector is no longer prepared."""
     first, second = card(Swamp), card(Swamp)
     library = _library()
-    game, _, lions, bolts = _three_deaths(lands=[first, second], seat1=Side(library=library))
+    game, recollector, lions, bolts = _three_deaths(lands=[first, second], seat1=Side(library=library))
     t = Table(game)
     _kill(t, 0, bolts, lions)
     _into_end_step(t)
-    _cast_craving(t, 0, first, 1)
+    _cast_craving(t, 0, first, 1, recollector)
     t.act(0, second, then=[taps(second)])
-    t.act_illegal(0, AncestralCraving, choices=[player(1)], note="the copy already cast unprepared it")
+    t.act_illegal(0, branches=craving(1, recollector), note="the copy already cast unprepared it")
     _resolve_craving(t, 0, 1, library[:3], 17)
-    t.act_illegal(0, AncestralCraving, choices=[player(1)])
+    t.act_illegal(0, branches=craving(1, recollector))
     t.run()
 
 
 def test_two_deaths_do_not_prepare():
     swamp = card(Swamp)
-    game, _, lions, bolts = _three_deaths(lands=[swamp])
+    game, recollector, lions, bolts = _three_deaths(lands=[swamp])
     t = Table(game)
     _kill(t, 0, bolts[:2], lions[:2])
     t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
     t.pass_(0)
     t.pass_(1, note="no Recollector trigger: fewer than three creatures died")
     t.act(0, swamp, then=[taps(swamp)])
-    t.act_illegal(0, AncestralCraving, choices=[player(1)])
+    t.act_illegal(0, branches=craving(1, recollector))
     t.run()
 
 
@@ -142,27 +156,27 @@ def test_the_opponents_creatures_count():
     swamp = card(Swamp)
     lions = [card(SavannahLions) for _ in range(3)]
     bolts = [card(BurstLightning) for _ in range(3)]
-    library = _library()
+    library, recollector = _library(), card(BloodlineRecollector)
     game = create_game(
-        Side(hand=bolts, battlefield=[BloodlineRecollector, swamp], library=_library(), mana={ManaType.RED: 3}),
+        Side(hand=bolts, battlefield=[recollector, swamp], library=_library(), mana={ManaType.RED: 3}),
         Side(battlefield=lions, library=library),
         start=MAIN,
     )
     t = Table(game)
     _kill(t, 0, bolts, lions)
     _into_end_step(t)
-    _cast_craving(t, 0, swamp, 1)
+    _cast_craving(t, 0, swamp, 1, recollector)
     _resolve_craving(t, 0, 1, library[:3], 17)
     t.run()
 
 
 def test_token_creatures_dying_count():
     """Two Lions and the Soldier token Resolute Reinforcements makes die."""
-    swamp, reinforcements = card(Swamp), card(ResoluteReinforcements)
+    swamp, reinforcements, recollector = card(Swamp), card(ResoluteReinforcements), card(BloodlineRecollector)
     lions = [card(SavannahLions) for _ in range(2)]
     bolts = [card(BurstLightning) for _ in range(3)]
     game = create_game(
-        Side(hand=[*bolts, reinforcements], battlefield=[BloodlineRecollector, swamp, *lions], library=_library(),
+        Side(hand=[*bolts, reinforcements], battlefield=[recollector, swamp, *lions], library=_library(),
              mana={ManaType.RED: 3, ManaType.WHITE: 2}),
         Side(library=_library()),
         start=MAIN,
@@ -177,17 +191,18 @@ def test_token_creatures_dying_count():
     _bolt(t, 0, bolts[2], token(1), then=[ceases(token(1))])
     _into_end_step(t)
     t.act(0, swamp, then=[taps(swamp)])
-    t.act(0, AncestralCraving, choices=[player(1)], then=[copied(AncestralCraving, 0)])
+    t.act(0, branches=craving(1, recollector), then=[copied(AncestralCraving, 0)])
     t.run()
 
 
 def test_noncreature_deaths_do_not_count():
     """Two Lions and a planeswalker dying is not three creatures."""
     swamp, ajani, downfall = card(Swamp), card(AjaniCallerOfThePride), card(HerosDownfall)
+    recollector = card(BloodlineRecollector)
     lions = [card(SavannahLions) for _ in range(2)]
     bolts = [card(BurstLightning) for _ in range(2)]
     game = create_game(
-        Side(hand=[*bolts, downfall], battlefield=[BloodlineRecollector, swamp, *lions, ajani], library=_library(),
+        Side(hand=[*bolts, downfall], battlefield=[recollector, swamp, *lions, ajani], library=_library(),
              mana={ManaType.RED: 2, ManaType.BLACK: 3}),
         Side(library=_library()),
         start=MAIN,
@@ -201,7 +216,7 @@ def test_noncreature_deaths_do_not_count():
     t.pass_(0)
     t.pass_(1, note="no Recollector trigger")
     t.act(0, swamp, then=[taps(swamp)])
-    t.act_illegal(0, AncestralCraving, choices=[player(1)])
+    t.act_illegal(0, branches=craving(1, recollector))
     t.run()
 
 
@@ -222,7 +237,7 @@ def test_deaths_before_the_recollector_entered_count():
     t.pass_(0)
     t.pass_(1, then=[moves(recollector, Zone.BATTLEFIELD)])
     _into_end_step(t)
-    _cast_craving(t, 0, swamp, 1)
+    _cast_craving(t, 0, swamp, 1, recollector)
     _resolve_craving(t, 0, 1, library[:3], 17)
     t.run()
 
@@ -250,18 +265,18 @@ def test_deaths_on_an_earlier_turn_do_not_count():
     t.pass_(1)
     t.pass_(0, note="no Recollector trigger: no creature died this turn")
     t.act(1, lands[2], then=[taps(lands[2])])
-    t.act_illegal(1, AncestralCraving, choices=[player(0)])
+    t.act_illegal(1, branches=craving(0, recollector))
     t.run()
 
 
 def test_the_copy_needs_black_mana():
     mountain = card(Mountain)
-    game, _, lions, bolts = _three_deaths(lands=[mountain])
+    game, recollector, lions, bolts = _three_deaths(lands=[mountain])
     t = Table(game)
     _kill(t, 0, bolts, lions)
     _into_end_step(t)
     t.act(0, mountain, then=[taps(mountain)])
-    t.act_illegal(0, AncestralCraving, choices=[player(1)], note="{R} cannot pay {B}")
+    t.act_illegal(0, branches=craving(1, recollector), note="{R} cannot pay {B}")
     t.run()
 
 
@@ -274,7 +289,7 @@ def test_preparation_ends_when_the_recollector_leaves():
     t.act(0, mountain, then=[taps(mountain)])
     _bolt(t, 0, bolt, recollector, then=[moves(recollector, Zone.GRAVEYARD)])
     t.act(0, swamp, then=[taps(swamp)])
-    t.act_illegal(0, AncestralCraving, choices=[player(1)])
+    t.act_illegal(0, branches=craving(1, recollector))
     t.run()
 
 
@@ -296,7 +311,7 @@ def test_leaving_before_the_trigger_resolves_prepares_nothing():
     t.pass_(0)
     t.pass_(1, then=[off_stack(PREPARE)])
     t.act(0, swamp, then=[taps(swamp)])
-    t.act_illegal(0, AncestralCraving, choices=[player(1)])
+    t.act_illegal(0, branches=craving(1, recollector))
     t.run()
 
 
@@ -308,7 +323,7 @@ def test_a_cast_copy_resolves_after_the_recollector_leaves():
     t = Table(game)
     _kill(t, 0, bolts, lions)
     _into_end_step(t)
-    _cast_craving(t, 0, swamp, 1)
+    _cast_craving(t, 0, swamp, 1, recollector)
     t.pass_(0)
     t.act(1, mountain, then=[taps(mountain)])
     _bolt(t, 1, bolt, recollector, then=[moves(recollector, Zone.GRAVEYARD)])
@@ -322,12 +337,12 @@ def test_a_countered_copy_still_unprepares():
     refute = card(Refute)
     islands = [card(Island) for _ in range(3)]
     discard = card(Plains)
-    game, _, lions, bolts = _three_deaths(
+    game, recollector, lions, bolts = _three_deaths(
         lands=[first, second], seat1=Side(hand=[refute], battlefield=islands, library=[discard, *_library()]))
     t = Table(game)
     _kill(t, 0, bolts, lions)
     _into_end_step(t)
-    _cast_craving(t, 0, first, 1)
+    _cast_craving(t, 0, first, 1, recollector)
     t.pass_(0)
     for island in islands:
         t.act(1, island, then=[taps(island)])
@@ -336,14 +351,15 @@ def test_a_countered_copy_still_unprepares():
     t.pass_(0, then=[moves(refute, Zone.GRAVEYARD), off_stack(AncestralCraving), moves(discard, Zone.HAND),
                      moves(discard, Zone.GRAVEYARD)])
     t.act(0, second, then=[taps(second)])
-    t.act_illegal(0, AncestralCraving, choices=[player(1)])
+    t.act_illegal(0, branches=craving(1, recollector))
     t.run()
 
 
 def test_two_recollectors_prepare_independently():
     first, second = card(Swamp), card(Swamp)
     library = _library(7)
-    game, _, lions, bolts = _three_deaths(lands=[BloodlineRecollector, first, second], seat1=Side(library=library))
+    other = card(BloodlineRecollector)
+    game, recollector, lions, bolts = _three_deaths(lands=[other, first, second], seat1=Side(library=library))
     t = Table(game)
     _kill(t, 0, bolts, lions)
     t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
@@ -353,10 +369,10 @@ def test_two_recollectors_prepare_independently():
     t.pass_(1, then=[off_stack(PREPARE)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(PREPARE)])
-    _cast_craving(t, 0, first, 1)
+    _cast_craving(t, 0, first, 1, recollector, other)
     _resolve_craving(t, 0, 1, library[:3], 17)
     t.act(0, second, then=[taps(second)])
-    t.act(0, AncestralCraving, choices=[player(1)], then=[copied(AncestralCraving, 0)])
+    t.act(0, branches=craving(1, recollector, other), then=[copied(AncestralCraving, 0)])
     _resolve_craving(t, 0, 1, library[3:6], 14)
     t.run()
 
@@ -377,7 +393,7 @@ def test_control_of_the_recollector_carries_its_preparation():
     t.pass_(1)
     t.pass_(0, then=[moves(employment, Zone.GRAVEYARD), gains_control(recollector, 1), appears(1)])
     t.act(1, lands[4], then=[taps(lands[4])])
-    t.act(1, AncestralCraving, choices=[player(0)], then=[copied(AncestralCraving, 1)])
+    t.act(1, branches=craving(0, recollector), then=[copied(AncestralCraving, 1)])
     t.run()
 
 
