@@ -260,8 +260,11 @@ def view(game: Any) -> View:
     """A frozen snapshot of what the players can see of ``game``."""
     handles = _HANDLES.get(game, {})
 
+    def handle(obj: Any) -> Handle | None:
+        return handles.get(id(game.refs.physical_card(obj)))
+
     def seen(obj: Any, owner: int, tapped: bool = False) -> Seen:
-        return Seen(_printed(obj), owner, tapped, handles.get(id(obj)))
+        return Seen(_printed(obj), owner, tapped, handle(obj))
 
     sides = []
     for seat, scripted in enumerate(game.players):
@@ -283,7 +286,7 @@ def view(game: Any) -> View:
             _seat(game, obj.controller),
             False,
             # A spell is its card; an ability is not the card it comes from.
-            handles.get(id(obj.source)) if getattr(obj, "is_spell", False) else None,
+            handle(obj),
         )
         for obj in game.stack.objects()
     )
@@ -725,9 +728,9 @@ class ScriptedPlayer(Player):
         while playing.branch < len(branches):
             current = branches[playing.branch]
             matched = current.matched(query)
-            for preference in self._decisions(matched if matched is not None else current.preferences):
+            for preference in self._matchers(matched if matched is not None else current.preferences):
                 for option in query.options:
-                    if satisfies(option, preference):
+                    if self._matches(option, preference):
                         return Answer((option,))
             playing.branch += 1
         if playing.entry.kind is Kind.ACT:
@@ -765,11 +768,11 @@ class ScriptedPlayer(Player):
             taken = {obj for owner, src, obj in self._chosen if owner == id(playing) and src == source}
             options = [o for o in options if _object_key(o) not in taken]
         selected: list[PlayerDecision] = []
-        for preference in self._decisions(preferences):
+        for preference in self._matchers(preferences):
             if len(selected) >= query.max:
                 break
             for option in options:
-                if option not in selected and satisfies(option, preference):
+                if option not in selected and self._matches(option, preference):
                     selected.append(option)
                     break
         if len(selected) < query.min:
@@ -783,38 +786,23 @@ class ScriptedPlayer(Player):
             self._chosen.extend((id(playing), source, _object_key(o)) for o in selected)
         return Answer(tuple(selected))
 
-    def _decisions(self, items: Iterable[Any]) -> list[PlayerDecision]:
-        decisions: list[PlayerDecision] = []
+    def _matchers(self, items: Iterable[Any]) -> list[PlayerDecision | Handle]:
+        """Each preference as Player Decisions to satisfy — a class stands for
+        the card, ability or mode it prints — or as a handle."""
+        matchers: list[PlayerDecision | Handle] = []
         for item in items:
-            if isinstance(item, PlayerDecision):
-                decisions.append(item)
-            elif isinstance(item, Handle):
-                decisions += self._handle_decision(item)
+            if isinstance(item, (PlayerDecision, Handle)):
+                matchers.append(item)
             else:
-                decisions += [Decision.obj(printed=item), Decision.ability(printed=item), Decision.mode(printed=item)]
-        return decisions
+                matchers += [Decision.obj(printed=item), Decision.ability(printed=item), Decision.mode(printed=item)]
+        return matchers
 
-    def _handle_decision(self, handle: Handle) -> list[PlayerDecision]:
-        """The preference for a handle's card, by what a player can see of it:
-        its class, zone, controller and tapped status — none while the card is
-        in no zone. A handle that cannot be told apart from another card that
-        way diverges."""
-        current = view(self.game)
-        places = [(seen, seen.owner, Zone.STACK) for seen in current.stack]
-        for side in current.players:
-            for zone in ("library", *_UNORDERED):
-                places += [(seen, seen.owner, Zone(zone)) for seen in getattr(side, zone)]
-        target = next((place for place in places if place[0].handle is handle), None)
-        if target is None:
-            return []
-        seen, seat, zone = target
-        twins = [p for p in places if p[0].card is handle.cls and p[1:] == (seat, zone) and p[0].tapped == seen.tapped]
-        if len(twins) > 1:
-            self._run.diverge(f"{handle!r} cannot be told apart from another {handle.cls.__name__} in {zone.value}")
-        attrs: dict[str, Any] = {"printed": handle.cls, "zone": zone.value, "controller": seat}
-        if zone is Zone.BATTLEFIELD:
-            attrs["tapped"] = seen.tapped
-        return [Decision.obj(**attrs)]
+    def _matches(self, option: PlayerDecision, preference: PlayerDecision | Handle) -> bool:
+        """A handle matches an option that stands for its physical card — for
+        an ability, the card of the permanent it belongs to."""
+        if isinstance(preference, Handle):
+            return preference.card is not None and self.game.refs.physical_card(option) is preference.card
+        return satisfies(option, preference)
 
 
 def _source_key(query: PlayerQuery) -> Any:

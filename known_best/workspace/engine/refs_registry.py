@@ -291,6 +291,22 @@ class GameRefsRegistry:
                     return self._player_by_seat.get(value)
         return None
 
+    def physical_card(self, item: Any) -> Any:
+        """The physical card ``item`` stands for, or ``None`` if it stands for
+        none: a card is its own physical card wherever it moves, since a zone
+        change gives it a new instance but keeps the object (CR 400.7); a
+        spell on the stack is its card; an offered OBJECT option is its
+        object's card, and an ABILITY option its source permanent's."""
+        if isinstance(item, PlayerDecision):
+            attrs = dict(item.attrs)
+            key = "source" if item.kind is DecisionKind.ABILITY else "instance"
+            item = self._obj_by_id.get(attrs.get(key))
+        from engine.stack import StackObject
+
+        if isinstance(item, StackObject):
+            return item.source if item.is_spell else None
+        return item
+
     def ref_for(
         self,
         obj: Any,

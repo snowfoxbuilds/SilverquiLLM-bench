@@ -397,11 +397,21 @@ def test_a_handle_names_one_of_two_cards_of_a_class():
     assert final.where(untapped) is Zone.GRAVEYARD and final.where(tapped) is Zone.BATTLEFIELD
 
 
-def test_a_handle_that_cannot_be_told_apart_diverges():
+def test_a_handle_names_one_of_two_identical_cards():
     first, second = card(Bear), card(Bear)
     game = _main(Side(hand=[BurstLightning], mana={ManaType.RED: 1}), Side(battlefield=[first, second]))
-    with pytest.raises(PlayDiverged, match="cannot be told apart"):
-        run(game, [act(BurstLightning, choices=[second]), pass_priority()], [pass_priority()], expect=None)
+    final = run(game, [act(BurstLightning, choices=[second]), pass_priority()], [pass_priority()], expect=None)
+    assert final.where(second) is Zone.GRAVEYARD and final.where(first) is Zone.BATTLEFIELD
+
+
+@pytest.mark.parametrize("chosen", [0, 1])
+def test_a_handle_names_the_ability_of_its_own_permanent(chosen):
+    mountains = [card(Mountain), card(Mountain)]
+    game = _main(Side(battlefield=mountains))
+    t = Table(game)
+    t.act(0, mountains[chosen], then=[taps(mountains[chosen])])
+    final = t.run()
+    assert [final.players[0].battlefield[i].tapped for i in range(2)].count(True) == 1
 
 
 # ---------------------------------------------------------------------------

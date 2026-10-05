@@ -40,6 +40,7 @@ The Test Interface relies only on a small engine surface, which the workspace do
 | `PlayerQuery`, `PlayerDecision`, the Player hooks, `InvalidPlayerChoiceError` | Answering queries and hearing rejections |
 | `shuffle(cards)`, `choose_at_random(options, n)`, `flip_coin()` | Every random event, so the test decides its result |
 | Zone containers, life totals, each object's `printed` class, the tapped flag, the current step, the active player, the player being asked, game over and winner | The Player View |
+| Each object's and each offered option's physical card | Following a handle's card across zones and choosing it |
 
 ### Construction
 
@@ -139,6 +140,7 @@ Events are seen as changes in the view: a test compares the view before and afte
 What a player was asked routes answers through the scripts, never assertions, since how a choice is presented is never judged.
 
 A card is a physical object, so a test may keep a handle to a card it constructed and follow it across zones even though each zone change makes a new object (CR 400.7) — the Glamdring put in hand is now in exile (grilling 2026-10-05).
+The engine names the physical card behind each object and each offered option — for an ability, its source permanent's card — so a handle in a script chooses that very card, never one that merely looks the same.
 Tokens are not tracked that way: a token or other object made during play is found in the view by its class.
 
 ## Relevant ADRs

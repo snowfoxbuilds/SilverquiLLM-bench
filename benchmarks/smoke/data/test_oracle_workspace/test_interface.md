@@ -14,10 +14,11 @@ Keep these working beside the Player Query protocol; the Test Interface uses not
 | `engine.turn.advance(game)` | Playing: the engine's one stepping entry |
 | `engine.player.Player` with `answer(query)`, `on_attempt_rejected(context, answer, error)` and `on_action_ended(context)`; the context's `kind`, `actor` and `taken` | Answering questions and hearing rejections |
 | `engine.queries.PlayerQuery`, `Answer`, `asks_for`, `is_priority_query`; `engine.decisions.Decision`, `PlayerDecision`, `satisfies`, `InvalidPlayerChoiceError` | Telling questions apart and choosing among their options |
+| `game.refs.physical_card(item)`: the physical card a game object, a spell on the stack or an offered option stands for (an ability option: its source permanent's card) | Following a handle's card and choosing it |
 | The game's `shuffle(cards)`, `choose_at_random(options, n)` and `flip_coin()` | Every random event, so the test decides its result; a library is shuffled top first |
 | Each player's `zones[Zone.X].get_all()` (a library bottom to top) and `life`; `game.stack.objects()` (top first) with each object's `controller`, `source`, `is_spell` and `printed`; `engine.card.printed_class`; a permanent's `is_tapped`; `game.phase`, `game.step`, `game.active_player_index`, `game.priority_player_index`, `game.is_game_over` and `game.winner` | The Player View |
 
-A card keeps being the same Python object as it moves between zones, so a handle can follow it.
+A zone change makes a new object (CR 400.7), but `physical_card` still names the same card, so a handle follows it everywhere.
 
 ## Building a game
 
@@ -59,7 +60,7 @@ Each `Entry` answers its player's next action question — a Priority Query — 
 - `act_illegal(...)` tries an action the rules forbid; once every branch is not offered or rejected, the same question goes to the next entry.
 - `pass_priority(choices=..., branches=..., view=...)` passes, answering the questions that follow with its choices.
 
-A preference is a Player Decision, a predefined class, a `card(...)` handle or `player(seat)`. Each preference picks the first offered option it is satisfied by, preferences in order. A rejected answer is answered again from the entry's next branch (`branch(...)`); a branch whose action is not offered is skipped. `per_query` maps a payload object or a predicate over the query to the preferences for the questions it matches; a branch with `distinct=True` never chooses again an object an earlier answer of the entry chose for a question from the same source. A mandatory question that offers exactly as many options as it requires is filled.
+A preference is a Player Decision, a predefined class, a `card(...)` handle or `player(seat)`; a handle chooses its own card, or an ability of its own permanent. Each preference picks the first offered option it is satisfied by, preferences in order. A rejected answer is answered again from the entry's next branch (`branch(...)`); a branch whose action is not offered is skipped. `per_query` maps a payload object or a predicate over the query to the preferences for the questions it matches; a branch with `distinct=True` never chooses again an object an earlier answer of the entry chose for a question from the same source. A mandatory question that offers exactly as many options as it requires is filled.
 
 `run` compares the view with the expected one at every action question: the first is `expect` (by default the view as play begins), and each entry's `view` replaces it. Play stops when a player whose script is empty is asked and every script is empty, or when the game ends; the final view must then be the expected one. `run` raises `PlayDiverged` when:
 
