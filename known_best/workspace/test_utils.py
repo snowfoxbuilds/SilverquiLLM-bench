@@ -242,7 +242,10 @@ def cast_spell(
 
     The function:
     1. Locates the first card matching *card_name* in the player's hand.
-    2. Sets up the game phase/priority for sorcery-speed casting if needed.
+    2. For a sorcery-speed spell, makes the caster the active player in a main
+       phase (the current one, else precombat main); a changed phase or active
+       player opens that main phase's window in a fresh round, so later
+       drivers carry on from it.
     3. Casts it as a one-entry :func:`act` script: the player chooses the card
        in a Priority Query and the engine casts it.
     4. Passes priority for both players so the spell resolves.
@@ -290,12 +293,7 @@ def cast_spell(
     has_flash = Keyword.FLASH in getattr(card, "keywords", Keyword(0))
 
     if not is_instant and not has_flash:
-        # Set up sorcery-speed timing: active player, main phase, empty stack
-        game.active_player_index = player_index
-        game.priority_player_index = player_index
-        if game.phase not in (Phase.PRECOMBAT_MAIN, Phase.POSTCOMBAT_MAIN):
-            game.phase = Phase.PRECOMBAT_MAIN
-            game.step = None
+        _sorcery_timing(game, player_index, keep_main=True)
 
     # Ensure the stack is empty for sorcery-speed
     if not game.stack.is_empty():
@@ -431,12 +429,39 @@ def _deterministic(game: GameState, player: Any) -> DeterministicPlayer:
     return player
 
 
+def _sorcery_timing(game: GameState, seat: int, *, keep_main: bool) -> None:
+    """Make *seat* the active player in a main phase, for a casting wrapper's
+    sorcery-speed cast: precombat main, or the current main phase when
+    ``keep_main``. A changed phase, step or active player starts that main
+    phase's window afresh, so every driver carries on from it."""
+    main = game.phase in (Phase.PRECOMBAT_MAIN, Phase.POSTCOMBAT_MAIN)
+    phase = game.phase if keep_main and main else Phase.PRECOMBAT_MAIN
+    if (game.phase, game.step, game.active_player_index) != (phase, None, seat):
+        game.phase, game.step, game.active_player_index = phase, None, seat
+        _open_window(game)
+
+
+def _open_window(game: GameState) -> None:
+    """Setup only: open the current step's priority window in a fresh round,
+    without its turn-based actions — as :func:`advance_to_phase` marks a step
+    entered."""
+    game.step_state = StepState.WINDOW
+    game.start_priority_round()
+
+
 def _take_action(game: GameState, player: Any, entry: ScriptEntry) -> Any:
     """Give *player* priority once with *entry* as their whole script; return
-    what the engine's action returned. Their own script is left untouched."""
+    what the engine's action returned. Their own script is left untouched.
+
+    A player acts only in an open priority window: when the current step's
+    window is not open — its actions still pending, or the step complete —
+    it is opened first (:func:`_open_window`), so every driver afterwards
+    carries on from that window rather than past the action."""
     from engine.priority import take_priority
 
     player = _deterministic(game, player)
+    if game.step_state is not StepState.WINDOW:
+        _open_window(game)
     game.priority_player_index = game.players.index(player)
     saved = player.set_script([entry])
     player.last_action_result = None
@@ -895,6 +920,10 @@ def cast_card(game, player, card, resolve=True):
     """Stage an unzoned card and cast it as a one-entry :func:`act` script; the
     test supplies mana and Intents. Returns what the engine's cast returned.
 
+    A sorcery-speed card is cast by its caster as the active player in
+    precombat main; moving there opens that main phase's window in a fresh
+    round, so later drivers carry on from it.
+
     Raises :class:`~engine.casting.CastingError` when the card is not offered
     at priority or the engine rejects the cast (rolled back).
     """
@@ -910,8 +939,7 @@ def cast_card(game, player, card, resolve=True):
     elif not game.get_hand(player).contains(card):
         raise TestSetupError("cast_card expects an unzoned card or one in the caster's hand")
     if not can_cast_at_instant_speed(card):
-        game.active_player_index = game.players.index(player)
-        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
+        _sorcery_timing(game, game.players.index(player), keep_main=False)
     result = _cast(game, player, card)
     if resolve:
         resolve_stack(game)
@@ -931,7 +959,7 @@ def finish_cleanup(game):
         TestSetupError: Outside a cleanup step.
     """
     if not _in_cleanup(game):
-        raise TestSetupError("finish_cleanup is called in a cleanup step")
+        raise TestSetupError("finish_cleanup called outside a cleanup step")
     _finish_cleanup(game)
 
 

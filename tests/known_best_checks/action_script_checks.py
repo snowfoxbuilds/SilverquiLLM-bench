@@ -2731,3 +2731,110 @@ def test_each_driver_completes_cleanup_from_any_stage(state, driver):
         assert _life(game) == 21
     if forced:
         assert _pending_counts(game) == [1, 1]
+
+
+# ---------------------------------------------------------------------------
+# Review round 10: a casting wrapper's action happens in an open window
+# ---------------------------------------------------------------------------
+
+
+class Quiet(Sorcery):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(name="Quiet", mana_cost=ManaCost(), **kwargs)
+
+
+def _exceptional_cleanup_done():
+    game, _ = _paused_in_cleanup(lambda g: _doomed(g, g.players[0]))
+    resolve_stack(game)
+    assert game.step_state is StepState.DONE
+    return game
+
+
+_BEFORE_CAST = {
+    "completed cleanup": lambda: _completed_cleanup(),
+    "completed exceptional cleanup": _exceptional_cleanup_done,
+    "fresh main": _game,
+}
+
+
+def _wrapper_cast(game, wrapper, resolve):
+    quiet = Quiet()
+    if wrapper == "cast_card":
+        cast_card(game, game.players[0], quiet, resolve=resolve)
+    else:
+        set_board_state(game, 0, hand=[quiet])
+        test_utils.cast_spell(game, 0, "Quiet")
+        if not resolve:
+            return quiet
+    return quiet
+
+
+def _drive_scripts(game):
+    run_scripts(game)
+
+
+def _drive_native_step(game):
+    from engine.turn import advance_step
+
+    for player in game.players:
+        player.set_baseline(Intent(pattern=GameRef()))
+    for _ in range(3):  # enter a pending step, then play out its window
+        if not game.players[1].pending_entries:
+            return
+        assert advance_step(game) is True
+
+
+@pytest.mark.parametrize("drive", [_drive_scripts, _drive_native_step], ids=["scripted", "native"])
+@pytest.mark.parametrize(("wrapper", "resolve"), [
+    ("cast_card", False), ("cast_card", True), ("cast_spell", True),
+])
+@pytest.mark.parametrize("before", list(_BEFORE_CAST))
+def test_play_continues_in_the_main_phase_a_casting_wrapper_cast_in(before, wrapper, resolve, drive):
+    from engine.events import BeginningOfCombatTriggeredEvent
+
+    game = _BEFORE_CAST[before]()
+    combat = _counting(game, BeginningOfCombatTriggeredEvent)
+    quiet = _wrapper_cast(game, wrapper, resolve)
+    assert (game.phase, game.step) == (Phase.PRECOMBAT_MAIN, None)
+    bolt = Bolt()
+    set_board_state(game, 1, hand=[bolt])
+    script(game, 1, act(Bolt))
+    drive(game)
+    assert (game.phase, game.step) == (Phase.PRECOMBAT_MAIN, None)
+    assert not game.players[1].pending_entries and combat == []
+    if drive is _drive_scripts:
+        assert _on_stack(game, bolt) and _on_stack(game, quiet) is not resolve
+
+
+def test_a_rejected_wrapper_cast_leaves_the_main_window_open_for_legal_play():
+    game = _completed_cleanup()
+    with pytest.raises(CastingError):
+        cast_card(game, game.players[0], Costly())
+    assert (game.phase, game.step, game.step_state) == (Phase.PRECOMBAT_MAIN, None, StepState.WINDOW)
+    assert game.priority_passes == 0 and game.stack.is_empty()
+    set_board_state(game, 1, hand=[Bolt()])
+    script(game, 1, act(Bolt))
+    run_scripts(game)
+    assert (game.phase, game.step) == (Phase.PRECOMBAT_MAIN, None) and len(game.stack) == 1
+
+
+def test_a_wrapper_cast_in_an_open_main_window_keeps_its_round():
+    game = _game()
+    script(game, 0, pass_priority())
+    run_scripts(game)
+    assert game.step_state is StepState.WINDOW and game.priority_passes == 1
+    set_board_state(game, 1, hand=[Bolt()])
+    test_utils.cast_spell(game, 1, "Bolt")
+    assert (game.phase, game.step) == (Phase.PRECOMBAT_MAIN, None) and game.active_player_index == 0
+
+
+def test_an_instant_wrapper_cast_in_a_completed_step_opens_its_window():
+    game = _completed_cleanup()
+    bolt = Bolt()
+    cast_card(game, game.players[0], bolt, resolve=False)
+    assert (game.step, game.step_state) == (Step.CLEANUP, StepState.WINDOW) and _on_stack(game, bolt)
+    for player in game.players:
+        player.set_baseline(Intent(pattern=GameRef()))
+    from engine.turn import run_turn
+
+    assert run_turn(game) is True and game.turn_number == 2 and game.stack.is_empty()
