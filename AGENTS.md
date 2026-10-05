@@ -47,6 +47,7 @@ All specs, code, and agent instructions use these terms exactly.
 | `FRA-HARD-BENCHMARK.md` | The ten-card mixed FRA/HOB hard benchmark (fra-hard-v2; v1 read-only): selected pool, qualified card identities, predefined card/face/ability classes, independent oracle, and hidden evaluation |
 | `KNOWN-BEST-ENGINE.md` | The Known-Best Workspace and Engine, per-benchmark Known Defects, the baseline reference grade, and how newly found defects and wrong Audited Tests are fixed |
 | `DECISION-MODEL.md` | V2 engine Player Query / Player Decision protocol, Game Symbols/Refs, Intents, DeterministicPlayer (V2); from fra-hard-v2, Priority Queries, `printed` identity, `InvalidPlayerChoiceError` and action scripts — engine-level, pool-neutral |
+| `TEST-INTERFACE.md` | The immutable Test Interface (`test_interface`) for Audited Tests from smoke and fra-hard-v2 onward: construction with a starting position, play only through `run`, the Player View, judging by consequence, and the engine surface a candidate must keep |
 | `BENCHMARK-CANDIDATES.md` | Retired: the removed Candidate Bundle promotion, batch, and publication pipeline, and what of it remains readable |
 | `BENCH-CONTRACT.md` | Historical Candidate Bundle and production Implementer Run contract (vendored read-only from the-ozolith); reference for legacy candidates |
 | `KARN-BENCHMARK-CONTRACT.md` | The bench-owned Karn consumer contract (v4 and v5 definitions): explicit builds, independent execution, grading isolation, implementation-only tasks, and subscription authentication |

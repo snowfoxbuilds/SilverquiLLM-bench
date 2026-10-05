@@ -11,7 +11,7 @@ On fra-hard, most candidates selected Glamdring's Adventure through a new keywor
 
 ## Decision
 
-When a player receives priority, the engine raises a Player Query whose options are the actions available to that player, and audited tests choose an action through an Intent, the same way they answer any other choice.
+When a player receives priority, the engine raises a Player Query whose options are the actions available to that player, and audited tests choose an action through the player's script, the same way they answer any other choice (amended 2026-10-05).
 The engine, not the test, turns the chosen action into its own casting or activation call, so a candidate may shape that call freely.
 
 Actions reuse the existing Decision kinds: casting a spell or playing a land is an OBJECT option, activating an ability is an ABILITY option, and passing is a decline.
@@ -41,3 +41,7 @@ fra-hard v1, the HOB tiers and SOS keep their directive-driven priority.
 - **Define a canonical face argument on `cast_spell`, as `CastMode` does**: Rejected for the same reason in reverse: it fails engines that ask the player during casting.
 - **A new ACTION Decision kind carrying the face as an attribute**: Rejected, because faces are distinct objects, so OBJECT and ABILITY options plus a decline already express every priority action, without a benchmark-version event for a new kind.
 - **Adapt tests per run to each candidate's keyword**: Rejected, because the keyword is unknowable in advance and the adaptation does not generalize.
+
+## Amendments
+
+- **2026-10-05**: Tests choose actions through the players' scripts rather than Intents, since ADR-018 makes the scripts the only source of answers from fra-hard-v2 onward.

@@ -210,4 +210,5 @@ For "T, Pay 1 life: Add one mana of any color. Spend this mana only to cast an i
 
 | ADR | Decision |
 | --- | --- |
-| [ADR-017](../adr/ADR-017-priority-actions-are-player-queries.md) | Priority actions are Player Queries chosen through Intents |
+| [ADR-017](../adr/ADR-017-priority-actions-are-player-queries.md) | Priority actions are Player Queries chosen through the players' answers |
+| [ADR-018](../adr/ADR-018-audited-tests-play-as-two-players-at-a-table.md) | Audited Tests build a position, play it and judge it only as players at the table would |
