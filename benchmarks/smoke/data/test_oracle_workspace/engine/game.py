@@ -893,7 +893,9 @@ def run_game(game: GameState) -> Player | None:
         if game.is_game_over:
             break
 
-        run_turn(game)
+        if not run_turn(game):
+            # Stopped at an abandoned resolution; run_game resumes it.
+            return None
 
         # Check SBAs after the turn
         resolve_state_based_actions(game)

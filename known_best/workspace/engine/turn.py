@@ -132,13 +132,16 @@ def _do_combat_step(game: GameState, step: Step) -> None:
         end_combat_step(game)
 
 
-def _do_cleanup_step(game: GameState) -> None:
+def _do_cleanup_step(game: GameState) -> bool:
     """Perform the cleanup step (MTG rule §514): cleanup iterations
     (:func:`cleanup_iteration`) until one grants no priority, each that does
-    followed by a priority window in a fresh round (rule 514.3a)."""
+    followed by a priority window in a fresh round (rule 514.3a). Returns
+    ``False`` if a window stopped at an abandoned resolution."""
     while cleanup_iteration(game):
         game.start_priority_round()
-        priority_loop(game)
+        if not priority_loop(game):
+            return False
+    return True
 
 
 def cleanup_iteration(game: GameState) -> bool:
@@ -188,7 +191,7 @@ def cleanup_iteration(game: GameState) -> bool:
     return bool(sba_happened) or not game.stack.is_empty()
 
 
-def run_turn(game: GameState) -> None:
+def run_turn(game: GameState) -> bool:
     """Execute a full turn, iterating through all phases/steps.
 
     At each priority point (every phase/step except Untap and Cleanup),
@@ -204,6 +207,12 @@ def run_turn(game: GameState) -> None:
     After the last step (Cleanup), the turn number is incremented and
     the active player swaps via :meth:`GameState.advance_phase`.
 
+    A resolution abandoned at a rejected choice stops the turn where it is
+    and returns ``False``: no further cleanup, step or event follows. Calling
+    ``run_turn`` again — like starting it in a step another driver already
+    entered — carries on that step's priority window without repeating its
+    turn-based actions, and then finishes the turn.
+
     Parameters:
         game: The game state to advance through one complete turn.
     """
@@ -211,26 +220,49 @@ def run_turn(game: GameState) -> None:
 
     while game.turn_number == start_turn:
         current = (game.phase, game.step)
-
-        # Perform turn-based actions for the current step
-        if current == (Phase.BEGINNING, Step.UNTAP):
-            _do_untap_step(game)
-        elif current == (Phase.BEGINNING, Step.UPKEEP):
-            from engine.events import BeginningOfUpkeepTriggeredEvent
-            game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
-        elif current == (Phase.BEGINNING, Step.DRAW):
-            _do_draw_step(game)
-        elif game.phase == Phase.COMBAT and game.step is not None:
-            _do_combat_step(game, game.step)
-        elif current == (Phase.ENDING, Step.CLEANUP):
-            _do_cleanup_step(game)
-
-        # Grant priority at this phase/step unless it's Untap or Cleanup.
-        if current not in _NO_PRIORITY_STEPS:
-            priority_loop(game)
+        if game.step_actions_done:
+            completed = _resume_step(game, current)
+        else:
+            completed = _take_step(game, current)
+        if not completed:
+            return False
 
         # Advance to the next phase/step (or to next turn).
         game.advance_phase()
+    return True
+
+
+def _take_step(game: GameState, current: tuple) -> bool:
+    """Perform *current*'s turn-based actions and its priority window;
+    return ``False`` if play stopped at an abandoned resolution."""
+    game.step_actions_done = True
+    # Perform turn-based actions for the current step
+    if current == (Phase.BEGINNING, Step.UNTAP):
+        _do_untap_step(game)
+    elif current == (Phase.BEGINNING, Step.UPKEEP):
+        from engine.events import BeginningOfUpkeepTriggeredEvent
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    elif current == (Phase.BEGINNING, Step.DRAW):
+        _do_draw_step(game)
+    elif game.phase == Phase.COMBAT and game.step is not None:
+        _do_combat_step(game, game.step)
+    elif current == (Phase.ENDING, Step.CLEANUP):
+        return _do_cleanup_step(game)
+
+    # Grant priority at this phase/step unless it's Untap or Cleanup.
+    if current not in _NO_PRIORITY_STEPS:
+        return priority_loop(game)
+    return True
+
+
+def _resume_step(game: GameState, current: tuple) -> bool:
+    """Carry on *current*'s priority window, its turn-based actions already
+    done — and in cleanup, the cleanup steps that follow the window."""
+    if current == (Phase.ENDING, Step.CLEANUP):
+        return priority_loop(game) and _do_cleanup_step(game)
+    if current in _NO_PRIORITY_STEPS:
+        return True
+    return priority_loop(game)
 
 
 def _choose_discard(game: "GameState", player: object, cards: list) -> object:

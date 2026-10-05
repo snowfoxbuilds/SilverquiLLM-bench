@@ -1116,7 +1116,7 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
     player.land_plays_remaining -= 1
 
 
-def resolve_top(game: GameState) -> None:
+def resolve_top(game: GameState) -> bool:
     """Resolve the top spell/ability on the stack (thin compatibility alias).
 
     Delegates to :func:`engine.stack.resolve_top_of_stack`, the single canonical
@@ -1129,4 +1129,4 @@ def resolve_top(game: GameState) -> None:
     """
     from engine.stack import resolve_top_of_stack
 
-    resolve_top_of_stack(game)
+    return resolve_top_of_stack(game)

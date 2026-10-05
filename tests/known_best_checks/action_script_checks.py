@@ -2214,3 +2214,101 @@ def test_a_phase_helper_resumes_the_cleanup_it_stopped_in():
     assert (game.turn_number, game.step) == (turn + 1, Step.UPKEEP)
     (second,) = made
     assert not game.get_battlefield(game.players[0]).contains(second)
+
+
+# ---------------------------------------------------------------------------
+# Review round 7: abandonment stops every driver; a retry starts from the
+# restored boundary whatever the hooks changed
+# ---------------------------------------------------------------------------
+
+
+def test_priority_loop_stops_at_an_abandoned_resolution():
+    game, visitor, copy = _copied_visitor("Bad", negative=True)
+    script(game, 0, pass_priority())
+    game.priority_passes = 2
+    assert priority_loop(game) is False
+    # The copy abandoned; the original below it and the pending entry wait.
+    assert [obj.source for obj in game.stack._items] == [visitor]
+    assert len(game.players[0].pending_entries) == 1 and _life(game) == 21
+
+
+def test_native_cleanup_stops_at_an_abandoned_resolution():
+    from engine.turn import _do_cleanup_step
+
+    game, made = _abandoned_above_paused_cleanup()
+    assert _do_cleanup_step(game) is False
+    assert game.step == Step.CLEANUP and len(game.stack) == 2 and made == []
+
+
+def _turn_with_abandoning_copy():
+    game, visitor, copy = _copied_visitor("Bad", negative=True)
+    game.players[0].set_baseline(Intent(pattern=GameRef(), preferences=_named("Good")))
+    game.players[1].set_baseline(Intent(pattern=GameRef()))
+    return game, visitor
+
+
+def test_a_turn_stops_at_an_abandoned_resolution_and_resumes_without_repeating():
+    from engine.turn import run_turn
+
+    game, visitor = _turn_with_abandoning_copy()
+    draws = len(game.get_library(game.players[0]).get_all())
+    assert run_turn(game) is False
+    assert (game.turn_number, game.phase, game.step) == (1, Phase.PRECOMBAT_MAIN, None)
+    assert [obj.source for obj in game.stack._items] == [visitor]
+    game.players[0].end_intent("choose")
+    assert run_turn(game) is True
+    assert game.turn_number == 2 and game.stack.is_empty()
+    assert visitor.chosen == "Good"
+    assert len(game.get_library(game.players[0]).get_all()) == draws
+
+
+def test_run_turn_does_not_repeat_the_actions_of_a_step_run_scripts_entered():
+    from engine.turn import run_turn
+
+    game = _game()
+    game.turn_number = 2  # the starting player skips only turn 1's draw
+    game.phase, game.step = Phase.BEGINNING, Step.UPKEEP
+    library = game.get_library(game.players[0])
+    for _ in range(3):
+        library.add(_artifact("Card"))
+    script(game, 0, pass_priority(), pass_priority())
+    script(game, 1, pass_priority())
+    run_scripts(game)  # passes out of upkeep into the draw step, drawing
+    assert game.step == Step.DRAW and len(library.get_all()) == 2
+    for player in game.players:
+        player.set_baseline(Intent(pattern=GameRef()))
+    run_turn(game)
+    assert len(library.get_all()) == 2
+
+
+class HookMutator(PlainPlayer):
+    """Gains 7 life while hearing each rejection, then retries."""
+
+    def on_attempt_rejected(self, context, answer, error):
+        verdict = super().on_attempt_rejected(context, answer, error)
+        gain_life(context.game, self, 7)
+        return verdict
+
+
+def test_a_priority_retry_starts_from_the_restored_boundary():
+    p0 = HookMutator("Player1", picks=["Costly", "Bolt"], verdict="retry")
+    game = _plain_game(p0)
+    game.active_player_index = game.priority_player_index = 0
+    set_board_state(game, 0, hand=[Costly(), Bolt()])
+    take_priority(game, p0)
+    assert p0.heard == [20] and p0.life == 20
+    assert any(isinstance(obj.source, Bolt) for obj in game.stack._items)
+
+
+def test_an_opponent_owned_priority_retry_starts_from_the_restored_boundary():
+    game, spell = _opponent_cast_game(act(OpponentCast))
+    opponent = game.players[1]
+    original = opponent.on_attempt_rejected
+
+    def mutate_then_hear(context, answer, error):
+        gain_life(game, opponent, 7)
+        return original(context, answer, error)
+
+    opponent.on_attempt_rejected = mutate_then_hear
+    take_priority(game, game.players[0])
+    assert _on_stack(game, spell) and opponent.life == 20

@@ -95,13 +95,15 @@ def _attempt_action(game: GameState, player: Player, context: AttemptContext) ->
         except REJECTED_ACTION_ERRORS as exc:
             context.boundary.restore()
             error = as_choice_error(exc)
-            if player.settle_rejected_action(context, error):
-                continue
-            if context.reject(error) == "pass":
-                return True
-            if context.owner_answer is not context.answers[0]:
-                # A choice inside the action was rejected, not the action.
-                player.on_action_retried(context)
+            if not player.settle_rejected_action(context, error):
+                if context.reject(error) == "pass":
+                    return True
+                if context.owner_answer is not context.answers[0]:
+                    # A choice inside the action was rejected, not the action.
+                    player.on_action_retried(context)
+            # What the hooks changed outside their rollback-exempt state is
+            # not part of the retry (see Player.on_attempt_rejected).
+            context.boundary.restore()
             continue
         context.check_forbidden()
         game.priority_passes = 0

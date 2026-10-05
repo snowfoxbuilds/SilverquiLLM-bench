@@ -829,6 +829,7 @@ def _enter_next_step(game: GameState, *, finish_cleanup_step: bool = True) -> bo
     from engine.turn import untap_step
 
     game.advance_phase()
+    game.step_actions_done = True
     if game.step == Step.UNTAP:
         untap_step(game)
     elif game.step == Step.UPKEEP:

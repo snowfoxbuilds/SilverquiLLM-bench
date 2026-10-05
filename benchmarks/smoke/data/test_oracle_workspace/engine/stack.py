@@ -613,7 +613,7 @@ def _handle_priority(game: GameState, player: Player) -> bool:
     return take_priority(game, player)
 
 
-def priority_loop(game: GameState) -> None:
+def priority_loop(game: GameState) -> bool:
     """Run the priority-passing loop for the current phase/step.
 
     Flow
@@ -644,6 +644,10 @@ def priority_loop(game: GameState) -> None:
     on a round already in progress, and one whose two passes are already due
     resolves or returns at once. A new step or a resolution starts a fresh
     round (:meth:`~engine.game_state.GameState.start_priority_round`).
+
+    Returns ``True`` once both players pass on an empty stack, and ``False``
+    when a resolution is abandoned at a rejected choice: play stops there, as
+    in every driver, with lower objects and script entries left pending.
     """
     while True:
         while game.priority_passes < 2:
@@ -657,9 +661,10 @@ def priority_loop(game: GameState) -> None:
 
         # Both players passed consecutively.
         if game.stack.is_empty():
-            return  # Advance to next phase/step
+            return True  # Advance to next phase/step
 
         # Resolve top of stack (LIFO) — settles SBAs and re-derives continuous
         # effects so a just-registered mid-turn effect applies immediately —
         # and the active player receives priority in a fresh round.
-        resolve_top_of_stack(game)
+        if not resolve_top_of_stack(game):
+            return False

@@ -72,6 +72,11 @@ class GameState:
         # Passes in a row in the current priority round, for a driver that
         # stops mid-round and resumes later; see start_priority_round.
         self.priority_passes: int = 0
+        # A driver has performed the current step's turn-based actions, so
+        # run_turn carries on its priority window instead of repeating them —
+        # after any driver stopped there, at an abandoned resolution or a dry
+        # script. advance_phase clears it.
+        self.step_actions_done: bool = False
         self.phase: Phase = Phase.BEGINNING
         self.step: Step | None = Step.UNTAP
         self.turn_number: int = 1
@@ -146,6 +151,7 @@ class GameState:
         active player swaps (2-player assumption).  Mana pools are
         emptied on every transition.
         """
+        self.step_actions_done = False
         current = (self.phase, self.step)
         idx = _TURN_SEQUENCE.index(current)
 
