@@ -1,18 +1,46 @@
-"""Embercleave's attacking discount, paid equip and entry attachment are observable."""
+"""Embercleave's attacking discount, paid equip and entry attachment are observable.
 
-from cards.fdn.spg_77.card_impl import Embercleave
-from engine.card import Creature, Equipment, printed_class
-from engine.types import Keyword, ManaCost, ManaType, Supertype
-from test_utils import (
-    activate_card_ability,
-    behavioral_game,
-    cast_card,
-    declare_attackers,
-    object_preference,
-    prefer,
-    put_on_battlefield,
-    resolve_stack,
-)
+The equipped creature gets +1/+1 and double strike, so an equipped Savannah
+Lions deals 6 combat damage where an unequipped one deals 2.
+"""
+
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_278.card_impl import Mountain
+from cards.fdn.spg_77.card_impl import Embercleave, EmbercleaveAbility3, EmbercleaveAbility5
+from engine.card import Equipment, printed_class
+from engine.types import Keyword, ManaCost, Supertype
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
+
+from silverquillm.table import Table, first_strike_damage, life, moves, off_stack, on_stack, taps
+
+
+def _cast_cleave(t: Table, cleave, onto) -> None:
+    """Player 0 casts Embercleave; its enters trigger, targeting ``onto``
+    (rule 603.3d), attaches it."""
+    t.act(0, cleave, then=[moves(cleave, Zone.STACK)])
+    t.pass_(0, choices=[onto])
+    t.pass_(1, then=[moves(cleave, Zone.BATTLEFIELD), on_stack(EmbercleaveAbility3, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(EmbercleaveAbility3)])
+
+
+def _combat_damage(t: Table, first: int, total: int) -> None:
+    """No blocks; the equipped creature's double strike adds a first-strike
+    combat damage step (rule 510.4), after which player 1's life is
+    ``first``, and ``total`` after the regular one."""
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1, then=[first_strike_damage()])
+    t.pass_(0)
+    t.pass_(1, then=[life(1, first)])
+    t.pass_(0)
+    t.pass_(1, then=[life(1, total)])
+
+
+def _declare(t: Table, *attackers) -> None:
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, *attackers, then=[taps(a) for a in attackers])
 
 
 def test_static_data():
@@ -24,44 +52,48 @@ def test_static_data():
 
 
 def test_cost_reduction_per_attacking_creature():
-    game = behavioral_game()
-    player = game.players[0]
-    attackers = [
-        put_on_battlefield(game, player, Creature(name=f"Bear {i}", base_power=2, base_toughness=2))
-        for i in range(2)
-    ]
-    for card in attackers:
-        card.summoning_sick = False
-    declare_attackers(game, attackers)
-    player.mana_pool.add(ManaType.RED, 2)
-    player.mana_pool.add(ManaType.COLORLESS, 2)
-    prefer(player, object_preference(game, attackers[0]))
-    cleave = Embercleave(owner=player)
-    cast_card(game, player, cleave)
-    assert player.mana_pool.total() == 0 and cleave.attached_to is attackers[0]
-    assert game.get_battlefield(player).contains(cleave)
+    """With two attackers, four lands pay for Embercleave."""
+    first, second, cleave = card(SavannahLions), card(SavannahLions), card(Embercleave)
+    lands = [card(Mountain), card(Mountain), card(Plains), card(Plains)]
+    game = create_game(
+        Side(hand=[cleave], battlefield=[first, second, *lands]),
+        Side(),
+        start=(Step.BEGIN_COMBAT, 0),
+    )
+    t = Table(game)
+    _declare(t, first, second)
+    for land in lands:
+        t.act(0, land, then=[taps(land)])
+    _cast_cleave(t, cleave, first)
+    _combat_damage(t, 17, 12)
+    t.run()
 
 
 def test_static_buff_after_paid_equip():
-    game = behavioral_game()
-    player = game.players[0]
-    bear = put_on_battlefield(game, player, Creature(name="Bear", base_power=2, base_toughness=2))
-    cleave = put_on_battlefield(game, player, Embercleave())
-    player.mana_pool.add(ManaType.COLORLESS, 3)
-    prefer(player, object_preference(game, bear))
-    activate_card_ability(game, player, cleave)
-    resolve_stack(game)
-    assert (bear.power, bear.toughness) == (3, 3)
-    assert bear.keywords & Keyword.DOUBLE_STRIKE and bear.keywords & Keyword.TRAMPLE
+    lions, cleave = card(SavannahLions), card(Embercleave)
+    game = create_game(
+        Side(battlefield=[lions, cleave], mana={ManaType.COLORLESS: 3}),
+        Side(),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, EmbercleaveAbility5, choices=[lions], then=[on_stack(EmbercleaveAbility5, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(EmbercleaveAbility5)])
+    _declare(t, lions)
+    _combat_damage(t, 17, 14)
+    t.run()
 
 
 def test_cast_entry_attaches_to_the_chosen_creature():
-    game = behavioral_game()
-    player = game.players[0]
-    bear = put_on_battlefield(game, player, Creature(name="Bear", base_power=2, base_toughness=2))
-    other = put_on_battlefield(game, player, Creature(name="Other", base_power=2, base_toughness=2))
-    player.mana_pool.add(ManaType.RED, 6)
-    prefer(player, object_preference(game, bear))
-    cleave = Embercleave(owner=player)
-    cast_card(game, player, cleave)
-    assert cleave.attached_to is bear and bear.power == 3 and other.power == 2
+    other, chosen, cleave = card(SavannahLions), card(SavannahLions), card(Embercleave)
+    game = create_game(
+        Side(hand=[cleave], battlefield=[other, chosen], mana={ManaType.RED: 6}),
+        Side(),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    _cast_cleave(t, cleave, chosen)
+    _declare(t, other, chosen)
+    _combat_damage(t, 17, 12)
+    t.run()

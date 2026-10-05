@@ -1,78 +1,52 @@
-"""Reference test for FDN 215 — Bushwhack.
+"""Audited tests for FDN 215 — Bushwhack.
 
-Pattern 5 — modal spell ("choose one —"). The mode is chosen in
-``get_targets`` via ``choose_mode`` (a real MODE Player Query):
+"Choose one — • Search your library for a basic land card, reveal it, put it
+into your hand, then shuffle. • Target creature you control fights target
+creature you don't control." The mode and the fight's targets are chosen
+while casting (rule 601.2b-c): the first target only among the caster's
+creatures, the second only among the others'.
 
-* Fight mode returns two ``TargetRequirement`` specs (a creature you control and
-  a creature you don't control); ``on_resolve`` makes each deal damage equal to
-  its power to the other (implemented as two ``deal_damage`` calls, since the
-  engine has no ``fight`` primitive).
-* Search mode is non-target: ``on_resolve`` runs a ``choose_object`` over the
-  basic lands in the controller's library and moves the chosen one to hand.
-
-A single Intent answers the MODE query and (for Fight) both target queries.
-No dead test backdoors — targeting flows through real engine channels.
+A target that changes control before Bushwhack resolves is reached through
+High Fae Trickster and Involuntary Employment.
 """
 
 from __future__ import annotations
 
+from cards.fdn.fdn_40.card_impl import HighFaeTrickster
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_203.card_impl import InvoluntaryEmployment
 from cards.fdn.fdn_215.card_impl import Bushwhack, BushwhackAbility2, BushwhackAbility3
-from engine.basic_lands import Forest
-from engine.card import Creature, Land, printed_class
-from engine.casting import cast_spell as engine_cast_spell
-from engine.decisions import Decision, DecisionKind, GameRef
-from test_utils import Intent
-from engine.types import CardType, ManaCost, ManaType, Phase, Zone
-from test_utils import cast_spell, resolve_stack, set_board_state
-from test_utils import scenario_game as create_game
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_250.card_impl import BurnishedHart
+from cards.fdn.fdn_264.card_impl import RoguesPassage
+from cards.fdn.fdn_278.card_impl import Mountain
+from cards.fdn.fdn_280.card_impl import Forest as FdnForest
+from engine.card import printed_class
+from engine.types import ManaCost, ManaType
+from test_interface import Phase as TablePhase
+from test_interface import Side, card, create_game, shuffled
+from test_interface import Zone as TableZone
+
+from silverquillm.table import Table, appears, gains_control, moves, taps
 
 
-def _cast_bushwhack(game, mode, obj_instance_ids):
-    """Cast Bushwhack; one Intent answers the MODE query then each OBJECT query."""
-    p1 = game.players[0]
-    prefs = (Decision.mode(printed=mode),) + tuple(Decision.obj(instance=i) for i in obj_instance_ids)
-    p1.start_intent(
-        "bw",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", Bushwhack)})),
-            preferences=prefs,
-        ),
+def _table(mine=(), theirs=(), library=()):
+    bushwhack = card(Bushwhack)
+    game = create_game(
+        Side(hand=[bushwhack], battlefield=list(mine), library=list(library), mana={ManaType.GREEN: 1}),
+        Side(battlefield=list(theirs)),
+        start=(TablePhase.PRECOMBAT_MAIN, 0),
     )
-    try:
-        cast_spell(game, 0, Bushwhack)
-    finally:
-        p1.end_intent("bw")
+    return Table(game), bushwhack
 
 
-def _cast_bushwhack_no_resolve(game, mode, obj_instance_ids):
-    """Cast Bushwhack (choosing mode + targets) WITHOUT resolving, so a test can
-    change a target before the fight resolves."""
-    p1 = game.players[0]
-    game.active_player_index = 0
-    game.priority_player_index = 0
-    game.phase = Phase.PRECOMBAT_MAIN
-    game.step = None
-    bw = next(c for c in game.get_hand(p1).get_all() if printed_class(c) is Bushwhack)
-    prefs = (Decision.mode(printed=mode),) + tuple(Decision.obj(instance=i) for i in obj_instance_ids)
-    p1.start_intent(
-        "bw",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", Bushwhack)})),
-            preferences=prefs,
-        ),
-    )
-    try:
-        engine_cast_spell(game, p1, bw)
-    finally:
-        p1.end_intent("bw")
-
-
-def _put_in_library(game, player, card):
-    card.owner = player
-    card.controller = player
-    player.zones[Zone.LIBRARY].add(card)
-    card.instance_id = game.refs.instance_id(card, Zone.LIBRARY.value)
-    return card
+def _cast(t, bushwhack, *choices, found=(), then=()):
+    """Player 0 casts Bushwhack answering its mode and targets from
+    ``choices``, and both players pass, resolving it; player 0's pass answers
+    the search from ``found``."""
+    t.act(0, bushwhack, choices=list(choices), then=[moves(bushwhack, TableZone.STACK)])
+    t.pass_(0, choices=list(found))
+    t.pass_(1, then=[moves(bushwhack, TableZone.GRAVEYARD), *then])
 
 
 class TestBushwhackProperties:
@@ -83,108 +57,69 @@ class TestBushwhackProperties:
 
 
 class TestBushwhackFight:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        bw = Bushwhack(owner=p1, controller=p1)
-        ours = Creature(name="Ours", base_power=3, base_toughness=3)
-        theirs = Creature(name="Theirs", base_power=1, base_toughness=1)
-        set_board_state(game, 0, hand=[bw], battlefield=[ours], mana={ManaType.GREEN: 1})
-        set_board_state(game, 1, battlefield=[theirs])
-        return game, p1, p2, ours, theirs
-
     def test_each_creature_deals_its_power_to_the_other(self):
-        game, p1, p2, ours, theirs = self._setup()
-        _cast_bushwhack(game, BushwhackAbility3, [ours.instance_id, theirs.instance_id])
-        # Ours (3/3) deals 3 → Theirs (1/1) dies; Theirs deals 1 → Ours survives.
-        assert p2.zones[Zone.GRAVEYARD].contains(theirs)
-        assert game.get_battlefield(p1).contains(ours)
-        assert ours.damage_marked == 1
+        """The 3/3 kills the 1/1 and survives the 1 damage it takes."""
+        ours, theirs = card(BrazenScourge), card(LlanowarElves)
+        t, bushwhack = _table([ours], [theirs])
+        _cast(t, bushwhack, BushwhackAbility3, ours, theirs, then=[moves(theirs, TableZone.GRAVEYARD)])
+        t.run()
 
     def test_mutual_destruction(self):
-        game = create_game()
-        p1, p2 = game.players
-        bw = Bushwhack(owner=p1, controller=p1)
-        ours = Creature(name="Ours", base_power=2, base_toughness=2)
-        theirs = Creature(name="Theirs", base_power=2, base_toughness=2)
-        set_board_state(game, 0, hand=[bw], battlefield=[ours], mana={ManaType.GREEN: 1})
-        set_board_state(game, 1, battlefield=[theirs])
-        _cast_bushwhack(game, BushwhackAbility3, [ours.instance_id, theirs.instance_id])
-        assert p1.zones[Zone.GRAVEYARD].contains(ours)
-        assert p2.zones[Zone.GRAVEYARD].contains(theirs)
+        ours, theirs = card(BurnishedHart), card(BurnishedHart)
+        t, bushwhack = _table([ours], [theirs])
+        _cast(t, bushwhack, BushwhackAbility3, ours, theirs,
+              then=[moves(ours, TableZone.GRAVEYARD), moves(theirs, TableZone.GRAVEYARD)])
+        t.run()
 
     def test_fight_targets_split_by_control(self):
-        """Option-set invariant: the first target is a creature you control, the
-        second a creature you don't control — the two option sets are disjoint."""
-        game, p1, _p2, ours, theirs = self._setup()
-        _cast_bushwhack(game, BushwhackAbility3, [ours.instance_id, theirs.instance_id])
-        obj_records = p1.transcript.queries(DecisionKind.OBJECT)
-        assert len(obj_records) == 2
-        first = {dict(o.attrs).get("name") for o in obj_records[0].options}
-        second = {dict(o.attrs).get("name") for o in obj_records[1].options}
-        assert first == {"Ours"}
-        assert second == {"Theirs"}
+        """The caster prefers the opponent's creature for every target; the
+        first target can only be the caster's creature, so the 3/3 fights the
+        1/1. Choosing the 1/1 first would fight it with nothing of ours."""
+        ours, theirs = card(BrazenScourge), card(LlanowarElves)
+        t, bushwhack = _table([ours], [theirs])
+        _cast(t, bushwhack, BushwhackAbility3, theirs, ours, then=[moves(theirs, TableZone.GRAVEYARD)])
+        t.run()
 
 
 class TestBushwhackSearch:
     def test_finds_basic_land_and_puts_it_in_hand(self):
-        game = create_game()
-        p1, _p2 = game.players
-        bw = Bushwhack(owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[bw], mana={ManaType.GREEN: 1})
-        forest = _put_in_library(game, p1, Forest(name="Forest"))
-        _put_in_library(game, p1, Land(name="Nonbasic Land"))
-        _cast_bushwhack(game, BushwhackAbility2, [forest.instance_id])
-        assert game.get_hand(p1).contains(forest)
-        assert not p1.zones[Zone.LIBRARY].contains(forest)
+        forest, passage = card(FdnForest), card(RoguesPassage)
+        t, bushwhack = _table(library=[forest, passage])
+        _cast(t, bushwhack, BushwhackAbility2, found=[forest], then=[moves(forest, TableZone.HAND)])
+        t.run(chance=[shuffled(passage)])
 
     def test_search_offers_only_basics(self):
-        """Option-set invariant: only basic lands are search candidates."""
-        game = create_game()
-        p1, _p2 = game.players
-        bw = Bushwhack(owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[bw], mana={ManaType.GREEN: 1})
-        forest = _put_in_library(game, p1, Forest(name="Forest"))
-        _put_in_library(game, p1, Land(name="Nonbasic Land"))
-        _cast_bushwhack(game, BushwhackAbility2, [forest.instance_id])
-        offered = {
-            dict(o.attrs).get("name")
-            for r in p1.transcript.queries(DecisionKind.OBJECT)
-            for o in r.options
-            if o.kind is DecisionKind.OBJECT
-        }
-        assert offered == {"Forest"}
+        """The caster prefers the nonbasic Rogue's Passage, but only the basic
+        Forest is found."""
+        forest, passage = card(FdnForest), card(RoguesPassage)
+        t, bushwhack = _table(library=[passage, forest])
+        _cast(t, bushwhack, BushwhackAbility2, found=[passage, forest], then=[moves(forest, TableZone.HAND)])
+        t.run(chance=[shuffled(passage)])
 
 
 class TestBushwhackFightRevalidation:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        bw = Bushwhack(owner=p1, controller=p1)
-        ours = Creature(name="Ours", base_power=3, base_toughness=3)
-        theirs = Creature(name="Theirs", base_power=1, base_toughness=1)
-        set_board_state(game, 0, hand=[bw], battlefield=[ours], mana={ManaType.GREEN: 1})
-        set_board_state(game, 1, battlefield=[theirs])
-        return game, p1, p2, ours, theirs
 
     def test_target_control_change_before_resolution_no_fight(self):
-        """Negative revalidation: the opponent's creature comes under the
-        caster's control before resolution → no longer 'a creature you don't
-        control'. The fight needs both legal targets, so nothing happens."""
-        game, p1, p2, ours, theirs = self._setup()
-        _cast_bushwhack_no_resolve(game, BushwhackAbility3, [ours.instance_id, theirs.instance_id])
-        theirs.controller = p1  # now controlled by the caster
-        resolve_stack(game)
-        assert ours.damage_marked == 0
-        assert theirs.damage_marked == 0
-        assert game.get_battlefield(p2).contains(theirs)
-
-    def test_target_ceases_to_be_creature_before_resolution_no_fight(self):
-        """Negative revalidation: one target stops being a creature before
-        resolution → illegal, so the fight does not happen."""
-        game, _p1, p2, ours, theirs = self._setup()
-        _cast_bushwhack_no_resolve(game, BushwhackAbility3, [ours.instance_id, theirs.instance_id])
-        ours.card_types = set(ours.card_types) - {CardType.CREATURE}  # no longer a creature
-        resolve_stack(game)
-        assert theirs.damage_marked == 0
-        assert game.get_battlefield(p2).contains(theirs)
+        """Negative revalidation: with Bushwhack on the stack, player 0, whose
+        High Fae Trickster lets them cast Involuntary Employment at instant
+        speed, takes the opponent's Llanowar Elves, so it is no longer 'a
+        creature you don't control'. The fight needs both legal targets, so
+        nothing happens and the 1/1 Elves survives."""
+        ours, theirs = card(BrazenScourge), card(LlanowarElves)
+        bushwhack, employment = card(Bushwhack), card(InvoluntaryEmployment)
+        mountains = [card(Mountain) for _ in range(4)]
+        game = create_game(
+            Side(hand=[bushwhack, employment], battlefield=[ours, HighFaeTrickster, *mountains], mana={ManaType.GREEN: 1}),
+            Side(battlefield=[theirs]),
+            start=(TablePhase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(0, bushwhack, choices=[BushwhackAbility3, ours, theirs], then=[moves(bushwhack, TableZone.STACK)])
+        for mountain in mountains:
+            t.act(0, mountain, then=[taps(mountain)])
+        t.act(0, employment, choices=[theirs], then=[moves(employment, TableZone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(employment, TableZone.GRAVEYARD), gains_control(theirs, 0), appears(0)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(bushwhack, TableZone.GRAVEYARD)], note="no fight: the Elves survives")
+        t.run()

@@ -1,57 +1,38 @@
-"""Reference test for FDN 195 — Fanatical Firebrand.
+"""Audited tests for FDN 195 — Fanatical Firebrand.
 
-Demonstrates a **targeted activated ability** (Phase D pattern 2) with an
-``{T}, Sacrifice`` cost and an "any target" option set (players and
-creatures/planeswalkers). The target is chosen at activation via a Player
-Query (answered by an Intent), captured on the stack, revalidated at
-resolution, and dealt 1 damage.
+"{T}, Sacrifice this creature: It deals 1 damage to any target." The target
+is chosen as the ability is activated and the cost is paid then (rule
+602.2), so the Firebrand is in the graveyard while the ability waits; a
+tapped Firebrand, or one off the battlefield, cannot activate it.
 """
 
 from __future__ import annotations
 
-import pytest
-from cards.fdn.fdn_195.card_impl import FanaticalFirebrand
-from engine.abilities import AbilityError
-from engine.card import Creature, printed_class
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.types import Keyword, ManaCost, Zone
-from engine.zones import move_to_zone
-from test_utils import (
-    activate_card_ability,
-    resolve_stack,
-    set_board_state,
-)
-from test_utils import (
-    scenario_game as create_game,
-)
+from cards.fdn.fdn_195.card_impl import FanaticalFirebrand, FanaticalFirebrandAbility2
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from engine.card import printed_class
+from engine.types import Keyword, ManaCost
+from test_interface import Phase, Side, Zone, card, create_game, player
+
+from silverquillm.table import Table, life, moves, off_stack, on_stack
 
 
-def _bear(p, name="Bear"):
-    return Creature(name=name, base_power=2, base_toughness=2, owner=p, controller=p)
-
-
-def _names(zone):
-    return [card.name for card in zone.get_all()]
-
-
-def _on_battlefield(game, obj):
-    return any(game.get_battlefield(p).contains(obj) for p in game.players)
-
-
-def _activate_targeting(game, player, source, target, *, target_zone=Zone.BATTLEFIELD.value):
-    inst = game.refs.instance_id(target, target_zone)
-    player.start_intent(
-        "brand",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", printed_class(source))})),
-            preferences=(Decision.obj(instance=inst),),
-        ),
+def _table(brand, *elves):
+    game = create_game(
+        Side(battlefield=[brand]),
+        Side(battlefield=list(elves)),
+        start=(Phase.PRECOMBAT_MAIN, 0),
     )
-    try:
-        activate_card_ability(game, player, source)
-    finally:
-        player.end_intent("brand")
+    return Table(game)
+
+
+def _activate(t, brand, target, *, then=()):
+    """Player 0 activates the Firebrand at ``target``, sacrificing it, and both
+    players pass, resolving the ability."""
+    # The ability is chosen by its class: the Firebrand itself is "any target".
+    t.act(0, FanaticalFirebrandAbility2, choices=[target], then=[moves(brand, Zone.GRAVEYARD), on_stack(FanaticalFirebrandAbility2, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(FanaticalFirebrandAbility2), *then])
 
 
 class TestFanaticalFirebrandProperties:
@@ -65,53 +46,43 @@ class TestFanaticalFirebrandProperties:
 
 
 class TestFanaticalFirebrandAbility:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        brand = FanaticalFirebrand(owner=p1, controller=p1)
-        target = _bear(p2, "Their Bear")
-        set_board_state(game, 0, battlefield=[brand], life=20)
-        set_board_state(game, 1, battlefield=[target], life=20)
-        return game, p1, p2, brand, target
-
     def test_deals_damage_to_target_creature(self):
-        game, p1, _p2, brand, target = self._setup()
-        _activate_targeting(game, p1, brand, target)
-        resolve_stack(game)
-        assert target.damage_marked == 1
-        assert not _on_battlefield(game, brand)  # sacrificed as cost
+        brand, elves = card(FanaticalFirebrand), card(LlanowarElves)
+        t = _table(brand, elves)
+        _activate(t, brand, elves, then=[moves(elves, Zone.GRAVEYARD)])
+        t.run()
 
     def test_deals_damage_to_a_player(self):
-        """Option-set invariant: "any target" includes players."""
-        game, p1, p2, brand, _target = self._setup()
-        _activate_targeting(game, p1, brand, p2)
-        resolve_stack(game)
-        assert p2.life == 19
+        """"Any target" includes players."""
+        brand = card(FanaticalFirebrand)
+        t = _table(brand, card(LlanowarElves))
+        _activate(t, brand, player(1), then=[life(1, 19)])
+        t.run()
 
     def test_cost_taps_and_sacrifices(self):
-        game, p1, _p2, brand, target = self._setup()
-        # {T} is part of the cost: a tapped Firebrand cannot pay it.
-        brand.is_tapped = True
-        with pytest.raises(AbilityError):
-            _activate_targeting(game, p1, brand, target)
-        assert brand.name in _names(game.get_battlefield(p1))
-        brand.is_tapped = False
-        _activate_targeting(game, p1, brand, target)
-        # Status is not read off the sacrificed card: it is a new object (CR 400.7).
-        assert brand.name not in _names(game.get_battlefield(p1))
-        assert brand.name in _names(game.get_graveyard(p1))
-        resolve_stack(game)
-        assert target.damage_marked == 1
+        """{T} is part of the cost: a tapped Firebrand cannot pay it, an
+        untapped one is sacrificed as it is activated."""
+        tapped, brand, elves = card(FanaticalFirebrand, tapped=True), card(FanaticalFirebrand), card(LlanowarElves)
+        game = create_game(
+            Side(battlefield=[tapped, brand]), Side(battlefield=[elves]), start=(Phase.PRECOMBAT_MAIN, 0)
+        )
+        t = Table(game)
+        t.act_illegal(0, tapped, choices=[elves], note="a tapped Firebrand cannot pay {T}")
+        _activate(t, brand, elves, then=[moves(elves, Zone.GRAVEYARD)])
+        t.run()
 
     def test_target_captured_on_stack(self):
-        game, p1, _p2, brand, target = self._setup()
-        _activate_targeting(game, p1, brand, target)
-        assert game.stack.peek().targets == [target]
+        """The target chosen at activation is the one dealt damage."""
+        brand, first, second = card(FanaticalFirebrand), card(LlanowarElves), card(LlanowarElves)
+        t = _table(brand, first, second)
+        _activate(t, brand, second, then=[moves(second, Zone.GRAVEYARD)])
+        t.run()
 
     def test_source_off_battlefield_rejected_before_cost(self):
-        """Legality invariant (can_activate): activating while the source is
-        not on the battlefield is rejected before any cost is paid."""
-        game, p1, _p2, brand, _target = self._setup()
-        move_to_zone(game, brand, Zone.BATTLEFIELD, Zone.GRAVEYARD)
-        with pytest.raises(AbilityError):
-            activate_card_ability(game, p1, brand)
+        """A Firebrand in the graveyard cannot activate its ability."""
+        brand, elves = card(FanaticalFirebrand), card(LlanowarElves)
+        game = create_game(Side(graveyard=[brand]), Side(battlefield=[elves]), start=(Phase.PRECOMBAT_MAIN, 0))
+        t = Table(game)
+        t.act_illegal(0, brand, choices=[elves])
+        t.pass_(0)
+        t.run()

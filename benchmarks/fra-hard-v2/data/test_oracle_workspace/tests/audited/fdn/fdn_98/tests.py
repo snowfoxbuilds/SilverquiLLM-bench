@@ -1,21 +1,38 @@
 """Reference test for FDN 98 — Ambush Wolf.
 
-Exemplar for an **"up to one target" ETB** (Phase D, Pattern 1 with
-``optional=True``): the enters ability exiles up to one target card from a
-graveyard. The single optional requirement is declinable — an empty graveyard
-set casts the creature with zero targets rather than making it uncastable.
+Exemplar for an **"up to one target" ETB**: the enters ability exiles up to one
+target card from a graveyard. The single optional requirement is declinable —
+an empty graveyard set casts the creature with zero targets rather than making
+it uncastable.
 """
 
 from __future__ import annotations
 
-from cards.fdn.fdn_98.card_impl import AmbushWolf
-from engine.card import Creature, printed_class
-from engine.types import Keyword, ManaCost, ManaType, Phase, Zone
-from test_utils import cast_spell, create_game, set_board_state
+from cards.fdn.fdn_98.card_impl import AmbushWolf, AmbushWolfAbility2
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from engine.card import printed_class
+from engine.types import Keyword, ManaCost, ManaType
+from test_interface import Phase, Side, Zone, card, create_game
+
+from silverquillm.table import Table, moves, off_stack, on_stack
+
+_MANA = {ManaType.GREEN: 1, ManaType.COLORLESS: 2}
 
 
-def _bear(name: str = "Bear") -> Creature:
-    return Creature(name=name, base_power=2, base_toughness=2)
+def _cast_wolf(choices, *, mine=(), theirs=()):
+    wolf = card(AmbushWolf)
+    game = create_game(
+        Side(hand=[wolf], battlefield=list(mine), mana=_MANA),
+        Side(graveyard=list(theirs)),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, wolf, then=[moves(wolf, Zone.STACK)])
+    t.pass_(0, choices=choices)
+    t.pass_(1, then=[moves(wolf, Zone.BATTLEFIELD), on_stack(AmbushWolfAbility2, 0)])
+    t.pass_(0)
+    return t, wolf
 
 
 class TestAmbushWolfProperties:
@@ -30,47 +47,23 @@ class TestAmbushWolfProperties:
 
 class TestAmbushWolfETB:
     def test_exiles_targeted_graveyard_card(self):
-        game = create_game()
-        p1, p2 = game.players
-        game.active_player_index = 0
-        wolf = AmbushWolf(owner=p1, controller=p1)
-        victim = _bear("Graveyard Bear")
-        set_board_state(game, 0, hand=[wolf], mana={ManaType.GREEN: 1, ManaType.COLORLESS: 2})
-        set_board_state(game, 1, graveyard=[victim])
-        game.phase = Phase.PRECOMBAT_MAIN
-
-        cast_spell(game, 0, AmbushWolf, targets=[victim])
-        # Exiled from the opponent's graveyard to its owner's exile.
-        assert p2.zones[Zone.EXILE].contains(victim)
-        assert not game.get_graveyard(p2).contains(victim)
-        assert game.get_battlefield(p1).contains(wolf)
+        victim = card(SavannahLions)
+        t, _wolf = _cast_wolf([victim], theirs=[victim])
+        t.pass_(1, then=[off_stack(AmbushWolfAbility2), moves(victim, Zone.EXILE)],
+                note="exiled from the opponent's graveyard to its owner's exile")
+        t.run()
 
     def test_castable_with_zero_targets_when_no_graveyard_card(self):
         """Option-set invariant: 'up to one' declines cleanly with an empty
         candidate set — the Wolf still enters."""
-        game = create_game()
-        p1, _p2 = game.players
-        game.active_player_index = 0
-        wolf = AmbushWolf(owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[wolf], mana={ManaType.GREEN: 1, ManaType.COLORLESS: 2})
-        game.phase = Phase.PRECOMBAT_MAIN
-
-        cast_spell(game, 0, AmbushWolf)  # no targets available
-        assert game.get_battlefield(p1).contains(wolf)
+        t, _wolf = _cast_wolf([])
+        t.pass_(1, then=[off_stack(AmbushWolfAbility2)])
+        t.run()
 
     def test_only_graveyard_cards_can_be_exiled(self):
-        game = create_game()
-        p1, p2 = game.players
-        wolf = AmbushWolf(owner=p1, controller=p1)
-        in_gy, on_bf = _bear("In Graveyard"), _bear("On Battlefield")
-        set_board_state(
-            game,
-            0,
-            hand=[wolf],
-            battlefield=[on_bf],
-            mana={ManaType.GREEN: 1, ManaType.COLORLESS: 2},
-        )
-        set_board_state(game, 1, graveyard=[in_gy])
-        cast_spell(game, 0, wolf, targets=[on_bf, in_gy])
-        assert game.get_battlefield(p1).contains(on_bf)
-        assert game.get_exile(p2).contains(in_gy)
+        """Player 0 prefers their own creature on the battlefield, which is not
+        offered, then the card in the opponent's graveyard."""
+        on_bf, in_gy = card(LlanowarElves), card(SavannahLions)
+        t, _wolf = _cast_wolf([on_bf, in_gy], mine=[on_bf], theirs=[in_gy])
+        t.pass_(1, then=[off_stack(AmbushWolfAbility2), moves(in_gy, Zone.EXILE)])
+        t.run()

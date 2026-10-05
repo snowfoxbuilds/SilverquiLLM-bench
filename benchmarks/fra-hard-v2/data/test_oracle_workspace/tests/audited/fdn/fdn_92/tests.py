@@ -1,33 +1,21 @@
 """Reference test for FDN 92 — Rite of the Dragoncaller.
 
 "Whenever you cast an instant or sorcery spell, create a 5/5 red Dragon
-creature token with flying." The mint routes through ``make_creature_token``,
-so this test drives the cast trigger and proves the produced token carries the
-exact spec characteristics — a token has no mana cost, so its red colour must
-be represented explicitly for ``get_colors`` (and the replay executor's colour
-correlation) to see it.
+creature token with flying." The Dragon shows in play: it arrives as its
+trigger resolves, a creature without flying cannot block it, and it deals 5.
 """
 
 from __future__ import annotations
 
-from cards.fdn.fdn_92.card_impl import RiteOfTheDragoncaller
-from engine.card import Instant, printed_class
-from engine.protection import get_colors
-from engine.types import Color, Keyword, ManaCost
-from test_utils import cast_card, create_game, enter_permanent
+from cards.fdn.fdn_92.card_impl import RiteOfTheDragoncaller, RiteOfTheDragoncallerAbility1
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_278.card_impl import Mountain
+from engine.card import printed_class
+from engine.types import ManaCost, ManaType
+from test_interface import Phase, Side, Step, Zone, card, create_game, player, token
 
-
-def _dragons(game, player):
-    bf = game.get_battlefield(player)
-    return [
-        o
-        for o in bf.get_all()
-        if getattr(o, "is_token", False) and getattr(o, "name", None) == "Dragon"
-    ]
-
-
-def _cast_instant(game, p1):
-    cast_card(game, p1, Instant(name="Some Instant", owner=p1))
+from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
 
 
 class TestRiteOfTheDragoncallerProperties:
@@ -39,18 +27,29 @@ class TestRiteOfTheDragoncallerProperties:
 
 class TestRiteOfTheDragoncallerToken:
     def test_casting_instant_mints_flying_red_dragon(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        rite = RiteOfTheDragoncaller()
-        enter_permanent(game, p1, rite)
-
-        _cast_instant(game, p1)
-
-        dragons = _dragons(game, p1)
-        assert len(dragons) == 1
-        dragon = dragons[0]
-        assert dragon.subtypes == {"Dragon"}
-        assert (dragon.base_power, dragon.base_toughness) == (5, 5)
-        assert dragon.is_token is True
-        assert get_colors(dragon) == {Color.RED}
-        assert Keyword.FLYING in dragon.keywords
+        bolt, lions = card(BurstLightning), card(SavannahLions)
+        game = create_game(
+            Side(hand=[bolt], battlefield=[card(RiteOfTheDragoncaller)], library=[card(Mountain)],
+                 mana={ManaType.RED: 1}),
+            Side(battlefield=[lions], library=[card(Mountain)]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(0, bolt, choices=[player(1)], then=[
+            moves(bolt, Zone.STACK), on_stack(RiteOfTheDragoncallerAbility1, 0),
+        ])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(RiteOfTheDragoncallerAbility1), appears(0)], note="a Dragon token")
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+        # Player 0's next turn: the Dragon attacks; the Lions cannot block a flier.
+        t.pass_to(Step.UPKEEP, 0)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, token(1), then=[taps(token(1))])
+        t.pass_(0)
+        t.pass_(1)
+        t.act_illegal(1, lions, scoped={lions: token(1)}, note="the Dragon has flying")
+        t.pass_(1)
+        t.pass_(0)
+        t.pass_(1, then=[life(1, 13)], note="the Dragon deals 5")
+        t.run()

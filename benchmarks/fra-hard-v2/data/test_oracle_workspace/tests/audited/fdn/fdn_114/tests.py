@@ -1,49 +1,54 @@
 """Reference test for FDN 114 — Treetop Snarespinner.
 
-Demonstrates a **targeted activated ability** (Phase D pattern 2) with an
-extra sorcery-speed timing gate in ``can_activate``. The target creature is
-chosen at activation via a Player Query (answered by an Intent), captured on
-the stack, revalidated at resolution, and given a +1/+1 counter.
+A **targeted activated ability** with an extra sorcery-speed timing gate:
+"{2}{G}: Put a +1/+1 counter on target creature you control. Activate only as
+a sorcery." The target is chosen at activation and the counter lands when the
+ability resolves; each test shows the counter by the extra damage the
+creature deals in combat, and the gate by an activation that does not take
+effect while the mana stays available.
 """
 
 from __future__ import annotations
 
-import pytest
-from cards.fdn.fdn_114.card_impl import TreetopSnarespinner
-from engine.abilities import AbilityError
-from engine.card import Creature, printed_class
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.types import Keyword, ManaCost, ManaType, Phase, Zone
-from test_utils import (
-    activate_card_ability,
-    resolve_stack,
-    set_board_state,
-)
-from test_utils import (
-    scenario_game as create_game,
-)
+from cards.fdn.fdn_114.card_impl import TreetopSnarespinner, TreetopSnarespinnerAbility3
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_223.card_impl import GiantGrowth
+from cards.fdn.fdn_226.card_impl import InspiringCall
+from cards.fdn.fdn_280.card_impl import Forest
+from engine.card import printed_class
+from engine.types import Keyword, ManaCost
+from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game
+
+from silverquillm.table import Table, life, moves, off_stack, on_stack, taps
+
+SNARE = TreetopSnarespinnerAbility3
 
 
-def _bear(p, name="Bear"):
-    return Creature(name=name, base_power=2, base_toughness=2, owner=p, controller=p)
-
-
-def _activate_targeting(game, player, source, target):
-    """Drive the ability through the real activate → stack → resolve path,
-    targeting *target* (chosen at activation via an Intent on *player*)."""
-    inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
-    player.start_intent(
-        "snare",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", printed_class(source))})),
-            preferences=(Decision.obj(instance=inst),),
-        ),
+def _table(*, hand=(), creatures=(), theirs=(), green=3, start=(Phase.PRECOMBAT_MAIN, 0)):
+    game = create_game(
+        Side(hand=list(hand), battlefield=[TreetopSnarespinner, *creatures], library=[Forest],
+             mana={ManaType.GREEN: green}),
+        Side(battlefield=list(theirs), library=[Forest]),
+        start=start,
     )
-    try:
-        activate_card_ability(game, player, source)
-    finally:
-        player.end_intent("snare")
+    return Table(game)
+
+
+def _activate(t, target, **options):
+    t.act(0, SNARE, choices=[target], then=[on_stack(SNARE, 0)], **options)
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(SNARE)])
+
+
+def _attack_alone(t, attacker, damage):
+    """``attacker`` attacks alone this turn and is not blocked."""
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, attacker, then=[taps(attacker)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 20 - damage)])
 
 
 class TestTreetopSnarespinnerProperties:
@@ -58,65 +63,73 @@ class TestTreetopSnarespinnerProperties:
 
 
 class TestTreetopSnarespinnerAbility:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        snare = TreetopSnarespinner(owner=p1, controller=p1)
-        my_bear = _bear(p1, "My Bear")
-        set_board_state(game, 0, battlefield=[snare, my_bear], mana={ManaType.GREEN: 3})
-        game.phase = Phase.PRECOMBAT_MAIN
-        return game, p1, p2, snare, my_bear
-
     def test_counter_added_after_resolution(self):
-        game, p1, _p2, snare, my_bear = self._setup()
-        _activate_targeting(game, p1, snare, my_bear)
-        assert not game.stack.is_empty()
-        resolve_stack(game)
-        assert my_bear.plus_one_counters == 1
+        lions = card(SavannahLions)
+        t = _table(creatures=[lions])
+        _activate(t, lions)
+        _attack_alone(t, lions, 3)
+        t.run()
 
     def test_cost_is_paid(self):
-        game, p1, _p2, snare, my_bear = self._setup()
-        _activate_targeting(game, p1, snare, my_bear)
-        assert p1.mana_pool.total() == 0  # {2}{G} paid
+        """{2}{G} empties a pool of three green: a second activation cannot be paid."""
+        lions = card(SavannahLions)
+        t = _table(creatures=[lions])
+        t.act(0, SNARE, choices=[lions], then=[on_stack(SNARE, 0)])
+        t.act_illegal(0, SNARE, choices=[lions], note="no mana is left")
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(SNARE)])
+        t.run()
 
     def test_target_captured_on_stack(self):
-        game, p1, _p2, snare, my_bear = self._setup()
-        _activate_targeting(game, p1, snare, my_bear)
-        top = game.stack.peek()
-        assert top.targets == [my_bear]
-        assert top.controller is p1
+        """The counter goes on the creature chosen as the target: of two
+        Savannah Lions, the chosen one attacks for 3."""
+        chosen, other = card(SavannahLions), card(SavannahLions)
+        t = _table(creatures=[other, chosen])
+        _activate(t, chosen)
+        _attack_alone(t, chosen, 3)
+        t.run()
 
     def test_cannot_target_creature_you_do_not_control(self):
         """Option-set invariant: only creatures the controller controls are
-        offered, so an opponent's creature is never a legal target."""
-        game, p1, p2, snare, my_bear = self._setup()
-        their_bear = _bear(p2, "Their Bear")
-        set_board_state(game, 1, battlefield=[their_bear])
-        # No Intent targeting their_bear can be built — it is not a candidate,
-        # so activation with no legal own creature-target would fail. Here we
-        # confirm targeting p2's bear is simply not among the offered options
-        # by driving the ability at our own bear and checking the opponent's
-        # creature is untouched.
-        _activate_targeting(game, p1, snare, my_bear)
-        resolve_stack(game)
-        assert their_bear.plus_one_counters == 0
-        assert my_bear.plus_one_counters == 1
+        legal targets. Asked for the opponent's Lions first, the engine must
+        not put the counter there: either it is not offered, and the player's
+        own Lions is chosen, or it is rejected, and the next answer chooses
+        the own Lions. The own Lions then attacks for 3."""
+        mine, theirs = card(SavannahLions), card(SavannahLions)
+        t = _table(creatures=[mine], theirs=[theirs])
+        t.act(0, branches=[branch(SNARE, choices=[theirs, mine]), branch(SNARE, choices=[mine])],
+              then=[on_stack(SNARE, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(SNARE)])
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, mine, then=[taps(mine)])
+        t.pass_(0)
+        t.pass_(1)
+        t.pass_(1)
+        t.pass_(0)
+        t.pass_(1, then=[life(1, 17)], note="the counter is on player 0's own Lions")
+        t.run()
 
     def test_sorcery_speed_gate_rejects_outside_main(self):
-        """Legality invariant (can_activate): the sorcery-speed timing gate
-        rejects activation outside the controller's main phase before any cost."""
-        game, p1, _p2, snare, _my_bear = self._setup()
-        game.phase = Phase.COMBAT
-        with pytest.raises(AbilityError):
-            activate_card_ability(game, p1, snare)
-        assert p1.mana_pool.total() == 3  # no mana spent
+        """Legality invariant: the sorcery-speed gate rejects activation in
+        the beginning of combat step before any cost — the three green stay
+        to cast Inspiring Call."""
+        lions, call = card(SavannahLions), card(InspiringCall)
+        t = _table(hand=[call], creatures=[lions], start=(Step.BEGIN_COMBAT, 0))
+        t.act_illegal(0, SNARE, choices=[lions], note="not a main phase")
+        t.act(0, call, then=[moves(call, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(call, Zone.GRAVEYARD)])
+        t.run()
 
     def test_sorcery_speed_gate_rejects_with_nonempty_stack(self):
-        game, p1, _p2, snare, _my_bear = self._setup()
-        # A pending object on the stack means it is not sorcery-speed timing.
-        from engine.stack import StackObject
-
-        game.stack.push(StackObject(source=snare, controller=p1))
-        with pytest.raises(AbilityError):
-            activate_card_ability(game, p1, snare)
-        assert p1.mana_pool.total() == 3
+        """With Giant Growth on the stack it is not sorcery timing; once the
+        stack is empty the three green left still pay for the ability."""
+        lions, growth = card(SavannahLions), card(GiantGrowth)
+        t = _table(hand=[growth], creatures=[lions], green=4)
+        t.act(0, growth, choices=[lions], then=[moves(growth, Zone.STACK)])
+        t.act_illegal(0, SNARE, choices=[lions], note="a spell is on the stack")
+        t.pass_(0)
+        t.pass_(1, then=[moves(growth, Zone.GRAVEYARD)])
+        _activate(t, lions)
+        t.run()

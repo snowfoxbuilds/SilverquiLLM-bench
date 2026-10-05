@@ -1,38 +1,43 @@
-"""Leyline Axe attaches through paid equip activations and normal zone departures."""
+"""Leyline Axe attaches through paid equip activations and normal zone departures.
 
-import pytest
-from cards.fdn.fdn_129.card_impl import LeylineAxe
-from engine.abilities import AbilityError
-from engine.card import Creature, Equipment, printed_class
-from engine.game import destroy
-from engine.types import Keyword, ManaCost, ManaType, Phase, Zone
-from engine.zones import move_to_zone
-from test_utils import (
-    activate_card_ability,
-    behavioral_game,
-    object_preference,
-    prefer,
-    put_on_battlefield,
-    resolve_stack,
-)
+"Equipped creature gets +1/+1 and has double strike and trample. Equip {3}."
+The buff shows in what damage does: an equipped Hungry Ghoul (2/2) is a 3/3
+that survives Burst Lightning's 2 damage, and it attacks with double strike.
+"""
 
+from cards.fdn.fdn_62.card_impl import HungryGhoul
+from cards.fdn.fdn_129.card_impl import LeylineAxe, LeylineAxeAbility3
+from cards.fdn.fdn_188.card_impl import Abrade, AbradeAbility2, AbradeAbility3
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_226.card_impl import InspiringCall
+from engine.card import Equipment, printed_class
+from engine.types import ManaCost
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
 
-def arrange(count=1, mana=3):
-    game = behavioral_game()
-    player = game.players[0]
-    axe = put_on_battlefield(game, player, LeylineAxe())
-    creatures = [
-        put_on_battlefield(game, player, Creature(name=f"Bear {i}", base_power=2, base_toughness=2))
-        for i in range(count)
-    ]
-    player.mana_pool.add(ManaType.COLORLESS, mana)
-    return game, player, axe, creatures
+from silverquillm.table import Table, first_strike_damage, life, moves, off_stack, on_stack, taps
+
+EQUIP = LeylineAxeAbility3
 
 
-def equip(game, player, axe, target):
-    prefer(player, object_preference(game, target))
-    activate_card_ability(game, player, axe)
-    resolve_stack(game)
+def _table(p0_hand=(), p0_battlefield=(), *, mana, p1=None, start=(Phase.PRECOMBAT_MAIN, 0)):
+    game = create_game(
+        Side(hand=list(p0_hand), battlefield=[LeylineAxe, *p0_battlefield], mana=mana),
+        p1 or Side(),
+        start=start,
+    )
+    return Table(game)
+
+
+def _equip(t, target):
+    t.act(0, EQUIP, choices=[target], then=[on_stack(EQUIP, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(EQUIP)])
+
+
+def _cast(t, spell, *choices, then=(), seat=0):
+    t.act(seat, spell, choices=list(choices), then=[moves(spell, Zone.STACK)])
+    t.pass_(seat)
+    t.pass_(1 - seat, then=[moves(spell, Zone.GRAVEYARD), *then])
 
 
 def test_static_data():
@@ -48,57 +53,84 @@ def test_is_equipment():
 
 
 def test_equip_buffs_then_equipment_departure_removes_buff():
-    game, player, axe, (bear,) = arrange()
-    equip(game, player, axe, bear)
-    assert axe.attached_to is bear and (bear.power, bear.toughness) == (3, 3)
-    assert bear.keywords & Keyword.DOUBLE_STRIKE and bear.keywords & Keyword.TRAMPLE
-    move_to_zone(game, axe, Zone.BATTLEFIELD, Zone.HAND)
-    assert axe.attached_to is None and (bear.power, bear.toughness) == (2, 2)
-    assert not bear.keywords & Keyword.DOUBLE_STRIKE
+    """Equipped, the Ghoul survives Burst Lightning; once Abrade destroys the
+    Axe it is a 2/2 again, and the 2 damage marked on it is lethal."""
+    ghoul, bolt, abrade = card(HungryGhoul), card(BurstLightning), card(Abrade)
+    t = _table([bolt, abrade], [ghoul], mana={ManaType.RED: 6})
+    _equip(t, ghoul)
+    _cast(t, bolt, ghoul)
+    _cast(t, abrade, AbradeAbility3, LeylineAxe, then=[moves(LeylineAxe, Zone.GRAVEYARD), moves(ghoul, Zone.GRAVEYARD)])
+    t.run()
 
 
 def test_buff_moves_when_re_equipped():
-    game, player, axe, (first, second) = arrange(2, 6)
-    equip(game, player, axe, first)
-    assert (first.power, second.power) == (3, 2)
-    equip(game, player, axe, second)
-    assert (first.power, second.power) == (2, 3) and player.mana_pool.total() == 0
+    """Re-equipped from the first Ghoul to the second, the Axe buffs only the
+    second: Burst Lightning kills the first and not the second, and the second
+    attacks unblocked with double strike, dealing 3 twice."""
+    first, second, bolt1, bolt2 = card(HungryGhoul), card(HungryGhoul), card(BurstLightning), card(BurstLightning)
+    t = _table([bolt1, bolt2], [first, second], mana={ManaType.RED: 8})
+    _equip(t, first)
+    _equip(t, second)
+    _cast(t, bolt1, first, then=[moves(first, Zone.GRAVEYARD)])
+    _cast(t, bolt2, second)
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, second, then=[taps(second)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1, then=[first_strike_damage()])
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 17)])
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 14)])
+    t.run()
 
 
 def test_creature_death_detaches_equipment():
-    game, player, axe, (bear,) = arrange()
-    equip(game, player, axe, bear)
-    destroy(game, bear)
-    resolve_stack(game)
-    from engine.stack import settle_after_resolution
-
-    settle_after_resolution(game)
-    assert axe.attached_to is None and game.get_graveyard(player).contains(bear)
+    """The equipped Ghoul dies to Abrade; the Axe stays on the battlefield,
+    unattached, and equips the second Ghoul, which then survives Burst
+    Lightning."""
+    ghoul, other, abrade, bolt = card(HungryGhoul), card(HungryGhoul), card(Abrade), card(BurstLightning)
+    t = _table([abrade, bolt], [ghoul, other], mana={ManaType.RED: 9})
+    _equip(t, ghoul)
+    _cast(t, abrade, AbradeAbility2, ghoul, then=[moves(ghoul, Zone.GRAVEYARD)])
+    _equip(t, other)
+    _cast(t, bolt, other)
+    t.run()
 
 
 def test_equip_only_at_sorcery_speed():
-    game, player, axe, (bear,) = arrange()
-    game.phase = Phase.COMBAT
-    prefer(player, object_preference(game, bear))
-    with pytest.raises(AbilityError):
-        activate_card_ability(game, player, axe)
-    assert player.mana_pool.total() == 3 and axe.attached_to is None
+    """In the beginning of combat step equip cannot be activated, and the
+    three mana stay to cast Inspiring Call."""
+    ghoul, call = card(HungryGhoul), card(InspiringCall)
+    t = _table([call], [ghoul], mana={ManaType.GREEN: 3}, start=(Step.BEGIN_COMBAT, 0))
+    t.act_illegal(0, EQUIP, choices=[ghoul], note="not a main phase")
+    _cast(t, call)
+    t.run()
 
 
 def test_equip_no_legal_target_spends_no_mana():
-    game, player, axe, _ = arrange(0)
-    put_on_battlefield(
-        game, game.players[1], Creature(name="Theirs", base_power=2, base_toughness=2)
-    )
-    with pytest.raises(AbilityError):
-        activate_card_ability(game, player, axe)
-    assert player.mana_pool.total() == 3 and axe.attached_to is None and game.stack.is_empty()
+    """Only player 1 controls a creature, so equip cannot be activated; the
+    three mana stay to cast Inspiring Call."""
+    theirs, call = card(HungryGhoul), card(InspiringCall)
+    t = _table([call], mana={ManaType.GREEN: 3}, p1=Side(battlefield=[theirs]))
+    t.act_illegal(0, EQUIP, choices=[theirs], note="equip targets only a creature you control")
+    _cast(t, call)
+    t.run()
 
 
 def test_equip_pays_before_attachment_resolves():
-    game, player, axe, (bear,) = arrange()
-    prefer(player, object_preference(game, bear))
-    activate_card_ability(game, player, axe)
-    assert player.mana_pool.total() == 0 and axe.attached_to is None
-    resolve_stack(game)
-    assert axe.attached_to is bear and bear.power == 3
+    """Equip's {3} is paid on activation — Inspiring Call can no longer be
+    cast — and the Axe attaches only on resolution: Burst Lightning in
+    response still kills the 2/2 Ghoul."""
+    ghoul, call, bolt = card(HungryGhoul), card(InspiringCall), card(BurstLightning)
+    t = _table([call], [ghoul], mana={ManaType.GREEN: 3},
+               p1=Side(hand=[bolt], mana={ManaType.RED: 1}))
+    t.act(0, EQUIP, choices=[ghoul], then=[on_stack(EQUIP, 0)])
+    t.act_illegal(0, call, note="the mana is spent")
+    t.pass_(0)
+    t.act(1, bolt, choices=[ghoul], then=[moves(bolt, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(bolt, Zone.GRAVEYARD), moves(ghoul, Zone.GRAVEYARD)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(EQUIP)])
+    t.run()

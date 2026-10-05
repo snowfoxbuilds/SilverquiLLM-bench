@@ -3,16 +3,21 @@
 Exercises the cost-reduction primitive: "Instant and sorcery spells you cast
 cost {1} less to cast" is now a real reduction sourced from a battlefield
 permanent (``spell_cost_reduction``), consulted by ``get_cost_reduction``'s
-battlefield sweep — not the historical dead marker.
+battlefield sweep — not the historical dead marker. The tests show it by
+what a single mana can cast while Mocking Sprite is on the battlefield.
 """
 
 from __future__ import annotations
 
+from cards.fdn.fdn_149.card_impl import YouthfulValkyrie
 from cards.fdn.fdn_159.card_impl import MockingSprite
-from engine.card import Creature, Instant, printed_class
-from engine.casting import get_cost_reduction
+from cards.fdn.fdn_165.card_impl import ThinkTwice
+from cards.fdn.fdn_274.card_impl import Island
+from engine.card import printed_class
 from engine.types import Keyword, ManaCost
-from test_utils import create_game, set_board_state
+from test_interface import ManaType, Phase, Side, Zone, card, create_game
+
+from silverquillm.table import Table, moves
 
 
 class TestMockingSpriteProperties:
@@ -28,33 +33,40 @@ class TestMockingSpriteProperties:
 
 class TestMockingSpriteCostReduction:
     def test_reduces_own_controllers_instant(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        sprite = MockingSprite(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[sprite])
-
-        bolt = Instant(name="Bolt", mana_cost=ManaCost.parse("{2}{R}"), owner=p1, controller=p1)
-        assert sprite.spell_cost_reduction(game, bolt, p1) == 1
-        # Consulted by the battlefield sweep in get_cost_reduction.
-        assert get_cost_reduction(game, bolt, p1) == 1
+        """Think Twice ({1}{U}) costs {U}: a pool of one {U} casts it."""
+        think = card(ThinkTwice)
+        drawn = card(Island)
+        game = create_game(
+            Side(battlefield=[MockingSprite], hand=[think], library=[drawn], mana={ManaType.BLUE: 1}),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(0, think, then=[moves(think, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(think, Zone.GRAVEYARD), moves(drawn, Zone.HAND)])
+        t.run()
 
     def test_does_not_reduce_creatures(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        sprite = MockingSprite(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[sprite])
-
-        bear = Creature(name="Bear", mana_cost=ManaCost.parse("{1}{G}"),
-                        base_power=2, base_toughness=2, owner=p1, controller=p1)
-        assert sprite.spell_cost_reduction(game, bear, p1) == 0
+        """Youthful Valkyrie ({1}{W}) still costs two: one {W} cannot cast it."""
+        valkyrie = card(YouthfulValkyrie)
+        game = create_game(
+            Side(battlefield=[MockingSprite], hand=[valkyrie], mana={ManaType.WHITE: 1}),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act_illegal(0, valkyrie)
+        t.run()
 
     def test_does_not_reduce_opponents_spells(self) -> None:
-        game = create_game()
-        p1, p2 = game.players
-        sprite = MockingSprite(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[sprite])
-
-        their_bolt = Instant(name="Bolt", mana_cost=ManaCost.parse("{2}{R}"),
-                             owner=p2, controller=p2)
-        assert sprite.spell_cost_reduction(game, their_bolt, p2) == 0
-        assert get_cost_reduction(game, their_bolt, p2) == 0
+        """Player 1's Think Twice still costs {1}{U} while player 0 controls
+        Mocking Sprite: one {U} cannot cast it."""
+        think = card(ThinkTwice)
+        game = create_game(
+            Side(battlefield=[MockingSprite]),
+            Side(hand=[think], library=[card(Island)], mana={ManaType.BLUE: 1}),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.pass_(0)
+        t.act_illegal(1, think)
+        t.run()

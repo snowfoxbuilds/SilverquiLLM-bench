@@ -1,35 +1,31 @@
-"""Reference test for FDN 234 — Vivien Reid.
+"""Audited tests for FDN 234 — Vivien Reid.
 
-Demonstrates **Pattern 4 — loyalty ability with targeting** (Phase D) for a
-**required** loyalty target with a type/keyword-restricted option set:
-
-* ``−3`` — "Destroy target artifact, enchantment, or creature with flying." The
-  ``targeting`` hook offers only permanents matching that filter and returns
-  ``None`` (ability cannot be activated, no loyalty spent) when none exist. The
-  target is captured at activation, revalidated at resolution, then destroyed.
-* ``+1`` (look at top four) and ``−8`` (emblem) are untargeted.
-
-The target is chosen at activation via a Player Query answered by an Intent
-(pattern = the walker's name) — never re-selected at resolution.
+"+1: Look at the top four cards of your library. You may reveal a creature
+or land card from among them and put it into your hand. Put the rest on the
+bottom of your library in a random order. −3: Destroy target artifact,
+enchantment, or creature with flying." The −3 target is chosen at
+activation, only among permanents matching that filter; with none, the
+ability cannot be activated and no loyalty is spent, so Vivien may still
+activate +1 that turn. After a −3 her 2 loyalty cannot pay another −3.
 """
 
 from __future__ import annotations
 
 import pytest
-from cards.fdn.fdn_234.card_impl import VivienReid
-from engine.abilities import AbilityError, clear_loyalty_tracking
-from engine.card import Artifact, Creature, Enchantment, printed_class
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.types import Keyword, ManaCost, Phase, Supertype, Zone
-from test_utils import (
-    activate_loyalty_ability,
-    resolve_stack,
-    set_board_state,
-)
-from test_utils import (
-    scenario_game as create_game,
-)
+from cards.fdn.fdn_52.card_impl import StrixLookout
+from cards.fdn.fdn_116.card_impl import AnthemOfChampions
+from cards.fdn.fdn_130.card_impl import QuickDrawKatana
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_234.card_impl import VivienReid, VivienReidAbility1, VivienReidAbility2
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_278.card_impl import Mountain
+from cards.fdn.fdn_280.card_impl import Forest
+from engine.abilities import clear_loyalty_tracking
+from engine.card import printed_class
+from engine.types import ManaCost, Supertype
+from test_interface import Phase, Side, Zone, card, create_game, shuffled
+
+from silverquillm.table import Table, moves, off_stack, on_stack
 
 
 @pytest.fixture(autouse=True)
@@ -39,45 +35,31 @@ def _reset_loyalty_tracker():
     clear_loyalty_tracking()
 
 
-def _flyer(p, name="Flyer"):
-    return Creature(
-        name=name,
-        base_power=1,
-        base_toughness=1,
-        keywords=Keyword.FLYING,
-        owner=p,
-        controller=p,
+def _table(theirs=(), *, library=(), their_library=()):
+    game = create_game(
+        Side(battlefield=[VivienReid], library=list(library)),
+        Side(battlefield=list(theirs), library=list(their_library)),
+        start=(Phase.PRECOMBAT_MAIN, 0),
     )
+    return Table(game)
 
 
-def _ground(p, name="Groundling"):
-    return Creature(name=name, base_power=2, base_toughness=2, owner=p, controller=p)
+def _minus_three(t, target):
+    t.act(0, VivienReidAbility2, choices=[target], then=[on_stack(VivienReidAbility2, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(VivienReidAbility2), moves(target, Zone.GRAVEYARD)])
 
 
-def _artifact(p, name="Trinket"):
-    return Artifact(name=name, owner=p, controller=p)
-
-
-def _enchantment(p, name="Curse"):
-    return Enchantment(name=name, owner=p, controller=p)
-
-
-def _activate_targeting(game, player, walker, index, target):
-    player.start_intent(
-        "vivien",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", printed_class(walker))})),
-            preferences=(Decision.obj(instance=target.instance_id),),
-        ),
-    )
-    try:
-        activate_loyalty_ability(game, player, walker, index)
-    finally:
-        player.end_intent("vivien")
-
-
-def _in_graveyard(game, player, obj):
-    return player.zones[Zone.GRAVEYARD].contains(obj)
+def _plus_one(t, plains, forest, mountain):
+    """Vivien's +1 over a library of Plains, Forest and Mountain: player 0
+    puts the Plains into hand, and the other two go to the bottom in the
+    order the chance script gives."""
+    t.act(0, VivienReidAbility1, then=[on_stack(VivienReidAbility1, 0)])
+    t.pass_(0, choices=[plains])
+    t.pass_(1, then=[
+        off_stack(VivienReidAbility1), moves(plains, Zone.HAND),
+        moves(forest, Zone.LIBRARY, bottom=True), moves(mountain, Zone.LIBRARY, bottom=True),
+    ])
 
 
 class TestVivienProperties:
@@ -91,69 +73,49 @@ class TestVivienProperties:
 
 
 class TestVivienMinusThree:
-    def _setup(self, extra=None):
-        game = create_game()
-        p1, p2 = game.players
-        vivien = VivienReid(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[vivien])
-        if extra is not None:
-            set_board_state(game, 1, battlefield=extra)
-        game.phase = Phase.PRECOMBAT_MAIN
-        return game, p1, p2, vivien
-
     def test_destroys_flying_creature(self):
-        flyer = None
-        game, p1, p2, vivien = self._setup()
-        flyer = _flyer(p2, "Their Flyer")
-        set_board_state(game, 1, battlefield=[flyer])
-        _activate_targeting(game, p1, vivien, 1, flyer)
-        assert vivien.loyalty == 2  # 5 − 3
-        top = game.stack.peek()
-        assert top.targets == [flyer]
-        resolve_stack(game)
-        assert _in_graveyard(game, p2, flyer)
-        assert not game.get_battlefield(p2).contains(flyer)
+        """−3 destroys a flier; on player 0's next turn Vivien, at 2 loyalty,
+        cannot −3 the other one."""
+        flyer, other_flyer = card(StrixLookout), card(StrixLookout)
+        t = _table([flyer, other_flyer], library=[Plains], their_library=[Plains])
+        _minus_three(t, flyer)
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        t.act_illegal(0, VivienReidAbility2, choices=[other_flyer], note="2 loyalty cannot pay −3")
+        t.pass_(0)
+        t.run()
 
     def test_destroys_artifact(self):
-        game, p1, p2, vivien = self._setup()
-        trinket = _artifact(p2, "Their Trinket")
-        set_board_state(game, 1, battlefield=[trinket])
-        _activate_targeting(game, p1, vivien, 1, trinket)
-        resolve_stack(game)
-        assert _in_graveyard(game, p2, trinket)
+        katana = card(QuickDrawKatana)
+        t = _table([katana])
+        _minus_three(t, katana)
+        t.run()
 
     def test_destroys_enchantment(self):
-        game, p1, p2, vivien = self._setup()
-        curse = _enchantment(p2, "Their Curse")
-        set_board_state(game, 1, battlefield=[curse])
-        _activate_targeting(game, p1, vivien, 1, curse)
-        resolve_stack(game)
-        assert _in_graveyard(game, p2, curse)
+        anthem = card(AnthemOfChampions)
+        t = _table([anthem])
+        _minus_three(t, anthem)
+        t.run()
 
     def test_ground_creature_is_not_a_legal_target(self):
-        """A non-flying creature (and nothing else legal) → targeting returns
-        None → ability cannot be activated, no loyalty spent."""
-        game, p1, p2, vivien = self._setup()
-        set_board_state(game, 1, battlefield=[_ground(p2, "Their Groundling")])
-        game.phase = Phase.PRECOMBAT_MAIN
-        with pytest.raises(AbilityError):
-            activate_loyalty_ability(game, p1, vivien, 1)
-        assert vivien.loyalty == 5  # unchanged
+        """With only a non-flying creature, −3 cannot be activated; no loyalty
+        ability was activated, so Vivien may still +1 this turn."""
+        lions = card(SavannahLions)
+        plains, forest, mountain = card(Plains), card(Forest), card(Mountain)
+        t = _table([lions], library=[plains, forest, mountain])
+        t.act_illegal(0, VivienReidAbility2, choices=[lions])
+        _plus_one(t, plains, forest, mountain)
+        t.run(chance=[shuffled(forest, mountain)])
 
     def test_no_legal_target_rejected_before_cost(self):
-        game, p1, _p2, vivien = self._setup()  # nothing but the walker
-        with pytest.raises(AbilityError):
-            activate_loyalty_ability(game, p1, vivien, 1)
-        assert vivien.loyalty == 5
+        t = _table()
+        t.act_illegal(0, VivienReidAbility2)
+        t.pass_(0)
+        t.run()
 
 
 class TestVivienUntargeted:
     def test_plus_one_activates_and_resolves(self):
-        game = create_game()
-        p1, _p2 = game.players
-        vivien = VivienReid(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[vivien])
-        game.phase = Phase.PRECOMBAT_MAIN
-        activate_loyalty_ability(game, p1, vivien, 0)  # +1, untargeted
-        assert vivien.loyalty == 6
-        resolve_stack(game)  # empty library → no-op
+        plains, forest, mountain = card(Plains), card(Forest), card(Mountain)
+        t = _table(library=[plains, forest, mountain])
+        _plus_one(t, plains, forest, mountain)
+        t.run(chance=[shuffled(forest, mountain)])

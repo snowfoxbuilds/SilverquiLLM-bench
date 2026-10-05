@@ -1,102 +1,82 @@
 """Reference test for FDN 39 — Grappling Kraken.
 
-Exemplar for a **triggered ability that targets** (Phase D): a landfall trigger
-whose target is chosen when the ability resolves (the engine's trigger channel
-has no cast-time targeting), via ``choose_object`` answered by an Intent. On
-resolution the chosen opponent creature is tapped (through the
-``engine.game.tap`` helper, never a raw tapped-field write) and gains a stun
-counter.
+A **triggered ability that targets**: landfall taps the opponent's only
+creature and puts a stun counter on it.
 """
 
 from __future__ import annotations
 
-from cards.fdn.fdn_39.card_impl import GrapplingKraken
-from engine.card import Creature, Land, printed_class
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.types import ManaCost, Phase, Zone
-from engine.zones import move_to_zone
-from test_utils import create_game, enter_permanent, resolve_stack, set_board_state
+from cards.fdn.fdn_39.card_impl import GrapplingKraken, GrapplingKrakenAbility1
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_274.card_impl import Island
+from engine.card import printed_class
+from engine.types import ManaCost
+from test_interface import Phase, Side, Step, Zone, card, create_game
 
-
-def _bear(name: str = "Bear") -> Creature:
-    return Creature(name=name, base_power=2, base_toughness=2)
-
-
-def _prefer(game, player, source, target):
-    """Start an Intent on *player* selecting *target* for the landfall query."""
-    inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
-    player.start_intent(
-        "kraken",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", source)})),
-            preferences=(Decision.obj(instance=inst),),
-        ),
-    )
-
-
-def _trigger_landfall(game, controller):
-    """Move a land onto *controller*'s battlefield, firing landfall."""
-    land = Land(name="Island", owner=controller, controller=controller)
-    controller.zones[Zone.HAND].add(land)
-    land.instance_id = game.refs.instance_id(land, "hand")
-    move_to_zone(game, land, Zone.HAND, Zone.BATTLEFIELD)
-
-
-def _setup():
-    game = create_game()
-    p1, p2 = game.players
-    game.active_player_index = 0
-    kraken = GrapplingKraken(owner=p1, controller=p1)
-    opp = _bear("Opp Bear")
-    set_board_state(game, 0, battlefield=[])
-    set_board_state(game, 1, battlefield=[opp])
-    enter_permanent(game, p1, kraken)  # normally wired by move_to_zone on ETB
-    game.phase = Phase.PRECOMBAT_MAIN
-    return game, p1, p2, kraken, opp
+from silverquillm.table import Table, life, moves, off_stack, on_stack, taps
 
 
 class TestGrapplingKrakenProperties:
     def test_static_data(self):
-        card = GrapplingKraken(owner=None)
-        assert printed_class(card) is GrapplingKraken
-        assert card.mana_cost == ManaCost.parse("{4}{U}{U}")
-        assert (card.base_power, card.base_toughness) == (5, 6)
-        assert card.subtypes == {"Kraken"}
+        card_ = GrapplingKraken(owner=None)
+        assert printed_class(card_) is GrapplingKraken
+        assert card_.mana_cost == ManaCost.parse("{4}{U}{U}")
+        assert (card_.base_power, card_.base_toughness) == (5, 6)
+        assert card_.subtypes == {"Kraken"}
 
 
 class TestGrapplingKrakenLandfall:
     def test_landfall_taps_and_stuns_opponent_creature(self):
-        game, p1, _p2, _kraken, opp = _setup()
-        assert opp.is_tapped is False
-        _prefer(game, p1, GrapplingKraken, opp)
-        _trigger_landfall(game, p1)  # pushes the landfall trigger
-        assert not game.stack.is_empty()
-        resolve_stack(game)
-        p1.end_intent("kraken")
-
-        assert opp.is_tapped is True
-        assert opp.counters.get("stun") == 1
+        """The tapped Lions cannot block the Kraken. (Known-Best does not keep a
+        stunned permanent tapped, rule 122.1d, so the stun counter goes
+        unjudged.)"""
+        island, lions, kraken = card(Island), card(SavannahLions), card(GrapplingKraken)
+        game = create_game(
+            Side(battlefield=[kraken], hand=[island]),
+            Side(battlefield=[lions]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(
+            0, island, then=[moves(island, Zone.BATTLEFIELD), on_stack(GrapplingKrakenAbility1, 0)]
+        )
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(GrapplingKrakenAbility1), taps(lions)])
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, kraken, then=[taps(kraken)])
+        t.pass_(0)
+        t.pass_(1)
+        t.act_illegal(1, lions, scoped={lions: kraken}, note="a tapped creature cannot block")
+        t.pass_(1)
+        t.pass_(0)
+        t.pass_(1, then=[life(1, 15)])
+        t.run()
 
     def test_no_opponent_creature_is_a_noop(self):
-        """Option-set invariant: with no opponent creature there is no legal
-        target — landfall resolves doing nothing (no query, no error)."""
-        game = create_game()
-        p1, _p2 = game.players
-        game.active_player_index = 0
-        kraken = GrapplingKraken(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[])
-        enter_permanent(game, p1, kraken)
-        game.phase = Phase.PRECOMBAT_MAIN
-
-        _trigger_landfall(game, p1)
-        resolve_stack(game)  # must not raise even with nothing to target
+        """With no opponent creature there is no legal target, so the
+        landfall trigger is removed and nothing goes on the stack (rule
+        603.3d)."""
+        island = card(Island)
+        game = create_game(
+            Side(battlefield=[GrapplingKraken], hand=[island]), Side(), start=(Phase.PRECOMBAT_MAIN, 0)
+        )
+        t = Table(game)
+        t.act(0, island, then=[moves(island, Zone.BATTLEFIELD)], note="no landfall trigger on the stack")
+        t.run()
 
     def test_landfall_only_from_your_own_land(self):
-        """The trigger condition ignores a land an opponent plays — only *your*
-        land's entry triggers landfall, so the opponent creature stays untapped."""
-        game, _p1, p2, _kraken, opp = _setup()
-        # An opponent land entering must not fire the Kraken's landfall.
-        _trigger_landfall(game, p2)
-        assert game.stack.is_empty()
-        assert opp.is_tapped is False
+        """A land the opponent plays does not trigger the Kraken's landfall."""
+        island, lions = card(Island), card(SavannahLions)
+        game = create_game(
+            Side(battlefield=[GrapplingKraken]),
+            Side(battlefield=[lions], hand=[island]),
+            start=(Phase.PRECOMBAT_MAIN, 1),
+        )
+        t = Table(game)
+        t.act(
+            1,
+            island,
+            then=[moves(island, Zone.BATTLEFIELD)],
+            note="no landfall trigger, the Lions stays untapped",
+        )
+        t.run()

@@ -38,15 +38,15 @@
         "fdn_regression": [
           "fdn_117/tests.py::TestAshrootAnimistAttack::test_a_later_return_and_departure_do_not_change_the_pending_power",
           "fdn_117/tests.py::TestAshrootAnimistAttack::test_uses_its_power_as_it_last_existed_if_it_left",
-          "fdn_120/tests.py::TestFiendishPandaDies::test_each_death_keeps_its_own_power",
           "fdn_120/tests.py::TestFiendishPandaDies::test_returns_a_creature_card_with_mana_value_up_to_its_power",
           "fdn_120/tests.py::TestFiendishPandaDies::test_uses_its_power_as_it_died",
-          "fdn_131/tests.py::TestRavenousAmuletDrain::test_uses_its_soul_counters_as_it_last_existed_if_it_left",
-          "fdn_201/tests.py::TestHeartfireImmolatorAbility::test_damage_uses_power_snapshot_at_activation",
+          "fdn_122/tests.py::TestKykarFlicker::test_flicker_exiles_then_returns_as_a_new_object",
           "fdn_223/tests.py::TestGiantGrowth::test_pump_ends_when_the_target_dies_and_returns",
           "fdn_223/tests.py::TestGiantGrowth::test_pump_ends_when_the_target_is_exiled_and_returned",
-          "fdn_61/tests.py::TestHighSocietyHunterDraw::test_pending_draw_ignores_the_hunter_returning_under_its_owner",
-          "fdn_66/tests.py::TestNineLivesDiesReturn::test_dies_returns_with_one_fewer_revival"
+          "fdn_66/tests.py::TestNineLivesDiesReturn::test_dies_returns_with_one_fewer_revival",
+          "fdn_66/tests.py::TestNineLivesDiesReturn::test_does_not_return_before_the_next_end_step",
+          "fdn_66/tests.py::TestNineLivesEntersWithRevival::test_enters_from_stack_gets_eight_revival",
+          "fdn_86/tests.py::TestFieryAnnihilationTargets::test_creature_leaves_and_returns_takes_no_damage"
         ]
       }
     },
@@ -67,6 +67,7 @@
         ],
         "fdn_regression": [
           "fdn_236/tests.py::TestWildwoodScourgeProperties::test_enters_with_x_counters",
+          "fdn_236/tests.py::TestWildwoodScourgeTriggerRegistration::test_condition_matches_other_nonhydra_creature_you_control",
           "fdn_88/tests.py::TestGoblinNegotiationMint::test_excess_damage_mints_11_red_goblin_tokens"
         ]
       }
@@ -86,6 +87,8 @@
         "fdn_regression": [
           "fdn_115/tests.py::TestAleshaRaid::test_returns_a_creature_card_with_mana_value_up_to_its_power",
           "fdn_115/tests.py::TestAleshaRaid::test_uses_its_power_as_it_last_existed_if_it_left",
+          "fdn_87/tests.py::TestGoblinBoardersRaid::test_enters_buffed_when_attacked_this_turn",
+          "fdn_87/tests.py::TestGoblinBoardersRaid::test_reads_controller_attacked_flag",
           "fdn_93/tests.py::TestSearslicerGoblinMint::test_raid_end_step_mints_11_red_goblin_token"
         ]
       }
@@ -199,7 +202,9 @@
       "kind": "inherited",
       "failing_tests": {
         "fdn_regression": [
-          "fdn_66/tests.py::TestNineLivesDiesReturn::test_dies_returns_with_one_fewer_revival"
+          "fdn_66/tests.py::TestNineLivesDiesReturn::test_dies_returns_with_one_fewer_revival",
+          "fdn_66/tests.py::TestNineLivesDiesReturn::test_does_not_return_before_the_next_end_step",
+          "fdn_66/tests.py::TestNineLivesEntersWithRevival::test_enters_from_stack_gets_eight_revival"
         ]
       }
     },

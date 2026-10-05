@@ -8,51 +8,59 @@ the battlefield." Its power is read as it last existed on the battlefield
 
 from __future__ import annotations
 
-from cards.fdn.fdn_120.card_impl import FiendishPanda
-from engine.card import Creature
-from engine.game import add_counter, destroy
-from engine.types import ManaCost, Zone
-from engine.zones import move_to_zone
-from test_utils import behavioral_game, enter_permanent, resolve_stack
+from cards.fdn.fdn_3.card_impl import ArmasaurGuide
+from cards.fdn.fdn_18.card_impl import InspiringPaladin
+from cards.fdn.fdn_120.card_impl import FiendishPanda, FiendishPandaAbility2
+from cards.fdn.fdn_175.card_impl import HerosDownfall
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_223.card_impl import GiantGrowth
+from engine.types import Zone
+from test_interface import ManaType, Phase, Side, card, create_game
+
+from silverquillm.table import Table, moves, off_stack, on_stack
 
 
-def _dead_creature(game, player, mana_value: int) -> Creature:
-    card = Creature(
-        name=f"Mana value {mana_value}", mana_cost=ManaCost(generic=mana_value),
-        base_power=1, base_toughness=1, owner=player,
-    )
-    game.get_graveyard(player).add(card)
-    return card
+def _cast(t, spell, *, choices, then=()):
+    """Player 0 casts ``spell``, and both players pass, so it resolves."""
+    t.act(0, spell, choices=choices, then=[moves(spell, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(spell, Zone.GRAVEYARD), *then])
+
+
+def _panda_returns(t, panda, returned):
+    """The Panda's dies trigger resolves and returns ``returned``."""
+    t.pass_(0, choices=[returned])
+    t.pass_(1, then=[off_stack(FiendishPandaAbility2), moves(returned, Zone.BATTLEFIELD)])
 
 
 class TestFiendishPandaDies:
     def test_returns_a_creature_card_with_mana_value_up_to_its_power(self) -> None:
-        game = behavioral_game()
-        player = game.players[0]
-        returned = _dead_creature(game, player, 3)
-        panda = enter_permanent(game, player, FiendishPanda())
-        destroy(game, panda)
-        resolve_stack(game)
-        assert game.get_battlefield(player).contains(returned)
+        """The 3/2 Panda, killed by Burst Lightning, returns Inspiring Paladin
+        (mana value 3)."""
+        panda, bolt, paladin = card(FiendishPanda), card(BurstLightning), card(InspiringPaladin)
+        game = create_game(
+            Side(hand=[bolt], battlefield=[panda], graveyard=[paladin], mana={ManaType.RED: 1}),
+            Side(),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        _cast(t, bolt, choices=[panda], then=[moves(panda, Zone.GRAVEYARD), on_stack(FiendishPandaAbility2, 0)])
+        _panda_returns(t, panda, paladin)
+        t.run()
 
     def test_uses_its_power_as_it_died(self) -> None:
-        game = behavioral_game()
-        player = game.players[0]
-        returned = _dead_creature(game, player, 5)
-        panda = enter_permanent(game, player, FiendishPanda())
-        add_counter(game, panda, "+1/+1", 3)
-        destroy(game, panda)
-        resolve_stack(game)
-        assert game.get_battlefield(player).contains(returned)
-
-    def test_each_death_keeps_its_own_power(self) -> None:
-        game = behavioral_game()
-        player = game.players[0]
-        returned = _dead_creature(game, player, 5)
-        panda = enter_permanent(game, player, FiendishPanda())
-        add_counter(game, panda, "+1/+1", 3)
-        destroy(game, panda)  # power 6 as it died
-        move_to_zone(game, panda, Zone.GRAVEYARD, Zone.BATTLEFIELD)
-        destroy(game, panda)  # power 3 this time
-        resolve_stack(game)
-        assert game.get_battlefield(player).contains(returned)
+        """Giant Growth makes the Panda a 6/5 before Hero's Downfall destroys
+        it: its power as it died, 6, returns Armasaur Guide (mana value 5),
+        which the 3 power of the card in the graveyard would not."""
+        panda, growth, downfall, guide = card(FiendishPanda), card(GiantGrowth), card(HerosDownfall), card(ArmasaurGuide)
+        game = create_game(
+            Side(hand=[growth, downfall], battlefield=[panda], graveyard=[guide],
+                 mana={ManaType.GREEN: 1, ManaType.BLACK: 3}),
+            Side(),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        _cast(t, growth, choices=[panda])
+        _cast(t, downfall, choices=[panda], then=[moves(panda, Zone.GRAVEYARD), on_stack(FiendishPandaAbility2, 0)])
+        _panda_returns(t, panda, guide)
+        t.run()

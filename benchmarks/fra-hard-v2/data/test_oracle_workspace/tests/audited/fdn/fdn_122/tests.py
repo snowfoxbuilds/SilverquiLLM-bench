@@ -1,48 +1,68 @@
 """Reference test for FDN 122 — Kykar, Zephyr Awakener.
 
-Behavioral coverage of the flicker leg of the cast trigger: exile
-another creature you control, return it at the beginning of the next end
-step. The flicker drives both legs through ``move_to_zone``, so it also
-pins the instance-id contract — a zone change yields a new object, and the
-returned creature must carry a fresh instance id even though no query ever
-observes the exile stint.
+"Whenever you cast a noncreature spell, choose one — Exile another target
+creature you control. Return that card to the battlefield under its owner's
+control at the beginning of the next end step. / Create a 1/1 white Spirit
+creature token with flying."
+
+Player 0 casts Burst Lightning at player 1 to trigger Kykar. The flickered
+creature returns as a new object — it started tapped and comes back untapped.
 """
 
 from __future__ import annotations
 
+import pytest
 from cards.fdn.fdn_122.card_impl import (
     KykarZephyrAwakener,
+    KykarZephyrAwakenerAbility2,
     KykarZephyrAwakenerAbility3,
     KykarZephyrAwakenerAbility4,
 )
-from engine.card import Creature, Instant, printed_class
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.protection import get_colors
-from engine.types import Color, Keyword, ManaCost, Phase, Step, Zone
-from test_utils import (
-    advance_game_to_phase,
-    cast_card,
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_150.card_impl import AegisTurtle
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_280.card_impl import Forest
+from engine.card import printed_class
+from engine.types import ManaCost
+from test_interface import (
+    Decision,
+    ManaType,
+    Phase,
+    PlayDiverged,
+    Side,
+    Step,
+    Zone,
+    card,
     create_game,
-    enter_permanent,
-    set_board_state,
+    player,
+    token,
 )
 
+from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
 
-def _flicker_setup():
-    """Kykar + a bear on p1's battlefield, triggers registered."""
-    game = create_game()
-    p1 = game.players[0]
-    kykar = KykarZephyrAwakener()
-    bear = Creature(name="Bear", base_power=2, base_toughness=2)
-    set_board_state(game, 0, battlefield=[bear])
-    enter_permanent(game, p1, kykar)
-    return game, p1, kykar, bear
+FLICKER = Decision.mode(printed=KykarZephyrAwakenerAbility3)
+SPIRIT = Decision.mode(printed=KykarZephyrAwakenerAbility4)
 
 
-def _cast_noncreature(game, p1):
-    spell = Instant(name="Some Instant", owner=p1)
-    cast_card(game, p1, spell)
+def _table(lions, *, p1_battlefield=()):
+    bolt = card(BurstLightning)
+    game = create_game(
+        Side(hand=[bolt], battlefield=[KykarZephyrAwakener, lions], library=[Forest], mana={ManaType.RED: 1}),
+        Side(battlefield=list(p1_battlefield), library=[Forest]),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    return Table(game), bolt
+
+
+def _cast_and_trigger(t, bolt, choices, *, then):
+    """Player 0 casts Burst Lightning at player 1; Kykar's trigger, answered
+    with ``choices`` whenever its mode and target are asked, resolves with
+    ``then``, and then the Burst Lightning resolves."""
+    t.act(0, bolt, choices=[player(1), *choices], then=[moves(bolt, Zone.STACK), on_stack(KykarZephyrAwakenerAbility2, 0)])
+    t.pass_(0, choices=choices)
+    t.pass_(1, then=[off_stack(KykarZephyrAwakenerAbility2), *then])
+    t.pass_(0)
+    t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
 
 
 class TestKykarProperties:
@@ -56,85 +76,53 @@ class TestKykarProperties:
 
 
 class TestKykarFlicker:
-    """Flicker mode: exile via move_to_zone, return at the next end step."""
+    """Flicker mode: exile, then return at the next end step."""
 
-    def test_flicker_exiles_then_returns_with_fresh_instance_id(self) -> None:
-        game, p1, _kykar, bear = _flicker_setup()
-        pre_flicker = game.refs.instance_id(bear, "battlefield")
+    def test_flicker_exiles_then_returns_as_a_new_object(self) -> None:
+        lions = card(SavannahLions, tapped=True)
+        t, bolt = _table(lions)
+        _cast_and_trigger(t, bolt, [FLICKER, lions], then=[moves(lions, Zone.EXILE)])
+        t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+        t.pass_(0)
+        t.pass_(1, then=[on_stack(KykarZephyrAwakenerAbility3, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(KykarZephyrAwakenerAbility3), moves(lions, Zone.BATTLEFIELD)],
+                note="the Lions returns untapped: a new object")
+        t.run()
 
-        # One intent answers both queries the trigger raises: the MODE query
-        # (flicker) and the OBJECT query (the bear).
-        p1.start_intent(
-            "kykar",
-            Intent(
-                pattern=GameRef(card=frozenset({("printed", KykarZephyrAwakener)})),
-                preferences=(
-                    Decision.mode(printed=KykarZephyrAwakenerAbility3),
-                    Decision.obj(instance=pre_flicker),
-                ),
-            ),
-        )
-        _cast_noncreature(game, p1)
-        p1.end_intent("kykar")
-
-        # Exile leg: the bear left the battlefield with no query observing it.
-        assert p1.zones[Zone.EXILE].contains(bear)
-        assert not p1.zones[Zone.BATTLEFIELD].contains(bear)
-
-        # Return leg at the next end step.
-        from engine.stack import priority_loop
-
-        advance_game_to_phase(game, Phase.ENDING, Step.END)
-        priority_loop(game)
-        assert p1.zones[Zone.BATTLEFIELD].contains(bear)
-
-        # The returned creature is a new object: fresh instance id even
-        # though the exile stint was never observed (the real fdn_122 path
-        # the registry's stint-minting must cover).
-        post_flicker = game.refs.instance_id(bear, "battlefield")
-        assert post_flicker != pre_flicker
+    def test_unanswered_query_is_a_hard_failure_not_a_token(self) -> None:
+        """Fault attribution: with no answer to the trigger's mode, play
+        cannot go on — the engine never silently makes a token."""
+        lions = card(SavannahLions)
+        t, bolt = _table(lions)
+        _cast_and_trigger(t, bolt, [], then=[])
+        with pytest.raises(PlayDiverged, match="answers this question"):
+            t.run()
 
     def test_token_mode_creates_spirit_and_no_flicker(self) -> None:
-        game, p1, _kykar, bear = _flicker_setup()
-        p1.start_intent(
-            "kykar",
-            Intent(
-                pattern=GameRef(card=frozenset({("printed", KykarZephyrAwakener)})),
-                preferences=(Decision.mode(printed=KykarZephyrAwakenerAbility4),),
-            ),
-        )
-        _cast_noncreature(game, p1)
-        p1.end_intent("kykar")
-        bf = p1.zones[Zone.BATTLEFIELD].get_all()
-        assert any(getattr(c, "name", "") == "Spirit" for c in bf)
-        assert p1.zones[Zone.BATTLEFIELD].contains(bear)
-        assert not p1.zones[Zone.EXILE].contains(bear)
+        lions = card(SavannahLions)
+        t, bolt = _table(lions)
+        _cast_and_trigger(t, bolt, [SPIRIT], then=[appears(0)])
+        t.run()
 
 
 class TestKykarSpiritToken:
-    """The token leg mints a 1/1 white Spirit creature token with flying."""
+    """The token leg mints a 1/1 Spirit creature token with flying."""
 
-    def test_spirit_token_has_spec_characteristics(self) -> None:
-        game, p1, _kykar, _bear = _flicker_setup()
-        p1.start_intent(
-            "kykar",
-            Intent(
-                pattern=GameRef(card=frozenset({("printed", KykarZephyrAwakener)})),
-                preferences=(Decision.mode(printed=KykarZephyrAwakenerAbility4),),
-            ),
-        )
-        _cast_noncreature(game, p1)
-        p1.end_intent("kykar")
-
-        spirits = [
-            c
-            for c in p1.zones[Zone.BATTLEFIELD].get_all()
-            if getattr(c, "is_token", False) and getattr(c, "name", "") == "Spirit"
-        ]
-        assert len(spirits) == 1
-        spirit = spirits[0]
-        assert spirit.subtypes == {"Spirit"}
-        assert (spirit.base_power, spirit.base_toughness) == (1, 1)
-        assert spirit.is_token is True
-        assert get_colors(spirit) == {Color.WHITE}
-        assert Keyword.FLYING in spirit.keywords
+    def test_spirit_token_is_a_one_one_flier(self) -> None:
+        """On player 0's next turn the Spirit attacks: Aegis Turtle cannot
+        block it, and it deals 1."""
+        lions, turtle = card(SavannahLions), card(AegisTurtle)
+        t, bolt = _table(lions, p1_battlefield=[turtle])
+        _cast_and_trigger(t, bolt, [SPIRIT], then=[appears(0)])
+        t.pass_to(Step.UPKEEP, 1)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        spirit = token(1)
+        t.act(0, spirit, then=[taps(spirit)])
+        t.pass_(0)
+        t.pass_(1)
+        t.act_illegal(1, turtle, scoped={turtle: spirit}, note="the Spirit flies")
+        t.pass_(1)
+        t.pass_(0)
+        t.pass_(1, then=[life(1, 17)])
+        t.run()

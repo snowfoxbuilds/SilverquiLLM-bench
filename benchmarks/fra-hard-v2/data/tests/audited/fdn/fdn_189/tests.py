@@ -2,40 +2,49 @@
 
 Demonstrates a **targeted activated ability** (Phase D pattern 2) with a
 ``{T}`` cost and an until-end-of-turn keyword grant. The target creature is
-chosen at activation via a Player Query (answered by an Intent), captured on
-the stack, and granted haste through an until-EOT continuous effect that is
-re-applied on every ``apply_all()`` pass.
+chosen at activation, captured on the stack, and granted haste until end of
+turn. The haste shows when a Savannah Lions cast this turn attacks.
 """
 
 from __future__ import annotations
 
-import pytest
-from cards.fdn.fdn_189.card_impl import AxgardCavalry
-from engine.abilities import AbilityError
-from engine.card import Creature, printed_class
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.types import Keyword, ManaCost, Zone
-from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_189.card_impl import AxgardCavalry, AxgardCavalryAbility1
+from engine.card import printed_class
+from engine.types import ManaCost
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
+
+from silverquillm.table import Table, life, moves, off_stack, on_stack, taps
 
 
-def _bear(p, name="Bear"):
-    return Creature(name=name, base_power=2, base_toughness=2, owner=p, controller=p)
-
-
-def _activate_targeting(game, player, source, target):
-    inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
-    player.start_intent(
-        "axgard",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", printed_class(source))})),
-            preferences=(Decision.obj(instance=inst),),
-        ),
+def _table(*, battlefield=(), hand=(), mana=None):
+    game = create_game(
+        Side(battlefield=list(battlefield), hand=list(hand), mana=mana or {}),
+        start=(Phase.PRECOMBAT_MAIN, 0),
     )
-    try:
-        activate_card_ability(game, player, source)
-    finally:
-        player.end_intent("axgard")
+    return Table(game)
+
+
+def _cast(t, creature):
+    t.act(0, creature, then=[moves(creature, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(creature, Zone.BATTLEFIELD)])
+
+
+def _activate(t, axgard, target):
+    # Named by its ability class: Axgard Cavalry is a creature too, and the
+    # entry's preferences also answer the target question.
+    t.act(0, AxgardCavalryAbility1, choices=[target], then=[taps(axgard), on_stack(AxgardCavalryAbility1, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(AxgardCavalryAbility1)])
+
+
+def _attack_unblocked(t, attacker, life_after):
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=[life(1, life_after)])
 
 
 class TestAxgardCavalryProperties:
@@ -48,49 +57,52 @@ class TestAxgardCavalryProperties:
 
 
 class TestAxgardCavalryAbility:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        axgard = AxgardCavalry(owner=p1, controller=p1)
-        axgard.summoning_sick = False  # able to pay {T}
-        newcomer = _bear(p1, "Newcomer")
-        newcomer.summoning_sick = True  # would-be attacker
-        set_board_state(game, 0, battlefield=[axgard, newcomer])
-        return game, p1, p2, axgard, newcomer
-
     def test_target_gains_haste_after_resolution(self):
-        game, p1, _p2, axgard, newcomer = self._setup()
-        assert Keyword.HASTE not in newcomer.keywords
-        _activate_targeting(game, p1, axgard, newcomer)
-        resolve_stack(game)
-        game.effect_manager.apply_all(game)  # re-derive continuous effects
-        assert Keyword.HASTE in newcomer.keywords
+        """Savannah Lions, cast this turn, attacks for 2."""
+        axgard, lions = card(AxgardCavalry), card(SavannahLions)
+        t = _table(battlefield=[axgard], hand=[lions], mana={ManaType.WHITE: 1})
+        _cast(t, lions)
+        _activate(t, axgard, lions)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, lions, then=[taps(lions)])
+        _attack_unblocked(t, lions, 18)
+        t.run()
 
     def test_tap_cost_is_paid(self):
-        game, p1, _p2, axgard, newcomer = self._setup()
-        _activate_targeting(game, p1, axgard, newcomer)
-        assert axgard.is_tapped is True
+        """Axgard Cavalry is tapped as soon as the ability is activated."""
+        axgard, lions = card(AxgardCavalry), card(SavannahLions)
+        t = _table(battlefield=[axgard], hand=[lions], mana={ManaType.WHITE: 1})
+        _cast(t, lions)
+        t.act(0, AxgardCavalryAbility1, choices=[lions], then=[taps(axgard), on_stack(AxgardCavalryAbility1, 0)])
+        t.run()
 
     def test_target_captured_on_stack(self):
-        game, p1, _p2, axgard, newcomer = self._setup()
-        _activate_targeting(game, p1, axgard, newcomer)
-        top = game.stack.peek()
-        assert top.targets == [newcomer]
+        """Of two Lions cast this turn, only the one targeted can attack."""
+        axgard, first, second = card(AxgardCavalry), card(SavannahLions), card(SavannahLions)
+        t = _table(battlefield=[axgard], hand=[first, second], mana={ManaType.WHITE: 2})
+        _cast(t, first)
+        _cast(t, second)
+        _activate(t, axgard, second)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act_illegal(0, first, note="the untargeted Lions is still summoning sick")
+        t.act(0, second, then=[taps(second)])
+        _attack_unblocked(t, second, 18)
+        t.run()
 
     def test_tapped_source_rejected_before_cost(self):
-        """Legality invariant (can_activate): a ``{T}`` ability cannot be
-        activated when the source is already tapped — rejected, nothing spent."""
-        game, p1, _p2, axgard, _newcomer = self._setup()
-        axgard.is_tapped = True
-        with pytest.raises(AbilityError):
-            activate_card_ability(game, p1, axgard)
+        """Legality invariant: a ``{T}`` ability cannot be activated when the
+        source is already tapped."""
+        axgard = card(AxgardCavalry, tapped=True)
+        t = _table(battlefield=[axgard])
+        t.act_illegal(0, AxgardCavalryAbility1, choices=[axgard])
+        t.run()
 
     def test_summoning_sick_source_rejected_before_cost(self):
         """Legality invariant: a summoning-sick source without haste cannot pay
-        the ``{T}`` cost (rule 302.6)."""
-        game, p1, _p2, axgard, _newcomer = self._setup()
-        axgard.summoning_sick = True
-        assert Keyword.HASTE not in axgard.keywords
-        with pytest.raises(AbilityError):
-            activate_card_ability(game, p1, axgard)
-        assert axgard.is_tapped is False
+        the ``{T}`` cost (rule 302.6): Axgard Cavalry cast this turn stays
+        untapped."""
+        axgard = card(AxgardCavalry)
+        t = _table(hand=[axgard], mana={ManaType.RED: 1, ManaType.COLORLESS: 1})
+        _cast(t, axgard)
+        t.act_illegal(0, AxgardCavalryAbility1, choices=[axgard])
+        t.run()

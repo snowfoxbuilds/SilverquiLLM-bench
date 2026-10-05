@@ -1,59 +1,44 @@
 """Audited tests for FDN 93 — Searslicer Goblin.
 
 "Raid — At the beginning of your end step, if you attacked this turn, create a
-1/1 red Goblin creature token." Each test plays the turn through public
-actions: a real attack declaration, then the end step (rules 508.1, 207.2c).
+1/1 red Goblin creature token." Each test plays the turn: a real attack
+declaration, or none, then the end step (rules 508.1, 207.2c).
 """
 
 from __future__ import annotations
 
-from cards.fdn.fdn_93.card_impl import SearslicerGoblin
-from engine.protection import get_colors
-from engine.turn import untap_step
-from engine.types import Color, Phase, Step
-from test_utils import (
-    advance_game_to_phase,
-    behavioral_game,
-    declare_attackers,
-    declare_blockers,
-    enter_permanent,
-    resolve_stack,
-)
+from cards.fdn.fdn_93.card_impl import SearslicerGoblin, SearslicerGoblinAbility1
+from test_interface import Phase, Side, Step, card, create_game
 
-
-def _goblin_tokens(game, player):
-    return [
-        obj
-        for obj in game.get_battlefield(player).get_all()
-        if getattr(obj, "is_token", False) and "Goblin" in getattr(obj, "subtypes", set())
-    ]
+from silverquillm.table import Table, appears, life, off_stack, on_stack, taps
 
 
 def _searslicer_in_play():
-    game = behavioral_game()
-    player = game.players[0]
-    goblin = enter_permanent(game, player, SearslicerGoblin())
-    untap_step(game)
-    return game, player, goblin
+    goblin = card(SearslicerGoblin)
+    game = create_game(Side(battlefield=[goblin]), Side(), start=(Step.BEGIN_COMBAT, 0))
+    return Table(game), goblin
 
 
 class TestSearslicerGoblinMint:
     def test_raid_end_step_mints_11_red_goblin_token(self) -> None:
-        game, player, goblin = _searslicer_in_play()
-        declare_attackers(game, [goblin])
-        declare_blockers(game, {})
-        advance_game_to_phase(game, Phase.ENDING, Step.END)
-        resolve_stack(game)
-
-        tokens = _goblin_tokens(game, player)
-        assert len(tokens) == 1
-        token = tokens[0]
-        assert token.subtypes == {"Goblin"}
-        assert get_colors(token) == {Color.RED}
-        assert (token.power, token.toughness) == (1, 1)
+        t, goblin = _searslicer_in_play()
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, goblin, then=[taps(goblin)])
+        t.pass_(0)
+        t.pass_(1)
+        t.pass_(1)
+        t.pass_(0)
+        t.pass_(1, then=[life(1, 18)])
+        t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+        t.pass_(0)
+        t.pass_(1, then=[on_stack(SearslicerGoblinAbility1, 0)], note="player 0 attacked this turn")
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(SearslicerGoblinAbility1), appears(0)], note="a Goblin token")
+        t.run()
 
     def test_no_attack_means_no_goblin(self) -> None:
-        game, player, _goblin = _searslicer_in_play()
-        advance_game_to_phase(game, Phase.ENDING, Step.END)
-        resolve_stack(game)
-        assert _goblin_tokens(game, player) == []
+        t, _goblin = _searslicer_in_play()
+        t.pass_to(Step.END, 0)
+        t.pass_(0)
+        t.pass_(1, note="no Goblin: the end step ends with nothing on the stack")
+        t.run()

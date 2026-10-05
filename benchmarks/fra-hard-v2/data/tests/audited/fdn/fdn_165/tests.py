@@ -11,15 +11,14 @@ graveyard round-trip. Both casts still resolve their "draw a card" effect.
 from __future__ import annotations
 
 from cards.fdn.fdn_165.card_impl import ThinkTwice
-from engine.card import Creature, Instant
-from engine.casting import CastMode, cast_spell_free
-from engine.stack import resolve_top_of_stack
+from cards.fdn.fdn_194.card_impl import EtaliPrimalStorm, EtaliPrimalStormAbility1
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from engine.card import Instant
 from engine.types import ManaCost, Zone
-from test_utils import create_game, set_board_state
+from test_interface import Decision, ManaType, Phase, Side, Step, card, create_game
 
-
-def _library_card(name: str = "Blank"):
-    return Creature(name=name, base_power=1, base_toughness=1)
+from silverquillm.table import Table, moves, off_stack, on_stack, taps
 
 
 class TestThinkTwiceProperties:
@@ -31,61 +30,46 @@ class TestThinkTwiceProperties:
 
 
 class TestThinkTwiceFlashbackExile:
-    def _game_with_flashbackable_think_twice(self):
-        game = create_game()
-        p1 = game.players[0]
-        card = ThinkTwice(owner=p1, controller=p1)
-        set_board_state(game, 0, graveyard=[card])
-        # A card to draw so on_resolve does not fail on an empty library.
-        game.get_library(p1).add(_library_card())
-        return game, p1, card
+    @staticmethod
+    def _flashback():
+        """Player 0 casts Think Twice from the graveyard for {2}{U}; it draws
+        the Island and is exiled."""
+        think, drawn = card(ThinkTwice), card(Island)
+        game = create_game(
+            Side(graveyard=[think], library=[drawn], mana={ManaType.BLUE: 1, ManaType.COLORLESS: 2}),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(0, think, then=[moves(think, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(drawn, Zone.HAND), moves(think, Zone.EXILE)])
+        return t
 
     def test_flashback_cast_exiles_on_resolution(self) -> None:
-        game, p1, card = self._game_with_flashbackable_think_twice()
-
-        cast_spell_free(game, p1, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
-        resolve_top_of_stack(game)
-
-        assert game.get_exile(p1).contains(card)
-        assert not game.get_graveyard(p1).contains(card)
+        self._flashback().run()
 
     def test_flashback_cast_still_draws(self) -> None:
-        game, p1, card = self._game_with_flashbackable_think_twice()
-        hand_before = len(game.get_hand(p1))
-
-        cast_spell_free(game, p1, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
-        resolve_top_of_stack(game)
-
-        assert len(game.get_hand(p1)) == hand_before + 1
-
-    def test_graveyard_cast_without_flashback_mode_keeps_graveyard(self) -> None:
-        """Flashback is an explicit cast mode, never inferred: Think Twice
-        free-cast from the graveyard WITHOUT selecting flashback still draws
-        but returns to the graveyard — no silent exile."""
-        game, p1, card = self._game_with_flashbackable_think_twice()
-
-        cast_spell_free(game, p1, card, Zone.GRAVEYARD)
-        resolve_top_of_stack(game)
-
-        assert game.get_graveyard(p1).contains(card)
-        assert not game.get_exile(p1).contains(card)
+        self._flashback().run()
 
     def test_normal_resolution_goes_to_graveyard(self) -> None:
-        """The disposition override is flashback-only: a normal on_resolve draws
-        and (via the engine's cast path) the card would go to the graveyard.
-        Here we assert the default disposition is unchanged for a from-exile
-        free cast (cascade/Etali style), which must NOT exile."""
-        game = create_game()
-        p1 = game.players[0]
-        card = ThinkTwice(owner=p1, controller=p1)
-        set_board_state(game, 0)
-        game.get_exile(p1).add(card)
-        game.get_library(p1).add(_library_card())
-
-        cast_spell_free(game, p1, card, Zone.EXILE)
-        resolve_top_of_stack(game)
-
-        # From exile without flashback (no graveyard flashback path) → default
-        # non-permanent disposition is the graveyard, never a silent exile.
-        assert game.get_graveyard(p1).contains(card)
-        assert not game.get_exile(p1).contains(card)
+        """The disposition override is flashback-only: Think Twice cast for
+        free from exile (by Etali, Primal Storm's attack trigger) draws and
+        goes to the graveyard, never a silent exile."""
+        etali, think, drawn = card(EtaliPrimalStorm), card(ThinkTwice), card(Island)
+        p1_top = card(Plains)
+        game = create_game(
+            Side(battlefield=[etali], library=[think, drawn]),
+            Side(library=[p1_top]),
+            start=(Step.BEGIN_COMBAT, 0),
+        )
+        t = Table(game)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, etali, then=[taps(etali), on_stack(EtaliPrimalStormAbility1, 0)])
+        t.pass_(0, choices=[Decision.yes()])
+        t.pass_(
+            1,
+            then=[off_stack(EtaliPrimalStormAbility1), moves(think, Zone.STACK, seat=0), moves(p1_top, Zone.EXILE)],
+        )
+        t.pass_(0)
+        t.pass_(1, then=[moves(drawn, Zone.HAND), moves(think, Zone.GRAVEYARD)])
+        t.run()

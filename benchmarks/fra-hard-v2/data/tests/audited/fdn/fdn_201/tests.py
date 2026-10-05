@@ -1,60 +1,47 @@
-"""Reference test for FDN 201 — Heartfire Immolator.
+"""Audited tests for FDN 201 — Heartfire Immolator.
 
-Demonstrates a **targeted activated ability** (Phase D pattern 2) whose cost
-sacrifices the source and snapshots its power (last-known information) before
-it leaves the battlefield. The "target creature or planeswalker" is chosen at
-activation via a Player Query (answered by an Intent), captured on the stack,
-revalidated at resolution, and dealt damage equal to the snapshotted power.
+"{R}, Sacrifice this creature: It deals damage equal to its power
+to target creature or planeswalker." The target is chosen and the cost paid
+as the ability is activated (rule 602.2); the sacrificed Immolator's power
+is read as it last existed on the battlefield (rule 608.2h), so a boost it
+had then still counts.
 """
 
 from __future__ import annotations
 
-import pytest
-from cards.fdn.fdn_201.card_impl import HeartfireImmolator
-from engine.abilities import AbilityError
-from engine.card import Creature, Planeswalker, printed_class
-from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer, SubLayer
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.types import Keyword, ManaCost, ManaType, Zone
-from engine.zones import move_to_zone
-from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
+from cards.fdn.fdn_116.card_impl import AnthemOfChampions
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_201.card_impl import (
+    HeartfireImmolator,
+    HeartfireImmolatorAbility2,
+)
+from cards.fdn.fdn_234.card_impl import VivienReid
+from cards.fdn.fdn_250.card_impl import BurnishedHart
+from engine.card import printed_class
+from engine.types import Keyword, ManaCost
+from test_interface import ManaType, Phase, Side, Zone, card, create_game
+
+from silverquillm.table import Table, moves, off_stack, on_stack
 
 
-def _pump_power(game, creature, amount):
-    """Give *creature* +amount/+0 until end of turn as a layer-7c effect."""
-
-    def apply(_game):
-        if creature in effect.bound_to:
-            creature.modified_power += amount
-
-    effect = ContinuousEffect(source=creature, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT,
-                              bound_to=[creature], apply=apply, duration=DURATION_END_OF_TURN)
-    game.effect_manager.add(effect)
-    game.effect_manager.apply_all(game)
-
-
-def _bear(p, name="Bear", power=2):
-    return Creature(name=name, base_power=power, base_toughness=3, owner=p, controller=p)
-
-
-def _on_battlefield(game, obj):
-    return any(game.get_battlefield(p).contains(obj) for p in game.players)
-
-
-def _activate_targeting(game, player, source, target):
-    inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
-    player.start_intent(
-        "immo",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", printed_class(source))})),
-            preferences=(Decision.obj(instance=inst),),
-        ),
+def _table(mine, theirs):
+    game = create_game(
+        Side(battlefield=list(mine), mana={ManaType.RED: 1}),
+        Side(battlefield=list(theirs)),
+        start=(Phase.PRECOMBAT_MAIN, 0),
     )
-    try:
-        activate_card_ability(game, player, source)
-    finally:
-        player.end_intent("immo")
+    return Table(game)
+
+
+def _activate(t, immolator, target, *, then=()):
+    """Player 0 pays {R} and sacrifices the Immolator at ``target``, and both
+    players pass, resolving the ability. The ability is chosen by its class:
+    the Immolator itself is a legal target."""
+    t.act(0, HeartfireImmolatorAbility2, choices=[target],
+          then=[moves(immolator, Zone.GRAVEYARD), on_stack(HeartfireImmolatorAbility2, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(HeartfireImmolatorAbility2), *then])
 
 
 class TestHeartfireImmolatorProperties:
@@ -68,57 +55,46 @@ class TestHeartfireImmolatorProperties:
 
 
 class TestHeartfireImmolatorAbility:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        immo = HeartfireImmolator(owner=p1, controller=p1)
-        target = _bear(p2, "Their Bear")
-        set_board_state(game, 0, battlefield=[immo], mana={ManaType.RED: 1})
-        set_board_state(game, 1, battlefield=[target])
-        return game, p1, p2, immo, target
-
     def test_deals_damage_equal_to_power(self):
-        game, p1, _p2, immo, target = self._setup()
-        _activate_targeting(game, p1, immo, target)
-        resolve_stack(game)
-        assert target.damage_marked == 2  # power 2
-        assert not _on_battlefield(game, immo)  # sacrificed
-        assert p1.mana_pool.total() == 0  # {R} paid
+        """The 2-power Immolator kills a 2/2."""
+        immolator, hart = card(HeartfireImmolator), card(BurnishedHart)
+        t = _table([immolator], [hart])
+        _activate(t, immolator, hart, then=[moves(hart, Zone.GRAVEYARD)])
+        t.run()
 
     def test_damage_uses_power_snapshot_at_activation(self):
-        """The snapshot captures power before the sacrifice, so a pumped power
-        is reflected even though the source is gone at resolution."""
-        game, p1, _p2, immo, target = self._setup()
-        _pump_power(game, immo, 3)  # e.g. a prowess pump: 2 -> 5
-        _activate_targeting(game, p1, immo, target)
-        resolve_stack(game)
-        # Five damage kills the 2/3, so read it as it last existed (rule 603.10a).
-        from engine.last_known import last_known_info
-
-        assert not _on_battlefield(game, target)
-        assert last_known_info(game, target).damage_marked == 5
+        """Anthem of Champions makes the Immolator 3/3; sacrificed, it is no
+        longer pumped, yet it deals the 3 damage it had as it last existed:
+        the 3/3 dies, which 2 damage would not kill."""
+        immolator, scourge = card(HeartfireImmolator), card(BrazenScourge)
+        t = _table([immolator, card(AnthemOfChampions)], [scourge])
+        _activate(t, immolator, scourge, then=[moves(scourge, Zone.GRAVEYARD)])
+        t.run()
 
     def test_target_captured_on_stack(self):
-        game, p1, _p2, immo, target = self._setup()
-        _activate_targeting(game, p1, immo, target)
-        assert game.stack.peek().targets == [target]
+        """The creature chosen at activation is the one dealt damage."""
+        immolator, first, second = card(HeartfireImmolator), card(BurnishedHart), card(BurnishedHart)
+        t = _table([immolator], [first, second])
+        _activate(t, immolator, second, then=[moves(second, Zone.GRAVEYARD)])
+        t.run()
 
     def test_planeswalker_is_a_legal_target(self):
-        """Option-set invariant: a planeswalker is a legal target (creature or
-        planeswalker), captured on the stack at activation."""
-        game = create_game()
-        p1, p2 = game.players
-        immo = HeartfireImmolator(owner=p1, controller=p1)
-        walker = Planeswalker(name="Chandra", starting_loyalty=4, owner=p2, controller=p2)
-        set_board_state(game, 0, battlefield=[immo], mana={ManaType.RED: 1})
-        set_board_state(game, 1, battlefield=[walker])
-        _activate_targeting(game, p1, immo, walker)
-        assert game.stack.peek().targets == [walker]
+        """A planeswalker is a legal target. Player 0's Lions makes the target
+        question one an engine could not fill in by itself."""
+        immolator, walker = card(HeartfireImmolator), card(VivienReid)
+        t = _table([immolator, card(SavannahLions)], [walker])
+        _activate(t, immolator, walker)
+        t.run()
 
     def test_source_off_battlefield_rejected_before_cost(self):
-        """Legality invariant (can_activate)."""
-        game, p1, _p2, immo, _target = self._setup()
-        move_to_zone(game, immo, Zone.BATTLEFIELD, Zone.GRAVEYARD)
-        with pytest.raises(AbilityError):
-            activate_card_ability(game, p1, immo)
-        assert p1.mana_pool.total() == 1  # no mana spent
+        """An Immolator in the graveyard cannot activate its ability."""
+        immolator, hart = card(HeartfireImmolator), card(BurnishedHart)
+        game = create_game(
+            Side(graveyard=[immolator], mana={ManaType.RED: 1}),
+            Side(battlefield=[hart]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act_illegal(0, immolator, choices=[hart])
+        t.pass_(0)
+        t.run()

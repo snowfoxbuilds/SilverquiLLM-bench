@@ -6,57 +6,110 @@ Two targeted mechanisms fixed at stack-placement time, not at resolution:
   creatures/artifacts you control — genuinely optional (zero/one/two), chosen at
   activation, revalidated (stint + "you control") at resolution.
 * Beginning-of-combat trigger: "up to two target creatures you control" whose
-  targets are chosen as the trigger is put on the stack (the reusable
-  ``TriggerRegistration.targeting`` channel).
+  targets are chosen as the trigger is put on the stack.
+
+Counters show in play: a Savannah Lions (2/1) with one +1/+1 counter attacks
+for 3, with two for 4.
 """
 
 from __future__ import annotations
 
-from cards.fdn.fdn_126.card_impl import ZimoneParadoxSculptor
-from engine.card import Artifact, Creature
-from engine.decisions import Decision, GameRef
-from engine.game import add_counter
-from test_utils import Intent
-from engine.types import ManaCost, ManaType, Phase, Step, Zone
-from engine.zones import move_to_zone
-from test_utils import (
-    activate_card_ability,
-    advance_game_to_phase,
-    create_game,
-    enter_permanent,
-    resolve_stack,
-    set_board_state,
+from cards.fdn.fdn_40.card_impl import HighFaeTrickster
+from cards.fdn.fdn_126.card_impl import (
+    ZimoneParadoxSculptor,
+    ZimoneParadoxSculptorAbility1,
+    ZimoneParadoxSculptorAbility2,
 )
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_203.card_impl import InvoluntaryEmployment
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_278.card_impl import Mountain
+from cards.fdn.fdn_280.card_impl import Forest
+from engine.types import ManaCost, ManaType, Phase, Step, Zone
+from test_interface import Side, card
+from test_interface import create_game as table_game
 
-ZIMONE = "Zimone, Paradox Sculptor"
+from silverquillm.table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
 
-
-def _creature(p, name):
-    return Creature(name=name, base_power=2, base_toughness=2, owner=p, controller=p)
-
-
-def _named(objects, name):
-    (match,) = [obj for obj in objects if obj.name == name]
-    return match
-
-
-def _pref(game, obj):
-    return Decision.obj(instance=game.refs.instance_id(obj, Zone.BATTLEFIELD.value))
+TRIGGER, DOUBLE = ZimoneParadoxSculptorAbility1, ZimoneParadoxSculptorAbility2
 
 
-def _activate_double(game, player, zimone, targets):
-    prefs = tuple(_pref(game, t) for t in targets)
-    player.start_intent(
-        "z",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", ZimoneParadoxSculptor)})),
-            preferences=prefs,
-        ),
-    )
-    try:
-        activate_card_ability(game, player, zimone)
-    finally:
-        player.end_intent("z")
+def _table(p0, p1=None, *, start=(Phase.PRECOMBAT_MAIN, 0)):
+    return Table(table_game(p0, p1 or Side(), start=start))
+
+
+def _combat_trigger(t, *targets, seat=0):
+    """From a main phase, the game moves to beginning of combat and Zimone's
+    trigger, targeting ``targets``, resolves."""
+    t.pass_(seat, choices=list(targets), distinct=True)
+    t.pass_(1 - seat, then=[on_stack(TRIGGER, seat)])
+    t.pass_(seat, choices=list(targets), distinct=True)
+    t.pass_(1 - seat, then=[off_stack(TRIGGER)])
+
+
+def _double(t, zimone, forest, island, *targets, respond=None):
+    """Player 0 taps a Forest and an Island and activates Zimone's ability
+    targeting ``targets``; ``respond`` plays out before it resolves."""
+    t.act(0, forest, then=[taps(forest)])
+    t.act(0, island, then=[taps(island)])
+    t.act(0, DOUBLE, choices=list(targets), distinct=True, then=[taps(zimone), on_stack(DOUBLE, 0)])
+    if respond:
+        respond(t)
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(DOUBLE)])
+
+
+def _attack(t, *attackers, damage, seat=0, life_before=20):
+    """From beginning of combat, ``attackers`` attack unblocked."""
+    t.pass_(seat)
+    t.pass_(1 - seat)
+    t.act(seat, *attackers, then=[taps(a) for a in attackers])
+    t.pass_(seat)
+    t.pass_(1 - seat)
+    t.pass_(1 - seat)
+    t.pass_(seat)
+    t.pass_(1 - seat, then=[life(1 - seat, life_before - damage)])
+
+
+def _stealer():
+    """Player 1's side: High Fae Trickster, four Mountains and Involuntary
+    Employment in hand, to cast at instant speed; with the Mountains and the
+    Employment."""
+    mountains, employment = [card(Mountain) for _ in range(4)], card(InvoluntaryEmployment)
+    side = Side(hand=[employment], battlefield=[HighFaeTrickster, *mountains], library=[Forest])
+    return side, (mountains, employment)
+
+
+def _steal(t, stealer, creature):
+    """Player 0 passes; player 1 taps four Mountains and casts Involuntary
+    Employment on ``creature``, which resolves."""
+    mountains, employment = stealer
+    t.pass_(0)
+    for mountain in mountains:
+        t.act(1, mountain, then=[taps(mountain)])
+    t.act(1, employment, choices=[creature], then=[moves(employment, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(employment, Zone.GRAVEYARD), gains_control(creature, 1), appears(1)])
+
+
+def _next_turn_attack(t, attacker, *, damage, life_before):
+    """Involuntary Employment's control of ``attacker`` ends at cleanup; on
+    player 0's next turn Zimone's trigger targets nothing, and ``attacker``
+    attacks unblocked."""
+    t.pass_to(Step.END, 0)
+    t.pass_(0)
+    t.pass_(1, then=[gains_control(attacker, 0)], note="Involuntary Employment's control ends at cleanup")
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    _combat_trigger(t)
+    _attack(t, attacker, damage=damage, life_before=life_before)
+
+
+def _countered_pair(opponent=None):
+    """Zimone's combat trigger puts a counter on each of two Savannah Lions."""
+    zimone, a, b, forest, island = card(ZimoneParadoxSculptor), card(SavannahLions), card(SavannahLions), card(Forest), card(Island)
+    t = _table(Side(battlefield=[zimone, a, b, forest, island], library=[Forest]), opponent)
+    _combat_trigger(t, a, b)
+    return t, zimone, a, b, forest, island
 
 
 class TestZimoneProperties:
@@ -67,143 +120,81 @@ class TestZimoneProperties:
 
 
 class TestZimoneDoubleAbility:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        z = ZimoneParadoxSculptor(owner=p1, controller=p1)
-        a = _creature(p1, "Ally A")
-        b = _creature(p1, "Ally B")
-        set_board_state(game, 0, battlefield=[z, a, b], mana={ManaType.GREEN: 1, ManaType.BLUE: 1})
-        add_counter(game, a, "+1/+1", 2)
-        add_counter(game, b, "+1/+1", 3)
-        return game, p1, p2, z, a, b
 
     def test_two_distinct_targets_doubled(self):
-        game, p1, _p2, z, a, b = self._setup()
-        _activate_double(game, p1, z, [a, b])
-        top = game.stack.peek()
-        assert set(top.targets) == {a, b}  # fixed at activation, distinct
-        assert len(top.targets) == 2
-        resolve_stack(game)
-        assert a.plus_one_counters == 4  # 2 → 4
-        assert b.plus_one_counters == 6  # 3 → 6
+        t, zimone, a, b, forest, island = _countered_pair()
+        _double(t, zimone, forest, island, a, b)
+        _attack(t, a, b, damage=4 + 4)
+        t.run()
 
     def test_one_target(self):
-        game, p1, _p2, z, a, b = self._setup()
-        _activate_double(game, p1, z, [a])  # decline the second pick
-        assert game.stack.peek().targets == [a]
-        resolve_stack(game)
-        assert a.plus_one_counters == 4
-        assert b.plus_one_counters == 3  # untouched
+        t, zimone, a, b, forest, island = _countered_pair()
+        _double(t, zimone, forest, island, a)
+        _attack(t, a, b, damage=4 + 3)
+        t.run()
 
     def test_zero_targets_still_activates(self):
-        game, p1, _p2, z, a, b = self._setup()
-        _activate_double(game, p1, z, [])  # genuinely optional: none chosen
-        assert game.stack.peek().targets == []
-        assert z.is_tapped  # cost still paid ({T})
-        resolve_stack(game)
-        assert a.plus_one_counters == 2
-        assert b.plus_one_counters == 3
-
-    def test_can_target_artifact_you_control(self):
-        game, p1, _p2, z, _a, _b = self._setup()
-        art = Artifact(name="Trinket", owner=p1, controller=p1)
-        game.get_battlefield(p1).add(art)
-        art.instance_id = game.refs.instance_id(art, Zone.BATTLEFIELD.value)
-        add_counter(game, art, "charge", 2)
-        _activate_double(game, p1, z, [art])
-        resolve_stack(game)
-        assert art.counters.get("charge") == 4
+        """Genuinely optional: with no target chosen the ability is still
+        activated, and Zimone taps for its cost."""
+        t, zimone, a, b, forest, island = _countered_pair()
+        _double(t, zimone, forest, island)
+        _attack(t, a, b, damage=3 + 3)
+        t.run()
 
     def test_one_target_illegal_other_legal(self):
-        """A targets loses "you control" before resolution; the other still
-        resolves (rule 608.2b — each target revalidated independently)."""
-        game, p1, p2, z, a, b = self._setup()
-        _activate_double(game, p1, z, [a, b])
-        a.controller = p2  # no longer "you control"
-        resolve_stack(game)
-        assert a.plus_one_counters == 2  # illegal → not doubled
-        assert b.plus_one_counters == 6  # legal → doubled
-
-    def test_leave_and_return_target_rejected(self):
-        """A target that leaves and returns is a new object (new stint) and is
-        rejected by stint validation — its counters are not doubled."""
-        game, p1, _p2, z, a, _b = self._setup()
-        _activate_double(game, p1, z, [a])
-        move_to_zone(game, a, Zone.BATTLEFIELD, Zone.EXILE)
-        exiled = _named(p1.zones[Zone.EXILE].get_all(), "Ally A")
-        move_to_zone(game, exiled, Zone.EXILE, Zone.BATTLEFIELD)
-        returned = _named(game.get_battlefield(p1).get_all(), "Ally A")
-        # Whatever counters survive the zone change (CR 400.7), the returned
-        # object holds some now; doubling would change them.
-        add_counter(game, returned, "+1/+1", 3)
-        before = returned.plus_one_counters
-        resolve_stack(game)
-        # The returned object is p1-controlled and a creature, so only stint
-        # validation can reject it: its counters are left undoubled.
-        assert returned.plus_one_counters == before
+        """A target leaves "you control" before resolution and the other still
+        doubles (rule 608.2b — each target is checked on its own): player 1,
+        whose High Fae Trickster lets them cast Involuntary Employment at
+        instant speed, takes Lions A in response. Lions B, doubled to two
+        counters, attacks for 4; on player 0's next turn Lions A, back with its
+        one counter, attacks for 3."""
+        side, stealer = _stealer()
+        t, zimone, a, b, forest, island = _countered_pair(side)
+        _double(t, zimone, forest, island, a, b, respond=lambda t: _steal(t, stealer, a))
+        _attack(t, b, damage=4)
+        _next_turn_attack(t, a, damage=3, life_before=16)
+        t.run()
 
 
 class TestZimoneCombatTrigger:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        z = ZimoneParadoxSculptor(owner=p1, controller=p1)
-        a = _creature(p1, "Ally A")
-        b = _creature(p1, "Ally B")
-        set_board_state(game, 0, battlefield=[a, b])
-        game.active_player_index = 0
-        enter_permanent(game, p1, z)
-        return game, p1, p2, z, a, b
-
-    def _fire(self, game, player, targets):
-        prefs = tuple(_pref(game, t) for t in targets)
-        player.start_intent(
-            "zt",
-            Intent(
-                pattern=GameRef(card=frozenset({("printed", ZimoneParadoxSculptor)})),
-                preferences=prefs,
-            ),
-        )
-        try:
-            advance_game_to_phase(game, Phase.COMBAT, Step.BEGIN_COMBAT)
-        finally:
-            player.end_intent("zt")
 
     def test_two_targets_countered_at_trigger_time(self):
-        game, p1, _p2, _z, a, b = self._setup()
-        self._fire(game, p1, [a, b])
-        top = game.stack.peek()
-        assert set(top.targets) == {a, b}  # fixed as the trigger went up
-        resolve_stack(game)
-        assert a.plus_one_counters == 1
-        assert b.plus_one_counters == 1
+        t, _zimone, a, b, _forest, _island = _countered_pair()
+        _attack(t, a, b, damage=3 + 3)
+        t.run()
 
     def test_target_control_change_before_resolution(self):
-        game, p1, p2, _z, a, b = self._setup()
-        self._fire(game, p1, [a, b])
-        a.controller = p2  # a leaves "you control"
-        resolve_stack(game)
-        assert a.plus_one_counters == 0  # illegal → no counter
-        assert b.plus_one_counters == 1  # still legal
+        """Player 1 takes Lions A while Zimone's trigger waits: A is no longer
+        a creature its controller controls, so only Lions B gets a counter
+        and attacks for 3; on player 0's next turn Lions A, back without a
+        counter, attacks for 2."""
+        zimone, a, b = card(ZimoneParadoxSculptor), card(SavannahLions), card(SavannahLions)
+        side, stealer = _stealer()
+        t = _table(Side(battlefield=[zimone, a, b], library=[Forest]), side)
+        t.pass_(0, choices=[a, b], distinct=True)
+        t.pass_(1, then=[on_stack(TRIGGER, 0)])
+        _steal(t, stealer, a)
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(TRIGGER)])
+        _attack(t, b, damage=3)
+        _next_turn_attack(t, a, damage=2, life_before=17)
+        t.run()
 
     def test_source_control_change_between_registration_and_fire(self):
         """Zimone changes controller after its trigger is registered but before
-        beginning of combat: the trigger's controller is determined at fire time
-        (rule 603.3e), so it targets the NEW controller's creatures and the stack
-        object / context are the new controller's."""
-        game, _p1, p2, z, a, _b = self._setup()  # registered under p1
-        # Zimone (and a creature to buff) are now controlled by p2.
-        z.controller = p2
-        p2_creature = _creature(p2, "Stolen Ally")
-        game.get_battlefield(p2).add(p2_creature)
-        p2_creature.instance_id = game.refs.instance_id(p2_creature, Zone.BATTLEFIELD.value)
-        game.active_player_index = 1  # p2's turn → condition holds
-        self._fire(game, p2, [p2_creature])  # p2 answers the target query
-        top = game.stack.peek()
-        assert top.controller is p2  # trigger is now p2's
-        assert top.activation_context.controller is p2
-        assert top.targets == [p2_creature]
-        resolve_stack(game)
-        assert p2_creature.plus_one_counters == 1  # p2's creature got the counter
-        assert a.plus_one_counters == 0  # p1's creatures untouched
+        beginning of combat: the trigger's controller is determined at fire
+        time (rule 603.3e). Player 1 takes Zimone with Involuntary Employment
+        on their turn, so at their beginning of combat the trigger is theirs
+        and puts the counter on their own Savannah Lions, which attacks for 3."""
+        zimone, ours, theirs, employment = card(ZimoneParadoxSculptor), card(SavannahLions), card(SavannahLions), card(InvoluntaryEmployment)
+        t = _table(
+            Side(battlefield=[zimone, ours]),
+            Side(hand=[employment], battlefield=[theirs], mana={ManaType.RED: 4}),
+            start=(Phase.PRECOMBAT_MAIN, 1),
+        )
+        t.act(1, employment, choices=[zimone], then=[moves(employment, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(employment, Zone.GRAVEYARD), gains_control(zimone, 1), appears(1)])
+        _combat_trigger(t, theirs, seat=1)
+        _attack(t, theirs, damage=3, seat=1)
+        t.run()

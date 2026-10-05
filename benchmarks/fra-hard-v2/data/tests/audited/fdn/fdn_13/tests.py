@@ -1,16 +1,24 @@
 """Public casting, targeting and temporary flying coverage for Fleeting Flight.
 
-Combat damage prevention is excluded with an unscored baseline diagnostic."""
+"Put a +1/+1 counter on target creature. It gains flying until end of turn.
+Prevent all combat damage that would be dealt to it this turn." The counter,
+the flying and the prevention each show in combat."""
 
 from __future__ import annotations
 
 from cards.fdn.fdn_13.card_impl import FleetingFlight
-from engine.card import Creature, Instant, printed_class
-from engine.types import (
-    Keyword,
-    ManaCost,
-)
-from test_utils import scenario_game as create_game
+from cards.fdn.fdn_50.card_impl import SkyshipBuccaneer
+from cards.fdn.fdn_130.card_impl import QuickDrawKatana
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_272.card_impl import Plains
+from engine.card import Instant, printed_class
+from engine.types import ManaCost
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
+
+from silverquillm.table import Table, life, moves, taps
+
+_W = {ManaType.WHITE: 1}
 
 
 class TestFleetingFlightProperties:
@@ -30,97 +38,85 @@ class TestFleetingFlightTargeting:
     """Only creatures are legal cast targets."""
 
     def test_artifact_is_not_a_legal_creature_target(self) -> None:
-        import pytest
-        from engine.card import Artifact
-        from engine.casting import CastingError
-        from test_utils import cast_card, fund_mana_cost, set_board_state
+        flight, katana = card(FleetingFlight), card(QuickDrawKatana)
+        game = create_game(
+            Side(hand=[flight], battlefield=[katana], mana=_W),
+            Side(),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act_illegal(
+            0, flight, choices=[katana], note="an artifact is no target for Fleeting Flight"
+        )
+        t.run()
 
-        game = create_game()
-        p1 = game.players[0]
-        set_board_state(game, 0, battlefield=[Artifact(name="Not a creature")])
-        spell = FleetingFlight(owner=p1)
-        fund_mana_cost(p1, spell.mana_cost)
-        with pytest.raises(CastingError):
-            cast_card(game, p1, spell)
+
+def _flight_on_lions(p1_battlefield, *, p0_library=(), p1_library=()):
+    """Turn 1: player 0 casts Fleeting Flight on their Savannah Lions."""
+    flight, lions = card(FleetingFlight), card(SavannahLions)
+    game = create_game(
+        Side(hand=[flight], battlefield=[lions], mana=_W, library=list(p0_library)),
+        Side(battlefield=list(p1_battlefield), library=list(p1_library)),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, flight, choices=[lions], then=[moves(flight, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(flight, Zone.GRAVEYARD)])
+    return t, lions
+
+
+def _attack(t, lions, *, block=None, illegal_block=None, then=()):
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, lions, then=[taps(lions)])
+    t.pass_(0)
+    t.pass_(1)
+    if illegal_block is not None:
+        t.act_illegal(1, illegal_block, scoped={illegal_block: lions})
+    if block is not None:
+        t.act(1, block, scoped={block: lions})
+    else:
+        t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=list(then))
 
 
 class TestFleetingFlightResolution:
     """Targeting and resolution run through normal casting."""
 
     def test_missing_required_target_rejects_before_payment(self) -> None:
-        import pytest
-        from engine.casting import CastingError
-        from test_utils import cast_card, fund_mana_cost
-
-        game = create_game()
-        p1 = game.players[0]
-        spell = FleetingFlight(owner=p1)
-        fund_mana_cost(p1, spell.mana_cost)
-        with pytest.raises(CastingError):
-            cast_card(game, p1, spell)
-        assert p1.mana_pool.total() == 1
+        flight, lions = card(FleetingFlight), card(SavannahLions)
+        game = create_game(
+            Side(hand=[flight, lions], mana=_W), Side(), start=(Phase.PRECOMBAT_MAIN, 0)
+        )
+        t = Table(game)
+        t.act_illegal(0, flight, note="no creature to target")
+        t.act(
+            0,
+            lions,
+            then=[moves(lions, Zone.STACK)],
+            note="the {W} is still there to pay for the Lions",
+        )
+        t.pass_(0)
+        t.pass_(1, then=[moves(lions, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_chosen_target_receives_counter_and_flying(self) -> None:
-        from test_utils import (
-            cast_card,
-            fund_mana_cost,
-            object_preference,
-            prefer,
-            put_on_battlefield,
-        )
-
-        game = create_game()
-        p1, _p2 = game.players
-        bear = put_on_battlefield(game, p1, Creature(name="Bear", base_power=2, base_toughness=2))
-        spell = FleetingFlight(owner=p1)
-        fund_mana_cost(p1, spell.mana_cost)
-        prefer(p1, object_preference(game, bear))
-        cast_card(game, p1, spell)
-        assert (bear.power, bear.toughness) == (3, 3) and bear.keywords & Keyword.FLYING
-        from engine.types import Phase, Step
-        from test_utils import advance_game_to_phase
-
-        advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
-        assert not bear.keywords & Keyword.FLYING
-        assert (bear.power, bear.toughness) == (3, 3)
+        """The 2/1 Lions attacks as a flying 3/2 that the Elves cannot block;
+        on its next turn it has lost flying but keeps the counter, so the Elves
+        blocks it and dies while it survives."""
+        elves = card(LlanowarElves)
+        t, lions = _flight_on_lions([elves], p0_library=[card(Plains)], p1_library=[card(Plains)])
+        _attack(t, lions, illegal_block=elves, then=[life(1, 17)])
+        t.pass_to(Step.UPKEEP, 0)
+        _attack(t, lions, block=elves, then=[moves(elves, Zone.GRAVEYARD)])
+        t.run()
 
     def test_targeted_creature_survives_combat_with_a_four_power_flyer(self) -> None:
         """It gets a +1/+1 counter and "prevent all combat damage that would be
-        dealt to it this turn" (rule 615.1): the 2/2 target becomes a flying
-        3/3 and survives a block by a 4/4 flyer."""
-        from engine.combat import combat_damage_step
-        from engine.turn import untap_step
-        from engine.types import Keyword
-        from test_utils import (
-            cast_card,
-            declare_attackers,
-            declare_blockers,
-            fund_mana_cost,
-            object_preference,
-            prefer,
-            put_on_battlefield,
-            resolve_stack,
-        )
-
-        game = create_game()
-        player, opponent = game.players
-        target = put_on_battlefield(
-            game, player, Creature(name="Protected attacker", base_power=2, base_toughness=2)
-        )
-        blocker = put_on_battlefield(
-            game, opponent,
-            Creature(name="Flying blocker", base_power=4, base_toughness=4, keywords=Keyword.FLYING),
-        )
-        spell = FleetingFlight(owner=player)
-        fund_mana_cost(player, spell.mana_cost)
-        prefer(player, object_preference(game, target))
-        cast_card(game, player, spell)
-        assert (target.power, target.toughness) == (3, 3)
-
-        untap_step(game)
-        declare_attackers(game, [target])
-        declare_blockers(game, {target: [blocker]})
-        combat_damage_step(game)
-        resolve_stack(game)
-        assert game.get_battlefield(player).contains(target)
-        assert (target.power, target.toughness) == (3, 3)
+        dealt to it this turn" (rule 615.1): the 2/1 target becomes a flying
+        3/2 and survives a block by a 4/3 flyer, which its 3 damage kills."""
+        buccaneer = card(SkyshipBuccaneer)
+        t, lions = _flight_on_lions([buccaneer])
+        _attack(t, lions, block=buccaneer, then=[moves(buccaneer, Zone.GRAVEYARD)])
+        t.run()

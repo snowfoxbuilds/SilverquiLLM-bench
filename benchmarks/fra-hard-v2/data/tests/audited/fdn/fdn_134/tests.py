@@ -1,67 +1,83 @@
 """Reference test for FDN 134 — Ajani, Caller of the Pride.
 
-Demonstrates **Pattern 4 — loyalty ability with targeting** (Phase D):
+**Loyalty abilities with targeting**:
 
 * ``+1`` — "Put a +1/+1 counter on *up to one* target creature": an **optional**
-  loyalty target (``targeting`` may return ``[]``; the ability still activates
-  with nothing chosen).
+  loyalty target; the ability still activates with nothing chosen.
 * ``−3`` — "Target creature gains flying and double strike until end of turn":
-  a **required** loyalty target (``targeting`` returns ``None`` when there is no
-  legal creature, so no loyalty is spent), applied as an until-end-of-turn
-  continuous effect.
+  a **required** loyalty target — with no legal creature the ability cannot be
+  activated and no loyalty is spent.
 * ``−8`` — untargeted (create X 2/2 Cat tokens).
 
-Targets are chosen at activation via a Player Query answered by an Intent
-(pattern = the walker's name), captured on the stack object, and applied at
-resolution — never re-selected. This is the loyalty analogue of the fdn_95
-activated-ability exemplar.
+Targets are chosen at activation and applied at resolution. Each effect shows
+in play: a Savannah Lions (2/1) with the counter attacks for 3, and with
+flying and double strike it flies over Aegis Turtle for 4.
 """
 
 from __future__ import annotations
 
-import pytest
-from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride
-from engine.abilities import AbilityError, clear_loyalty_tracking
-from engine.card import Creature, printed_class
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.types import CardType, Keyword, ManaCost, Phase, Supertype
-from test_utils import (
-    activate_loyalty_ability,
-    resolve_stack,
-    set_board_state,
+from cards.fdn.fdn_134.card_impl import (
+    AjaniCallerOfThePride,
+    AjaniCallerOfThePrideAbility1,
+    AjaniCallerOfThePrideAbility2,
+    AjaniCallerOfThePrideAbility3,
 )
-from test_utils import (
-    scenario_game as create_game,
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_150.card_impl import AegisTurtle
+from cards.fdn.fdn_280.card_impl import Forest
+from engine.card import printed_class
+from engine.types import CardType, ManaCost, Supertype
+from test_interface import Phase, Side, Step, Zone, card, create_game, token
+
+from silverquillm.table import (
+    Table,
+    appears,
+    first_strike_damage,
+    life,
+    moves,
+    off_stack,
+    on_stack,
+    taps,
 )
 
-
-@pytest.fixture(autouse=True)
-def _reset_loyalty_tracker():
-    """The once-per-turn tracker is module-level — reset around every test."""
-    clear_loyalty_tracking()
-    yield
-    clear_loyalty_tracking()
+PLUS, MINUS3, MINUS8 = AjaniCallerOfThePrideAbility1, AjaniCallerOfThePrideAbility2, AjaniCallerOfThePrideAbility3
 
 
-def _bear(p, name="Bear"):
-    return Creature(name=name, base_power=2, base_toughness=2, owner=p, controller=p)
-
-
-def _activate_targeting(game, player, walker, index, target):
-    """Drive a loyalty ability through the real activate → stack path, choosing
-    *target* at activation via an Intent on *player* (pattern = walker name)."""
-    player.start_intent(
-        "ajani",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", printed_class(walker))})),
-            preferences=(Decision.obj(instance=target.instance_id),),
-        ),
+def _table(battlefield=(), *, p1_battlefield=(), life0=20, turns=1):
+    """Player 0's first main phase with Ajani (loyalty 4); each player can
+    draw for ``turns`` more turns."""
+    ajani = card(AjaniCallerOfThePride)
+    game = create_game(
+        Side(battlefield=[ajani, *battlefield], library=[Forest] * turns, life=life0),
+        Side(battlefield=list(p1_battlefield), library=[Forest] * turns),
+        start=(Phase.PRECOMBAT_MAIN, 0),
     )
-    try:
-        activate_loyalty_ability(game, player, walker, index)
-    finally:
-        player.end_intent("ajani")
+    return Table(game), ajani
+
+
+def _loyalty(t, ability, *, choices=(), then=(), note=""):
+    """Player 0 activates ``ability`` and it resolves with ``then``."""
+    t.act(0, ability, choices=list(choices), then=[on_stack(ability, 0)], note=note)
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(ability), *then])
+
+
+def _attack(t, attacker, damage, *, illegal_block=None, double_strike=False):
+    """``attacker`` attacks this turn and is not blocked; with double strike
+    it deals ``damage`` in two halves, the first in a first-strike combat
+    damage step (rule 510.4)."""
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, attacker, then=[taps(attacker)])
+    t.pass_(0)
+    t.pass_(1)
+    if illegal_block is not None:
+        t.act_illegal(1, illegal_block, scoped={illegal_block: attacker}, note="it flies")
+    t.pass_(1, then=[first_strike_damage()] if double_strike else [])
+    t.pass_(0)
+    if double_strike:
+        t.pass_(1, then=[life(1, 20 - damage // 2)])
+        t.pass_(0)
+    t.pass_(1, then=[life(1, 20 - damage)])
 
 
 class TestAjaniProperties:
@@ -77,116 +93,79 @@ class TestAjaniProperties:
 
 
 class TestAjaniPlusOne:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        ajani = AjaniCallerOfThePride(owner=p1, controller=p1)
-        bear = _bear(p1, "Bear")
-        set_board_state(game, 0, battlefield=[ajani, bear])
-        game.phase = Phase.PRECOMBAT_MAIN
-        return game, p1, p2, ajani, bear
-
     def test_plus_one_counter_lands_on_target(self):
-        game, p1, _p2, ajani, bear = self._setup()
-        _activate_targeting(game, p1, ajani, 0, bear)
-        assert ajani.loyalty == 5  # +1 paid
-        assert not game.stack.is_empty()
-        resolve_stack(game)
-        assert bear.plus_one_counters == 1
-        assert bear.counters.get("+1/+1") == 1
+        lions = card(SavannahLions)
+        t, _ajani = _table([lions])
+        _loyalty(t, PLUS, choices=[lions])
+        _attack(t, lions, 3)
+        t.run()
 
     def test_target_captured_on_stack(self):
-        game, p1, _p2, ajani, bear = self._setup()
-        _activate_targeting(game, p1, ajani, 0, bear)
-        top = game.stack.peek()
-        assert top.targets == [bear]
-        assert top.controller is p1
+        """Of two Savannah Lions, the chosen one gets the counter and attacks
+        for 3."""
+        other, chosen = card(SavannahLions), card(SavannahLions)
+        t, _ajani = _table([other, chosen])
+        _loyalty(t, PLUS, choices=[chosen])
+        _attack(t, chosen, 3)
+        t.run()
 
     def test_up_to_one_activates_with_no_target(self):
-        """ "Up to one target" is optional: with no legal creature the ability
-        still activates (targeting returns []) and loyalty still changes."""
-        game = create_game()
-        p1, _p2 = game.players
-        ajani = AjaniCallerOfThePride(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[ajani])  # no creatures at all
-        game.phase = Phase.PRECOMBAT_MAIN
-        activate_loyalty_ability(game, p1, ajani, 0)
-        assert ajani.loyalty == 5  # activated, +1 paid
-        top = game.stack.peek()
-        assert top.targets == []  # nothing targeted
-        resolve_stack(game)  # resolves cleanly
+        """ "Up to one target" is optional: with no creature at all the
+        ability still activates and resolves, using Ajani's activation for the
+        turn."""
+        t, _ajani = _table()
+        _loyalty(t, PLUS)
+        t.act_illegal(0, PLUS, note="Ajani has activated this turn")
+        t.run()
 
     def test_once_per_turn(self):
-        game, p1, _p2, ajani, bear = self._setup()
-        _activate_targeting(game, p1, ajani, 0, bear)
-        resolve_stack(game)  # clear the stack (sorcery speed)
-        with pytest.raises(AbilityError):
-            _activate_targeting(game, p1, ajani, 0, bear)
-        assert ajani.loyalty == 5  # second activation spent nothing
-        # A fresh turn (tracker cleared) allows reactivation.
-        clear_loyalty_tracking()
-        _activate_targeting(game, p1, ajani, 0, bear)
-        assert ajani.loyalty == 6
+        lions = card(SavannahLions)
+        t, _ajani = _table([lions])
+        _loyalty(t, PLUS, choices=[lions])
+        t.act_illegal(0, PLUS, choices=[lions], note="once per turn")
+        t.act_illegal(0, MINUS3, choices=[lions], note="once per turn, whichever ability")
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        _loyalty(t, PLUS, choices=[lions], note="a new turn allows it again")
+        t.run()
 
 
 class TestAjaniMinusThree:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        ajani = AjaniCallerOfThePride(owner=p1, controller=p1)
-        bear = _bear(p2, "Their Bear")
-        set_board_state(game, 0, battlefield=[ajani])
-        set_board_state(game, 1, battlefield=[bear])
-        game.phase = Phase.PRECOMBAT_MAIN
-        return game, p1, p2, ajani, bear
-
     def test_grants_flying_and_double_strike(self):
-        game, p1, _p2, ajani, bear = self._setup()
-        assert Keyword.FLYING not in bear.keywords
-        _activate_targeting(game, p1, ajani, 1, bear)
-        assert ajani.loyalty == 1  # 4 − 3
-        resolve_stack(game)
-        assert Keyword.FLYING in bear.keywords
-        assert Keyword.DOUBLE_STRIKE in bear.keywords
-        # The grant is a continuous effect — survives a re-derivation pass.
-        game.effect_manager.apply_all(game)
-        assert Keyword.FLYING in bear.keywords
-        assert Keyword.DOUBLE_STRIKE in bear.keywords
+        """The Lions flies over Aegis Turtle and deals 2 twice."""
+        lions, turtle = card(SavannahLions), card(AegisTurtle)
+        t, _ajani = _table([lions], p1_battlefield=[turtle])
+        _loyalty(t, MINUS3, choices=[lions])
+        _attack(t, lions, 4, illegal_block=turtle, double_strike=True)
+        t.run()
 
     def test_required_target_no_creature_rejected_before_cost(self):
-        """Required target: with no legal creature, the ability cannot be
-        activated and no loyalty is spent (targeting returns None)."""
-        game = create_game()
-        p1, _p2 = game.players
-        ajani = AjaniCallerOfThePride(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[ajani])  # no creatures anywhere
-        game.phase = Phase.PRECOMBAT_MAIN
-        with pytest.raises(AbilityError):
-            activate_loyalty_ability(game, p1, ajani, 1)
-        assert ajani.loyalty == 4  # unchanged
+        """Required target: with no creature anywhere, −3 cannot be activated
+        and nothing is spent, so Ajani may still activate +1 this turn."""
+        t, _ajani = _table()
+        t.act_illegal(0, MINUS3, note="no creature to target")
+        _loyalty(t, PLUS)
+        t.run()
 
 
 class TestAjaniMinusEight:
     def test_creates_x_cat_tokens_equal_to_life(self):
-        game = create_game()
-        p1, _p2 = game.players
-        ajani = AjaniCallerOfThePride(owner=p1, controller=p1)
-        ajani.loyalty = 8  # enough to pay −8
-        set_board_state(game, 0, battlefield=[ajani], life=3)
-        game.phase = Phase.PRECOMBAT_MAIN
-        activate_loyalty_ability(game, p1, ajani, 2)  # untargeted
-        assert ajani.loyalty == 0
-        resolve_stack(game)
-        cats = [obj for obj in game.get_battlefield(p1).get_all() if obj.name == "Cat"]
-        assert len(cats) == 3
-        assert all((c.base_power, c.base_toughness) == (2, 2) for c in cats)
+        """Four +1 activations on player 0's turns bring Ajani to 8; at 3 life
+        −8 makes three Cats and leaves Ajani with no loyalty. A Cat attacks for
+        2 on the next turn."""
+        t, ajani = _table(life0=3, turns=5)
+        for _ in range(4):
+            _loyalty(t, PLUS)
+            t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        t.act(0, MINUS8, then=[on_stack(MINUS8, 0), moves(ajani, Zone.GRAVEYARD)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(MINUS8), appears(0), appears(0), appears(0)])
+        t.pass_to(Step.UPKEEP, 1)
+        cat = token(1)
+        _attack(t, cat, 2)
+        t.run()
 
     def test_minus_eight_rejected_when_insufficient_loyalty(self):
-        game = create_game()
-        p1, _p2 = game.players
-        ajani = AjaniCallerOfThePride(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[ajani], life=5)
-        game.phase = Phase.PRECOMBAT_MAIN
-        with pytest.raises(AbilityError):
-            activate_loyalty_ability(game, p1, ajani, 2)  # 4 − 8 < 0
-        assert ajani.loyalty == 4
+        t, _ajani = _table()
+        t.act_illegal(0, MINUS8, note="−8 from 4")
+        _loyalty(t, PLUS, note="the refused −8 spent nothing")
+        t.run()

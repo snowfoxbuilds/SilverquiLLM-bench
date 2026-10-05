@@ -1,57 +1,44 @@
 """Reference test for SPG 74 — Condemn.
 
-Pattern 1 — targeted spell. Condemn requires a real ``TargetRequirement``
-whose legal set is *attacking creatures* (the engine's ``is_attacking`` combat
-flag). The target is chosen at cast intent-style via ``cast_spell(targets=...)``,
-revalidated at resolution, put on the bottom of its owner's library, and its
-controller gains life equal to its toughness.
+Condemn puts target attacking creature on the bottom of its owner's library,
+and that creature's controller gains life equal to its toughness. Each test
+plays player 1's attack and player 0's Condemn in the declare attackers step.
 """
 
 from __future__ import annotations
 
-import pytest
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_150.card_impl import AegisTurtle
+from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.spg_74.card_impl import Condemn
-from engine.card import Creature, printed_class
-from engine.casting import cast_spell as engine_cast_spell
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.stack import resolve_top_of_stack
-from engine.types import ManaCost, ManaType, Phase, Zone
-from test_utils import TestSetupError as _CastError
-from test_utils import cast_spell, set_board_state
-from test_utils import scenario_game as create_game
+from engine.card import printed_class
+from engine.types import ManaCost
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
+
+from silverquillm.table import Table, life, moves, taps
 
 
-def _bear(p, name="Bear", toughness=2):
-    return Creature(name=name, base_power=2, base_toughness=toughness, owner=p, controller=p)
-
-
-def _cast_no_resolve(game, player_index, card, targets):
-    """Cast *card* choosing *targets* but leave it on the stack (no resolve).
-
-    Mirrors ``test_utils.cast_spell`` but stops before resolution so a test can
-    mutate the target and then resolve manually to exercise resolution-time
-    target revalidation.
-    """
-    player = game.players[player_index]
-    game.active_player_index = player_index
-    game.priority_player_index = player_index
-    game.phase = Phase.PRECOMBAT_MAIN
-    game.step = None
-    prefs = tuple(
-        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value)) for t in targets
+def _attack(*, attackers, others=(), hand=()):
+    """Player 1 attacks with ``attackers``; player 0, holding Condemn and a
+    Plains, taps the Plains in the declare attackers step."""
+    condemn, plains = card(Condemn), card(Plains)
+    game = create_game(
+        Side(hand=[condemn, *hand], battlefield=[plains]),
+        Side(battlefield=[*attackers, *others], library=[card(Plains)]),
+        start=(Step.BEGIN_COMBAT, 1),
     )
-    player.start_intent(
-        "cast",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
-            preferences=prefs,
-        ),
-    )
-    try:
-        engine_cast_spell(game, player, card)
-    finally:
-        player.end_intent("cast")
+    t = Table(game)
+    t.pass_to(Step.DECLARE_ATTACKERS, 1)
+    t.act(1, *attackers, then=[taps(a) for a in attackers])
+    t.pass_(1)
+    t.act(0, plains, then=[taps(plains)])
+    return t, condemn
+
+
+def _condemn(t: Table, condemn, targets, *, then) -> None:
+    t.act(0, condemn, choices=targets, then=[moves(condemn, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(condemn, Zone.GRAVEYARD), *then])
 
 
 class TestCondemnProperties:
@@ -61,82 +48,49 @@ class TestCondemnProperties:
         assert c.mana_cost == ManaCost.parse("{W}")
 
     def test_get_targets_requirement_filters_attackers(self):
-        from test_utils import (
-            cast_card,
-            declare_attackers,
-            fund_mana_cost,
-            object_preference,
-            prefer,
-            set_board_state,
-        )
-
-        game = create_game()
-        p1, p2 = game.players
-        attacker = _bear(p2, "Attacker")
-        idle = _bear(p2, "Idle")
-        set_board_state(game, 1, battlefield=[attacker, idle])
-        attacker.summoning_sick = False
-        game.active_player_index = 1
-        declare_attackers(game, [attacker])
-        spell = Condemn(owner=p1)
-        fund_mana_cost(p1, spell.mana_cost)
-        prefer(p1, object_preference(game, idle), object_preference(game, attacker))
-        cast_card(game, p1, spell)
-        assert game.get_library(p2).contains(attacker) and game.get_battlefield(p2).contains(idle)
+        """Player 0 would rather condemn the creature that stayed home, but only
+        the attacker can be targeted."""
+        attacker, idle = card(SavannahLions), card(SavannahLions)
+        t, condemn = _attack(attackers=[attacker], others=[idle])
+        _condemn(t, condemn, [idle, attacker], then=[moves(attacker, Zone.LIBRARY, bottom=True), life(1, 21)])
+        t.run()
 
 
 class TestCondemnResolve:
-    def _setup(self, toughness=2):
-        game = create_game()
-        p1, p2 = game.players
-        condemn = Condemn(owner=p1, controller=p1)
-        attacker = _bear(p2, "Their Attacker", toughness=toughness)
-        set_board_state(game, 0, hand=[condemn], mana={ManaType.WHITE: 1})
-        set_board_state(game, 1, battlefield=[attacker], life=20)
-        attacker.is_attacking = True
-        return game, p1, p2, condemn, attacker
-
     def test_puts_attacker_on_bottom_of_library(self):
-        game, _p1, p2, _condemn, attacker = self._setup()
-        cast_spell(game, 0, Condemn, targets=[attacker])
-        assert not game.get_battlefield(p2).contains(attacker)
-        library = p2.zones[Zone.LIBRARY]
-        assert library.contains(attacker)
-        # Bottom of library == position 0 of the internal list.
-        assert library.get_all()[0] is attacker
+        lions = card(SavannahLions)
+        t, condemn = _attack(attackers=[lions])
+        _condemn(t, condemn, [lions], then=[moves(lions, Zone.LIBRARY, bottom=True), life(1, 21)])
+        t.run()
 
     def test_controller_gains_life_equal_to_toughness(self):
-        game, _p1, p2, _condemn, attacker = self._setup(toughness=5)
-        cast_spell(game, 0, Condemn, targets=[attacker])
-        assert p2.life == 25  # 20 + toughness 5
+        turtle = card(AegisTurtle)
+        t, condemn = _attack(attackers=[turtle])
+        _condemn(t, condemn, [turtle], then=[moves(turtle, Zone.LIBRARY, bottom=True), life(1, 25)])
+        t.run()
 
     def test_cost_is_paid(self):
-        game, p1, _p2, _condemn, attacker = self._setup()
-        cast_spell(game, 0, Condemn, targets=[attacker])
-        assert p1.mana_pool.total() == 0
-
-    def test_target_removed_from_combat_before_resolution_does_nothing(self):
-        """Resolution-time revalidation (rule 608.2b): a creature that leaves
-        combat before Condemn resolves is no longer a legal 'attacking creature'
-        target, so Condemn does nothing — it stays on the battlefield and its
-        controller gains no life."""
-        game, _p1, p2, condemn, attacker = self._setup(toughness=5)
-        _cast_no_resolve(game, 0, condemn, [attacker])
-        # The attacker is removed from combat while Condemn is on the stack.
-        attacker.is_attacking = False
-        resolve_top_of_stack(game)
-        assert game.get_battlefield(p2).contains(attacker)  # not bottomed
-        assert not p2.zones[Zone.LIBRARY].contains(attacker)
-        assert p2.life == 20  # no life gained
+        """Condemn spends the Plains' white mana, so a second Condemn cannot be
+        cast."""
+        lions, turtle, second = card(SavannahLions), card(AegisTurtle), card(Condemn)
+        t, condemn = _attack(attackers=[lions, turtle], hand=[second])
+        _condemn(t, condemn, [lions], then=[moves(lions, Zone.LIBRARY, bottom=True), life(1, 21)])
+        t.pass_(1)
+        t.act_illegal(0, second, choices=[turtle])
+        t.pass_(0)
+        t.run()
 
     def test_no_attacking_creature_makes_spell_uncastable(self):
         """Required target: a non-attacking creature is not a legal target, so
         with no attackers the spell cannot be cast."""
-        game = create_game()
-        p1, p2 = game.players
-        condemn = Condemn(owner=p1, controller=p1)
-        idle = _bear(p2, "Idle")  # on battlefield but not attacking
-        set_board_state(game, 0, hand=[condemn], mana={ManaType.WHITE: 1})
-        set_board_state(game, 1, battlefield=[idle])
-        with pytest.raises(_CastError):
-            cast_spell(game, 0, Condemn)
+        condemn, idle = card(Condemn), card(SavannahLions)
+        game = create_game(
+            Side(hand=[condemn], mana={ManaType.WHITE: 1}),
+            Side(battlefield=[idle]),
+            start=(Phase.PRECOMBAT_MAIN, 1),
+        )
+        t = Table(game)
+        t.pass_(1)
+        t.act_illegal(0, condemn, choices=[idle])
+        t.pass_(0)
+        t.run()

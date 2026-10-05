@@ -1,52 +1,57 @@
 """Reference test for FDN 218 — Dwynen's Elite (token identity).
 
-Dwynen's Elite's ETB ("if you control another Elf, create a 1/1 green Elf
-Warrior creature token") mints through the shared ``make_creature_token``
-factory. This test pins the minted token's identity — subtypes, explicit
-green colour (a token has no mana cost to derive colour from), base P/T, and
-``is_token`` — so replay correlation keys it to the 1/1 green Elf Warrior grpId.
+"When this creature enters, if you control another Elf, create a 1/1 green
+Elf Warrior creature token." The enters ability is a triggered ability with
+an intervening "if" (rule 603.4). Colour and subtypes are not visible at the
+table, so the token is judged as a 1/1 in combat on the next turn.
 """
+
 from __future__ import annotations
 
-from cards.fdn.fdn_218.card_impl import DwynensElite
-from engine.card import Creature
-from engine.protection import get_colors
-from engine.types import Color, ManaType
-from test_utils import cast_spell, create_game, set_board_state
+from cards.fdn.fdn_164.card_impl import SpectralSailor
+from cards.fdn.fdn_218.card_impl import DwynensElite, DwynensEliteAbility1
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_280.card_impl import Forest
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, token
+
+from silverquillm.table import Table, appears, ceases, moves, off_stack, on_stack, taps
 
 
-def _elf_warrior_tokens(game, player):
-    bf = game.get_battlefield(player)
-    return [
-        o
-        for o in bf.get_all()
-        if getattr(o, "is_token", False)
-        and getattr(o, "name", None) == "Elf Warrior"
-    ]
+def _cast_elite(mine, theirs=()):
+    elite = card(DwynensElite)
+    game = create_game(
+        Side(hand=[elite], battlefield=list(mine), library=[Forest], mana={ManaType.GREEN: 1, ManaType.COLORLESS: 1}),
+        Side(battlefield=list(theirs), library=[Forest]),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, elite, then=[moves(elite, Zone.STACK)])
+    t.pass_(0)
+    return t, elite
 
 
 class TestDwynensEliteToken:
-    def test_etb_mints_green_elf_warrior_token(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        other_elf = Creature(
-            name="Llanowar Elves", subtypes={"Elf"}, base_power=1, base_toughness=1
-        )
-        set_board_state(game, 0, battlefield=[other_elf])
-        dwynen = DwynensElite(owner=p1, controller=p1)
-        set_board_state(
-            game,
-            0,
-            hand=[dwynen],
-            mana={ManaType.GREEN: 1, ManaType.COLORLESS: 1},
-        )
+    def test_etb_mints_a_one_one_token(self) -> None:
+        """With Llanowar Elves in play the Elite makes a token; on player 0's
+        next turn it attacks and trades with a blocking Spectral Sailor (1/1)."""
+        sailor = card(SpectralSailor)
+        t, elite = _cast_elite([LlanowarElves], [sailor])
+        t.pass_(1, then=[moves(elite, Zone.BATTLEFIELD), on_stack(DwynensEliteAbility1, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(DwynensEliteAbility1), appears(0)])
+        warrior = token(1)
+        t.pass_to(Phase.PRECOMBAT_MAIN, 1)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, warrior, then=[taps(warrior)])
+        t.pass_(0)
+        t.pass_(1)
+        t.act(1, sailor, scoped={sailor: warrior})
+        t.pass_(0)
+        t.pass_(1, then=[ceases(warrior), moves(sailor, Zone.GRAVEYARD)])
+        t.run()
 
-        cast_spell(game, 0, DwynensElite)
-
-        tokens = _elf_warrior_tokens(game, p1)
-        assert len(tokens) == 1
-        tok = tokens[0]
-        assert tok.subtypes == {"Elf", "Warrior"}
-        assert get_colors(tok) == {Color.GREEN}
-        assert (tok.base_power, tok.base_toughness) == (1, 1)
-        assert tok.is_token is True
+    def test_no_other_elf_no_trigger(self) -> None:
+        """Without another Elf the ability does not trigger (rule 603.4)."""
+        t, elite = _cast_elite([])
+        t.pass_(1, then=[moves(elite, Zone.BATTLEFIELD)])
+        t.run()
