@@ -181,6 +181,12 @@ _cases = [pytest.param("sos", card, id=f"sos/{card}") for card in _oracle_cards]
 _cases += [pytest.param("hob-medium", card, id=f"hob-medium/{card}") for card in _hob_layout.cards]
 _fra_layout = load_layout(_REPO_ROOT, "fra-hard", require_cards=True)
 _cases += [pytest.param("fra-hard", card, id=f"fra-hard/{card}") for card in _fra_layout.cards]
+# fra-hard-v2's HOB targets are not ported yet (#157).
+_cases += [
+    pytest.param("fra-hard-v2", card, id=f"fra-hard-v2/{card}")
+    for card in load_layout(_REPO_ROOT, "fra-hard-v2", require_cards=True).cards
+    if card.startswith("fra_")
+]
 
 
 @pytest.mark.parametrize("benchmark,cn", _cases)
@@ -188,7 +194,7 @@ def test_oracle_impl_passes_audited_tests(benchmark: str, cn: str) -> None:
     """Every selected HOB card is checked, including missing/stub/empty cases."""
     returncode, stdout, stderr = _run_audited_tests_against_oracle(cn, benchmark)
     assert returncode == 0, f"Oracle {benchmark}/{cn} failed:\n{stdout}\n{stderr}"
-    if benchmark == "fra-hard":
+    if benchmark in ("fra-hard", "fra-hard-v2"):
         summary = re.search(r"\b(\d+) passed\b", stdout)
         assert summary and 1 <= int(summary.group(1)) <= 30, stdout
         assert not re.search(r"\b\d+ (skipped|xfailed|xpassed)\b", stdout), stdout

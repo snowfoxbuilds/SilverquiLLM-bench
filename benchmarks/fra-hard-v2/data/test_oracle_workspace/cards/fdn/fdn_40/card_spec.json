@@ -1,0 +1,20 @@
+{
+  "name": "High Fae Trickster",
+  "mana_cost": "{3}{U}",
+  "type_line": "Creature — Faerie Wizard",
+  "oracle_text": "Flash (You may cast this spell any time you could cast an instant.)\nFlying\nYou may cast spells as though they had flash.",
+  "power": "4",
+  "toughness": "2",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Flash"
+  ],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "40",
+  "complexity_tier": "medium"
+}

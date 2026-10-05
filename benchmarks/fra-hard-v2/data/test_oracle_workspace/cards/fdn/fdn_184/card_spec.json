@@ -1,0 +1,19 @@
+{
+  "name": "Rune-Scarred Demon",
+  "mana_cost": "{5}{B}{B}",
+  "type_line": "Creature — Demon",
+  "oracle_text": "Flying\nWhen this creature enters, search your library for a card, put it into your hand, then shuffle.",
+  "power": "6",
+  "toughness": "6",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Flying"
+  ],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "184",
+  "complexity_tier": "medium"
+}

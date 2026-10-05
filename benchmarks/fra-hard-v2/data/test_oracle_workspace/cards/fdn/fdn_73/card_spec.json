@@ -1,0 +1,19 @@
+{
+  "name": "Tragic Banshee",
+  "mana_cost": "{4}{B}",
+  "type_line": "Creature — Spirit",
+  "oracle_text": "Morbid — When this creature enters, target creature an opponent controls gets -1/-1 until end of turn. If a creature died this turn, that creature gets -13/-13 until end of turn instead.",
+  "power": "5",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Morbid"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "73",
+  "complexity_tier": "medium"
+}

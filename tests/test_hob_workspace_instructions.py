@@ -22,7 +22,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SPEC = REPO_ROOT / "docs" / "specs" / "HOB-BENCHMARKS.md"
-HOB_GENERATION_WORKSPACES = ["hob-medium", "smoke"]
+HOB_GENERATION_WORKSPACES = ["hob-medium", "smoke", "fra-hard-v2"]
 
 # Vocabulary the spec's envelope ruling and the staged instructions must share.
 ENVELOPE_TERMS = [
@@ -87,12 +87,16 @@ _DEFICIENCIES_TAIL = (
     " It's your job to make sure your implementations behave correctly according to "
     "the rules in `RULEBOOK.txt`, and that your changes don't break existing cards."
 )
-# hob-medium is Released and frozen; smoke is built from the Known-Best Workspace,
-# whose Reference Tests are editable and may be wrong (KNOWN-BEST-ENGINE.md).
+# hob-medium is Released and frozen; smoke and fra-hard-v2 are built from the
+# Known-Best Workspace, whose Reference Tests are editable and may be wrong
+# (KNOWN-BEST-ENGINE.md).
+_KNOWN_BEST_DEFICIENCIES = (
+    "The engine may have deficiencies and bugs, and so may the existing tests." + _DEFICIENCIES_TAIL
+)
 DEFICIENCIES_LINE = {
     "hob-medium": "The engine may have deficiencies and bugs." + _DEFICIENCIES_TAIL,
-    "smoke": "The engine may have deficiencies and bugs, and so may the existing tests."
-    + _DEFICIENCIES_TAIL,
+    "smoke": _KNOWN_BEST_DEFICIENCIES,
+    "fra-hard-v2": _KNOWN_BEST_DEFICIENCIES,
 }
 
 

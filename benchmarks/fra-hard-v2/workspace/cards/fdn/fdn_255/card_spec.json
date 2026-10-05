@@ -1,0 +1,15 @@
+{
+  "name": "Juggernaut",
+  "mana_cost": "{4}",
+  "type_line": "Artifact Creature — Juggernaut",
+  "oracle_text": "This creature attacks each combat if able.\nThis creature can't be blocked by Walls.",
+  "power": "5",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "255",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,56 @@
+"""Reference test for FDN 92 — Rite of the Dragoncaller.
+
+"Whenever you cast an instant or sorcery spell, create a 5/5 red Dragon
+creature token with flying." The mint routes through ``make_creature_token``,
+so this test drives the cast trigger and proves the produced token carries the
+exact spec characteristics — a token has no mana cost, so its red colour must
+be represented explicitly for ``get_colors`` (and the replay executor's colour
+correlation) to see it.
+"""
+
+from __future__ import annotations
+
+from cards.fdn.fdn_92.card_impl import RiteOfTheDragoncaller
+from engine.card import Instant, printed_class
+from engine.protection import get_colors
+from engine.types import Color, Keyword, ManaCost
+from test_utils import cast_card, create_game, enter_permanent
+
+
+def _dragons(game, player):
+    bf = game.get_battlefield(player)
+    return [
+        o
+        for o in bf.get_all()
+        if getattr(o, "is_token", False) and getattr(o, "name", None) == "Dragon"
+    ]
+
+
+def _cast_instant(game, p1):
+    cast_card(game, p1, Instant(name="Some Instant", owner=p1))
+
+
+class TestRiteOfTheDragoncallerProperties:
+    def test_static_data(self) -> None:
+        c = RiteOfTheDragoncaller(owner=None)
+        assert printed_class(c) is RiteOfTheDragoncaller
+        assert c.mana_cost == ManaCost.parse("{4}{R}{R}")
+
+
+class TestRiteOfTheDragoncallerToken:
+    def test_casting_instant_mints_flying_red_dragon(self) -> None:
+        game = create_game()
+        p1 = game.players[0]
+        rite = RiteOfTheDragoncaller()
+        enter_permanent(game, p1, rite)
+
+        _cast_instant(game, p1)
+
+        dragons = _dragons(game, p1)
+        assert len(dragons) == 1
+        dragon = dragons[0]
+        assert dragon.subtypes == {"Dragon"}
+        assert (dragon.base_power, dragon.base_toughness) == (5, 5)
+        assert dragon.is_token is True
+        assert get_colors(dragon) == {Color.RED}
+        assert Keyword.FLYING in dragon.keywords

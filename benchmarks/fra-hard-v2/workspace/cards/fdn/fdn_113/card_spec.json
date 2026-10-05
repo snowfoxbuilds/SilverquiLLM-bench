@@ -1,0 +1,17 @@
+{
+  "name": "Sylvan Scavenging",
+  "mana_cost": "{1}{G}{G}",
+  "type_line": "Enchantment",
+  "oracle_text": "At the beginning of your end step, choose one —\n• Put a +1/+1 counter on target creature you control.\n• Create a 3/3 green Raccoon creature token if you control a creature with power 4 or greater.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "G"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "113",
+  "complexity_tier": "medium"
+}

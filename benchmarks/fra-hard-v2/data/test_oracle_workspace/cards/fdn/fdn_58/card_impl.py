@@ -1,0 +1,74 @@
+"""Card implementation for Bloodthirsty Conqueror."""
+from __future__ import annotations
+from typing import TYPE_CHECKING, Any
+from engine.card import Creature
+from engine.types import Keyword, ManaCost
+from engine.events import LosesLifeTriggeredEvent
+if TYPE_CHECKING:
+    from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BloodthirstyConquerorAbility1:
+    text = 'Flying'
+
+
+class BloodthirstyConquerorAbility2:
+    text = 'deathtouch'
+
+
+class BloodthirstyConquerorAbility3:
+    text = 'Whenever an opponent loses life, you gain that much life. (Damage causes loss of life.)'
+
+
+# endregion Printed abilities
+
+
+class BloodthirstyConqueror(Creature):
+    """Bloodthirsty Conqueror — {3}{B}{B} — 5/5 — Vampire Knight.
+
+    Flying, deathtouch
+    Whenever an opponent loses life, you gain that much life.
+
+    FDN collector number 58.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault('name', 'Bloodthirsty Conqueror')
+        kwargs.setdefault('mana_cost', ManaCost.parse('{3}{B}{B}'))
+        kwargs.setdefault('subtypes', {'Vampire', 'Knight'})
+        kwargs.setdefault('keywords', Keyword.FLYING | Keyword.DEATHTOUCH)
+        kwargs.setdefault('base_power', 5)
+        kwargs.setdefault('base_toughness', 5)
+        kwargs.setdefault('rules_text', 'Flying, deathtouch\nWhenever an opponent loses life, you gain that much life.')
+        super().__init__(**kwargs)
+
+    def register_triggers(self, game: 'GameState') -> None:
+        """Register life-loss trigger."""
+        from engine.triggers import TriggerRegistration
+        source = self
+
+        # (An earlier abandoned _condition/_effect pair referenced an
+        # undefined ``data`` name; only the _cond/_eff pair below is wired up,
+        # so the dead pair — a latent NameError — is removed.)
+        _last_amount = [0]
+
+        def _cond(game: Any, event: dict) -> bool:
+            player = event.player
+            controller = getattr(source, 'controller', None)
+            if controller is None:
+                return False
+            if player is controller:
+                return False
+            _last_amount[0] = event.amount
+            return _last_amount[0] > 0
+
+        def _eff(game: 'GameState', controller: Any) -> None:
+            if controller is None:
+                return
+            from engine.game import gain_life
+            gain_life(game, controller, _last_amount[0])
+        controller = getattr(self, 'controller', None) or game.active_player
+        game.trigger_manager.register(TriggerRegistration(event_type=LosesLifeTriggeredEvent, condition=_cond, effect=_eff, source=self, controller=controller, printed=BloodthirstyConquerorAbility3))

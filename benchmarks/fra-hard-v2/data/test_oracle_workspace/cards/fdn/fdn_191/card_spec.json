@@ -1,0 +1,19 @@
+{
+  "name": "Brazen Scourge",
+  "mana_cost": "{1}{R}{R}",
+  "type_line": "Creature — Gremlin",
+  "oracle_text": "Haste (This creature can attack and {T} as soon as it comes under your control.)",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Haste"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "191",
+  "complexity_tier": "medium"
+}

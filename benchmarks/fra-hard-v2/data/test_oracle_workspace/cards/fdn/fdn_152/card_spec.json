@@ -1,0 +1,19 @@
+{
+  "name": "Brineborn Cutthroat",
+  "mana_cost": "{1}{U}",
+  "type_line": "Creature — Merfolk Pirate",
+  "oracle_text": "Flash (You may cast this spell any time you could cast an instant.)\nWhenever you cast a spell during an opponent's turn, put a +1/+1 counter on this creature.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flash"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "152",
+  "complexity_tier": "medium"
+}

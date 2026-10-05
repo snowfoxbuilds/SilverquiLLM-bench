@@ -1,0 +1,23 @@
+{
+  "name": "Sire of Seven Deaths",
+  "mana_cost": "{7}",
+  "type_line": "Creature — Eldrazi",
+  "oracle_text": "First strike, vigilance\nMenace, trample\nReach, lifelink\nWard—Pay 7 life.",
+  "power": "7",
+  "toughness": "7",
+  "loyalty": null,
+  "colors": [],
+  "keywords": [
+    "Lifelink",
+    "Reach",
+    "Vigilance",
+    "First strike",
+    "Trample",
+    "Menace",
+    "Ward"
+  ],
+  "rarity": "mythic",
+  "set_code": "fdn",
+  "collector_number": "1",
+  "complexity_tier": "medium"
+}

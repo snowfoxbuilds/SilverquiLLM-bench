@@ -18,7 +18,7 @@ import pytest
 from silverquillm.evaluator import resolve_eval_paths
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BENCHMARKS = {"hob-medium": "hob", "smoke": "fdn", "fra-hard": "fra"}
+BENCHMARKS = {"hob-medium": "hob", "smoke": "fdn", "fra-hard": "fra", "fra-hard-v2": "fra"}
 
 
 @pytest.mark.parametrize("benchmark,target_set", BENCHMARKS.items())
@@ -32,8 +32,9 @@ def test_staged_grading_support_is_the_grading_copy(benchmark, target_set):
     assert staged.read_bytes() == grading.read_bytes()
 
 
-def test_smoke_grades_with_its_test_interface():
+def test_benchmarks_from_smoke_onward_grade_with_their_test_interface():
     assert resolve_eval_paths(REPO_ROOT / "benchmarks" / "smoke", "fdn").test_interface is not None
+    assert resolve_eval_paths(REPO_ROOT / "benchmarks" / "fra-hard-v2", "fra").test_interface is not None
     assert resolve_eval_paths(REPO_ROOT / "benchmarks" / "hob-medium", "hob").test_interface is None
 
 

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "fra-hard-v2",
+  "display_name": "Reality Fracture + The Hobbit — Hard v2",
+  "draft_set": {
+    "primary_set_code": "FRA",
+    "collector_range": "001-290",
+    "extra_set_codes": [
+      "HOB"
+    ]
+  },
+  "tier": "Beta",
+  "cards": [
+    "fra:1",
+    "fra:49",
+    "fra:64",
+    "fra:159",
+    "fra:179",
+    "hob:33",
+    "hob:76",
+    "hob:86",
+    "hob:167",
+    "hob:174"
+  ],
+  "leaderboard": {
+    "requires_full_set": true,
+    "requires_unfiltered": true
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Heraldic Banner",
+  "mana_cost": "{3}",
+  "type_line": "Artifact",
+  "oracle_text": "As this artifact enters, choose a color.\nCreatures you control of the chosen color get +1/+0.\n{T}: Add one mana of the chosen color.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "254",
+  "complexity_tier": "medium"
+}

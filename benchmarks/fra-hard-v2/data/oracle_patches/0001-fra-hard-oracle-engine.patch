@@ -1,0 +1,1137 @@
+diff --git a/engine/abilities.py b/engine/abilities.py
+index 72f2ad9..2dd4429 100644
+--- a/engine/abilities.py
++++ b/engine/abilities.py
+@@ -149,6 +149,42 @@ class LoyaltyAbilityInstance:
+ _loyalty_activated_this_turn: set[tuple[int, int]] = set()
+ 
+ 
++def borrowed_abilities(donor, source, *, available=None):
++    """Rebind self references in an ability's closures to its new source."""
++    import copy
++    import types
++
++    def bind(value):
++        if value is donor:
++            return source
++        if isinstance(value, types.MethodType) and value.__self__ is donor:
++            return types.MethodType(value.__func__, source)
++        if isinstance(value, types.FunctionType):
++            def cell(item):
++                return (lambda: item).__closure__[0]
++            closure = tuple(cell(bind(c.cell_contents)) for c in value.__closure__) if value.__closure__ else None
++            defaults = tuple(bind(item) for item in value.__defaults__) if value.__defaults__ else None
++            result = types.FunctionType(value.__code__, value.__globals__, value.__name__, defaults, closure)
++            result.__kwdefaults__ = value.__kwdefaults__
++            return result
++        return value
++
++    ordinary = donor.get_activated_abilities()
++    mana = getattr(donor, 'get_mana_abilities', lambda: [])()
++    for original in ordinary + [item for item in mana if item not in ordinary]:
++        ability = copy.copy(original)
++        for name in ('cost', 'effect', 'mana_produced', 'targeting', 'can_activate'):
++            if hasattr(ability, name):
++                setattr(ability, name, bind(getattr(ability, name)))
++        original_cost = ability.cost
++        def cost(game, permanent, original_cost=original_cost, available=available):
++            if available is not None and not available(game):
++                return False
++            return original_cost(game, permanent)
++        ability.cost = cost
++        yield ability
++
++
+ def clear_loyalty_tracking() -> None:
+     """Clear the loyalty-activated-this-turn tracker.
+ 
+@@ -364,6 +400,8 @@ def _activate_regular_ability(
+         else:
+             stack_obj.on_resolve = ability.effect
+         game.stack.push(stack_obj)
++        from engine.ward import trigger_ward
++        trigger_ward(game, stack_obj)
+ 
+ 
+ def _activate_loyalty_ability(
+@@ -465,3 +503,5 @@ def _activate_loyalty_ability(
+     else:
+         stack_obj.on_resolve = ability.effect
+     game.stack.push(stack_obj)
++    from engine.ward import trigger_ward
++    trigger_ward(game, stack_obj)
+diff --git a/engine/card.py b/engine/card.py
+index 838bfa8..3a01f65 100644
+--- a/engine/card.py
++++ b/engine/card.py
+@@ -126,6 +126,9 @@ class ActivatedAbility:
+             the ability is not currently applicable. Must not mutate game state.
+         description: Human-readable description of the ability.
+         printed: The predefined class of the printed ability (see ADR-017).
++        zone: The zone the ability functions from — the battlefield unless the
++            ability says otherwise (rule 113.6b), e.g. ``Zone.HAND`` for "Exile
++            this card from your hand: …".
+     """
+ 
+     cost: Callable[..., Any]
+@@ -135,6 +138,7 @@ class ActivatedAbility:
+     can_activate: Callable[..., Any] | None = None
+     predicted_outcome: Callable[..., Any] | None = None
+     printed: type | None = None
++    zone: Any = None
+ 
+ 
+ @dataclass
+diff --git a/engine/casting.py b/engine/casting.py
+index 9a5ae3e..9cc7cc2 100644
+--- a/engine/casting.py
++++ b/engine/casting.py
+@@ -549,17 +549,20 @@ def _fire_spell_cast_event(
+ # Cast spell
+ # ------------------------------------------------------------------
+ 
+-def _announce_x(game: GameState, player: Player, card: CardImpl, *, free: bool = False) -> None:
++def _announce_x(
++    game: GameState, player: Player, card: CardImpl, *, free: bool = False, reduction: int = 0
++) -> None:
+     """Choose the value of X while casting (rule 601.2b).
+ 
+-    A spell cast without paying its mana cost has X = 0 (rule 107.3b).
++    A spell cast without paying its mana cost has X = 0 (rule 107.3b). The
++    offered maximum counts the generic *reduction* the payment will get.
+     """
+     from engine.card_queries import choose_number
+ 
+     card.x_value = 0  # type: ignore[attr-defined]
+     x_count = card.mana_cost.x_count
+     if x_count and not free:
+-        maximum = max(0, player.mana_pool.total() - card.mana_cost.cmc) // x_count
++        maximum = max(0, player.mana_pool.total() + reduction - card.mana_cost.cmc) // x_count
+         card.x_value = choose_number(  # type: ignore[attr-defined]
+             game, player, 0, maximum, "Choose X", source_card=card
+         )
+@@ -577,13 +580,137 @@ def _with_x(cost: ManaCost, x_value: int) -> ManaCost:
+     )
+ 
+ 
+-def cast_spell(
++def _place_deferred_cast_triggers(game, spell, deferred):
++    if not deferred:
++        return
++    cast_triggers = []
++    while game.stack.peek() is not spell:
++        cast_triggers.append(game.stack.pop())
++    triggers = [*deferred, *reversed(cast_triggers)]
++    for active in (True, False):
++        for trigger in triggers:
++            if (trigger.controller is game.active_player) == active:
++                game.stack.push(trigger)
++
++
++def _mana_payment_window(game, player, spell, costs):
++    """Let the caster activate mana abilities while paying (rule 601.2g)."""
++    from engine.abilities import AbilityError, ActivatedAbilityInstance, activate_ability
++    from engine.card_queries import choose_number, choose_object
++    blocked = set()
++    deferred = []
++    while not any(player.mana_pool.can_pay(cost) for cost in costs):
++        sources = [c for c in game.get_battlefield(player).get_all()
++                   if c.object_id not in blocked and not getattr(c, 'is_tapped', False)
++                   and callable(getattr(c, 'get_mana_abilities', None)) and c.get_mana_abilities()]
++        if not sources:
++            break
++        source = choose_object(game, player, sources, 'Activate a mana ability',
++                               source_card=spell, optional=True)
++        if source is None:
++            break
++        abilities = source.get_mana_abilities()
++        index = (choose_number(game, player, 0, len(abilities)-1, 'Mana ability', source_card=source)
++                 if len(abilities) > 1 else 0)
++        ability = abilities[index]
++        before = player.mana_pool.total()
++        stack_size = len(game.stack)
++        try:
++            activate_ability(game, player, ActivatedAbilityInstance(
++                source=source, controller=player, cost=ability.cost,
++                effect=ability.mana_produced, is_mana_ability=True,
++                printed=getattr(ability, 'printed', None)))
++        except AbilityError:
++            blocked.add(source.object_id)
++        added = []
++        while len(game.stack) > stack_size:
++            added.append(game.stack.pop())
++        deferred.extend(reversed(added))
++        if player.mana_pool.total() <= before:
++            blocked.add(source.object_id)
++    return deferred
++
++
++def grant_cast_permission(game, player, card, *, from_zone=Zone.EXILE,
++                          until_turn=None, life_cost=False, departure_zone=None,
++                          controller_source=None, normal_face_only=False):
++    """Let *player* cast (or, for a land, play) *card* from *from_zone* while it
++    stays the object it is now — a later zone change ends the permission."""
++    permission = dict(player=player, card=card, zone=from_zone,
++                      epoch=game.refs.zone_epoch(card), until_turn=until_turn,
++                      life_cost=life_cost, departure_zone=departure_zone,
++                      source=controller_source,
++                      normal_face_only=normal_face_only,
++                      source_epoch=game.refs.zone_epoch(controller_source) if controller_source else None)
++    game.cast_permissions.append(permission)
++
++
++def cast_permission(game, player, card):
++    """The permission that lets *player* cast *card* where it is now, if any."""
++    from engine.stack import object_current_zone
++    for permission in game.cast_permissions:
++        source = permission['source']
++        if source is not None:
++            if (object_current_zone(game, source) != Zone.BATTLEFIELD.value or
++                    game.refs.zone_epoch(source) != permission['source_epoch'] or
++                    source.controller is not player):
++                continue
++        elif permission['player'] is not player:
++            continue
++        if (permission['card'] is card and
++                permission['epoch'] == game.refs.zone_epoch(card) and
++                object_current_zone(game, card) == permission['zone'].value and
++                (permission['until_turn'] is None or permission['until_turn'] == game.turn_number)):
++            return permission
++    return None
++
++
++def permitted_cards(game, player):
++    """``(card, zone)`` for every card a cast permission lets *player* cast or play now."""
++    found = []
++    for permission in list(game.cast_permissions):
++        card = permission['card']
++        if any(card is other for other, _ in found):
++            continue
++        if cast_permission(game, player, card) is not None:
++            found.append((card, permission['zone']))
++    return found
++
++
++def _holding_zone(game, card, zone):
++    return next((p.zones[zone] for p in game.players if p.zones[zone].contains(card)), None)
++
++
++def cast_spell(game: GameState, player: Player, card: CardImpl, **kwargs) -> StackObject:
++    """Cast *card*, restoring where it was if casting fails part-way."""
++    origin = next((owner.zones[zone] for owner in game.players for zone in Zone
++                   if zone in owner.zones and owner.zones[zone].contains(card)), None)
++    controller = card.controller
++    try:
++        return _cast_spell(game, player, card, **kwargs)
++    except Exception:
++        if origin is not None and not origin.contains(card):
++            for owner in game.players:
++                if owner.zones[Zone.STACK].contains(card):
++                    owner.zones[Zone.STACK].remove(card)
++                    origin.add(card)
++                    break
++        restore = getattr(card, 'restore_front_face', None)
++        if restore is not None:
++            restore()
++        card.controller = controller
++        raise
++
++
++def _cast_spell(
+     game: GameState,
+     player: Player,
+     card: CardImpl,
+     *,
+     from_zone: Zone = Zone.HAND,
+     mode: CastMode = CastMode.NORMAL,
++    ignore_timing: bool = False,
++    departure_zone: Zone | None = None,
+ ) -> StackObject:
+     """Cast *card* from *player*'s hand, or from *from_zone* when a cast
+     permission allows it.
+@@ -620,8 +747,10 @@ def cast_spell(
+     Raises:
+         CastingError: If any legality check fails.
+     """
++    if hasattr(card, 'choose_cast_face'):
++        card.choose_cast_face(game, player)
+     # 1. Timing
+-    if not can_cast_at_instant_speed(card, player) and not is_sorcery_speed(game, player):
++    if not ignore_timing and not can_cast_at_instant_speed(card, player) and not is_sorcery_speed(game, player):
+         raise CastingError(
+             f"Cannot cast {card.name!r} — sorcery-speed timing not met"
+         )
+@@ -646,11 +775,28 @@ def cast_spell(
+                 f"Cannot flashback {card.name!r} — owned by another player"
+             )
+     hand = player.zones[from_zone]
++    permission = None
++    if mode is CastMode.NORMAL and (
++        not hand.contains(card) or from_zone != Zone.HAND
++    ) and not getattr(card, "_castable_from_graveyard", False):
++        permission = cast_permission(game, player, card)
++        if permission is not None:
++            hand = _holding_zone(game, card, permission['zone']) or hand
++        elif from_zone != Zone.HAND:
++            raise CastingError(
++                f"Cannot cast {card.name!r} — no permission to cast it from {from_zone.value}"
++            )
+     if not hand.contains(card):
+         raise CastingError(
+             f"Cannot cast {card.name!r} — card not in {from_zone.value}"
+         )
+ 
++    from engine.stack import object_current_zone
++    card.cast_from_zone = Zone(object_current_zone(game, card))
++    card.controller = player
++    if card.owner is None:
++        card.owner = player
++
+     # 4. Move card from its zone to the stack zone
+     stack_zone = player.zones[Zone.STACK]
+     hand.remove(card)
+@@ -660,7 +806,11 @@ def cast_spell(
+     if hasattr(card, "colors_spent"):
+         del card.colors_spent
+ 
+-    _announce_x(game, player, card)
++    _announce_x(
++        game, player, card,
++        free=bool(permission and permission['life_cost']),
++        reduction=_raw_cost_reduction(game, card, player, targets=[]),
++    )
+ 
+     # 5. Choose targets
+     target_specs = card.get_targets(game)
+@@ -734,33 +884,43 @@ def cast_spell(
+         if mode is CastMode.FLASHBACK
+         else [card.mana_cost, *card.alternative_costs(game)]
+     )
+-    base_costs = [
++    pay_life = bool(permission and permission['life_cost'])
++    life_amount = card.mana_cost.cmc if pay_life else 0
++    base_costs = [ManaCost()] if pay_life else [
+         _with_x(base, card.x_value)  # type: ignore[attr-defined]
+         for base in candidate_costs
+     ]
+     payable: list[tuple[int, ManaCost]] = []
++    reduced_costs = [_apply_cost_reduction(base, raw_reduction) for base in base_costs]
++    deferred = _mana_payment_window(game, player, card, reduced_costs)
+     for index, base in enumerate(base_costs):
+         clamped = min(raw_reduction, base.generic) if raw_reduction > 0 else 0
+         reduced = _apply_cost_reduction(base, clamped) if clamped > 0 else base
+         if player.mana_pool.can_pay(reduced):
+             payable.append((index, reduced))
+ 
+-    if not payable:
++    if not payable or player.life < life_amount:
+         # Rollback: move card from stack zone back to hand
+         stack_zone.remove(card)
+         hand.add(card)
++        for trigger in deferred:
++            game.stack.push(trigger)
+         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
+ 
+     effective_cost = _choose_cost(game, player, card, payable)
+ 
+     # TODO: Phase 3 — support player choice for generic mana payment to optimize Converge color count
+     player.mana_pool.pay(effective_cost)
++    if pay_life:
++        from engine.game import lose_life
++        lose_life(game, player, life_amount)
+ 
+     # Store colors of mana spent on the card for mechanics like Converge
+     # that care about the colors used to cast the spell.
+     card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
+ 
+     # 7. Call on_cast hook
++    card.was_cast = True
+     card.on_cast(game)
+ 
+     # 7b. The spell has now become cast (rule 601.2i). Record it in the caster's
+@@ -785,6 +945,7 @@ def cast_spell(
+         prior_qualifying_casts=prior_qualifying_casts,
+         departure_zone=Zone.EXILE if mode is CastMode.FLASHBACK else None,
+         is_spell=True,
++        graveyard_departure_zone=departure_zone or (permission['departure_zone'] if permission else None),
+     )
+ 
+     def _on_resolve(g: GameState) -> None:
+@@ -792,6 +953,8 @@ def cast_spell(
+ 
+     stack_obj.on_resolve = _on_resolve
+     game.stack.push(stack_obj)
++    from engine.ward import trigger_ward
++    trigger_ward(game, stack_obj)
+ 
+     # 9. The spell is now on the stack (rule 601.2i complete). Fire the
+     #    cast-triggered event so "whenever you cast …" abilities queue on top of
+@@ -799,6 +962,7 @@ def cast_spell(
+     #    can correlate to this exact occurrence, and after the cast history is
+     #    recorded so a cast-count reader sees this spell counted.
+     _fire_spell_cast_event(game, player, card)
++    _place_deferred_cast_triggers(game, stack_obj, deferred)
+     return stack_obj
+ 
+ 
+@@ -814,6 +978,7 @@ def cast_spell_free(
+     from_zone: Zone,
+     *,
+     mode: CastMode = CastMode.NORMAL,
++    mana_value_limit: int | None = None,
+ ) -> StackObject:
+     """Cast *card* without paying its mana cost, using the stack.
+ 
+@@ -902,6 +1067,12 @@ def cast_spell_free(
+                 f"{player.name!r}'s graveyard"
+             )
+ 
++    card.cast_from_zone = from_zone
++    card.x_value = 0
++    if hasattr(card, 'choose_cast_face'):
++        card.choose_cast_face(game, player, mana_value_limit=mana_value_limit)
++    if mana_value_limit is not None and card.mana_cost.cmc > mana_value_limit:
++        raise CastingError('Spell exceeds the remaining mana-value allowance')
+     # Ensure controller is set
+     card.controller = player
+     if card.owner is None:
+@@ -980,6 +1151,7 @@ def cast_spell_free(
+     )
+ 
+     # 4. Call on_cast hook
++    card.was_cast = True
+     card.on_cast(game)
+ 
+     # 4b. The free-cast spell has become cast (rule 601.2i); record it in the
+@@ -1022,6 +1194,8 @@ def cast_spell_free(
+ 
+     stack_obj.on_resolve = _on_resolve
+     game.stack.push(stack_obj)
++    from engine.ward import trigger_ward
++    trigger_ward(game, stack_obj)
+ 
+     # 6. The free-cast spell is on the stack (rule 601.2i complete). Fire the
+     #    cast-triggered event, exactly as on the normal path — a spell cast
+@@ -1127,6 +1301,12 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
+ 
+     # Card must be in hand
+     hand = game.get_hand(player)
++    origin = Zone.HAND
++    if not hand.contains(land_card):
++        permission = cast_permission(game, player, land_card)
++        if permission:
++            origin = permission['zone']
++            hand = next((p.zones[origin] for p in game.players if p.zones[origin].contains(land_card)), hand)
+     if not hand.contains(land_card):
+         raise CastingError(
+             f"Cannot play land {land_card.name!r} — card not in hand"
+@@ -1145,7 +1325,7 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
+     # Move from hand to battlefield via move_to_zone, which fires
+     # ENTERS_BATTLEFIELD and registers triggers/replacement effects.
+     from engine.zones import move_to_zone
+-    move_to_zone(game, land_card, Zone.HAND, Zone.BATTLEFIELD)
++    move_to_zone(game, land_card, origin, Zone.BATTLEFIELD)
+ 
+     # Decrement land plays
+     player.land_plays_remaining -= 1
+diff --git a/engine/combat.py b/engine/combat.py
+index acb6372..55165db 100644
+--- a/engine/combat.py
++++ b/engine/combat.py
+@@ -117,6 +117,9 @@ def _can_attack(creature: Any) -> bool:
+     - It has summoning sickness (``summoning_sick``) and does not have ``HASTE``.
+     - A continuous effect has set ``_cant_attack`` (e.g. Pacifism).
+     """
++    from engine.types import CardType
++    if hasattr(creature, 'card_types') and CardType.CREATURE not in creature.card_types:
++        return False
+     if getattr(creature, "is_tapped", False):
+         return False
+ 
+@@ -145,6 +148,9 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
+       (e.g. Rogue's Passage).
+     - If the attacker has flying, the blocker must have flying or reach.
+     """
++    from engine.types import CardType
++    if hasattr(blocker, 'card_types') and CardType.CREATURE not in blocker.card_types:
++        return False
+     if getattr(blocker, "is_tapped", False):
+         return False
+ 
+diff --git a/engine/continuous_effects.py b/engine/continuous_effects.py
+index 9d42ac3..f922b8c 100644
+--- a/engine/continuous_effects.py
++++ b/engine/continuous_effects.py
+@@ -211,6 +211,8 @@ class EffectManager:
+             The number of effects removed.
+         """
+         before = len(self._effects)
++        from engine.copying import refresh_copies
++        refresh_copies(game)
+         remaining: list[ContinuousEffect] = []
+         for eff in self._effects:
+             if eff.duration == DURATION_PERMANENT:
+@@ -246,6 +248,10 @@ class EffectManager:
+         sorted_effects = sorted(self._effects, key=lambda e: e._sort_key())
+         for effect in sorted_effects:
+             effect.apply(game)
++        from engine.planeswalker import refresh_granted_abilities
++        refresh_granted_abilities(game)
++        from engine.mana_grants import refresh_mana_grants
++        refresh_mana_grants(game)
+ 
+     # ------------------------------------------------------------------
+     # Internal helpers
+diff --git b/engine/copying.py b/engine/copying.py
+new file mode 100644
+index 0000000..332e12d
+--- /dev/null
++++ b/engine/copying.py
+@@ -0,0 +1,101 @@
++"""Copiable characteristics exclude counters and continuous modifications."""
++
++from copy import copy
++
++from engine.card import Creature, GameObject
++from engine.types import CardType
++
++CHARACTERISTICS = ("name", "mana_cost", "rules_text", "card_types", "subtypes", "supertypes",
++                   "keywords", "base_power", "base_toughness", "starting_loyalty", "colors",
++                   "_original_card_types", "_original_keywords")
++
++
++def copiable_values(card):
++    values = {key: copy(getattr(card, key)) for key in CHARACTERISTICS if hasattr(card, key)}
++    values["card_types"] = set(card._original_card_types)
++    values["keywords"] = card._original_keywords
++    return values
++
++
++def copy_card(card, player):
++    result = copy(card)
++    result.__dict__ = {key: copy(value) for key, value in card.__dict__.items()
++                       if not key.startswith(("_printed_", "_copy_"))
++                       and key not in ("get_loyalty_abilities", "get_mana_abilities", "_game")}
++    result.__dict__.update(copiable_values(card))
++    result.object_id = GameObject._next_id
++    GameObject._next_id += 1
++    result.owner = result.controller = player
++    result._generic_counters = {}
++    result.is_card_copy = True
++    result.is_token = False
++    result.was_cast = False
++    result.prepared = False
++    result.prepared_copy = None
++    result.plus_one_counters = result.minus_one_counters = result.damage_marked = 0
++    result._base_plus_one_counters = result._base_minus_one_counters = 0
++    result.is_tapped = result.is_attacking = result.is_blocking = False
++    result.summoning_sick = True
++    if hasattr(result, "starting_loyalty"):
++        result.loyalty = result.starting_loyalty
++    result._reset_characteristics()
++    return result
++
++
++def become_copy(game, card, target):
++    if not hasattr(card, "_copy_original_class"):
++        card._copy_original_class = type(card)
++        card._copy_original_values = copiable_values(card)
++    game.trigger_manager.unregister(card)
++    try:
++        printed = type(target)()
++    except TypeError:
++        printed = None
++    if printed is not None:
++        for key, value in printed.__dict__.items():
++            if key not in card.__dict__:
++                card.__dict__[key] = copy(value)
++    card.__class__ = type(target)
++    card.__dict__.update(copiable_values(target))
++    for name in ("_printed_loyalty_method", "get_loyalty_abilities", "_printed_mana_method", "get_mana_abilities"):
++        card.__dict__.pop(name, None)
++    if CardType.CREATURE in card.card_types:
++        for key, value in Creature().__dict__.items():
++            if key not in card.__dict__:
++                card.__dict__[key] = value
++        for counter, attribute in (("+1/+1", "plus_one_counters"), ("-1/-1", "minus_one_counters")):
++            amount = card._generic_counters.pop(counter, 0)
++            setattr(card, attribute, getattr(card, attribute) + amount)
++            setattr(card, "_base_" + attribute, getattr(card, attribute))
++    card._reset_characteristics()
++    card.register_triggers(game)
++    card.register_replacement_effects(game)
++
++
++def end_copy(card, game):
++    if not hasattr(card, "_copy_original_class"):
++        return
++    game.trigger_manager.unregister(card)
++    game.replacement_manager.unregister(card)
++    original = card._copy_original_values
++    card.__class__ = card._copy_original_class
++    for key in CHARACTERISTICS:
++        card.__dict__.pop(key, None)
++    card.__dict__.update(original)
++    if CardType.CREATURE not in card.card_types:
++        for counter, attribute in (("+1/+1", "plus_one_counters"), ("-1/-1", "minus_one_counters")):
++            amount = getattr(card, attribute, 0)
++            if amount:
++                card._generic_counters[counter] = amount
++            card.__dict__.pop(attribute, None)
++            card.__dict__.pop("_base_" + attribute, None)
++    for name in ("_copy_original_class", "_copy_original_values", "_printed_loyalty_method", "get_loyalty_abilities", "_printed_mana_method", "get_mana_abilities"):
++        card.__dict__.pop(name, None)
++    card._reset_characteristics()
++
++
++def refresh_copies(game):
++    for player in game.players:
++        player.legend_rule_suppressed = False
++        for card in game.get_battlefield(player).get_all():
++            end_copy(card, game)
+diff --git a/engine/game_state.py b/engine/game_state.py
+index ef9a5cb..72fecc4 100644
+--- a/engine/game_state.py
++++ b/engine/game_state.py
+@@ -127,6 +127,8 @@ class GameState:
+         self.phase: Phase = Phase.BEGINNING
+         self.step: Step | None = Step.UNTAP
+         self.turn_number: int = 1
++        self.cast_permissions: list[dict] = []
++        self.battlefield_deaths: list[tuple] = []
+         self.stack: Stack = Stack()
+         self.trigger_manager: TriggerManager = TriggerManager()
+         self.replacement_manager: ReplacementManager = ReplacementManager()
+diff --git b/engine/mana_grants.py b/engine/mana_grants.py
+new file mode 100644
+index 0000000..0e69c01
+--- /dev/null
++++ b/engine/mana_grants.py
+@@ -0,0 +1,64 @@
++"""Mana abilities granted for a linked, non-turn duration."""
++
++import inspect
++
++from engine.abilities import tap_cost
++from engine.card import ManaAbility
++from engine.types import CardType, ManaType, Zone
++
++
++def grant_double_colorless(game, land, source, exile_epoch, printed=None):
++    """``land`` gains "{T}: Add {C}{C}" until ``source`` is cast from the exile
++    stint ``exile_epoch``; the granted ability carries ``printed``, the class of
++    the printed ability whose text defines it."""
++    grant = {"land": land, "land_epoch": game.refs.zone_epoch(land),
++             "source": source, "exile_epoch": exile_epoch, "active": True,
++             "printed": printed}
++    if not hasattr(game, "linked_mana_grants"):
++        game.linked_mana_grants = []
++    game.linked_mana_grants.append(grant)
++    refresh_mana_grants(game)
++
++
++def _listed(getter, game):
++    return list(getter(game) if inspect.signature(getter).parameters else getter())
++
++
++def _granted_mana_abilities(game, land):
++    printed_abilities = land._printed_mana_method
++
++    def abilities():
++        result = _listed(printed_abilities, game)
++        for item in getattr(game, "linked_mana_grants", []):
++            if (item["land"] is not land or not item["active"]
++                    or game.refs.zone_epoch(land) != item["land_epoch"]):
++                continue
++
++            def cost(state, source):
++                if CardType.CREATURE in source.card_types and source.summoning_sick:
++                    return False
++                return any(state.get_battlefield(p).contains(source) for p in state.players) and tap_cost(state, source)
++
++            result.append(ManaAbility(cost,
++                lambda state: land.controller.mana_pool.add(ManaType.COLORLESS, 2),
++                "{T}: Add {C}{C}.", printed=item["printed"]))
++        return result
++
++    return abilities
++
++
++def refresh_mana_grants(game):
++    for grant in getattr(game, "linked_mana_grants", []):
++        land = grant["land"]
++        if hasattr(land, "_printed_mana_method"):
++            continue
++        land._printed_mana_method = getattr(land, "get_mana_abilities", lambda: [])
++        land.get_mana_abilities = _granted_mana_abilities(game, land)
++
++
++def end_exile_duration(game, source):
++    if getattr(source, "cast_from_zone", None) != Zone.EXILE:
++        return
++    for grant in getattr(game, "linked_mana_grants", []):
++        if grant["source"] is source and grant["exile_epoch"] == game.refs.zone_epoch(source):
++            grant["active"] = False
+diff --git b/engine/planeswalker.py b/engine/planeswalker.py
+new file mode 100644
+index 0000000..ab6190c
+--- /dev/null
++++ b/engine/planeswalker.py
+@@ -0,0 +1,91 @@
++"""Empower tokens and continuous grants to planeswalkers."""
++
++import inspect
++
++from engine.card import LoyaltyAbility
++from engine.card_queries import choose_object, query_yes_no
++from engine.game import add_counter, create_token, deal_damage, draw_card, gain_life
++from engine.types import CardType, Zone
++from engine.zones import move_to_zone
++
++
++def _jace_token(player):
++    # The predefined token class lives with the cards, which the engine's own
++    # tests do not load, so it is imported only when a token is created.
++    from cards.fra.tokens import JaceToken, JaceTokenAbility1, JaceTokenAbility2
++
++    class EmpoweredJace(JaceToken):
++        printed_as = JaceToken
++
++        def get_loyalty_abilities(self):
++            controller = self.controller
++
++            def surveil(game):
++                library = game.get_library(controller).get_all()
++                if library and query_yes_no(game, controller, "Put the surveilled card in your graveyard?",
++                                            source_card=self):
++                    move_to_zone(game, library[-1], Zone.LIBRARY, Zone.GRAVEYARD)
++
++            return [
++                LoyaltyAbility(-1, surveil, "−1: Surveil 1.", printed=JaceTokenAbility1),
++                LoyaltyAbility(-3, lambda game: draw_card(game, controller), "−3: Draw a card.",
++                               printed=JaceTokenAbility2),
++            ]
++
++    return EmpoweredJace(owner=player)
++
++
++def empower_jace(game, player, amount, source):
++    tokens = [card for card in game.get_battlefield(player).get_all()
++              if getattr(card, "is_token", False) and "Jace" in card.subtypes
++              and CardType.PLANESWALKER in card.card_types]
++    if not tokens:
++        tokens = create_token(game, player, factory=lambda: _jace_token(player))
++    if not tokens:
++        return
++    target = choose_object(game, player, tokens, "Choose a Jace token to empower", source_card=source)
++    add_counter(game, target, "loyalty", amount)
++
++
++def granted_loyalty_abilities(card, game):
++    if CardType.PLANESWALKER not in card.card_types:
++        return []
++    grants = []
++    sources = [source for player in game.players for source in game.get_battlefield(player).get_all()]
++    for source in sources:
++        if not getattr(source, "grants_drain_loyalty", False) or source.controller is not card.controller:
++            continue
++        controller = card.controller
++
++        def drain(state, controller=controller):
++            for opponent in state.players:
++                if opponent is not controller:
++                    deal_damage(state, card, opponent, 1)
++            gain_life(state, controller, 1)
++
++        grants.append(LoyaltyAbility(
++            2, drain, "+2: This planeswalker deals 1 damage to each opponent and you gain 1 life.",
++            printed=getattr(source, "drain_loyalty_printed", None),
++        ))
++    return grants
++
++
++def _listed(getter, game):
++    return list(getter(game) if inspect.signature(getter).parameters else getter())
++
++
++def _with_granted_abilities(card, game):
++    printed_abilities = card._printed_loyalty_method
++
++    def abilities():
++        return _listed(printed_abilities, game) + granted_loyalty_abilities(card, game)
++
++    return abilities
++
++
++def refresh_granted_abilities(game):
++    for player in game.players:
++        for card in game.get_battlefield(player).get_all():
++            if not hasattr(card, "_printed_loyalty_method"):
++                card._printed_loyalty_method = getattr(card, "get_loyalty_abilities", lambda: [])
++                card.get_loyalty_abilities = _with_granted_abilities(card, game)
+diff --git b/engine/preparation.py b/engine/preparation.py
+new file mode 100644
+index 0000000..9e568d7
+--- /dev/null
++++ b/engine/preparation.py
+@@ -0,0 +1,36 @@
++"""Prepared designations and their linked exiled spell copies (rule 722)."""
++
++from engine.casting import grant_cast_permission
++from engine.types import Zone
++
++
++def clear_preparation(game, card):
++    card.prepared = False
++    spell = getattr(card, "prepared_copy", None)
++    if spell is not None:
++        for player in game.players:
++            zone = player.zones[Zone.EXILE]
++            if zone.contains(spell):
++                zone.remove(spell)
++    card.prepared_copy = None
++
++
++def prepare(game, card, factory):
++    if getattr(card, "prepared", False):
++        return
++    if not any(game.get_battlefield(player).contains(card) for player in game.players):
++        return
++    card.prepared = True
++    spell = factory(owner=card.controller, controller=card.controller)
++    spell.is_card_copy = True
++    spell.prepared_source = card
++    card.prepared_copy = spell
++    card.controller.zones[Zone.EXILE].add(spell)
++    grant_cast_permission(game, card.controller, spell, controller_source=card)
++
++
++def consume_preparation(game, spell):
++    source = getattr(spell, "prepared_source", None)
++    if source is not None:
++        source.prepared = False
++        source.prepared_copy = None
+diff --git a/engine/priority.py b/engine/priority.py
+index 2e70583..171029f 100644
+--- a/engine/priority.py
++++ b/engine/priority.py
+@@ -42,7 +42,13 @@ from engine.abilities import (
+     activate_ability,
+ )
+ from engine.card import LoyaltyAbility, ManaAbility
+-from engine.casting import CastingError, CastMode, is_sorcery_speed, play_land
++from engine.casting import (
++    CastingError,
++    CastMode,
++    is_sorcery_speed,
++    permitted_cards,
++    play_land,
++)
+ from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, PlayerDecision
+ from engine import attempts
+ from engine.attempts import AttemptContext
+@@ -128,10 +134,19 @@ def priority_query(
+         actions[game.refs.object_decision(obj, zone=zone.value, controller_seat=seat)] = action
+     for source in _controlled_permanents(game, player):
+         for index, ability in enumerate(activatable_abilities(source, game)):
+-            if _may_begin_activating(game, player, source, ability):
++            if _functions_from(ability) is Zone.BATTLEFIELD and _may_begin_activating(
++                game, player, source, ability
++            ):
+                 actions[_ability_decision(game, seat, source, index, ability)] = (
+                     _activation(game, player, source, ability)
+                 )
++    for source in game.get_hand(player).get_all():
++        for index, ability in enumerate(activatable_abilities(source, game)):
++            if _functions_from(ability) is Zone.HAND and _may_begin_activating(
++                game, player, source, ability
++            ):
++                decision = _ability_decision(game, seat, source, index, ability, in_zone=Zone.HAND)
++                actions[decision] = _activation(game, player, source, ability)
+     source = Decision.player(
+         ref=GameRef(player=frozenset({("seat", seat)}), ability=frozenset({PRIORITY_WINDOW})),
+         seat=seat,
+@@ -180,11 +195,23 @@ def _cast_and_play_offers(game: GameState, player: Player):
+         else:
+             for obj, action in card.cast_offers(game, player, Zone.HAND, CastMode.NORMAL):
+                 yield obj, Zone.HAND, action
++    offered = []
+     for card in game.get_graveyard(player).get_all():
+         mode = _graveyard_cast_mode(player, card)
+         if mode is not None:
++            offered.append(card)
+             for obj, action in card.cast_offers(game, player, Zone.GRAVEYARD, mode):
+                 yield obj, Zone.GRAVEYARD, action
++    # Cards a cast permission lets the player cast or play from another zone.
++    for card, zone in permitted_cards(game, player):
++        if zone is Zone.HAND or any(card is other for other in offered):
++            continue
++        if CardType.LAND in card.card_types:
++            if is_sorcery_speed(game, player) and player.land_plays_remaining > 0:
++                yield card, zone, (lambda c=card: play_land(game, player, c))
++        else:
++            for obj, action in card.cast_offers(game, player, zone, CastMode.NORMAL):
++                yield obj, zone, action
+ 
+ 
+ def _graveyard_cast_mode(player: Player, card: Any) -> CastMode | None:
+@@ -219,10 +246,15 @@ def _may_begin_activating(game: GameState, player: Player, source: Any, ability:
+     return can_activate is None or bool(can_activate(game, source, player))
+ 
+ 
++def _functions_from(ability: Any) -> Zone:
++    return getattr(ability, "zone", None) or Zone.BATTLEFIELD
++
++
+ def _ability_decision(
+-    game: GameState, seat: int, source: Any, index: int, ability: Any
++    game: GameState, seat: int, source: Any, index: int, ability: Any,
++    *, in_zone: Zone = Zone.BATTLEFIELD,
+ ) -> PlayerDecision:
+-    zone = Zone.BATTLEFIELD.value
++    zone = in_zone.value
+     instance = game.refs.instance_id(source, zone)
+     attrs: dict[str, Any] = {"source": instance, "index": index}
+     printed = getattr(ability, "printed", None)
+diff --git a/engine/stack.py b/engine/stack.py
+index 7f801f3..5003907 100644
+--- a/engine/stack.py
++++ b/engine/stack.py
+@@ -112,6 +112,7 @@ class StackObject:
+     event_state: Any = None
+     prior_qualifying_casts: int | None = None
+     departure_zone: Zone | None = None
++    graveyard_departure_zone: Zone | None = None
+     is_spell: bool = False
+     printed: type | None = None
+ 
+@@ -408,10 +409,32 @@ def move_spell_off_stack(
+         # Countering fizzle: this occurrence already left the stack.
+         return False
+ 
++    if not stack_obj.is_spell:
++        return True
++
+     card = stack_obj.source
+     if any(p.zones[Zone.STACK].contains(card) for p in game.players):
+         destination = stack_obj.departure_zone or to_zone
++        adventure = bool(resolving and getattr(card, 'casting_adventure', False))
++        if adventure:
++            destination = Zone.EXILE
++        if destination == Zone.GRAVEYARD and stack_obj.graveyard_departure_zone:
++            destination = stack_obj.graveyard_departure_zone
++        if getattr(card, 'is_card_copy', False):
++            if destination == Zone.BATTLEFIELD:
++                card.is_token = True
++            else:
++                for player in game.players:
++                    if player.zones[Zone.STACK].contains(card):
++                        player.zones[Zone.STACK].remove(card)
++                return True
++        restore = getattr(card, 'restore_front_face', None)
++        if restore is not None:
++            restore()
+         move_to_zone(game, card, Zone.STACK, destination)
++        if adventure and destination == Zone.EXILE:
++            from engine.casting import grant_cast_permission
++            grant_cast_permission(game, stack_obj.controller, card, normal_face_only=True)
+     return True
+ 
+ 
+@@ -454,6 +477,8 @@ def copy_spell(
+     copied_card = copy.copy(original.source)
+     copied_card.controller = controller
+     copied_card.owner = getattr(original.source, "owner", controller)
++    copied_card.was_cast = False
++    copied_card.is_card_copy = True
+ 
+     if new_targets is not None:
+         # New targets chosen for the copy — capture their current stints.
+@@ -496,6 +521,11 @@ def copy_spell(
+             g, copy_obj.activation_context, copy_obj.targets
+         )
+         copied_card.on_resolve(g)
++        from engine.types import CardType
++        if copied_card.card_types & {CardType.CREATURE, CardType.ARTIFACT,
++                                     CardType.ENCHANTMENT, CardType.PLANESWALKER}:
++            controller.zones[Zone.STACK].add(copied_card)
++            move_spell_off_stack(g, copy_obj, Zone.BATTLEFIELD, resolving=True)
+ 
+     copy_obj.on_resolve = _copy_resolve
+     return copy_obj
+diff --git a/engine/state_based_actions.py b/engine/state_based_actions.py
+index d62e816..17bd57d 100644
+--- a/engine/state_based_actions.py
++++ b/engine/state_based_actions.py
+@@ -98,7 +98,7 @@ def _sba_creature_zero_toughness(game: GameState) -> bool:
+     to_remove: list[tuple[Player, Any]] = []
+     for player in game.players:
+         for obj in _battlefield(game, player).get_all():
+-            if hasattr(obj, "toughness") and obj.toughness <= 0:
++            if CardType.CREATURE in getattr(obj, "card_types", {CardType.CREATURE}) and hasattr(obj, "toughness") and obj.toughness <= 0:
+                 to_remove.append((player, obj))
+     for player, obj in to_remove:
+         _move_to_graveyard(game, player, obj)
+@@ -108,11 +108,20 @@ def _sba_creature_zero_toughness(game: GameState) -> bool:
+ 
+ def _sba_planeswalker_zero_loyalty(game: GameState) -> bool:
+     """A planeswalker with 0 loyalty is put into its owner's graveyard (rule 704.5i)."""
++    # A permanent protects the planeswalkers its controller controls, wherever
++    # the engine keeps it.
++    protected = {
++        id(getattr(card, "controller", None))
++        for player in game.players
++        for card in _battlefield(game, player).get_all()
++        if getattr(card, "protects_zero_loyalty", False)
++    }
+     to_remove = [
+         (player, obj)
+         for player in game.players
+         for obj in _battlefield(game, player).get_all()
+         if CardType.PLANESWALKER in getattr(obj, "card_types", ()) and getattr(obj, "loyalty", 1) <= 0
++        and id(getattr(obj, "controller", player)) not in protected
+     ]
+     for player, obj in to_remove:
+         _move_to_graveyard(game, player, obj)
+@@ -131,7 +140,7 @@ def _sba_creature_lethal_damage(game: GameState) -> bool:
+     to_remove: list[tuple[Player, Any]] = []
+     for player in game.players:
+         for obj in _battlefield(game, player).get_all():
+-            if not hasattr(obj, "toughness") or not hasattr(obj, "damage_marked"):
++            if CardType.CREATURE not in getattr(obj, "card_types", {CardType.CREATURE}) or not hasattr(obj, "toughness") or not hasattr(obj, "damage_marked"):
+                 continue
+ 
+             # Skip indestructible creatures
+@@ -180,6 +189,8 @@ def _sba_legend_rule(game: GameState) -> bool:
+     action_taken = False
+     for player in game.players:
+         bf = _battlefield(game, player)
++        if getattr(player, "legend_rule_suppressed", False):
++            continue
+         legendaries: dict[str, list[Any]] = defaultdict(list)
+         for obj in bf.get_all():
+             if (
+diff --git a/engine/triggers.py b/engine/triggers.py
+index 4915b88..323d7ec 100644
+--- a/engine/triggers.py
++++ b/engine/triggers.py
+@@ -245,6 +245,8 @@ class TriggerManager:
+                     )
+                 )
+                 game.stack.push(stack_obj)
++                from engine.ward import trigger_ward
++                trigger_ward(game, stack_obj)
+             elif trigger.capture is not None:
+                 # Untargeted trigger that captures per-fire event state (rule
+                 # 603.3): capture NOW (fire time) and store it on this trigger's
+@@ -401,6 +403,8 @@ def put_reflexive_trigger(
+     )
+     stack_obj.on_resolve = lambda g: effect(g, stint_checked_targets(g, context, chosen), controller)
+     game.stack.push(stack_obj)
++    from engine.ward import trigger_ward
++    trigger_ward(game, stack_obj)
+ 
+ 
+ def register_enters_trigger(
+diff --git b/engine/ward.py b/engine/ward.py
+new file mode 100644
+index 0000000..f4fa7dd
+--- /dev/null
++++ b/engine/ward.py
+@@ -0,0 +1,29 @@
++"""Ward triggers are independent of the object that was targeted."""
++
++from engine.card_queries import query_yes_no
++from engine.stack import StackObject, move_spell_off_stack
++from engine.types import Zone
++
++
++def trigger_ward(game, stack_object):
++    seen = set()
++    for target in stack_object.targets or ():
++        if id(target) in seen:
++            continue
++        seen.add(id(target))
++        cost = getattr(target, "ward_cost", None)
++        if not callable(cost) or target.controller is stack_object.controller:
++            continue
++        if not any(game.get_battlefield(player).contains(target) for player in game.players):
++            continue
++        payer = stack_object.controller
++
++        def resolve(state, cost=cost, payer=payer, target=target):
++            if not state.stack.contains(stack_object):
++                return
++            if query_yes_no(state, payer, "Pay ward?", source_card=target) and cost(state, payer):
++                return
++            move_spell_off_stack(state, stack_object, Zone.GRAVEYARD)
++
++        game.stack.push(StackObject(source=target, controller=target.controller, on_resolve=resolve,
++                                     printed=getattr(target, "ward_printed", None)))
+diff --git a/engine/zones.py b/engine/zones.py
+index eb8404c..7379ff4 100644
+--- a/engine/zones.py
++++ b/engine/zones.py
+@@ -290,6 +290,11 @@ def move_to_zone(
+         # new one, so pending abilities of this stint can still find it.
+         game.last_known_by_stint[game.refs.instance_id(card, Zone.BATTLEFIELD.value)] = lki
+ 
++    leaving_types = set(getattr(card, 'card_types', ()))
++    if leaving_battlefield:
++        from engine.preparation import clear_preparation
++        clear_preparation(game, card)
++
+     # --- Perform the zone move ---
+     source_container.remove(card)
+ 
+@@ -336,6 +341,12 @@ def move_to_zone(
+     # (e.g. a flicker's exile leg). Minting stays lazy — the registry
+     # re-mints on the next observation.
+     game.refs.note_zone_change(card)
++    if leaving_battlefield and dest_zone == Zone.GRAVEYARD:
++        game.battlefield_deaths.append((card, game.refs.zone_epoch(card), game.turn_number,
++                                       CardType.CREATURE in leaving_types))
++    if from_zone != Zone.STACK:
++        card.was_cast = False
++    card._game = game
+ 
+     # --- Leaving battlefield hooks ---
+     removed_source_effects = False
+@@ -401,6 +412,11 @@ def move_to_zone(
+         # Now unregister triggers and replacement effects.
+         game.trigger_manager.unregister(card)
+         game.replacement_manager.unregister(card)
++        from engine.copying import end_copy
++        end_copy(card, game)
++        for callback in getattr(card, 'zone_departure_callbacks', []):
++            callback()
++        card.zone_departure_callbacks = []
+ 
+     # --- Entering battlefield hooks ---
+     if entering_battlefield:
+@@ -446,10 +462,13 @@ def move_to_zone(
+     # manager still needs one reset pass to strip the departed buff.
+     if leaving_battlefield or entering_battlefield:
+         effect_manager = getattr(game, "effect_manager", None)
+-        if effect_manager is not None and (
+-            len(effect_manager) > 0 or removed_source_effects
+-        ):
++        if effect_manager is not None and (len(effect_manager) > 0 or removed_source_effects):
+             effect_manager.apply_all(game)
++        else:
++            from engine.planeswalker import refresh_granted_abilities
++            from engine.mana_grants import refresh_mana_grants
++            refresh_granted_abilities(game)
++            refresh_mana_grants(game)
+ 
+ 
+ def _remove_from_combat(game: GameState, card: Any) -> None:
+@@ -488,3 +507,8 @@ _DESTINATION_ZONE_MAP: dict[str, Zone] = {
+     "hand": Zone.HAND,
+     "library": Zone.LIBRARY,
+ }
++
++
++def creatures_died_this_turn(game):
++    return sum(turn == game.turn_number and creature
++               for card, epoch, turn, creature in game.battlefield_deaths)

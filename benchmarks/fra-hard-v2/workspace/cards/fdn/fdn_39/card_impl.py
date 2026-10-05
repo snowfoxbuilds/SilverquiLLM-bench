@@ -1,0 +1,102 @@
+"""Card implementation for Grappling Kraken."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from engine.card import Creature
+from engine.events import EntersBattlefieldTriggeredEvent
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
+
+if TYPE_CHECKING:
+    from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GrapplingKrakenAbility1:
+    text = 'Landfall — Whenever a land you control enters, tap target creature an opponent controls and put a stun counter on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)'
+
+
+# endregion Printed abilities
+
+
+class GrapplingKraken(Creature):
+    """Grappling Kraken — {4}{U}{U} — 5/6 — Kraken.
+
+    Landfall — Whenever a land you control enters, tap target creature an
+    opponent controls and put a stun counter on it.
+
+    FDN collector number 39.
+
+    This is a genuine triggered ability (not an ETB on the Kraken itself), so
+    it is wired through ``register_triggers``. The engine's trigger channel has
+    no cast-time targeting, so the target is chosen when the ability resolves
+    via ``choose_object`` (a required target — the ability does nothing if no
+    opponent creature exists).
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Grappling Kraken")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{4}{U}{U}"))
+        kwargs.setdefault("subtypes", {"Kraken"})
+        kwargs.setdefault("base_power", 5)
+        kwargs.setdefault("base_toughness", 6)
+        kwargs.setdefault(
+            "rules_text",
+            "Landfall — Whenever a land you control enters, tap target "
+            "creature an opponent controls and put a stun counter on it.",
+        )
+        super().__init__(**kwargs)
+
+    def register_triggers(self, game: "GameState") -> None:
+        """Register the landfall trigger: tap + stun an opponent's creature."""
+        from engine.game import add_counter, tap
+        from engine.stack import stint_checked_targets
+        from engine.triggers import TriggerRegistration, choose_trigger_targets
+
+        source = self
+
+        def _landfall_condition(game: Any, event: Any) -> bool:
+            ctrl = getattr(source, "controller", None)
+            if ctrl is None:
+                return False
+            permanent = getattr(event, "permanent", None)
+            if permanent is None:
+                return False
+            if CardType.LAND not in getattr(permanent, "card_types", set()):
+                return False
+            perm_ctrl = getattr(permanent, "controller", None)
+            if perm_ctrl is None:
+                return game.get_battlefield(ctrl).contains(permanent)
+            return perm_ctrl is ctrl
+
+        def _opponent_creature(game: Any, event: Any, controller: Any) -> list[Any] | None:
+            def _legal(obj: Any) -> bool:
+                return CardType.CREATURE in getattr(obj, "card_types", set()) and getattr(obj, "controller", None) is not controller
+
+            return choose_trigger_targets(game, controller, source, [
+                TargetRequirement(filter_fn=_legal, description="tap target creature an opponent controls", zone=Zone.BATTLEFIELD)
+            ])
+
+        def _landfall_effect(game: "GameState", targets: list[Any], context: Any) -> None:
+            for target in stint_checked_targets(game, context, targets):
+                if target is None or getattr(target, "controller", None) is context.controller:
+                    continue
+                # Tap via the engine helper so tap-triggered machinery can fire.
+                tap(game, target)
+                add_counter(game, target, "stun", 1)
+
+        controller = getattr(self, "controller", None) or game.active_player
+        game.trigger_manager.register(
+            TriggerRegistration(
+                event_type=EntersBattlefieldTriggeredEvent,
+                condition=_landfall_condition,
+                effect=_landfall_effect,
+                source=self,
+                controller=controller,
+                targeting=_opponent_creature,
+                printed=GrapplingKrakenAbility1,
+            )
+        )

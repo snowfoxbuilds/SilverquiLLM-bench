@@ -1,0 +1,41 @@
+{
+  "name": "Bloodline Recollector // Ancestral Craving",
+  "mana_cost": "{1}{B} // {B}",
+  "type_line": "Creature — Vampire Warlock // Instant",
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Prepared"
+  ],
+  "rarity": "mythic",
+  "set": "fra",
+  "collector_number": "49",
+  "power": "2",
+  "toughness": "2",
+  "layout": "prepare",
+  "card_faces": [
+    {
+      "object": "card_face",
+      "name": "Bloodline Recollector",
+      "mana_cost": "{1}{B}",
+      "type_line": "Creature — Vampire Warlock",
+      "oracle_text": "At the beginning of each end step, if three or more creatures died this turn, this creature becomes prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+      "power": "2",
+      "toughness": "2",
+      "artist": "Cynthia Sheppard",
+      "artist_id": "9dfbdd58-65e6-40cf-951a-80e141061939",
+      "illustration_id": "8588ee7b-b874-485e-af97-3a1b4229b2c1"
+    },
+    {
+      "object": "card_face",
+      "name": "Ancestral Craving",
+      "mana_cost": "{B}",
+      "type_line": "Instant",
+      "oracle_text": "Target player draws three cards and loses 3 life.",
+      "artist": "Cynthia Sheppard",
+      "artist_id": "9dfbdd58-65e6-40cf-951a-80e141061939"
+    }
+  ],
+  "mana_cost_str": "{1}{B} // {B}"
+}

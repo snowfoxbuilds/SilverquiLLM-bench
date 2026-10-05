@@ -1,0 +1,39 @@
+--- a/engine/zones.py
++++ b/engine/zones.py
+@@ -280,9 +280,5 @@
+     if leaving_battlefield:
+-        from engine.last_known import lki_key, snapshot
++        from engine.last_known import snapshot
+ 
+         lki = snapshot(card, Zone.BATTLEFIELD)
+-        game.last_known[lki_key(card)] = lki
+-        # Keyed by the stint it ends, before note_zone_change below starts a
+-        # new one, so pending abilities of this stint can still find it.
+-        game.last_known_by_stint[game.refs.instance_id(card, Zone.BATTLEFIELD.value)] = lki
+ 
+@@ -340,6 +336,2 @@
+         is_creature = CardType.CREATURE in lki.card_types
+-
+-        # A permanent that leaves the battlefield is removed from combat
+-        # (rule 506.4).
+-        _remove_from_combat(game, card)
+ 
+@@ -371,8 +363,2 @@
+                 removed_source_effects = True
+-            # Effects locked onto this permanent stop applying to it: it
+-            # returns, if ever, as a new object (rules 400.7, 611.2c).
+-            if effect_manager.release(card):
+-                removed_source_effects = True
+-
+-        _begin_new_object(card)
+ 
+@@ -383,3 +369,3 @@
+             LeavesBattlefieldTriggeredEvent(
+-                permanent=card, controller=controller, last_known=lki
++                permanent=card, controller=controller, last_known=None
+             ),
+@@ -392,3 +378,3 @@
+                 CreatureDiesTriggeredEvent(
+-                    creature=card, controller=controller, owner=owner, last_known=lki
++                    creature=card, controller=controller, owner=owner, last_known=None
+                 ),

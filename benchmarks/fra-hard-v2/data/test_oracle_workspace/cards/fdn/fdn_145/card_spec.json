@@ -1,0 +1,19 @@
+{
+  "name": "Resolute Reinforcements",
+  "mana_cost": "{1}{W}",
+  "type_line": "Creature — Human Soldier",
+  "oracle_text": "Flash (You may cast this spell any time you could cast an instant.)\nWhen this creature enters, create a 1/1 white Soldier creature token.",
+  "power": "1",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flash"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "145",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Inside Information",
+  "mana_cost": "{X}{B}{B}",
+  "type_line": "Sorcery",
+  "oracle_text": "Exile the top X cards of target opponent's library. You may play those cards this turn. If you cast a spell this way, pay life equal to its mana value rather than pay its mana cost.",
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "mythic",
+  "set": "hob",
+  "collector_number": "76",
+  "layout": "normal",
+  "mana_cost_str": "{X}{B}{B}"
+}
