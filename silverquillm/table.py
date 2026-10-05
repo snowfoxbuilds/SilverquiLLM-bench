@@ -52,7 +52,7 @@ class Change:
             position = " (bottom)" if self.value == "bottom" else ""
             return f"{name} moves to {place}{position}"
         if self.kind == "appears":
-            return f"a {name} token appears on player {self.seat}'s battlefield"
+            return f"{name} appears on player {self.seat}'s battlefield"
         if self.kind == "ceases":
             return f"{name} leaves the game"
         if self.kind in ("taps", "untaps"):
@@ -76,13 +76,15 @@ def moves(item: Any, to: Any, *, seat: int | None = None, from_zone: Any = None,
     return Change("moves", item, to, seat, from_zone, "bottom" if bottom else "top")
 
 
-def appears(cls: type, seat: int) -> Change:
-    """A token of ``cls`` appears on ``seat``'s battlefield."""
-    return Change("appears", cls, seat=seat)
+def appears(seat: int) -> Change:
+    """A token appears on ``seat``'s battlefield. It takes the next token
+    number: list the tokens one effect makes in the order it makes them;
+    the table numbers seat 0's before seat 1's, as the Test Interface does."""
+    return Change("appears", seat=seat)
 
 
 def ceases(item: Any, seat: int | None = None) -> Change:
-    """``item`` — a token by class, or a handle — leaves the game."""
+    """``item`` — a ``test_interface.Token``, or a handle — leaves the game."""
     return Change("ceases", item, seat=seat)
 
 
@@ -164,6 +166,7 @@ class Table:
         self._asked = start.asked
         self._turn = 1 if start.active == 0 else 2
         self._passes = 0
+        self._tokens = 0
         self._over = False
         self._winner: int | None = None
         self.scripts: list[list[Any]] = [[] for _ in start.players]
@@ -229,6 +232,10 @@ class Table:
             raise ScriptError(f"player {seat} writes an entry, but player {self._asked} is asked next")
         changes = list(then)
         stack_before = len(self._stack)
+        # Tokens that appear together are numbered seat 0's first (TEST-INTERFACE.md).
+        appearing = sorted((i for i, c in enumerate(changes) if c.kind == "appears"), key=lambda i: changes[i].seat)
+        for n, i in enumerate(appearing, self._tokens + 1):
+            changes[i] = replace(changes[i], item=ti.Token(n))
         for change in changes:
             self._apply(change)
         self._derived = []
@@ -296,7 +303,8 @@ class Table:
         elif change.kind == "ends":
             self._over, self._winner = True, change.seat
         elif change.kind == "appears":
-            self._sides[change.seat]["battlefield"].append(ti.Seen(change.item, change.seat))
+            self._tokens = max(self._tokens, change.item.number)
+            self._sides[change.seat]["battlefield"].append(ti.Seen(None, change.seat, False, change.item))
         elif change.kind == "on_stack":
             self._stack.insert(0, ti.Seen(change.item, change.seat))
         elif change.kind == "off_stack":
@@ -339,11 +347,11 @@ class Table:
         found = []
         for place in places:
             for index, seen in enumerate(place):
-                if (seen.handle is item) if isinstance(item, ti.Handle) else (seen.card is item):
+                if (seen.handle == item) if isinstance(item, (ti.Handle, ti.Token)) else (seen.card is item):
                     found.append((place, index, seen))
         if not found:
             raise ScriptError(f"{_name(item)} is not on the board where the change looks for it")
-        if len(found) > 1 and not isinstance(item, ti.Handle):
+        if len(found) > 1 and not isinstance(item, (ti.Handle, ti.Token)):
             if all(seen.card is found[0][2].card and seen.handle is None for _, _, seen in found):
                 return found[0]
             raise ScriptError(f"more than one {_name(item)} could change; name it by handle or zone")

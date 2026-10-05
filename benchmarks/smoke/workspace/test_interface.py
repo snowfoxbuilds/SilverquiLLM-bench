@@ -45,6 +45,7 @@ __all__ = [
     "Seen",
     "Side",
     "Step",
+    "Token",
     "View",
     "Zone",
     "act",
@@ -58,6 +59,7 @@ __all__ = [
     "player",
     "run",
     "shuffled",
+    "token",
     "view",
 ]
 
@@ -73,9 +75,8 @@ QUESTION_TIMEOUT = 5.0
 class Handle:
     """A constructed card, followed as a physical card across zones.
 
-    Made with :func:`card` and placed by :func:`create_game`. A token or any
-    other object made during play has no handle; it is found in the view by
-    its class.
+    Made with :func:`card` and placed by :func:`create_game`. A token is
+    followed by its :class:`Token` instead.
     """
 
     _count = 0
@@ -114,6 +115,68 @@ class Side:
     exile: Sequence[type | Handle] = ()
     life: int = 20
     mana: Mapping[ManaType, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Token:
+    """A token, followed by its number: the game's tokens are numbered in
+    the order they first appear on the battlefield, so ``token(1)`` is the
+    first token made.
+
+    Tokens that appear together — those one effect creates — are numbered
+    in the order the effect creates them, seat 0's before seat 1's; tokens
+    an effect makes alike are interchangeable. A token has no class: what it
+    is shows in what it does.
+    """
+
+    number: int
+
+    def __repr__(self) -> str:
+        return f"token {self.number}"
+
+
+def token(number: int) -> Token:
+    """The ``number``-th token the game makes, counting from 1."""
+    if number < 1:
+        raise ValueError(f"tokens are numbered from 1, not {number}")
+    return Token(number)
+
+
+class _Tokens:
+    """A game's tokens in the order they were numbered; holding each keeps
+    its identity from being reused once it leaves the game."""
+
+    def __init__(self) -> None:
+        self.objects: list[Any] = []
+        self.by_id: dict[int, Token] = {}
+
+    def number(self, game: Any) -> None:
+        """Number the tokens on the battlefield that have none yet."""
+        for scripted in game.players:
+            for obj in scripted.zones[Zone.BATTLEFIELD].get_all():
+                if getattr(obj, "is_token", False) and id(obj) not in self.by_id:
+                    self.objects.append(obj)
+                    self.by_id[id(obj)] = Token(len(self.objects))
+
+    def find(self, game: Any, followed: Token) -> Any:
+        """The token object ``followed`` names, or ``None`` if none has
+        appeared with that number."""
+        if followed.number > len(self.objects):
+            self.number(game)
+        if followed.number > len(self.objects):
+            return None
+        return self.objects[followed.number - 1]
+
+
+# Each game's tokens.
+_TOKENS: weakref.WeakKeyDictionary[Any, _Tokens] = weakref.WeakKeyDictionary()
+
+
+def _tokens(game: Any) -> _Tokens:
+    tokens = _TOKENS.get(game)
+    if tokens is None:
+        tokens = _TOKENS[game] = _Tokens()
+    return tokens
 
 
 # Each game's handles, by the identity of the card each follows.
@@ -171,16 +234,19 @@ class Seen:
     card: type | None
     owner: int
     tapped: bool = False
-    handle: Handle | None = None
+    handle: Handle | Token | None = None
 
     def _key(self) -> tuple:
         cls = self.card
         name = "" if cls is None else f"{cls.__module__}.{cls.__qualname__}"
-        return (name, self.tapped, self.handle.number if self.handle else 0)
+        kind = 0 if self.handle is None else 1 if isinstance(self.handle, Handle) else 2
+        return (name, self.tapped, kind, self.handle.number if self.handle else 0)
 
     def __repr__(self) -> str:
-        name = "?" if self.card is None else self.card.__name__
         tapped = " tapped" if self.tapped else ""
+        if isinstance(self.handle, Token):
+            return f"{self.handle!r}{tapped}"
+        name = "?" if self.card is None else self.card.__name__
         handle = f" #{self.handle.number}" if self.handle else ""
         return f"{name}{handle}{tapped}"
 
@@ -229,13 +295,14 @@ class View:
         object.__setattr__(self, "players", tuple(self.players))
         object.__setattr__(self, "stack", tuple(self.stack))
 
-    def where(self, handle: Handle) -> Zone | None:
-        """The zone ``handle``'s card is in, or ``None`` if it is in none."""
-        if any(seen.handle is handle for seen in self.stack):
+    def where(self, handle: Handle | Token) -> Zone | None:
+        """The zone ``handle``'s card or token is in, or ``None`` if it is in
+        none."""
+        if any(seen.handle == handle for seen in self.stack):
             return Zone.STACK
         for side in self.players:
             for zone in ("library", *_UNORDERED):
-                if any(seen.handle is handle for seen in getattr(side, zone)):
+                if any(seen.handle == handle for seen in getattr(side, zone)):
                     return Zone(zone)
         return None
 
@@ -259,12 +326,16 @@ class View:
 def view(game: Any) -> View:
     """A frozen snapshot of what the players can see of ``game``."""
     handles = _HANDLES.get(game, {})
+    tokens = _tokens(game)
+    tokens.number(game)
 
-    def handle(obj: Any) -> Handle | None:
-        return handles.get(id(game.refs.physical_card(obj)))
+    def handle(obj: Any) -> Handle | Token | None:
+        physical = id(game.refs.physical_card(obj))
+        return handles.get(physical) or tokens.by_id.get(physical)
 
     def seen(obj: Any, owner: int, tapped: bool = False) -> Seen:
-        return Seen(_printed(obj), owner, tapped, handle(obj))
+        printed = None if getattr(obj, "is_token", False) else _printed(obj)
+        return Seen(printed, owner, tapped, handle(obj))
 
     sides = []
     for seat, scripted in enumerate(game.players):
@@ -490,9 +561,9 @@ def _branches(
 def _items(items: Iterable[Any]) -> tuple[Any, ...]:
     out = []
     for item in items:
-        if not isinstance(item, (PlayerDecision, Handle, type)):
+        if not isinstance(item, (PlayerDecision, Handle, Token, type)):
             raise TypeError(
-                f"a preference is a Player Decision, a predefined class or a handle, not {item!r}"
+                f"a preference is a Player Decision, a predefined class, a handle or a token, not {item!r}"
             )
         out.append(item)
     return tuple(out)
@@ -509,7 +580,7 @@ def _per_query(mapping: Mapping[Any, Any] | None) -> tuple[tuple[Any, tuple[Any,
 
 
 def _describe_item(item: Any) -> str:
-    if isinstance(item, (type, Handle)):
+    if isinstance(item, (type, Handle, Token)):
         return item.__name__ if isinstance(item, type) else repr(item)
     attrs = dict(item.attrs)
     printed = attrs.get("printed")
@@ -588,7 +659,7 @@ class _Chance:
         arranged = []
         for item in items:
             for candidate in pool:
-                if _is(item, candidate, handles):
+                if _is(item, candidate, handles, self._run.game):
                     arranged.append(candidate)
                     pool.remove(candidate)
                     break
@@ -599,9 +670,11 @@ class _Chance:
         return arranged
 
 
-def _is(item: Any, candidate: Any, handles: dict[int, Handle]) -> bool:
+def _is(item: Any, candidate: Any, handles: dict[int, Handle], game: Any) -> bool:
     if isinstance(item, Handle):
         return handles.get(id(candidate)) is item
+    if isinstance(item, Token):
+        return _tokens(game).find(game, item) is candidate
     if isinstance(item, type):
         return _printed(candidate) is item
     if isinstance(item, PlayerDecision):
@@ -786,22 +859,26 @@ class ScriptedPlayer(Player):
             self._chosen.extend((id(playing), source, _object_key(o)) for o in selected)
         return Answer(tuple(selected))
 
-    def _matchers(self, items: Iterable[Any]) -> list[PlayerDecision | Handle]:
+    def _matchers(self, items: Iterable[Any]) -> list[PlayerDecision | Handle | Token]:
         """Each preference as Player Decisions to satisfy — a class stands for
         the card, ability or mode it prints — or as a handle."""
-        matchers: list[PlayerDecision | Handle] = []
+        matchers: list[PlayerDecision | Handle | Token] = []
         for item in items:
-            if isinstance(item, (PlayerDecision, Handle)):
+            if isinstance(item, (PlayerDecision, Handle, Token)):
                 matchers.append(item)
             else:
                 matchers += [Decision.obj(printed=item), Decision.ability(printed=item), Decision.mode(printed=item)]
         return matchers
 
-    def _matches(self, option: PlayerDecision, preference: PlayerDecision | Handle) -> bool:
-        """A handle matches an option that stands for its physical card — for
-        an ability, the card of the permanent it belongs to."""
+    def _matches(self, option: PlayerDecision, preference: PlayerDecision | Handle | Token) -> bool:
+        """A handle matches an option that stands for its physical card, and
+        a token one that stands for that token — for an ability, the
+        permanent it belongs to."""
         if isinstance(preference, Handle):
             return preference.card is not None and self.game.refs.physical_card(option) is preference.card
+        if isinstance(preference, Token):
+            followed = _tokens(self.game).find(self.game, preference)
+            return followed is not None and self.game.refs.physical_card(option) is followed
         return satisfies(option, preference)
 
 

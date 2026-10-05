@@ -39,8 +39,8 @@ The Test Interface relies only on a small engine surface, which the workspace do
 | The one stepping entry | `run` |
 | `PlayerQuery`, `PlayerDecision`, the Player hooks, `InvalidPlayerChoiceError` | Answering queries and hearing rejections |
 | `shuffle(cards)`, `choose_at_random(options, n)`, `flip_coin()` | Every random event, so the test decides its result |
-| Zone containers, life totals, each object's `printed` class, the tapped flag, the current step, the active player, the player being asked, game over and winner | The Player View |
-| Each object's and each offered option's physical card | Following a handle's card across zones and choosing it |
+| Zone containers, life totals, each object's `printed` class, whether it is a token, the tapped flag, the current step, the active player, the player being asked, game over and winner | The Player View |
+| Each object's and each offered option's physical card — a token is its own | Following a handle's card across zones, or a token, and choosing it |
 
 ### Construction
 
@@ -97,7 +97,7 @@ Scripting a stretch of play, such as passing through a turn, uses helpers that b
   A scoped answer is never filled in or trimmed: when its choices are not all offered, or the declaration that would take effect gives a declared creature something else, that branch is withdrawn with nothing committed and the entry tries its next branch.
   Every declare-attackers step raises its declaration, even with nothing to declare; a declare-blockers step raises none when nothing attacks.
 - **Expected views**: the constructed position is the first expected view, and each entry states the changes its answers cause — Bolt in the graveyard, player 1 at 17 life; a host-side helper applies them to the previous expected view (grilling 2026-10-05).
-  A change says only what the view can show: a card, by handle or class, moves between zones; a token of a class appears on a player's side or leaves the game; an ability of a class goes on the stack or leaves it; a permanent becomes tapped or untapped; a player's life becomes a number; the game ends with a winner or in a draw.
+  A change says only what the view can show: a card, by handle or class, moves between zones; a token appears on a player's side, taking the next token number, or leaves the game; an ability of a class goes on the stack or leaves it; a permanent becomes tapped or untapped; a player's life becomes a number; the game ends with a winner or in a draw.
   The helper works out the step, the active player and the player being asked from the rules and the script — priority order (CR 117), the turn structure, and each turn's draw from the known library — so a test states only changes to the board and life.
   There is one expected outcome per test, never alternatives: how an engine presents its questions may vary, and the test's branches absorb that, but every presentation must reach the same view (grilling 2026-10-05).
   At every action question and when `run` stops, the whole Player View must equal the expected view, so an unexpected side effect fails as surely as a missing one.
@@ -116,8 +116,8 @@ It shows:
 - the current step, the active player, and the player being asked;
 - whether the game is over, and who won.
 
-Each object in it shows only what it is (its predefined card, face or token class), where it is (its zone; on the battlefield whose side it is on, elsewhere whose card it is), and whether it is tapped.
-A snapshot `v` has `v.players[i]` with `.life`, `.library`, `.hand`, `.battlefield`, `.graveyard` and `.exile`, plus `v.stack`, `v.step`, `v.active`, `v.asked`, `v.game_over` and `v.winner`; each entry has `.card`, `.tapped`, `.owner`, and `.handle` for a constructed card, and `v.where(handle)` gives that card's zone (grilling 2026-10-05).
+Each object in it shows only what it is (its predefined card, face or ability class; a token shows none), where it is (its zone; on the battlefield whose side it is on, elsewhere whose card it is), and whether it is tapped.
+A snapshot `v` has `v.players[i]` with `.life`, `.library`, `.hand`, `.battlefield`, `.graveyard` and `.exile`, plus `v.stack`, `v.step`, `v.active`, `v.asked`, `v.game_over` and `v.winner`; each entry has `.card`, `.tapped`, `.owner`, and `.handle` for a constructed card or a token, and `v.where(handle)` gives its zone (grilling 2026-10-05).
 Power and toughness, counters, damage, keywords, summoning sickness, continuous effects and the mana pool are not in the view.
 Neither are a stack object's targets or modes, nor what attacks or blocks what: those show in what happens, and leaving them out keeps engines free to model them — a creature that blocks several attackers — without a view to keep in step (grilling 2026-10-05).
 
@@ -141,7 +141,9 @@ What a player was asked routes answers through the scripts, never assertions, si
 
 A card is a physical object, so a test may keep a handle to a card it constructed and follow it across zones even though each zone change makes a new object (CR 400.7) — the Glamdring put in hand is now in exile (grilling 2026-10-05).
 The engine names the physical card behind each object and each offered option — for an ability, its source permanent's card — so a handle in a script chooses that very card, never one that merely looks the same.
-Tokens are not tracked that way: a token or other object made during play is found in the view by its class.
+A token is followed by number instead: the game's tokens are numbered in the order they first appear, and `token(n)` names the n-th in the view and in scripts (grilling 2026-10-05).
+Tokens one effect creates are numbered in the order its text names them, seat 0's before seat 1's; tokens it makes alike are interchangeable, so every engine reaches the same view.
+A token has no class in the view: what it is — a 1/1 Soldier or a Food — shows in what it does, so engines need no predefined token classes.
 
 ## Relevant ADRs
 

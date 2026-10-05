@@ -40,6 +40,7 @@ from test_interface import (
     player,
     run,
     shuffled,
+    token,
     view,
 )
 
@@ -468,9 +469,102 @@ def test_passing_through_a_turn_untaps_and_draws():
     assert "player 1 draws" in " ".join(e.narration for script in t.scripts for e in script)
 
 
-def test_a_token_appears_by_class():
-    from cards.fdn.tokens import FoodToken
+# ---------------------------------------------------------------------------
+# Tokens
+# ---------------------------------------------------------------------------
 
+
+def _make_tokens(game, controller, *sizes):
+    from engine.game import create_token
+
+    for size in sizes:
+        create_token(game, controller, Creature(name=f"{size}/{size} Token", base_power=size, base_toughness=size))
+
+
+class MakeOne(Sorcery):
+    """Create a 1/1 creature token."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Make One")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        _make_tokens(game, self.controller, 1)
+
+
+class MakeThree(Sorcery):
+    """Create three 1/1 creature tokens."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Make Three")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        _make_tokens(game, self.controller, 1, 1, 1)
+
+
+class MakeOneAndTwo(Sorcery):
+    """Create a 1/1 creature token and a 2/2 creature token."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Make One and Two")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        _make_tokens(game, self.controller, 1, 2)
+
+
+class Muster(Sorcery):
+    """Choose a creature you control; you gain life equal to its power."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Muster")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        mine = [c for c in game.get_battlefield(self.controller).get_all() if CardType.CREATURE in c.card_types]
+        chosen = choose_object(game, self.controller, mine, "choose a creature", source_card=self)
+        gain_life(game, self.controller, chosen.power)
+
+
+def _cast_and_resolve(t, spell, *, choices=(), then=()):
+    # A choice while the spell resolves falls in its caster's pass, the
+    # entry they are answering from then.
+    t.act(0, spell, then=[moves(spell, Zone.STACK)])
+    t.pass_(0, choices=list(choices))
+    t.pass_(1, then=[moves(spell, Zone.GRAVEYARD), *then])
+
+
+def test_a_token_is_followed_by_its_number_and_shows_no_class():
+    make = card(MakeOne)
+    t = Table(_main(Side(hand=[make])))
+    _cast_and_resolve(t, make, then=[appears(0)])
+    final = t.run()
+    (seen,) = final.players[0].battlefield
+    assert seen.card is None and seen.handle == token(1) and final.where(token(1)) is Zone.BATTLEFIELD
+
+
+def test_tokens_made_alike_are_interchangeable():
+    make, muster = card(MakeThree), card(Muster)
+    t = Table(_main(Side(hand=[make, muster])))
+    _cast_and_resolve(t, make, then=[appears(0), appears(0), appears(0)])
+    _cast_and_resolve(t, muster, choices=[token(3)], then=[life(0, 21)])
+    final = t.run()
+    assert {seen.handle for seen in final.players[0].battlefield} == {token(1), token(2), token(3)}
+
+
+@pytest.mark.parametrize(("chosen", "gained"), [(1, 1), (2, 2)])
+def test_tokens_one_effect_makes_are_numbered_in_the_order_it_makes_them(chosen, gained):
+    make, muster = card(MakeOneAndTwo), card(Muster)
+    t = Table(_main(Side(hand=[make, muster])))
+    _cast_and_resolve(t, make, then=[appears(0), appears(0)])
+    _cast_and_resolve(t, muster, choices=[token(chosen)], then=[life(0, 20 + gained)])
+    assert t.run().players[0].life == 20 + gained
+
+
+def test_the_table_numbers_tokens_appearing_together_seat_0_first():
     t = Table(_main())
-    t.pass_(0, then=[appears(FoodToken, 0)])
-    assert t.expected.players[0].battlefield[0].card is FoodToken
+    t.pass_(0, then=[appears(1), appears(0)])
+    expected = t.expected
+    assert expected.players[0].battlefield[0].handle == token(1)
+    assert expected.players[1].battlefield[0].handle == token(2)
