@@ -107,7 +107,6 @@ def create_game(
 
     # 5. Active player is player1 (index 0 — already the default)
     game.active_player_index = 0
-    game.priority_player_index = 0
 
     return game
 
@@ -874,34 +873,23 @@ def run_game(game: GameState) -> Player | None:
     are resolved before and after each turn to catch game-ending conditions
     even when the priority loop auto-passes.
 
-    Includes a safety limit of :data:`MAX_TURNS` to prevent infinite loops
-    in deterministic or stuck game states.
+    A game that reaches the safety limit of :data:`MAX_TURNS` ends in a
+    draw, so play always ends with the game over.
 
     Parameters:
         game: The game state to run.
 
     Returns:
-        The winning player, or ``None`` if the game ended in a draw (or
-        hit the turn limit).
+        The winning player, or ``None`` when the game ended in a draw.
     """
     from engine.state_based_actions import resolve_state_based_actions
 
-    while not game.is_game_over and game.turn_number <= MAX_TURNS:
-        # Check SBAs before the turn (catches pre-existing conditions)
+    while True:
         resolve_state_based_actions(game)
         _check_game_over(game)
         if game.is_game_over:
-            break
-
-        if not run_turn(game):
-            # Stopped at an abandoned resolution; run_game resumes it.
-            return None
-
-        # Check SBAs after the turn
-        resolve_state_based_actions(game)
-        _check_game_over(game)
-
-    return game.winner
+            return game.winner
+        run_turn(game)
 
 
 def _check_game_over(game: GameState) -> None:

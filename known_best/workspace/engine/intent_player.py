@@ -19,8 +19,9 @@ the face after the card is chosen. A dry script passes.
 
 What happens after a rejection is written by the test, never inferred: an entry
 or intent holds ordered *branches*, each an ordinary preference list answering
-every query of an attempt, and a rejected attempt is retried with the next
-branch. One preference list is one branch, so its rejection fails.
+every query of an attempt, and the query the engine asks again after a
+rejection is answered with the next branch. One preference list is one
+branch, so its rejection fails.
 """
 
 from __future__ import annotations
@@ -59,24 +60,17 @@ class Intent:
     here.
 
     ``branches`` replaces ``preferences`` when a rejected choice should be
-    retried: each branch is a preference list or a :func:`branch`, the first
-    answers the attempt, and each rejection the intent owns retries the
-    attempt with the next one. With ``preferences`` alone there is one branch,
-    and its rejection fails the test (see ADR-017). ``per_query`` maps what a
-    query asks for to the preferences that answer it, as in :func:`branch`.
-
-    A ``negative`` intent prefers a choice the rules forbid: when the engine
-    rejects that choice with ``InvalidPlayerChoiceError``, the rejection counts
-    as a pass; when the choice takes effect, the test fails with
-    ``PostconditionError`` — at the end of the attempt it was made in, or at
-    ``end_intent`` (see ADR-017). If no forbidden choice is offered, nothing
-    is checked.
+    answered differently: each branch is a preference list or a
+    :func:`branch`, the first answers the attempt, and each rejection the
+    intent owns answers the re-asked query with the next one. With
+    ``preferences`` alone there is one branch, and its rejection fails the
+    test (see ADR-017). ``per_query`` maps what a query asks for to the
+    preferences that answer it, as in :func:`branch`.
     """
 
     pattern: GameRef
     preferences: tuple[PlayerDecision, ...] = ()
     postcondition: Callable[[Any], bool] | None = None
-    negative: bool = False
     branches: tuple[Any, ...] = ()
     per_query: Any = ()
 
@@ -199,8 +193,8 @@ class ScriptEntry:
     """One priority action in a player's script.
 
     ``branches`` are tried in order: the first whose action is offered takes
-    it, and each rejection of the action retries it with the next branch.
-    ``goal`` is checked once the action has taken effect.
+    it, and each rejection of the action answers the re-asked Priority Query
+    with the next branch. ``goal`` is checked once the action has taken effect.
     """
 
     kind: EntryKind
@@ -398,13 +392,15 @@ class Transcript:
 
 @dataclass
 class _EntryAttempt:
-    """The script entry whose action is being taken, and the branch it is
-    being taken with; each rejection the entry owns moves to the next one."""
+    """The script entry whose action is being taken, the branch it is being
+    taken with — each rejection the entry owns moves to the next one — and
+    the priority attempt it is taken in, whose re-asked Priority Query it
+    answers again."""
 
     entry: ScriptEntry
     branch: int = 0
     error: InvalidPlayerChoiceError | None = None
-    retrying: bool = False
+    context: Any = None
 
     @property
     def current(self) -> Branch:
@@ -423,22 +419,22 @@ class DeterministicPlayer(Player):
     script entry, and with a dry script the player passes — the Baseline Intent
     never takes an action, whatever its preferences.
 
-    A rejected choice is retried only as the test spells it out (see ADR-017):
-    the handler that owns the rejected answer — the script entry, or the routed
-    intent that answered — retries the attempt with its next branch, and fails
-    the test when it has none. Each branch answers every query of the attempt,
-    so ``act(branches=[[GleamOfDeath, GlamdringFoehammer], [GlamdringFoehammer]])``
+    A rejected choice is answered again only as the test spells it out (see
+    ADR-017): the engine asks the same query again, and the handler that owns
+    the rejected answer — the script entry, or the routed intent that
+    answered — answers it with its next branch, failing the test when it has
+    none. Each branch answers every query of the attempt, so
+    ``act(branches=[[GleamOfDeath, GlamdringFoehammer], [GlamdringFoehammer]])``
     falls back to Glamdring whether the engine offered Gleam of Death at once
     or asked for the face after the card, and a choice intent's next branch is
-    tried while its entry's action is kept. A negative intent's choice that is
-    rejected counts as a pass; one that takes effect fails. Script position and
-    attempt bookkeeping are decision-side state, so a rollback leaves them
-    alone (``rollback_exempt``).
+    tried while its entry's action is kept. Script position and attempt
+    bookkeeping are decision-side state, so a rollback leaves them alone
+    (``rollback_exempt``).
     """
 
     rollback_exempt = frozenset({
         "_intents", "_baseline", "transcript", "game", "_script", "_attempt",
-        "_forbidden_outside", "last_action_result",
+        "last_action_result",
     })
 
     def __init__(self, name: str, life: int = 20) -> None:
@@ -450,8 +446,6 @@ class DeterministicPlayer(Player):
         self.game: Any = None
         self._script: list[ScriptEntry] = []
         self._attempt: _EntryAttempt | None = None
-        # Negative intents whose forbidden choice was accepted outside any attempt.
-        self._forbidden_outside: set[str] = set()
         self.last_action_result: Any = None
 
     # ------------------------------------------------------------------
@@ -467,15 +461,9 @@ class DeterministicPlayer(Player):
 
         Raises:
             KeyError: if ``name`` was never started.
-            PostconditionError: if the intent's postcondition returns falsey,
-                or a negative intent's forbidden choice took effect.
+            PostconditionError: if the intent's postcondition returns falsey.
         """
         intent = self._intents.pop(name)
-        if name in self._forbidden_outside:
-            self._forbidden_outside.discard(name)
-            raise PostconditionError(
-                f"negative intent {name!r}: a forbidden choice took effect"
-            )
         if intent.postcondition is not None:
             g = game if game is not None else self.game
             if not intent.postcondition(g):
@@ -514,95 +502,63 @@ class DeterministicPlayer(Player):
 
     def on_attempt_rejected(
         self, context: Any, answer: AttemptAnswer, error: InvalidPlayerChoiceError
-    ) -> str:
+    ) -> None:
         if answer.key is None:
             # Answered outside this player's handlers (a subclass's own answer).
-            return super().on_attempt_rejected(context, answer, error)
-        if context.forbidden_by(answer):
-            # A negative intent's choice was refused, as the rules require.
-            return "pass"
-        if answer.key == _ENTRY_KEY:
-            return self._entry_rejected(context, answer, error)
-        return self._choice_rejected(context, answer, error)
+            super().on_attempt_rejected(context, answer, error)
+        elif answer.key == _ENTRY_KEY:
+            self._entry_rejected(error)
+        else:
+            self._choice_rejected(context, answer, error)
 
-    def _entry_rejected(
-        self, context: Any, answer: AttemptAnswer, error: InvalidPlayerChoiceError
-    ) -> str:
+    def _entry_rejected(self, error: InvalidPlayerChoiceError) -> None:
+        """The entry answers the re-asked Priority Query with its next branch;
+        with none left, an :func:`act_illegal` entry has been refused as it
+        must be and the query goes to the next entry, and an :func:`act`
+        fails."""
         attempt = self._attempt
         if attempt is None:
             raise error
         attempt.error = error
         if attempt.branch + 1 < len(attempt.entry.branches):
             attempt.branch += 1
-            attempt.retrying = True
-            return "retry"
+            return
         self._attempt = None
-        if attempt.entry.kind is EntryKind.ILLEGAL:
-            # Rejected as it must be: the re-asked query goes to the next entry.
-            return "retry"
-        raise ScriptEntryError(attempt.entry, "rejected", error) from error
+        if attempt.entry.kind is not EntryKind.ILLEGAL:
+            raise ScriptEntryError(attempt.entry, "rejected", error) from error
 
     def _choice_rejected(
         self, context: Any, answer: AttemptAnswer, error: InvalidPlayerChoiceError
-    ) -> str:
+    ) -> None:
         intent = self._baseline if answer.key == _BASELINE_KEY else self._intents.get(answer.key)
         handler = (id(self), answer.key)
         following = context.branch.get(handler, 0) + 1
-        if intent is None or following >= len(intent.plans):
-            if context.kind == "priority" and context.answers and context.answers[0] is answer:
-                # A card intent chose this priority action and has no other.
-                raise error
-            raise PostconditionError(
-                f"choice intent {answer.key!r} has no branch left after a rejection: {error}"
-            ) from error
-        context.branch[handler] = following
-        return "retry"
-
-    def settle_rejected_action(self, context: Any, error: InvalidPlayerChoiceError) -> bool:
-        """Settle a rejection of the :func:`act_illegal` branch being taken:
-        the rules refused it, as the entry expects, so the entry moves to its
-        next branch, or hands the re-asked query to the next entry. A refused
-        choice whose owner can still retry it with another branch is left to
-        that owner, since the action may yet take effect."""
-        attempt = self._attempt
-        if attempt is None or attempt.entry.kind is not EntryKind.ILLEGAL:
-            return False
-        owner = context.owner(error)
-        if owner is not None and owner.key != _ENTRY_KEY and owner.player.would_retry(context, owner):
-            return False
-        attempt.error = error
-        if attempt.branch + 1 < len(attempt.entry.branches):
-            attempt.branch += 1
-            attempt.retrying = True
-        else:
-            self._attempt = None
-        return True
-
-    def would_retry(self, context: Any, answer: AttemptAnswer) -> bool:
-        if answer.key is None or context.forbidden_by(answer):
-            return False
-        if answer.key == _ENTRY_KEY:
-            attempt = self._attempt
-            return attempt is not None and attempt.branch + 1 < len(attempt.entry.branches)
-        intent = self._baseline if answer.key == _BASELINE_KEY else self._intents.get(answer.key)
-        following = context.branch.get((id(self), answer.key), 0) + 1
-        return intent is not None and following < len(intent.plans)
-
-    def on_action_retried(self, context: Any) -> None:
-        attempt = self._attempt
-        if attempt is None:
+        if intent is not None and following < len(intent.plans):
+            context.branch[handler] = following
             return
-        # The entry's action and branch stay the same; only the choice inside
-        # it is revised.
-        attempt.retrying = True
+        if context.action_answer is answer:
+            # A card intent chose this priority action and has no other.
+            raise error
+        attempt = self._attempt
+        if (
+            attempt is not None
+            and attempt.entry.kind is EntryKind.ILLEGAL
+            and context.actor is self
+        ):
+            # A choice inside an action the entry expects the rules to refuse
+            # was refused: the entry moves on as if the action were.
+            self._entry_rejected(error)
+            return
+        raise PostconditionError(
+            f"choice intent {answer.key!r} has no branch left after a rejection: {error}"
+        ) from error
 
     def on_action_ended(self, context: Any) -> None:
         # Whatever ended the action, its entry answers nothing after it.
-        self._attempt = None
-
-    def on_action_taken(self, query: PlayerQuery, answer: Answer, result: Any) -> None:
         attempt, self._attempt = self._attempt, None
-        self.last_action_result = result
+        if not context.taken:
+            return
+        self.last_action_result = context.result
         if attempt is None:
             return
         if attempt.entry.kind is EntryKind.ILLEGAL:
@@ -624,8 +580,8 @@ class DeterministicPlayer(Player):
         noted = attempts.current_answer(self)
         if is_priority_query(query):
             attempt = self._attempt
-            if attempt is not None and attempt.retrying:
-                attempt.retrying = False
+            if attempt is not None and attempt.context is attempts.current():
+                # The same Priority Query, asked again after a rejection.
                 _note(noted, _ENTRY_KEY)
                 answer = self._choose_action(attempt, query)
                 if answer is not None:
@@ -655,11 +611,7 @@ class DeterministicPlayer(Player):
         key = _BASELINE_KEY if name is None else name
         preferences = self._current_plan(key, intent).answers_for(query)
         answer, used = _select(list(enumerate(preferences)), query)
-        forbidden = intent.negative and bool(used)
-        if noted is not None:
-            _note(noted, key, forbidden)
-        elif forbidden and name is not None:
-            self._forbidden_outside.add(name)
+        _note(noted, key)
         if name is not None and preferences and not used and query.min > 0:
             # A routed card intent answered purely by first-offered fill —
             # probable wrong option set or typo'd preference. Flagged in the
@@ -710,6 +662,7 @@ class DeterministicPlayer(Player):
             for pref in branches[attempt.branch].action_for(query):
                 for option in query.options:
                     if satisfies(option, pref):
+                        attempt.context = attempts.current()
                         self._attempt = attempt
                         return Answer(selected=(option,))
             attempt.branch += 1
@@ -758,10 +711,10 @@ def _first_preferred(
     return None
 
 
-def _note(noted: AttemptAnswer | None, key: str, forbidden: bool = False) -> None:
+def _note(noted: AttemptAnswer | None, key: str) -> None:
     """Record which handler gave the answer being given inside an attempt."""
     if noted is not None:
-        noted.key, noted.forbidden = key, forbidden
+        noted.key = key
 
 
 def _intent_matches(intent: Intent, query: PlayerQuery) -> bool:

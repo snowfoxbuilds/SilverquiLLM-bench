@@ -116,65 +116,26 @@ class Player(ABC):
     # (engine.rollback): what the player saw and chose is not game state.
     rollback_exempt: frozenset[str] = frozenset()
 
-    def on_choice_rejected(
-        self, query: PlayerQuery, answer: Answer, error: InvalidPlayerChoiceError
-    ) -> None:
-        """Hear that the action chosen in ``answer`` to Priority Query ``query``
-        was illegal and has been rolled back (see ADR-017).
-
-        Returning lets the engine ask the same Priority Query again; raising
-        ends the game loop with that error. The default raises ``error``, so a
-        player that cannot revise its choice is never asked forever.
-        """
-        raise error
-
-    def on_attempt_rejected(self, context: Any, answer: Any, error: InvalidPlayerChoiceError) -> str:
+    def on_attempt_rejected(self, context: Any, answer: Any, error: InvalidPlayerChoiceError) -> None:
         """Hear that a rejection belongs to ``answer``, one this player gave
-        during ``context`` (an :class:`~engine.attempts.AttemptContext`), after
-        the game was rolled back (see ADR-017).
+        during ``context`` (an :class:`~engine.attempts.AttemptContext`, which
+        names the attempt, the action it belongs to and that action's player),
+        after the game was rolled back (see ADR-017).
 
-        Return ``"retry"`` to try again — for a priority action, the same
-        Priority Query is asked again — or ``"pass"`` to abandon the attempt;
-        raise to stop play with an error. The default hands a rejected priority
-        action to :meth:`on_choice_rejected` and raises any other rejection.
+        Returning lets the engine ask the same query again (CR 733.2), and the
+        player must then answer it differently; raising stops play with an
+        error. The default raises ``error``, so a player that cannot revise
+        its choice is never asked forever.
 
-        A retry rolls the game back again after this hook returns, so state the
+        The game is rolled back again after this hook returns, so state the
         player keeps for its decisions must be listed in ``rollback_exempt``.
         """
-        if context.kind == "priority":
-            self.on_choice_rejected(context.query, context.answer, error)
-            return "retry"
         raise error
-
-    def settle_rejected_action(self, context: Any, error: InvalidPlayerChoiceError) -> bool:
-        """Settle a rejection of this player's priority action before its owner
-        hears it, returning ``True`` if the player expected the rules to refuse
-        the action (see ADR-017); the engine then asks the same Priority Query
-        again. The default settles nothing."""
-        return False
-
-    def would_retry(self, context: Any, answer: Any) -> bool:
-        """Whether a rejection owned by ``answer`` would be retried with another
-        choice rather than passed or raised. The default never retries, as
-        :meth:`on_attempt_rejected` raises by default."""
-        return False
-
-    def on_action_retried(self, context: Any) -> None:
-        """Hear that a choice someone made while this player's priority action
-        was being taken was rejected and will be made again: the same Priority
-        Query is asked again and the player should choose the same action. The
-        default does nothing."""
 
     def on_action_ended(self, context: Any) -> None:
         """Hear that the priority action attempted in ``context`` is over —
-        taken, abandoned, passed, or ended by an error — so nothing of it should
-        answer later queries. The default does nothing."""
-
-    def on_action_taken(self, query: PlayerQuery, answer: Answer, result: Any) -> None:
-        """Hear that the action chosen in ``answer`` to Priority Query ``query``
-        took effect — the spell or ability is on the stack, the land played, or
-        the mana ability resolved. ``result`` is what the engine's call
-        returned. The default does nothing."""
+        taken, passed, or ended by an error — so nothing of it should answer
+        later queries. The default does nothing."""
 
     @abstractmethod
     def answer(self, query: PlayerQuery) -> Answer:

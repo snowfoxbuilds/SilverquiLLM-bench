@@ -110,9 +110,6 @@ class StackObject:
     prior_qualifying_casts: int | None = None
     departure_zone: Zone | None = None
     is_spell: bool = False
-    # Finishes a resolution whose effect was abandoned at a rejected choice —
-    # for a spell, its departure from the stack (see engine.attempts).
-    on_abandon: Callable[[GameState], None] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -560,12 +557,11 @@ def settle_after_resolution(game: GameState) -> None:
             break
 
 
-def resolve_top_of_stack(game: GameState) -> bool:
-    """Pop and resolve exactly one stack object, then settle the game; return
-    ``False`` if a rejected choice was abandoned and the resolution ended there.
+def resolve_top_of_stack(game: GameState) -> None:
+    """Pop and resolve exactly one stack object, then settle the game.
 
     This is the single, canonical normal-game resolution primitive shared by
-    :func:`priority_loop` (the normal-game path), :func:`engine.casting.resolve_top`
+    the step lifecycle (:func:`engine.turn.advance`), :func:`engine.casting.resolve_top`
     (a thin delegating alias), and the test-suite stack resolver — so settlement
     behaviour is identical at every entry point.
 
@@ -581,90 +577,35 @@ def resolve_top_of_stack(game: GameState) -> bool:
     See :func:`settle_after_resolution` for the ordering rationale.
 
     The effect runs as an attempt (:func:`engine.attempts.resolve`): a choice
-    the engine rejects while it resolves is rolled back and, if its player
-    retries, the effect runs again with every state before the rejected choice
-    restored; an abandoned choice ends the effect there, keeping the effects
-    before its first query, and the object still finishes resolving through
-    its ``on_abandon`` — a spell leaves the stack (see ADR-017). Either way a
-    fresh priority round begins.
+    the engine rejects while it resolves is rolled back and asked again, the
+    effect running again with every state before its first choice restored, so
+    a resolution is never abandoned (see ADR-017). Priority then returns to
+    the active player in the open window (rule 117.3b).
     """
     from engine import attempts
 
     if game.stack.is_empty():
-        return True
+        return
     obj = game.stack.pop()
-    completed = attempts.resolve(game, lambda: obj.on_resolve(game), obj)
-    if not completed and obj.on_abandon is not None:
-        obj.on_abandon(game)
+    attempts.resolve(game, obj)
     settle_after_resolution(game)
-    game.start_priority_round()
-    return completed
+    if game.window is not None:
+        game.window.resolved(game.active_player_index)
 
 
-def _handle_priority(game: GameState, player: Player) -> bool:
-    """Give priority to *player* through a Priority Query and let them act or pass.
+def priority_loop(game: GameState) -> None:
+    """Play out the current step's priority window through the step lifecycle
+    (:func:`engine.turn.advance`), opening it first if it is not open.
 
-    Returns ``True`` if the player passed priority, ``False`` if they
-    took an action (in which case the player retains priority). See
-    :mod:`engine.priority`.
+    The player holding priority acts or passes; a player who acts receives
+    priority again, a pass moves it on, and once both players pass in
+    succession the top of the stack resolves — the active player then holding
+    priority — or, on an empty stack, the window closes (rule 117.4).
     """
-    from engine.priority import take_priority
+    from engine.game_state import StepState
+    from engine.turn import advance
 
-    return take_priority(game, player)
-
-
-def priority_loop(game: GameState) -> bool:
-    """Run the priority-passing loop for the current phase/step.
-
-    Flow
-    ----
-    1. The player holding priority in the game's round — the active player
-       when a round begins — may play spells/abilities (pushed to stack) or
-       pass.
-    2. When a player takes an action they **retain** priority (MTG rule:
-       the player who just acted gets to respond first).
-    3. When a player passes, priority moves to the other player.
-    4. If both players pass in succession with the stack **non-empty**,
-       the top of the stack is resolved (``pop`` → ``on_resolve(game)``),
-       state-based actions are checked, and the active player receives
-       priority again.
-    5. If both players pass with the stack **empty**, return (the game
-       advances to the next phase/step).
-
-    ``game.priority_player_index`` is kept in sync throughout so that
-    :pyattr:`GameState.priority_player` always reflects who currently
-    holds priority.
-
-    Each time a player receives priority the engine raises a Priority
-    Query offering the actions they may take; declining passes (see
-    :mod:`engine.priority` and ADR-017).
-
-    The round is the game's own (``game.priority_player_index`` and
-    ``game.priority_passes``), shared with any other driver: the loop carries
-    on a round already in progress, and one whose two passes are already due
-    resolves or returns at once. A new step or a resolution starts a fresh
-    round (:meth:`~engine.game_state.GameState.start_priority_round`).
-
-    Returns ``True`` once both players pass on an empty stack, and ``False``
-    when a resolution is abandoned at a rejected choice: play stops there, as
-    in every driver, with lower objects and script entries left pending.
-    """
-    while True:
-        while game.priority_passes < 2:
-            current = game.priority_player_index
-            if _handle_priority(game, game.players[current]):
-                # Priority moves to the other player.
-                game.priority_passes += 1
-                game.priority_player_index = 1 - current
-            # A player who took an action retains priority; taking it began
-            # a fresh count of passes.
-
-        # Both players passed consecutively.
-        if game.stack.is_empty():
-            return True  # Advance to next phase/step
-
-        # Resolve top of stack (LIFO) — settles SBAs and re-derives continuous
-        # effects so a just-registered mid-turn effect applies immediately —
-        # and the active player receives priority in a fresh round.
-        if not resolve_top_of_stack(game):
-            return False
+    if game.step_state is not StepState.WINDOW:
+        game.open_window()
+    while game.step_state is StepState.WINDOW:
+        advance(game)

@@ -1,5 +1,5 @@
 """Attempted actions and choices: where a rejected choice is rolled back to,
-and who decides whether it is tried again (see ADR-017).
+and who hears the rejection (see ADR-017).
 
 An engine may let a player choose an illegal option as long as it rejects it
 with :class:`~engine.decisions.InvalidPlayerChoiceError` and rolls the game
@@ -8,38 +8,33 @@ back to the start of the rejected action. Each attempt runs inside an
 answers given during the attempt, and which answer owns a rejection:
 
 * a **priority** action (:func:`engine.priority.take_priority`) starts at the
-  beginning of its Priority Query, and a retry asks that query again;
+  beginning of its Priority Query;
 * a **resolution** (:func:`resolve`, used by
   :func:`engine.stack.resolve_top_of_stack`) keeps every effect that came
-  before its first choice: a retry replays it from the start with that state
-  restored, and an abandoned attempt ends it at its first choice;
+  before its first choice, and runs again from there;
 * an explicit **choice** attempt (:func:`attempt`) wraps one cast or choice
   that card code makes while resolving — such as one of several effect-granted
-  casts — so a rejection reverses only that operation and the resolution
-  continues after it, keeping what came before (CR 733).
+  casts — so a rejection reverses only that operation, keeping what the
+  resolution did before it (CR 733).
+
+Every rejection is rolled back to its boundary and the same query is asked
+again (CR 733.2): nothing is passed, ended or skipped on a player's behalf.
+The owner of the rejection answers the re-asked query differently — another
+action, another choice, or declining where that is legal — or raises.
 
 A rejection belongs to one answer. A choice the card or engine refuses
 (``InvalidPlayerChoiceError`` raised directly) belongs to the latest answer of
 the attempt; an action the rules forbid as a whole (a casting, activation or
 zone-move error) belongs to the answer that chose the action, the first one.
 Only that answer's player hears the rejection, through
-:meth:`~engine.player.Player.on_attempt_rejected`, and decides: ``"retry"``,
-``"pass"`` (abandon the attempt, restored), or raise to fail.
+:meth:`~engine.player.Player.on_attempt_rejected`, which returns to let the
+query be asked again or raises to fail.
 
 A rejection its owner raises, or one with no answer to own it, is final: the
 attempt has already restored its own boundary, so the error passes every
 enclosing attempt without another rollback or notification — effects and casts
 those attempts completed earlier stay in place — and the outermost attempt
 re-raises it unchanged.
-
-Before the owner hears a rejection in a priority action, the acting player may
-settle it (:meth:`~engine.player.Player.settle_rejected_action`): an action its
-script expected the rules to refuse is settled there, whoever answered the
-refused choice.
-
-An answer may also mark a *forbidden* choice — one a negative intent made on
-purpose. If such an attempt takes effect, the attempt fails with
-``PostconditionError``.
 
 Contexts are decision-side bookkeeping, held outside the game, so a rollback
 never touches them.
@@ -53,9 +48,8 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from engine.decisions import InvalidPlayerChoiceError, PostconditionError
+from engine.decisions import InvalidPlayerChoiceError
 
-Verdict = Literal["retry", "pass"]
 AttemptKind = Literal["priority", "resolution", "choice"]
 
 
@@ -64,33 +58,46 @@ class AttemptAnswer:
     """One answer given during an attempt.
 
     ``key`` names the handler of the answering player that chose it, for the
-    player to fill in. ``forbidden`` marks a choice a negative intent made on
-    purpose.
+    player to fill in.
     """
 
     player: Any
     key: Hashable | None = None
-    forbidden: bool = False
 
 
 @dataclass(eq=False)
 class AttemptContext:
-    """One attempted action or choice and every try at it."""
+    """One attempted action or choice and every try at it.
+
+    ``actor`` is the player whose action the attempt belongs to: the player
+    with priority, a resolving object's controller, or, for a choice attempt,
+    the actor of the attempt it is made in. ``action`` is that action: the
+    Priority Query's chosen option, the resolving object, or the enclosing
+    attempt's action.
+    """
 
     game: Any
     kind: AttemptKind
+    actor: Any = None
+    action: Any = None
     boundary: Any = None
     answers: list[AttemptAnswer] = field(default_factory=list)
     # The branch each handler answers this attempt's tries with, per
     # (id(player), handler key); a rejection the handler owns advances it.
     branch: dict[tuple[int, Hashable], int] = field(default_factory=dict)
-    # The Priority Query and its answer, for a priority attempt.
+    # The Priority Query and its latest answer, for a priority attempt, and
+    # whether the chosen action took effect, with what the engine returned.
     query: Any = None
     answer: Any = None
-    # The answer that owned the latest rejection.
-    owner_answer: AttemptAnswer | None = None
+    taken: bool = False
+    result: Any = None
     # What runs outside the game during the attempt, snapshotted with it.
     roots: tuple[Any, ...] = ()
+
+    def __post_init__(self) -> None:
+        enclosing = current()
+        if self.kind == "choice" and enclosing is not None:
+            self.actor, self.action = enclosing.actor, enclosing.action
 
     def begin_try(self) -> None:
         self.boundary = None
@@ -112,31 +119,22 @@ class AttemptContext:
             return None
         return self.answers[0] if _rejects_whole_action(error) else self.answers[-1]
 
-    def reject(self, error: InvalidPlayerChoiceError) -> Verdict:
-        """Let the owning answer's player decide what follows a rejection; a
-        rejection it raises, or one nobody owns, is final (:class:`_Final`)."""
+    @property
+    def action_answer(self) -> AttemptAnswer | None:
+        """The answer that chose a priority action, in the current try."""
+        return self.answers[0] if self.kind == "priority" and self.answers else None
+
+    def reject(self, error: InvalidPlayerChoiceError) -> None:
+        """Tell the owning answer's player about a rejection, after the
+        rollback; a rejection it raises, or one nobody owns, is final
+        (:class:`_Final`)."""
         owner = self.owner(error)
         if owner is None:
             raise _Final(error)
-        self.owner_answer = owner
         try:
-            return owner.player.on_attempt_rejected(self, owner, error)
+            owner.player.on_attempt_rejected(self, owner, error)
         except InvalidPlayerChoiceError as refused:
             raise _Final(refused) from refused
-
-    def forbidden_by(self, answer: AttemptAnswer) -> bool:
-        """Whether ``answer``'s handler made a forbidden choice in this try."""
-        return any(
-            other.forbidden
-            for other in self.answers
-            if other.player is answer.player and other.key == answer.key
-        )
-
-    def check_forbidden(self) -> None:
-        if any(a.forbidden for a in self.answers):
-            raise PostconditionError(
-                "a choice a negative intent forbids was allowed to take effect"
-            )
 
 
 _active: ContextVar[tuple[AttemptContext, ...]] = ContextVar("attempts", default=())
@@ -157,7 +155,8 @@ def current_answer(player: Any) -> AttemptAnswer | None:
 
 
 class _Final(Exception):
-    """A rejection no one retried or passed, on its way out of every attempt.
+    """A rejection its owner raised, or no one owns, on its way out of every
+    attempt.
 
     It is not one of the errors that reject an action, so an enclosing attempt
     neither rolls back for it nor notifies anyone again; the outermost attempt
@@ -183,47 +182,42 @@ def active(context: AttemptContext):
         _active.reset(token)
 
 
-def resolve(game: Any, operation: Callable[[], Any], *roots: Any) -> bool:
-    """Run a resolving object's effect as an attempt; return ``False`` if a
-    rejected choice was abandoned, ending the resolution at that choice.
-    ``roots`` — the popped StackObject — are rolled back with the game."""
-    return _run(game, "resolution", operation, roots)[0]
+def resolve(game: Any, obj: Any) -> None:
+    """Run the resolving object ``obj``'s effect as an attempt whose actor is
+    its controller; a rejected choice runs it again from the state before its
+    first query. ``obj`` — the popped StackObject — is rolled back with the
+    game."""
+    context = AttemptContext(
+        game, "resolution", actor=getattr(obj, "controller", None), action=obj
+    )
+    _run(context, lambda: obj.on_resolve(game), (obj,))
 
 
-def attempt(game: Any, operation: Callable[[], Any]) -> tuple[bool, Any]:
+def attempt(game: Any, operation: Callable[[], Any]) -> Any:
     """Run one cast or choice ``operation`` as its own attempt while an object
-    resolves; return ``(True, result)``, or ``(False, None)`` if it was rejected
-    and abandoned — rolled back, with everything before it kept."""
-    return _run(game, "choice", operation, ())
+    resolves, and return its result. A rejection rolls back only the
+    operation, keeping everything before it, and runs it again."""
+    return _run(AttemptContext(game, "choice"), operation, ())
 
 
-def _run(
-    game: Any, kind: AttemptKind, operation: Callable[[], Any], roots: tuple[Any, ...]
-) -> tuple[bool, Any]:
+def _run(context: AttemptContext, operation: Callable[[], Any], roots: tuple[Any, ...]) -> Any:
     from engine.priority import REJECTED_ACTION_ERRORS, as_choice_error
     from engine.rollback import take_snapshot
 
     # The operation's own state (its closure) is part of what a retry restores.
-    context = AttemptContext(game, kind, roots=(operation, *roots))
-    start = take_snapshot(game, *context.roots)
+    context.roots = (operation, *roots)
+    start = take_snapshot(context.game, *context.roots)
     with active(context):
         while True:
             context.begin_try()
-            if kind == "choice":
+            if context.kind == "choice":
                 context.boundary = start
             try:
-                result = operation()
+                return operation()
             except REJECTED_ACTION_ERRORS as exc:
-                if kind == "resolution" and not isinstance(exc, InvalidPlayerChoiceError):
-                    raise
-                error = as_choice_error(exc)
                 (context.boundary or start).restore()
-                if context.reject(error) == "pass":
-                    return False, None
+                context.reject(as_choice_error(exc))
                 start.restore()
-                continue
-            context.check_forbidden()
-            return True, result
 
 
 def _rejects_whole_action(error: InvalidPlayerChoiceError) -> bool:

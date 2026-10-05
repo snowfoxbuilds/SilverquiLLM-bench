@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import enum
+from dataclasses import dataclass
 
 from typing import Any
 
@@ -43,11 +44,9 @@ _TURN_SEQUENCE: list[tuple[Phase, Step | None]] = [
 class StepState(enum.Enum):
     """Where the current step is in its lifecycle.
 
-    Every driver — the turn loop, ``run_scripts`` and the test helpers —
-    advances this one engine-owned state through
-    :func:`engine.turn.enter_step`, :func:`engine.turn.close_window` and
-    :meth:`GameState.advance_phase`, so none keeps lifecycle bookkeeping of
-    its own.
+    Only the engine's one stepping entry, :func:`engine.turn.advance`,
+    moves this state on, whichever driver calls it, so none keeps lifecycle
+    bookkeeping of its own.
     """
 
     # The step's turn-based actions are still to come — in cleanup, its next
@@ -58,13 +57,42 @@ class StepState(enum.Enum):
     # The step is complete; the game moves to the next one.
     DONE = "done"
 
+
+@dataclass
+class PriorityWindow:
+    """A step's open priority window and the priority round it holds.
+
+    Only the rules change the round (CR 117.3–117.4): the window opens with the
+    active player holding priority, a player who acts receives priority again,
+    a pass moves priority to the next player, and a resolution returns it to
+    the active player. Every player passing in succession resolves the top
+    object or, on an empty stack, ends the step.
+    """
+
+    holder: int
+    passes: int = 0
+
+    def acted(self) -> None:
+        self.passes = 0
+
+    def passed(self, players: int) -> None:
+        self.passes += 1
+        self.holder = (self.holder + 1) % players
+
+    def resolved(self, active: int) -> None:
+        self.holder, self.passes = active, 0
+
+    def all_passed(self, players: int) -> bool:
+        return self.passes >= players
+
 class GameState:
     """Central game-state object tracking all mutable game information.
 
     Attributes:
         players: The list of players in the game.
         active_player_index: Index of the current active player.
-        priority_player_index: Index of the player who currently has priority.
+        priority_player_index: Index of the player who holds priority in the
+            open window (the active player when no window is open).
         phase: Current phase of the turn.
         step: Current step within the phase (``None`` for main phases).
         turn_number: The current turn number (1-indexed).
@@ -90,13 +118,10 @@ class GameState:
         for seat, player in enumerate(players):
             self.refs.register_player(player, seat)
         self.active_player_index: int = 0
-        self.priority_player_index: int = 0
-        # Passes in a row in the current priority round, for a driver that
-        # stops mid-round and resumes later; see start_priority_round.
-        self.priority_passes: int = 0
-        # Where the current step is in its lifecycle; every driver advances
-        # this one state through engine.turn (see StepState).
+        # Where the current step is in its lifecycle (see StepState), and its
+        # open priority window, which holds the priority round.
         self.step_state: StepState = StepState.PENDING
+        self.window: PriorityWindow | None = None
         self.phase: Phase = Phase.BEGINNING
         self.step: Step | None = Step.UNTAP
         self.turn_number: int = 1
@@ -136,6 +161,19 @@ class GameState:
     def active_player(self) -> Player:
         """Return the currently active player."""
         return self.players[self.active_player_index]
+
+    @property
+    def priority_player_index(self) -> int:
+        """The seat holding priority in the open window; the active player's
+        when no window is open."""
+        return self.window.holder if self.window is not None else self.active_player_index
+
+    @priority_player_index.setter
+    def priority_player_index(self, seat: int) -> None:
+        # Setup only, for tests that act out of turn: priority is held only in
+        # an open window, so with none open there is nothing to hand over.
+        if self.window is not None:
+            self.window.holder = seat
 
     @property
     def priority_player(self) -> Player:
@@ -182,7 +220,7 @@ class GameState:
         active player swaps (2-player assumption).  Mana pools are
         emptied on every transition.
         """
-        self.step_state = StepState.PENDING
+        self.close_window(StepState.PENDING)
         current = (self.phase, self.step)
         idx = _TURN_SEQUENCE.index(current)
 
@@ -203,7 +241,6 @@ class GameState:
             else:
                 self.active_player_index = self._normal_next_index
                 self._normal_next_index = 1 - self._normal_next_index
-            self.priority_player_index = self.active_player_index
             self.phase = _TURN_SEQUENCE[0][0]
             self.step = _TURN_SEQUENCE[0][1]
             for player in self.players:
@@ -219,14 +256,17 @@ class GameState:
                 effect_manager.apply_all(self)
 
         self.empty_mana_pools()
-        self.start_priority_round()
 
-    def start_priority_round(self) -> None:
-        """Begin a fresh priority round: the active player receives priority
-        and no one has passed yet — as at the start of a step and after an
-        object resolves (rule 117.3b)."""
-        self.priority_player_index = self.active_player_index
-        self.priority_passes = 0
+    def open_window(self) -> None:
+        """Open the current step's priority window, the active player holding
+        priority (rule 117.3a)."""
+        self.step_state = StepState.WINDOW
+        self.window = PriorityWindow(self.active_player_index)
+
+    def close_window(self, state: StepState) -> None:
+        """Close any open window, leaving the step ``state``."""
+        self.step_state = state
+        self.window = None
 
     def empty_mana_pools(self) -> None:
         """Empty all players' mana pools — called on each phase/step transition."""

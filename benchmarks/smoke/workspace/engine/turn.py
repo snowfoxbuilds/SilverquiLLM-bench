@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 from engine.game_state import StepState
-from engine.stack import priority_loop
 from engine.types import Phase, Step, Zone
 
 
@@ -127,24 +126,20 @@ def _do_combat_step(game: GameState, step: Step) -> None:
         end_combat_step(game)
 
 
-def _do_cleanup_step(game: GameState) -> bool:
+def _do_cleanup_step(game: GameState) -> None:
     """Play the cleanup step (MTG rule §514) to completion through the step
-    lifecycle (:func:`advance_step`): cleanup iterations
-    (:func:`cleanup_iteration`) until one grants no priority, each that does
-    followed by a priority window in a fresh round (rule 514.3a).
+    lifecycle (:func:`advance`): cleanup steps until one opens no priority
+    window, each that does followed by that window (rule 514.3a).
 
     It carries on from the game's step state: an open cleanup window is
-    played out before the next iteration, and a completed cleanup is left
+    played out before the next cleanup step, and a completed cleanup is left
     alone. Called outside cleanup, it moves the game into a fresh cleanup
-    step first. Returns ``False`` if a window stopped at an abandoned
-    resolution; calling it again resumes from there."""
+    step first."""
     if (game.phase, game.step) != (Phase.ENDING, Step.CLEANUP):
         game.phase, game.step = Phase.ENDING, Step.CLEANUP
-        game.step_state = StepState.PENDING
+        game.close_window(StepState.PENDING)
     while game.step_state is not StepState.DONE:
-        if not advance_step(game):
-            return False
-    return True
+        advance(game)
 
 
 def cleanup_iteration(game: GameState) -> bool:
@@ -194,18 +189,15 @@ def cleanup_iteration(game: GameState) -> bool:
     return bool(sba_happened) or not game.stack.is_empty()
 
 
-def run_turn(game: GameState) -> bool:
-    """Execute the rest of the current turn through the step machine
-    (:func:`advance_step`): each step's turn-based actions once, its priority
-    window, and in cleanup the cleanup iterations rule 514.3a requires.
+def run_turn(game: GameState) -> None:
+    """Execute the rest of the current turn through the step lifecycle
+    (:func:`advance`): each step's turn-based actions once, its priority
+    window, and in cleanup the cleanup steps rule 514.3a requires.
 
     After the last step (Cleanup), the turn number is incremented and the
-    active player swaps via :meth:`GameState.advance_phase`.
-
-    A resolution abandoned at a rejected choice stops the turn where it is
-    and returns ``False``. Calling ``run_turn`` again — like starting it where
-    any other driver stopped — carries on from the game's step state, so no
-    step's turn-based actions are repeated and a completed step is never
+    active player swaps via :meth:`GameState.advance_phase`. Starting it
+    where any other driver stopped carries on from the game's step state, so
+    no step's turn-based actions are repeated and a completed step is never
     reopened.
 
     Parameters:
@@ -213,62 +205,77 @@ def run_turn(game: GameState) -> bool:
     """
     start_turn = game.turn_number
     while game.turn_number == start_turn:
-        if not advance_step(game):
-            return False
-    return True
+        advance(game)
 
 
-def advance_step(game: GameState) -> bool:
-    """Take the current step one stage further — perform its pending
-    turn-based actions, play out its open priority window, or move on from
-    a completed step; return ``False`` if a resolution was abandoned."""
-    if game.step_state is StepState.PENDING:
-        enter_step(game)
-    elif game.step_state is StepState.WINDOW:
-        if not priority_loop(game):
-            return False
-        close_window(game)
-    else:
-        game.advance_phase()
-    return True
+def advance(game: GameState, *, all_pass: bool = False, forced: bool = False) -> None:
+    """The engine's one stepping entry: take the game one stage further.
 
+    * A step whose turn-based actions are pending performs them, then opens
+      its priority window — or completes, for a step that grants none. In
+      cleanup each cleanup step opens a window only when it performed
+      state-based actions or put triggers on the stack (rule 514.3a).
+    * In an open window the player holding priority acts or passes
+      (:func:`engine.priority.take_priority`); once every player has passed
+      in succession, the top object resolves or, on an empty stack, the
+      window closes and the step is complete — in cleanup, another cleanup
+      step follows.
+    * A completed step moves the game to the next one.
 
-def enter_step(game: GameState, *, forced: bool = False) -> None:
-    """Perform the current step's pending turn-based actions, then open its
-    priority window — or complete it, for a step that grants none. In
-    cleanup each call performs one cleanup iteration, which opens a window
-    only when it grants priority (rule 514.3a).
-
+    ``all_pass`` is the priority policy of every player passing without
+    being asked; it is not a separate path through the lifecycle.
     ``forced`` is the test helpers' fast-forward: it makes no combat
     declarations, and its draw takes a card from a nonempty library with no
-    first-turn exception. Live play — the turn loop and ``run_scripts`` —
-    never sets it.
+    first-turn exception. Live play never sets it.
     """
-    if game.step_state is not StepState.PENDING:
-        return
+    if game.step_state is StepState.PENDING:
+        _enter_step(game, forced)
+    elif game.step_state is StepState.WINDOW:
+        _play_priority(game, all_pass)
+    else:
+        game.advance_phase()
+
+
+def start_step(game: GameState) -> None:
+    """Setup only: begin play in the current step as if its turn-based actions
+    were done — open its priority window, or complete it if it grants none."""
+    if (game.phase, game.step) in _NO_PRIORITY_STEPS:
+        game.close_window(StepState.DONE)
+    else:
+        game.open_window()
+
+
+def _play_priority(game: GameState, all_pass: bool) -> None:
+    from engine.priority import take_priority
+    from engine.stack import resolve_top_of_stack
+
+    window = game.window
+    seats = len(game.players)
+    if window.all_passed(seats):
+        if not game.stack.is_empty():
+            resolve_top_of_stack(game)
+        else:
+            in_cleanup = (game.phase, game.step) == (Phase.ENDING, Step.CLEANUP)
+            game.close_window(StepState.PENDING if in_cleanup else StepState.DONE)
+    elif all_pass or take_priority(game, game.players[window.holder]):
+        window.passed(seats)
+    else:
+        window.acted()
+
+
+def _enter_step(game: GameState, forced: bool) -> None:
     current = (game.phase, game.step)
     if current == (Phase.ENDING, Step.CLEANUP):
-        grants = cleanup_iteration(game)
-        _open_window_or_complete(game, grants)
-        if grants:
-            # Each cleanup window is a fresh round; other steps got theirs
-            # from advance_phase, and passes already made in it stand.
-            game.start_priority_round()
+        if cleanup_iteration(game):
+            game.open_window()
+        else:
+            game.close_window(StepState.DONE)
         return
     _step_actions(game, current, forced)
-    _open_window_or_complete(game, current not in _NO_PRIORITY_STEPS)
-
-
-def close_window(game: GameState) -> None:
-    """Both players passed on an empty stack: the window closes. In cleanup
-    another cleanup iteration follows (rule 514.3a); any other step is
-    complete."""
-    in_cleanup = (game.phase, game.step) == (Phase.ENDING, Step.CLEANUP)
-    game.step_state = StepState.PENDING if in_cleanup else StepState.DONE
-
-
-def _open_window_or_complete(game: GameState, window: bool) -> None:
-    game.step_state = StepState.WINDOW if window else StepState.DONE
+    if current in _NO_PRIORITY_STEPS:
+        game.close_window(StepState.DONE)
+    else:
+        game.open_window()
 
 
 def _step_actions(game: GameState, current: tuple, forced: bool) -> None:

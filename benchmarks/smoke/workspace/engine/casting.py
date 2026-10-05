@@ -751,7 +751,6 @@ def cast_spell(
         _resolve_spell(g, card, player, stack_obj)
 
     stack_obj.on_resolve = _on_resolve
-    stack_obj.on_abandon = lambda g: _depart_resolved_spell(g, card, stack_obj)
     game.stack.push(stack_obj)
 
     # 9. The spell is now on the stack (rule 601.2i complete). Fire the
@@ -981,7 +980,6 @@ def cast_spell_free(
         _resolve_spell(g, card, player, stack_obj)
 
     stack_obj.on_resolve = _on_resolve
-    stack_obj.on_abandon = lambda g: _depart_resolved_spell(g, card, stack_obj)
     game.stack.push(stack_obj)
 
     # 6. The free-cast spell is on the stack (rule 601.2i complete). Fire the
@@ -1033,14 +1031,10 @@ def _resolve_spell(
         card.chosen_targets = targets  # type: ignore[attr-defined]
 
     card.on_resolve(game)
-    _depart_resolved_spell(game, card, stack_obj)
 
-
-def _depart_resolved_spell(game: GameState, card: CardImpl, stack_obj: StackObject) -> None:
-    """Move a resolved spell off the stack through the single shared primitive
-    (the resolver has already popped the StackObject): type-default
-    destination, with the cast's departure replacement (flashback → exile)
-    applied there. Also ends a resolution abandoned at a rejected choice."""
+    # Depart the stack through the single shared primitive (the resolver has
+    # already popped the StackObject): type-default destination, with the
+    # cast's departure replacement (flashback → exile) applied there.
     default_zone = (
         Zone.BATTLEFIELD
         if card.card_types & _PERMANENT_TYPES
@@ -1116,7 +1110,7 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
     player.land_plays_remaining -= 1
 
 
-def resolve_top(game: GameState) -> bool:
+def resolve_top(game: GameState) -> None:
     """Resolve the top spell/ability on the stack (thin compatibility alias).
 
     Delegates to :func:`engine.stack.resolve_top_of_stack`, the single canonical
@@ -1129,4 +1123,4 @@ def resolve_top(game: GameState) -> bool:
     """
     from engine.stack import resolve_top_of_stack
 
-    return resolve_top_of_stack(game)
+    resolve_top_of_stack(game)

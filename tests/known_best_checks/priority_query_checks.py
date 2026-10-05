@@ -65,7 +65,7 @@ class ScriptedPlayer(DeterministicPlayer):
                 return Answer(selected=(option,))
         return Answer()
 
-    def on_choice_rejected(self, query, answer, error) -> None:
+    def on_attempt_rejected(self, context, answer, error) -> None:
         self.rejections.append(error)
 
 

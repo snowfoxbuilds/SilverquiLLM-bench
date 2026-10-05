@@ -24,9 +24,9 @@ is not part of any test contract.
 
 Offering an illegal option is allowed; letting it take effect is not. When the
 chosen action fails, the game is rolled back to the beginning of the Priority
-Query (:mod:`engine.attempts`, :mod:`engine.rollback`), and the player who
-owns the rejection hears the :class:`~engine.decisions.InvalidPlayerChoiceError`
-and decides whether the query is asked again.
+Query (:mod:`engine.attempts`, :mod:`engine.rollback`), the player who owns the
+rejection hears the :class:`~engine.decisions.InvalidPlayerChoiceError`, and
+the same query is asked again (CR 733.2).
 """
 
 from __future__ import annotations
@@ -66,16 +66,17 @@ def take_priority(game: GameState, player: Player) -> bool:
 
     The action is an attempt (:mod:`engine.attempts`) whose rejection boundary
     is the beginning of the Priority Query: a rejected action is rolled back
-    there and the player who owns the rejection decides, through
-    :meth:`~engine.player.Player.on_attempt_rejected`, whether the same query
-    is asked again, the rejection counts as a pass, or play stops with an error.
+    there, the player who owns the rejection hears it through
+    :meth:`~engine.player.Player.on_attempt_rejected`, and the same query is
+    asked again — the player may take the action another way, take another,
+    or pass. Declining is a pass, the player's own answer.
     """
-    context = AttemptContext(game, "priority")
+    context = AttemptContext(game, "priority", actor=player)
     try:
         with attempts.active(context):
             return _attempt_action(game, player, context)
     finally:
-        # Taken, abandoned, passed or ended by an error: the action is over.
+        # Taken, passed or ended by an error: the action is over.
         player.on_action_ended(context)
 
 
@@ -90,24 +91,17 @@ def _attempt_action(game: GameState, player: Player, context: AttemptContext) ->
         context.query, context.answer = query, answer
         if not answer.selected:
             return True
+        context.action = answer.selected[0]
         try:
             result = actions[answer.selected[0]]()
         except REJECTED_ACTION_ERRORS as exc:
             context.boundary.restore()
-            error = as_choice_error(exc)
-            if not player.settle_rejected_action(context, error):
-                if context.reject(error) == "pass":
-                    return True
-                if context.owner_answer is not context.answers[0]:
-                    # A choice inside the action was rejected, not the action.
-                    player.on_action_retried(context)
-            # What the hooks changed outside their rollback-exempt state is
-            # not part of the retry (see Player.on_attempt_rejected).
+            context.reject(as_choice_error(exc))
+            # What the hook changed outside its rollback-exempt state is not
+            # part of the next try (see Player.on_attempt_rejected).
             context.boundary.restore()
             continue
-        context.check_forbidden()
-        game.priority_passes = 0
-        player.on_action_taken(query, answer, result)
+        context.taken, context.result = True, result
         return False
 
 

@@ -376,13 +376,12 @@ def test_responses_alternate_priority_and_stop_with_the_stack_in_place():
 # ---------------------------------------------------------------------------
 
 
-def _named_intent(source: str, names, negative: bool, branches) -> Intent:
+def _named_intent(source: str, names, branches) -> Intent:
     """An intent choosing objects by name: ``names`` is one branch, or
     ``branches`` lists several, tried in order after each rejection."""
     return Intent(
         pattern=GameRef(card=frozenset({("name", source)})),
         preferences=tuple(Decision.obj(name=name) for name in names),
-        negative=negative,
         branches=[[Decision.obj(name=name) for name in b] for b in branches],
     )
 
@@ -394,8 +393,8 @@ def _chooser_game(illegal=()):
     return game, chooser
 
 
-def _choose(*names, negative=False, branches=()) -> Intent:
-    return _named_intent("Chooser", names, negative, branches)
+def _choose(*names, branches=()) -> Intent:
+    return _named_intent("Chooser", names, branches)
 
 
 def test_choice_intents_answer_resolution_time_choices():
@@ -427,31 +426,6 @@ def test_a_resolution_choice_with_one_branch_fails_on_its_rejection():
     game.players[0].start_intent("choose", _choose("Bad", "Good"))
     with pytest.raises(PostconditionError):
         cast_card(game, game.players[0], chooser)
-
-
-def test_negative_resolution_choice_counts_as_a_pass():
-    game, chooser = _chooser_game(illegal={"Bad"})
-    game.players[0].start_intent("choose", _choose("Bad", negative=True))
-    cast_card(game, game.players[0], chooser)
-    # Rolled back to the rejected choice, and the resolution ended there.
-    assert chooser.chosen is None and not _on_stack(game, chooser)
-
-
-def test_negative_choice_while_casting_counts_as_a_pass():
-    game = _game()
-    spell = ChoosingCast(illegal={"Bad"})
-    set_board_state(game, 0, hand=[spell], battlefield=[_artifact("Bad")])
-    game.players[0].start_intent(
-        "choose",
-        Intent(
-            pattern=GameRef(card=frozenset({("name", "Choosing Cast")})),
-            preferences=(Decision.obj(name="Bad"),),
-            negative=True,
-        ),
-    )
-    script(game, 0, act(ChoosingCast))
-    run_scripts(game)
-    assert game.stack.is_empty() and game.get_hand(game.players[0]).contains(spell)
 
 
 # ---------------------------------------------------------------------------
@@ -492,14 +466,6 @@ def test_activate_card_ability_raises_ability_error_when_not_offered():
 
 def _life(game, seat=0) -> int:
     return game.players[seat].life
-
-
-def test_an_abandoned_choice_keeps_the_effects_before_it():
-    game, chooser = _chooser_game(illegal={"Bad"})
-    chooser.gain = 3
-    game.players[0].start_intent("choose", _choose("Bad", negative=True))
-    cast_card(game, game.players[0], chooser)
-    assert _life(game) == 23 and chooser.chosen is None
 
 
 def test_a_retried_choice_does_not_repeat_the_effects_before_it():
@@ -550,8 +516,7 @@ class Picker(Sorcery):
 
     def on_resolve(self, game) -> None:
         for _ in range(2):
-            took, name = attempts.attempt(game, lambda: self._pick(game))
-            self.picks.append(name if took else None)
+            self.picks.append(attempts.attempt(game, lambda: self._pick(game)))
 
     def _pick(self, game) -> str:
         candidates = game.get_battlefield(self.controller).get_all()
@@ -569,17 +534,18 @@ def _picker_game(illegal=()):
     return game, picker
 
 
-def _pick(*names, negative=False, branches=()) -> Intent:
-    return _named_intent("Picker", names, negative, branches)
+def _pick(*names, branches=()) -> Intent:
+    return _named_intent("Picker", names, branches)
 
 
-def test_abandoned_attempts_let_the_resolution_go_on():
+def test_a_rejected_attempt_is_asked_again_never_abandoned():
     game, picker = _picker_game(illegal={"Bad"})
-    game.players[0].start_intent("pick", _pick("Bad", negative=True))
-    cast_card(game, game.players[0], picker)
-    # Both picks were rejected and abandoned; the resolution still finished.
-    assert picker.picks == [None, None] and _life(game) == 20
-    assert game.get_graveyard(game.players[0]).contains(picker)
+    game.players[0].start_intent("pick", _pick("Bad"))
+    # One branch: the re-asked pick has nothing else to answer with, so the
+    # test fails rather than the pick being skipped.
+    with pytest.raises(PostconditionError):
+        cast_card(game, game.players[0], picker)
+    assert picker.picks == [] and _life(game) == 20
 
 
 def test_each_attempt_retries_its_own_rejected_pick():
@@ -638,8 +604,8 @@ def _choosing_cast_game(illegal=("Bad",)):
     return game, spell
 
 
-def _cast_choice(*names, negative=False, branches=()) -> Intent:
-    return _named_intent("Choosing Cast", names, negative, branches)
+def _cast_choice(*names, branches=()) -> Intent:
+    return _named_intent("Choosing Cast", names, branches)
 
 
 def test_a_choice_intent_during_a_cast_retries_its_next_branch_and_keeps_the_entry():
@@ -672,8 +638,8 @@ class TwoChooser(Sorcery):
         self.chosen = (a.name, b.name)
 
 
-def _sourced(source: str, *names, negative=False, branches=()) -> Intent:
-    return _named_intent(source, names, negative, branches)
+def _sourced(source: str, *names, branches=()) -> Intent:
+    return _named_intent(source, names, branches)
 
 
 def _two_chooser_game(**kwargs):
@@ -702,52 +668,48 @@ def test_only_the_player_who_owns_a_rejection_hears_it():
     assert card.chosen == ("Bad", "Good")
 
 
+# What a hook records must survive the rollback that follows it, so it is
+# kept where no game object reaches.
+_HEARD: list = []
+
+
+def test_a_rejections_context_names_its_action_and_that_actions_player():
+    game, spell = _opponent_cast_game(act(OpponentCast))
+    opponent = game.players[1]
+    original = opponent.on_attempt_rejected
+    _HEARD.clear()
+
+    def hear(context, answer, error):
+        _HEARD.append((context.kind, context.actor, dict(context.action.attrs).get("instance")))
+        original(context, answer, error)
+
+    opponent.on_attempt_rejected = hear
+    take_priority(game, game.players[0])
+    assert _HEARD == [("priority", game.players[0], spell.instance_id)]
+
+
+def test_a_resolution_rejections_context_names_the_resolving_object():
+    game, chooser = _chooser_game(illegal={"Bad"})
+    p0 = game.players[0]
+    p0.start_intent("choose", _choose(branches=[["Bad"], ["Good"]]))
+    script(game, 0, act(Chooser))
+    run_scripts(game)
+    resolving = game.stack.peek()
+    original = p0.on_attempt_rejected
+    _HEARD.clear()
+
+    def hear(context, answer, error):
+        _HEARD.append((context.kind, context.actor, context.action))
+        original(context, answer, error)
+
+    p0.on_attempt_rejected = hear
+    resolve_stack(game)
+    assert _HEARD == [("resolution", p0, resolving)] and chooser.chosen == "Good"
+
+
 # ---------------------------------------------------------------------------
 # Negative intents
 # ---------------------------------------------------------------------------
-
-
-def test_a_negative_choice_that_takes_effect_while_casting_fails():
-    game, _spell = _choosing_cast_game(illegal=())
-    game.players[0].start_intent("choose", _cast_choice("Bad", negative=True))
-    script(game, 0, act(ChoosingCast))
-    with pytest.raises(PostconditionError):
-        run_scripts(game)
-
-
-def test_a_negative_choice_that_takes_effect_while_resolving_fails():
-    game, chooser = _chooser_game()
-    game.players[0].start_intent("choose", _choose("Bad", negative=True))
-    with pytest.raises(PostconditionError):
-        cast_card(game, game.players[0], chooser)
-
-
-def test_a_negative_intent_whose_choice_is_not_offered_checks_nothing():
-    game, chooser = _chooser_game()
-    game.players[0].start_intent("choose", _choose("Missing", negative=True))
-    cast_card(game, game.players[0], chooser)
-    game.players[0].end_intent("choose")
-    assert chooser.chosen == "Bad"
-
-
-def test_a_later_unrelated_rejection_does_not_mask_a_forbidden_choice():
-    game, card = _two_chooser_game(illegal={"Bad"})
-    p0 = game.players[0]
-    p0.start_intent("first", _sourced("First Source", "Bad", negative=True))
-    p0.start_intent("second", _sourced("Second Source", branches=[["Bad"], ["Good"]]))
-    with pytest.raises(PostconditionError, match="negative intent forbids"):
-        cast_card(game, p0, card)
-
-
-def test_a_negative_choice_outside_any_attempt_fails_at_end_intent():
-    game = _game()
-    bad = _artifact("Bad")
-    set_board_state(game, 0, battlefield=[bad])
-    p0 = game.players[0]
-    p0.start_intent("choose", _sourced("Bad", "Bad", negative=True))
-    choose_object(game, p0, [bad], "Choose one", source_card=bad)
-    with pytest.raises(PostconditionError):
-        p0.end_intent("choose")
 
 
 # ---------------------------------------------------------------------------
@@ -846,7 +808,7 @@ def test_an_insufficient_priority_budget_fails():
 
 
 # ---------------------------------------------------------------------------
-# Review round 2: the enclosing action, handler-wide ranks, abandoned
+# Review round 2: the enclosing action, handler-wide ranks, re-asked
 # resolutions, ordinary players, and the shared priority round
 # ---------------------------------------------------------------------------
 
@@ -917,13 +879,13 @@ class PairChooser(Sorcery):
         self.chosen = names
 
 
-def _pair_game(combined: bool, *prefs, negative=False, branches=(), **kwargs):
+def _pair_game(combined: bool, *prefs, branches=(), **kwargs):
     game = _game()
     card = PairChooser(combined, **kwargs)
     artifacts = [_artifact(n) for n in ("Bad", "Good", "Followup", "Filler")]
     set_board_state(game, 0, hand=[card], battlefield=artifacts)
     game.players[0].start_intent(
-        "pair", _sourced("Pair Chooser", *prefs, negative=negative, branches=branches)
+        "pair", _sourced("Pair Chooser", *prefs, branches=branches)
     )
     return game, card
 
@@ -959,78 +921,21 @@ def test_a_handler_that_runs_out_of_branches_fails(combined):
         cast_card(game, game.players[0], card)
 
 
-@pytest.mark.parametrize("combined", [True, False], ids=["combined", "decomposed"])
-def test_a_negative_handlers_rejection_counts_as_a_pass(combined):
-    game, card = _pair_game(combined, "Bad", negative=True)
-    cast_card(game, game.players[0], card)
-    assert card.chosen is None
-
-
 def _in_zone(game, card, zone, seat=0) -> bool:
     return game.players[seat].zones[zone].contains(card)
 
 
-def _abandon_through_priority_loop(game, card):
-    script(game, 0, act(card_class(card)))
-    run_scripts(game)
-    priority_loop(game)
-
-
-def _abandon_through_run_scripts(game, card):
-    script(game, 0, act(card_class(card)), pass_priority())
-    script(game, 1, pass_priority(), pass_priority())
-    run_scripts(game)
-
-
-def _abandon_through_resolve_stack(game, card):
-    script(game, 0, act(card_class(card)))
-    run_scripts(game)
-    resolve_stack(game)
-
-
-def card_class(card) -> type:
-    return type(card)
-
-
-@pytest.mark.parametrize("drive", [_abandon_through_priority_loop, _abandon_through_run_scripts,
-                                   _abandon_through_resolve_stack],
-                         ids=["priority_loop", "run_scripts", "resolve_stack"])
-def test_an_abandoned_resolution_still_moves_the_spell_off_the_stack(drive):
-    game, chooser = _chooser_game(illegal={"Bad"})
-    chooser.gain = 3
-    game.players[0].start_intent("choose", _choose("Bad", negative=True))
-    drive(game, chooser)
-    assert game.stack.is_empty() and not _in_zone(game, chooser, Zone.STACK)
-    assert _in_zone(game, chooser, Zone.GRAVEYARD) and _life(game) == 23
-
-
-def test_an_abandoned_flashback_resolution_exiles_the_spell():
+def test_a_retried_flashback_resolution_exiles_the_spell():
     game = _game()
     chooser = Chooser(illegal={"Bad"})
     chooser.flashback_cost = ManaCost()
     set_board_state(game, 0, graveyard=[chooser], battlefield=[_artifact("Bad"), _artifact("Good")])
-    game.players[0].start_intent("choose", _choose("Bad", negative=True))
+    game.players[0].start_intent("choose", _choose(branches=[["Bad"], ["Good"]]))
     script(game, 0, act(Chooser))
     run_scripts(game)
     resolve_stack(game)
+    assert chooser.chosen == "Good"
     assert not _in_zone(game, chooser, Zone.STACK) and _in_zone(game, chooser, Zone.EXILE)
-
-
-def test_an_abandoned_copy_ceases_to_exist_and_the_original_below_stays_pending():
-    game, chooser = _chooser_game(illegal={"Bad"})
-    game.players[0].start_intent("choose", _choose("Bad", negative=True))
-    script(game, 0, act(Chooser))
-    run_scripts(game)
-    copy = copy_spell(game, game.stack.peek(), game.players[0])
-    game.stack.push(copy)
-    resolve_stack(game)
-    # The copy was abandoned and ceased to exist; play stopped with the original pending.
-    assert [obj.source for obj in game.stack._items] == [chooser]
-    assert not any(game.players[0].zones[z].contains(copy.source) for z in Zone)
-    game.players[0].end_intent("choose")
-    game.players[0].start_intent("choose", _choose("Good"))
-    resolve_stack(game)
-    assert chooser.chosen == "Good" and _in_zone(game, chooser, Zone.GRAVEYARD)
 
 
 class SelfExiler(Chooser):
@@ -1041,17 +946,18 @@ class SelfExiler(Chooser):
         super().on_resolve(game)
 
 
-def test_an_abandoned_resolution_does_not_move_a_source_its_effect_already_moved():
+def test_a_retried_resolution_does_not_move_a_source_its_effect_already_moved():
     game = _game()
     card = SelfExiler(illegal={"Bad"})
     set_board_state(game, 0, hand=[card], battlefield=[_artifact("Bad"), _artifact("Good")])
-    game.players[0].start_intent("choose", _choose("Bad", negative=True))
+    game.players[0].start_intent("choose", _choose(branches=[["Bad"], ["Good"]]))
     cast_card(game, game.players[0], card)
+    assert card.chosen == "Good"
     assert _in_zone(game, card, Zone.EXILE) and not _in_zone(game, card, Zone.GRAVEYARD)
     assert not _in_zone(game, card, Zone.STACK)
 
 
-def test_an_abandoned_ability_leaves_its_source_where_it_is():
+def test_a_retried_ability_leaves_its_source_where_it_is():
     game = _game()
     source = _artifact("Source")
     set_board_state(game, 0, battlefield=[source, _artifact("Bad"), _artifact("Good")])
@@ -1059,8 +965,9 @@ def test_an_abandoned_ability_leaves_its_source_where_it_is():
     chooser.controller = game.players[0]
     game.stack.push(StackObject(source=source, controller=game.players[0],
                                 on_resolve=chooser.on_resolve))
-    game.players[0].start_intent("choose", _choose("Bad", negative=True))
+    game.players[0].start_intent("choose", _choose(branches=[["Bad"], ["Good"]]))
     resolve_stack(game)
+    assert chooser.chosen == "Good"
     assert game.stack.is_empty() and _in_zone(game, source, Zone.BATTLEFIELD)
 
 
@@ -1068,16 +975,17 @@ def test_an_abandoned_ability_leaves_its_source_where_it_is():
 
 
 class PlainPlayer(Player):
-    """A Player with no intents: it picks by name in order and answers a
-    rejection with ``verdict`` (``None`` keeps the default raise). Its
-    decision-side state is listed in ``rollback_exempt``, as the hook requires."""
+    """A Player with no intents: it picks by name in order and, when
+    ``revise``, answers a re-asked query with its next pick after a rejection
+    (otherwise the default raises). Its decision-side state is listed in
+    ``rollback_exempt``, as the hook requires."""
 
-    rollback_exempt = frozenset({"picks", "verdict", "heard"})
+    rollback_exempt = frozenset({"picks", "revise", "heard"})
 
-    def __init__(self, name: str, picks=(), verdict=None) -> None:
+    def __init__(self, name: str, picks=(), revise=False) -> None:
         super().__init__(name)
         self.picks = list(picks)
-        self.verdict = verdict
+        self.revise = revise
         self.heard: list[int] = []
 
     def answer(self, query):
@@ -1089,11 +997,9 @@ class PlainPlayer(Player):
 
     def on_attempt_rejected(self, context, answer, error):
         self.heard.append(self.life)
-        if self.verdict is None:
-            return super().on_attempt_rejected(context, answer, error)
-        if self.verdict == "retry":
-            self.picks.pop(0)
-        return self.verdict
+        if not self.revise:
+            super().on_attempt_rejected(context, answer, error)
+        self.picks.pop(0)
 
 
 def _plain_game(p0):
@@ -1118,18 +1024,15 @@ def _gain_choose_gain(game, player):
 
 def _resolve_plain(game, operation):
     game.stack.push(StackObject(source=None, controller=game.players[0], on_resolve=operation))
-    return resolve_top_of_stack(game)
+    resolve_top_of_stack(game)
 
 
-@pytest.mark.parametrize(("verdict", "life", "completed"),
-                         [("retry", 25, True), ("pass", 22, False)])
-def test_an_ordinary_player_hears_a_resolution_rejection_after_the_rollback(
-    verdict, life, completed
-):
-    p0 = PlainPlayer("Player1", picks=["Bad", "Good"], verdict=verdict)
+def test_an_ordinary_player_hears_a_resolution_rejection_after_the_rollback():
+    p0 = PlainPlayer("Player1", picks=["Bad", "Good"], revise=True)
     game = _plain_game(p0)
-    assert _resolve_plain(game, lambda g: _gain_choose_gain(g, p0)) is completed
-    assert p0.heard == [22] and p0.life == life
+    _resolve_plain(game, lambda g: _gain_choose_gain(g, p0))
+    # Heard at the boundary (+2 kept); the effect then ran again from its start.
+    assert p0.heard == [22] and p0.life == 25
 
 
 def test_an_ordinary_players_default_raises_after_the_rollback():
@@ -1141,18 +1044,19 @@ def test_an_ordinary_players_default_raises_after_the_rollback():
 
 
 def test_an_ordinary_players_explicit_attempt_is_rolled_back_alone():
-    p0 = PlainPlayer("Player1", verdict="pass")
+    p0 = PlainPlayer("Player1", revise=True)
     game = _plain_game(p0)
     results = []
 
     def resolve(g):
-        for name in ("Good", "Bad"):
-            p0.picks = [name]
+        for picks in (["Good"], ["Bad", "Good"]):
+            p0.picks = picks
             results.append(attempts.attempt(g, lambda: _gain_choose_gain(g, p0)))
 
-    assert _resolve_plain(game, resolve) is True
-    # The first attempt took Good (+5); the second, Bad, rolled back to its own start.
-    assert results == [(True, "Good"), (False, None)] and p0.life == 25
+    _resolve_plain(game, resolve)
+    # The first attempt took Good (+5); the second rolled back only itself to
+    # its own start when Bad was rejected (heard at 25), and was asked again.
+    assert results == ["Good", "Good"] and p0.heard == [25] and p0.life == 30
 
 
 # ---- effect-granted casts ---------------------------------------------------
@@ -1170,30 +1074,37 @@ class Refused(Sorcery):
 
 class GrantedCaster(Sorcery):
     """Resolving, lets its controller choose and cast free one card from each
-    of ``offers`` — each cast its own attempt, as Uldaros casts its copies."""
+    of ``offers`` — each cast its own attempt, as Uldaros casts its copies.
+    When ``optional``, the controller may choose to cast nothing."""
 
-    def __init__(self, offers, **kwargs) -> None:
+    def __init__(self, offers, optional=False, **kwargs) -> None:
         super().__init__(name="Granted Caster", mana_cost=ManaCost(), **kwargs)
         self.offers = offers
-        self.casts: list[bool] = []
+        self.optional = optional
+        self.casts: list = []
 
     def on_resolve(self, game) -> None:
         player = self.controller
         for offer in self.offers:
-            took, _ = attempts.attempt(game, lambda o=offer: self._cast_one(game, player, o))
-            self.casts.append(took)
+            self.casts.append(
+                attempts.attempt(game, lambda o=offer: self._cast_one(game, player, o))
+            )
 
     def _cast_one(self, game, player, offer):
-        card = choose_object(game, player, offer, "Cast which?", source_card=self)
-        return cast_spell_free(game, player, card, Zone.HAND)
+        card = choose_object(game, player, offer, "Cast which?", source_card=self,
+                             optional=self.optional)
+        if card is None:
+            return None
+        cast_spell_free(game, player, card, Zone.HAND)
+        return card
 
 
-def _granted_game(*names, negative=False, branches=()):
+def _granted_game(*names, branches=(), optional=False):
     game = _game()
     first, refused, second = Bolt(), Refused(), Bolt()
-    caster = GrantedCaster([[first], [refused, second]])
+    caster = GrantedCaster([[first], [refused, second]], optional=optional)
     set_board_state(game, 0, hand=[caster, first, refused, second])
-    game.players[0].start_intent("cast", _named_intent("Granted Caster", names, negative, branches))
+    game.players[0].start_intent("cast", _named_intent("Granted Caster", names, branches))
     return game, caster, first, refused, second
 
 
@@ -1201,15 +1112,17 @@ def test_a_rejected_later_granted_cast_retries_and_keeps_the_earlier_cast():
     game, caster, first, refused, second = _granted_game(branches=[["Refused"], ["Bolt"]])
     cast_card(game, game.players[0], caster, resolve=False)
     resolve_top_of_stack(game)
-    assert caster.casts == [True, True] and _in_zone(game, refused, Zone.HAND)
+    assert caster.casts == [first, second] and _in_zone(game, refused, Zone.HAND)
     assert [obj.source for obj in game.stack._items] == [first, second]
 
 
-def test_an_abandoned_later_granted_cast_keeps_the_earlier_cast():
-    game, caster, first, refused, _second = _granted_game("Refused", negative=True)
+def test_a_rejected_optional_granted_cast_may_be_declined_when_asked_again():
+    game, caster, first, refused, _second = _granted_game(
+        branches=[["Refused", "Bolt"], []], optional=True
+    )
     cast_card(game, game.players[0], caster, resolve=False)
     resolve_top_of_stack(game)
-    assert caster.casts == [True, False] and _in_zone(game, refused, Zone.HAND)
+    assert caster.casts == [first, None] and _in_zone(game, refused, Zone.HAND)
     assert [obj.source for obj in game.stack._items] == [first]
 
 
@@ -1220,16 +1133,17 @@ def _one_pass_then(game, operation):
     set_board_state(game, 0, hand=[Bolt()])
     script(game, 0, pass_priority())
     run_scripts(game)
-    assert (game.priority_player_index, game.priority_passes) == (1, 1)
+    assert (game.priority_player_index, game.window.passes) == (1, 1)
     operation(game)
     script(game, 0, act(Bolt))
     run_scripts(game)
 
 
-def test_an_empty_resolve_stack_starts_a_fresh_round():
+def test_an_empty_resolve_stack_leaves_the_round_as_it_is():
     game = _game()
     _one_pass_then(game, resolve_stack)
-    assert (game.phase, game.step) == (Phase.PRECOMBAT_MAIN, None) and len(game.stack) == 1
+    # Nothing resolved, so player 1's dry pass ended the step (CR 117.4).
+    assert (game.phase, game.step) == (Phase.COMBAT, Step.BEGIN_COMBAT) and len(game.stack) == 1
 
 
 def test_a_direct_resolution_starts_a_fresh_round():
@@ -1267,10 +1181,10 @@ def test_two_passes_with_a_spell_pending_stay_due_when_the_scripts_run_out():
     script(game, 0, act(Bolt), pass_priority())
     script(game, 1, pass_priority())
     run_scripts(game)
-    assert game.priority_passes == 2 and len(game.stack) == 1
+    assert game.window.passes == 2 and len(game.stack) == 1
     script(game, 0, act(Bolt))
     run_scripts(game)
-    assert len(game.stack) == 1 and game.priority_passes == 0
+    assert len(game.stack) == 1 and game.window.passes == 0
 
 
 # ---------------------------------------------------------------------------
@@ -1349,37 +1263,40 @@ def test_an_entry_choice_answers_ahead_of_a_baseline_preference():
     assert spell.chose == "Good"
 
 
-def test_an_abandoned_action_clears_its_entry():
+def test_a_failed_action_clears_its_entry():
     game = _game()
     spell = ChoosingCast(illegal={"Bad"})
     set_board_state(game, 0, hand=[spell], battlefield=[_artifact("Bad")])
-    game.players[0].start_intent("choose", _sourced("Choosing Cast", "Bad", negative=True))
+    game.players[0].start_intent("choose", _sourced("Choosing Cast", "Bad"))
     script(game, 0, act(ChoosingCast))
-    assert take_priority(game, game.players[0]) is True
+    with pytest.raises(PostconditionError):
+        take_priority(game, game.players[0])
     assert not game.players[0].acting
 
 
-def test_an_abandoned_entry_does_not_answer_a_later_resolution():
+def test_a_failed_entry_does_not_answer_a_later_resolution():
     game, chooser = _chooser_game()
     spell = ChoosingCast(illegal={"Bad"})
     set_board_state(game, 0, hand=[chooser, spell], battlefield=[_artifact("Bad"), _artifact("Good")])
     p0 = game.players[0]
     script(game, 0, act(Chooser))
     run_scripts(game)
-    p0.start_intent("choose", _sourced("Choosing Cast", "Bad", negative=True))
+    p0.start_intent("choose", _sourced("Choosing Cast", "Bad"))
     script(game, 0, act(ChoosingCast, choices=_named("Bad")))
-    assert take_priority(game, p0) is True
+    with pytest.raises(PostconditionError):
+        take_priority(game, p0)
     p0.end_intent("choose")
     p0.set_baseline(Intent(pattern=GameRef(), preferences=_named("Good")))
     resolve_stack(game)
     assert chooser.chosen == "Good"
 
 
-def test_another_players_abandoned_choice_ends_the_casters_entry():
+def test_another_players_exhausted_choice_fails_and_ends_the_casters_entry():
     game, spell = _opponent_cast_game(act(OpponentCast), act(Bolt))
     game.players[1].end_intent("choose")
-    game.players[1].start_intent("choose", _sourced("Opponent Cast", "Bad", negative=True))
-    assert take_priority(game, game.players[0]) is True
+    game.players[1].start_intent("choose", _sourced("Opponent Cast", "Bad"))
+    with pytest.raises(PostconditionError):
+        take_priority(game, game.players[0])
     assert not game.players[0].acting and not _on_stack(game, spell)
     assert [e.describe() for e in game.players[0].pending_entries] == ["act(Bolt)"]
 
@@ -1409,7 +1326,7 @@ class Visitor(Chooser):
         super().on_resolve(game)
 
 
-def _copied_visitor(*prefs, negative=False, branches=()):
+def _copied_visitor(*prefs, branches=()):
     game = _game()
     visitor = Visitor(illegal={"Bad"})
     set_board_state(game, 0, hand=[visitor], battlefield=[_artifact("Bad"), _artifact("Good")])
@@ -1417,22 +1334,15 @@ def _copied_visitor(*prefs, negative=False, branches=()):
     run_scripts(game)
     copy = copy_spell(game, game.stack.peek(), game.players[0])
     game.stack.push(copy)
-    game.players[0].start_intent("choose", _named_intent("Chooser", prefs, negative, branches))
+    game.players[0].start_intent("choose", _named_intent("Chooser", prefs, branches))
     return game, visitor, copy
 
 
 def test_a_retried_copy_restores_the_state_only_its_stack_object_reaches():
     game, visitor, copy = _copied_visitor(branches=[["Bad"], ["Good"]])
-    assert resolve_top_of_stack(game) is True
+    resolve_top_of_stack(game)
     assert copy.source.visits == 1 and _life(game) == 21 and copy.source.chosen == "Good"
     assert [obj.source for obj in game.stack._items] == [visitor]  # the original still pending
-
-
-def test_an_abandoned_copy_keeps_its_effects_before_the_choice():
-    game, visitor, copy = _copied_visitor("Bad", negative=True)
-    assert resolve_top_of_stack(game) is False
-    assert copy.source.visits == 1 and _life(game) == 21 and copy.source.chosen is None
-    assert [obj.source for obj in game.stack._items] == [visitor]
 
 
 def test_an_ability_callback_with_captured_state_is_retried_from_its_start():
@@ -1447,7 +1357,7 @@ def test_an_ability_callback_with_captured_state_is_retried_from_its_start():
 
     game.stack.push(StackObject(source=None, controller=game.players[0], on_resolve=resolve))
     game.players[0].start_intent("choose", _choose(branches=[["Bad"], ["Good"]]))
-    assert resolve_top_of_stack(game) is True
+    resolve_top_of_stack(game)
     assert seen["runs"] == 1 and chooser.chosen == "Good"
 
 
@@ -1462,7 +1372,7 @@ def test_an_explicit_attempt_restores_state_only_its_callable_reaches():
         return picker._pick(game)
 
     def resolve(g):
-        assert attempts.attempt(g, pick) == (True, "Good")
+        assert attempts.attempt(g, pick) == "Good"
 
     game.stack.push(StackObject(source=None, controller=game.players[0], on_resolve=resolve))
     game.players[0].start_intent("pick", _pick(branches=[["Bad"], ["Good"]]))
@@ -1479,11 +1389,11 @@ def test_priority_loop_finishes_a_round_run_scripts_began():
     set_board_state(game, 0, hand=[bolt])
     script(game, 0, pass_priority())
     run_scripts(game)
-    assert (game.priority_player_index, game.priority_passes) == (1, 1)
+    assert (game.priority_player_index, game.window.passes) == (1, 1)
     script(game, 0, act(Bolt))
     priority_loop(game)
-    # Player 1's pass completed the round: the loop returned for the step to end.
-    assert game.priority_passes == 2 and game.stack.is_empty()
+    # Player 1's pass completed the round: the window closed and the step is over.
+    assert game.step_state is StepState.DONE and game.stack.is_empty()
     assert [e.describe() for e in game.players[0].pending_entries] == ["act(Bolt)"]
 
 
@@ -1492,10 +1402,10 @@ def test_run_scripts_carries_on_after_priority_loop_returns():
     bolt = Bolt()
     set_board_state(game, 0, hand=[bolt])
     priority_loop(game)
-    assert game.priority_passes == 2
+    assert game.step_state is StepState.DONE
     script(game, 0, act(Bolt))
     run_scripts(game)
-    # The step change both passes made due happened first.
+    # The completed step moved on first.
     assert (game.phase, game.step) == (Phase.COMBAT, Step.BEGIN_COMBAT) and _on_stack(game, bolt)
 
 
@@ -1505,7 +1415,7 @@ def test_priority_loop_resolves_a_spell_whose_two_passes_are_due():
     script(game, 0, act(Bolt), pass_priority())
     script(game, 1, pass_priority())
     run_scripts(game)
-    assert game.priority_passes == 2 and len(game.stack) == 1
+    assert game.window.passes == 2 and len(game.stack) == 1
     priority_loop(game)
     assert game.stack.is_empty() and len(game.get_graveyard(game.players[0]).get_all()) == 1
 
@@ -1517,7 +1427,7 @@ def test_priority_loop_gives_the_retained_priority_back_to_the_nonactive_player(
     script(game, 0, pass_priority())
     script(game, 1, act(Bolt))
     run_scripts(game)
-    assert (game.priority_player_index, game.priority_passes) == (1, 0)
+    assert (game.priority_player_index, game.window.passes) == (1, 0)
     first = len(game.players[1].transcript.priority_queries())
     priority_loop(game)
     assert game.stack.is_empty() and game.get_graveyard(game.players[1]).contains(bolt)
@@ -1614,10 +1524,9 @@ def _bolt_cast_in_main(game) -> bool:
     )
 
 
-@pytest.mark.parametrize("negative", [False, True], ids=["positive", "negative"])
-def test_act_illegal_settles_a_refused_choice_its_intent_cannot_retry(negative):
+def test_act_illegal_settles_a_refused_choice_its_intent_cannot_retry():
     game, spell = _choosing_cast_game()
-    game.players[0].start_intent("choose", _cast_choice("Bad", negative=negative))
+    game.players[0].start_intent("choose", _cast_choice("Bad"))
     script(game, 0, act_illegal(ChoosingCast), act(Bolt))
     run_scripts(game)
     assert _bolt_cast_in_main(game) and not _on_stack(game, spell)
@@ -1631,12 +1540,16 @@ def test_act_illegal_settles_a_refused_baseline_choice():
     assert _bolt_cast_in_main(game) and not _on_stack(game, spell)
 
 
-def test_act_illegal_settles_a_refused_choice_the_opponent_cannot_retry():
+def test_only_the_opponent_hears_its_refused_choice_inside_an_illegal_action():
+    """The opponent owns the refused answer, so the opponent — not the acting
+    player's entry — answers the re-asked query, and with no branch left it
+    fails the test."""
     game, spell = _opponent_cast_game(act_illegal(OpponentCast), act(Bolt))
     game.players[1].end_intent("choose")
     game.players[1].start_intent("choose", _sourced("Opponent Cast", "Bad"))
-    run_scripts(game)
-    assert _bolt_cast_in_main(game) and not _on_stack(game, spell)
+    with pytest.raises(PostconditionError, match="no branch left"):
+        run_scripts(game)
+    assert not _on_stack(game, spell)
 
 
 def test_act_illegal_without_a_successor_entry_ends_its_window():
@@ -1987,13 +1900,16 @@ class PickyOpponentCast(OpponentCast):
 
 def test_an_opponents_choice_starts_from_its_first_branch_for_a_successor_entry():
     game = _game()
-    first, second = PickyOpponentCast({"Bad", "Good"}), PickyOpponentCast({"Good"})
+    first, second = PickyOpponentCast({"Bad"}), PickyOpponentCast({"Good"})
     set_board_state(game, 0, hand=[first, second], battlefield=[_artifact("Bad"), _artifact("Good")])
     game.players[1].start_intent("choose", _sourced("Opponent Cast", branches=[["Bad"], ["Good"]]))
-    script(game, 0, act_illegal(Decision.obj(instance=first.instance_id)),
-           act(Decision.obj(instance=second.instance_id)))
+    script(game, 0, act(Decision.obj(instance=first.instance_id)))
     run_scripts(game)
-    assert _on_stack(game, second) and not _on_stack(game, first)
+    resolve_stack(game)
+    script(game, 0, act(Decision.obj(instance=second.instance_id)))
+    run_scripts(game)
+    # The first cast moved the opponent to Good; the second began again at Bad.
+    assert _in_zone(game, first, Zone.GRAVEYARD) and _on_stack(game, second)
 
 
 def test_a_retried_entry_keeps_its_choices_branch():
@@ -2108,7 +2024,7 @@ def test_an_intent_applies_shared_per_query_after_each_branchs_own():
 
 # ---------------------------------------------------------------------------
 # Review round 6: handlers answer with their current branch, explicit
-# overrides own their answer, forced helpers stop where play was abandoned
+# overrides own their answer
 # ---------------------------------------------------------------------------
 
 
@@ -2185,83 +2101,10 @@ def test_without_an_override_the_baseline_preference_still_answers():
     assert spell.chosen == "Rock"
 
 
-def _abandoned_above_paused_cleanup():
-    """Paused in cleanup with Bolt above a death trigger (which makes a
-    second doomed creature), plus a resolving choice a negative intent's
-    refusal abandons on top."""
-    game, made = _paused_in_cleanup(lambda g: _doomed(g, g.players[0]))
-    p0 = game.players[0]
-    set_board_state(game, 0, battlefield=[_artifact("Bad"), _artifact("Good")])
-    chooser = Chooser({"Bad"})
-    chooser.controller = p0
-    game.stack.push(StackObject(source=None, controller=p0, on_resolve=chooser.on_resolve))
-    p0.start_intent("choose", _choose("Bad", negative=True))
-    return game, made
-
-
-def test_a_phase_helper_stops_where_a_cleanup_resolution_is_abandoned():
-    game, made = _abandoned_above_paused_cleanup()
-    turn = game.turn_number
-    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
-    assert (game.turn_number, game.step) == (turn, Step.CLEANUP) and len(game.stack) == 2
-    assert made == []
-
-
-def test_a_phase_helper_resumes_the_cleanup_it_stopped_in():
-    game, made = _abandoned_above_paused_cleanup()
-    turn = game.turn_number
-    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
-    game.players[0].end_intent("choose")
-    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
-    assert (game.turn_number, game.step) == (turn + 1, Step.UPKEEP)
-    (second,) = made
-    assert not game.get_battlefield(game.players[0]).contains(second)
-
-
 # ---------------------------------------------------------------------------
-# Review round 7: abandonment stops every driver; a retry starts from the
+# Review round 7: a retry starts from the
 # restored boundary whatever the hooks changed
 # ---------------------------------------------------------------------------
-
-
-def test_priority_loop_stops_at_an_abandoned_resolution():
-    game, visitor, copy = _copied_visitor("Bad", negative=True)
-    script(game, 0, pass_priority())
-    game.priority_passes = 2
-    assert priority_loop(game) is False
-    # The copy abandoned; the original below it and the pending entry wait.
-    assert [obj.source for obj in game.stack._items] == [visitor]
-    assert len(game.players[0].pending_entries) == 1 and _life(game) == 21
-
-
-def test_native_cleanup_stops_at_an_abandoned_resolution():
-    from engine.turn import _do_cleanup_step
-
-    game, made = _abandoned_above_paused_cleanup()
-    assert _do_cleanup_step(game) is False
-    assert game.step == Step.CLEANUP and len(game.stack) == 2 and made == []
-
-
-def _turn_with_abandoning_copy():
-    game, visitor, copy = _copied_visitor("Bad", negative=True)
-    game.players[0].set_baseline(Intent(pattern=GameRef(), preferences=_named("Good")))
-    game.players[1].set_baseline(Intent(pattern=GameRef()))
-    return game, visitor
-
-
-def test_a_turn_stops_at_an_abandoned_resolution_and_resumes_without_repeating():
-    from engine.turn import run_turn
-
-    game, visitor = _turn_with_abandoning_copy()
-    draws = len(game.get_library(game.players[0]).get_all())
-    assert run_turn(game) is False
-    assert (game.turn_number, game.phase, game.step) == (1, Phase.PRECOMBAT_MAIN, None)
-    assert [obj.source for obj in game.stack._items] == [visitor]
-    game.players[0].end_intent("choose")
-    assert run_turn(game) is True
-    assert game.turn_number == 2 and game.stack.is_empty()
-    assert visitor.chosen == "Good"
-    assert len(game.get_library(game.players[0]).get_all()) == draws
 
 
 def test_run_turn_does_not_repeat_the_actions_of_a_step_run_scripts_entered():
@@ -2284,16 +2127,15 @@ def test_run_turn_does_not_repeat_the_actions_of_a_step_run_scripts_entered():
 
 
 class HookMutator(PlainPlayer):
-    """Gains 7 life while hearing each rejection, then retries."""
+    """Gains 7 life while hearing each rejection, then answers again."""
 
     def on_attempt_rejected(self, context, answer, error):
-        verdict = super().on_attempt_rejected(context, answer, error)
+        super().on_attempt_rejected(context, answer, error)
         gain_life(context.game, self, 7)
-        return verdict
 
 
 def test_a_priority_retry_starts_from_the_restored_boundary():
-    p0 = HookMutator("Player1", picks=["Costly", "Bolt"], verdict="retry")
+    p0 = HookMutator("Player1", picks=["Costly", "Bolt"], revise=True)
     game = _plain_game(p0)
     game.active_player_index = game.priority_player_index = 0
     set_board_state(game, 0, hand=[Costly(), Bolt()])
@@ -2309,7 +2151,7 @@ def test_an_opponent_owned_priority_retry_starts_from_the_restored_boundary():
 
     def mutate_then_hear(context, answer, error):
         gain_life(game, opponent, 7)
-        return original(context, answer, error)
+        original(context, answer, error)
 
     opponent.on_attempt_rejected = mutate_then_hear
     take_priority(game, game.players[0])
@@ -2352,7 +2194,7 @@ def test_run_turn_does_not_reopen_a_completed_cleanup():
 
     game = _completed_cleanup()
     script(game, 0, act(Bolt))
-    assert run_turn(game) is True
+    run_turn(game)
     assert game.turn_number == 2 and game.stack.is_empty()
     assert len(game.players[0].pending_entries) == 1
 
@@ -2398,21 +2240,8 @@ def test_a_forced_exceptional_cleanup_is_not_reopened_by_the_next_driver():
     resolve_stack(game)  # finishes the cleanup with every player passing
     set_board_state(game, 0, hand=[Bolt()])
     script(game, 0, act(Bolt))
-    assert run_turn(game) is True
+    run_turn(game)
     assert game.turn_number == 2 and len(game.players[0].pending_entries) == 1
-
-
-def test_run_turn_resumes_an_abandoned_cleanup_window():
-    from engine.turn import run_turn
-
-    game, made = _abandoned_above_paused_cleanup()
-    assert run_turn(game) is False and game.step == Step.CLEANUP
-    game.players[0].end_intent("choose")
-    game.players[0].set_baseline(Intent(pattern=GameRef()))
-    game.players[1].set_baseline(Intent(pattern=GameRef()))
-    assert run_turn(game) is True and game.turn_number == 2
-    (second,) = made
-    assert not game.get_battlefield(game.players[0]).contains(second)
 
 
 # ---- every driver hands off to every other ------------------------------------
@@ -2458,7 +2287,7 @@ def _finish_by_run_turn(game, entries):
 
     for player in game.players:
         player.set_baseline(Intent(pattern=GameRef()))
-    assert run_turn(game) is True
+    run_turn(game)
     return False
 
 
@@ -2532,7 +2361,7 @@ def _cleanup_pending_with_doomed():
     _watch_deaths(game, lambda g: gain_life(g, g.players[0], 1))
     _doomed(game, game.players[0])
     game.phase, game.step = Phase.ENDING, Step.CLEANUP
-    game.step_state = StepState.PENDING
+    game.close_window(StepState.PENDING)
     return game
 
 
@@ -2573,19 +2402,6 @@ def test_finish_cleanup_outside_cleanup_is_a_setup_error():
         finish_cleanup(_game())
 
 
-def test_finish_cleanup_stops_at_an_abandoned_resolution_and_resumes():
-    game, made = _abandoned_above_paused_cleanup()
-    game.players[0].cards_drawn_this_turn = 3
-    finish_cleanup(game)
-    assert len(game.stack) == 2 and made == [] and game.step_state is StepState.WINDOW
-    assert game.players[0].cards_drawn_this_turn == 3
-    game.players[0].end_intent("choose")
-    finish_cleanup(game)
-    (second,) = made
-    assert game.step_state is StepState.DONE and game.stack.is_empty()
-    assert not game.get_battlefield(game.players[0]).contains(second)
-
-
 @pytest.mark.parametrize("target", ["cleanup", "next upkeep"])
 def test_the_phase_helper_completes_cleanup_as_target_or_on_the_way(target):
     game = _game()
@@ -2604,48 +2420,12 @@ def test_the_phase_helper_completes_cleanup_as_target_or_on_the_way(target):
     assert _pending_counts(game) == [1, 1]
 
 
-def test_the_phase_helper_resumes_an_abandoned_target_cleanup():
-    game, made = _abandoned_above_paused_cleanup()
-    turn = game.turn_number
-    advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
-    assert len(game.stack) == 2 and made == [] and game.step_state is StepState.WINDOW
-    game.players[0].end_intent("choose")
-    advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
-    (second,) = made
-    assert (game.turn_number, game.step_state) == (turn, StepState.DONE)
-    assert not game.get_battlefield(game.players[0]).contains(second)
-
-
-def test_native_cleanup_does_not_repeat_mechanics_in_an_open_window():
-    from engine.turn import _do_cleanup_step
-
-    game, made = _abandoned_above_paused_cleanup()
-    game.players[0].cards_drawn_this_turn = 3
-    assert _do_cleanup_step(game) is False
-    assert game.players[0].cards_drawn_this_turn == 3
-    assert len(game.stack) == 2 and made == []
-
-
-def test_native_cleanup_resumes_its_window_then_completes():
-    from engine.turn import _do_cleanup_step
-
-    game, made = _abandoned_above_paused_cleanup()
-    assert _do_cleanup_step(game) is False
-    game.players[0].end_intent("choose")
-    for player in game.players:
-        player.set_baseline(Intent(pattern=GameRef()))
-    assert _do_cleanup_step(game) is True
-    (second,) = made
-    assert game.step_state is StepState.DONE and game.stack.is_empty()
-    assert not game.get_battlefield(game.players[0]).contains(second)
-
-
 def test_native_cleanup_leaves_a_completed_cleanup_alone():
     from engine.turn import _do_cleanup_step
 
     game = _done_cleanup()
     game.players[0].cards_drawn_this_turn = 3
-    assert _do_cleanup_step(game) is True
+    _do_cleanup_step(game)
     assert game.players[0].cards_drawn_this_turn == 3
 
 
@@ -2659,7 +2439,7 @@ def _cleanup_start(state):
         return _paused_in_cleanup(lambda g: _doomed(g, g.players[0]))
     if state == "empty window":
         game = _cleanup_pending_with_doomed()
-        game.step_state = StepState.WINDOW
+        game.open_window()
         return game, None
     if state == "done":
         return _done_cleanup(), None
@@ -2687,7 +2467,7 @@ def _drive_native(game):
 
     for player in game.players:
         player.set_baseline(Intent(pattern=GameRef()))
-    assert _do_cleanup_step(game) is True
+    _do_cleanup_step(game)
 
 
 def _drive_run_turn(game):
@@ -2695,7 +2475,7 @@ def _drive_run_turn(game):
 
     for player in game.players:
         player.set_baseline(Intent(pattern=GameRef()))
-    assert run_turn(game) is True
+    run_turn(game)
 
 
 # name -> (driver, whether it leaves cleanup, whether it is a forced helper)
@@ -2774,14 +2554,14 @@ def _drive_scripts(game):
 
 
 def _drive_native_step(game):
-    from engine.turn import advance_step
+    from engine.turn import advance
 
     for player in game.players:
         player.set_baseline(Intent(pattern=GameRef()))
-    for _ in range(3):  # enter a pending step, then play out its window
+    for _ in range(4):  # one stage at a time, until player 1 has acted
         if not game.players[1].pending_entries:
             return
-        assert advance_step(game) is True
+        advance(game)
 
 
 @pytest.mark.parametrize("drive", [_drive_scripts, _drive_native_step], ids=["scripted", "native"])
@@ -2811,7 +2591,7 @@ def test_a_rejected_wrapper_cast_leaves_the_main_window_open_for_legal_play():
     with pytest.raises(CastingError):
         cast_card(game, game.players[0], Costly())
     assert (game.phase, game.step, game.step_state) == (Phase.PRECOMBAT_MAIN, None, StepState.WINDOW)
-    assert game.priority_passes == 0 and game.stack.is_empty()
+    assert game.window.passes == 0 and game.stack.is_empty()
     set_board_state(game, 1, hand=[Bolt()])
     script(game, 1, act(Bolt))
     run_scripts(game)
@@ -2822,7 +2602,7 @@ def test_a_wrapper_cast_in_an_open_main_window_keeps_its_round():
     game = _game()
     script(game, 0, pass_priority())
     run_scripts(game)
-    assert game.step_state is StepState.WINDOW and game.priority_passes == 1
+    assert game.step_state is StepState.WINDOW and game.window.passes == 1
     set_board_state(game, 1, hand=[Bolt()])
     test_utils.cast_spell(game, 1, "Bolt")
     assert (game.phase, game.step) == (Phase.PRECOMBAT_MAIN, None) and game.active_player_index == 0
@@ -2837,4 +2617,5 @@ def test_an_instant_wrapper_cast_in_a_completed_step_opens_its_window():
         player.set_baseline(Intent(pattern=GameRef()))
     from engine.turn import run_turn
 
-    assert run_turn(game) is True and game.turn_number == 2 and game.stack.is_empty()
+    run_turn(game)
+    assert game.turn_number == 2 and game.stack.is_empty()

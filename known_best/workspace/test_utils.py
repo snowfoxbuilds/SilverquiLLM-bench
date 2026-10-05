@@ -47,7 +47,7 @@ from engine.intent_player import (  # noqa: F401 — script entries are re-expor
     pass_priority,
 )
 from engine.stack import resolve_top_of_stack
-from engine.turn import _NO_PRIORITY_STEPS, close_window, enter_step
+from engine.turn import advance, start_step
 from engine.types import ManaType, Phase, Step, Zone
 
 
@@ -244,8 +244,8 @@ def cast_spell(
     1. Locates the first card matching *card_name* in the player's hand.
     2. For a sorcery-speed spell, makes the caster the active player in a main
        phase (the current one, else precombat main); a changed phase or active
-       player opens that main phase's window in a fresh round, so later
-       drivers carry on from it.
+       player opens that main phase's window, so later drivers carry on from
+       it.
     3. Casts it as a one-entry :func:`act` script: the player chooses the card
        in a Priority Query and the engine casts it.
     4. Passes priority for both players so the spell resolves.
@@ -362,61 +362,34 @@ def script(game: GameState, player_index: int, *entries: ScriptEntry) -> None:
 def run_scripts(game: GameState, *, max_priority: int = 1000) -> None:
     """Play until every player's script is consumed, leaving the stack in place.
 
-    Priority starts with ``game.priority_player_index`` and moves as in a real
-    game: a player who acts keeps priority, two passes in a row resolve the top
-    of the stack (the active player then receives priority) or, on an empty
-    stack, move the game to the next step that grants priority. A player whose
-    script is dry passes.
+    Play goes through the engine's one step lifecycle
+    (:func:`~engine.turn.advance`): priority moves as in a real game — a player
+    who acts keeps priority, every player passing in succession resolves the
+    top of the stack (the active player then receives priority) or, on an
+    empty stack, ends the step. A player whose script is dry passes.
 
-    The priority round is kept with the game (``game.priority_player_index``
-    and ``game.priority_passes``), so a later call carries on from where the
-    scripts ran out — with a pending resolution or step change made first if
-    both players had passed. The engine starts a fresh round whenever an
-    action is taken, an object resolves or the game moves to another step, and
-    :func:`resolve_stack` always starts one.
+    The priority round is the open window's own, so a later call carries on
+    from where the scripts ran out.
 
-    Rejections follow the engine's attempts (:mod:`engine.attempts`): a
-    rejected priority action is retried within its entry, and a rejected choice
-    while an object resolves is retried from before that choice — each with
-    the next branch of the entry or intent that owns the rejection. Under a
-    negative Intent (see :class:`~engine.intent_player.Intent`) a rejection
-    counts as a pass, and a resolution-time one stops play there.
+    A rejected choice is rolled back and the same query asked again (see
+    :mod:`engine.attempts`): within a priority action, the entry or intent that
+    owns the rejection answers it with its next branch; while an object
+    resolves, the owning intent does.
 
     Raises:
         ScriptEntryError: When an entry's action does not go as it requires.
-        PostconditionError: When a rejected choice's intent has no branch left, or a
-            negative intent's forbidden choice takes effect.
+        PostconditionError: When a rejected choice's intent has no branch left.
         TestSetupError: If the scripts are not consumed within ``max_priority``
             grants of priority.
     """
-    from engine.priority import take_priority
-
     grants = 0
-    while True:
-        if not _scripts_remain(game):
-            return
-        if game.step_state is not StepState.WINDOW:
-            # Pending turn-based actions happen once; a step with no window
-            # (untap, a completed cleanup) is moved past before any entry.
-            if game.step_state is StepState.PENDING:
-                enter_step(game)
-            else:
-                game.advance_phase()
-            continue
-        if game.priority_passes >= 2:
-            if not game.stack.is_empty():
-                if not resolve_top_of_stack(game):
-                    return
-            else:
-                close_window(game)
-            continue
-        if grants == max_priority:
-            raise TestSetupError(f"scripts not consumed within {max_priority} grants of priority")
-        grants += 1
-        current = game.priority_player_index
-        if take_priority(game, game.players[current]):
-            game.priority_passes += 1
-            game.priority_player_index = 1 - current
+    while _scripts_remain(game):
+        window = game.window
+        if window is not None and not window.all_passed(len(game.players)):
+            if grants == max_priority:
+                raise TestSetupError(f"scripts not consumed within {max_priority} grants of priority")
+            grants += 1
+        advance(game)
 
 
 def _scripts_remain(game: GameState) -> bool:
@@ -433,20 +406,13 @@ def _sorcery_timing(game: GameState, seat: int, *, keep_main: bool) -> None:
     """Make *seat* the active player in a main phase, for a casting wrapper's
     sorcery-speed cast: precombat main, or the current main phase when
     ``keep_main``. A changed phase, step or active player starts that main
-    phase's window afresh, so every driver carries on from it."""
+    phase with its window open (:func:`~engine.turn.start_step`), so every
+    driver carries on from it."""
     main = game.phase in (Phase.PRECOMBAT_MAIN, Phase.POSTCOMBAT_MAIN)
     phase = game.phase if keep_main and main else Phase.PRECOMBAT_MAIN
     if (game.phase, game.step, game.active_player_index) != (phase, None, seat):
         game.phase, game.step, game.active_player_index = phase, None, seat
-        _open_window(game)
-
-
-def _open_window(game: GameState) -> None:
-    """Setup only: open the current step's priority window in a fresh round,
-    without its turn-based actions — as :func:`advance_to_phase` marks a step
-    entered."""
-    game.step_state = StepState.WINDOW
-    game.start_priority_round()
+        start_step(game)
 
 
 def _take_action(game: GameState, player: Any, entry: ScriptEntry) -> Any:
@@ -455,18 +421,19 @@ def _take_action(game: GameState, player: Any, entry: ScriptEntry) -> Any:
 
     A player acts only in an open priority window: when the current step's
     window is not open — its actions still pending, or the step complete —
-    it is opened first (:func:`_open_window`), so every driver afterwards
-    carries on from that window rather than past the action."""
+    it is opened first, so every driver afterwards carries on from that
+    window rather than past the action."""
     from engine.priority import take_priority
 
     player = _deterministic(game, player)
     if game.step_state is not StepState.WINDOW:
-        _open_window(game)
+        game.open_window()
     game.priority_player_index = game.players.index(player)
     saved = player.set_script([entry])
     player.last_action_result = None
     try:
-        take_priority(game, player)
+        if not take_priority(game, player):
+            game.window.acted()
     finally:
         player.set_script(saved)
     return player.last_action_result
@@ -529,40 +496,29 @@ def resolve_stack(game: GameState) -> None:
     """Resolve the entire stack with every player passing; consumes no script
     entries.
 
-    Each resolution is the engine's own (:func:`~engine.stack.resolve_top_of_stack`),
-    exactly as in :func:`~engine.stack.priority_loop`: a choice the engine
-    rejects while an object resolves is retried from before that choice, with
-    the owning intent's next branch; under a negative
-    Intent the rejection counts as a pass and resolution stops there. The
-    active player then holds priority in a fresh round, even when the stack
-    was already empty.
+    Each resolution is the engine's own (:func:`~engine.stack.resolve_top_of_stack`):
+    a choice the engine rejects while an object resolves is rolled back and
+    asked again, answered with the owning intent's next branch. In an open
+    window the active player then holds priority.
 
-    In a cleanup step's priority window the cleanup step is then finished
-    too, with every player passing (:func:`finish_cleanup`): another cleanup
-    follows the window, and so on until one grants no priority (CR 514.3a).
+    In a cleanup step the cleanup step is then finished too, with every
+    player passing (:func:`finish_cleanup`): another cleanup follows the
+    window, and so on until one opens no window (CR 514.3a).
     """
-    _finish_forced(game)
+    _drain_stack(game)
+    if _in_cleanup(game):
+        _finish_cleanup(game)
 
 
-def _finish_forced(game: GameState) -> bool:
-    """Resolve the stack with every player passing and, in a cleanup step,
-    finish the cleanup; return ``False`` if a resolution was abandoned, which
-    stops play there."""
-    if not _drain_stack(game):
-        return False
-    if not _in_cleanup(game):
-        return True
-    return _finish_cleanup(game)
-
-
-def _drain_stack(game: GameState) -> bool:
-    """Resolve the stack with every player passing, in a fresh round; return
-    ``False`` if a resolution was abandoned and stopped there."""
-    game.start_priority_round()
+def _drain_stack(game: GameState) -> None:
+    """Resolve the stack with every player passing (the open window's
+    all-pass policy), or object by object when a test left objects on the
+    stack outside any window."""
     while not game.stack.is_empty():
-        if not resolve_top_of_stack(game):
-            return False
-    return True
+        if game.step_state is StepState.WINDOW:
+            advance(game, all_pass=True)
+        else:
+            resolve_top_of_stack(game)
 
 
 def card_abilities(card: Any) -> list:
@@ -666,8 +622,7 @@ def advance_to_phase(
         game.advance_phase()
         if (game.phase, game.step) == target:
             # Setup only: the step counts as entered without its actions.
-            no_window = target in _NO_PRIORITY_STEPS
-            game.step_state = StepState.DONE if no_window else StepState.WINDOW
+            start_step(game)
             return
 
     raise TestSetupError(
@@ -813,14 +768,15 @@ def enter_permanent(game, player, card):
 def advance_game_to_phase(game, phase, step=None):
     """Drive canonical phase transitions and their public boundary events.
 
-    Consumes no script entries: the stack is resolved with every player
-    passing before each transition. Arriving at the target step performs its
+    Consumes no script entries: play goes through the engine's step lifecycle
+    with every player passing and the forced fast-forward
+    (:func:`~engine.turn.advance`). Arriving at the target step performs its
     turn-based actions and returns with its window open — except cleanup,
-    which as the target is completed (:func:`finish_cleanup`), including
-    when a later call resumes a cleanup an abandoned resolution stopped.
+    which as the target is completed (:func:`finish_cleanup`).
     """
     first = True
-    for _ in range(3 * len(_TURN_SEQUENCE) + 3):
+    start_turn = game.turn_number
+    while game.turn_number <= start_turn + 2:
         at_target = (game.phase, game.step) == (phase, step)
         if at_target and _in_cleanup(game):
             _finish_cleanup(game)
@@ -828,17 +784,7 @@ def advance_game_to_phase(game, phase, step=None):
         if at_target and (first or game.step_state is not StepState.PENDING):
             return
         first = False
-        if game.step_state is StepState.PENDING:
-            enter_step(game, forced=True)
-        elif game.step_state is StepState.WINDOW:
-            # An abandoned resolution stops play where it is, as in any
-            # driver; a later call resumes from there.
-            if not _finish_forced(game):
-                return
-            if game.step_state is StepState.WINDOW:
-                close_window(game)
-        else:
-            game.advance_phase()
+        advance(game, all_pass=True, forced=True)
     raise TestSetupError("phase boundary was not reached")
 
 
@@ -921,8 +867,8 @@ def cast_card(game, player, card, resolve=True):
     test supplies mana and Intents. Returns what the engine's cast returned.
 
     A sorcery-speed card is cast by its caster as the active player in
-    precombat main; moving there opens that main phase's window in a fresh
-    round, so later drivers carry on from it.
+    precombat main; moving there opens that main phase's window, so later
+    drivers carry on from it.
 
     Raises :class:`~engine.casting.CastingError` when the card is not offered
     at priority or the engine rejects the cast (rolled back).
@@ -951,9 +897,8 @@ def finish_cleanup(game):
     no entries.
 
     It carries on from the step state: an open window's stack is resolved
-    and the window closed, then cleanup iterations follow until one grants
-    no priority (CR 514.3a); a completed cleanup is left alone. Stops where
-    a resolution is abandoned, and a later call resumes from there.
+    and the window closed, then cleanup steps follow until one opens no
+    window (CR 514.3a); a completed cleanup is left alone.
 
     Raises:
         TestSetupError: Outside a cleanup step.
@@ -967,17 +912,10 @@ def _in_cleanup(game: GameState) -> bool:
     return (game.phase, game.step) == (Phase.ENDING, Step.CLEANUP)
 
 
-def _finish_cleanup(game: GameState) -> bool:
-    """Advance the current cleanup step to DONE with every player passing;
-    return ``False`` if a resolution was abandoned, which stops play there."""
+def _finish_cleanup(game: GameState) -> None:
+    """Advance the current cleanup step to DONE with every player passing."""
     while game.step_state is not StepState.DONE:
-        if game.step_state is StepState.PENDING:
-            enter_step(game, forced=True)
-        elif not _drain_stack(game):
-            return False
-        else:
-            close_window(game)
-    return True
+        advance(game, all_pass=True, forced=True)
 
 
 def scenario_game(*args, **kwargs):
