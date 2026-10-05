@@ -26,5 +26,5 @@ class ScouredBarrensAbility3:
 
 
 ScouredBarrens = make_gainlife_tapland(
-    "Scoured Barrens", (ManaType.WHITE, ManaType.BLACK), 266, mana_printed=ScouredBarrensAbility3
+    "Scoured Barrens", (ManaType.WHITE, ManaType.BLACK), 266, mana_printed=ScouredBarrensAbility3, enters_printed=ScouredBarrensAbility2
 )

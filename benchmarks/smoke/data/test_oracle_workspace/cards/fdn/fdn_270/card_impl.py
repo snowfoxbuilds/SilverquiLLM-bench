@@ -26,5 +26,5 @@ class TranquilCoveAbility3:
 
 
 TranquilCove = make_gainlife_tapland(
-    "Tranquil Cove", (ManaType.WHITE, ManaType.BLUE), 270, mana_printed=TranquilCoveAbility3
+    "Tranquil Cove", (ManaType.WHITE, ManaType.BLUE), 270, mana_printed=TranquilCoveAbility3, enters_printed=TranquilCoveAbility2
 )

@@ -88,4 +88,4 @@ class SylvanScavenging(Enchantment):
             elif chosen_mode == 'token' and has_power_4:
                 token = make_creature_token('Raccoon', {'Raccoon'}, [Color.GREEN], 3, 3)
                 create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=SylvanScavengingAbility1))

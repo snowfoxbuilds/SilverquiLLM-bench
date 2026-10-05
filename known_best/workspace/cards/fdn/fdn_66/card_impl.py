@@ -93,8 +93,8 @@ class NineLivesFamiliar(Creature):
             # "at the beginning of the next end step" (rule 603.7a).
             register_delayed_trigger(
                 game, EndStepTriggeredEvent, controller, _return,
-                name='Nine-Lives Familiar return',
+                name='Nine-Lives Familiar return', printed=NineLivesFamiliarAbility2,
             )
 
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_dies_condition, effect=_dies_effect, source=self, controller=controller, capture=_capture))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_dies_condition, effect=_dies_effect, source=self, controller=controller, capture=_capture, printed=NineLivesFamiliarAbility2))

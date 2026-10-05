@@ -65,4 +65,4 @@ class NeedletoothPack(Creature):
             target = choose_object(game, ctrl, creatures, 'creature to put +1/+1 counters on', source_card=source)
             if target is not None and _is_on_battlefield(game, target):
                 add_counter(game, target, '+1/+1', 2)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=NeedletoothPackAbility1))

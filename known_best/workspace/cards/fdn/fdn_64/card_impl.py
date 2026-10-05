@@ -57,4 +57,4 @@ class InfestationSage(Creature):
             token = make_creature_token("Insect", {"Insect"}, [Color.BLACK, Color.GREEN], 1, 1, keywords=Keyword.FLYING)
             create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_effect, source=self, controller=controller, printed=InfestationSageAbility1))

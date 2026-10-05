@@ -70,4 +70,4 @@ class MischievousMystic(Creature):
                 return
             token = make_creature_token('Faerie', {'Faerie'}, [Color.BLUE], 1, 1, keywords=Keyword.FLYING)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller, printed=MischievousMysticAbility2))

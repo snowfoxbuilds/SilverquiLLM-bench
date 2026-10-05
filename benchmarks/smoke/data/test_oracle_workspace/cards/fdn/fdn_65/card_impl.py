@@ -57,7 +57,7 @@ class MidnightSnack(Enchantment):
             from cards.fdn.tokens import make_food_token
             create_token(game, controller, make_food_token())
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=MidnightSnackAbility1))
 
     def get_activated_abilities(self, game: 'GameState') -> list:
         """Sacrifice ability: target opponent loses X life."""

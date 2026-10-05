@@ -78,5 +78,5 @@ class SphinxOfForgottenLore(Creature):
                         chosen.has_flashback = False
                     if hasattr(chosen, 'flashback_cost'):
                         del chosen.flashback_cost
-                game.trigger_manager.register(TriggerRegistration(event_type=EndOfTurnTriggeredEvent, condition=_cleanup_flashback, effect=_remove_flashback, source=source, controller=ctrl))
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
+                game.trigger_manager.register(TriggerRegistration(event_type=EndOfTurnTriggeredEvent, condition=_cleanup_flashback, effect=_remove_flashback, source=source, controller=ctrl, printed=SphinxOfForgottenLoreAbility3))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=SphinxOfForgottenLoreAbility3))

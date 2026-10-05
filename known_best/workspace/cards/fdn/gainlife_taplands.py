@@ -28,10 +28,12 @@ def make_gainlife_tapland(
     colors: tuple[ManaType, ManaType],
     collector_number: int,
     mana_printed: type | None = None,
+    enters_printed: type | None = None,
 ) -> type[Land]:
     """Build a gain-life tapland class for *name* producing *colors*.
 
-    *mana_printed* is the predefined class of its printed mana ability.
+    *mana_printed* and *enters_printed* are the predefined classes of its
+    printed mana ability and its enters trigger.
     """
     first, second = (m.value for m in colors)
     rules_text = (
@@ -84,6 +86,7 @@ def make_gainlife_tapland(
                     effect=_effect,
                     source=self,
                     controller=controller,
+                    printed=enters_printed,
                 )
             )
 

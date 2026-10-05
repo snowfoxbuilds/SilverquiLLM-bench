@@ -148,6 +148,7 @@ class ZimoneParadoxSculptor(Creature):
                 source=self,
                 controller=controller,
                 targeting=_targeting,
+                printed=ZimoneParadoxSculptorAbility1,
             )
         )
 

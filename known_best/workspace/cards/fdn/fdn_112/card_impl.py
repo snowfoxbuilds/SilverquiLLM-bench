@@ -81,4 +81,4 @@ class SpinnerOfSouls(Creature):
             for card in revealed:
                 library.add(card, position='bottom')
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=SpinnerOfSoulsAbility2))

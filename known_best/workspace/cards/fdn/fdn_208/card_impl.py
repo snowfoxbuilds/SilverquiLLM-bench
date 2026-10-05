@@ -66,4 +66,4 @@ class SpitfireLagac(Creature):
             for player in game.players:
                 if player is not ctrl:
                     deal_damage(game, source, player, 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_landfall_condition, effect=_landfall_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_landfall_condition, effect=_landfall_effect, source=self, controller=controller, printed=SpitfireLagacAbility1))

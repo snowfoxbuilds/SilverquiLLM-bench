@@ -115,5 +115,6 @@ class GoldveinPick(Equipment):
                 effect=_effect,
                 source=self,
                 controller=controller,
+                printed=GoldveinPickAbility2,
             )
         )

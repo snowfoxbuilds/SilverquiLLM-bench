@@ -73,4 +73,4 @@ class RiteOfTheDragoncaller(Enchantment):
             token = make_creature_token("Dragon", {"Dragon"}, [Color.RED], 5, 5, keywords=Keyword.FLYING)
             create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=RiteOfTheDragoncallerAbility1))

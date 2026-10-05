@@ -84,4 +84,4 @@ class CatCollector(Creature):
                 return
             token = make_creature_token('Cat', {'Cat'}, [Color.WHITE], 1, 1)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller, printed=CatCollectorAbility2))

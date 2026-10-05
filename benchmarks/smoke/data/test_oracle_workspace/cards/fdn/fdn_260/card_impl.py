@@ -26,5 +26,5 @@ class BlossomingSandsAbility3:
 
 
 BlossomingSands = make_gainlife_tapland(
-    "Blossoming Sands", (ManaType.GREEN, ManaType.WHITE), 260, mana_printed=BlossomingSandsAbility3
+    "Blossoming Sands", (ManaType.GREEN, ManaType.WHITE), 260, mana_printed=BlossomingSandsAbility3, enters_printed=BlossomingSandsAbility2
 )

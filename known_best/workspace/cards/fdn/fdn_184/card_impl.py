@@ -74,4 +74,4 @@ class RuneScarredDemon(Creature):
 
         def _effect(game: 'GameState') -> None:
             source._tutor(game)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=RuneScarredDemonAbility2))

@@ -65,4 +65,4 @@ class DazzlingAngel(Creature):
                 return
             from engine.game import gain_life
             gain_life(game, ctrl, 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller, printed=DazzlingAngelAbility2))

@@ -106,5 +106,6 @@ class AdventuringGear(Equipment):
                 effect=_effect,
                 source=self,
                 controller=controller,
+                printed=AdventuringGearAbility1,
             )
         )

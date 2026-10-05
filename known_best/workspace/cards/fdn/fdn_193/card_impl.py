@@ -78,4 +78,4 @@ class DrakusethMawOfFlames(Creature):
                 if target is not None:
                     deal_damage(game, source, target, 3)
                     remaining = [t for t in remaining if t is not target]
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=DrakusethMawOfFlamesAbility2))

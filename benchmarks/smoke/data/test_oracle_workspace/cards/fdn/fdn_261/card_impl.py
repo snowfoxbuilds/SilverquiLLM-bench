@@ -26,5 +26,5 @@ class DismalBackwaterAbility3:
 
 
 DismalBackwater = make_gainlife_tapland(
-    "Dismal Backwater", (ManaType.BLUE, ManaType.BLACK), 261, mana_printed=DismalBackwaterAbility3
+    "Dismal Backwater", (ManaType.BLUE, ManaType.BLACK), 261, mana_printed=DismalBackwaterAbility3, enters_printed=DismalBackwaterAbility2
 )

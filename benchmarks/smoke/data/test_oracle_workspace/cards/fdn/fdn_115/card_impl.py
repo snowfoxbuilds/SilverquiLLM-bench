@@ -64,7 +64,7 @@ class AleshaWhoLaughsAtFate(Creature):
 
         def _attack_effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1')
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=AleshaWhoLaughsAtFateAbility2))
 
         def _raid_condition(game: Any, event: dict) -> bool:
             ctrl = getattr(source, 'controller', None)
@@ -99,4 +99,4 @@ class AleshaWhoLaughsAtFate(Creature):
                 return
             chosen.controller = ctrl
             move_to_zone(game, chosen, Zone.GRAVEYARD, Zone.BATTLEFIELD)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_raid_condition, effect=_raid_effect, source=self, controller=controller, capture=_stint))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_raid_condition, effect=_raid_effect, source=self, controller=controller, capture=_stint, printed=AleshaWhoLaughsAtFateAbility3))

@@ -73,4 +73,4 @@ class ArchmageOfRunes(Creature):
             if ctrl is None:
                 return
             draw_card(game, ctrl)
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_spell_cast_condition, effect=_spell_cast_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_spell_cast_condition, effect=_spell_cast_effect, source=self, controller=controller, printed=ArchmageOfRunesAbility2))

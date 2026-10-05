@@ -85,7 +85,7 @@ class NivMizzetVisionary(Creature):
             amount = _amount_queue.popleft() if _amount_queue else 1
             for _ in range(amount):
                 draw_card(game, ctrl)
-        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=NivMizzetVisionaryAbility3))
 
     def unregister_triggers(self, game: 'GameState') -> None:
         """Clean up no-max-hand-size on controller."""

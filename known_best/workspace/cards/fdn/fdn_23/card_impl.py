@@ -74,7 +74,7 @@ class SkyknightSquire(Creature):
             if not _is_on_battlefield(game, source):
                 return
             add_counter(game, source, '+1/+1', 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller, printed=SkyknightSquireAbility1))
         if self._threshold_effect_ref is None:
             original_subtypes = frozenset(source.subtypes)
 

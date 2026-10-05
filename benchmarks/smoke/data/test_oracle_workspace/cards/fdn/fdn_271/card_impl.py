@@ -26,5 +26,5 @@ class WindScarredCragAbility3:
 
 
 WindScarredCrag = make_gainlife_tapland(
-    "Wind-Scarred Crag", (ManaType.RED, ManaType.WHITE), 271, mana_printed=WindScarredCragAbility3
+    "Wind-Scarred Crag", (ManaType.RED, ManaType.WHITE), 271, mana_printed=WindScarredCragAbility3, enters_printed=WindScarredCragAbility2
 )

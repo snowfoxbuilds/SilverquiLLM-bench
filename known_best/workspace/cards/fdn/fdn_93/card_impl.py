@@ -62,4 +62,4 @@ class SearslicerGoblin(Creature):
                 return
             token = make_creature_token('Goblin', {'Goblin'}, [Color.RED], 1, 1)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=SearslicerGoblinAbility1))

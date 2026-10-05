@@ -65,5 +65,5 @@ class WaryThespian(Creature):
                 graveyard = controller.zones[Zone.GRAVEYARD]
                 graveyard.add(card)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_surveil_effect, source=self, controller=controller))
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_surveil_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_surveil_effect, source=self, controller=controller, printed=WaryThespianAbility1))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_surveil_effect, source=self, controller=controller, printed=WaryThespianAbility1))

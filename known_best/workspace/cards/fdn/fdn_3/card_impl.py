@@ -76,4 +76,4 @@ class ArmasaurGuide(Creature):
             if target is None:
                 return
             add_counter(game, target, '+1/+1', 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=ArmasaurGuideAbility2))

@@ -79,7 +79,7 @@ class LathrilBladeOfTheElves(Creature):
             for _ in range(amount):
                 token = make_creature_token('Elf Warrior', {'Elf', 'Warrior'}, [Color.GREEN], 1, 1)
                 create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=LathrilBladeOfTheElvesAbility2))
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         """Return the tap-ten-elves activated ability."""

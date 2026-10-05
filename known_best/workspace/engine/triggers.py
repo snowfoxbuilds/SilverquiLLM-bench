@@ -128,6 +128,8 @@ class TriggerRegistration:
             count) **without** a mutable source-level slot that later firings would
             clobber. ``capture`` is for *untargeted* triggers (a targeted trigger
             uses ``targeting`` + the effect's ``targets``/``context`` instead).
+        printed: The predefined class of the printed ability this trigger
+            comes from (see ADR-017); its stack objects carry it.
     """
 
     event_type: type[TriggeredEvent]
@@ -137,6 +139,7 @@ class TriggerRegistration:
     controller: Player
     targeting: Callable[..., Any] | None = None
     capture: Callable[..., Any] | None = None
+    printed: type | None = None
 
 
 class TriggerManager:
@@ -233,6 +236,7 @@ class TriggerManager:
                 stack_obj = StackObject(
                     source=trigger.source,
                     controller=fire_controller,
+                    printed=trigger.printed,
                     targets=chosen_targets,
                     activation_context=context,
                 )
@@ -256,6 +260,7 @@ class TriggerManager:
                 stack_obj = StackObject(
                     source=trigger.source,
                     controller=fire_controller,
+                    printed=trigger.printed,
                     activation_context=context,
                     event_state=event_state,
                 )
@@ -279,6 +284,7 @@ class TriggerManager:
                     stack_obj = StackObject(
                         source=trigger.source,
                         controller=fire_controller,
+                        printed=trigger.printed,
                         activation_context=context,
                     )
                     stack_obj.on_resolve = (
@@ -288,6 +294,7 @@ class TriggerManager:
                     stack_obj = StackObject(
                         source=trigger.source,
                         controller=fire_controller,
+                        printed=trigger.printed,
                         on_resolve=effect,
                     )
                 game.stack.push(stack_obj)
@@ -313,6 +320,7 @@ def register_delayed_trigger(
     *,
     condition: Callable[..., bool] | None = None,
     name: str = "Delayed trigger",
+    printed: type | None = None,
 ) -> None:
     """Create a delayed triggered ability (rule 603.7).
 
@@ -321,7 +329,8 @@ def register_delayed_trigger(
     registered under a marker object of its own, so it survives the creating
     object leaving the battlefield. *effect* follows the untargeted
     :class:`TriggerRegistration`
-    contract: ``effect(game)`` or ``effect(game, controller)``.
+    contract: ``effect(game)`` or ``effect(game, controller)``. *printed* is
+    the predefined class of the printed ability that creates it.
     """
     from engine.card import CardImpl
 
@@ -340,5 +349,6 @@ def register_delayed_trigger(
             effect=effect,
             source=marker,
             controller=controller,
+            printed=printed,
         )
     )

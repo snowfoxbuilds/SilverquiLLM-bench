@@ -78,7 +78,7 @@ class DrakeHatcher(Creature):
             # via `.counters`, syncable by the replay executor's CounterAdded
             # consumption) — not a card-private attribute.
             add_counter(game, source, 'incubation', amount)
-        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_damage_condition, effect=_damage_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_damage_condition, effect=_damage_effect, source=self, controller=controller, printed=DrakeHatcherAbility3))
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         """Remove three incubation counters: Create a 2/2 blue Drake token with flying."""

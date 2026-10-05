@@ -103,4 +103,4 @@ class KellanPlanarTrailblazer(Creature):
             from engine.zones import move_to_zone
             move_to_zone(game, top_card, Zone.LIBRARY, Zone.EXILE)
             top_card._playable_this_turn = True
-        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=KellanPlanarTrailblazerAbility1))

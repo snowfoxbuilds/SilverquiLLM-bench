@@ -61,4 +61,4 @@ class FirebrandArcher(Creature):
             for player in game.players:
                 if player is not ctrl:
                     deal_damage(game, source, player, 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=FirebrandArcherAbility1))

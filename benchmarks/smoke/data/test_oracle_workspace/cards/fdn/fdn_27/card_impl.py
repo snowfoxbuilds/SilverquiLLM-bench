@@ -97,4 +97,4 @@ class ValkyrieSCall(Enchantment):
                 creature_ref.subtypes = creature_ref.subtypes | {'Angel'}
             effect = game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.ABILITY, sublayer=None, bound_to=[creature_ref], apply=_apply_angel, duration=DURATION_PERMANENT))
             source._angel_effects.append(effect)
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_dies_condition, effect=_dies_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_dies_condition, effect=_dies_effect, source=self, controller=controller, printed=ValkyrieSCallAbility1))

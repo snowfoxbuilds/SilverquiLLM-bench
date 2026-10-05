@@ -91,7 +91,7 @@ class DreadwingScavenger(Creature):
                 chosen = choose_object(game, ctrl, hand, 'card to discard', source_card=source)
                 if chosen is not None:
                     discard(game, ctrl, chosen)
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=DreadwingScavengerAbility2))
 
         def _apply_threshold(game: Any) -> None:
             ctrl = getattr(source, 'controller', None)

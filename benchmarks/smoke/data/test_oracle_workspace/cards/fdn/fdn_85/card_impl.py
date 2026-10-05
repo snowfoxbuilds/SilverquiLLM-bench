@@ -82,4 +82,4 @@ class Electroduplicate(Sorcery):
             bf = game.get_battlefield(ctrl)
             if bf.contains(token):
                 sacrifice(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_sac_condition, effect=_sac_effect, source=token, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_sac_condition, effect=_sac_effect, source=token, controller=controller, printed=ElectroduplicateAbility1))

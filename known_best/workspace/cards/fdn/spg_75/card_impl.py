@@ -105,7 +105,7 @@ class SphinxsTutelage(Enchantment):
                     break
                 if not SphinxsTutelage._shared_color_among_nonlands(milled):
                     break
-        reg = TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=source.controller or source.owner)
+        reg = TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=source.controller or source.owner, printed=SphinxsTutelageAbility1)
         game.trigger_manager.register(reg)
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:

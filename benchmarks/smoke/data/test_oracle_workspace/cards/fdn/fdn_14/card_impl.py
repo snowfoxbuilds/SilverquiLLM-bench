@@ -60,4 +60,4 @@ class GuardedHeir(Creature):
                     token = make_creature_token('Knight', {'Knight'}, [Color.WHITE], 3, 3)
                     create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller, printed=GuardedHeirAbility2))

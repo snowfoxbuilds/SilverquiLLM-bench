@@ -64,4 +64,4 @@ class InfernalVessel(Creature):
                 move_to_zone(game, source, Zone.GRAVEYARD, Zone.BATTLEFIELD)
                 add_counter(game, source, '+1/+1', 2)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=InfernalVesselAbility1))

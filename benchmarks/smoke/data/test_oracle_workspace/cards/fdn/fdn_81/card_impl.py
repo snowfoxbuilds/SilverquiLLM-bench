@@ -101,7 +101,7 @@ class ChandraFlameshaper(Planeswalker):
                 bf = game.get_battlefield(controller)
                 if bf.contains(token):
                     sacrifice(game, controller, token)
-            game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_eot_condition, effect=_eot_effect, source=token, controller=controller))
+            game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_eot_condition, effect=_eot_effect, source=token, controller=controller, printed=ChandraFlameshaperAbility2))
 
         # Each activation's division, keyed by the identity of the targets it
         # chose; set while activating and read when that activation resolves.

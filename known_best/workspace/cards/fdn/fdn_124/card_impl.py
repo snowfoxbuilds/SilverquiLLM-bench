@@ -98,4 +98,4 @@ class PerforatingArtist(Creature):
                 if not chose_alternative:
                     from engine.game import lose_life
                     lose_life(game, player, 3)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=PerforatingArtistAbility2))

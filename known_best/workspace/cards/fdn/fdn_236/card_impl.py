@@ -88,4 +88,4 @@ class WildwoodScourge(Creature):
 
         def _effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1', 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=CounterAddedTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CounterAddedTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=WildwoodScourgeAbility2))

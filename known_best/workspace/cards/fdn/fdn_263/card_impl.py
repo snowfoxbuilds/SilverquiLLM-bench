@@ -26,5 +26,5 @@ class JungleHollowAbility3:
 
 
 JungleHollow = make_gainlife_tapland(
-    "Jungle Hollow", (ManaType.BLACK, ManaType.GREEN), 263, mana_printed=JungleHollowAbility3
+    "Jungle Hollow", (ManaType.BLACK, ManaType.GREEN), 263, mana_printed=JungleHollowAbility3, enters_printed=JungleHollowAbility2
 )

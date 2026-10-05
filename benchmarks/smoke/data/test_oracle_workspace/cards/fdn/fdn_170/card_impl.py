@@ -62,4 +62,4 @@ class BurglarRat(Creature):
                     to_discard = choose_object(game, player, hand_cards, 'card to discard', source_card=source)
                     discard(game, player, to_discard)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller, printed=BurglarRatAbility1))

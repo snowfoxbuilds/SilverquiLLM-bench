@@ -69,4 +69,4 @@ class EtaliPrimalStorm(Creature):
                     # Use the proper cast pipeline — spell goes on the
                     # stack and can be responded to (e.g. countered).
                     cast_spell_free(game, ctrl, card, Zone.EXILE)
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=EtaliPrimalStormAbility1))

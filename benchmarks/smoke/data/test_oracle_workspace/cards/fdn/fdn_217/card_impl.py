@@ -96,4 +96,4 @@ class DwynenGiltLeafDaen(Creature):
             if elf_count > 0:
                 from engine.game import gain_life
                 gain_life(game, ctrl, elf_count)
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=DwynenGiltLeafDaenAbility3))

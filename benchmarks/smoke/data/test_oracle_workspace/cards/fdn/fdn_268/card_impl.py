@@ -26,5 +26,5 @@ class SwiftwaterCliffsAbility3:
 
 
 SwiftwaterCliffs = make_gainlife_tapland(
-    "Swiftwater Cliffs", (ManaType.BLUE, ManaType.RED), 268, mana_printed=SwiftwaterCliffsAbility3
+    "Swiftwater Cliffs", (ManaType.BLUE, ManaType.RED), 268, mana_printed=SwiftwaterCliffsAbility3, enters_printed=SwiftwaterCliffsAbility2
 )

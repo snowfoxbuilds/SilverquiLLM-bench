@@ -233,6 +233,54 @@ def test_every_descriptor_construction_names_its_printed_ability():
     assert missing == []
 
 
+TRIGGERS = {"TriggerRegistration", "register_delayed_trigger"}
+
+
+def test_every_card_trigger_names_a_printed_ability_of_its_own_card():
+    """A card's trigger names one of its own card's generated classes; a
+    shared helper passes on the class its caller gives it."""
+    wrong = []
+    for path in FDN.rglob("*.py"):
+        if path.name == "tests.py":
+            continue
+        tree = ast.parse(path.read_text())
+        own = {node.name for node in tree.body if isinstance(node, ast.ClassDef) and "Ability" in node.name}
+        parameters = {
+            arg.arg for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) for arg in node.args.kwonlyargs + node.args.args
+        }
+        for name, call in _calls(path):
+            if name not in TRIGGERS:
+                continue
+            printed = next((k.value for k in call.keywords if k.arg == "printed"), None)
+            allowed = own if path.name == "card_impl.py" else parameters
+            if not (isinstance(printed, ast.Name) and printed.id in allowed):
+                wrong.append(f"{path.relative_to(WORKSPACE)}:{call.lineno}")
+        if path.name == "card_impl.py":
+            for _, call in _calls(path):
+                for keyword in call.keywords:
+                    if keyword.arg and keyword.arg.endswith("_printed") and not (
+                        isinstance(keyword.value, ast.Name) and keyword.value.id in own
+                    ):
+                        wrong.append(f"{path.relative_to(WORKSPACE)}:{call.lineno} {keyword.arg}")
+    assert wrong == []
+
+
+def test_a_trigger_on_the_stack_carries_its_printed_ability():
+    from engine.events import EntersBattlefieldTriggeredEvent
+
+    Ranger = _card("fdn_100", "BeastKinRanger")
+    printed = _card("fdn_100", "BeastKinRangerAbility2")
+    game = behavioral_game()
+    me = game.players[0]
+    ranger = Ranger(owner=me, controller=me)
+    game.get_battlefield(me).add(ranger)
+    ranger.register_triggers(game)
+    bear = Creature(name="Bear", owner=me, controller=me)
+    game.get_battlefield(me).add(bear)
+    game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=bear, controller=me))
+    (trigger,) = game.stack.objects()
+    assert trigger.printed is printed
+
 def test_basic_land_mana_abilities_carry_their_printed_ability():
     from engine import basic_lands
 

@@ -103,8 +103,8 @@ class KykarZephyrAwakener(Creature):
                         _returned[0] = True
                         _exiled_card.controller = _owner
                         move_to_zone(game, _exiled_card, Zone.EXILE, Zone.BATTLEFIELD)
-                    game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_return_condition, effect=_return_effect, source=source, controller=ctrl))
+                    game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_return_condition, effect=_return_effect, source=source, controller=ctrl, printed=KykarZephyrAwakenerAbility3))
             else:
                 token = make_creature_token("Spirit", {"Spirit"}, [Color.WHITE], 1, 1, keywords=Keyword.FLYING)
                 create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=KykarZephyrAwakenerAbility2))

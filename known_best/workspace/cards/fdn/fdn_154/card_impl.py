@@ -69,4 +69,4 @@ class ExtravagantReplication(Enchantment):
             # original's counters/damage/tap, unlike a bare copy.copy.
             token = mint_token_copy(chosen)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=BeginningOfUpkeepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=BeginningOfUpkeepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=ExtravagantReplicationAbility1))

@@ -55,4 +55,4 @@ class ClinquantSkymage(Creature):
 
         def _draw_effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1', 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller, printed=ClinquantSkymageAbility2))

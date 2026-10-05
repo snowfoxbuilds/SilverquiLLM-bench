@@ -96,7 +96,7 @@ class KaitoCunningInfiltrator(Planeswalker):
         def _combat_damage_effect(game: Any) -> None:
             """Put a loyalty counter on Kaito."""
             add_counter(game, pw, 'loyalty', 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_combat_damage_condition, effect=_combat_damage_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_combat_damage_condition, effect=_combat_damage_effect, source=self, controller=controller, printed=KaitoCunningInfiltratorAbility1))
 
     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
         pw = self
@@ -188,7 +188,7 @@ class KaitoCunningInfiltrator(Planeswalker):
                 """Create a 2/1 blue Ninja creature token."""
                 token = Creature(name='Ninja', base_power=2, base_toughness=1, subtypes={'Ninja'})
                 create_token(game, controller, token)
-            game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_spell_cast_condition, effect=_spell_cast_effect, source=emblem, controller=controller))
+            game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_spell_cast_condition, effect=_spell_cast_effect, source=emblem, controller=controller, printed=KaitoCunningInfiltratorAbility4))
         return [
             LoyaltyAbility(
                 loyalty_cost=+1,

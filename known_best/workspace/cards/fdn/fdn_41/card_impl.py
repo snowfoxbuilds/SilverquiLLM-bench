@@ -65,4 +65,4 @@ class HomunculusHorde(Creature):
             token = Creature(name='Homunculus Horde', mana_cost=ManaCost.parse('{3}{U}'), subtypes={'Homunculus'}, base_power=2, base_toughness=2)
             token.printed_as = printed_class(source)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller, printed=HomunculusHordeAbility1))

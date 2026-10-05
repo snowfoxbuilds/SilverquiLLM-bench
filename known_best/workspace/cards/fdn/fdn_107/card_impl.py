@@ -81,4 +81,4 @@ class MossbornHydra(Creature):
             if current > 0:
                 # Double the counters: add another `current` to reach 2×.
                 add_counter(game, source, '+1/+1', current)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_landfall_condition, effect=_landfall_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_landfall_condition, effect=_landfall_effect, source=self, controller=controller, printed=MossbornHydraAbility3))

@@ -104,4 +104,4 @@ class ArahboTheFirstFang(Creature):
                 return
             token = make_creature_token("Cat", {"Cat"}, [Color.WHITE], 1, 1)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller, printed=ArahboTheFirstFangAbility2))

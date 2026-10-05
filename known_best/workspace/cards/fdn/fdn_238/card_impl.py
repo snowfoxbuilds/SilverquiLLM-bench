@@ -90,4 +90,4 @@ class ConsumingAberration(Creature):
                     card_types = getattr(card, 'card_types', set())
                     if CardType.LAND in card_types:
                         break
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=ConsumingAberrationAbility2))

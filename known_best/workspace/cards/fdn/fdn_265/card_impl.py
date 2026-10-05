@@ -26,5 +26,5 @@ class RuggedHighlandsAbility3:
 
 
 RuggedHighlands = make_gainlife_tapland(
-    "Rugged Highlands", (ManaType.RED, ManaType.GREEN), 265, mana_printed=RuggedHighlandsAbility3
+    "Rugged Highlands", (ManaType.RED, ManaType.GREEN), 265, mana_printed=RuggedHighlandsAbility3, enters_printed=RuggedHighlandsAbility2
 )

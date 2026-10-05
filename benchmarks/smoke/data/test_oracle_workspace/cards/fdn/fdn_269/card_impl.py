@@ -26,5 +26,5 @@ class ThornwoodFallsAbility3:
 
 
 ThornwoodFalls = make_gainlife_tapland(
-    "Thornwood Falls", (ManaType.GREEN, ManaType.BLUE), 269, mana_printed=ThornwoodFallsAbility3
+    "Thornwood Falls", (ManaType.GREEN, ManaType.BLUE), 269, mana_printed=ThornwoodFallsAbility3, enters_printed=ThornwoodFallsAbility2
 )

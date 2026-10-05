@@ -76,4 +76,4 @@ class VanguardSeraph(Creature):
             if put_in_gy:
                 library.remove(top_card)
                 ctrl.zones[Zone.GRAVEYARD].add(top_card)
-        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller, printed=VanguardSeraphAbility2))

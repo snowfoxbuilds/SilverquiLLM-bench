@@ -53,4 +53,4 @@ class SlumberingCerberus(Creature):
 
         def _effect(game: 'GameState') -> None:
             source.is_tapped = False
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=SlumberingCerberusAbility2))

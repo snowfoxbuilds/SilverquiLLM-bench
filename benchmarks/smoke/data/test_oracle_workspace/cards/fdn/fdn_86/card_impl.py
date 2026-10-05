@@ -133,4 +133,4 @@ class FieryAnnihilation(Instant):
                 if graveyard.contains(_target_ref):
                     graveyard.remove(_target_ref)
                     exile(game, _target_ref)
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_death_condition, effect=_death_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_death_condition, effect=_death_effect, source=self, controller=controller, printed=FieryAnnihilationAbility1))

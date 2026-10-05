@@ -68,4 +68,4 @@ class ExemplarOfLight(Creature):
                 ctrl = controller
                 if ctrl is not None:
                     draw_card(game, ctrl)
-        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller, printed=ExemplarOfLightAbility2))

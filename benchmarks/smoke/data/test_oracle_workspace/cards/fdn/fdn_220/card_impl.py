@@ -104,7 +104,7 @@ class GarruksUprising(Enchantment):
             if controller is not None:
                 draw_card(game, controller)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=GarruksUprisingAbility3))
 
     def register_replacement_effects(self, game: GameState) -> None:
         if self._effect_ref is None:

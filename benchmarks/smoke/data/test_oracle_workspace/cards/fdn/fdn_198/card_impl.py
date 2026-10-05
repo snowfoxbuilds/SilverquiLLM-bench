@@ -86,4 +86,4 @@ class FlamewakePhoenix(Creature):
                 return  # insufficient mana -- pay() returns False, never raises
             move_to_zone(game, source, Zone.GRAVEYARD, Zone.BATTLEFIELD)
             source.controller = ctrl
-        game.trigger_manager.register(TriggerRegistration(event_type=BeginningOfCombatTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=BeginningOfCombatTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=FlamewakePhoenixAbility4))

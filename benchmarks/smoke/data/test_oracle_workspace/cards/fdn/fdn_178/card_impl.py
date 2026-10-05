@@ -53,4 +53,4 @@ class MaraudingBlightPriest(Creature):
                 if player is not ctrl:
                     from engine.game import lose_life
                     lose_life(game, player, 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=MaraudingBlightPriestAbility1))

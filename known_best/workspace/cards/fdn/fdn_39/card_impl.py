@@ -106,5 +106,6 @@ class GrapplingKraken(Creature):
                 effect=_landfall_effect,
                 source=self,
                 controller=controller,
+                printed=GrapplingKrakenAbility1,
             )
         )

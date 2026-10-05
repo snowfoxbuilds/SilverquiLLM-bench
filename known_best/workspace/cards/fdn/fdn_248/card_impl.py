@@ -192,4 +192,5 @@ class ThousandYearStorm(Enchantment):
             source=self,
             controller=controller,
             capture=_capture,
+            printed=ThousandYearStormAbility1,
         ))

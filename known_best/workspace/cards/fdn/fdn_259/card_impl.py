@@ -26,5 +26,5 @@ class BloodfellCavesAbility3:
 
 
 BloodfellCaves = make_gainlife_tapland(
-    "Bloodfell Caves", (ManaType.BLACK, ManaType.RED), 259, mana_printed=BloodfellCavesAbility3
+    "Bloodfell Caves", (ManaType.BLACK, ManaType.RED), 259, mana_printed=BloodfellCavesAbility3, enters_printed=BloodfellCavesAbility2
 )

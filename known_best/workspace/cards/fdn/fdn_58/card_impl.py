@@ -71,4 +71,4 @@ class BloodthirstyConqueror(Creature):
             from engine.game import gain_life
             gain_life(game, controller, _last_amount[0])
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=LosesLifeTriggeredEvent, condition=_cond, effect=_eff, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=LosesLifeTriggeredEvent, condition=_cond, effect=_eff, source=self, controller=controller, printed=BloodthirstyConquerorAbility3))
