@@ -182,6 +182,8 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 - **`printed` attr**: OBJECT, ABILITY and MODE decisions carry a blessed `printed` attr whose value is the predefined class the option stands for, and tests match on it (`Decision.obj(printed=GleamOfDeath)`).
   An instance id identifies one object in play, but implementations differ in which objects they present for a face; `printed` picks the intended choice in any valid implementation, and instance ids remain only to tell identical objects apart.
   A copy carries the class of what it copies (grilling 2026-10-04).
+  An ability an effect grants carries the class of the printed ability whose text defines it: the "{T}: Add {C}{C}" a land gains from Emrakul's last ability carries `EmrakulTheExigentDoomAbility5`.
+  A token has no Card Spec, so a token's abilities have predefined classes beside the cards that create it (`cards/fdn/tokens.py`, or `cards/fra/tokens.py` for the Jace token "empower Jace" creates).
 - **No raw strings**: tests place, choose and assert by predefined classes, never by a name string.
   Game Symbols values stay a closed, validated vocabulary exposed as named constants (grilling 2026-10-04).
   Every query's source ref carries `("printed", <class>)`, so an Intent routes by class; `test_utils` helpers take a predefined class (the first matching object) or the object itself and refuse a string.

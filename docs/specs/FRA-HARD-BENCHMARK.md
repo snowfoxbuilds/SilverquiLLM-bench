@@ -40,8 +40,8 @@ Collector numbers in different sets are distinct targets even when their numbers
 
 ### Workspaces and instructions
 
-The candidate Workspace is a self-contained copy of the HOB-generation V2 engine and FDN reference baseline.
-It contains ten behavior-free card stubs with Card Specs under `cards/fra/fra_<N>/` and `cards/hob/hob_<N>/`.
+The candidate Workspace is ported from the Known-Best Workspace with `scripts/port_from_known_best.py`: the Known-Best engine and FDN implementations plus the benchmark's Known Defects.
+It contains ten behavior-free card stubs with Card Specs under `cards/fra/fra_<N>/` and `cards/hob/hob_<N>/`, and `cards/fra/tokens.py` predefines the Jace token "empower Jace" creates and its abilities.
 Both parts of preparation and Adventure cards belong to their one target card.
 Each stub predefines one behavior-free class per face and per printed line of text, such as `GlamdringFoehammer` and `GleamOfDeath`, or `EmrakulTheExigentDoomAbility1`; how those classes relate is the candidate's design (grilling 2026-10-04).
 Each Benchmark Run implements the entire ten-card pool in one Workspace.
@@ -52,7 +52,7 @@ The Player Query / Player Decision protocol is described in [Decision Model](DEC
 The workspace documents describe the Priority Query as how the game runs — the set of choices a real player may make at that moment — state that every option carries the predefined class it stands for in its `printed` attr and that an illegal choice is rejected with `InvalidPlayerChoiceError`, and say nothing about how a multi-face card should be modelled or presented (grilling 2026-10-04).
 
 The host-only Test Oracle Workspace is independent of the candidate Workspace.
-Oracle-specific engine extensions and target implementations live under `data/test_oracle_workspace/`.
+Oracle-specific engine extensions are kept as `data/oracle_patches/*.patch` against the Known-Best engine and applied when the oracle is ported; target implementations live under `data/test_oracle_workspace/`.
 They are never staged into the candidate Workspace.
 Audited Tests live under `data/tests/audited/<set>/<card_id>/tests.py` and are mirrored into the Test Oracle Workspace for validation.
 Candidate-authored tests do not replace these suites.
