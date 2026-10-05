@@ -89,7 +89,7 @@ Fault attribution requires propagation: card implementations must never catch ex
 
 Locked alongside the Task #1 implementation prompt; recorded here so the spec, not the prompt, is canonical.
 
-**Module layout** — `engine/decisions.py` (kinds, decisions, refs, `satisfies()`, the Game Symbols vocabulary, exceptions), `engine/queries.py` (`PlayerQuery`, `Answer`, boundary validation), `engine/refs_registry.py` (Game Refs registry), `engine/player.py` (the `Player` ABC with the single entry point `answer(query) -> Answer`), `engine/intent_player.py` (`Intent`, `DeterministicPlayer`, query transcript).
+**Module layout** — `engine/decisions.py` (kinds, decisions, refs, `satisfies()`, the Game Symbols vocabulary, exceptions), `engine/queries.py` (`PlayerQuery`, `Answer`, boundary validation), `engine/refs_registry.py` (Game Refs registry), `engine/player.py` (the `Player` ABC with the single entry point `answer(query) -> Answer`), `engine/intent_player.py` (`Intent`, `DeterministicPlayer`, query transcript) in the HOB engines; from smoke and fra-hard-v2 onward the players that answer tests belong to the tests instead — the [Test Interface](TEST-INTERFACE.md)'s `ScriptedPlayer`, and `test_utils.py`'s `DeterministicPlayer` for Reference Tests.
 
 **Exception hierarchy** — engine-fault vs test-fault split:
 

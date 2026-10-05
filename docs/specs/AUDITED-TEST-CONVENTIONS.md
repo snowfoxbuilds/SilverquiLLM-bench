@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-10-03
+Last updated: 2026-10-05
 
 # Audited Test Conventions
 
@@ -158,6 +158,7 @@ def test_spell_resolves():
 ```
 
 Use `test_utils` helpers: `create_game()`, `set_board_state()`, `cast_spell()`, `resolve_top()`, `advance_to_phase()`. These advance game state deterministically without entering the open-ended game loop.
+From smoke and fra-hard-v2 onward, Audited Tests instead play only through the [Test Interface](TEST-INTERFACE.md)'s `run`, which stops when a script runs out or play diverges and times out between queries, so it never loops open-endedly (grilling 2026-10-05).
 
 ### 6. Clean up all resources in test teardown
 

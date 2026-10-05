@@ -52,7 +52,7 @@ It sets only:
 
 Permanents present at the start are not summoning sick, and a planeswalker starts with its printed loyalty.
 Construction sets no counters, damage or effects, and never shuffles: anything else a test needs is reached through proper play (grilling 2026-10-05).
-It returns a handle for each card it places.
+Every card it places has a handle; a test makes the ones it follows with `card(...)` before placing them.
 Once play begins, state changes only through play: a permanent that must arrive mid-game is cast, or put there by an effect, never placed by a helper (grilling 2026-10-05).
 
 ### Playing
@@ -78,7 +78,7 @@ Scripting a stretch of play, such as passing through a turn, uses helpers that b
 - **One script per player**: each player's script is an ordered list of entries, and it is the only source of answers — there are no choice Intents and no Baseline Intent, so choices that shape play, such as trigger order, replacement order or dividing combat damage, are scripted like any other (grilling 2026-10-05).
 - **What an entry answers**: an entry answers the player's next action question — a Priority Query or a combat declaration — and every other question that player receives until their following action question: a target or face inside their own action, a trigger's target as it is put on the stack, a choice while an object resolves, or a discard the other player's spell asks of them (grilling 2026-10-05).
   When and how those questions come differs between engines, but which stretch of a player's play they fall in is fixed by the rules, so one mechanism answers them all.
-- **Entry kinds**: `act` takes an action; `act_illegal` tries an action that must not take effect; `pass_priority` passes, or declares nothing at a declaration, and may carry choices for the questions that follow it.
+- **Entry kinds**: `act` takes an action; `act_illegal` tries an action that must not take effect; `pass_priority` passes, or declares nothing at a declaration, and may carry choices for the questions that follow it, in branches like any entry's.
 - **Preferences and branches**: an entry answers by preferences over Player Decisions, matched preference-major ([Decision Model](DECISION-MODEL.md) › Determinism, for its matching only, not its fill to the minimum), held as ordered branches, each an ordinary preference list that answers every question of the entry.
   A retry is never inferred: when the engine rejects an answer the entry owns, it answers the re-asked question from its next branch, so with branches [Gleam of Death, Glamdring] then [Glamdring] and Gleam of Death illegal, an engine that offers Gleam of Death at once and one that asks Glamdring and then the face both cast Glamdring on the retry (grilling 2026-10-04).
   A branch whose action is not offered is skipped.
@@ -96,7 +96,7 @@ Scripting a stretch of play, such as passing through a turn, uses helpers that b
   A scoped answer is never filled in or trimmed: when its choices are not all offered, or the declaration that would take effect gives a declared creature something else, that branch is withdrawn with nothing committed and the entry tries its next branch.
   Every declare-attackers step raises its declaration, even with nothing to declare; a declare-blockers step raises none when nothing attacks.
 - **Expected views**: the constructed position is the first expected view, and each entry states the changes its answers cause — Bolt in the graveyard, player 1 at 17 life; a host-side helper applies them to the previous expected view (grilling 2026-10-05).
-  A change says only what the view can show: a card, by handle or class, moves between zones; a token of a class appears on a player's side; a permanent becomes tapped or untapped; a player's life becomes a number; the game ends with a winner.
+  A change says only what the view can show: a card, by handle or class, moves between zones; a token of a class appears on a player's side or leaves the game; an ability of a class goes on the stack or leaves it; a permanent becomes tapped or untapped; a player's life becomes a number; the game ends with a winner or in a draw.
   The helper works out the step, the active player and the player being asked from the rules and the script — priority order (CR 117), the turn structure, and each turn's draw from the known library — so a test states only changes to the board and life.
   There is one expected outcome per test, never alternatives: how an engine presents its questions may vary, and the test's branches absorb that, but every presentation must reach the same view (grilling 2026-10-05).
   At every action question and when `run` stops, the whole Player View must equal the expected view, so an unexpected side effect fails as surely as a missing one.
