@@ -110,7 +110,7 @@ class PostconditionError(IntentError): ...
 
 **Answer / decline** — `Answer(selected: tuple[PlayerDecision, ...])`: each element equals one of `query.options`, no duplicates, `min <= len(selected) <= max`, validated by the engine before applying. Decline is `Answer(selected=())`, legal iff `min == 0`; there is no separate Decline type.
 
-**Ordering queries** — `min == max == len(options)`; the order of `Answer.selected` is the assignment order (damage assignment, trigger ordering).
+**Ordering queries** — `min == max == len(options)`; the order of `Answer.selected` is the order chosen (trigger ordering).
 
 **Intent shape** — frozen dataclass: `pattern: GameRef` (matched against query source refs, subset rule per field), `preferences: tuple[PlayerDecision, ...]` (in rank order; each takes the first offered option that satisfies it), optional `postcondition` (checked at `end_intent`). The registry name is passed to `start_intent(name, intent)`, not stored on the Intent.
 
@@ -155,6 +155,15 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
   The timing of a multi-face card is judged by the face being cast (CR 715.3a), so the card, not the engine's generic timing check, decides which of its faces may begin casting, and an instant face of a creature card is offered at instant speed.
 - **Combat declarations**: declaring attackers and declaring blockers are Player Queries too — a multi-select of OBJECT options for the creatures that could attack or block, with whom each attacks or blocks.
   They replace the imperative `declare_attackers` / `declare_blockers` calls and the convention that the engine silently filters illegal attackers and blockers (grilling 2026-10-04).
+  A declaration's one source is the declaring player's PLAYER decision with a `("window", "declare_attackers")` or `("window", "declare_blockers")` entry, matched by `declaration_pattern(window, seat)`.
+  Like a Priority Query, a declaration is an action question, answered by the declaring player's script entry ([Test Interface](TEST-INTERFACE.md) › Scripts).
+  What each attacker attacks and what each blocker blocks are follow-up queries sourced by that creature's OBJECT decision; the Known-Best Engine asks what an attacker attacks even when the defending player is the only choice, but an engine may skip a question with only one possible answer, so scoped answers are judged against the declaration that would take effect — what each declared creature attacks or blocks — never by which questions were asked.
+  A forced choice — a query with only one possible answer, its single option or none — needs no decision: a player with no preference for it answers it anyway, and that answer owns a rejection only when no answer of the attempt made a decision.
+- **Combat damage division**: an attacker blocked by two or more creatures has its controller divide its combat damage among them (CR 510.1c), replacing the damage assignment order (grilling 2026-10-05).
+  The Known-Best Engine asks one NUMBER query per blocker, sourced by the attacker with that blocker's OBJECT decision as its question payload: how much of the damage still undivided that blocker is assigned.
+  Without trample the last blocker is assigned the rest unasked; with trample every blocker is asked and the rest goes to the player or planeswalker attacked, and a division leaving damage over while a blocker is assigned less than lethal damage is rejected and asked again (CR 702.19c).
+- **Trigger order**: a player whose triggered abilities trigger together puts them on the stack in the order they choose (CR 603.3b), through an ordering query per player in APNAP order whenever they control two or more of them (grilling 2026-10-05).
+  Each option is an ABILITY decision naming its source's instance and its place among that source's abilities in the batch, and the first chosen is put on the stack first.
 - **Multi-face cards**: the benchmark predefines no face structure — Glamdring, Foe-hammer is one object and Gleam of Death another, and the candidate decides how they relate (grilling 2026-10-04).
   Any Player Query that can present such a card — a Priority Query, a target or graveyard selection such as Uldaros's, an effect-granted cast — may offer it as one object or as one object per face.
   Within one priority, Gleam of Death may be offered at once and chosen in one query, or Glamdring may be chosen first and a second query then asks Glamdring or Gleam of Death.
