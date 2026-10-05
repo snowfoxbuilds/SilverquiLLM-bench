@@ -1,290 +1,411 @@
-import pytest
-from card_impl import AncestralCraving, BloodlineRecollector
-from engine.card import Artifact, Creature, Instant
-from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer
-from engine.decisions import Decision, satisfies
-from engine.game import exile, sacrifice
-from engine.queries import is_priority_query
-from engine.types import ManaCost, ManaType, Phase, Step, Zone
-from engine.zones import move_to_zone
-from test_utils import (
-    ScriptEntryError,
-    act,
-    act_illegal,
-    advance_game_to_phase,
-    branch,
-    behavioral_game,
-    cast_card,
-    enter_permanent,
-    offered_actions,
-    resolve_stack,
-    take_action,
-)
+"""Bloodline Recollector // Ancestral Craving, played at the table.
+
+Each test builds a position, plays it through both players' scripts and judges
+the card by what the players can see. Whether the Recollector is prepared
+shows only through whether its controller may cast a copy of Ancestral
+Craving: a prepared Recollector shows nothing else on the table.
+"""
+
+from card_impl import AncestralCraving, BloodlineRecollector, BloodlineRecollectorAbility1
+from cards.fdn.fdn_48.card_impl import Refute
+from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride
+from cards.fdn.fdn_145.card_impl import ResoluteReinforcements, ResoluteReinforcementsAbility2
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_175.card_impl import HerosDownfall
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_203.card_impl import InvoluntaryEmployment
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_276.card_impl import Swamp
+from cards.fdn.fdn_278.card_impl import Mountain
+from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game, player, spell_copy, token
+
+from silverquillm.table import Table, appears, ceases, copied, gains_control, life, moves, off_stack, on_stack, taps
+
+MAIN = (Phase.PRECOMBAT_MAIN, 0)
+PREPARE = BloodlineRecollectorAbility1
 
 
-def arrange(deaths=3, opponent=False):
-    game = behavioral_game()
-    player = game.players[0]
-    source = enter_permanent(game, player, BloodlineRecollector())
-    owner = game.players[1] if opponent else player
-    for i in range(deaths):
-        victim = enter_permanent(game, owner, Creature(name=f"Victim {i}", base_power=1, base_toughness=1))
-        sacrifice(game, owner, victim)
-    advance_game_to_phase(game, Phase.ENDING, Step.END)
-    resolve_stack(game)
-    return game, player, source
+def _library(n: int = 4) -> list:
+    return [card(Plains) for _ in range(n)]
 
 
-def craving(game, seat=0, target_seat=0, illegal=False):
-    """Cast Ancestral Craving, whether the engine offers the inset spell at once
-    or offers its prepared card and then asks which spell to cast.
-
-    The offered actions only enumerate what could be chosen, never what is
-    legal: each Ancestral Craving or Bloodline Recollector the player is offered
-    gets its own branch, choosing that option at priority and Ancestral Craving
-    if a face is asked for, so an engine that offers a consumed or unprepared
-    one and rejects it is retried with the next.
-    """
-    candidates = (Decision.obj(printed=AncestralCraving), Decision.obj(printed=BloodlineRecollector))
-    options = [option for option in offered_actions(game, seat)
-               if any(satisfies(option, candidate) for candidate in candidates)]
-    branches = [branch(AncestralCraving, per_query={is_priority_query: [option]}) for option in options]
-    entry = act_illegal if illegal else act
-    return entry(branches=branches or [[AncestralCraving]],
-                 choices=(Decision.player(seat=target_seat),))
+def _bolt(t: Table, seat: int, bolt, target, *, then=()) -> None:
+    """``seat`` casts Burst Lightning at ``target``; it resolves."""
+    t.act(seat, bolt, choices=[target], then=[moves(bolt, Zone.STACK)])
+    t.pass_(seat)
+    t.pass_(1 - seat, then=[moves(bolt, Zone.GRAVEYARD), *then])
 
 
-def cast_craving(game, seat=0, target_seat=0):
-    take_action(game, seat, craving(game, seat, target_seat))
+def _kill(t: Table, seat: int, bolts, victims) -> None:
+    for bolt, victim in zip(bolts, victims):
+        _bolt(t, seat, bolt, victim, then=[moves(victim, Zone.GRAVEYARD)])
 
 
-def castable_cravings(game, seat=0, limit=3):
-    """How many prepared Ancestral Cravings the player can cast now, given {B}
-    for each; the ones cast are left on the stack."""
-    player = game.players[seat]
-    for count in range(limit):
-        player.mana_pool.add(ManaType.BLACK, 1)
-        try:
-            take_action(game, seat, craving(game, seat, seat))
-        except ScriptEntryError:
-            return count
-    return limit
+def _into_end_step(t: Table, seat: int = 0, *, triggers: int = 1) -> None:
+    """Every player passes into ``seat``'s end step, where ``triggers``
+    Recollector triggers go on the stack and resolve."""
+    t.pass_to(Phase.POSTCOMBAT_MAIN, seat)
+    t.pass_(seat)
+    t.pass_(1 - seat, then=[on_stack(PREPARE, seat) for _ in range(triggers)])
+    for _ in range(triggers):
+        t.pass_(seat)
+        t.pass_(1 - seat, then=[off_stack(PREPARE)])
 
 
-@pytest.mark.parametrize("deaths", [0, 1, 2])
-def test_fewer_than_three_deaths_does_not_prepare(deaths):
-    game, _player, _source = arrange(deaths)
-    assert castable_cravings(game) == 0
+def offers_craving(query) -> bool:
+    """A question that offers Ancestral Craving among its options."""
+    return any(dict(getattr(option, "attrs", ())).get("printed") is AncestralCraving for option in query.options)
 
 
-@pytest.mark.parametrize("opponent", [False, True])
-def test_three_deaths_prepares_even_if_opponents_creatures(opponent):
-    game, player, source = arrange(opponent=opponent)
-    assert castable_cravings(game) == 1
-    assert game.get_battlefield(player).contains(source)
+def craving(target: int, *recollectors) -> list:
+    """Branches that cast a copy of Ancestral Craving at player ``target``,
+    whether the engine offers the spell itself or a prepared Recollector
+    followed by which of the two to cast."""
+    return [branch(AncestralCraving, choices=[player(target)]),
+            *[branch(source, choices=[player(target)], per_query={offers_craving: [AncestralCraving]})
+              for source in recollectors]]
 
 
-def test_prepared_spell_draws_and_loses_life_and_unprepares():
-    game, player, source = arrange()
-    player.mana_pool.add(ManaType.BLACK, 1)
-    cast_craving(game)
-    resolve_stack(game)
-    assert len(game.get_hand(player).get_all()) == 3 and player.life == 17
-    assert castable_cravings(game) == 0
-    assert game.get_battlefield(player).contains(source)
+def _cast_craving(t: Table, seat: int, swamp, target: int, *recollectors) -> None:
+    """``seat`` taps ``swamp`` and casts a copy of Ancestral Craving at player ``target``."""
+    t.act(seat, swamp, then=[taps(swamp)])
+    t.act(seat, branches=craving(target, *recollectors), then=[copied(AncestralCraving, seat)],
+          note="the prepared Recollector lets its controller cast a copy of its spell")
 
 
-def test_can_target_opponent():
-    game, player, _source = arrange()
-    opponent = game.players[1]
-    player.mana_pool.add(ManaType.BLACK, 1)
-    cast_craving(game, target_seat=1)
-    resolve_stack(game)
-    assert opponent.life == 17 and len(game.get_hand(opponent).get_all()) == 3
-    assert player.life == 20
+def _resolve_craving(t: Table, seat: int, target: int, drawn, life_after: int) -> None:
+    t.pass_(seat)
+    t.pass_(1 - seat, then=[off_stack(AncestralCraving), *[moves(c, Zone.HAND) for c in drawn], life(target, life_after)])
 
 
-def test_prepared_copy_still_requires_black_mana():
-    game, player, _source = arrange()
-    take_action(game, 0, craving(game, illegal=True))
-    assert player.life == 20 and castable_cravings(game) == 1
+def _three_deaths(recollector=None, *, extra_hand=(), lands=(), seat1: Side | None = None):
+    """Player 0, with a Recollector, three Savannah Lions and three Burst Lightnings."""
+    lions = [card(SavannahLions) for _ in range(3)]
+    bolts = [card(BurstLightning) for _ in range(3)]
+    recollector = recollector or card(BloodlineRecollector)
+    game = create_game(
+        Side(hand=[*bolts, *extra_hand], battlefield=[recollector, *lions, *lands], library=_library(),
+             mana={ManaType.RED: 3}),
+        seat1 or Side(library=_library()),
+        start=MAIN,
+    )
+    return game, recollector, lions, bolts
 
 
-def test_prepared_copy_disappears_when_permanent_leaves():
-    game, _player, source = arrange()
-    exile(game, source)
-    resolve_stack(game)
-    assert castable_cravings(game) == 0
+def test_three_deaths_prepare_and_the_copy_draws_three_and_loses_three():
+    swamp = card(Swamp)
+    library = _library()
+    game, recollector, lions, bolts = _three_deaths(lands=[swamp], seat1=Side(library=library))
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    _into_end_step(t)
+    _cast_craving(t, 0, swamp, 1, recollector)
+    _resolve_craving(t, 0, 1, library[:3], 17)
+    t.run()
 
 
-def test_pending_spell_survives_source_leaving():
-    game, player, source = arrange()
-    player.mana_pool.add(ManaType.BLACK, 1)
-    cast_craving(game)
-    exile(game, source)
-    resolve_stack(game)
-    assert player.life == 17 and len(game.get_hand(player).get_all()) == 3
+def test_the_copy_can_target_its_caster():
+    swamp, library, recollector = card(Swamp), _library(6), card(BloodlineRecollector)
+    lions = [card(SavannahLions) for _ in range(3)]
+    bolts = [card(BurstLightning) for _ in range(3)]
+    game = create_game(
+        Side(hand=bolts, battlefield=[recollector, swamp, *lions], library=library, mana={ManaType.RED: 3}),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    _into_end_step(t)
+    _cast_craving(t, 0, swamp, 0, recollector)
+    _resolve_craving(t, 0, 0, library[:3], 17)
+    t.run()
 
 
-def test_blink_does_not_preserve_preparation():
-    game, player, source = arrange()
-    move_to_zone(game, source, Zone.BATTLEFIELD, Zone.EXILE)
-    move_to_zone(game, source, Zone.EXILE, Zone.BATTLEFIELD)
-    resolve_stack(game)
-    assert castable_cravings(game) == 0
-    assert player.life == 20
+def test_casting_the_copy_unprepares_the_recollector():
+    """Once its copy is cast — even while it is still on the stack — the
+    Recollector is no longer prepared."""
+    first, second = card(Swamp), card(Swamp)
+    library = _library()
+    game, recollector, lions, bolts = _three_deaths(lands=[first, second], seat1=Side(library=library))
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    _into_end_step(t)
+    _cast_craving(t, 0, first, 1, recollector)
+    t.act(0, second, then=[taps(second)])
+    t.act_illegal(0, branches=craving(1, recollector), note="the copy already cast unprepared it")
+    _resolve_craving(t, 0, 1, library[:3], 17)
+    t.act_illegal(0, branches=craving(1, recollector))
+    t.run()
 
 
-def test_multiple_prepare_events_do_not_accumulate_copies():
-    game, player, _source = arrange()
-    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
-    for i in range(3):
-        victim = enter_permanent(game, player, Creature(name=f"New victim {i}", base_power=1, base_toughness=1))
-        sacrifice(game, player, victim)
-    advance_game_to_phase(game, Phase.ENDING, Step.END)
-    resolve_stack(game)
-    assert castable_cravings(game) == 1
+def test_two_deaths_do_not_prepare():
+    swamp = card(Swamp)
+    game, recollector, lions, bolts = _three_deaths(lands=[swamp])
+    t = Table(game)
+    _kill(t, 0, bolts[:2], lions[:2])
+    t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+    t.pass_(0)
+    t.pass_(1, note="no Recollector trigger: fewer than three creatures died")
+    t.act(0, swamp, then=[taps(swamp)])
+    t.act_illegal(0, branches=craving(1, recollector))
+    t.run()
 
 
-def test_noncreature_deaths_do_not_prepare():
-    game = behavioral_game()
-    player = game.players[0]
-    enter_permanent(game, player, BloodlineRecollector())
-    for i in range(3):
-        victim = enter_permanent(game, player, Artifact(name=f"Relic {i}"))
-        sacrifice(game, player, victim)
-    advance_game_to_phase(game, Phase.ENDING, Step.END)
-    resolve_stack(game)
-    assert castable_cravings(game) == 0
+def test_the_opponents_creatures_count():
+    swamp = card(Swamp)
+    lions = [card(SavannahLions) for _ in range(3)]
+    bolts = [card(BurstLightning) for _ in range(3)]
+    library, recollector = _library(), card(BloodlineRecollector)
+    game = create_game(
+        Side(hand=bolts, battlefield=[recollector, swamp], library=_library(), mana={ManaType.RED: 3}),
+        Side(battlefield=lions, library=library),
+        start=MAIN,
+    )
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    _into_end_step(t)
+    _cast_craving(t, 0, swamp, 1, recollector)
+    _resolve_craving(t, 0, 1, library[:3], 17)
+    t.run()
 
 
-def test_deaths_before_recollector_entered_are_counted():
-    game = behavioral_game()
-    player = game.players[0]
-    for i in range(3):
-        victim = enter_permanent(game, player, Creature(name=f"Victim {i}", base_power=1, base_toughness=1))
-        sacrifice(game, player, victim)
-    enter_permanent(game, player, BloodlineRecollector())
-    advance_game_to_phase(game, Phase.ENDING, Step.END)
-    resolve_stack(game)
-    assert castable_cravings(game) == 1
+def test_token_creatures_dying_count():
+    """Two Lions and the Soldier token Resolute Reinforcements makes die."""
+    swamp, reinforcements, recollector = card(Swamp), card(ResoluteReinforcements), card(BloodlineRecollector)
+    lions = [card(SavannahLions) for _ in range(2)]
+    bolts = [card(BurstLightning) for _ in range(3)]
+    game = create_game(
+        Side(hand=[*bolts, reinforcements], battlefield=[recollector, swamp, *lions], library=_library(),
+             mana={ManaType.RED: 3, ManaType.WHITE: 2}),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act(0, reinforcements, then=[moves(reinforcements, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(reinforcements, Zone.BATTLEFIELD), on_stack(ResoluteReinforcementsAbility2, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(ResoluteReinforcementsAbility2), appears(0)])
+    _kill(t, 0, bolts[:2], lions)
+    _bolt(t, 0, bolts[2], token(1), then=[ceases(token(1))])
+    _into_end_step(t)
+    t.act(0, swamp, then=[taps(swamp)])
+    t.act(0, branches=craving(1, recollector), then=[copied(AncestralCraving, 0)])
+    t.run()
 
 
-def test_old_turn_deaths_do_not_prepare_next_turn():
-    game, player, _source = arrange()
-    player.mana_pool.add(ManaType.BLACK, 1)
-    cast_craving(game)
-    resolve_stack(game)
-    advance_game_to_phase(game, Phase.BEGINNING, Step.UPKEEP)
-    advance_game_to_phase(game, Phase.ENDING, Step.END)
-    resolve_stack(game)
-    assert castable_cravings(game) == 0
+def test_noncreature_deaths_do_not_count():
+    """Two Lions and a planeswalker dying is not three creatures."""
+    swamp, ajani, downfall = card(Swamp), card(AjaniCallerOfThePride), card(HerosDownfall)
+    recollector = card(BloodlineRecollector)
+    lions = [card(SavannahLions) for _ in range(2)]
+    bolts = [card(BurstLightning) for _ in range(2)]
+    game = create_game(
+        Side(hand=[*bolts, downfall], battlefield=[recollector, swamp, *lions, ajani], library=_library(),
+             mana={ManaType.RED: 2, ManaType.BLACK: 3}),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    t.act(0, downfall, choices=[ajani], then=[moves(downfall, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(downfall, Zone.GRAVEYARD), moves(ajani, Zone.GRAVEYARD)])
+    t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+    t.pass_(0)
+    t.pass_(1, note="no Recollector trigger")
+    t.act(0, swamp, then=[taps(swamp)])
+    t.act_illegal(0, branches=craving(1, recollector))
+    t.run()
 
 
-class Steal(Instant):
-    def __init__(self, target, **kwargs):
-        super().__init__(name="Steal response", mana_cost=ManaCost(), **kwargs)
-        self.target = target
-
-    def on_resolve(self, game):
-        player = self.controller
-
-        def apply(state):
-            for previous in state.players:
-                if state.get_battlefield(previous).contains(self.target):
-                    if previous is not player:
-                        state.get_battlefield(previous).remove(self.target)
-                        state.get_battlefield(player).add(self.target)
-                    self.target.controller = player
-                    break
-
-        game.effect_manager.add(ContinuousEffect(self, Layer.CONTROL, apply=apply,
-                                                duration=DURATION_END_OF_TURN))
-
-
-def test_control_change_transfers_cast_permission_without_recreating_copy():
-    game, player, source = arrange()
-    opponent = game.players[1]
-    cast_card(game, opponent, Steal(source, owner=opponent))
-    player.mana_pool.add(ManaType.BLACK, 1)
-    take_action(game, 0, craving(game, illegal=True))
-    opponent.mana_pool.add(ManaType.BLACK, 1)
-    cast_craving(game, seat=1, target_seat=0)
-    resolve_stack(game)
-    assert len(game.get_hand(player).get_all()) == 3
-    assert castable_cravings(game, 0) == castable_cravings(game, 1) == 0
+def test_deaths_before_the_recollector_entered_count():
+    swamp, recollector = card(Swamp), card(BloodlineRecollector)
+    library = _library()
+    lions = [card(SavannahLions) for _ in range(3)]
+    bolts = [card(BurstLightning) for _ in range(3)]
+    game = create_game(
+        Side(hand=[*bolts, recollector], battlefield=[swamp, *lions], library=_library(),
+             mana={ManaType.RED: 3, ManaType.BLACK: 2}),
+        Side(library=library),
+        start=MAIN,
+    )
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    t.act(0, recollector, then=[moves(recollector, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(recollector, Zone.BATTLEFIELD)])
+    _into_end_step(t)
+    _cast_craving(t, 0, swamp, 1, recollector)
+    _resolve_craving(t, 0, 1, library[:3], 17)
+    t.run()
 
 
-def test_creatures_exiled_instead_of_dying_do_not_prepare():
-    game = behavioral_game()
-    player = game.players[0]
-    enter_permanent(game, player, BloodlineRecollector())
-    for i in range(3):
-        victim = enter_permanent(game, player, Creature(name=f"Exiled {i}", base_power=1, base_toughness=1))
-        exile(game, victim)
-    advance_game_to_phase(game, Phase.ENDING, Step.END)
-    resolve_stack(game)
-    assert castable_cravings(game) == 0
+def test_deaths_on_an_earlier_turn_do_not_count():
+    """Three creatures die on player 0's turn; player 1's Recollector, cast on
+    the next turn, does not become prepared at that turn's end step."""
+    recollector, lands = card(BloodlineRecollector), [card(Swamp), card(Swamp), card(Swamp)]
+    lions = [card(SavannahLions) for _ in range(3)]
+    bolts = [card(BurstLightning) for _ in range(3)]
+    game = create_game(
+        Side(hand=bolts, battlefield=lions, library=_library(), mana={ManaType.RED: 3}),
+        Side(hand=[recollector], battlefield=lands, library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    t.pass_to(Phase.PRECOMBAT_MAIN, 1)
+    t.act(1, lands[0], then=[taps(lands[0])])
+    t.act(1, lands[1], then=[taps(lands[1])])
+    t.act(1, recollector, then=[moves(recollector, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(recollector, Zone.BATTLEFIELD)])
+    t.pass_to(Phase.POSTCOMBAT_MAIN, 1)
+    t.pass_(1)
+    t.pass_(0, note="no Recollector trigger: no creature died this turn")
+    t.act(1, lands[2], then=[taps(lands[2])])
+    t.act_illegal(1, branches=craving(0, recollector))
+    t.run()
 
 
-def test_token_creature_deaths_count():
-    game = behavioral_game()
-    player = game.players[0]
-    enter_permanent(game, player, BloodlineRecollector())
-    for i in range(3):
-        victim = enter_permanent(game, player, Creature(name=f"Token {i}", base_power=1, base_toughness=1))
-        victim.is_token = True
-        sacrifice(game, player, victim)
-    advance_game_to_phase(game, Phase.ENDING, Step.END)
-    resolve_stack(game)
-    assert castable_cravings(game) == 1
+def test_the_copy_needs_black_mana():
+    mountain = card(Mountain)
+    game, recollector, lions, bolts = _three_deaths(lands=[mountain])
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    _into_end_step(t)
+    t.act(0, mountain, then=[taps(mountain)])
+    t.act_illegal(0, branches=craving(1, recollector), note="{R} cannot pay {B}")
+    t.run()
 
 
-def test_preparation_is_consumed_on_cast_before_resolution():
-    game, player, _ = arrange()
-    player.mana_pool.add(ManaType.BLACK, 1)
-    cast_craving(game)
-    assert player.life == 20 and castable_cravings(game) == 0
-    resolve_stack(game)
-    assert player.life == 17
+def test_preparation_ends_when_the_recollector_leaves():
+    swamp, mountain, bolt = card(Swamp), card(Mountain), card(BurstLightning)
+    game, recollector, lions, bolts = _three_deaths(lands=[swamp, mountain], extra_hand=[bolt])
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    _into_end_step(t)
+    t.act(0, mountain, then=[taps(mountain)])
+    _bolt(t, 0, bolt, recollector, then=[moves(recollector, Zone.GRAVEYARD)])
+    t.act(0, swamp, then=[taps(swamp)])
+    t.act_illegal(0, branches=craving(1, recollector))
+    t.run()
 
 
-def test_leaving_before_prepare_trigger_resolves_does_not_prepare():
-    game = behavioral_game()
-    player = game.players[0]
-    source = enter_permanent(game, player, BloodlineRecollector())
-    for i in range(3):
-        sacrifice(game, player, enter_permanent(game, player, Creature(name=f"Victim {i}", base_power=1, base_toughness=1)))
-    advance_game_to_phase(game, Phase.ENDING, Step.END)
-    exile(game, source)
-    resolve_stack(game)
-    assert castable_cravings(game) == 0
+def test_leaving_before_the_trigger_resolves_prepares_nothing():
+    """The Recollector dies with its trigger on the stack: nothing can be cast."""
+    swamp = card(Swamp)
+    bolt = card(BurstLightning)
+    mountain = card(Mountain)
+    game, recollector, lions, bolts = _three_deaths(
+        lands=[swamp], seat1=Side(hand=[bolt], battlefield=[mountain], library=_library()))
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+    t.pass_(0)
+    t.pass_(1, then=[on_stack(PREPARE, 0)])
+    t.pass_(0)
+    t.act(1, mountain, then=[taps(mountain)])
+    _bolt(t, 1, bolt, recollector, then=[moves(recollector, Zone.GRAVEYARD)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(PREPARE)])
+    t.act(0, swamp, then=[taps(swamp)])
+    t.act_illegal(0, branches=craving(1, recollector))
+    t.run()
+
+
+def test_a_cast_copy_resolves_after_the_recollector_leaves():
+    swamp, library = card(Swamp), _library()
+    bolt, mountain = card(BurstLightning), card(Mountain)
+    game, recollector, lions, bolts = _three_deaths(
+        lands=[swamp], seat1=Side(hand=[bolt], battlefield=[mountain], library=library))
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    _into_end_step(t)
+    _cast_craving(t, 0, swamp, 1, recollector)
+    t.pass_(0)
+    t.act(1, mountain, then=[taps(mountain)])
+    _bolt(t, 1, bolt, recollector, then=[moves(recollector, Zone.GRAVEYARD)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(AncestralCraving), *[moves(c, Zone.HAND) for c in library[:3]], life(1, 17)])
+    t.run()
+
+
+def test_a_countered_copy_still_unprepares():
+    first, second = card(Swamp), card(Swamp)
+    refute = card(Refute)
+    islands = [card(Island) for _ in range(3)]
+    discard = card(Plains)
+    game, recollector, lions, bolts = _three_deaths(
+        lands=[first, second], seat1=Side(hand=[refute], battlefield=islands, library=[discard, *_library()]))
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    _into_end_step(t)
+    _cast_craving(t, 0, first, 1, recollector)
+    t.pass_(0)
+    for island in islands:
+        t.act(1, island, then=[taps(island)])
+    t.act(1, refute, choices=[spell_copy(1)], then=[moves(refute, Zone.STACK)])
+    t.pass_(1, choices=[discard])
+    t.pass_(0, then=[moves(refute, Zone.GRAVEYARD), off_stack(AncestralCraving), moves(discard, Zone.HAND),
+                     moves(discard, Zone.GRAVEYARD)])
+    t.act(0, second, then=[taps(second)])
+    t.act_illegal(0, branches=craving(1, recollector))
+    t.run()
 
 
 def test_two_recollectors_prepare_independently():
-    game = behavioral_game()
-    player = game.players[0]
-    sources = [enter_permanent(game, player, BloodlineRecollector()) for _ in range(2)]
-    for i in range(3):
-        sacrifice(game, player, enter_permanent(game, player, Creature(name=f"Victim {i}", base_power=1, base_toughness=1)))
-    advance_game_to_phase(game, Phase.ENDING, Step.END)
-    resolve_stack(game)
-    assert castable_cravings(game) == 2
-    resolve_stack(game)
-    assert player.life == 14 and len(game.get_hand(player).get_all()) == 6
-    assert castable_cravings(game) == 0
-    assert all(game.get_battlefield(player).contains(source) for source in sources)
+    first, second = card(Swamp), card(Swamp)
+    library = _library(7)
+    other = card(BloodlineRecollector)
+    game, recollector, lions, bolts = _three_deaths(lands=[other, first, second], seat1=Side(library=library))
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+    t.pass_(0)
+    t.pass_(1, then=[on_stack(PREPARE, 0), on_stack(PREPARE, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(PREPARE)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(PREPARE)])
+    _cast_craving(t, 0, first, 1, recollector, other)
+    _resolve_craving(t, 0, 1, library[:3], 17)
+    t.act(0, second, then=[taps(second)])
+    t.act(0, branches=craving(1, recollector, other), then=[copied(AncestralCraving, 0)])
+    _resolve_craving(t, 0, 1, library[3:6], 14)
+    t.run()
 
 
-def test_countered_prepared_spell_still_consumes_preparation():
-    from cards.fdn.fdn_160.card_impl import AnOfferYouCantRefuse
+def test_control_of_the_recollector_carries_its_preparation():
+    """Player 1 gains control of a prepared Recollector and casts its copy."""
+    employment = card(InvoluntaryEmployment)
+    lands = [card(Mountain) for _ in range(4)] + [card(Swamp)]
+    game, recollector, lions, bolts = _three_deaths(
+        seat1=Side(hand=[employment], battlefield=lands, library=_library()))
+    t = Table(game)
+    _kill(t, 0, bolts, lions)
+    _into_end_step(t)
+    t.pass_to(Phase.PRECOMBAT_MAIN, 1)
+    for land in lands[:4]:
+        t.act(1, land, then=[taps(land)])
+    t.act(1, employment, choices=[recollector], then=[moves(employment, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(employment, Zone.GRAVEYARD), gains_control(recollector, 1), appears(1)])
+    t.act(1, lands[4], then=[taps(lands[4])])
+    t.act(1, branches=craving(0, recollector), then=[copied(AncestralCraving, 1)])
+    t.run()
 
-    game, player, source = arrange()
-    player.mana_pool.add(ManaType.BLACK, 1)
-    cast_craving(game)
-    opponent = game.players[1]
-    opponent.mana_pool.add(ManaType.BLUE, 1)
-    cast_card(game, opponent, AnOfferYouCantRefuse())
-    assert player.life == 20 and not game.get_hand(player).get_all()
-    assert castable_cravings(game) == 0
-    assert game.get_battlefield(player).contains(source)
+
+def test_recollector_attacks_as_a_two_two():
+    recollector = card(BloodlineRecollector)
+    game = create_game(Side(battlefield=[recollector], library=_library()), Side(library=_library()), start=MAIN)
+    t = Table(game)
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, recollector, then=[taps(recollector)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 18)])
+    t.run()

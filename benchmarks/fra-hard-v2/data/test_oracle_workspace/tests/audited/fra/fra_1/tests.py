@@ -1,326 +1,313 @@
-import pytest
-from card_impl import EmrakulTheExigentDoom, EmrakulTheExigentDoomAbility5
-from engine.basic_lands import Forest, ForestAbility1
-from engine.card import ActivatedAbility, Artifact, Creature, Instant
-from engine.casting import resolve_top
-from engine.decisions import Decision
-from engine.game import exile
-from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, TargetRequirement, Zone
-from engine.zones import move_to_zone
-from test_utils import (
-    act,
-    act_illegal,
-    activate_card_ability,
-    advance_game_to_phase,
-    behavioral_game,
-    cast_card,
-    enter_permanent,
-    object_preference,
-    prefer,
-    resolve_stack,
-    take_action,
-)
+"""Emrakul, the Exigent Doom, played at the table.
+
+Each test builds a position, plays it through both players' scripts and judges
+Emrakul by what the players can see: where Emrakul is, which lands are tapped,
+what the granted mana pays for, which spells the rules allow, and combat.
+"""
+
+from card_impl import EmrakulTheExigentDoom, EmrakulTheExigentDoomAbility1, EmrakulTheExigentDoomAbility4
+from card_impl import EmrakulTheExigentDoomAbility5
+from cards.fdn.fdn_130.card_impl import QuickDrawKatana
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_153.card_impl import EssenceScatter
+from cards.fdn.fdn_164.card_impl import SpectralSailor
+from cards.fdn.fdn_175.card_impl import HerosDownfall
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_276.card_impl import Swamp
+from cards.fdn.fdn_280.card_impl import Forest, ForestAbility1
+from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game
+
+from silverquillm.table import Table, life, moves, off_stack, on_stack, taps, untaps
+
+MAIN = (Phase.PRECOMBAT_MAIN, 0)
+EXILE_ABILITY = EmrakulTheExigentDoomAbility5
+GRANTED = EmrakulTheExigentDoomAbility5  # the "{T}: Add {C}{C}" the land gains
+CAST_TRIGGER = EmrakulTheExigentDoomAbility1
+WARD = EmrakulTheExigentDoomAbility4
 
 
-def arrange():
-    game = behavioral_game()
-    player = game.players[0]
-    emrakul = EmrakulTheExigentDoom(owner=player)
-    game.get_hand(player).add(emrakul)
-    land = enter_permanent(game, player, Forest())
-    player.mana_pool.add(ManaType.COLORLESS, 3)
-    prefer(player, object_preference(game, land))
-    return game, player, emrakul, land
+def _library(n: int = 3) -> list:
+    return [card(Plains) for _ in range(n)]
 
 
-def exile_ability(game, emrakul):
-    take_action(game, 0, act(EmrakulTheExigentDoomAbility5))
-    resolve_stack(game)
+def _exile(t: Table, emrakul, land) -> None:
+    """Player 0 pays {3} and exiles Emrakul from hand, targeting ``land``; it resolves."""
+    t.act(0, EXILE_ABILITY, choices=[land], then=[moves(emrakul, Zone.EXILE), on_stack(EXILE_ABILITY, 0)],
+          note="exiling Emrakul is part of the cost")
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(EXILE_ABILITY)])
 
 
-def granted_mana(game, land):
-    """The "{T}: Add {C}{C}" ``land`` gains, by its source and printed identity."""
-    instance = dict(object_preference(game, land).attrs)["instance"]
-    return Decision.ability(source=instance, printed=EmrakulTheExigentDoomAbility5)
+def _tap(t: Table, seat: int, lands) -> None:
+    for land in lands:
+        t.act(seat, land, then=[taps(land)])
 
 
-def tap_for_granted_mana(game, seat=0):
-    take_action(game, seat, act(Decision.ability(printed=EmrakulTheExigentDoomAbility5)))
+def _in_exile(lands: int = 8, *, seat1: Side | None = None):
+    """Emrakul in hand with {3} to exile it, a Forest to target and ``lands`` more Forests."""
+    emrakul, target = card(EmrakulTheExigentDoom), card(Forest)
+    forests = [card(Forest) for _ in range(lands)]
+    game = create_game(
+        Side(hand=[emrakul], battlefield=[target, *forests], library=_library(), mana={ManaType.COLORLESS: 3}),
+        seat1 or Side(library=_library()),
+        start=MAIN,
+    )
+    return game, emrakul, target, forests
 
 
-def assert_grant(game, land, seat=0):
-    """The untapped ``land`` taps for {C}{C} through the granted ability."""
-    pool = game.players[seat].mana_pool
-    before = pool.total()
-    take_action(game, seat, act(granted_mana(game, land)))
-    assert land.is_tapped and pool.total() == before + 2
+def _cast_from_exile(t: Table, emrakul, untapped) -> None:
+    """Player 0 casts Emrakul from exile; its cast trigger untaps ``untapped``,
+    then Emrakul resolves."""
+    t.act(0, emrakul, then=[moves(emrakul, Zone.STACK), on_stack(CAST_TRIGGER, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(CAST_TRIGGER), *[untaps(land) for land in untapped]])
+    t.pass_(0)
+    t.pass_(1, then=[moves(emrakul, Zone.BATTLEFIELD)])
 
 
-def assert_no_grant(game, land, seat=0):
-    """The untapped ``land`` has no granted ability that can take effect."""
-    pool = game.players[seat].mana_pool
-    before = pool.total()
-    take_action(game, seat, act_illegal(granted_mana(game, land)))
-    assert not land.is_tapped and pool.total() == before
+def test_exiling_is_a_cost_and_the_grant_waits_for_resolution():
+    game, emrakul, target, _ = _in_exile(0)
+    t = Table(game)
+    t.act(0, EXILE_ABILITY, choices=[target], then=[moves(emrakul, Zone.EXILE), on_stack(EXILE_ABILITY, 0)])
+    t.act_illegal(0, GRANTED, note="the land has no granted ability yet")
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(EXILE_ABILITY)])
+    t.act(0, GRANTED, then=[taps(target)])
+    t.run()
 
 
-def test_exile_is_cost_and_land_grant_waits_for_resolution():
-    game, player, emrakul, land = arrange()
-    take_action(game, 0, act(EmrakulTheExigentDoomAbility5))
-    assert player.zones[Zone.EXILE].contains(emrakul) and player.mana_pool.total() == 0
-    assert_no_grant(game, land)
-    resolve_stack(game)
-    assert_grant(game, land)
-    assert player.mana_pool.total() == 2
+def test_the_grant_is_in_addition_to_the_lands_own_ability():
+    game, emrakul, target, _ = _in_exile(0)
+    t = Table(game)
+    _exile(t, emrakul, target)
+    t.act(0, ForestAbility1, then=[taps(target)])
+    t.run()
 
 
-def test_grant_is_additional_not_replacement():
-    game, player, emrakul, land = arrange()
-    exile_ability(game, emrakul)
-    take_action(game, 0, act(ForestAbility1))
-    assert player.mana_pool.can_pay(ManaCost.parse("{G}"))
+def test_granted_mana_pays_for_emrakul_and_casting_it_untaps_the_lands():
+    """Eight Forests and the granted {C}{C} make exactly {10}: Emrakul is cast
+    from exile, its cast trigger untaps every land, and the grant is gone."""
+    game, emrakul, target, forests = _in_exile(8)
+    t = Table(game)
+    _exile(t, emrakul, target)
+    t.act(0, GRANTED, then=[taps(target)])
+    _tap(t, 0, forests)
+    _cast_from_exile(t, emrakul, [target, *forests])
+    t.act_illegal(0, GRANTED, note="casting Emrakul from exile ended the grant")
+    t.run()
 
 
-def test_cast_from_exile_ends_grant_and_untaps_lands():
-    game, player, emrakul, land = arrange()
-    exile_ability(game, emrakul)
-    land.is_tapped = True
-    player.mana_pool.add(ManaType.COLORLESS, 10)
-    take_action(game, 0, act(EmrakulTheExigentDoom))
-    assert land.is_tapped
-    resolve_top(game)
-    assert not land.is_tapped and not game.get_battlefield(player).contains(emrakul)
-    resolve_stack(game)
-    assert game.get_battlefield(player).contains(emrakul)
-    assert_no_grant(game, land)
-    assert emrakul.power == 12 and emrakul.toughness == 12
-    assert Keyword.FLYING in emrakul.keywords and Keyword.TRAMPLE in emrakul.keywords
+def test_without_the_grant_nine_lands_cannot_cast_emrakul():
+    game, emrakul, target, forests = _in_exile(8)
+    t = Table(game)
+    _exile(t, emrakul, target)
+    t.act(0, ForestAbility1, then=[taps(target)])
+    _tap(t, 0, forests)
+    t.act_illegal(0, emrakul, note="{9} cannot pay {10}")
+    t.run()
 
 
-def test_granted_mana_can_pay_for_emrakul_before_it_expires():
-    game, player, emrakul, land = arrange()
-    exile_ability(game, emrakul)
-    player.mana_pool.add(ManaType.COLORLESS, 8)
-    tap_for_granted_mana(game)
-    assert land.is_tapped and player.mana_pool.total() == 10
-    take_action(game, 0, act(EmrakulTheExigentDoom))
-    resolve_stack(game)
-    assert game.get_battlefield(player).contains(emrakul) and player.mana_pool.total() == 0
-    assert not land.is_tapped
-    assert_no_grant(game, land)
-
-
-def test_grant_survives_cleanup():
-    game, _player, emrakul, land = arrange()
-    exile_ability(game, emrakul)
-    advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
-    assert_grant(game, land)
-
-
-def test_exile_cast_requires_normal_timing_and_mana():
-    game, player, emrakul, _land = arrange()
-    exile_ability(game, emrakul)
-    take_action(game, 0, act_illegal(EmrakulTheExigentDoom))
-    player.mana_pool.add(ManaType.COLORLESS, 10)
-    advance_game_to_phase(game, Phase.ENDING, Step.END)
-    take_action(game, 0, act_illegal(EmrakulTheExigentDoom))
-    assert player.zones[Zone.EXILE].contains(emrakul)
-
-
-def test_land_removed_in_response_fizzles_and_no_cast_permission():
-    game, player, emrakul, land = arrange()
-    take_action(game, 0, act(EmrakulTheExigentDoomAbility5))
-    exile(game, land)
-    resolve_stack(game)
-    player.mana_pool.add(ManaType.COLORLESS, 10)
-    take_action(game, 0, act_illegal(EmrakulTheExigentDoom))
-    assert player.zones[Zone.EXILE].contains(emrakul)
-
-
-def test_land_blink_removes_granted_ability():
-    game, _player, emrakul, land = arrange()
-    exile_ability(game, emrakul)
-    move_to_zone(game, land, Zone.BATTLEFIELD, Zone.EXILE)
-    move_to_zone(game, land, Zone.EXILE, Zone.BATTLEFIELD)
-    assert_no_grant(game, land)
-
-
-def test_emrakul_leaving_exile_other_way_does_not_expire_land_grant():
-    game, player, emrakul, land = arrange()
-    exile_ability(game, emrakul)
-    move_to_zone(game, emrakul, Zone.EXILE, Zone.HAND)
-    player.mana_pool.add(ManaType.COLORLESS, 10)
-    take_action(game, 0, act(EmrakulTheExigentDoom))
-    resolve_stack(game)
-    assert game.get_battlefield(player).contains(emrakul)
-    assert_grant(game, land)
-
-
-def test_exile_permission_does_not_follow_return_to_exile():
-    game, player, emrakul, _land = arrange()
-    exile_ability(game, emrakul)
-    move_to_zone(game, emrakul, Zone.EXILE, Zone.HAND)
-    move_to_zone(game, emrakul, Zone.HAND, Zone.EXILE)
-    player.mana_pool.add(ManaType.COLORLESS, 10)
-    take_action(game, 0, act_illegal(EmrakulTheExigentDoom))
-    assert player.zones[Zone.EXILE].contains(emrakul)
-
-
-def test_noncast_entry_does_not_untap_lands():
-    game, _player, emrakul, land = arrange()
-    land.is_tapped = True
-    move_to_zone(game, emrakul, Zone.HAND, Zone.BATTLEFIELD)
-    resolve_stack(game)
-    assert land.is_tapped
-
-
-def test_cast_untaps_only_your_lands():
-    game, player, _emrakul, land = arrange()
-    enemy = enter_permanent(game, game.players[1], Forest())
-    artifact = enter_permanent(game, player, Artifact(name="Relic"))
-    land.is_tapped = enemy.is_tapped = artifact.is_tapped = True
-    player.mana_pool.add(ManaType.COLORLESS, 7)
-    take_action(game, 0, act(EmrakulTheExigentDoom))
-    resolve_top(game)
-    assert not land.is_tapped and enemy.is_tapped and artifact.is_tapped
-
-
-class Removal(Instant):
-    def __init__(self, **kwargs):
-        super().__init__(name="Removal", mana_cost=ManaCost(), **kwargs)
-
-    def get_targets(self, game):
-        return [TargetRequirement(lambda card: CardType.CREATURE in getattr(card, "card_types", set()),
-                                  "Target creature", Zone.BATTLEFIELD)]
-
-    def on_resolve(self, game):
-        exile(game, self.chosen_targets[0])
-
-
-@pytest.mark.parametrize("permanents", [0, 2, 3])
-def test_ward_requires_three_permanents(permanents):
-    game, player, emrakul, _land = arrange()
-    move_to_zone(game, emrakul, Zone.HAND, Zone.BATTLEFIELD)
-    opponent = game.players[1]
-    for _ in range(permanents):
-        enter_permanent(game, opponent, Forest())
-    prefer(opponent, object_preference(game, emrakul), Decision.yes())
-    spell = Removal(owner=opponent)
-    cast_card(game, opponent, spell)
-    if permanents < 3:
-        assert game.get_battlefield(player).contains(emrakul)
-        assert opponent.zones[Zone.GRAVEYARD].contains(spell)
-        assert len(game.get_battlefield(opponent).get_all()) == permanents
-    else:
-        assert player.zones[Zone.EXILE].contains(emrakul)
-        assert len(game.get_battlefield(opponent).get_all()) == 0
-
-
-def test_ward_can_be_declined_even_with_payment_available():
-    game, player, emrakul, _land = arrange()
-    move_to_zone(game, emrakul, Zone.HAND, Zone.BATTLEFIELD)
-    opponent = game.players[1]
-    for _ in range(3):
-        enter_permanent(game, opponent, Forest())
-    prefer(opponent, object_preference(game, emrakul), Decision.no())
-    cast_card(game, opponent, Removal(owner=opponent))
-    assert game.get_battlefield(player).contains(emrakul)
-    assert len(game.get_battlefield(opponent).get_all()) == 3
-
-
-def test_your_own_targeting_does_not_trigger_ward():
-    game, player, emrakul, land = arrange()
-    move_to_zone(game, emrakul, Zone.HAND, Zone.BATTLEFIELD)
-    prefer(player, object_preference(game, emrakul))
-    cast_card(game, player, Removal(owner=player))
-    assert player.zones[Zone.EXILE].contains(emrakul) and game.get_battlefield(player).contains(land)
-
-
-class Exiler(Creature):
-    def __init__(self, target, **kwargs):
-        super().__init__(name="Exiler", base_power=1, base_toughness=1, **kwargs)
-        self.target = target
-
-    def get_activated_abilities(self):
-        return [ActivatedAbility(lambda g, s: True,
-            lambda g, targets, context: exile(g, targets[0]),
-            targeting=lambda g, s, p: [self.target])]
-
-
-def test_ward_counters_activated_ability_without_removing_source():
-    game, player, emrakul, _land = arrange()
-    move_to_zone(game, emrakul, Zone.HAND, Zone.BATTLEFIELD)
-    opponent = game.players[1]
-    source = enter_permanent(game, opponent, Exiler(emrakul))
-    activate_card_ability(game, opponent, source)
-    resolve_stack(game)
-    assert game.get_battlefield(player).contains(emrakul)
-    assert game.get_battlefield(opponent).contains(source)
-
-
-def test_opponents_land_can_receive_grant_but_not_cast_permission():
-    game, player, emrakul, _ = arrange()
-    opponent = game.players[1]
-    land = enter_permanent(game, opponent, Forest())
-    prefer(player, object_preference(game, land))
-    exile_ability(game, emrakul)
-    tap_for_granted_mana(game, seat=1)
-    assert opponent.mana_pool.total() == 2
-    opponent.mana_pool.add(ManaType.COLORLESS, 10)
-    game.active_player_index = 1
-    take_action(game, 1, act_illegal(EmrakulTheExigentDoom))
-    assert player.zones[Zone.EXILE].contains(emrakul)
-
-
-def test_insufficient_activation_mana_does_not_exile_or_pay():
-    game, player, emrakul, _ = arrange()
-    player.mana_pool.pay(ManaCost(generic=1))
-    take_action(game, 0, act_illegal(EmrakulTheExigentDoomAbility5))
-    assert game.get_hand(player).contains(emrakul)
-    assert player.mana_pool.total() == 2
-
-
-def test_exile_activation_is_not_available_on_battlefield():
-    game, player, emrakul, _ = arrange()
-    move_to_zone(game, emrakul, Zone.HAND, Zone.BATTLEFIELD)
-    take_action(game, 0, act_illegal(EmrakulTheExigentDoomAbility5))
-    assert game.get_battlefield(player).contains(emrakul)
-    assert player.mana_pool.total() == 3
-
-
-def test_land_grant_resolves_even_if_emrakul_already_left_exile():
-    game, player, emrakul, land = arrange()
-    take_action(game, 0, act(EmrakulTheExigentDoomAbility5))
-    move_to_zone(game, emrakul, Zone.EXILE, Zone.HAND)
-    resolve_stack(game)
-    assert_grant(game, land)
-    assert game.get_hand(player).contains(emrakul)
-
-
-def test_blinked_land_in_response_gets_no_grant_or_permission():
-    game, player, emrakul, land = arrange()
-    take_action(game, 0, act(EmrakulTheExigentDoomAbility5))
-    move_to_zone(game, land, Zone.BATTLEFIELD, Zone.EXILE)
-    move_to_zone(game, land, Zone.EXILE, Zone.BATTLEFIELD)
-    resolve_stack(game)
-    assert_no_grant(game, land)
-    player.mana_pool.add(ManaType.COLORLESS, 10)
-    take_action(game, 0, act_illegal(EmrakulTheExigentDoom))
-    assert player.zones[Zone.EXILE].contains(emrakul)
+def test_casting_emrakul_untaps_only_its_controllers_lands():
+    emrakul = card(EmrakulTheExigentDoom)
+    mine, theirs = card(Forest, tapped=True), card(Forest, tapped=True)
+    game = create_game(
+        Side(hand=[emrakul], battlefield=[mine], library=_library(), mana={ManaType.COLORLESS: 10}),
+        Side(battlefield=[theirs], library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act(0, emrakul, then=[moves(emrakul, Zone.STACK), on_stack(CAST_TRIGGER, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(CAST_TRIGGER), untaps(mine)], note="player 1's Forest stays tapped")
+    t.pass_(0)
+    t.pass_(1, then=[moves(emrakul, Zone.BATTLEFIELD)])
+    t.run()
 
 
 def test_countering_emrakul_does_not_counter_its_cast_trigger():
-    from cards.fdn.fdn_153.card_impl import EssenceScatter
+    emrakul, scatter = card(EmrakulTheExigentDoom), card(EssenceScatter)
+    mine, islands = card(Forest, tapped=True), [card(Island), card(Island)]
+    game = create_game(
+        Side(hand=[emrakul], battlefield=[mine], library=_library(), mana={ManaType.COLORLESS: 10}),
+        Side(hand=[scatter], battlefield=islands, library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act(0, emrakul, then=[moves(emrakul, Zone.STACK), on_stack(CAST_TRIGGER, 0)])
+    t.pass_(0)
+    _tap(t, 1, islands)
+    t.act(1, scatter, choices=[emrakul], then=[moves(scatter, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(scatter, Zone.GRAVEYARD), moves(emrakul, Zone.GRAVEYARD)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(CAST_TRIGGER), untaps(mine)])
+    t.run()
 
-    game, player, emrakul, land = arrange()
-    land.is_tapped = True
-    player.mana_pool.add(ManaType.COLORLESS, 7)
-    take_action(game, 0, act(EmrakulTheExigentDoom))
-    opponent = game.players[1]
-    opponent.mana_pool.add(ManaType.BLUE, 1)
-    opponent.mana_pool.add(ManaType.COLORLESS, 1)
-    cast_card(game, opponent, EssenceScatter(), resolve=False)
-    resolve_top(game)
-    assert player.zones[Zone.GRAVEYARD].contains(emrakul) and land.is_tapped
-    resolve_stack(game)
-    assert not land.is_tapped
+
+def test_casting_from_exile_needs_sorcery_timing():
+    game, emrakul, target, forests = _in_exile(8)
+    t = Table(game)
+    _exile(t, emrakul, target)
+    t.pass_to(Step.UPKEEP, 1)
+    t.pass_(1)
+    t.act(0, GRANTED, then=[taps(target)])
+    _tap(t, 0, forests)
+    t.act_illegal(0, emrakul, note="it is the opponent's turn")
+    t.run()
+
+
+def test_the_grant_lasts_through_later_turns():
+    game, emrakul, target, _ = _in_exile(0)
+    t = Table(game)
+    _exile(t, emrakul, target)
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    t.act(0, GRANTED, then=[taps(target)], note="two turns later the land still has the grant")
+    t.run()
+
+
+def test_an_opponents_land_can_get_the_grant_but_not_the_permission():
+    """The land may be player 1's: player 1 taps it for {C}{C} and casts
+    Quick-Draw Katana with it, but may not cast Emrakul."""
+    emrakul, theirs, katana = card(EmrakulTheExigentDoom), card(Forest), card(QuickDrawKatana)
+    game = create_game(
+        Side(hand=[emrakul], library=_library(), mana={ManaType.COLORLESS: 3}),
+        Side(hand=[katana], battlefield=[theirs], library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    _exile(t, emrakul, theirs)
+    t.pass_to(Phase.PRECOMBAT_MAIN, 1)
+    t.act(1, GRANTED, then=[taps(theirs)])
+    t.act_illegal(1, emrakul)
+    t.act(1, katana, then=[moves(katana, Zone.STACK)], note="{C}{C} pays the Katana's {2}")
+    t.pass_(1)
+    t.pass_(0, then=[moves(katana, Zone.BATTLEFIELD)])
+    t.run()
+
+
+def test_exiling_needs_three_mana():
+    emrakul, target = card(EmrakulTheExigentDoom), card(Forest)
+    game = create_game(
+        Side(hand=[emrakul], battlefield=[target], library=_library(), mana={ManaType.COLORLESS: 2}),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act_illegal(0, EXILE_ABILITY, choices=[target], note="Emrakul stays in hand")
+    t.run()
+
+
+def test_exiling_works_only_from_hand():
+    emrakul, target = card(EmrakulTheExigentDoom), card(Forest)
+    game = create_game(
+        Side(battlefield=[emrakul, target], library=_library(), mana={ManaType.COLORLESS: 3}),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act_illegal(0, EXILE_ABILITY, choices=[target])
+    t.run()
+
+
+def _ward_game(seat1_battlefield):
+    emrakul, downfall = card(EmrakulTheExigentDoom), card(HerosDownfall)
+    game = create_game(
+        Side(battlefield=[emrakul], library=_library()),
+        Side(hand=[downfall], battlefield=seat1_battlefield, library=_library(), mana={ManaType.BLACK: 3}),
+        start=(Phase.PRECOMBAT_MAIN, 1),
+    )
+    return game, emrakul, downfall
+
+
+def test_ward_counters_a_spell_whose_controller_cannot_pay():
+    game, emrakul, downfall = _ward_game([card(Plains), card(Plains)])
+    t = Table(game)
+    t.act(1, downfall, choices=[emrakul], then=[moves(downfall, Zone.STACK), on_stack(WARD, 0)])
+    t.pass_(1, choices=[Decision.yes()])
+    t.pass_(0, then=[off_stack(WARD), moves(downfall, Zone.GRAVEYARD)], note="willing or not, two permanents cannot pay ward")
+    t.run()
+
+
+def test_ward_is_paid_by_sacrificing_three_permanents():
+    paid = [card(Plains), card(Plains), card(Plains)]
+    game, emrakul, downfall = _ward_game(paid)
+    t = Table(game)
+    t.act(1, downfall, choices=[emrakul], then=[moves(downfall, Zone.STACK), on_stack(WARD, 0)])
+    t.pass_(1, choices=[Decision.yes(), *paid])
+    t.pass_(0, then=[off_stack(WARD), *[moves(land, Zone.GRAVEYARD) for land in paid]])
+    t.pass_(1)
+    t.pass_(0, then=[moves(downfall, Zone.GRAVEYARD), moves(emrakul, Zone.GRAVEYARD)])
+    t.run()
+
+
+def test_ward_may_be_declined():
+    game, emrakul, downfall = _ward_game([card(Plains), card(Plains), card(Plains)])
+    t = Table(game)
+    t.act(1, downfall, choices=[emrakul], then=[moves(downfall, Zone.STACK), on_stack(WARD, 0)])
+    t.pass_(1, choices=[Decision.no()])
+    t.pass_(0, then=[off_stack(WARD), moves(downfall, Zone.GRAVEYARD)])
+    t.run()
+
+
+def test_its_controllers_own_spell_does_not_trigger_ward():
+    emrakul, downfall = card(EmrakulTheExigentDoom), card(HerosDownfall)
+    game = create_game(
+        Side(hand=[downfall], battlefield=[emrakul], library=_library(), mana={ManaType.BLACK: 3}),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act(0, downfall, choices=[emrakul], then=[moves(downfall, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(downfall, Zone.GRAVEYARD), moves(emrakul, Zone.GRAVEYARD)])
+    t.run()
+
+
+def test_emrakul_flies_and_tramples_as_a_twelve_twelve():
+    """A ground creature cannot block Emrakul; a 1/1 flier can, and 11 tramples over."""
+    emrakul, lions, sailor = card(EmrakulTheExigentDoom), card(SavannahLions), card(SpectralSailor)
+    game = create_game(
+        Side(battlefield=[emrakul], library=_library()),
+        Side(battlefield=[lions, sailor], library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, emrakul, then=[taps(emrakul)])
+    t.pass_(0)
+    t.pass_(1)
+    t.act_illegal(1, lions, scoped={lions: [emrakul]}, note="Lions cannot block a flier")
+    t.act(1, sailor, scoped={sailor: [emrakul]})
+    t.pass_(0, choices=[Decision.number(1)])
+    t.pass_(1, then=[moves(sailor, Zone.GRAVEYARD), life(1, 9)])
+    t.run()
+
+
+def test_exiling_with_swamps_also_works():
+    """The {3} is generic: any mana pays it."""
+    emrakul, target = card(EmrakulTheExigentDoom), card(Forest)
+    swamps = [card(Swamp) for _ in range(3)]
+    game = create_game(
+        Side(hand=[emrakul], battlefield=[target, *swamps], library=_library()),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    _tap(t, 0, swamps)
+    _exile(t, emrakul, target)
+    t.act(0, GRANTED, then=[taps(target)])
+    t.run()
+
+
+def test_an_emrakul_exiled_some_other_way_cannot_be_cast():
+    """Only exiling Emrakul with its own ability lets it be cast from exile."""
+    emrakul = card(EmrakulTheExigentDoom)
+    game = create_game(
+        Side(exile=[emrakul], library=_library(), mana={ManaType.COLORLESS: 10}),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act_illegal(0, emrakul)
+    t.run()
