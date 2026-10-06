@@ -12,21 +12,15 @@ from __future__ import annotations
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_172.card_impl import EatenAlive
 from cards.fdn.fdn_272.card_impl import Plains
-from engine.card import Sorcery, printed_class
-from engine.types import ManaCost, ManaType
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_276.card_impl import Swamp
+from cards.fdn.fdn_709.card_impl import Confiscate
+from engine.types import ManaType
 from test_interface import Phase, Side, Zone, card, create_game
 
-from silverquillm.table import Table, moves
+from silverquillm.table import Table, gains_control, moves, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
-
-
-class TestEatenAliveProperties:
-    def test_static_data(self):
-        eaten = EatenAlive(owner=None)
-        assert printed_class(eaten) is EatenAlive
-        assert eaten.mana_cost == ManaCost.parse("{B}")
-        assert isinstance(eaten, Sorcery)
 
 
 def _resolve(t, eaten, target):
@@ -84,4 +78,78 @@ class TestEatenAliveAdditionalCost:
         t.act(0, eaten, choices=[mine], then=[moves(eaten, Zone.STACK), moves(mine, Zone.GRAVEYARD)])
         t.pass_(0)
         t.pass_(1, then=[moves(eaten, Zone.GRAVEYARD)])
+        t.run()
+
+    def test_without_black_mana_it_cannot_be_cast_even_with_a_creature(self):
+        """A creature to sacrifice pays only the additional cost: with no {B}
+        for the mana cost, the spell cannot be cast."""
+        eaten, mine, theirs = card(EatenAlive), card(SavannahLions), card(SavannahLions)
+        t = Table(create_game(
+            Side(hand=[eaten], battlefield=[mine], library=[card(Plains)], mana={ManaType.COLORLESS: 4}),
+            Side(battlefield=[theirs], library=[card(Plains)]),
+            start=MAIN,
+        ))
+        t.act_illegal(0, eaten, choices=[theirs])
+        t.run()
+
+
+class TestEatenAliveTiming:
+    def test_it_cannot_be_cast_on_another_players_turn(self):
+        """A sorcery: player 0, with {B} and a creature to sacrifice, cannot
+        cast it while player 1's main phase has the stack empty."""
+        eaten, mine, theirs = card(EatenAlive), card(SavannahLions), card(SavannahLions)
+        t = Table(create_game(
+            Side(hand=[eaten], battlefield=[mine], library=[card(Plains)], mana={ManaType.BLACK: 1}),
+            Side(battlefield=[theirs], library=[card(Plains)]),
+            start=(Phase.PRECOMBAT_MAIN, 1),
+        ))
+        t.pass_(1)
+        t.act_illegal(0, eaten, choices=[theirs])
+        t.run()
+
+
+def _confiscate_their_lions(t, confiscate, lions, islands):
+    """Player 0 taps six Islands and casts Confiscate on player 1's Lions."""
+    for island in islands:
+        t.act(0, island, then=[taps(island)])
+    t.act(0, confiscate, choices=[lions], then=[moves(confiscate, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(confiscate, Zone.BATTLEFIELD), gains_control(lions, 0)])
+
+
+class TestEatenAliveAcrossControlChanges:
+    def _game(self, *, their_swamp=False):
+        eaten, confiscate, lions, swamp = card(EatenAlive), card(Confiscate), card(SavannahLions), card(Swamp)
+        islands = [card(Island) for _ in range(6)]
+        mine = Side(hand=[eaten, confiscate], battlefield=[*islands, swamp],
+                    library=[card(Plains), card(Plains)])
+        theirs = Side(battlefield=[lions], library=[card(Plains), card(Plains)])
+        if their_swamp:
+            mine = Side(hand=[confiscate], battlefield=islands, library=[card(Plains), card(Plains)])
+            theirs = Side(hand=[eaten], battlefield=[lions, swamp], library=[card(Plains), card(Plains)])
+        t = Table(create_game(mine, theirs, start=MAIN))
+        _confiscate_their_lions(t, confiscate, lions, islands)
+        return t, eaten, confiscate, lions, swamp
+
+    def test_a_creature_you_gained_control_of_can_be_sacrificed(self):
+        """Player 0 controls player 1's Lions through Confiscate and, with only
+        {B}, sacrifices it to cast Eaten Alive at it: the Lions goes to its
+        owner's graveyard, the Confiscate with it, and the spell, its target
+        gone, does nothing (rule 608.2b)."""
+        t, eaten, confiscate, lions, swamp = self._game()
+        t.act(0, swamp, then=[taps(swamp)])
+        t.act(0, eaten, choices=[lions], then=[
+            moves(eaten, Zone.STACK), moves(lions, Zone.GRAVEYARD), moves(confiscate, Zone.GRAVEYARD),
+        ])
+        t.pass_(0)
+        t.pass_(1, then=[moves(eaten, Zone.GRAVEYARD)])
+        t.run()
+
+    def test_a_creature_you_own_but_no_longer_control_cannot_be_sacrificed(self):
+        """Player 1 still owns the Lions player 0 took with Confiscate, but
+        controls no creature: with only {B}, Eaten Alive cannot be cast."""
+        t, eaten, _, lions, swamp = self._game(their_swamp=True)
+        t.pass_to(Phase.PRECOMBAT_MAIN, 1)
+        t.act(1, swamp, then=[taps(swamp)])
+        t.act_illegal(1, eaten, choices=[lions])
         t.run()
