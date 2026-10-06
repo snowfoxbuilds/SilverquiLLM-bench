@@ -5,22 +5,33 @@
 creature going to its owner's graveyard while the spell is cast; the mana
 alternative shows in what the caster can and cannot afford; with neither
 alternative payable the spell cannot be cast.
+
+Every script names the alternative it pays, as the engine may ask even when
+only one of them can be paid; a cast the rules forbid tries each alternative
+in turn.
 """
 
 from __future__ import annotations
 
 from cards.fdn.fdn_146.card_impl import SavannahLions
-from cards.fdn.fdn_172.card_impl import EatenAlive
+from cards.fdn.fdn_172.card_impl import EatenAlive, EatenAliveAbility1
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_274.card_impl import Island
 from cards.fdn.fdn_276.card_impl import Swamp
 from cards.fdn.fdn_709.card_impl import Confiscate
 from engine.types import ManaType
-from test_interface import Phase, Side, Zone, card, create_game
+from test_interface import Decision, Phase, Side, Zone, card, create_game
 
 from silverquillm.table import Table, gains_control, moves, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
+SACRIFICE = Decision.ability(index=0, printed=EatenAliveAbility1)
+PAY_MANA = Decision.ability(index=1, printed=EatenAliveAbility1)
+
+
+def _either_alternative(eaten):
+    """Casting Eaten Alive paying the sacrifice, or else paying the mana."""
+    return [[eaten, SACRIFICE], [eaten, PAY_MANA]]
 
 
 def _resolve(t, eaten, target):
@@ -38,7 +49,7 @@ class TestEatenAliveAdditionalCost:
             Side(battlefield=[theirs], library=[card(Plains)]),
             start=MAIN,
         ))
-        t.act(0, eaten, choices=[theirs], then=[moves(eaten, Zone.STACK), moves(mine, Zone.GRAVEYARD)])
+        t.act(0, eaten, SACRIFICE, choices=[theirs], then=[moves(eaten, Zone.STACK), moves(mine, Zone.GRAVEYARD)])
         _resolve(t, eaten, theirs)
         t.run()
 
@@ -50,7 +61,7 @@ class TestEatenAliveAdditionalCost:
             Side(battlefield=[theirs], library=[card(Plains)]),
             start=MAIN,
         ))
-        t.act(0, eaten, choices=[theirs], then=[moves(eaten, Zone.STACK)])
+        t.act(0, eaten, PAY_MANA, choices=[theirs], then=[moves(eaten, Zone.STACK)])
         _resolve(t, eaten, theirs)
         t.run()
 
@@ -63,7 +74,7 @@ class TestEatenAliveAdditionalCost:
             Side(battlefield=[theirs], library=[card(Plains)]),
             start=MAIN,
         ))
-        t.act_illegal(0, eaten, choices=[theirs])
+        t.act_illegal(0, branches=_either_alternative(eaten), choices=[theirs])
         t.run()
 
     def test_the_sacrificed_creature_may_be_the_target(self):
@@ -75,7 +86,7 @@ class TestEatenAliveAdditionalCost:
             Side(library=[card(Plains)]),
             start=MAIN,
         ))
-        t.act(0, eaten, choices=[mine], then=[moves(eaten, Zone.STACK), moves(mine, Zone.GRAVEYARD)])
+        t.act(0, eaten, SACRIFICE, choices=[mine], then=[moves(eaten, Zone.STACK), moves(mine, Zone.GRAVEYARD)])
         t.pass_(0)
         t.pass_(1, then=[moves(eaten, Zone.GRAVEYARD)])
         t.run()
@@ -89,7 +100,7 @@ class TestEatenAliveAdditionalCost:
             Side(battlefield=[theirs], library=[card(Plains)]),
             start=MAIN,
         ))
-        t.act_illegal(0, eaten, choices=[theirs])
+        t.act_illegal(0, branches=_either_alternative(eaten), choices=[theirs])
         t.run()
 
 
@@ -104,7 +115,7 @@ class TestEatenAliveTiming:
             start=(Phase.PRECOMBAT_MAIN, 1),
         ))
         t.pass_(1)
-        t.act_illegal(0, eaten, choices=[theirs])
+        t.act_illegal(0, branches=_either_alternative(eaten), choices=[theirs])
         t.run()
 
 
@@ -138,7 +149,7 @@ class TestEatenAliveAcrossControlChanges:
         gone, does nothing (rule 608.2b)."""
         t, eaten, confiscate, lions, swamp = self._game()
         t.act(0, swamp, then=[taps(swamp)])
-        t.act(0, eaten, choices=[lions], then=[
+        t.act(0, eaten, SACRIFICE, choices=[lions], then=[
             moves(eaten, Zone.STACK), moves(lions, Zone.GRAVEYARD), moves(confiscate, Zone.GRAVEYARD),
         ])
         t.pass_(0)
@@ -151,5 +162,5 @@ class TestEatenAliveAcrossControlChanges:
         t, eaten, _, lions, swamp = self._game(their_swamp=True)
         t.pass_to(Phase.PRECOMBAT_MAIN, 1)
         t.act(1, swamp, then=[taps(swamp)])
-        t.act_illegal(1, eaten, choices=[lions])
+        t.act_illegal(1, branches=_either_alternative(eaten), choices=[lions])
         t.run()

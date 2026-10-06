@@ -2,9 +2,10 @@
 
 The spell itself has no targets: it creates two Faerie tokens, and its "when
 you do, tap target creature an opponent controls" is a reflexive triggered
-ability (rule 603.12) that goes on the stack as the spell resolves, choosing
-its target then (rule 603.3d). With no opponent creature the reflexive trigger
-is removed and the tokens still appear. Targeting is intent-style via
+ability (rule 603.12) that triggers as the spell resolves and, like any other
+triggered ability, goes on the stack when the game next settles, choosing its
+target then (rule 603.3b, 603.3d). With no opponent creature the reflexive
+trigger is removed and the tokens still appear. Targeting is intent-style via
 ``cast_spell(targets=...)``.
 """
 
@@ -30,9 +31,9 @@ from test_utils import cast_spell, create_game, set_board_state
 
 
 def _resolve_spell_only(game, player_index, card, targets):
-    """Cast *card* and resolve the spell, so its reflexive trigger goes on the
-    stack choosing *targets* — and stop there, so a test can change the board
-    before the trigger resolves."""
+    """Cast *card* and resolve the spell; as the game settles afterwards, its
+    reflexive trigger goes on the stack choosing *targets* — and stop there,
+    so a test can change the board before the trigger resolves."""
     player = game.players[player_index]
     game.active_player_index = player_index
     game.priority_player_index = player_index

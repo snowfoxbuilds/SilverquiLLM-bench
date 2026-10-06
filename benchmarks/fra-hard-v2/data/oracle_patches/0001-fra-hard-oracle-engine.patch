@@ -1043,15 +1043,6 @@
              elif trigger.capture is not None:
                  # Untargeted trigger that captured per-fire event state when it
                  # triggered (rule 603.3), stored on this trigger's own
-@@ -585,6 +587,8 @@
-         g, still_legal_targets(g, source, requirements, stint_checked_targets(g, context, chosen)), controller
-     )
-     game.stack.push(stack_obj)
-+    from engine.ward import trigger_ward
-+    trigger_ward(game, stack_obj)
- 
- 
- def register_enters_trigger(
 --- /dev/null
 +++ b/engine/ward.py
 @@ -0,0 +1,29 @@
