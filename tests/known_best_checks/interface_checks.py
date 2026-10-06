@@ -153,6 +153,60 @@ class Stall(Sorcery):
         time.sleep(ti.QUESTION_TIMEOUT + 0.5)
 
 
+class PickTwice(Sorcery):
+    """Choose a permanent you control, then choose one again; you gain 1 life
+    for each choice."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Pick Twice")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        for _ in range(2):
+            mine = game.get_battlefield(self.controller).get_all()
+            choose_object(game, self.controller, mine, "choose a permanent", source_card=self)
+            gain_life(game, self.controller, 1)
+
+
+class PickBoth(Sorcery):
+    """Choose both permanents you control, in an order; you gain 1 life if the
+    first chosen is a Plains."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Pick Both")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        from engine.queries import PlayerQuery, ask
+        from engine.refs_registry import object_options
+
+        seat = game.refs.seat_of(self.controller)
+        mine = game.get_battlefield(self.controller).get_all()
+        options, by_decision = object_options(game.refs, ((c, "battlefield", seat) for c in mine))
+        query = PlayerQuery(
+            source=(game.refs.object_decision(self, zone="stack", controller_seat=seat),),
+            prompt="order your permanents",
+            options=options,
+            min=len(options),
+            max=len(options),
+        )
+        first = by_decision[ask(self.controller, query).selected[0]]
+        if isinstance(first, Plains):
+            gain_life(game, self.controller, 1)
+
+
+class RandomPlayerLoses(Sorcery):
+    """A player chosen at random loses 3 life."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Random Player Loses")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        for chosen in game.choose_at_random(list(game.players), 1):
+            chosen.life -= 3
+
+
 def _main(p0=None, p1=None, active=0):
     return create_game(p0 or Side(), p1 or Side(), start=(Phase.PRECOMBAT_MAIN, active))
 
@@ -307,19 +361,19 @@ def test_an_act_illegal_that_takes_effect_diverges():
 def test_a_question_nothing_answers_diverges():
     game = _main(Side(hand=[PickBear], battlefield=[Plains, Mountain]))
     with pytest.raises(PlayDiverged, match="nothing in player 0's script answers"):
-        run(game, [act(PickBear), pass_priority()], [pass_priority()])
+        run(game, [act(PickBear), pass_priority()], [pass_priority()], check_views=False)
 
 
 def test_a_mandatory_question_with_exactly_its_minimum_is_filled():
     game = _main(Side(hand=[PickBear], battlefield=[Plains]))
-    final = run(game, [act(PickBear), pass_priority()], [pass_priority()], expect=None)
+    final = run(game, [act(PickBear), pass_priority()], [pass_priority()], check_views=False)
     assert final.players[0].life == 23
 
 
 def test_a_rejected_choice_is_answered_from_the_next_branch():
     game = _main(Side(hand=[PickBear], battlefield=[Bear, Plains]))
     resolving = pass_priority(branches=[[Bear], [Plains]], note="a Bear is refused")
-    final = run(game, [act(PickBear), resolving], [pass_priority()], expect=None)
+    final = run(game, [act(PickBear), resolving], [pass_priority()], check_views=False)
     assert final.players[0].life == 23
 
 
@@ -341,7 +395,12 @@ def test_a_game_ending_with_entries_left_diverges():
     assert final.game_over and final.winner == 0
     game2 = _main(Side(hand=[card(BurstLightning)], battlefield=[card(Mountain)]), Side(life=2))
     with pytest.raises(PlayDiverged, match="ended with entries left"):
-        run(game2, [act(MountainAbility1), act(BurstLightning, choices=[player(1)]), pass_priority(), pass_priority()], [pass_priority()])
+        run(
+            game2,
+            [act(MountainAbility1), act(BurstLightning, choices=[player(1)]), pass_priority(), pass_priority()],
+            [pass_priority()],
+            check_views=False,
+        )
 
 
 def test_a_slow_engine_times_out_between_questions(monkeypatch):
@@ -349,8 +408,41 @@ def test_a_slow_engine_times_out_between_questions(monkeypatch):
     game = _main(Side(hand=[Stall]))
     started = time.monotonic()
     with pytest.raises(PlayDiverged, match="more than"):
-        run(game, [act(Stall), pass_priority()], [pass_priority()], expect=None)
+        run(game, [act(Stall), pass_priority()], [pass_priority()], check_views=False)
     assert time.monotonic() - started < ti.QUESTION_TIMEOUT + 3
+
+
+def test_an_entry_without_a_view_expects_nothing_visible_to_change():
+    game = _main(Side(hand=[PickBear], battlefield=[Plains]))
+    with pytest.raises(PlayDiverged, match="the view differs from the expected view"):
+        run(game, [act(PickBear), pass_priority()], [pass_priority()])
+
+
+def test_drivers_stop_once_the_game_is_over():
+    import signal
+
+    import test_utils
+    from engine.stack import priority_loop
+    from engine.turn import _do_cleanup_step, run_turn
+
+    game = _main(Side(hand=[BurstLightning], mana={ManaType.RED: 1}), Side(life=2))
+    final = run(game, [act(BurstLightning, choices=[player(1)]), pass_priority()], [pass_priority()], check_views=False)
+    assert final.game_over
+
+    def hung(signum, frame):
+        raise AssertionError("a driver kept stepping a game that is over")
+
+    previous = signal.signal(signal.SIGALRM, hung)
+    signal.alarm(2)
+    try:
+        priority_loop(game)
+        _do_cleanup_step(game)
+        run_turn(game)
+        test_utils.resolve_stack(game)
+        test_utils.advance_game_to_phase(game, Phase.ENDING, Step.END)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 # ---------------------------------------------------------------------------
@@ -375,7 +467,7 @@ class ArtifactBear(Creature):
 
 def test_per_query_keys_tell_questions_apart():
     game, entry = _pick_two(per_query={CardType.ARTIFACT: [ArtifactBear], CardType.CREATURE: []})
-    final = run(game, [act(PickTwo), entry], [pass_priority()], expect=None)
+    final = run(game, [act(PickTwo), entry], [pass_priority()], check_views=False)
     assert final.players[0].life == 21
 
 
@@ -386,22 +478,22 @@ def test_a_raw_string_per_query_key_is_refused():
 
 def test_a_branch_repeats_by_default_and_distinct_chooses_once():
     game, repeat = _pick_two(branches=[branch(choices=[ArtifactBear])])
-    assert run(game, [act(PickTwo), repeat], [pass_priority()], expect=None).players[0].life == 22
+    assert run(game, [act(PickTwo), repeat], [pass_priority()], check_views=False).players[0].life == 22
     game, once = _pick_two(branches=[branch(choices=[ArtifactBear], distinct=True)])
-    assert run(game, [act(PickTwo), once], [pass_priority()], expect=None).players[0].life == 21
+    assert run(game, [act(PickTwo), once], [pass_priority()], check_views=False).players[0].life == 21
 
 
 def test_a_handle_names_one_of_two_cards_of_a_class():
     tapped, untapped = card(Bear, tapped=True), card(Bear)
     game = _main(Side(hand=[BurstLightning], mana={ManaType.RED: 1}), Side(battlefield=[tapped, untapped]))
-    final = run(game, [act(BurstLightning, choices=[untapped]), pass_priority()], [pass_priority()], expect=None)
+    final = run(game, [act(BurstLightning, choices=[untapped]), pass_priority()], [pass_priority()], check_views=False)
     assert final.where(untapped) is Zone.GRAVEYARD and final.where(tapped) is Zone.BATTLEFIELD
 
 
 def test_a_handle_names_one_of_two_identical_cards():
     first, second = card(Bear), card(Bear)
     game = _main(Side(hand=[BurstLightning], mana={ManaType.RED: 1}), Side(battlefield=[first, second]))
-    final = run(game, [act(BurstLightning, choices=[second]), pass_priority()], [pass_priority()], expect=None)
+    final = run(game, [act(BurstLightning, choices=[second]), pass_priority()], [pass_priority()], check_views=False)
     assert final.where(second) is Zone.GRAVEYARD and final.where(first) is Zone.BATTLEFIELD
 
 
@@ -415,6 +507,24 @@ def test_a_handle_names_the_ability_of_its_own_permanent(chosen):
     assert [final.players[0].battlefield[i].tapped for i in range(2)].count(True) == 1
 
 
+def test_a_distinct_branch_never_fills_a_question_with_an_object_it_chose():
+    game = _main(Side(hand=[PickTwice], battlefield=[Bear]))
+    final = run(game, [act(PickTwice), pass_priority(choices=[Bear])], [pass_priority()], check_views=False)
+    assert final.players[0].life == 22
+    game = _main(Side(hand=[PickTwice], battlefield=[Bear]))
+    with pytest.raises(PlayDiverged, match="nothing in player 0's script answers"):
+        run(game, [act(PickTwice), pass_priority(choices=[Bear], distinct=True)], [pass_priority()], check_views=False)
+
+
+def test_a_question_whose_answer_is_an_order_is_never_filled():
+    game = _main(Side(hand=[PickBoth], battlefield=[Mountain, Plains]))
+    with pytest.raises(PlayDiverged, match="nothing in player 0's script answers"):
+        run(game, [act(PickBoth), pass_priority()], [pass_priority()], check_views=False)
+    game = _main(Side(hand=[PickBoth], battlefield=[Mountain, Plains]))
+    final = run(game, [act(PickBoth), pass_priority(choices=[Plains, Mountain])], [pass_priority()], check_views=False)
+    assert final.players[0].life == 21
+
+
 # ---------------------------------------------------------------------------
 # Chance
 # ---------------------------------------------------------------------------
@@ -423,28 +533,38 @@ def test_a_handle_names_the_ability_of_its_own_permanent(chosen):
 def test_a_coin_flip_is_answered_by_the_chance_script():
     for heads, total in ((True, 25), (False, 20)):
         game = _main(Side(hand=[CoinToss]))
-        final = run(game, [act(CoinToss), pass_priority()], [pass_priority()], chance=[coin(heads)], expect=None)
+        final = run(game, [act(CoinToss), pass_priority()], [pass_priority()], chance=[coin(heads)], check_views=False)
         assert final.players[0].life == total
 
 
 def test_a_choice_at_random_is_answered_by_the_chance_script():
     keep, lose = card(Bear), card(Plains)
     game = _main(Side(hand=[RandomDiscard]), Side(hand=[keep, lose]))
-    final = run(game, [act(RandomDiscard), pass_priority()], [pass_priority()], chance=[chosen_at_random(lose)], expect=None)
+    final = run(game, [act(RandomDiscard), pass_priority()], [pass_priority()], chance=[chosen_at_random(lose)], check_views=False)
     assert final.where(lose) is Zone.GRAVEYARD and final.where(keep) is Zone.HAND
+
+
+@pytest.mark.parametrize("seat", [0, 1])
+def test_a_choice_at_random_of_a_player_takes_the_named_seat(seat):
+    game = _main(Side(hand=[RandomPlayerLoses]))
+    final = run(
+        game, [act(RandomPlayerLoses), pass_priority()], [pass_priority()],
+        chance=[chosen_at_random(player(seat))], check_views=False,
+    )
+    assert final.players[seat].life == 17 and final.players[1 - seat].life == 20
 
 
 def test_a_shuffle_is_answered_top_first():
     a, b, c = card(Plains), card(Mountain), card(Bear)
     game = _main(Side(hand=[Reshuffle], library=[a, b, c]))
-    final = run(game, [act(Reshuffle), pass_priority()], [pass_priority()], chance=[shuffled(c, a, b)], expect=None)
+    final = run(game, [act(Reshuffle), pass_priority()], [pass_priority()], chance=[shuffled(c, a, b)], check_views=False)
     assert [seen.handle for seen in final.players[0].library] == [c, a, b]
 
 
 def test_a_random_event_with_nothing_to_answer_it_diverges():
     game = _main(Side(hand=[CoinToss]))
     with pytest.raises(PlayDiverged, match="nothing in the chance script"):
-        run(game, [act(CoinToss), pass_priority()], [pass_priority()], expect=None)
+        run(game, [act(CoinToss), pass_priority()], [pass_priority()], check_views=False)
 
 
 # ---------------------------------------------------------------------------

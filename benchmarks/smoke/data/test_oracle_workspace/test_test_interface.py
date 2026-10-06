@@ -71,14 +71,16 @@ def test_a_spell_is_cast_and_resolves_as_expected():
 
 def test_an_illegal_activation_is_refused_and_the_planeswalker_can_still_act():
     game = create_game(Side(battlefield=[AjaniCallerOfThePride]), start=(Phase.PRECOMBAT_MAIN, 0))
+    start = view(game)
+    activated = replace(start, stack=(Seen(AjaniCallerOfThePrideAbility1, 0),))
     final = run(
         game,
         [
             act_illegal(AjaniCallerOfThePrideAbility3, note="-8 needs more than Ajani's 4 loyalty"),
-            act(AjaniCallerOfThePrideAbility1),
-            pass_priority(),
+            act(AjaniCallerOfThePrideAbility1, view=activated),
+            pass_priority(view=replace(activated, asked=1)),
         ],
-        [pass_priority()],
+        [pass_priority(view=start)],
     )
     assert not final.stack
 

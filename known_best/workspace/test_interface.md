@@ -53,7 +53,7 @@ Hand, battlefield, graveyard and exile compare without regard to order. Power, t
 
 ## Playing
 
-`run(game, script0, script1, chance=[...], expect=view)` plays the game from one script per seat and returns the final view. The engine asks the questions; the scripts answer every one of them.
+`run(game, script0, script1, chance=[...], expect=view, check_views=True)` plays the game from one script per seat and returns the final view. The engine asks the questions; the scripts answer every one of them.
 
 Each `Entry` answers its player's next action question — a Priority Query — and every other question that player is asked until their following one:
 
@@ -61,9 +61,9 @@ Each `Entry` answers its player's next action question — a Priority Query — 
 - `act_illegal(...)` tries an action the rules forbid; once every branch is not offered or rejected, the same question goes to the next entry.
 - `pass_priority(choices=..., branches=..., view=...)` passes, answering the questions that follow with its choices.
 
-A preference is a Player Decision, a predefined class, a `card(...)` handle, a `token(n)` or `player(seat)`; a handle or token chooses its own card or token, or an ability of its own permanent. Each preference picks the first offered option it is satisfied by, preferences in order. A rejected answer is answered again from the entry's next branch (`branch(...)`); a branch whose action is not offered is skipped. `per_query` maps a payload object or a predicate over the query to the preferences for the questions it matches; a branch with `distinct=True` never chooses again an object an earlier answer of the entry chose for a question from the same source. A mandatory question that offers exactly as many options as it requires is filled.
+A preference is a Player Decision, a predefined class, a `card(...)` handle, a `token(n)` or `player(seat)`; a handle or token chooses its own card or token, or an ability of its own permanent. Each preference picks the first offered option it is satisfied by, preferences in order. A rejected answer is answered again from the entry's next branch (`branch(...)`); a branch whose action is not offered is skipped. `per_query` maps a payload object or a predicate over the query to the preferences for the questions it matches; a branch with `distinct=True` never chooses again an object an earlier answer of the entry chose for a question from the same source. A mandatory question with exactly one possible answer — one option, required — is filled, unless `distinct` rules that option out; a question that requires several options, such as an order, is always answered by the script.
 
-`run` compares the view with the expected one at every action question: the first is `expect` (by default the view as play begins), and each entry's `view` replaces it. Play stops when a player whose script is empty is asked and every script is empty, or when the game ends; the final view must then be the expected one. `run` raises `PlayDiverged` when:
+`run` compares the view with the expected one at every action question: the first is `expect` (by default the view as play begins), and each entry's `view` replaces it; an entry without a `view` expects nothing the view shows to change. `check_views=False` turns the comparison off, for checking the interface itself. Play stops when a player whose script is empty is asked and every script is empty, or when the game ends; the final view must then be the expected one. `run` raises `PlayDiverged` when:
 
 - the view differs from the expected one;
 - an `act` is not offered, or is rejected with no branch left;

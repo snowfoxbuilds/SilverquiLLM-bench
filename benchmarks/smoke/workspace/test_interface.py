@@ -451,7 +451,8 @@ class Entry:
     question and every other question they receive until the one after.
 
     ``view`` is the Player View expected at the next action question, any
-    player's; ``narration`` says in plain English what the entry does.
+    player's; an entry without one changes nothing the view shows.
+    ``narration`` says in plain English what the entry does.
     """
 
     kind: Kind
@@ -678,7 +679,10 @@ def _is(item: Any, candidate: Any, handles: dict[int, Handle], game: Any) -> boo
     if isinstance(item, type):
         return _printed(candidate) is item
     if isinstance(item, PlayerDecision):
-        return item.kind.value == "player" and getattr(candidate, "life", None) is not None
+        if item.kind.value != "player" or not any(candidate is p for p in game.players):
+            return False
+        seat = dict(item.attrs).get("seat")
+        return seat is None or game.players[seat] is candidate
     return item is candidate or item == candidate
 
 
@@ -832,11 +836,16 @@ class ScriptedPlayer(Player):
     ) -> Answer:
         """Preference-major selection: each preference picks the first offered
         option it is satisfied by and that is not picked yet. A mandatory
-        question that offers exactly as many options as it requires is
-        filled; so is an explicitly empty ``per_query`` answer, to its
-        minimum. Any other shortfall diverges."""
+        question with exactly one possible answer — one option, required — is
+        filled, unless ``distinct`` rules that option out; an explicitly empty
+        ``per_query`` answer is filled to its minimum. Any other shortfall
+        diverges."""
         source = _source_key(query)
         options = list(query.options)
+        # Only a question with exactly one possible answer is filled for the
+        # script: an all-of-several question still leaves the order open, and
+        # an ordering question is answered by its order.
+        forced = len(options) == query.min <= 1
         if playing is not None and playing.current.distinct:
             taken = {obj for owner, src, obj in self._chosen if owner == id(playing) and src == source}
             options = [o for o in options if _object_key(o) not in taken]
@@ -851,9 +860,9 @@ class ScriptedPlayer(Player):
         if len(selected) < query.min:
             if explicit and not preferences:
                 selected += [o for o in options if o not in selected][: query.min - len(selected)]
-            elif len(query.options) == query.min:
-                selected += [o for o in query.options if o not in selected]
-            else:
+            elif forced:
+                selected += [o for o in options if o not in selected]
+            if len(selected) < query.min:
                 run.diverge(f"nothing in player {self.seat}'s script answers this question", query)
         if playing is not None:
             self._chosen.extend((id(playing), source, _object_key(o)) for o in selected)
@@ -904,11 +913,12 @@ class _Run:
     """One run's progress: the expected view, the entries started so far,
     and the question being answered — the test's, so never rolled back."""
 
-    rollback_exempt = frozenset({"game", "expected", "last", "narrated", "query", "deadline"})
+    rollback_exempt = frozenset({"game", "expected", "checking", "last", "narrated", "query", "deadline"})
 
-    def __init__(self, game: Any, expect: View | None) -> None:
+    def __init__(self, game: Any, expect: View, checking: bool) -> None:
         self.game = game
-        self.expected: View | None = expect
+        self.expected = expect
+        self.checking = checking
         self.last: _Playing | None = None
         self.narrated: list[str] = []
         self.query: PlayerQuery | None = None
@@ -932,11 +942,12 @@ class _Run:
     def completed(self, playing: _Playing) -> None:
         if playing is self.last:
             self.last = None
-            self.expected = playing.entry.view
+            if playing.entry.view is not None:
+                self.expected = playing.entry.view
 
     def compare(self, seat: int, *, again: bool = False) -> None:
         _ASKED[self.game] = seat
-        if self.expected is None:
+        if not self.checking:
             return
         actual = view(self.game)
         if actual != self.expected:
@@ -955,7 +966,7 @@ class _Run:
         if self.game.is_game_over and leftover:
             self.diverge(f"the game ended with entries left in player {leftover[0]}'s script")
         final = view(self.game)
-        if self.expected is not None and final != self.expected:
+        if self.checking and final != self.expected:
             self.diverge("the final view differs from the expected view", actual=final)
         return final
 
@@ -966,7 +977,7 @@ class _Run:
         if query is not None:
             lines += ["", f"Question: {query.prompt}", f"  options: {', '.join(map(_describe_item, query.options)) or '(none)'}",
                       f"  choose {query.min} to {query.max}"]
-        if actual is not None and self.expected is not None:
+        if actual is not None:
             lines += ["", "Expected view:", self.expected.describe(), "", "Actual view:", actual.describe()]
         raise _Diverged("\n".join(lines))
 
@@ -976,13 +987,17 @@ def run(
     *scripts: Sequence[Entry],
     chance: Sequence[ChanceResult] = (),
     expect: View | None = None,
+    check_views: bool = True,
 ) -> View:
     """Play ``game`` from its scripts, one per seat, and return the final view.
 
     ``expect`` is the view expected at the first action question, by default
     the view as play begins. At every action question the view must equal the
-    expected one, which each entry's ``view`` then replaces; questions inside
-    an action or a resolution are answered without a check. Play stops when a
+    expected one, which each entry's ``view`` then replaces — an entry without
+    a ``view`` expects nothing visible to change; questions inside an action
+    or a resolution are answered without a check. ``check_views=False`` turns
+    every view check off, for checking the interface's own play mechanics;
+    an Audited Test never turns it off. Play stops when a
     player whose script is empty is asked and every script is empty, or when
     the game ends; either way the final view must be the expected one.
     ``chance`` answers every random event, in order.
@@ -993,7 +1008,7 @@ def run(
     """
     if len(scripts) != len(game.players):
         raise TypeError(f"run takes one script per player ({len(game.players)}), not {len(scripts)}")
-    state = _Run(game, expect if expect is not None else view(game))
+    state = _Run(game, expect if expect is not None else view(game), check_views)
     players = list(game.players)
     for scripted, entries in zip(players, scripts):
         if not isinstance(scripted, ScriptedPlayer):
