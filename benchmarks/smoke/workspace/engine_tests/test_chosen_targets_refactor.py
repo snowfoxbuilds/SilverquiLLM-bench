@@ -24,7 +24,7 @@ from engine.card import CardImpl, Creature, Instant, Sorcery
 from engine.casting import cast_spell, CastingError
 from engine.decisions import Decision, GameRef
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer, Intent
+from test_utils import DeterministicPlayer, Intent
 from engine.stack import StackObject
 from engine.types import (
     CardType,

@@ -16,7 +16,7 @@ from cards.fdn.fdn_126.card_impl import ZimoneParadoxSculptor
 from engine.card import Artifact, Creature
 from engine.decisions import Decision, GameRef
 from engine.game import add_counter
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import ManaCost, ManaType, Phase, Step, Zone
 from engine.zones import move_to_zone
 from test_utils import (

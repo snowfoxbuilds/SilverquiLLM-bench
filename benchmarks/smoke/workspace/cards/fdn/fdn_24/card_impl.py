@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 from typing import TYPE_CHECKING, Any
 
 from engine.card import ActivatedAbility, Creature
@@ -98,7 +97,7 @@ class SquadRallier(Creature):
                 ctrl.zones[Zone.HAND].add(chosen)
 
             # Put the rest on the bottom in random order
-            random.shuffle(top_four)
+            top_four[:] = game.shuffle(top_four)
             for card in top_four:
                 library.add(card, position="bottom")
 

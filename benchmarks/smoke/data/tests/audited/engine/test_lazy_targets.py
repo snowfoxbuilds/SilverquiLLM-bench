@@ -14,7 +14,7 @@ import pytest
 
 from engine.card import Creature, Instant
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer
+from test_utils import DeterministicPlayer
 from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 
 

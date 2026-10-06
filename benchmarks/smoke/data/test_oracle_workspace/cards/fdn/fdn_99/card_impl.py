@@ -11,6 +11,28 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ApothecaryStomperAbility1:
+    text = "Vigilance (Attacking doesn't cause this creature to tap.)"
+
+
+class ApothecaryStomperAbility2:
+    text = 'When this creature enters, choose one —'
+
+
+class ApothecaryStomperAbility3:
+    text = '• Put two +1/+1 counters on target creature you control.'
+
+
+class ApothecaryStomperAbility4:
+    text = '• You gain 4 life.'
+
+
+# endregion Printed abilities
+
+
 class ApothecaryStomper(Creature):
     """Apothecary Stomper — {4}{G}{G} — 4/4 — Elephant — Vigilance.
 
@@ -48,8 +70,9 @@ class ApothecaryStomper(Creature):
             Mode(
                 name="Counters",
                 description="Put two +1/+1 counters on target creature you control.",
+                printed=ApothecaryStomperAbility3,
             ),
-            Mode(name="Life", description="You gain 4 life."),
+            Mode(name="Life", description="You gain 4 life.", printed=ApothecaryStomperAbility4),
         ]
 
     def get_targets(self, game: "GameState") -> list[Any]:
@@ -64,6 +87,7 @@ class ApothecaryStomper(Creature):
             [m.name for m in modes],
             "Choose one",
             source_card=self,
+            printed=[m.printed for m in modes],
         )
         self.chosen_mode = next(
             i for i, m in enumerate(modes) if m.name == chosen_name

@@ -8,6 +8,21 @@ from engine.events import GainsLifeTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class VanguardSeraphAbility1:
+    text = 'Flying'
+
+
+class VanguardSeraphAbility2:
+    text = 'Whenever you gain life for the first time each turn, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)'
+
+
+# endregion Printed abilities
+
+
 class VanguardSeraph(Creature):
     """Vanguard Seraph — {3}{W} — 3/3 — Angel Warrior — Flying.
 
@@ -61,4 +76,4 @@ class VanguardSeraph(Creature):
             if put_in_gy:
                 library.remove(top_card)
                 ctrl.zones[Zone.GRAVEYARD].add(top_card)
-        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller, printed=VanguardSeraphAbility2))

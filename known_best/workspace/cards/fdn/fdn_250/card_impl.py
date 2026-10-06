@@ -1,7 +1,6 @@
 """Card implementation for Burnished Hart."""
 
 from __future__ import annotations
-import random
 from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, ArtifactCreature, Creature, ManaAbility
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
@@ -9,6 +8,17 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
     from cards.registry import CardRegistry
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BurnishedHartAbility1:
+    text = '{3}, Sacrifice this creature: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.'
+
+
+# endregion Printed abilities
+
 
 class BurnishedHart(ArtifactCreature):
     """Burnished Hart — {3} — 2/2 — Elk
@@ -85,7 +95,7 @@ class BurnishedHart(ArtifactCreature):
                 bf = game.get_battlefield(controller)
                 bf.add(basic)
             if len(library) > 0:
-                library.shuffle()
+                library.shuffle(game)
 
         return [ActivatedAbility(
             cost=_cost,
@@ -93,4 +103,5 @@ class BurnishedHart(ArtifactCreature):
             description="{3}, Sacrifice this creature: Search your library "
             "for up to two basic land cards, put them onto the battlefield "
             "tapped, then shuffle.",
+            printed=BurnishedHartAbility1,
         )]

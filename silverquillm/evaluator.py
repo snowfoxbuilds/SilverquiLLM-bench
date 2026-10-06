@@ -1019,23 +1019,31 @@ def _eval_engine(
     support_dir: Path,
     test_utils: Path | None = None,
     cards_dir: Path | None = None,
+    test_interface: Path | None = None,
 ) -> EngineResult:
     """Run authoritative engine tests beside isolated copies of the selected code.
 
     The workspace-relative card checks and repository-relative replay fixtures
     must see the same candidate packages as ordinary imports. Candidate pytest
-    configuration, tests and helper modules never enter the grading workspace:
-    ``conftest.py``, ``pytest.ini`` and the default ``test_utils.py`` come from
-    the host-side *support_dir*. Legacy engine-only staging supplies its
-    reference cards explicitly.
+    configuration and tests never enter the grading workspace: ``conftest.py``
+    and ``pytest.ini`` come from the host-side *support_dir*. A benchmark with
+    a Test Interface grades with its own *test_interface* beside the
+    candidate's ``test_utils.py``; one without grades with the authoritative
+    ``test_utils.py`` (by default *support_dir*'s). Legacy engine-only staging
+    supplies its reference cards explicitly.
     """
     if not engine_tests_dir.is_dir():
         return EngineResult(errors=[f"No engine tests at {engine_tests_dir}"])
     if not support_dir.is_dir():
         return EngineResult(errors=[f"authoritative engine support not found at {support_dir}"])
-    support = test_utils if test_utils is not None else support_dir / "test_utils.py"
-    if not support.is_file():
-        return EngineResult(errors=[f"authoritative test_utils.py not found at {support}"])
+    if test_interface is not None:
+        if not test_interface.is_file():
+            return EngineResult(errors=[f"authoritative test_interface.py not found at {test_interface}"])
+        support = engine_work.parent / "test_utils.py"
+    else:
+        support = test_utils if test_utils is not None else support_dir / "test_utils.py"
+        if not support.is_file():
+            return EngineResult(errors=[f"authoritative test_utils.py not found at {support}"])
     selected_cards = cards_dir if cards_dir is not None else engine_work.parent / "cards"
     for source in (engine_work, selected_cards):
         if not source.is_dir():
@@ -1055,7 +1063,10 @@ def _eval_engine(
         # Suites import engine_tests.* whatever the source directory is called.
         staged_tests = workspace / "engine_tests"
         shutil.copytree(engine_tests_dir, staged_tests, ignore=_GRADING_IGNORE)
-        shutil.copy2(support, workspace / "test_utils.py")
+        if support.is_file():
+            shutil.copy2(support, workspace / "test_utils.py")
+        if test_interface is not None:
+            shutil.copy2(test_interface, workspace / "test_interface.py")
         for name in ("conftest.py", "pytest.ini"):
             source = support_dir / name
             if source.is_file():
@@ -1121,6 +1132,7 @@ class EvalPaths:
     engine_tests: Path
     test_utils: Path
     engine_support: Path
+    test_interface: Path | None = None
 
 
 def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
@@ -1128,7 +1140,9 @@ def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
 
     ``test_utils`` prefers the oracle workspace copy (as SOS uses today) and
     falls back to the staged workspace copy for benchmarks that ship only the
-    latter (e.g. smoke).
+    latter. ``test_interface`` is the benchmark's Test Interface, resolved the
+    same way, or ``None`` for a benchmark that has none; a benchmark that has
+    one grades with it and never with ``test_utils``.
 
     ``engine_tests`` is the hidden Audited Engine Tests directory
     ``data/tests/audited/engine`` whenever it exists, even empty; otherwise it
@@ -1139,6 +1153,17 @@ def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
     tests_audited = benchmark_root / "data" / "tests" / "audited"
     oracle_test_utils = benchmark_root / "data" / "test_oracle_workspace" / "test_utils.py"
     workspace_test_utils = benchmark_root / "workspace" / "test_utils.py"
+    test_interface = next(
+        (
+            path
+            for path in (
+                benchmark_root / "data" / "test_oracle_workspace" / "test_interface.py",
+                benchmark_root / "workspace" / "test_interface.py",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
     audited_engine = tests_audited / "engine"
     return EvalPaths(
         benchmark_root=benchmark_root,
@@ -1153,6 +1178,7 @@ def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
         ),
         test_utils=oracle_test_utils if oracle_test_utils.is_file() else workspace_test_utils,
         engine_support=benchmark_root / "workspace",
+        test_interface=test_interface,
     )
 
 
@@ -1167,6 +1193,7 @@ def _grade_audited_card(
     *,
     test_utils: Path | None,
     card_set: str | None = None,
+    test_interface: Path | None = None,
 ) -> CardResult:
     """Grade one card's authoritative audited suite against the agent's tree.
 
@@ -1179,6 +1206,8 @@ def _grade_audited_card(
     the score — while the card's own ``cards.<set>.<card>.card_impl`` and
     ``engine`` still resolve from the tree the agent left behind (the evidence).
     A card-directory ``conftest.py`` is preserved as authoritative fixtures.
+    A benchmark with a Test Interface copies its *test_interface* in the same
+    way instead, and ``test_utils`` then resolves from the agent's tree.
     Missing authoritative support fails visibly rather than scoring as zero.
     """
     if not test_file.exists():
@@ -1186,21 +1215,22 @@ def _grade_audited_card(
             collector_number=card_id, skipped=True,
             errors=[f"No audited tests at {test_file}"],
         )
-    if test_utils is None or not test_utils.is_file():
+    support, name = (test_interface, "test_interface.py") if test_interface else (test_utils, "test_utils.py")
+    if support is None or not support.is_file():
         return CardResult(
             collector_number=card_id, skipped=True,
-            errors=[f"authoritative test_utils.py not found at {test_utils}"],
+            errors=[f"authoritative {name} not found at {support}"],
         )
     tmp_dir = tempfile.mkdtemp(prefix="eval_contract_")
     try:
         tmp = Path(tmp_dir)
-        shutil.copy2(test_utils, tmp / "test_utils.py")
+        shutil.copy2(support, tmp / name)
         card_conftest = test_file.parent / "conftest.py"
         if card_conftest.is_file():
             shutil.copy2(card_conftest, tmp / "conftest.py")
         shutil.copy2(test_file, tmp / "tests.py")
         # Grading support FIRST, candidate overlay SECOND: the authoritative
-        # test_utils wins; candidate cards/engine still resolve from the overlay.
+        # support wins; candidate cards/engine still resolve from the overlay.
         card_set = card_set or card_id.split("_", 1)[0]
         candidate_card = overlay / "cards" / card_set / card_id
         qualified = f"cards.{card_set}.{card_id}.card_impl"
@@ -1266,6 +1296,7 @@ def _eval_target_cards(
     timeout: int,
     *,
     test_utils: Path | None,
+    test_interface: Path | None = None,
 ) -> dict[str, CardResult]:
     """Dimension 1: correctness of the benchmark's target cards."""
     results: dict[str, CardResult] = {}
@@ -1274,7 +1305,8 @@ def _eval_target_cards(
         card_id = _target_card_id(card_set, cn, audited_set)
         test_file = audited_set / card_id / "tests.py"
         results[card_id] = _grade_audited_card(
-            card_id, test_file, overlay, timeout, test_utils=test_utils, card_set=card_set
+            card_id, test_file, overlay, timeout, test_utils=test_utils, card_set=card_set,
+            test_interface=test_interface,
         )
     return results
 
@@ -1286,6 +1318,7 @@ def _eval_audited_dir(
     *,
     test_utils: Path | None,
     exclude: Collection[str] = frozenset(),
+    test_interface: Path | None = None,
 ) -> dict[str, CardResult]:
     """Dimension 2: every card with an audited suite under *audited_dir* graded
     against the agent's tree (FDN regression), except the cards in *exclude*."""
@@ -1298,6 +1331,7 @@ def _eval_audited_dir(
             continue
         results[card_dir.name] = _grade_audited_card(
             card_dir.name, test_file, overlay, timeout, test_utils=test_utils, card_set=audited_dir.name,
+            test_interface=test_interface,
         )
     return results
 
@@ -1340,10 +1374,12 @@ def evaluate_run(
         result.sos_results = _eval_target_cards(
             overlay, benchmark.target_set, list(benchmark.cards),
             paths.audited_target, timeout, test_utils=paths.test_utils,
+            test_interface=paths.test_interface,
         )
         # Dimension 2 — FDN card regression.
         result.fdn_results = _eval_audited_dir(
             overlay, paths.audited_fdn, timeout, test_utils=paths.test_utils,
+            test_interface=paths.test_interface,
             exclude=fdn_target_card_ids(
                 benchmark.target_set, benchmark.cards, paths.audited_fdn.parent
             ),
@@ -1352,6 +1388,7 @@ def evaluate_run(
         result.engine_result = _eval_engine(
             overlay / "engine", paths.engine_tests, timeout=timeout,
             support_dir=paths.engine_support, test_utils=paths.test_utils,
+            test_interface=paths.test_interface,
         )
     finally:
         shutil.rmtree(overlay_root, ignore_errors=True)

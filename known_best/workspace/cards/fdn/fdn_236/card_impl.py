@@ -7,6 +7,21 @@ from engine.events import CounterAddedTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class WildwoodScourgeAbility1:
+    text = 'This creature enters with X +1/+1 counters on it.'
+
+
+class WildwoodScourgeAbility2:
+    text = 'Whenever one or more +1/+1 counters are put on another non-Hydra creature you control, put a +1/+1 counter on this creature.'
+
+
+# endregion Printed abilities
+
+
 class WildwoodScourge(Creature):
     """Wildwood Scourge — {X}{G} — 0/0 — Hydra.
 
@@ -73,4 +88,4 @@ class WildwoodScourge(Creature):
 
         def _effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1', 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=CounterAddedTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CounterAddedTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=WildwoodScourgeAbility2))

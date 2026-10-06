@@ -39,7 +39,8 @@
           "test_combat.py::TestCombatDamage::test_trample_excess_damage_to_player",
           "test_combat.py::TestCombatDamage::test_trample_with_deathtouch",
           "test_combat.py::TestCombatDamage::test_without_trample_all_damage_to_blocker",
-          "test_combat.py::TestCombatDamage::test_multiple_blockers_damage_assignment_order",
+          "test_combat.py::TestCombatDamage::test_multiple_blockers_damage_division",
+          "test_combat.py::TestDeclareBlockers::test_attackers_controller_divides_damage_among_blockers",
           "test_combat.py::TestCombatIntegration::test_full_combat_cycle_blocked",
           "test_combat.py::TestCombatIntegration::test_creature_with_multiple_keywords",
           "test_combat_damage_prevention.py::test_prevention_ends_at_cleanup"

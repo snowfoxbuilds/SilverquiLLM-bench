@@ -17,7 +17,7 @@ from cards.fdn.fdn_160.card_impl import AnOfferYouCantRefuse
 from engine.card import Creature, Instant
 from engine.casting import CastingError, CastMode, cast_spell_free
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.stack import move_spell_off_stack, resolve_top_of_stack
 from engine.types import ManaCost, Zone
 from test_utils import create_game

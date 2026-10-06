@@ -7,6 +7,21 @@ from engine.events import GainsLifeTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CatCollectorAbility1:
+    text = 'When this creature enters, create a Food token. (It\'s an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")'
+
+
+class CatCollectorAbility2:
+    text = 'Whenever you gain life for the first time during each of your turns, create a 1/1 white Cat creature token.'
+
+
+# endregion Printed abilities
+
+
 class CatCollector(Creature):
     """Cat Collector — {2}{W} — 3/2 — Human Citizen.
 
@@ -69,4 +84,4 @@ class CatCollector(Creature):
                 return
             token = make_creature_token('Cat', {'Cat'}, [Color.WHITE], 1, 1)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller, printed=CatCollectorAbility2))

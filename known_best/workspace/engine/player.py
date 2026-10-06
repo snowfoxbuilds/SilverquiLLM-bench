@@ -6,8 +6,8 @@ the engine's native interaction surface for the *choice* layer. There is no V1
 option satisfies is a test-authoring failure (``IntentError`` family), and a
 malformed/unanswerable query is an engine failure (``ProtocolError`` family).
 
-The concrete intent-based ``DeterministicPlayer`` lives in
-``engine/intent_player.py`` (and is re-exported from ``engine/__init__.py``).
+The players that answer from a test's scripts belong to the tests: the Test
+Interface's ``ScriptedPlayer`` and ``test_utils``' ``DeterministicPlayer``.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from engine.decisions import InvalidPlayerChoiceError
 from engine.mana import ManaPool
 from engine.queries import Answer, PlayerQuery
 from engine.zones import Zones
@@ -110,6 +111,44 @@ class Player(ABC):
         if self._instant_sorcery_cast_turn != turn_number:
             return []
         return list(self._instant_sorcery_casts)
+
+    # Decision-side attributes a rejected action's rollback leaves alone
+    # (engine.rollback): what the player saw and chose is not game state.
+    rollback_exempt: frozenset[str] = frozenset()
+
+    def on_attempt_rejected(self, context: Any, answer: Any, error: InvalidPlayerChoiceError) -> None:
+        """Hear that a rejection belongs to ``answer``, one this player gave
+        during ``context`` (an :class:`~engine.attempts.AttemptContext`, which
+        names the attempt, the action it belongs to and that action's player),
+        after the game was rolled back (see ADR-017).
+
+        Returning lets the engine ask the same query again (CR 733.2), and the
+        player must then answer it differently; raising stops play with an
+        error. The default raises ``error``, so a player that cannot revise
+        its choice is never asked forever.
+
+        The game is rolled back again after this hook returns, so state the
+        player keeps for its decisions must be listed in ``rollback_exempt``.
+        """
+        raise error
+
+    def on_action_ended(self, context: Any) -> None:
+        """Hear that the priority action or declaration attempted in
+        ``context`` is over — taken, passed, or ended by an error — so nothing
+        of it should answer later queries. The default does nothing."""
+
+    def confirm_declaration(
+        self, query: PlayerQuery, answer: Answer, outcome: tuple[Any, ...] = ()
+    ) -> None:
+        """Hear that the combat declaration chosen in ``answer`` to ``query``
+        has had every question answered and is about to take effect.
+        ``outcome`` pairs each declared creature's option with the decisions
+        for what it attacks or blocks — the declaration as it will stand,
+        whichever follow-up questions the engine asked.
+
+        Raising ``InvalidPlayerChoiceError`` withdraws it: it is rolled back
+        like a rejected declaration, before any combat state is committed, and
+        the same declaration is asked again. The default does nothing."""
 
     @abstractmethod
     def answer(self, query: PlayerQuery) -> Answer:

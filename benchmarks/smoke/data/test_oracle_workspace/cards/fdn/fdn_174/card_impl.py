@@ -8,6 +8,17 @@ from engine.events import CreatureDiesTriggeredEvent, EndOfTurnTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FakeYourOwnDeathAbility1:
+    text = 'Until end of turn, target creature gets +2/+0 and gains "When this creature dies, return it to the battlefield tapped under its owner\'s control and you create a Treasure token." (It\'s an artifact with "{T}, Sacrifice this token: Add one mana of any color.")'
+
+
+# endregion Printed abilities
+
+
 class FakeYourOwnDeath(Instant):
     """Fake Your Own Death — {1}{B} — Instant.
 
@@ -77,7 +88,7 @@ class FakeYourOwnDeath(Instant):
         class _DeathTriggerSentinel:
             pass
         sentinel = _DeathTriggerSentinel()
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_death_condition, effect=_death_effect, source=sentinel, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_death_condition, effect=_death_effect, source=sentinel, controller=controller, printed=FakeYourOwnDeathAbility1))
         _sentinel_ref = sentinel
 
         def _eot_cleanup_condition(game: Any, event: dict) -> bool:
@@ -88,4 +99,4 @@ class FakeYourOwnDeath(Instant):
         # Clean up the death trigger at end of turn. (The guard here used to
         # reference an undefined ``EventType`` name, crashing this resolution
         # with a NameError; the intended event type is imported directly.)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndOfTurnTriggeredEvent, condition=_eot_cleanup_condition, effect=_eot_cleanup_effect, source=sentinel, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndOfTurnTriggeredEvent, condition=_eot_cleanup_condition, effect=_eot_cleanup_effect, source=sentinel, controller=controller, printed=FakeYourOwnDeathAbility1))

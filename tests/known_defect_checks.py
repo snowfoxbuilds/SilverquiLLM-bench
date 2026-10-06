@@ -57,7 +57,7 @@ def audited_outcomes(benchmark, workspace: Path, dimension: str, *, timeout: int
                     paths.engine_tests,
                     timeout=timeout,
                     support_dir=paths.engine_support,
-                    test_utils=paths.test_utils,
+                    test_utils=paths.test_utils, test_interface=paths.test_interface,
                 )
             )
         if dimension == "card_correctness":
@@ -67,14 +67,14 @@ def audited_outcomes(benchmark, workspace: Path, dimension: str, *, timeout: int
                 list(benchmark.cards),
                 paths.audited_target,
                 timeout,
-                test_utils=paths.test_utils,
+                test_utils=paths.test_utils, test_interface=paths.test_interface,
             )
         else:
             results = _eval_audited_dir(
                 overlay,
                 paths.audited_fdn,
                 timeout,
-                test_utils=paths.test_utils,
+                test_utils=paths.test_utils, test_interface=paths.test_interface,
                 exclude=fdn_target_card_ids(
                     benchmark.target_set, benchmark.cards, paths.audited_fdn.parent
                 ),

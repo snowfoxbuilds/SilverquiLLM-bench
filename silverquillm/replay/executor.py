@@ -32,23 +32,106 @@ from silverquillm.replay.types import (
 logger = logging.getLogger(__name__)
 
 
+def _declarations_are_queries() -> bool:
+    """Whether the workspace engine asks combat declarations as Player Queries
+    (ADR-017) rather than taking them as arguments."""
+    from engine import queries
+
+    return hasattr(queries, "is_declaration_query")
+
+
+def _intent_api() -> Any:
+    """The module holding the workspace's intent-based player, ``Intent`` and
+    script entries: ``engine.intent_player`` in the hob-medium engine, or the
+    Workspace's ``test_utils`` in the Known-Best lineage, whose engine keeps
+    only the base Player (see ADR-018). Raises ``ImportError`` for an engine
+    with neither, the frozen SOS (V1) engine."""
+    try:
+        import engine.intent_player as api
+    except ImportError:
+        import test_utils as api
+
+        if not hasattr(api, "Intent"):
+            raise ImportError("the workspace has no intent-based player") from None
+    return api
+
+
+def _asks_division(query: Any) -> bool:
+    """Whether *query* asks for a blocker's share of combat damage: a NUMBER
+    query whose payload names the blocker (rule 510.1c)."""
+    return bool(query.question) and all(
+        getattr(o.kind, "name", o.kind) == "NUMBER" for o in query.options
+    )
+
+
+def _asks_about(instance: int) -> Any:
+    """A per_query key matching the division query about the blocker whose
+    engine instance id is *instance*."""
+    def key(query: Any) -> bool:
+        return _asks_division(query) and any(
+            dict(getattr(p, "attrs", ())).get("instance") == instance for p in query.question
+        )
+    return key
+
+
+def _legal_division(
+    *, power: int, trample: bool, blockers: list[Any], died: list[Any], lethal: Any
+) -> dict[int, int]:
+    """A division of *power* combat damage among *blockers* that the rules
+    allow (rule 510.1c-d, 702.19c), keyed by ``id(blocker)``.
+
+    *died* (in the order they left) are guessed to have been assigned lethal
+    damage first, and any damage left over goes to the first of them, so a
+    blocker seen to survive is assigned none — unless every blocker died,
+    when a trampler assigns the rest past them. With no blocker seen to die,
+    the survivors are kept below lethal damage while the power allows; what
+    is still left goes to the first blocker, or, with trample, to each
+    survivor up to lethal damage and then past them. With no observation at
+    all the result is still deterministic and legal.
+    """
+    shares = {id(b): 0 for b in blockers}
+    survivors = [b for b in blockers if all(b is not d for d in died)]
+    remaining = power
+    for blocker in died:
+        share = min(lethal(blocker), remaining)
+        shares[id(blocker)] += share
+        remaining -= share
+    if died:
+        if remaining and (survivors or not trample):
+            shares[id(died[0])] += remaining
+        return shares
+    for blocker in survivors:
+        share = min(max(0, lethal(blocker) - 1), remaining)
+        shares[id(blocker)] += share
+        remaining -= share
+    if remaining and not trample:
+        shares[id(blockers[0])] += remaining
+        return shares
+    for blocker in survivors:
+        share = min(lethal(blocker) - shares[id(blocker)], remaining)
+        if share > 0:
+            shares[id(blocker)] += share
+            remaining -= share
+    return shares
+
+
 def _make_replay_player(name: str, life: int) -> Any:
     """Create a DeterministicPlayer for whichever workspace engine is on sys.path.
 
     Benchmark-parameterized: the frozen SOS (V1) engine has a scripted
     ``engine.player.DeterministicPlayer`` (replay drives its actions, not a
-    script); the hob-medium engine has the intent-based ``engine.intent_player.
-    DeterministicPlayer``, which gets a permissive Baseline Intent so any query
+    script); the hob-medium engine and the Known-Best lineage have the
+    intent-based ``DeterministicPlayer`` (:func:`_intent_api`), which gets a permissive Baseline Intent so any query
     the replay raises is answered in GRE-observed (first-offered) order rather
     than crashing. A genuinely unanswerable query surfaces as a
     ``QUERY_UNANSWERED`` divergence, not an exception.
     """
     try:
-        from engine.intent_player import DeterministicPlayer as _IntentPlayer
-        from engine.intent_player import Intent
+        api = _intent_api()
         from engine.decisions import GameRef
 
-        player = _IntentPlayer(name=name, life=life)
+        Intent = api.Intent
+        player = api.DeterministicPlayer(name=name, life=life)
         player.set_baseline(Intent(pattern=GameRef(), preferences=()))
         return player
     except ImportError:
@@ -1360,9 +1443,8 @@ class ReplayExecutor:
                 and (card := self._engine_cards.get(obj.instance_id)) is not None
             ]
             if attackers:
-                from engine.combat import declare_attackers_step
                 try:
-                    declare_attackers_step(self.game, attackers)
+                    self._declare_attackers(attackers)
                     self._combat_active = True
                 except Exception as exc:
                     result.engine_failures.append(
@@ -1386,9 +1468,8 @@ class ReplayExecutor:
                     assignments[blocker] = attackers_blocked
             if assignments or step in self._COMBAT_DAMAGE_STEPS:
                 if assignments:
-                    from engine.combat import declare_blockers_step
                     try:
-                        declare_blockers_step(self.game, assignments)
+                        self._declare_blockers(assignments)
                     except Exception as exc:
                         result.engine_failures.append(
                             f"declare_blockers_step: {type(exc).__name__}: {exc}"
@@ -1405,11 +1486,16 @@ class ReplayExecutor:
             )
             if sub_step not in self._combat_damage_passes:
                 self._combat_damage_passes.add(sub_step)
+                import engine.combat as engine_combat
                 from engine.combat import combat_damage_step
-                # Multi-blocker damage order: the engine raises an ordering
-                # Player Query; answer it with the replay's observed outcome
-                # (blockers that die first were assigned damage first).
-                ordering_intents = self._mint_damage_order_intents(curr_snapshot)
+                # Multi-blocker damage: the engine asks how the attacker's
+                # damage is divided (rule 510.1c) or, on older engines, in
+                # what order its blockers are assigned damage; answer from
+                # the replay's observed outcome.
+                if hasattr(engine_combat, "_divide_damage"):
+                    ordering_intents = self._mint_damage_division_intents(curr_snapshot)
+                else:
+                    ordering_intents = self._mint_damage_order_intents(curr_snapshot)
                 try:
                     combat_damage_step(self.game, sub_step=sub_step)
                 except Exception as exc:
@@ -1435,7 +1521,7 @@ class ReplayExecutor:
         resulting divergence.
         """
         from engine.decisions import Decision, GameRef
-        from engine.intent_player import Intent
+        Intent = _intent_api().Intent
 
         by_attacker: dict[int, list[int]] = {}
         for obj in curr_snapshot.get_zone_objects("ZoneType_Battlefield"):
@@ -1478,10 +1564,73 @@ class ReplayExecutor:
             intents.append((controller, intent_name))
         return intents
 
+    def _mint_damage_division_intents(
+        self, curr_snapshot: GameSnapshot
+    ) -> list[tuple[Any, str]]:
+        """Answer damage-division queries with a legal division guided by the replay.
+
+        For each attacker the engine has blocked by two or more creatures, the
+        division comes from :func:`_legal_division` over the engine's own
+        blockers, with the blockers seen to leave the battlefield as its
+        guide. Each blocker's share is a NUMBER preference keyed to the query
+        whose payload names that blocker; the Intent is routed by the
+        attacker's runtime instance ref, so same-name attackers each get their
+        own division. One Intent per attacker, ended by the caller after the
+        damage pass. A wrong guess is an honest compare-first mismatch; the
+        division itself is always one the rules allow (rule 510.1c-d,
+        702.19c).
+        """
+        from engine.combat import _get_lethal_damage
+        from engine.decisions import Decision, GameRef
+        from engine.types import Keyword
+        Intent = _intent_api().Intent
+
+        combat = getattr(self.game, "combat_state", None)
+        attacker_blockers = getattr(combat, "attacker_blockers", {}) or {}
+        replay_iid = {id(card): iid for iid, card in self._engine_cards.items() if card is not None}
+        intents: list[tuple[Any, str]] = []
+        for attacker, blockers in attacker_blockers.items():
+            if len(blockers) < 2:
+                continue
+            controller = getattr(attacker, "controller", None)
+            attacker_iid = self._engine_instance_id(attacker)
+            if controller is None or attacker_iid is None or not hasattr(controller, "start_intent"):
+                continue
+            keyed = [(b, self._engine_instance_id(b)) for b in blockers]
+            if any(iid is None for _, iid in keyed):
+                continue
+            observed = [replay_iid[id(b)] for b in blockers if id(b) in replay_iid]
+            died_order = self._blocker_deaths(observed, curr_snapshot)
+            died = [b for iid in died_order for b, _ in keyed if replay_iid.get(id(b)) == iid]
+            shares = _legal_division(
+                power=max(0, getattr(attacker, "power", 0)),
+                trample=Keyword.TRAMPLE in getattr(attacker, "keywords", Keyword(0)),
+                blockers=[b for b, _ in keyed],
+                died=died,
+                lethal=lambda b, attacker=attacker: _get_lethal_damage(b, attacker),
+            )
+            per_query = {
+                _asks_about(iid): [Decision.number(shares[id(b)])] for b, iid in keyed
+            }
+            intent_name = f"replay_division_{attacker_iid}"
+            controller.start_intent(intent_name, Intent(
+                pattern=GameRef(object=frozenset({("instance", attacker_iid)})),
+                per_query=per_query,
+            ))
+            intents.append((controller, intent_name))
+        return intents
+
     def _blocker_death_order(
         self, blocker_iids: list[int], curr_snapshot: GameSnapshot
     ) -> list[int]:
-        """Blockers ordered by observed death (first to leave first), survivors last.
+        """Blockers ordered by observed death (first to leave first), survivors last."""
+        died = self._blocker_deaths(blocker_iids, curr_snapshot)
+        return died + [i for i in blocker_iids if i not in died]
+
+    def _blocker_deaths(
+        self, blocker_iids: list[int], curr_snapshot: GameSnapshot
+    ) -> list[int]:
+        """The blockers seen to leave the battlefield, first to leave first.
 
         Heuristic: "left the battlefield within the window" conflates combat
         death with bounce/exile or a follow-up removal spell — acceptable
@@ -1505,9 +1654,7 @@ class ReplayExecutor:
                 if iid not in bf_ids:
                     deaths[iid] = k
                     alive.discard(iid)
-        ordered = sorted(deaths, key=lambda i: deaths[i])
-        ordered.extend(i for i in blocker_iids if i not in deaths)
-        return ordered
+        return sorted(deaths, key=lambda i: deaths[i])
 
     def _simulate_hand_draws(
         self,
@@ -2099,6 +2246,54 @@ class ReplayExecutor:
         refs = getattr(self.game, "refs", None) if self.game is not None else None
         zone_epoch = getattr(refs, "zone_epoch", None)
         return zone_epoch(obj) if callable(zone_epoch) else 0
+
+    def _declare_attackers(self, attackers: list[Any]) -> None:
+        """Declare the observed attackers, each attacking the defending player."""
+        from engine.combat import declare_attackers_step
+
+        if not _declarations_are_queries():
+            declare_attackers_step(self.game, attackers)
+            return
+        from engine.decisions import Decision
+
+        defending = self.game.non_active_player
+        defender = Decision.player(seat=self.game.refs.seat_of(defending))
+        refs = [self._battlefield_ref(card) for card in attackers]
+        self._scripted_declaration(
+            self.game.active_player, declare_attackers_step, refs, {r: defender for r in refs}
+        )
+
+    def _declare_blockers(self, assignments: dict[Any, list[Any]]) -> None:
+        """Declare the observed blocks, each blocker with every attacker it blocks."""
+        from engine.combat import declare_blockers_step
+
+        if not _declarations_are_queries():
+            declare_blockers_step(self.game, assignments)
+            return
+        scoped = {
+            self._battlefield_ref(blocker): [self._battlefield_ref(a) for a in blocked]
+            for blocker, blocked in assignments.items()
+        }
+        self._scripted_declaration(
+            self.game.non_active_player, declare_blockers_step, list(scoped), scoped
+        )
+
+    def _battlefield_ref(self, card: Any) -> Any:
+        from engine.decisions import Decision
+
+        return Decision.obj(instance=self.game.refs.instance_id(card, "battlefield"))
+
+    def _scripted_declaration(self, player: Any, step: Any, chosen: list, scoped: dict) -> None:
+        """Run a combat step whose declaration is a Player Query, answered by
+        a one-entry action script naming exactly the observed creatures; the
+        player's own script is restored however the step ends."""
+        act = _intent_api().act
+
+        saved = player.set_script([act(*chosen, scoped=scoped)])
+        try:
+            step(self.game)
+        finally:
+            player.set_script(saved)
 
     def _engine_bf_stints(self) -> dict[tuple[Any, int], tuple[int, Any]]:
         """``counter key -> (zone epoch, object)`` for every permanent
@@ -2905,7 +3100,7 @@ class ReplayExecutor:
         """
         from engine.casting import cast_spell
         from engine.decisions import GameRef
-        from engine.intent_player import Intent
+        Intent = _intent_api().Intent
         from engine.types import Zone
 
         player = self.players.get(action.player_seat_id)
@@ -3578,7 +3773,7 @@ class ReplayExecutor:
         if not preferences:
             return thunk()
         from engine.decisions import GameRef
-        from engine.intent_player import Intent
+        Intent = _intent_api().Intent
 
         intent_name = f"replay_ability_{action.instance_id}"
         player.start_intent(intent_name, Intent(

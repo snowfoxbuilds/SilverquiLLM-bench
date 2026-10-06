@@ -13,7 +13,7 @@ from __future__ import annotations
 from cards.fdn.fdn_39.card_impl import GrapplingKraken
 from engine.card import Creature, Land
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import ManaCost, Phase, Zone
 from engine.zones import move_to_zone
 from test_utils import create_game, enter_permanent, resolve_stack, set_board_state
@@ -41,6 +41,7 @@ def _trigger_landfall(game, controller):
     controller.zones[Zone.HAND].add(land)
     land.instance_id = game.refs.instance_id(land, "hand")
     move_to_zone(game, land, Zone.HAND, Zone.BATTLEFIELD)
+    game.trigger_manager.put_pending_on_stack(game)  # as the game settles before priority
 
 
 def _setup():

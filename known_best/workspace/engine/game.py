@@ -13,6 +13,8 @@ a game of Magic: The Gathering:
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from engine.events import (
@@ -30,7 +32,7 @@ from engine.events import (
 )
 from engine.game_state import GameState
 from engine.turn import run_turn
-from engine.types import Zone
+from engine.types import ManaType, Phase, Step, Zone
 from engine.zones import move_to_zone
 
 if TYPE_CHECKING:
@@ -47,69 +49,143 @@ MAX_TURNS: int = 1000
 # Game creation
 # ---------------------------------------------------------------------------
 
+@dataclass
+class Side:
+    """One player's part of a constructed starting position.
+
+    ``library`` is listed top first. ``tapped`` names the battlefield
+    permanents that start tapped; ``mana`` is what the player's pool holds.
+    """
+
+    library: Sequence[CardImpl] = ()
+    hand: Sequence[CardImpl] = ()
+    battlefield: Sequence[CardImpl] = ()
+    graveyard: Sequence[CardImpl] = ()
+    exile: Sequence[CardImpl] = ()
+    tapped: Collection[CardImpl] = ()
+    life: int = 20
+    mana: Mapping[ManaType, int] = field(default_factory=dict)
+
+
+# The steps a game can start in: each one that opens a priority window.
+_STARTING_STEPS: dict[Step | Phase, tuple[Phase, Step | None]] = {
+    Step.UPKEEP: (Phase.BEGINNING, Step.UPKEEP),
+    Step.DRAW: (Phase.BEGINNING, Step.DRAW),
+    Phase.PRECOMBAT_MAIN: (Phase.PRECOMBAT_MAIN, None),
+    Step.BEGIN_COMBAT: (Phase.COMBAT, Step.BEGIN_COMBAT),
+    Step.DECLARE_ATTACKERS: (Phase.COMBAT, Step.DECLARE_ATTACKERS),
+    Step.DECLARE_BLOCKERS: (Phase.COMBAT, Step.DECLARE_BLOCKERS),
+    Step.COMBAT_DAMAGE: (Phase.COMBAT, Step.COMBAT_DAMAGE),
+    Step.END_COMBAT: (Phase.COMBAT, Step.END_COMBAT),
+    Phase.POSTCOMBAT_MAIN: (Phase.POSTCOMBAT_MAIN, None),
+    Step.END: (Phase.ENDING, Step.END),
+}
+
+
 def create_game(
     player1: Player,
     player2: Player,
-    deck1: list[CardImpl],
-    deck2: list[CardImpl],
+    deck1: list[CardImpl] | None = None,
+    deck2: list[CardImpl] | None = None,
+    *,
+    start: tuple[Step | Phase, int] | None = None,
+    sides: tuple[Side, Side] | None = None,
 ) -> GameState:
     """Create and initialise a new two-player game.
 
-    Steps performed:
+    Without ``start``, the game is set up for play from its first turn: life
+    totals are 20, *deck1* and *deck2* become the libraries, each library is
+    shuffled and each player draws 7 cards, and *player1* is active.
 
-    1. Set each player's life total to 20.
-    2. Place *deck1* / *deck2* into the respective player's library zone.
-    3. Shuffle each library.
-    4. Draw 7 cards for each player.
-    5. Set the active player to *player1*.
+    With ``start=(step, active)``, the game is a constructed position instead
+    (see the Test Interface): ``sides`` places each player's cards, life and
+    mana, nothing is shuffled or drawn, and play begins in ``step`` — a
+    :class:`Step`, or a main :class:`Phase` — of seat ``active``'s turn with
+    that step's priority window open. The turn is 1 when seat 0 is active and
+    2 when seat 1 is, so the starting player's skipped first draw (CR 103.8a)
+    still applies. Permanents start untapped unless listed in their side's
+    ``tapped``, are not summoning sick, carry no counters or damage, and a
+    planeswalker has its printed loyalty.
 
     Card ownership is set so that each card's ``owner`` and ``controller``
-    point to the player whose deck it came from.
-
-    Parameters:
-        player1: The first player (goes first).
-        player2: The second player.
-        deck1: Cards comprising player1's deck.
-        deck2: Cards comprising player2's deck.
-
-    Returns:
-        A fully initialised :class:`GameState` ready for play.
+    point to the player whose deck or side it came from.
     """
-    # 1. Set life totals
+    if start is not None:
+        if deck1 or deck2:
+            raise ValueError("a constructed position places its cards through sides, not decks")
+        return _construct(player1, player2, start, sides or (Side(), Side()))
+
     player1.life = 20
     player2.life = 20
+    for player, deck in ((player1, deck1 or []), (player2, deck2 or [])):
+        library = player.zones[Zone.LIBRARY]
+        for card in deck:
+            card.owner = player
+            card.controller = player
+            library.add(card)
 
-    # 2. Place deck cards into libraries and set ownership
-    library1 = player1.zones[Zone.LIBRARY]
-    for card in deck1:
-        card.owner = player1
-        card.controller = player1
-        library1.add(card)
-
-    library2 = player2.zones[Zone.LIBRARY]
-    for card in deck2:
-        card.owner = player2
-        card.controller = player2
-        library2.add(card)
-
-    # 3. Shuffle libraries
-    library1.shuffle()
-    library2.shuffle()
-
-    # Build the game state
     game = GameState([player1, player2])
-
-    # 4. Draw 7 cards each
-    for _ in range(7):
-        draw_card(game, player1)
-    for _ in range(7):
-        draw_card(game, player2)
-
-    # 5. Active player is player1 (index 0 — already the default)
+    for player in game.players:
+        player.zones[Zone.LIBRARY].shuffle(game)
+    for player in game.players:
+        for _ in range(7):
+            draw_card(game, player)
     game.active_player_index = 0
-    game.priority_player_index = 0
-
     return game
+
+
+def _construct(
+    player1: Player, player2: Player, start: tuple[Step | Phase, int], sides: tuple[Side, Side]
+) -> GameState:
+    step, active = start
+    if step not in _STARTING_STEPS:
+        raise ValueError(f"a game cannot start in {step!r}: no priority window opens there")
+    if active not in (0, 1):
+        raise ValueError(f"no seat {active!r}")
+    game = GameState([player1, player2])
+    for player, side in zip(game.players, sides):
+        player.life = side.life
+        zones = player.zones
+        for card in reversed(list(side.library)):
+            _place(player, zones[Zone.LIBRARY], card)
+        for zone, cards in (
+            (Zone.HAND, side.hand),
+            (Zone.GRAVEYARD, side.graveyard),
+            (Zone.EXILE, side.exile),
+            (Zone.BATTLEFIELD, side.battlefield),
+        ):
+            for card in cards:
+                _place(player, zones[zone], card)
+        tapped = list(side.tapped)
+        for card in side.battlefield:
+            if hasattr(card, "summoning_sick"):
+                card.summoning_sick = False
+            if any(card is t for t in tapped):
+                card.is_tapped = True
+        for mana_type, amount in side.mana.items():
+            player.mana_pool.add(mana_type, amount)
+    # Abilities of permanents already in play work from the start; none of
+    # them entered, so nothing triggers on their arrival.
+    for player, side in zip(game.players, sides):
+        for card in side.battlefield:
+            if hasattr(card, "register_triggers"):
+                card.register_triggers(game)
+            if hasattr(card, "register_replacement_effects"):
+                card.register_replacement_effects(game)
+    game.effect_manager.apply_all(game)
+
+    game.phase, game.step = _STARTING_STEPS[step]
+    game.active_player_index = active
+    game._normal_next_index = 1 - active
+    game.turn_number = 1 if active == 0 else 2
+    game.open_window()
+    return game
+
+
+def _place(player: Player, zone: Any, card: CardImpl) -> None:
+    card.owner = player
+    card.controller = player
+    zone.add(card)
 
 
 # ---------------------------------------------------------------------------
@@ -432,6 +508,7 @@ def _place_token(game: GameState, player: Player, token: Any, grp_id: Any) -> No
     )
     battlefield = game.get_battlefield(player)
     battlefield.add(token)
+    game.created_tokens.append(token)
 
     landed_counters = apply_entry_counter_values(game, token, enters_event)
 
@@ -874,32 +951,23 @@ def run_game(game: GameState) -> Player | None:
     are resolved before and after each turn to catch game-ending conditions
     even when the priority loop auto-passes.
 
-    Includes a safety limit of :data:`MAX_TURNS` to prevent infinite loops
-    in deterministic or stuck game states.
+    A game that reaches the safety limit of :data:`MAX_TURNS` ends in a
+    draw, so play always ends with the game over.
 
     Parameters:
         game: The game state to run.
 
     Returns:
-        The winning player, or ``None`` if the game ended in a draw (or
-        hit the turn limit).
+        The winning player, or ``None`` when the game ended in a draw.
     """
     from engine.state_based_actions import resolve_state_based_actions
 
-    while not game.is_game_over and game.turn_number <= MAX_TURNS:
-        # Check SBAs before the turn (catches pre-existing conditions)
+    while True:
         resolve_state_based_actions(game)
         _check_game_over(game)
         if game.is_game_over:
-            break
-
+            return game.winner
         run_turn(game)
-
-        # Check SBAs after the turn
-        resolve_state_based_actions(game)
-        _check_game_over(game)
-
-    return game.winner
 
 
 def _check_game_over(game: GameState) -> None:

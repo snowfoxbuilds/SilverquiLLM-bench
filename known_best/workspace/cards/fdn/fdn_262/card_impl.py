@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class EvolvingWildsAbility1:
+    text = '{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.'
+
+
+# endregion Printed abilities
+
+
 class EvolvingWilds(Land):
     """Evolving Wilds — Land.
 
@@ -58,7 +68,7 @@ class EvolvingWilds(Land):
                 and CardType.LAND in getattr(c, "card_types", set())
             ]
             if not basics:
-                library.shuffle()
+                library.shuffle(game)
                 return
             if len(basics) == 1:
                 chosen = basics[0]
@@ -75,7 +85,7 @@ class EvolvingWilds(Land):
             from engine.zones import move_to_zone
 
             move_to_zone(game, chosen, Zone.LIBRARY, Zone.BATTLEFIELD)
-            library.shuffle()
+            library.shuffle(game)
 
         return [
             ActivatedAbility(
@@ -84,5 +94,6 @@ class EvolvingWilds(Land):
                 description="{T}, Sacrifice this land: Search your library "
                 "for a basic land card, put it onto the battlefield tapped, "
                 "then shuffle.",
+                printed=EvolvingWildsAbility1,
             )
         ]

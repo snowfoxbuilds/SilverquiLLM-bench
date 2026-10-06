@@ -9,6 +9,17 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class InfestationSageAbility1:
+    text = 'When this creature dies, create a 1/1 black and green Insect creature token with flying.'
+
+
+# endregion Printed abilities
+
+
 def _self_dies_condition(source: Any):
     """Return a condition callable that matches only when *source* dies."""
 
@@ -46,4 +57,4 @@ class InfestationSage(Creature):
             token = make_creature_token("Insect", {"Insect"}, [Color.BLACK, Color.GREEN], 1, 1, keywords=Keyword.FLYING)
             create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_effect, source=self, controller=controller, printed=InfestationSageAbility1))

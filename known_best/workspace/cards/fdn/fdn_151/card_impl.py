@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AetherizeAbility1:
+    text = "Return all attacking creatures to their owner's hand."
+
+
+# endregion Printed abilities
+
+
 class Aetherize(Instant):
     """Aetherize — {3}{U} — Instant.
 

@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BrasssBountyAbility1:
+    text = 'For each land you control, create a Treasure token. (It\'s an artifact with "{T}, Sacrifice this token: Add one mana of any color.")'
+
+
+# endregion Printed abilities
+
+
 class BrasssBounty(Sorcery):
     """Brass's Bounty — {6}{R} — Sorcery.
 

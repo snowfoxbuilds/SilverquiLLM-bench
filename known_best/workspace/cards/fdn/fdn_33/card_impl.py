@@ -7,6 +7,21 @@ from engine.events import DrawsCardTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ClinquantSkymageAbility1:
+    text = 'Flying'
+
+
+class ClinquantSkymageAbility2:
+    text = 'Whenever you draw a card, put a +1/+1 counter on this creature.'
+
+
+# endregion Printed abilities
+
+
 class ClinquantSkymage(Creature):
     """Clinquant Skymage — {3}{U} — 1/1 — Bird Wizard — Flying.
 
@@ -40,4 +55,4 @@ class ClinquantSkymage(Creature):
 
         def _draw_effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1', 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller, printed=ClinquantSkymageAbility2))

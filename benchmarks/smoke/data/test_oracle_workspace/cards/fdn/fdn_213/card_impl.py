@@ -17,6 +17,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BlanchwoodArmorAbility1:
+    text = 'Enchant creature'
+
+
+class BlanchwoodArmorAbility2:
+    text = 'Enchanted creature gets +1/+1 for each Forest you control.'
+
+
+# endregion Printed abilities
+
+
 def _creature_targets(game: Any) -> list[Any]:
     """Return all creatures on the battlefield."""
     targets: list[Any] = []

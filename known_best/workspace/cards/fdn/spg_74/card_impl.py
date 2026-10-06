@@ -7,6 +7,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CondemnAbility1:
+    text = "Put target attacking creature on the bottom of its owner's library. Its controller gains life equal to its toughness."
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, card: Any) -> bool:
     """Check if *card* is on any player's battlefield."""
     for player in game.players:

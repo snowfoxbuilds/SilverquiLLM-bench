@@ -15,7 +15,7 @@ from cards.fdn.fdn_95.card_impl import SowerOfChaos
 from engine.abilities import AbilityError
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from engine.zones import move_to_zone
 from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state

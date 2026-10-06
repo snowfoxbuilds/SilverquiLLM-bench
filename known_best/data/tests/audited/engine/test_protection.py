@@ -21,7 +21,7 @@ import pytest
 from engine.card import Aura, Creature, Instant, Sorcery
 from engine.game import deal_damage
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer as Player
+from test_utils import DeterministicPlayer as Player
 from engine.protection import (
     ProtectionAbility,
     get_colors,

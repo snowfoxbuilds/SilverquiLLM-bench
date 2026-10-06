@@ -17,6 +17,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class QuickDrawKatanaAbility1:
+    text = 'During your turn, equipped creature gets +2/+0 and has first strike. (It deals combat damage before creatures without first strike.)'
+
+
+class QuickDrawKatanaAbility2:
+    text = 'Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)'
+
+
+# endregion Printed abilities
+
+
 class QuickDrawKatana(Equipment):
     """Quick-Draw Katana — {2} — Artifact — Equipment.
 
@@ -25,6 +39,8 @@ class QuickDrawKatana(Equipment):
 
     FDN collector number 130.
     """
+
+    equip_printed = QuickDrawKatanaAbility2
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Quick-Draw Katana")

@@ -24,7 +24,7 @@ from engine.casting import (
     cast_spell,
 )
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer
+from test_utils import DeterministicPlayer
 from engine.types import CardType, ManaCost, ManaType, Phase, Step
 
 

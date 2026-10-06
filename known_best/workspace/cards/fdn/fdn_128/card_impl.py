@@ -15,6 +15,25 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FishingPoleAbility1:
+    text = 'Equipped creature has "{1}, {T}, Tap Fishing Pole: Put a bait counter on Fishing Pole."'
+
+
+class FishingPoleAbility2:
+    text = 'Whenever equipped creature becomes untapped, remove a bait counter from this Equipment. If you do, create a 1/1 blue Fish creature token.'
+
+
+class FishingPoleAbility3:
+    text = 'Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)'
+
+
+# endregion Printed abilities
+
+
 class FishingPole(Artifact):
     """Fishing Pole — {1} — Equipment with bait counter mechanics."""
 

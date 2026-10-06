@@ -7,6 +7,21 @@ from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SlumberingCerberusAbility1:
+    text = "This creature doesn't untap during your untap step."
+
+
+class SlumberingCerberusAbility2:
+    text = 'Morbid — At the beginning of each end step, if a creature died this turn, untap this creature.'
+
+
+# endregion Printed abilities
+
+
 class SlumberingCerberus(Creature):
     """Slumbering Cerberus — {1}{R} — 4/2 — Dog.
 
@@ -38,4 +53,4 @@ class SlumberingCerberus(Creature):
 
         def _effect(game: 'GameState') -> None:
             source.is_tapped = False
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=SlumberingCerberusAbility2))

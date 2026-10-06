@@ -10,7 +10,7 @@ from cards.fdn.fdn_253.card_impl import GoldveinPick
 from engine.card import Creature, Equipment
 from engine.events import DealsDamageTriggeredEvent
 from engine.stack import priority_loop
-from engine.types import ManaCost
+from engine.types import ManaCost, Phase
 from test_utils import create_game, set_board_state
 
 
@@ -49,6 +49,7 @@ class TestGoldveinPickBehaviour:
         game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(
             source=bear, target=p2, amount=3, is_combat=True,
         ))
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         priority_loop(game)
 
         treasures = [o for o in game.get_battlefield(p1).get_all()

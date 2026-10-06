@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SoulShackledZombieAbility1:
+    text = 'When this creature enters, exile up to two target cards from a single graveyard. If at least one creature card was exiled this way, each opponent loses 2 life and you gain 2 life.'
+
+
+# endregion Printed abilities
+
+
 class SoulShackledZombie(Creature):
     """Soul-Shackled Zombie — {3}{B} — 4/2 — Zombie.
 

@@ -14,7 +14,7 @@ from cards.fdn.fdn_129.card_impl import LeylineAxe
 from engine.abilities import AbilityError
 from engine.card import Creature, Equipment
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.state_based_actions import check_state_based_actions
 from engine.types import Keyword, ManaCost, ManaType, Phase, Zone
 from engine.zones import move_to_zone

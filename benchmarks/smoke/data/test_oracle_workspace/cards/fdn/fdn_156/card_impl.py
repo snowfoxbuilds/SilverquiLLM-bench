@@ -16,6 +16,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ImprisonedInTheMoonAbility1:
+    text = 'Enchant creature, land, or planeswalker'
+
+
+class ImprisonedInTheMoonAbility2:
+    text = 'Enchanted permanent is a colorless land with "{T}: Add {C}" and loses all other card types and abilities.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Check if *obj* is on any player's battlefield."""
     for player in game.players:

@@ -13,10 +13,10 @@ from cards.fdn.fdn_113.card_impl import SylvanScavenging
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
 from engine.events import EndStepTriggeredEvent
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.protection import get_colors
 from engine.stack import priority_loop
-from engine.types import Color
+from engine.types import Color, Phase
 from test_utils import create_game, set_board_state
 
 
@@ -52,6 +52,7 @@ class TestSylvanScavengingToken:
             ),
         )
         game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=p1))
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         priority_loop(game)
         p1.end_intent("scav")
 

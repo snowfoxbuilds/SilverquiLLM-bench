@@ -17,8 +17,9 @@ from __future__ import annotations
 import pytest
 
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer
+from test_utils import DeterministicPlayer
 from engine.stack import Stack, StackObject, check_state_based_actions, priority_loop
+from engine.types import Phase
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +29,10 @@ def _make_game() -> GameState:
     """Create a 2-player GameState with intent-based DeterministicPlayers."""
     p1 = DeterministicPlayer("Alice", life=20)
     p2 = DeterministicPlayer("Bob", life=20)
-    return GameState([p1, p2])
+    game = GameState([p1, p2])
+    # A stack only resolves in a step that grants priority (CR 502.4).
+    game.phase, game.step = Phase.PRECOMBAT_MAIN, None
+    return game
 
 
 def _make_stack_object(

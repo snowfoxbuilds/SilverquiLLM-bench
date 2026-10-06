@@ -1,4 +1,4 @@
-"""Unit tests for the intent-based DeterministicPlayer (engine/intent_player.py).
+"""Unit tests for the intent-based DeterministicPlayer (test_utils).
 
 Routing (pattern → source refs), preference-based answering, the Baseline
 Intent slot, ambiguity / unmatched hard errors, decline semantics, ordering
@@ -17,7 +17,7 @@ from engine.decisions import (
     PostconditionError,
     UnmatchedQueryError,
 )
-from engine.intent_player import DeterministicPlayer, Intent
+from test_utils import DeterministicPlayer, Intent
 from engine.queries import PlayerQuery
 
 

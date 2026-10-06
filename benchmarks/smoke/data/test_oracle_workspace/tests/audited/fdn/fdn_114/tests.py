@@ -13,7 +13,7 @@ from cards.fdn.fdn_114.card_impl import TreetopSnarespinner
 from engine.abilities import AbilityError
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import Keyword, ManaCost, ManaType, Phase, Zone
 from test_utils import (
     activate_card_ability,

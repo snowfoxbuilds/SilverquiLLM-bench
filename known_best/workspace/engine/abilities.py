@@ -84,6 +84,7 @@ class ActivatedAbilityInstance:
             side effects, so an illegal-timing activation raises no query and
             spends no resources. ``None`` means no extra restriction beyond the
             source's ``_cant_activate`` suppression.
+        printed: The predefined class of the printed ability (see ADR-017).
     """
 
     source: Any
@@ -94,6 +95,7 @@ class ActivatedAbilityInstance:
     description: str = ""
     targeting: Callable[..., Any] | None = None
     can_activate: Callable[..., bool] | None = None
+    printed: type | None = None
 
 
 @dataclass
@@ -124,6 +126,7 @@ class LoyaltyAbilityInstance:
             chosen targets (possibly an empty list for an "up to one target"
             ability), or ``None`` when a *required* target has no legal choice
             (the ability then cannot be activated and no loyalty is spent).
+        printed: The predefined class of the printed ability (see ADR-017).
     """
 
     source: Any
@@ -132,6 +135,7 @@ class LoyaltyAbilityInstance:
     effect: Callable[..., None] = field(default=lambda _game: None)
     description: str = ""
     targeting: Callable[..., Any] | None = None
+    printed: type | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +334,7 @@ def _activate_regular_ability(
             targets=chosen_targets,
             is_mana_ability=False,
             activation_context=context,
+            printed=ability.printed,
         )
         if ability.targeting is not None:
             effect = ability.effect
@@ -434,6 +439,7 @@ def _activate_loyalty_ability(
         targets=chosen_targets,
         is_mana_ability=False,
         activation_context=context,
+        printed=ability.printed,
     )
     if ability.targeting is not None:
         effect = ability.effect

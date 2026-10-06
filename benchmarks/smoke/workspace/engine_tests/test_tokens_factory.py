@@ -20,7 +20,7 @@ from cards.fdn.tokens import (
     make_treasure_token,
 )
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.protection import get_colors
 from engine.types import CardType, Color, Keyword, ManaType
 from test_utils import create_game, set_board_state

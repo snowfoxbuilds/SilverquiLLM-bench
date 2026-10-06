@@ -13,7 +13,7 @@ from cards.fdn.fdn_38.card_impl import FaebloomTrick
 from engine.card import Creature
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.protection import get_colors
 from engine.stack import resolve_top_of_stack
 from engine.types import (

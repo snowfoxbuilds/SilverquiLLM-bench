@@ -35,7 +35,8 @@ from engine.events import (
     LosesLifeTriggeredEvent,
 )
 from engine.game import add_counter, create_token, gain_life, lose_life, remove_counter
-from engine.intent_player import Intent
+from test_utils import Intent
+from engine.queries import is_priority_query
 from engine.replacement_effects import ReplacementEffect
 from engine.stack import priority_loop
 from engine.state_based_actions import check_state_based_actions
@@ -94,12 +95,14 @@ def _push_equip_activation(game, player, equipment, target):
 
 def _spy_on_answer(player):
     """Replace ``player.answer`` with a spy; return (calls, restore) so a test
-    can assert no Player Query was raised (``calls == []``)."""
+    can assert the activation raised no Player Query (``calls == []``). The
+    Priority Query in which the player chooses the activation is not counted."""
     calls: list = []
     original = player.answer
 
     def _spy(query):
-        calls.append(query)
+        if not is_priority_query(query):
+            calls.append(query)
         return original(query)
 
     player.answer = _spy
@@ -283,6 +286,7 @@ class TestEffectTiming:
         gear.equip(bear, game)
         assert (bear.power, bear.toughness) == (2, 2)  # Gear has no static buff
 
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         move_to_zone(game, land, Zone.HAND, Zone.BATTLEFIELD)  # landfall -> stack
         assert (bear.power, bear.toughness) == (2, 2)  # trigger not resolved yet
         priority_loop(game)  # resolves the landfall trigger through the real stack
@@ -411,6 +415,7 @@ class TestResolutionOrder:
             p1 = game.players[0]
             bear = _creature("Bear", p1, 2, 2)
             set_board_state(game, 0, battlefield=[bear])
+            game.phase, game.step = Phase.PRECOMBAT_MAIN, None
             game.stack.push(_resolving(
                 lambda g: g.effect_manager.add(_pt_effect(bear, -2, -2))
             ))
@@ -761,13 +766,19 @@ class TestEquipmentLifecycle:
         game = create_game()
         p1 = game.players[0]
         protected = _creature("Protected", p1, 2, 2)
-        protected.protections = [ProtectionAbility(
-            quality="artifacts",
-            predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
-        )]
         boots = SwiftfootBoots(owner=p1, controller=p1)  # an artifact
         set_board_state(game, 0, battlefield=[protected, boots],
                         mana={ManaType.COLORLESS: 1})
+        # Protection from artifacts as a static ability, so it survives re-derivation.
+        protection = ProtectionAbility(
+            quality="artifacts",
+            predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
+        )
+        game.effect_manager.add(ContinuousEffect(
+            source=protected, layer=Layer.ABILITY, duration=DURATION_PERMANENT,
+            apply=lambda _game: setattr(protected, "protections", [protection]),
+        ))
+        game.effect_manager.apply_all(game)
         game.phase = Phase.PRECOMBAT_MAIN
         with pytest.raises(AbilityError):
             activate_card_ability(game, p1, boots)  # only creature is protected
@@ -789,10 +800,17 @@ class TestEquipmentLifecycle:
         game.phase = Phase.PRECOMBAT_MAIN
         _equip_via_ability(game, p1, boots, bear)  # legal at activation
         # The target gains protection from artifacts before the ability resolves.
-        bear.protections = [ProtectionAbility(
+        protection = ProtectionAbility(
             quality="artifacts",
             predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
-        )]
+        )
+        game.effect_manager.add(ContinuousEffect(
+            source=object(), layer=Layer.ABILITY,
+            apply=lambda _g: setattr(
+                bear, "protections", [*getattr(bear, "protections", []), protection]
+            ),
+            duration=DURATION_PERMANENT,
+        ))
         resolve_stack(game)
         assert boots.attached_to is None
 

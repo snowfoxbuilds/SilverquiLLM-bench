@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SeismicRuptureAbility1:
+    text = 'Seismic Rupture deals 2 damage to each creature without flying.'
+
+
+# endregion Printed abilities
+
+
 class SeismicRupture(Sorcery):
     """Seismic Rupture — {2}{R} — Sorcery.
 

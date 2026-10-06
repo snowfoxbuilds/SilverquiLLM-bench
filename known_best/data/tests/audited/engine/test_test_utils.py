@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from engine.card import CardImpl, Creature, Instant
-from engine.intent_player import DeterministicPlayer
+from test_utils import DeterministicPlayer
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 
 from test_utils import (

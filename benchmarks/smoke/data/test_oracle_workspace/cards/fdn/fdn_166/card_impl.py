@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class TimeStopAbility1:
+    text = 'End the turn. (Exile all spells and abilities, including this spell. The player whose turn it is discards down to their maximum hand size. Damage heals and "this turn" and "until end of turn" effects end.)'
+
+
+# endregion Printed abilities
+
+
 class TimeStop(Instant):
     """Time Stop — {4}{U}{U} — Instant.
 

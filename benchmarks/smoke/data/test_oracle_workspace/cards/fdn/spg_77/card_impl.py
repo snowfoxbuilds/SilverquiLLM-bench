@@ -18,6 +18,32 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class EmbercleaveAbility1:
+    text = 'Flash'
+
+
+class EmbercleaveAbility2:
+    text = 'This spell costs {1} less to cast for each attacking creature you control.'
+
+
+class EmbercleaveAbility3:
+    text = 'When Embercleave enters, attach it to target creature you control.'
+
+
+class EmbercleaveAbility4:
+    text = 'Equipped creature gets +1/+1 and has double strike and trample.'
+
+
+class EmbercleaveAbility5:
+    text = 'Equip {3}'
+
+
+# endregion Printed abilities
+
+
 class Embercleave(Equipment):
     """Embercleave — {4}{R}{R} — Legendary Artifact — Equipment.
 
@@ -30,6 +56,8 @@ class Embercleave(Equipment):
 
     SPG collector number 77.
     """
+
+    equip_printed = EmbercleaveAbility5
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Embercleave")

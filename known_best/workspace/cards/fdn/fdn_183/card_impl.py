@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class RiseOfTheDarkRealmsAbility1:
+    text = 'Put all creature cards from all graveyards onto the battlefield under your control.'
+
+
+# endregion Printed abilities
+
+
 class RiseOfTheDarkRealms(Sorcery):
     """Rise of the Dark Realms — {7}{B}{B} — Sorcery.
 

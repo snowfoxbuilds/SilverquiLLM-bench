@@ -6,7 +6,7 @@ from cards.fdn.fdn_81.card_impl import ChandraFlameshaper
 from engine.abilities import AbilityError
 from engine.card import Creature, Planeswalker
 from engine.decisions import Decision, DecisionKind, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import ManaCost, ManaType, Phase
 from test_utils import (
     activate_loyalty_ability,

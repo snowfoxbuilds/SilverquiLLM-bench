@@ -57,9 +57,13 @@ class ZoneContainer:
                 return
         raise ValueError(f"{obj!r} not in zone")
 
-    def shuffle(self) -> None:
-        """Randomly shuffle the contents of this zone (used for libraries)."""
-        random.shuffle(self._objects)
+    def shuffle(self, game: Any = None) -> None:
+        """Shuffle this zone (a library) through ``game``'s chance hook, which
+        sees it top first; with no game, by Python's ``random``."""
+        if game is None:
+            random.shuffle(self._objects)
+            return
+        self._objects[:] = reversed(game.shuffle(list(reversed(self._objects))))
 
     # ------------------------------------------------------------------
     # Queries
@@ -323,7 +327,7 @@ def move_to_zone(
         raise ValueError(f"Invalid position: {position!r}; expected 'top', 'bottom', or 'shuffle'")
     if position == "shuffle":
         dest_player.zones[dest_zone].add(card)
-        dest_player.zones[dest_zone].shuffle()
+        dest_player.zones[dest_zone].shuffle(game)
     else:
         dest_player.zones[dest_zone].add(card, position=position)
 

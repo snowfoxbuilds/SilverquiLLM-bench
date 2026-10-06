@@ -8,6 +8,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FiendishPandaAbility1:
+    text = 'Whenever you gain life, put a +1/+1 counter on this creature.'
+
+
+class FiendishPandaAbility2:
+    text = "When this creature dies, return another target non-Bear creature card with mana value less than or equal to this creature's power from your graveyard to the battlefield."
+
+
+# endregion Printed abilities
+
+
 def _self_dies_condition(source: Any):
     """Return a condition callable that matches only when *source* dies."""
 
@@ -85,5 +100,5 @@ class FiendishPanda(Creature):
                 target.controller = controller
                 move_to_zone(game, target, Zone.GRAVEYARD, Zone.BATTLEFIELD)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_lifegain_condition, effect=_lifegain_effect, source=self, controller=controller))
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_dies_effect, source=self, controller=controller, capture=_dies_power))
+        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_lifegain_condition, effect=_lifegain_effect, source=self, controller=controller, printed=FiendishPandaAbility1))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_dies_effect, source=self, controller=controller, capture=_dies_power, printed=FiendishPandaAbility2))

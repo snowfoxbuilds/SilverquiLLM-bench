@@ -17,6 +17,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class HeroicReinforcementsAbility1:
+    text = 'Create two 1/1 white Soldier creature tokens. Until end of turn, creatures you control get +1/+1 and gain haste. (They can attack and {T} this turn.)'
+
+
+# endregion Printed abilities
+
+
 class HeroicReinforcements(Sorcery):
     """Heroic Reinforcements — {2}{R}{W} — Sorcery.
 

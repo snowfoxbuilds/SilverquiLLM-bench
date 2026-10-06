@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-02
+Last updated: 2026-10-06
 
 # Known-Best Engine
 
@@ -15,8 +15,9 @@ Benchmarks now ship a baseline that may carry Known Defects, graded by rules-cor
 
 ### Scope
 
-The design applies to smoke, fra-hard, and every later benchmark (grilling 2026-10-02).
-hob-medium and SOS are frozen: they keep their baseline engines, read-only staged tests, and current graded copies, and they take no Known-Best Engine fixes.
+The design applies to smoke, fra-hard-v2, and every later benchmark (grilling 2026-10-02).
+hob-medium, SOS and fra-hard v1 are frozen: they keep their baseline engines, read-only staged tests, and current graded copies, and they take no Known-Best Engine fixes (grilling 2026-10-04).
+The Known-Best Engine drives play through Priority Queries and its Workspace predefines a class for every card, face and printed ability; it changes first, and smoke and fra-hard-v2 are ported from it (grilling 2026-10-04).
 
 ### Known-Best Workspace
 
@@ -46,7 +47,10 @@ known_best/
 │   │                                with their FDN Reference Tests)
 │   ├── conftest.py
 │   ├── pytest.ini
-│   └── test_utils.py
+│   ├── test_interface.py            Test Interface (benchmark-owned)
+│   ├── test_interface.md            its documentation (benchmark-owned)
+│   ├── test_test_interface.py       tests that demonstrate it (not graded)
+│   └── test_utils.py                Reference Tests' helpers
 └── data/tests/audited/
     ├── fdn/<card_id>/tests.py       FDN Audited Tests
     └── engine/                      Audited Engine Tests
@@ -55,10 +59,11 @@ known_best/
 | From `known_best/` | To a benchmark |
 | --- | --- |
 | `workspace/engine/`, `workspace/cards/fdn/` | `workspace/` and the Test Oracle Workspace |
+| `workspace/test_interface.py`, `workspace/test_interface.md`, `workspace/test_test_interface.py`, `workspace/test_utils.py` | `workspace/` and the Test Oracle Workspace |
 | `data/tests/audited/fdn/`, `data/tests/audited/engine/` | `data/tests/audited/` |
 | `data/tests/audited/engine/` | `workspace/engine_tests/`, seeding the Engine Reference Tests |
 
-It deliberately holds no `config.json` (it is not a benchmark), no target-set cards or stubs, no agent-facing documents, no Test Oracle Workspace or oracle extension, and no Engine Reference Tests.
+It deliberately holds no `config.json` (it is not a benchmark), no target-set cards or stubs, no agent-facing documents beyond the Test Interface's own, no Test Oracle Workspace or oracle extension, and no Engine Reference Tests.
 Engine Regression grades a benchmark's `data/tests/audited/engine/` whenever that directory exists and otherwise the host copy of `workspace/engine_tests/`, so `known_best/` is graded by exactly the code that grades benchmarks.
 
 ### Building a benchmark from it
@@ -163,3 +168,5 @@ There is no per-run dispute or pending state; agents' edits to Reference Tests, 
 | [ADR-010](../adr/ADR-010-test-oracle-workspace-uses-independent-engine.md) | Oracle engines are independent and start from the ported Known-Best Engine |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |
 | [ADR-016](../adr/ADR-016-baseline-engines-may-carry-known-defects.md) | Baseline engines may carry Known Defects, scored against a separate Known-Best Engine |
+| [ADR-017](../adr/ADR-017-priority-actions-are-player-queries.md) | Priority actions are Player Queries chosen through the players' answers |
+| [ADR-018](../adr/ADR-018-audited-tests-play-as-two-players-at-a-table.md) | Audited Tests build a position, play it and judge it only as players at the table would |

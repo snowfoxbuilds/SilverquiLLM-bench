@@ -13,7 +13,7 @@ from cards.fdn.fdn_139.card_impl import CatharCommando
 from engine.abilities import AbilityError
 from engine.card import Artifact, Creature, Enchantment
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import Keyword, ManaCost, ManaType, Zone
 from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
 

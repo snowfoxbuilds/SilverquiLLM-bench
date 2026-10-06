@@ -17,6 +17,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SeekersFollyAbility1:
+    text = 'Choose one —'
+
+
+class SeekersFollyAbility2:
+    text = '• Target opponent discards two cards.'
+
+
+class SeekersFollyAbility3:
+    text = '• Creatures your opponents control get -1/-1 until end of turn.'
+
+
+# endregion Printed abilities
+
+
 class SeekersFolly(Sorcery):
     """Seeker's Folly — {2}{B} — Sorcery.
 
@@ -46,10 +64,11 @@ class SeekersFolly(Sorcery):
 
     def get_modes(self) -> list[Mode]:
         return [
-            Mode(name="Discard", description="Target opponent discards two cards."),
+            Mode(name="Discard", description="Target opponent discards two cards.", printed=SeekersFollyAbility2),
             Mode(
                 name="Shrink",
                 description="Creatures your opponents control get -1/-1 until end of turn.",
+                printed=SeekersFollyAbility3,
             ),
         ]
 
@@ -70,6 +89,7 @@ class SeekersFolly(Sorcery):
             [m.name for m in modes],
             "Choose one",
             source_card=self,
+            printed=[m.printed for m in modes],
         )
         self.chosen_mode = next(
             i for i, m in enumerate(modes) if m.name == chosen_name

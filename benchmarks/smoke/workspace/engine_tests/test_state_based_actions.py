@@ -26,7 +26,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 import pytest
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer, Intent
+from test_utils import DeterministicPlayer, Intent
 from engine.decisions import Decision, GameRef
 from engine.state_based_actions import check_state_based_actions, resolve_state_based_actions
 from engine.triggers import TriggerRegistration

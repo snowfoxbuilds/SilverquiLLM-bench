@@ -18,7 +18,7 @@ import pytest
 
 from engine.card import CardImpl, Creature, Instant, Sorcery
 from engine.decisions import GameRef
-from engine.intent_player import DeterministicPlayer, Intent
+from test_utils import DeterministicPlayer, Intent
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 
 from test_utils import (

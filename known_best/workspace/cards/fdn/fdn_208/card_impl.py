@@ -7,6 +7,17 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SpitfireLagacAbility1:
+    text = 'Landfall — Whenever a land you control enters, this creature deals 1 damage to each opponent.'
+
+
+# endregion Printed abilities
+
+
 class SpitfireLagac(Creature):
     """Spitfire Lagac — {3}{R} — 3/4 — Lizard.
 
@@ -55,4 +66,4 @@ class SpitfireLagac(Creature):
             for player in game.players:
                 if player is not ctrl:
                     deal_damage(game, source, player, 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_landfall_condition, effect=_landfall_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_landfall_condition, effect=_landfall_effect, source=self, controller=controller, printed=SpitfireLagacAbility1))

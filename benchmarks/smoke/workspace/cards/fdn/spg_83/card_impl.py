@@ -140,5 +140,5 @@ class FiendArtisan(Creature):
                 if hasattr(chosen, 'register_triggers'):
                     chosen.register_triggers(game)
                 game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=chosen, controller=controller))
-            library.shuffle()
+            library.shuffle(game)
         return [ActivatedAbility(cost=_cost, effect=_effect, description='{X}{B/G}, {T}, Sacrifice another creature: Search your library for a creature card with mana value X or less, put it onto the battlefield, then shuffle. Activate only as a sorcery.')]

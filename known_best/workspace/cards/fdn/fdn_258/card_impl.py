@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SwiftfootBootsAbility1:
+    text = "Equipped creature has hexproof and haste. (It can't be the target of spells or abilities your opponents control. It can attack and {T} no matter when it came under your control.)"
+
+
+class SwiftfootBootsAbility2:
+    text = 'Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)'
+
+
+# endregion Printed abilities
+
+
 class SwiftfootBoots(Equipment):
     """Swiftfoot Boots — {2} — Artifact — Equipment.
 
@@ -20,6 +34,8 @@ class SwiftfootBoots(Equipment):
 
     FDN collector number 258.
     """
+
+    equip_printed = SwiftfootBootsAbility2
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Swiftfoot Boots")

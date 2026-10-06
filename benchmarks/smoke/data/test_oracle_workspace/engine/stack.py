@@ -98,6 +98,9 @@ class StackObject:
             is not that spell — "counter target spell" effects and
             ``Zone.STACK`` target enumeration select spell occurrences by this
             flag, never by inspecting the shared source card.
+        printed: For an activated, loyalty or triggered ability, the predefined
+            class of the printed ability it comes from (see ADR-017); ``None``
+            otherwise.
     """
 
     source: Any
@@ -110,6 +113,7 @@ class StackObject:
     prior_qualifying_casts: int | None = None
     departure_zone: Zone | None = None
     is_spell: bool = False
+    printed: type | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -549,10 +553,12 @@ def settle_after_resolution(game: GameState) -> None:
     SBAs only remove permanents / decrement counters, and re-derivation is
     deterministic, so the state cannot oscillate.
     """
+    from engine.combat import note_planeswalker_departures
     from engine.state_based_actions import resolve_state_based_actions
 
     while True:
         _rederive_continuous_effects(game)
+        note_planeswalker_departures(game)
         if not resolve_state_based_actions(game):
             break
 
@@ -561,7 +567,7 @@ def resolve_top_of_stack(game: GameState) -> None:
     """Pop and resolve exactly one stack object, then settle the game.
 
     This is the single, canonical normal-game resolution primitive shared by
-    :func:`priority_loop` (the normal-game path), :func:`engine.casting.resolve_top`
+    the step lifecycle (:func:`engine.turn.advance`), :func:`engine.casting.resolve_top`
     (a thin delegating alias), and the test-suite stack resolver — so settlement
     behaviour is identical at every entry point.
 
@@ -575,92 +581,40 @@ def resolve_top_of_stack(game: GameState) -> None:
        continuous characteristics current before priority returns.
 
     See :func:`settle_after_resolution` for the ordering rationale.
+
+    The effect runs as an attempt (:func:`engine.attempts.resolve`): a choice
+    the engine rejects while it resolves is rolled back and asked again, the
+    effect running again with every state before its first choice restored, so
+    a resolution is never abandoned (see ADR-017). Priority then returns to
+    the active player in the open window (rule 117.3b).
     """
+    from engine import attempts
+
     if game.stack.is_empty():
         return
     obj = game.stack.pop()
-    obj.on_resolve(game)
+    attempts.resolve(game, obj)
     settle_after_resolution(game)
-
-
-def _get_legal_actions(game: GameState, player: Player) -> list[Any]:
-    """Return the legal actions available to *player*.
-
-    Placeholder — returns an empty list until spells/abilities are
-    implemented in later items.
-    """
-    return []
-
-
-def _handle_priority(game: GameState, player: Player) -> bool:
-    """Give priority to *player* and let them act or pass.
-
-    Returns ``True`` if the player passed priority, ``False`` if they
-    took an action (in which case the priority loop restarts).
-
-    Priority is *action-layer* and directive-driven: the engine never elicits a
-    proactive priority action from the player through a Player Query. Spells and
-    abilities are cast/activated imperatively (by a test or the replay
-    executor), not via a priority choice, so the player simply passes priority
-    here. Only the *choice* layer (targets, modes, ordering, …) is query-driven.
-    """
-    return True
+    if game.window is not None:
+        game.window.resolved(game.active_player_index)
 
 
 def priority_loop(game: GameState) -> None:
-    """Run the priority-passing loop for the current phase/step.
+    """Play out the current step's priority window through the step lifecycle
+    (:func:`engine.turn.advance`).
 
-    Flow
-    ----
-    1. Active player gets priority.  They may play spells/abilities
-       (pushed to stack) or pass.
-    2. When a player takes an action they **retain** priority (MTG rule:
-       the player who just acted gets to respond first).
-    3. When a player passes, priority moves to the other player.
-    4. If both players pass in succession with the stack **non-empty**,
-       the top of the stack is resolved (``pop`` → ``on_resolve(game)``),
-       state-based actions are checked, and the active player receives
-       priority again.
-    5. If both players pass with the stack **empty**, return (the game
-       advances to the next phase/step).
-
-    ``game.priority_player_index`` is kept in sync throughout so that
-    :pyattr:`GameState.priority_player` always reflects who currently
-    holds priority.
-
-    Priority is action-layer and directive-driven: the engine never
-    elicits a proactive priority action via a Player Query — the player
-    simply passes priority here (see :func:`_handle_priority`). Spells
-    and abilities are cast/activated imperatively by callers (tests or a
-    replay executor), and the *choice* layer (targets, modes, ordering,
-    …) is the only query-driven surface.
+    A step whose turn-based actions are still pending is entered first, through
+    the same lifecycle, so its actions happen before anyone receives priority; a
+    step already complete has no window left to play. In the window, the player
+    holding priority acts or passes; a player who acts receives priority again,
+    a pass moves it on, and once both players pass in succession the top of the
+    stack resolves — the active player then holding priority — or, on an empty
+    stack, the window closes (rule 117.4).
     """
-    while True:
-        # Active player receives priority at the start of each
-        # resolution round.
-        current_index = game.active_player_index
-        game.priority_player_index = current_index
-        consecutive_passes = 0
+    from engine.game_state import StepState
+    from engine.turn import advance
 
-        while consecutive_passes < 2:
-            player = game.players[current_index]
-            game.priority_player_index = current_index
-
-            passed = _handle_priority(game, player)
-
-            if passed:
-                consecutive_passes += 1
-                # Priority moves to the other player.
-                current_index = 1 - current_index
-            else:
-                # Player took an action — they retain priority.
-                consecutive_passes = 0
-
-        # Both players passed consecutively.
-        if game.stack.is_empty():
-            return  # Advance to next phase/step
-
-        # Resolve top of stack (LIFO) — settles SBAs and re-derives continuous
-        # effects so a just-registered mid-turn effect applies immediately.
-        resolve_top_of_stack(game)
-        # Active player receives priority again — outer loop continues.
+    if game.step_state is StepState.PENDING:
+        advance(game)
+    while game.step_state is StepState.WINDOW and not game.is_game_over:
+        advance(game)

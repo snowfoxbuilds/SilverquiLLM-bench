@@ -15,6 +15,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BakeIntoAPieAbility1:
+    text = 'Destroy target creature. Create a Food token. (It\'s an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")'
+
+
+# endregion Printed abilities
+
+
 def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
 

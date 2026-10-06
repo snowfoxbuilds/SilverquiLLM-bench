@@ -14,7 +14,7 @@ from cards.fdn.fdn_95.card_impl import SowerOfChaos
 from engine.abilities import AbilityError
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import ManaCost, ManaType, Phase, Zone
 from engine.zones import move_to_zone
 from test_utils import (
@@ -78,7 +78,7 @@ class TestSowerOfChaosAbility:
         resolve_stack(game)
         attacker.summoning_sick = False
         declare_attackers(game, [attacker.name])
-        declare_blockers(game, {attacker.name: [their_bear.name]})
+        declare_blockers(game, {attacker.name: [their_bear.name]}, illegal=True)
         combat_damage_step(game)
         resolve_stack(game)
         assert p2.life == 18 and their_bear.damage_marked == 0
@@ -118,7 +118,7 @@ class TestSowerOfChaosAbility:
         resolve_stack(game)
         their_bear.summoning_sick = False
         declare_attackers(game, [their_bear.name])
-        declare_blockers(game, {their_bear.name: [sower.name]})
+        declare_blockers(game, {their_bear.name: [sower.name]}, illegal=True)
         combat_damage_step(game)
         resolve_stack(game)
         assert p1.life == 18 and sower.damage_marked == 0

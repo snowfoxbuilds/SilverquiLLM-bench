@@ -30,7 +30,7 @@ from engine.continuous_effects import (
 from engine.decisions import Decision, GameRef
 from engine.game_state import GameState
 from engine.mana import ManaPool
-from engine.intent_player import DeterministicPlayer, Intent
+from test_utils import DeterministicPlayer, Intent
 from engine.turn import _do_cleanup_step, MAX_HAND_SIZE
 from engine.types import CardType, Keyword, ManaType, Phase, Step, Zone
 

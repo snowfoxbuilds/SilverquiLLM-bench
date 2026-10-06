@@ -9,6 +9,17 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FrenziedGoblinAbility1:
+    text = "Whenever this creature attacks, you may pay {R}. If you do, target creature can't block this turn."
+
+
+# endregion Printed abilities
+
+
 class FrenziedGoblin(Creature):
     """Frenzied Goblin — {R} — 1/1 — Goblin Berserker.
 
@@ -58,4 +69,4 @@ class FrenziedGoblin(Creature):
                 def _apply(game: Any) -> None:
                     target._cant_block = True
                 game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.ABILITY, sublayer=None, bound_to=[target], apply=_apply, duration=DURATION_END_OF_TURN))
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=FrenziedGoblinAbility1))

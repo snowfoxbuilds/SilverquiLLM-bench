@@ -17,6 +17,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BulkUpAbility1:
+    text = "Double target creature's power until end of turn."
+
+
+class BulkUpAbility2:
+    text = 'Flashback {4}{R}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)'
+
+
+# endregion Printed abilities
+
+
 class BulkUp(Instant):
     """Bulk Up — {1}{ Instant.R} 
 

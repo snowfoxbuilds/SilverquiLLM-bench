@@ -21,6 +21,24 @@ if TYPE_CHECKING:
     from cards.registry import CardRegistry
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AjaniCallerOfThePrideAbility1:
+    text = '+1: Put a +1/+1 counter on up to one target creature.'
+
+
+class AjaniCallerOfThePrideAbility2:
+    text = '−3: Target creature gains flying and double strike until end of turn.'
+
+
+class AjaniCallerOfThePrideAbility3:
+    text = '−8: Create X 2/2 white Cat creature tokens, where X is your life total.'
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     """Return ``True`` if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -177,16 +195,19 @@ class AjaniCallerOfThePride(Planeswalker):
                 effect=_plus1,
                 targeting=_plus1_targeting,
                 description="+1: Put a +1/+1 counter on up to one target creature.",
+                printed=AjaniCallerOfThePrideAbility1,
             ),
             LoyaltyAbility(
                 loyalty_cost=-3,
                 effect=_minus3,
                 targeting=_minus3_targeting,
                 description="-3: Target creature gains flying and double strike until end of turn.",
+                printed=AjaniCallerOfThePrideAbility2,
             ),
             LoyaltyAbility(
                 loyalty_cost=-8,
                 effect=_minus8,
                 description="-8: Create X 2/2 white Cat tokens, where X is your life total.",
+                printed=AjaniCallerOfThePrideAbility3,
             ),
         ]

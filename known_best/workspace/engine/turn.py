@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
-from engine.stack import priority_loop
+from engine.game_state import StepState
 from engine.types import Phase, Step, Zone
 
 
@@ -51,7 +51,7 @@ def cleanup_mechanical(game: GameState) -> None:
     """The deterministic core of the cleanup step (rule 514 steps 2-5).
 
     Expires "until end of turn" continuous effects (and reapplies the
-    rest), clears marked damage, deathtouch/combat flags, and per-turn
+    rest) and "cast it from your graveyard this turn" grants, clears marked damage, deathtouch/combat flags, and per-turn
     trackers (``cards_drawn_this_turn``, ``creature_died_this_turn``),
     resets the combat state, and empties mana pools.
 
@@ -60,6 +60,9 @@ def cleanup_mechanical(game: GameState) -> None:
     mechanical core at GRE turn boundaries (discards there are explicit
     GRE zone moves, and deaths are GRE-observed events).
     """
+    from engine.priority import expire_graveyard_cast_grants
+
+    expire_graveyard_cast_grants(game)
     if hasattr(game, "effect_manager"):
         game.effect_manager.remove_expired(game)
         # Reapply remaining effects so the game state is consistent.
@@ -130,9 +133,26 @@ def _do_combat_step(game: GameState, step: Step) -> None:
 
 
 def _do_cleanup_step(game: GameState) -> None:
-    """Perform the cleanup step (MTG rule §514).
+    """Play the cleanup step (MTG rule §514) to completion through the step
+    lifecycle (:func:`advance`): cleanup steps until one opens no priority
+    window, each that does followed by that window (rule 514.3a).
 
-    The cleanup step executes the following actions in order:
+    It carries on from the game's step state: an open cleanup window is
+    played out before the next cleanup step, and a completed cleanup is left
+    alone. Called outside cleanup, it moves the game into a fresh cleanup
+    step first."""
+    if (game.phase, game.step) != (Phase.ENDING, Step.CLEANUP):
+        game.phase, game.step = Phase.ENDING, Step.CLEANUP
+        game.close_window(StepState.PENDING)
+    while game.step_state is not StepState.DONE and not game.is_game_over:
+        advance(game)
+
+
+def cleanup_iteration(game: GameState) -> bool:
+    """Perform one cleanup step's actions; return whether players receive
+    priority before another cleanup step (rule 514.3a).
+
+    The actions, in order:
 
     1. Active player discards down to maximum hand size (7) via a
        Player Query (one OBJECT query per discard).
@@ -144,8 +164,10 @@ def _do_cleanup_step(game: GameState) -> None:
        ``is_attacking``, ``is_blocking``) and reset the combat state.
     5. Empty all players' mana pools.
     6. Check state-based actions.
-    7. If triggers fired during cleanup (e.g. from discarding), process
-       them (give priority, resolve stack) and perform another cleanup step.
+
+    Priority is granted only if state-based actions were performed or
+    abilities triggered (their triggers are on the stack); the caller then
+    gives priority and, once it ends, performs another cleanup step.
     """
     from engine.game import discard as _discard
     from engine.state_based_actions import resolve_state_based_actions
@@ -170,59 +192,143 @@ def _do_cleanup_step(game: GameState) -> None:
     # --- Step 6: Check state-based actions ---
     sba_happened = resolve_state_based_actions(game)
 
-    # --- Step 7: If SBAs were performed or triggers fired, process & repeat ---
-    # Rule 514.3a: if state-based actions were performed or triggered abilities
-    # triggered during cleanup, another cleanup step occurs.
-    if sba_happened or not game.stack.is_empty():
-        # Triggers were placed on the stack — give priority and resolve.
-        priority_loop(game)
-        # After resolving, perform another cleanup step (recursive).
-        _do_cleanup_step(game)
+    return bool(sba_happened) or not game.stack.is_empty()
 
 
 def run_turn(game: GameState) -> None:
-    """Execute a full turn, iterating through all phases/steps.
+    """Execute the rest of the current turn through the step lifecycle
+    (:func:`advance`): each step's turn-based actions once, its priority
+    window, and in cleanup the cleanup steps rule 514.3a requires.
 
-    At each priority point (every phase/step except Untap and Cleanup),
-    :func:`priority_loop` is called.  Turn-based actions are performed
-    at the appropriate steps:
+    After the last step (Cleanup), the turn number is incremented and the
+    active player swaps via :meth:`GameState.advance_phase`. Starting it
+    where any other driver stopped carries on from the game's step state, so
+    no step's turn-based actions are repeated and a completed step is never
+    reopened.
 
-    - **Untap**: Untap all permanents, clear summoning sickness, reset
-      land plays.
-    - **Draw**: Active player draws a card.
-    - **Combat**: Delegate to combat system functions.
-    - **Cleanup**: Clear damage, remove expired effects.
-
-    After the last step (Cleanup), the turn number is incremented and
-    the active player swaps via :meth:`GameState.advance_phase`.
+    A game that ends during the turn ends the turn with it.
 
     Parameters:
         game: The game state to advance through one complete turn.
     """
     start_turn = game.turn_number
+    while game.turn_number == start_turn and not game.is_game_over:
+        advance(game)
 
-    while game.turn_number == start_turn:
-        current = (game.phase, game.step)
 
-        # Perform turn-based actions for the current step
-        if current == (Phase.BEGINNING, Step.UNTAP):
-            _do_untap_step(game)
-        elif current == (Phase.BEGINNING, Step.UPKEEP):
-            from engine.events import BeginningOfUpkeepTriggeredEvent
-            game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
-        elif current == (Phase.BEGINNING, Step.DRAW):
-            _do_draw_step(game)
-        elif game.phase == Phase.COMBAT and game.step is not None:
-            _do_combat_step(game, game.step)
-        elif current == (Phase.ENDING, Step.CLEANUP):
-            _do_cleanup_step(game)
+def advance(game: GameState, *, all_pass: bool = False, forced: bool = False) -> None:
+    """The engine's one stepping entry: take the game one stage further.
 
-        # Grant priority at this phase/step unless it's Untap or Cleanup.
-        if current not in _NO_PRIORITY_STEPS:
-            priority_loop(game)
+    * A step whose turn-based actions are pending performs them, then opens
+      its priority window — or completes, for a step that grants none. In
+      cleanup each cleanup step opens a window only when it performed
+      state-based actions or put triggers on the stack (rule 514.3a).
+    * In an open window the player holding priority acts or passes
+      (:func:`engine.priority.take_priority`); once every player has passed
+      in succession, the top object resolves or, on an empty stack, the
+      window closes and the step is complete — in cleanup, another cleanup
+      step follows.
+    * A completed step moves the game to the next one — past the declare
+      blockers and combat damage steps when nothing attacks (CR 508.8).
+    * Once the game is over, nothing happens.
 
-        # Advance to the next phase/step (or to next turn).
+    ``all_pass`` is the priority policy of every player passing without
+    being asked; it is not a separate path through the lifecycle.
+    ``forced`` is the test helpers' fast-forward: it makes no combat
+    declarations, and its draw takes a card from a nonempty library with no
+    first-turn exception. Live play never sets it.
+    """
+    if game.is_game_over:
+        return
+    if game.step_state is StepState.PENDING:
+        _enter_step(game, forced)
+    elif game.step_state is StepState.WINDOW:
+        _play_priority(game, all_pass)
+    else:
         game.advance_phase()
+        if game.step is Step.DECLARE_BLOCKERS and not game.combat_state.attackers:
+            # CR 508.8: with no attackers, the declare blockers and combat
+            # damage steps are skipped.
+            game.advance_phase()
+            game.advance_phase()
+
+
+def start_step(game: GameState) -> None:
+    """Setup only: begin play in the current step as if its turn-based actions
+    were done — open its priority window, or complete it if it grants none."""
+    if (game.phase, game.step) in _NO_PRIORITY_STEPS:
+        game.close_window(StepState.DONE)
+    else:
+        game.open_window()
+
+
+def _play_priority(game: GameState, all_pass: bool) -> None:
+    from engine.priority import take_priority
+    from engine.stack import resolve_top_of_stack, settle_after_resolution
+
+    window = game.window
+    seats = len(game.players)
+    if window.all_passed(seats):
+        if not game.stack.is_empty():
+            resolve_top_of_stack(game)
+        else:
+            in_cleanup = (game.phase, game.step) == (Phase.ENDING, Step.CLEANUP)
+            game.close_window(StepState.PENDING if in_cleanup else StepState.DONE)
+        return
+    if all_pass:
+        # CR 117.5: the game settles before a player receives priority, even
+        # when that player's answer is a pass the caller already knows.
+        settle_after_resolution(game)
+        window.passed(seats)
+    elif take_priority(game, game.players[window.holder]):
+        window.passed(seats)
+    else:
+        window.acted()
+
+
+def _enter_step(game: GameState, forced: bool) -> None:
+    current = (game.phase, game.step)
+    if current == (Phase.ENDING, Step.CLEANUP):
+        if cleanup_iteration(game):
+            game.open_window()
+        else:
+            game.close_window(StepState.DONE)
+        return
+    _step_actions(game, current, forced)
+    if current in _NO_PRIORITY_STEPS:
+        game.close_window(StepState.DONE)
+    else:
+        game.open_window()
+
+
+def _step_actions(game: GameState, current: tuple, forced: bool) -> None:
+    """The turn-based actions and step-entry events of *current*."""
+    from engine.events import (
+        BeginningOfCombatTriggeredEvent,
+        BeginningOfUpkeepTriggeredEvent,
+        EndOfTurnTriggeredEvent,
+        EndStepTriggeredEvent,
+    )
+
+    if current == (Phase.BEGINNING, Step.UNTAP):
+        _do_untap_step(game)
+    elif current == (Phase.BEGINNING, Step.UPKEEP):
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    elif current == (Phase.BEGINNING, Step.DRAW):
+        if not forced:
+            _do_draw_step(game)
+        elif game.get_library(game.active_player).get_all():
+            from engine.game import draw_card
+
+            draw_card(game, game.active_player)
+    elif current == (Phase.COMBAT, Step.BEGIN_COMBAT):
+        game.trigger_manager.fire_event(game, BeginningOfCombatTriggeredEvent())
+    elif game.phase == Phase.COMBAT and game.step is not None:
+        if not forced or game.step not in (Step.DECLARE_ATTACKERS, Step.DECLARE_BLOCKERS):
+            _do_combat_step(game, game.step)
+    elif current == (Phase.ENDING, Step.END):
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=game.active_player))
+        game.trigger_manager.fire_event(game, EndOfTurnTriggeredEvent())
 
 
 def _choose_discard(game: "GameState", player: object, cards: list) -> object:

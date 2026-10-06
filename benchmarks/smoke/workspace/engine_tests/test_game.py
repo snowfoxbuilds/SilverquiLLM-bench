@@ -47,7 +47,7 @@ from engine.game import (
 )
 from engine.decisions import GameRef
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer, Intent
+from test_utils import DeterministicPlayer, Intent
 from engine.types import CardType, Keyword, Phase, Step, Zone
 
 

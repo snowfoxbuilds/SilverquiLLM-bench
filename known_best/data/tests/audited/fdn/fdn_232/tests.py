@@ -15,7 +15,7 @@ from cards.fdn.fdn_232.card_impl import ScavengingOoze
 from engine.abilities import AbilityError
 from engine.card import Creature, Instant
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import ManaCost, ManaType, Zone
 from engine.zones import move_to_zone
 from test_utils import (

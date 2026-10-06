@@ -451,7 +451,15 @@ def _choose_cost(
     from engine.decisions import Decision
     from engine.queries import PlayerQuery, ask
 
-    options = tuple(Decision.ability(index=i) for i, _ in payable)
+    # Index 0 is the normal mana cost; each alternative carries the printed
+    # ability that grants it.
+    alternative_printed = dict(enumerate(card.alternative_cost_printed, start=1))
+    options = tuple(
+        Decision.ability(index=i, printed=alternative_printed[i])
+        if i in alternative_printed
+        else Decision.ability(index=i)
+        for i, _ in payable
+    )
     query = PlayerQuery(
         source=(_source_decision(game, card),),
         prompt="Choose a cost to pay",
@@ -566,8 +574,20 @@ def _with_x(cost: ManaCost, x_value: int) -> ManaCost:
     )
 
 
-def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
-    """Cast *card* from *player*'s hand.
+def cast_spell(
+    game: GameState,
+    player: Player,
+    card: CardImpl,
+    *,
+    from_zone: Zone = Zone.HAND,
+    mode: CastMode = CastMode.NORMAL,
+) -> StackObject:
+    """Cast *card* from *player*'s hand, or from *from_zone* when a cast
+    permission allows it.
+
+    ``mode=CastMode.FLASHBACK`` casts the card from its owner's graveyard for
+    its flashback cost (rule 702.34a) and exiles it whenever it leaves the
+    stack; every flashback check runs before any mutation.
 
     Pipeline
     --------
@@ -575,14 +595,14 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
        whenever the player has priority; everything else requires
        sorcery-speed timing.
     2. **can_cast** — ask the card whether it can legally be cast.
-    3. **Hand check** — the card must be in the player's hand.
-    4. **Move hand → stack zone** — remove the card from the hand and
+    3. **Zone check** — the card must be in the player's *from_zone*.
+    4. **Move to stack zone** — remove the card from *from_zone* and
        place it into the player's stack zone.
     5. **Choose targets** — if the card specifies targets (via
        :meth:`CardImpl.get_targets`), the player is asked to choose.
     6. **Mana check / payment** — the player's mana pool must be able to
        pay the card's mana cost.  If payment fails, the card is rolled
-       back from the stack zone to the hand.
+       back from the stack zone to *from_zone*.
     7. **Call on_cast** — invoke the card's ``on_cast`` hook.
     8. **Push StackObject** — push a :class:`StackObject` whose
        ``on_resolve`` callback handles resolution.
@@ -607,12 +627,28 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
     if not card.can_cast(game):
         raise CastingError(f"Cannot cast {card.name!r} — can_cast returned False")
 
-    # 3. Hand check
-    hand = game.get_hand(player)
+    # 3. Zone check (the hand unless a cast permission names another zone)
+    if mode is CastMode.FLASHBACK:
+        if from_zone != Zone.GRAVEYARD:
+            raise CastingError(
+                f"Cannot flashback {card.name!r} — flashback casts from the "
+                f"graveyard, not {from_zone.name}"
+            )
+        if getattr(card, "flashback_cost", None) is None:
+            raise CastingError(
+                f"Cannot flashback {card.name!r} — card has no flashback cost"
+            )
+        if card.owner is not None and card.owner is not player:
+            raise CastingError(
+                f"Cannot flashback {card.name!r} — owned by another player"
+            )
+    hand = player.zones[from_zone]
     if not hand.contains(card):
-        raise CastingError(f"Cannot cast {card.name!r} — card not in hand")
+        raise CastingError(
+            f"Cannot cast {card.name!r} — card not in {from_zone.value}"
+        )
 
-    # 4. Move card from hand to stack zone
+    # 4. Move card from its zone to the stack zone
     stack_zone = player.zones[Zone.STACK]
     hand.remove(card)
     stack_zone.add(card)
@@ -687,10 +723,17 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
     #      cost's own generic component so colored pips are never reduced.
     #   3. Keep only the candidates the player can actually pay, then choose
     #      among them (a Player Query fires only when more than one is payable).
+    #   Flashback is itself an alternative cost (rule 702.34a), so a flashback
+    #   cast pays only the flashback cost.
     raw_reduction = _raw_cost_reduction(game, card, player, targets=chosen_targets)
+    candidate_costs = (
+        [card.flashback_cost]  # type: ignore[attr-defined]
+        if mode is CastMode.FLASHBACK
+        else [card.mana_cost, *card.alternative_costs(game)]
+    )
     base_costs = [
         _with_x(base, card.x_value)  # type: ignore[attr-defined]
-        for base in [card.mana_cost, *card.alternative_costs(game)]
+        for base in candidate_costs
     ]
     payable: list[tuple[int, ManaCost]] = []
     for index, base in enumerate(base_costs):
@@ -737,6 +780,7 @@ def cast_spell(game: GameState, player: Player, card: CardImpl) -> StackObject:
         on_resolve=lambda g: None,  # replaced below
         activation_context=activation_context,
         prior_qualifying_casts=prior_qualifying_casts,
+        departure_zone=Zone.EXILE if mode is CastMode.FLASHBACK else None,
         is_spell=True,
     )
 

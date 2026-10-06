@@ -58,6 +58,28 @@ def _make_mana_effect(mana_type: ManaType):
 # Basic land classes
 # ---------------------------------------------------------------------------
 
+# The intrinsic mana ability each basic land type grants (rule 305.6), as the
+# predefined class of its printed reminder text (see ADR-017).
+class PlainsAbility1:
+    text = "({T}: Add {W}.)"
+
+
+class IslandAbility1:
+    text = "({T}: Add {U}.)"
+
+
+class SwampAbility1:
+    text = "({T}: Add {B}.)"
+
+
+class MountainAbility1:
+    text = "({T}: Add {R}.)"
+
+
+class ForestAbility1:
+    text = "({T}: Add {G}.)"
+
+
 class Plains(Land):
     """Basic Plains — taps for {W}."""
 
@@ -80,6 +102,7 @@ class Plains(Land):
                 cost=_tap_cost,
                 mana_produced=_effect,
                 description="{T}: Add {W}.",
+                printed=PlainsAbility1,
             )
         ]
 
@@ -106,6 +129,7 @@ class Island(Land):
                 cost=_tap_cost,
                 mana_produced=_effect,
                 description="{T}: Add {U}.",
+                printed=IslandAbility1,
             )
         ]
 
@@ -132,6 +156,7 @@ class Swamp(Land):
                 cost=_tap_cost,
                 mana_produced=_effect,
                 description="{T}: Add {B}.",
+                printed=SwampAbility1,
             )
         ]
 
@@ -158,6 +183,7 @@ class Mountain(Land):
                 cost=_tap_cost,
                 mana_produced=_effect,
                 description="{T}: Add {R}.",
+                printed=MountainAbility1,
             )
         ]
 
@@ -184,6 +210,7 @@ class Forest(Land):
                 cost=_tap_cost,
                 mana_produced=_effect,
                 description="{T}: Add {G}.",
+                printed=ForestAbility1,
             )
         ]
 

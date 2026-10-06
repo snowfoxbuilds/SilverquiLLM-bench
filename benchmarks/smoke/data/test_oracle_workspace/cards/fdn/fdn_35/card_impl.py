@@ -7,6 +7,29 @@ from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DrakeHatcherAbility1:
+    text = 'Vigilance'
+
+
+class DrakeHatcherAbility2:
+    text = 'prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)'
+
+
+class DrakeHatcherAbility3:
+    text = 'Whenever this creature deals combat damage to a player, put that many incubation counters on it.'
+
+
+class DrakeHatcherAbility4:
+    text = 'Remove three incubation counters from this creature: Create a 2/2 blue Drake creature token with flying.'
+
+
+# endregion Printed abilities
+
+
 class DrakeHatcher(Creature):
     """Drake Hatcher — {1}{U} — 1/3 — Human Wizard.
 
@@ -55,7 +78,7 @@ class DrakeHatcher(Creature):
             # via `.counters`, syncable by the replay executor's CounterAdded
             # consumption) — not a card-private attribute.
             add_counter(game, source, 'incubation', amount)
-        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_damage_condition, effect=_damage_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_damage_condition, effect=_damage_effect, source=self, controller=controller, printed=DrakeHatcherAbility3))
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         """Remove three incubation counters: Create a 2/2 blue Drake token with flying."""
@@ -79,4 +102,4 @@ class DrakeHatcher(Creature):
                 'Drake', {'Drake'}, [Color.BLUE], 2, 2, keywords=Keyword.FLYING
             )
             create_token(game, ctrl, token)
-        return [ActivatedAbility(cost=_cost, effect=_effect, description='Remove three incubation counters from this creature: Create a 2/2 blue Drake creature token with flying.')]
+        return [ActivatedAbility(cost=_cost, effect=_effect, description='Remove three incubation counters from this creature: Create a 2/2 blue Drake creature token with flying.', printed=DrakeHatcherAbility4)]

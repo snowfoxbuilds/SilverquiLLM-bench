@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class PlainsAbility1:
+    text = '({T}: Add {W}.)'
+
+
+# endregion Printed abilities
+
+
 class Plains(Land):
     """Plains — Basic Land — Plains. ({T}: Add {W}.)
 
@@ -42,5 +52,6 @@ class Plains(Land):
                 cost=_tap_cost,
                 mana_produced=_add_white,
                 description="{T}: Add {W}.",
+                printed=PlainsAbility1,
             )
         ]

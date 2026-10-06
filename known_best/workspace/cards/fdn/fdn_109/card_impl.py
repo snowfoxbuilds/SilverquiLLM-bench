@@ -17,6 +17,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class PreposterousProportionsAbility1:
+    text = 'Creatures you control get +10/+10 and gain vigilance until end of turn.'
+
+
+# endregion Printed abilities
+
+
 class PreposterousProportions(Sorcery):
     """Preposterous Proportions — {5}{G}{G} — Sorcery.
 

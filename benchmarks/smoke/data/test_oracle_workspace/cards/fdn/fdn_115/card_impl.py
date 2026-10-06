@@ -8,6 +8,25 @@ from engine.events import AttacksTriggeredEvent, EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AleshaWhoLaughsAtFateAbility1:
+    text = 'First strike'
+
+
+class AleshaWhoLaughsAtFateAbility2:
+    text = 'Whenever Alesha attacks, put a +1/+1 counter on it.'
+
+
+class AleshaWhoLaughsAtFateAbility3:
+    text = "Raid — At the beginning of your end step, if you attacked this turn, return target creature card with mana value less than or equal to Alesha's power from your graveyard to the battlefield."
+
+
+# endregion Printed abilities
+
+
 class AleshaWhoLaughsAtFate(Creature):
     """Alesha, Who Laughs at Fate — {1}{B}{R} — 2/2 — Legendary Human Warrior.
 
@@ -45,7 +64,7 @@ class AleshaWhoLaughsAtFate(Creature):
 
         def _attack_effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1')
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=AleshaWhoLaughsAtFateAbility2))
 
         def _raid_condition(game: Any, event: dict) -> bool:
             ctrl = getattr(source, 'controller', None)
@@ -80,4 +99,4 @@ class AleshaWhoLaughsAtFate(Creature):
                 return
             chosen.controller = ctrl
             move_to_zone(game, chosen, Zone.GRAVEYARD, Zone.BATTLEFIELD)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_raid_condition, effect=_raid_effect, source=self, controller=controller, capture=_stint))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_raid_condition, effect=_raid_effect, source=self, controller=controller, capture=_stint, printed=AleshaWhoLaughsAtFateAbility3))

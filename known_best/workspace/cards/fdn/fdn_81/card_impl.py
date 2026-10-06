@@ -1,7 +1,7 @@
 """Card implementation for Chandra, Flameshaper."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, LoyaltyAbility, Planeswalker
+from engine.card import Creature, LoyaltyAbility, Planeswalker, printed_class
 from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 from engine.events import EndStepTriggeredEvent
@@ -9,6 +9,25 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from engine.player import Player
     from cards.registry import CardRegistry
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ChandraFlameshaperAbility1:
+    text = '+2: Add {R}{R}{R}. Exile the top three cards of your library. Choose one. You may play that card this turn.'
+
+
+class ChandraFlameshaperAbility2:
+    text = '+1: Create a token that\'s a copy of target creature you control, except it has haste and "At the beginning of the end step, sacrifice this token."'
+
+
+class ChandraFlameshaperAbility3:
+    text = '−4: Chandra deals 8 damage divided as you choose among any number of target creatures and/or planeswalkers.'
+
+
+# endregion Printed abilities
+
 
 def _is_creature_or_planeswalker(obj: Any) -> bool:
     card_types = getattr(obj, 'card_types', set())
@@ -68,6 +87,7 @@ class ChandraFlameshaper(Planeswalker):
             if target is None or controller is None:
                 return
             token = Creature(name=getattr(target, 'name', 'Token'), base_power=getattr(target, 'base_power', 0), base_toughness=getattr(target, 'base_toughness', 0), subtypes=getattr(target, 'subtypes', set()).copy() if getattr(target, 'subtypes', None) else set(), keywords=getattr(target, 'keywords', Keyword(0)) | Keyword.HASTE)
+            token.printed_as = printed_class(target)
             if hasattr(target, 'card_types'):
                 token.card_types = set(target.card_types)
             create_token(game, controller, token)
@@ -81,7 +101,7 @@ class ChandraFlameshaper(Planeswalker):
                 bf = game.get_battlefield(controller)
                 if bf.contains(token):
                     sacrifice(game, controller, token)
-            game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_eot_condition, effect=_eot_effect, source=token, controller=controller))
+            game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_eot_condition, effect=_eot_effect, source=token, controller=controller, printed=ChandraFlameshaperAbility2))
 
         # Each activation's division, keyed by the identity of the targets it
         # chose; set while activating and read when that activation resolves.
@@ -135,4 +155,4 @@ class ChandraFlameshaper(Planeswalker):
             for target, dmg in zip(targets, amounts):
                 if any(target is t for t in legal):
                     deal_damage(game, pw, target, dmg)
-        return [LoyaltyAbility(loyalty_cost=+2, effect=_plus2, description='+2: Add {R}{R}{R}. Exile top 3, choose one to play this turn.'), LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description='+1: Create a hasty token copy of target creature (sacrifice at end step).'), LoyaltyAbility(loyalty_cost=-4, effect=_minus4, targeting=_minus4_targeting, description='−4: Deal 8 damage divided among target creatures and/or planeswalkers.')]
+        return [LoyaltyAbility(loyalty_cost=+2, effect=_plus2, description='+2: Add {R}{R}{R}. Exile top 3, choose one to play this turn.', printed=ChandraFlameshaperAbility1), LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description='+1: Create a hasty token copy of target creature (sacrifice at end step).', printed=ChandraFlameshaperAbility2), LoyaltyAbility(loyalty_cost=-4, effect=_minus4, targeting=_minus4_targeting, description='−4: Deal 8 damage divided among target creatures and/or planeswalkers.', printed=ChandraFlameshaperAbility3)]

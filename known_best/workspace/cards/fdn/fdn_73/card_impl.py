@@ -17,6 +17,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class TragicBansheeAbility1:
+    text = 'Morbid — When this creature enters, target creature an opponent controls gets -1/-1 until end of turn. If a creature died this turn, that creature gets -13/-13 until end of turn instead.'
+
+
+# endregion Printed abilities
+
+
 class TragicBanshee(Creature):
     """Tragic Banshee — {4}{B} — 5/3 — Spirit.
 

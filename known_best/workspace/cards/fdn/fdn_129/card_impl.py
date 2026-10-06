@@ -17,6 +17,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class LeylineAxeAbility1:
+    text = 'If this card is in your opening hand, you may begin the game with it on the battlefield.'
+
+
+class LeylineAxeAbility2:
+    text = 'Equipped creature gets +1/+1 and has double strike and trample.'
+
+
+class LeylineAxeAbility3:
+    text = 'Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)'
+
+
+# endregion Printed abilities
+
+
 class LeylineAxe(Equipment):
     """Leyline Axe — {4} — Artifact — Equipment.
 
@@ -25,6 +43,8 @@ class LeylineAxe(Equipment):
 
     FDN collector number 129.
     """
+
+    equip_printed = LeylineAxeAbility3
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Leyline Axe")

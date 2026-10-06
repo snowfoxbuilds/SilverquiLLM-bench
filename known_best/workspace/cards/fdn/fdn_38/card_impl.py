@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FaebloomTrickAbility1:
+    text = 'Create two 1/1 blue Faerie creature tokens with flying. When you do, tap target creature an opponent controls.'
+
+
+# endregion Printed abilities
+
+
 class FaebloomTrick(Instant):
     """Faebloom Trick — {2}{U} — Instant.
 

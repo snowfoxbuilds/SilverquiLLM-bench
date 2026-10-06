@@ -5,34 +5,54 @@ player ``choose_*`` method (there is none — the Player ABC exposes only
 ``answer``). Each helper builds a Player Query, routes it through ``ask`` (which
 boundary-validates it and validates the answer), and maps the answer back to the
 chosen game object / value. ``source_card`` (the implementing card) supplies the
-query's source ref so a test/replay Intent can route by card name.
+query's source ref — the card's instance and printed identity.
 """
 
 from __future__ import annotations
 
 from typing import Any, Iterable
 
-from engine.decisions import Decision, GameRef, InvalidOptionsError
+from engine.decisions import Decision, InvalidOptionsError
 from engine.queries import PlayerQuery, ask
 from engine.refs_registry import object_options
 from engine.types import Zone
 
 
-def _source(card: Any) -> tuple:
-    """The query's source refs — the implementing card's printed identity."""
-    name = getattr(card, "name", None) if card is not None else None
-    if not isinstance(name, str) or not name:
+def _source(game: Any, card: Any) -> tuple:
+    """The query's source refs — the implementing card's instance and printed identity.
+
+    A card found in no player's zone is a spell on the stack, as for the
+    casting engine's own sources.
+    """
+    if card is None or not isinstance(getattr(card, "name", None), str):
         return ()
-    return (Decision.obj(ref=GameRef(card=frozenset({("name", name)})), name=name),)
+    zone = _player_zone(game, card) or "stack"
+    return (
+        game.refs.object_decision(
+            card,
+            zone=zone,
+            controller_seat=game.refs.seat_of(getattr(card, "controller", None)),
+        ),
+    )
 
 
-def _zone_token(game: Any, obj: Any) -> str:
-    """Find which zone ``obj`` currently lives in (defaults to battlefield)."""
+def _player_zone(game: Any, obj: Any) -> str | None:
     for player in game.players:
         for zone in Zone:
             if zone in player.zones and player.zones[zone].contains(obj):
                 return zone.value
-    return "battlefield"
+    return None
+
+
+def _zone_token(game: Any, obj: Any) -> str:
+    """Find which zone ``obj`` currently lives in (defaults to battlefield)."""
+    return _player_zone(game, obj) or "battlefield"
+
+
+def _payload(question: Any) -> tuple:
+    if question is None:
+        return ()
+    return question if isinstance(question, tuple) else (question,)
 
 
 def choose_object(
@@ -45,12 +65,15 @@ def choose_object(
     min: int = 1,
     max: int = 1,
     optional: bool = False,
+    question: Any = None,
 ) -> Any:
     """Raise an OBJECT Player Query over ``candidates``; return chosen object(s).
 
     ``max == 1`` returns a single object (or ``None`` if declined / no
     candidates); ``max > 1`` returns a list. ``optional`` (or ``min == 0``)
-    allows a decline.
+    allows a decline. ``question`` is the query's payload when it asks for a
+    specific kind of object — an object or a tuple of them, such as
+    ``CardType.ARTIFACT`` (see :class:`~engine.queries.PlayerQuery`).
     """
     cands = list(candidates)
     items = [
@@ -67,11 +90,12 @@ def choose_object(
         return None if max == 1 else []
     hi = max if max <= len(options) else len(options)
     query = PlayerQuery(
-        source=_source(source_card),
+        source=_source(game, source_card),
         prompt=prompt,
         options=options,
         min=lo,
         max=hi,
+        question=_payload(question),
     )
     answer = ask(player, query)
     chosen = [by_decision[d] for d in answer.selected]
@@ -96,7 +120,7 @@ def choose_number(
     """
     options = tuple(Decision.number(n) for n in range(lo, hi + 1))
     query = PlayerQuery(
-        source=_source(source_card),
+        source=_source(game, source_card),
         prompt=prompt,
         options=options,
         min=1,
@@ -109,7 +133,7 @@ def choose_number(
 def query_yes_no(game: Any, player: Any, prompt: str, *, source_card: Any = None) -> bool:
     """Raise a BOOL Player Query; return True for yes, False for no."""
     query = PlayerQuery(
-        source=_source(source_card),
+        source=_source(game, source_card),
         prompt=prompt,
         options=(Decision.yes(), Decision.no()),
         min=1,
@@ -126,12 +150,22 @@ def choose_mode(
     prompt: str,
     *,
     source_card: Any = None,
+    printed: Iterable[type] | None = None,
 ) -> Any:
-    """Raise a MODE Player Query over named modes; return the chosen name."""
+    """Raise a MODE Player Query over named modes; return the chosen name.
+
+    ``printed`` lists each mode's predefined class, in ``mode_names`` order.
+    """
     names = list(mode_names)
-    options = tuple(Decision.mode(str(n), index=i) for i, n in enumerate(names))
+    classes = list(printed) if printed is not None else [None] * len(names)
+    if len(classes) != len(names):
+        raise InvalidOptionsError("choose_mode: one printed class per mode")
+    options = tuple(
+        Decision.mode(str(n), index=i, printed=cls)
+        for i, (n, cls) in enumerate(zip(names, classes))
+    )
     query = PlayerQuery(
-        source=_source(source_card),
+        source=_source(game, source_card),
         prompt=prompt,
         options=options,
         min=1,
@@ -153,7 +187,7 @@ def choose_color(
     """Raise a COLOR Player Query; return the chosen single-letter color."""
     options = tuple(Decision.color(c) for c in colors)
     query = PlayerQuery(
-        source=_source(source_card),
+        source=_source(game, source_card),
         prompt=prompt,
         options=options,
         min=1,

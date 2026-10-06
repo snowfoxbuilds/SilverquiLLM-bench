@@ -56,6 +56,18 @@ class PostconditionError(IntentError):
     """An ``end_intent`` postcondition failed."""
 
 
+class InvalidPlayerChoiceError(Exception):
+    """The engine rejects a chosen option as illegal under the rules.
+
+    Offering an illegal option is allowed; letting it take effect is not. An
+    engine that accepts an illegal choice raises this and rolls the game back to
+    the boundary of the rejected attempt: the beginning of the Priority Query in
+    which an ordinary priority action began, the beginning of a combat
+    declaration, or, for a cast or choice made while an object resolves, the
+    point just before it (see ADR-017).
+    """
+
+
 class DecisionKind(enum.Enum):
     """Closed, benchmark-owned set of Player Decision kinds.
 
@@ -140,13 +152,29 @@ COLORS: frozenset[str] = frozenset({"W", "U", "B", "R", "G", "C"})
 ZONES: frozenset[str] = frozenset(
     {"battlefield", "hand", "graveyard", "library", "exile", "stack", "command"}
 )
-PLAYER_ROLES: frozenset[str] = frozenset(
-    {"controller", "opponent", "active", "nonactive", "you", "owner"}
-)
+
+
+class Role(enum.StrEnum):
+    """Named constants for the PLAYER ``role`` attr."""
+
+    CONTROLLER = "controller"
+    OPPONENT = "opponent"
+    ACTIVE = "active"
+    NONACTIVE = "nonactive"
+    YOU = "you"
+    OWNER = "owner"
+
+
+PLAYER_ROLES: frozenset[str] = frozenset(role.value for role in Role)
 
 # Canonical Modifier names: Modifiers are open (engines may invent private
 # ones), but any Modifier a test asserts on must use a canonical name.
 CANONICAL_MODIFIERS: frozenset[str] = frozenset({"spend", "snow"})
+
+
+def _is_class(value: Any) -> bool:
+    return isinstance(value, type)
+
 
 # Per-kind blessed attr keys -> value domain. Domain may be a set/frozenset
 # (membership), a type (isinstance), a callable predicate, or None (any
@@ -166,6 +194,7 @@ ATTR_SCHEMA: dict[DecisionKind, dict[str, Any]] = {
         "tapped": bool,
         "power": int,
         "toughness": int,
+        "printed": _is_class,
     },
     DecisionKind.PLAYER: {
         "instance": None,
@@ -178,6 +207,7 @@ ATTR_SCHEMA: dict[DecisionKind, dict[str, Any]] = {
         "index": int,
         "source": None,
         "keyword": str,
+        "printed": _is_class,
     },
     DecisionKind.MANA: {
         "color": COLORS,
@@ -191,6 +221,7 @@ ATTR_SCHEMA: dict[DecisionKind, dict[str, Any]] = {
     DecisionKind.MODE: {
         "name": str,
         "index": int,
+        "printed": _is_class,
     },
     DecisionKind.COLOR: {
         "color": COLORS,
@@ -252,6 +283,20 @@ def validate_attrs(
     return frozenset(out)
 
 
+def symbol(value: Hashable) -> Hashable:
+    """The Game Symbols value a named constant stands for.
+
+    Engine enums are the named constants for symbol values: ``Zone.GRAVEYARD``
+    is ``"graveyard"``, ``CardType.ARTIFACT`` is ``"artifact"``, ``ManaType.RED``
+    is ``"R"``, and a single ``Keyword`` flag is its lower-case member name.
+    """
+    if isinstance(value, enum.Flag) and not isinstance(value, int):
+        return value.name.lower() if value.name and "|" not in value.name else value
+    if isinstance(value, enum.Enum):
+        return value.value
+    return value
+
+
 def _make(
     kind: DecisionKind,
     attrs: Mapping[str, Hashable],
@@ -260,7 +305,7 @@ def _make(
 ) -> PlayerDecision:
     return PlayerDecision(
         kind=kind,
-        attrs=validate_attrs(kind, attrs),
+        attrs=validate_attrs(kind, {key: symbol(value) for key, value in attrs.items()}),
         modifiers=frozenset((modifiers or {}).items()),
         ref=ref,
     )
@@ -319,8 +364,17 @@ class Decision:
         return _make(DecisionKind.COLOR, {"color": c})
 
     @staticmethod
-    def mode(name: str, index: int | None = None) -> PlayerDecision:
-        attrs: dict[str, Hashable] = {"name": name}
+    def mode(
+        name: str | None = None,
+        index: int | None = None,
+        *,
+        printed: type | None = None,
+    ) -> PlayerDecision:
+        attrs: dict[str, Hashable] = {}
+        if name is not None:
+            attrs["name"] = name
         if index is not None:
             attrs["index"] = index
+        if printed is not None:
+            attrs["printed"] = printed
         return _make(DecisionKind.MODE, attrs)

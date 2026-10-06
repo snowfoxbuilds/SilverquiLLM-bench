@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DayOfJudgmentAbility1:
+    text = 'Destroy all creatures.'
+
+
+# endregion Printed abilities
+
+
 class DayOfJudgment(Sorcery):
     """Day of Judgment — {2}{W}{W} — Sorcery.
 

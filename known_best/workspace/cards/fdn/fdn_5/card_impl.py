@@ -18,6 +18,28 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CelestialArmorAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class CelestialArmorAbility2:
+    text = 'When this Equipment enters, attach it to target creature you control. That creature gains hexproof and indestructible until end of turn.'
+
+
+class CelestialArmorAbility3:
+    text = 'Equipped creature gets +2/+0 and has flying.'
+
+
+class CelestialArmorAbility4:
+    text = 'Equip {3}{W} ({3}{W}: Attach to target creature you control. Equip only as a sorcery.)'
+
+
+# endregion Printed abilities
+
+
 class CelestialArmor(Equipment):
     """Celestial Armor — {2}{W} — Artifact — Equipment — Flash.
 
@@ -28,6 +50,8 @@ class CelestialArmor(Equipment):
 
     FDN collector number 5.
     """
+
+    equip_printed = CelestialArmorAbility4
 
     def __init__(self, **kwargs: Any) -> None:
         kwargs.setdefault("name", "Celestial Armor")

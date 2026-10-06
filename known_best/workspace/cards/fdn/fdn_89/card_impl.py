@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GorehornRaiderAbility1:
+    text = 'Raid — When this creature enters, if you attacked this turn, this creature deals 2 damage to any target.'
+
+
+# endregion Printed abilities
+
+
 class GorehornRaider(Creature):
     """Gorehorn Raider — {4}{R} — 4/4 — Minotaur Pirate.
 

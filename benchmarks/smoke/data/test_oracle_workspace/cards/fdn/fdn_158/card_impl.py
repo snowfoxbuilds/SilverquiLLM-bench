@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MicromancerAbility1:
+    text = 'When this creature enters, you may search your library for an instant or sorcery card with mana value 1, reveal it, put it into your hand, then shuffle.'
+
+
+# endregion Printed abilities
+
+
 class Micromancer(Creature):
     """Micromancer — {3}{U} — 3/3 — Human Wizard.
 
@@ -66,4 +76,4 @@ class Micromancer(Creature):
         library.remove(chosen)
         controller.zones[Zone.HAND].add(chosen)
         # Shuffle library
-        library.shuffle()
+        library.shuffle(game)

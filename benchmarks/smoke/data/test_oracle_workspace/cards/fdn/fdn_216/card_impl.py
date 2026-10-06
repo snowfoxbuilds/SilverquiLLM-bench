@@ -8,6 +8,21 @@ from engine.events import AddCounterReplacementEvent, CreateTokenReplacementEven
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DoublingSeasonAbility1:
+    text = 'If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.'
+
+
+class DoublingSeasonAbility2:
+    text = 'If an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead.'
+
+
+# endregion Printed abilities
+
+
 class DoublingSeason(Enchantment):
     """Doubling Season — {4}{G} — Enchantment.
 
@@ -47,7 +62,7 @@ class DoublingSeason(Enchantment):
             count = event.count
             event.count = count * 2
             return event
-        game.replacement_manager.register(ReplacementEffect(event_type=CreateTokenReplacementEvent, source=self, condition=_token_condition, replacement=_token_replacement, controller=getattr(self, 'controller', None)))
+        game.replacement_manager.register(ReplacementEffect(event_type=CreateTokenReplacementEvent, source=self, condition=_token_condition, replacement=_token_replacement, controller=getattr(self, 'controller', None), printed=DoublingSeasonAbility1))
 
         def _counter_condition(game: Any, event: dict) -> bool:
             ctrl = getattr(source, 'controller', None)
@@ -59,4 +74,4 @@ class DoublingSeason(Enchantment):
             amount = event.amount
             event.amount = amount * 2
             return event
-        game.replacement_manager.register(ReplacementEffect(event_type=AddCounterReplacementEvent, source=self, condition=_counter_condition, replacement=_counter_replacement, controller=getattr(self, 'controller', None)))
+        game.replacement_manager.register(ReplacementEffect(event_type=AddCounterReplacementEvent, source=self, condition=_counter_condition, replacement=_counter_replacement, controller=getattr(self, 'controller', None), printed=DoublingSeasonAbility2))

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 from typing import TYPE_CHECKING, Any
 
 from engine.card import ActivatedAbility, Creature
@@ -11,6 +10,16 @@ from engine.types import CardType, Keyword, ManaCost
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SquadRallierAbility1:
+    text = '{2}{W}: Look at the top four cards of your library. You may reveal a creature card with power 2 or less from among them and put it into your hand. Put the rest on the bottom of your library in a random order.'
+
+
+# endregion Printed abilities
 
 
 class SquadRallier(Creature):
@@ -98,7 +107,7 @@ class SquadRallier(Creature):
                 ctrl.zones[Zone.HAND].add(chosen)
 
             # Put the rest on the bottom in random order
-            random.shuffle(top_four)
+            top_four[:] = game.shuffle(top_four)
             for card in top_four:
                 library.add(card, position="bottom")
 
@@ -106,4 +115,5 @@ class SquadRallier(Creature):
             cost=_cost,
             effect=_effect,
             description="{2}{W}: Look at top four, may take a creature with power 2 or less.",
+            printed=SquadRallierAbility1,
         )]

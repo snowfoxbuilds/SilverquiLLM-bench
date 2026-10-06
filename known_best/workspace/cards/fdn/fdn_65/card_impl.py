@@ -7,6 +7,21 @@ from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MidnightSnackAbility1:
+    text = 'Raid — At the beginning of your end step, if you attacked this turn, create a Food token. (It\'s an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")'
+
+
+class MidnightSnackAbility2:
+    text = '{2}{B}, Sacrifice this enchantment: Target opponent loses X life, where X is the amount of life you gained this turn.'
+
+
+# endregion Printed abilities
+
+
 class MidnightSnack(Enchantment):
     """Midnight Snack — {2}{B} — Enchantment.
 
@@ -42,7 +57,7 @@ class MidnightSnack(Enchantment):
             from cards.fdn.tokens import make_food_token
             create_token(game, controller, make_food_token())
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=MidnightSnackAbility1))
 
     def get_activated_abilities(self, game: 'GameState') -> list:
         """Sacrifice ability: target opponent loses X life."""
@@ -70,6 +85,6 @@ class MidnightSnack(Enchantment):
                 return False
             controller.mana_pool.pay(cost)
             return True
-        ability = ActivatedAbility(cost=_sac_cost, effect=_sac_effect, description='{2}{B}, Sacrifice this enchantment: Target opponent loses X life, where X is the amount of life you gained this turn.')
+        ability = ActivatedAbility(cost=_sac_cost, effect=_sac_effect, description='{2}{B}, Sacrifice this enchantment: Target opponent loses X life, where X is the amount of life you gained this turn.', printed=MidnightSnackAbility2)
         ability.tap_cost = False
         return [ability]

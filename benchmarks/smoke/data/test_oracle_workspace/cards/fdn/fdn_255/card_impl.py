@@ -15,6 +15,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class JuggernautAbility1:
+    text = 'This creature attacks each combat if able.'
+
+
+class JuggernautAbility2:
+    text = "This creature can't be blocked by Walls."
+
+
+# endregion Printed abilities
+
+
 class Juggernaut(ArtifactCreature):
     """Juggernaut — {4} — 5/3. Attacks each combat if able. Can't be blocked by Walls."""
 

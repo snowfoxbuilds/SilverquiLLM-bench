@@ -36,7 +36,7 @@ from engine.casting import (
 from engine.decisions import Decision, GameRef
 from engine.events import SpellCastTriggeredEvent
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer, Intent
+from test_utils import DeterministicPlayer, Intent
 from engine.stack import StackObject
 from engine.triggers import TriggerRegistration
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
@@ -1233,7 +1233,7 @@ class TestSpellTargetStintRevalidation:
     def _cast_free_no_resolve(self, game, player, card, target, from_zone):
         from engine.casting import cast_spell_free
         from engine.decisions import Decision, GameRef
-        from engine.intent_player import Intent
+        from test_utils import Intent
         from engine.types import Zone as _Z
         inst = game.refs.instance_id(target, _Z.BATTLEFIELD.value)
         player.start_intent("free", Intent(
@@ -1284,7 +1284,7 @@ class TestSpellTargetStintRevalidation:
         from engine.card import Creature
         from engine.casting import cast_spell as engine_cast_spell
         from engine.decisions import Decision, GameRef
-        from engine.intent_player import Intent
+        from test_utils import Intent
         from engine.types import Phase, Zone
         from test_utils import create_game, set_board_state
         game = create_game()

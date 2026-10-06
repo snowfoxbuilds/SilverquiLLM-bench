@@ -20,7 +20,7 @@ from engine.card import (
 )
 from engine.casting import cast_spell_free
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer
+from test_utils import DeterministicPlayer
 from engine.stack import StackObject
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 

@@ -11,6 +11,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class VampireSoulcallerAbility1:
+    text = 'Flying'
+
+
+class VampireSoulcallerAbility2:
+    text = "This creature can't block."
+
+
+class VampireSoulcallerAbility3:
+    text = 'When this creature enters, return target creature card from your graveyard to your hand.'
+
+
+# endregion Printed abilities
+
+
 class VampireSoulcaller(Creature):
     """Vampire Soulcaller — {4}{B} — 3/2 — Vampire Warlock — Flying.
 

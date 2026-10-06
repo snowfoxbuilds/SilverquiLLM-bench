@@ -8,6 +8,25 @@ from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class LathrilBladeOfTheElvesAbility1:
+    text = "Menace (This creature can't be blocked except by two or more creatures.)"
+
+
+class LathrilBladeOfTheElvesAbility2:
+    text = 'Whenever Lathril deals combat damage to a player, create that many 1/1 green Elf Warrior creature tokens.'
+
+
+class LathrilBladeOfTheElvesAbility3:
+    text = '{T}, Tap ten untapped Elves you control: Each opponent loses 10 life and you gain 10 life.'
+
+
+# endregion Printed abilities
+
+
 class LathrilBladeOfTheElves(Creature):
     """Lathril, Blade of the Elves — {2}{B}{G} — 2/3 — Legendary Elf Noble.
 
@@ -60,7 +79,7 @@ class LathrilBladeOfTheElves(Creature):
             for _ in range(amount):
                 token = make_creature_token('Elf Warrior', {'Elf', 'Warrior'}, [Color.GREEN], 1, 1)
                 create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=LathrilBladeOfTheElvesAbility2))
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
         """Return the tap-ten-elves activated ability."""
@@ -97,4 +116,4 @@ class LathrilBladeOfTheElves(Creature):
                     lose_life(game, player, 10)
             from engine.game import gain_life
             gain_life(game, ctrl, 10)
-        return [ActivatedAbility(cost=_cost, effect=_effect, description='{T}, Tap ten untapped Elves you control: Each opponent loses 10 life and you gain 10 life.')]
+        return [ActivatedAbility(cost=_cost, effect=_effect, description='{T}, Tap ten untapped Elves you control: Each opponent loses 10 life and you gain 10 life.', printed=LathrilBladeOfTheElvesAbility3)]

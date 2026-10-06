@@ -23,7 +23,7 @@ import pytest
 from engine.card import CardImpl, Creature
 from engine.decisions import Decision, GameRef
 from engine.game_state import GameState
-from engine.intent_player import DeterministicPlayer, Intent
+from test_utils import DeterministicPlayer, Intent
 from engine.replacement_effects import ReplacementEffect, ReplacementManager
 from engine.types import CardType, Zone
 from engine.events import AddCounterReplacementEvent, CreateTokenReplacementEvent, CreatureDiesReplacementEvent, MoveToGraveyardReplacementEvent, ReplacementEvent

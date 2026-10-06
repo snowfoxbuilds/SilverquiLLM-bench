@@ -24,6 +24,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class TemporalManipulationAbility1:
+    text = 'Take an extra turn after this one.'
+
+
+# endregion Printed abilities
+
+
 class TemporalManipulation(Sorcery):
     """Temporal Manipulation — {3}{U}{U} — Sorcery
 

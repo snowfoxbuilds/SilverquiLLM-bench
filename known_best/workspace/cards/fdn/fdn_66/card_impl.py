@@ -8,6 +8,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class NineLivesFamiliarAbility1:
+    text = 'This creature enters with eight revival counters on it if you cast it.'
+
+
+class NineLivesFamiliarAbility2:
+    text = 'When this creature dies, if it had a revival counter on it, return it to the battlefield with one fewer revival counter on it at the beginning of the next end step.'
+
+
+# endregion Printed abilities
+
+
 class NineLivesFamiliar(Creature):
     """Nine-Lives Familiar — {1}{B}{B} — 1/1 — Cat
 
@@ -78,8 +93,8 @@ class NineLivesFamiliar(Creature):
             # "at the beginning of the next end step" (rule 603.7a).
             register_delayed_trigger(
                 game, EndStepTriggeredEvent, controller, _return,
-                name='Nine-Lives Familiar return',
+                name='Nine-Lives Familiar return', printed=NineLivesFamiliarAbility2,
             )
 
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_dies_condition, effect=_dies_effect, source=self, controller=controller, capture=_capture))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_dies_condition, effect=_dies_effect, source=self, controller=controller, capture=_capture, printed=NineLivesFamiliarAbility2))

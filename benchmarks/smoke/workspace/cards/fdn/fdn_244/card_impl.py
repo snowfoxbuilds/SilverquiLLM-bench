@@ -57,7 +57,7 @@ class Progenitus(Creature):
             if owner is not None:
                 library = owner.zones[Zone.LIBRARY]
                 library.add(source)
-                library.shuffle()
+                library.shuffle(game)
             event.prevented = True
             return event
         controller = getattr(self, 'controller', None)

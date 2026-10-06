@@ -361,39 +361,40 @@ def check_state_based_actions(game: GameState) -> bool:
 
 
 def resolve_state_based_actions(game: GameState) -> bool:
-    """Run state-based actions in a loop until no more actions are taken.
-
-    After each SBA stabilisation pass, any triggered abilities that were
-    queued during processing are left on the stack.  Per MTG rule 704.3,
-    the SBA loop must repeat if new triggers were placed on the stack
-    (because those triggers may cause further SBAs when resolved, and
-    the game state must be fully stable before a player receives priority).
-
-    The outer loop: repeat { run SBA passes until stable; record whether
-    new triggers were pushed onto the stack during those passes } until
-    no SBAs were performed **and** no new triggers were queued.
+    """Settle the game before a player would receive priority (rule 117.5,
+    704.3): perform state-based actions until none apply, then put every
+    triggered ability waiting since a player last received priority on the
+    stack (:meth:`~engine.triggers.TriggerManager.put_pending_on_stack`), and
+    repeat until neither happens. Once a pass makes a player lose, the game
+    is over: settling stops there and nothing waiting goes on the stack
+    (rule 104.2a).
 
     Returns ``True`` if any SBAs were performed during the entire process,
     ``False`` if the game state was already stable.
     """
     any_performed = False
-    while True:
-        # Snapshot the stack size before SBA passes so we can detect new
-        # triggers that were pushed during processing.
-        stack_size_before = len(game.stack)
-
-        # Inner loop: run SBA checks until no more actions are taken.
+    while not game.is_game_over:
         sba_this_round = False
         while check_state_based_actions(game):
             sba_this_round = True
             any_performed = True
+            if _someone_lost(game):
+                break
+        if _someone_lost(game):
+            # A player who loses leaves the game at once, which ends it (rule
+            # 104.2a, 104.4a): losses from one pass are simultaneous, and
+            # nothing waiting is put on the stack afterwards.
+            from engine.game import _check_game_over
 
-        # Detect whether any triggers were queued during this round.
-        triggers_queued = len(game.stack) > stack_size_before
-
-        # If nothing happened this round (no SBAs and no new triggers),
-        # the game state is fully stable.
-        if not sba_this_round and not triggers_queued:
+            _check_game_over(game)
             break
-
+        triggers_placed = game.trigger_manager.put_pending_on_stack(game)
+        if not sba_this_round and not triggers_placed:
+            break
+    if game.is_game_over:
+        game.trigger_manager.discard_pending()
     return any_performed
+
+
+def _someone_lost(game: GameState) -> bool:
+    return any(player.has_lost for player in game.players)

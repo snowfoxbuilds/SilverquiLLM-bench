@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ElvishRegrowerAbility1:
+    text = 'When this creature enters, return target permanent card from your graveyard to your hand.'
+
+
+# endregion Printed abilities
+
+
 _PERMANENT_TYPES = frozenset(
     {
         CardType.CREATURE,

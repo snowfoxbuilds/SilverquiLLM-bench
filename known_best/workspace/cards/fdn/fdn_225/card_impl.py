@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GrowFromTheAshesAbility1:
+    text = 'Kicker {2} (You may pay an additional {2} as you cast this spell.)'
+
+
+class GrowFromTheAshesAbility2:
+    text = 'Search your library for a basic land card, put it onto the battlefield, then shuffle. If this spell was kicked, instead search your library for two basic land cards, put them onto the battlefield, then shuffle.'
+
+
+# endregion Printed abilities
+
+
 class GrowFromTheAshes(Sorcery):
     """Grow from the Ashes — {2}{G} — Sorcery.
 
@@ -68,4 +82,4 @@ class GrowFromTheAshes(Sorcery):
                 move_to_zone(game, chosen, Zone.LIBRARY, Zone.BATTLEFIELD)
 
         # Shuffle library
-        library.shuffle()
+        library.shuffle(game)

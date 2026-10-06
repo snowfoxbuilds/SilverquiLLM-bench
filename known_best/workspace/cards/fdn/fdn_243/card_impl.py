@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MuldrothaTheGravetideAbility1:
+    text = 'During each of your turns, you may play a land and cast a permanent spell of each permanent type from your graveyard. (If a card has multiple permanent types, choose one as you play it.)'
+
+
+# endregion Printed abilities
+
+
 class MuldrothaTheGravetide(Creature):
     """Muldrotha, the Gravetide — {3}{B}{G}{U} — 6/6 — Legendary Elemental Avatar.
 

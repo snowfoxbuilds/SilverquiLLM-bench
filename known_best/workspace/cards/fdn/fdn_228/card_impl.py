@@ -10,6 +10,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MildManneredLibrarianAbility1:
+    text = '{3}{G}: This creature becomes a Werewolf. Put two +1/+1 counters on it and you draw a card. Activate only once.'
+
+
+# endregion Printed abilities
+
+
 class MildManneredLibrarian(Creature):
     """Mild-Mannered Librarian — {G} — 1/1 — Human Werewolf
 
@@ -68,4 +79,5 @@ class MildManneredLibrarian(Creature):
             description="{3}{G}: This creature becomes a Werewolf. Put "
             "two +1/+1 counters on it and you draw a card. Activate "
             "only once.",
+            printed=MildManneredLibrarianAbility1,
         )]

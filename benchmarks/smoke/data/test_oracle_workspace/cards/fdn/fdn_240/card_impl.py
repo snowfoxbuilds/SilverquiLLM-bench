@@ -8,6 +8,17 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GoodFortuneUnicornAbility1:
+    text = 'Whenever another creature you control enters, put a +1/+1 counter on that creature.'
+
+
+# endregion Printed abilities
+
+
 class GoodFortuneUnicorn(Creature):
     """Good-Fortune Unicorn — {1}{G}{W} — 2/2 — Unicorn.
 
@@ -51,4 +62,4 @@ class GoodFortuneUnicorn(Creature):
                 return
             target = _queue.popleft()
             add_counter(game, target, '+1/+1', 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=GoodFortuneUnicornAbility1))

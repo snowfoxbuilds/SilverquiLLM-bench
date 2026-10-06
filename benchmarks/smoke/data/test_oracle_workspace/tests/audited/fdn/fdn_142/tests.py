@@ -78,7 +78,7 @@ class TestHealersHawkBlockerRules:
         blocker = put_on_battlefield(game, p2, self._ground_creature())
         blocker.is_tapped = False
         declare_attackers(game, [attacker.name])
-        declare_blockers(game, {attacker.name: [blocker.name]})
+        declare_blockers(game, {attacker.name: [blocker.name]}, illegal=True)
         combat_damage_step(game)
         resolve_stack(game)
         assert p2.life == 19
@@ -150,7 +150,7 @@ class TestHealersHawkBlockerRules:
         blocker = put_on_battlefield(game, p2, self._flying_creature())
         blocker.is_tapped = True
         declare_attackers(game, [attacker.name])
-        declare_blockers(game, {attacker.name: [blocker.name]})
+        declare_blockers(game, {attacker.name: [blocker.name]}, illegal=True)
         combat_damage_step(game)
         resolve_stack(game)
         assert p2.life == 19

@@ -13,6 +13,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class TreetopSnarespinnerAbility1:
+    text = 'Reach (This creature can block creatures with flying.)'
+
+
+class TreetopSnarespinnerAbility2:
+    text = 'Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)'
+
+
+class TreetopSnarespinnerAbility3:
+    text = '{2}{G}: Put a +1/+1 counter on target creature you control. Activate only as a sorcery.'
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     """Return ``True`` if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -125,5 +143,6 @@ class TreetopSnarespinner(Creature):
                 can_activate=_can_activate,
                 description="{2}{G}: Put a +1/+1 counter on target creature "
                 "you control. Activate only as a sorcery.",
+                printed=TreetopSnarespinnerAbility3,
             )
         ]

@@ -8,6 +8,21 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class RuneScarredDemonAbility1:
+    text = 'Flying'
+
+
+class RuneScarredDemonAbility2:
+    text = 'When this creature enters, search your library for a card, put it into your hand, then shuffle.'
+
+
+# endregion Printed abilities
+
+
 class RuneScarredDemon(Creature):
     """Rune-Scarred Demon — {5}{B}{B} — 6/6 — Demon — Flying.
 
@@ -41,7 +56,7 @@ class RuneScarredDemon(Creature):
             return
         library.remove(chosen)
         controller.zones[Zone.HAND].add(chosen)
-        library.shuffle()
+        library.shuffle(game)
 
     # The tutor is handled by the self-ETB trigger below. Phase F flipped the
     # engine order so an own-enters trigger registers before the ETB event
@@ -59,4 +74,4 @@ class RuneScarredDemon(Creature):
 
         def _effect(game: 'GameState') -> None:
             source._tutor(game)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=RuneScarredDemonAbility2))

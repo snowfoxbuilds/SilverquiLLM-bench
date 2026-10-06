@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class TolarianTerrorAbility1:
+    text = 'This spell costs {1} less to cast for each instant and sorcery card in your graveyard.'
+
+
+class TolarianTerrorAbility2:
+    text = 'Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)'
+
+
+# endregion Printed abilities
+
+
 class TolarianTerror(Creature):
     """Tolarian Terror — {6}{U} — 5/5 — Serpent — Ward {2}.
 

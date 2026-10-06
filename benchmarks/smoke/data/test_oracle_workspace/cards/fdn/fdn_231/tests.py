@@ -12,7 +12,7 @@ from __future__ import annotations
 from cards.fdn.fdn_231.card_impl import ReclamationSage
 from engine.card import Artifact, Creature, Enchantment
 from engine.decisions import Decision, DecisionKind, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.types import CardType, ManaCost, ManaType, Zone
 from test_utils import cast_spell, create_game, set_board_state
 

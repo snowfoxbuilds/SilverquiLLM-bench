@@ -14,7 +14,7 @@ from cards.fdn.fdn_86.card_impl import FieryAnnihilation
 from engine.card import Creature, Equipment
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import ManaCost, ManaType, Zone
 from engine.zones import move_to_zone

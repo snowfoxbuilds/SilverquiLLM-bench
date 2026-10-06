@@ -8,9 +8,10 @@ from cards.fdn.fdn_86.card_impl import FieryAnnihilation
 from cards.fdn.fdn_248.card_impl import ThousandYearStorm
 from engine.card import Creature, Equipment, Instant
 from engine.casting import cast_spell as engine_cast_spell
+from engine.state_based_actions import resolve_state_based_actions
 from engine.casting import cast_spell_free
 from engine.decisions import Decision, DecisionKind, GameRef
-from engine.intent_player import Intent
+from test_utils import Intent
 from engine.protection import ProtectionAbility
 from engine.stack import move_spell_off_stack, resolve_top_of_stack
 from engine.types import (
@@ -120,6 +121,9 @@ def _cast(game, p1, spell, target_prefs=None):
             p1.end_intent("cast")
     else:
         engine_cast_spell(game, p1, spell)
+    # The cast's triggers go on the stack as the game settles before the next
+    # priority (rule 117.5), above the spell.
+    resolve_state_based_actions(game)
 
 
 def _resolve_top_collect_new(game):
@@ -673,6 +677,7 @@ class TestStormRepeatedObjectCasts:
         turn = game.turn_number
         before = len(p1.instant_or_sorcery_casts_this_turn(turn))
         cast_spell_free(game, p1, a, Zone.HAND)  # free cast of SAME object
+        resolve_state_based_actions(game)  # its trigger goes on the stack (rule 117.5)
         assert self._copy_count(game, storm, a) == 1  # the prior cast counts
         after = len(p1.instant_or_sorcery_casts_this_turn(turn))
         assert after - before == 1  # recorded exactly once

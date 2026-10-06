@@ -7,6 +7,25 @@ from engine.types import Keyword, ManaCost, Zone
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class TinybonesBaubleBurglarAbility1:
+    text = 'Whenever an opponent discards a card, exile it from their graveyard with a stash counter on it.'
+
+
+class TinybonesBaubleBurglarAbility2:
+    text = "During your turn, you may play cards you don't own with stash counters on them from exile, and mana of any type can be spent to cast those spells."
+
+
+class TinybonesBaubleBurglarAbility3:
+    text = '{3}{B}, {T}: Each opponent discards a card. Activate only as a sorcery.'
+
+
+# endregion Printed abilities
+
+
 class TinybonesBaubleBurglar(Creature):
     """Tinybones, Bauble Burglar — {1}{B} — 1/3 — Legendary Skeleton Rogue.
 
@@ -77,6 +96,6 @@ class TinybonesBaubleBurglar(Creature):
                 return False
             controller.mana_pool.pay(cost)
             return True
-        ability = ActivatedAbility(cost=_cost, effect=_discard_effect, description='{3}{B}, {T}: Each opponent discards a card. Activate only as a sorcery.')
+        ability = ActivatedAbility(cost=_cost, effect=_discard_effect, description='{3}{B}, {T}: Each opponent discards a card. Activate only as a sorcery.', printed=TinybonesBaubleBurglarAbility3)
         ability.tap_cost = True
         return [ability]

@@ -24,6 +24,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AkromasMemorialAbility1:
+    text = 'Creatures you control have flying, first strike, vigilance, trample, haste, and protection from black and from red.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, card: Any) -> bool:
     """Check if *card* is on any player's battlefield."""
     for player in game.players:

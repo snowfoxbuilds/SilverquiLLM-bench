@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SwampAbility1:
+    text = '({T}: Add {B}.)'
+
+
+# endregion Printed abilities
+
+
 class Swamp(Land):
     """Swamp — Basic Land — Swamp. ({T}: Add {B}.)
 
@@ -42,5 +52,6 @@ class Swamp(Land):
                 cost=_tap_cost,
                 mana_produced=_add_black,
                 description="{T}: Add {B}.",
+                printed=SwampAbility1,
             )
         ]

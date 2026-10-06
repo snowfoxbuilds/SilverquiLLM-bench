@@ -10,6 +10,25 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class StrixLookoutAbility1:
+    text = 'Flying'
+
+
+class StrixLookoutAbility2:
+    text = "vigilance (Attacking doesn't cause this creature to tap.)"
+
+
+class StrixLookoutAbility3:
+    text = '{1}{U}, {T}: Draw a card, then discard a card.'
+
+
+# endregion Printed abilities
+
+
 class StrixLookout(Creature):
     """Strix Lookout — {1}{U} — 1/2 — Bird
 
@@ -63,4 +82,5 @@ class StrixLookout(Creature):
             cost=_cost,
             effect=_effect,
             description="{1}{U}, {T}: Draw a card, then discard a card.",
+            printed=StrixLookoutAbility3,
         )]
