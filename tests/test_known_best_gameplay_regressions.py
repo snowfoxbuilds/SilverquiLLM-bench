@@ -32,6 +32,7 @@ CHECKS = Path(__file__).resolve().parent / "known_best_checks"
         "reflexive_trigger_checks.py",
         "source_identity_checks.py",
         "additional_cost_checks.py",
+        "additional_cost_portability_checks.py",
         "control_effect_checks.py",
     ],
 )
