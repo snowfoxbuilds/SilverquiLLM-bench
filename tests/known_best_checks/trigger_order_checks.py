@@ -127,3 +127,38 @@ def test_a_trigger_is_offered_and_chosen_by_its_printed_ability_class():
     # Top first: the second ability went on first, so the first is on top.
     assert [o.printed for o in game.stack.objects()] == [BearAbility1, BearAbility2]
 
+
+
+def _attack_trigger(source, controller) -> TriggerRegistration:
+    from engine.events import AttacksTriggeredEvent
+
+    return TriggerRegistration(
+        event_type=AttacksTriggeredEvent,
+        condition=lambda game, event, _s=source: event.attacker is _s,
+        effect=lambda game: None, source=source, controller=controller,
+    )
+
+
+def test_triggers_from_simultaneous_attacks_are_ordered_as_one_batch():
+    from engine.combat import declare_attackers_step
+    from engine.types import Phase, Step
+    from test_utils import act, script
+
+    bear, cub = Bear(), Bear(name="Cub")
+    game = _game([bear, cub])
+    p0 = game.players[0]
+    for source in (bear, cub):
+        source.summoning_sick = False
+        game.trigger_manager.register(_attack_trigger(source, p0))
+    game.active_player_index = game.priority_player_index = 0
+    game.phase, game.step = Phase.COMBAT, Step.DECLARE_ATTACKERS
+    cub_first = Decision.ability(source=game.refs.instance_id(cub, Zone.BATTLEFIELD.value))
+    p0.set_baseline(Intent(pattern=GameRef(), preferences=(cub_first,)))
+    script(game, 0, act(*(
+        Decision.obj(instance=game.refs.instance_id(c, Zone.BATTLEFIELD.value)) for c in (bear, cub)
+    )))
+    declare_attackers_step(game)
+    # Both attack at once (rule 508.1), so their triggers are one ordering
+    # (rule 603.3b): the Cub's, chosen first, goes on first.
+    assert len(_orderings(p0)) == 1
+    assert [o.source for o in game.stack.objects()] == [bear, cub]

@@ -504,12 +504,14 @@ def _register_attacks(game: GameState, attacks: dict) -> None:
     # All attackers are declared simultaneously (rule 508.1); only after the
     # whole set is registered do "whenever ~ attacks" abilities go on the stack
     # (rule 508.2), so a trigger reading "each other attacking creature"
-    # (Dauntless Veteran) sees the complete set. Fire once per attacker in
-    # declaration order (APNAP within the active player = registration order).
-    for attacker in declared:
-        game.trigger_manager.fire_event(
-            game, AttacksTriggeredEvent(creature=attacker, attacker=attacker)
-        )
+    # (Dauntless Veteran) sees the complete set. Every attack trigger goes on
+    # the stack in one batch, so a player orders all of theirs together
+    # (rule 603.3b).
+    with game.trigger_manager.batch(game):
+        for attacker in declared:
+            game.trigger_manager.fire_event(
+                game, AttacksTriggeredEvent(creature=attacker, attacker=attacker)
+            )
 
 
 def _choose_defender(game: GameState, active: Player, defending: Player, attacker: Any) -> Any:
@@ -666,14 +668,18 @@ def combat_damage_step(game: GameState, *, sub_step: str | None = None) -> None:
     )
 
     # --- First strike damage sub-step ---
+    # Combat damage is dealt at once (rule 510.2), so what it triggers goes on
+    # the stack in one batch with what the state-based actions after it trigger.
     if sub_step in (None, "first_strike") and has_first_strike_step:
-        _assign_combat_damage(all_attackers, combat, game, is_first_strike=True)
-        resolve_state_based_actions(game)
+        with game.trigger_manager.batch(game):
+            _assign_combat_damage(all_attackers, combat, game, is_first_strike=True)
+            resolve_state_based_actions(game)
 
     # --- Normal damage sub-step ---
     if sub_step in (None, "normal"):
-        _assign_combat_damage(all_attackers, combat, game, is_first_strike=False)
-        resolve_state_based_actions(game)
+        with game.trigger_manager.batch(game):
+            _assign_combat_damage(all_attackers, combat, game, is_first_strike=False)
+            resolve_state_based_actions(game)
 
 
 def _assign_combat_damage(

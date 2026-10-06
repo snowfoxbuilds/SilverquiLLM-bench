@@ -12,8 +12,9 @@ Event types live in :mod:`engine.events` as typed dataclasses.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, Iterator
 
 import inspect
 
@@ -145,6 +146,29 @@ class TriggerManager:
 
     def __init__(self) -> None:
         self._triggers: list[TriggerRegistration] = []
+        self._batch_depth = 0
+        self._pending: list[tuple[TriggerRegistration, Any, TriggeredEvent]] = []
+
+    @contextmanager
+    def batch(self, game: GameState) -> Iterator[None]:
+        """Hold the triggered abilities that trigger inside the block, and put
+        them all on the stack together when it ends — one APNAP batch, each
+        player ordering all of their own (rule 603.3b) — for events that
+        happen at once, such as attackers being declared, combat damage being
+        dealt or state-based actions being performed. Nested blocks join the
+        outermost; a block left by an exception puts nothing on the stack."""
+        self._batch_depth += 1
+        try:
+            yield
+        except BaseException:
+            if self._batch_depth == 1:
+                self._pending = []
+            raise
+        finally:
+            self._batch_depth -= 1
+        if self._batch_depth == 0 and self._pending:
+            pending, self._pending = self._pending, []
+            self._put_on_stack(game, pending)
 
     def register(self, trigger: TriggerRegistration) -> None:
         """Register a triggered ability."""
@@ -191,13 +215,24 @@ class TriggerManager:
         def _fire_controller(trigger: TriggerRegistration) -> Any:
             return getattr(trigger.source, "controller", None) or trigger.controller
 
+        matched = [(trigger, _fire_controller(trigger), event) for trigger in matching]
+        if self._batch_depth:
+            self._pending.extend(matched)
+            return
+        self._put_on_stack(game, matched)
+
+    def _put_on_stack(
+        self, game: GameState, matched: list[tuple[TriggerRegistration, Any, TriggeredEvent]]
+    ) -> None:
+        """Put triggered abilities that triggered together on the stack:
+        the active player's in the order they choose, then the non-active
+        player's (rule 603.3b)."""
         active_player = game.active_player
-        matched = [(trigger, _fire_controller(trigger)) for trigger in matching]
-        active_triggers = [(t, c) for (t, c) in matched if c is active_player]
-        non_active_triggers = [(t, c) for (t, c) in matched if c is not active_player]
+        active_triggers = [m for m in matched if m[1] is active_player]
+        non_active_triggers = [m for m in matched if m[1] is not active_player]
         ordered = _chosen_order(game, active_triggers) + _chosen_order(game, non_active_triggers)
 
-        for trigger, fire_controller in ordered:
+        for trigger, fire_controller, event in ordered:
             if trigger.targeting is not None:
                 # Choose targets as the trigger goes on the stack.
                 chosen = trigger.targeting(game, event, fire_controller)
@@ -283,7 +318,7 @@ class TriggerManager:
         """Remove all registered triggers."""
         self._triggers.clear()
 
-def _chosen_order(game: GameState, group: list[tuple[TriggerRegistration, Any]]) -> list[tuple[TriggerRegistration, Any]]:
+def _chosen_order(game: GameState, group: list[tuple[Any, ...]]) -> list[tuple[Any, ...]]:
     """*group* — one player's triggered abilities that triggered together — in
     the order its controller puts them on the stack (rule 603.3b).
 
@@ -301,7 +336,7 @@ def _chosen_order(game: GameState, group: list[tuple[TriggerRegistration, Any]])
 
     controller = group[0][1]
     seat = game.refs.seat_of(controller)
-    by_decision: dict[Any, tuple[TriggerRegistration, Any]] = {}
+    by_decision: dict[Any, tuple[Any, ...]] = {}
     ordinals: dict[int, int] = {}
     for item in group:
         source, printed = item[0].source, getattr(item[0], "printed", None)
