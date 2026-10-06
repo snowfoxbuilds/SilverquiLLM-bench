@@ -56,6 +56,24 @@ def _intent_api() -> Any:
     return api
 
 
+def _asks_division(query: Any) -> bool:
+    """Whether *query* asks for a blocker's share of combat damage: a NUMBER
+    query whose payload names the blocker (rule 510.1c)."""
+    return bool(query.question) and all(
+        getattr(o.kind, "name", o.kind) == "NUMBER" for o in query.options
+    )
+
+
+def _asks_about(instance: int) -> Any:
+    """A per_query key matching the division query about the blocker whose
+    engine instance id is *instance*."""
+    def key(query: Any) -> bool:
+        return _asks_division(query) and any(
+            dict(getattr(p, "attrs", ())).get("instance") == instance for p in query.question
+        )
+    return key
+
+
 def _make_replay_player(name: str, life: int) -> Any:
     """Create a DeterministicPlayer for whichever workspace engine is on sys.path.
 
@@ -1427,11 +1445,16 @@ class ReplayExecutor:
             )
             if sub_step not in self._combat_damage_passes:
                 self._combat_damage_passes.add(sub_step)
+                import engine.combat as engine_combat
                 from engine.combat import combat_damage_step
-                # Multi-blocker damage order: the engine raises an ordering
-                # Player Query; answer it with the replay's observed outcome
-                # (blockers that die first were assigned damage first).
-                ordering_intents = self._mint_damage_order_intents(curr_snapshot)
+                # Multi-blocker damage: the engine asks how the attacker's
+                # damage is divided (rule 510.1c) or, on older engines, in
+                # what order its blockers are assigned damage; answer from
+                # the replay's observed outcome.
+                if hasattr(engine_combat, "_divide_damage"):
+                    ordering_intents = self._mint_damage_division_intents(curr_snapshot)
+                else:
+                    ordering_intents = self._mint_damage_order_intents(curr_snapshot)
                 try:
                     combat_damage_step(self.game, sub_step=sub_step)
                 except Exception as exc:
@@ -1500,10 +1523,86 @@ class ReplayExecutor:
             intents.append((controller, intent_name))
         return intents
 
+    def _mint_damage_division_intents(
+        self, curr_snapshot: GameSnapshot
+    ) -> list[tuple[Any, str]]:
+        """Answer damage-division queries from the replay's observed outcome.
+
+        For each attacker blocked by 2+ creatures, the blockers that leave
+        the battlefield are assigned lethal damage, in death order, while the
+        attacker's power lasts; without trample the rest goes to the first of
+        them, so a survivor is assigned none. Each blocker's share is a NUMBER
+        preference keyed to the query whose payload names that blocker. Mints
+        one Intent per such attacker on its controller, ended by the caller
+        after the damage pass; same-name attackers are skipped as for
+        :meth:`_mint_damage_order_intents`.
+        """
+        from engine.combat import _get_lethal_damage
+        from engine.decisions import Decision, GameRef
+        from engine.types import Keyword
+        Intent = _intent_api().Intent
+
+        by_attacker: dict[int, list[int]] = {}
+        for obj in curr_snapshot.get_zone_objects("ZoneType_Battlefield"):
+            for aid in obj.blocking_attacker_ids:
+                by_attacker.setdefault(aid, []).append(obj.instance_id)
+
+        multi = {a: b for a, b in by_attacker.items() if len(b) >= 2}
+        if not multi:
+            return []
+        names = [
+            getattr(self._engine_cards.get(a), "name", None) for a in multi
+        ]
+        intents: list[tuple[Any, str]] = []
+        for aid, blocker_iids in multi.items():
+            attacker = self._engine_cards.get(aid)
+            if attacker is None:
+                continue
+            if names.count(getattr(attacker, "name", None)) > 1:
+                continue
+            controller = getattr(attacker, "controller", None)
+            if controller is None or not hasattr(controller, "start_intent"):
+                continue
+            remaining = max(0, getattr(attacker, "power", 0))
+            trample = Keyword.TRAMPLE in getattr(attacker, "keywords", Keyword(0))
+            died = self._blocker_deaths(blocker_iids, curr_snapshot)
+            shares: dict[int, int] = {}
+            for iid in died:
+                card = self._engine_cards.get(iid)
+                engine_iid = self._engine_instance_id(card) if card is not None else None
+                if engine_iid is None:
+                    continue
+                share = min(_get_lethal_damage(card, attacker), remaining)
+                shares[engine_iid] = share
+                remaining -= share
+            if not shares:
+                continue
+            if remaining and not trample:
+                shares[next(iter(shares))] += remaining
+            per_query = {
+                _asks_about(engine_iid): [Decision.number(share)]
+                for engine_iid, share in shares.items()
+            }
+            per_query[_asks_division] = [Decision.number(0)]
+            intent_name = f"replay_division_{aid}"
+            controller.start_intent(intent_name, Intent(
+                pattern=GameRef(card=frozenset({("name", attacker.name)})),
+                per_query=per_query,
+            ))
+            intents.append((controller, intent_name))
+        return intents
+
     def _blocker_death_order(
         self, blocker_iids: list[int], curr_snapshot: GameSnapshot
     ) -> list[int]:
-        """Blockers ordered by observed death (first to leave first), survivors last.
+        """Blockers ordered by observed death (first to leave first), survivors last."""
+        died = self._blocker_deaths(blocker_iids, curr_snapshot)
+        return died + [i for i in blocker_iids if i not in died]
+
+    def _blocker_deaths(
+        self, blocker_iids: list[int], curr_snapshot: GameSnapshot
+    ) -> list[int]:
+        """The blockers seen to leave the battlefield, first to leave first.
 
         Heuristic: "left the battlefield within the window" conflates combat
         death with bounce/exile or a follow-up removal spell — acceptable
@@ -1527,9 +1626,7 @@ class ReplayExecutor:
                 if iid not in bf_ids:
                     deaths[iid] = k
                     alive.discard(iid)
-        ordered = sorted(deaths, key=lambda i: deaths[i])
-        ordered.extend(i for i in blocker_iids if i not in deaths)
-        return ordered
+        return sorted(deaths, key=lambda i: deaths[i])
 
     def _simulate_hand_draws(
         self,

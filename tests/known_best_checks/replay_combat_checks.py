@@ -142,3 +142,24 @@ def test_the_declaring_players_own_script_is_restored(seat):
     board.step(_snapshot("Step_DeclareBlock",
                          {**attacking, 200: _obj(200, 2, blocking_attacker_ids=[100])}))
     assert [e.describe() for e in player.pending_entries] == ["own"]
+
+
+def test_two_blockers_divide_damage_as_the_replay_shows():
+    board = _Board()
+    board.creature(100, 1, power=4, toughness=4)
+    frail, sturdy = board.creature(200, 2), board.creature(201, 2, toughness=5)
+    attacking = {100: _obj(100, 1, attack_state="AttackState_Attacking")}
+    assert board.step(_snapshot("Step_DeclareAttack", attacking)).engine_failures == []
+    blocking = {**attacking,
+                200: _obj(200, 2, blocking_attacker_ids=[100]),
+                201: _obj(201, 2, blocking_attacker_ids=[100])}
+    assert board.step(_snapshot("Step_DeclareBlock", blocking)).engine_failures == []
+    damage = _snapshot("Step_CombatDamage", blocking)
+    after = _snapshot("Step_CombatDamage", {k: v for k, v in blocking.items() if k != 200})
+    after.game_state_id = 2
+    board.ex.replay.snapshots = [damage, after]
+    board.ex._gsid_index = {1: 0, 2: 1}
+    result = board.step(damage)
+    assert result.engine_failures == []
+    assert sturdy.damage_marked == 0
+    assert not board.ex.players[2].zones[EZone.BATTLEFIELD].contains(frail)
