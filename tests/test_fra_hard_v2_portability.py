@@ -271,6 +271,23 @@ def _cost_reversed(player, query):
 _queries.ask = _cost_reversed
 '''
 
+# Asks every question with its options in reverse order — actions, targets,
+# modes, costs, trigger order and damage division alike — so a script that names
+# only a printed class shared by two objects meets the other one first.
+EVERY_QUESTION_REVERSED = '''
+import dataclasses as _dataclasses
+import test_interface as _test_interface
+
+if not getattr(_test_interface.ScriptedPlayer, "_every_question_reversed", False):
+    _original_answer = _test_interface.ScriptedPlayer.answer
+
+    def _reversed_answer(self, query, _original_answer=_original_answer):
+        return _original_answer(self, _dataclasses.replace(query, options=tuple(reversed(query.options))))
+
+    _test_interface.ScriptedPlayer.answer = _reversed_answer
+    _test_interface.ScriptedPlayer._every_question_reversed = True
+'''
+
 # Faulty: a spell's additional cost is never paid.
 COSTS_WAIVED = '''
 import engine.additional_costs as _additional_costs
@@ -477,7 +494,7 @@ TARGETS = ("fra_1", "fra_49", "fra_64", "fra_159", "fra_179", "war_143", "fut_78
 @pytest.mark.parametrize("variant", ["offer_then_reject", "card_then_face", "card_then_face_all_sources",
                                      "exiled_source_first", "consumed_face_first", "reversed",
                                      "exiled_abilities_first", "costs_all_offered", "costs_reversed",
-                                     "costs_all_offered_reversed"])
+                                     "costs_all_offered_reversed", "every_question_reversed"])
 def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None:
     suffix = {"offer_then_reject": OFFER_THEN_REJECT, "card_then_face": CARD_THEN_FACE,
               "card_then_face_all_sources": CARD_THEN_FACE_ALL_SOURCES,
@@ -485,7 +502,8 @@ def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None
               "exiled_source_first": EXILED_SOURCE_FIRST, "reversed": REVERSED,
               "exiled_abilities_first": OFFER_THEN_REJECT + EXILED_ABILITIES_FIRST,
               "costs_all_offered": COSTS_ALL_OFFERED, "costs_reversed": COSTS_REVERSED,
-              "costs_all_offered_reversed": COSTS_ALL_OFFERED + COSTS_REVERSED}[variant]
+              "costs_all_offered_reversed": COSTS_ALL_OFFERED + COSTS_REVERSED,
+              "every_question_reversed": EVERY_QUESTION_REVERSED}[variant]
     passed, failed, output = run_suite(card, suffix)
     assert passed and not failed, output[-4000:]
 
