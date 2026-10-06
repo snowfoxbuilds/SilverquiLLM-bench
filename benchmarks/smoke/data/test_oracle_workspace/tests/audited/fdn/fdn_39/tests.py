@@ -41,6 +41,7 @@ def _trigger_landfall(game, controller):
     controller.zones[Zone.HAND].add(land)
     land.instance_id = game.refs.instance_id(land, "hand")
     move_to_zone(game, land, Zone.HAND, Zone.BATTLEFIELD)
+    game.trigger_manager.put_pending_on_stack(game)  # as the game settles before priority
 
 
 def _setup():

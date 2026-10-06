@@ -278,6 +278,7 @@ def test_a_trigger_on_the_stack_carries_its_printed_ability():
     bear = Creature(name="Bear", owner=me, controller=me)
     game.get_battlefield(me).add(bear)
     game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(permanent=bear, controller=me))
+    game.trigger_manager.put_pending_on_stack(game)
     (trigger,) = game.stack.objects()
     assert trigger.printed is printed
 

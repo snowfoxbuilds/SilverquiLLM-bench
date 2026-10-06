@@ -1252,3 +1252,109 @@ def test_without_attackers_the_blockers_and_damage_steps_are_skipped():
     final = t.run()
     assert (final.step, final.asked) == (Step.END_COMBAT, 0)
 
+
+
+# ---------------------------------------------------------------------------
+# Triggered abilities ordered together (CR 603.3b)
+# ---------------------------------------------------------------------------
+
+
+class ScribeAbility1:
+    """When this creature enters, draw a card."""
+
+
+class MillerAbility1:
+    """When this creature enters, mill a card."""
+
+
+class _Arrival(Creature):
+    ability: type
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("base_power", 1)
+        kwargs.setdefault("base_toughness", 1)
+        super().__init__(**kwargs)
+
+    def register_triggers(self, game):
+        from engine.events import EntersBattlefieldTriggeredEvent
+        from engine.triggers import TriggerRegistration
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=EntersBattlefieldTriggeredEvent,
+            condition=lambda game, event, _s=self: event.permanent is _s,
+            effect=self.arrive, source=self, controller=self.controller, printed=self.ability,
+        ))
+
+
+class Scribe(_Arrival):
+    ability = ScribeAbility1
+
+    def __init__(self, **kwargs):
+        super().__init__(name="Scribe", **kwargs)
+
+    def arrive(self, game):
+        from engine.game import draw_card
+
+        draw_card(game, self.controller)
+
+
+class Miller(_Arrival):
+    ability = MillerAbility1
+
+    def __init__(self, **kwargs):
+        super().__init__(name="Miller", **kwargs)
+
+    def arrive(self, game):
+        from engine.zones import move_to_zone
+
+        library = game.get_library(self.controller)
+        (top,) = library.top(1)
+        move_to_zone(game, top, Zone.LIBRARY, Zone.GRAVEYARD)
+
+
+class TwinArrival(Sorcery):
+    """Put every creature card in your hand onto the battlefield."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Twin Arrival")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        from engine.zones import move_to_zone
+
+        for creature in [c for c in game.get_hand(self.controller).get_all() if CardType.CREATURE in c.card_types]:
+            move_to_zone(game, creature, Zone.HAND, Zone.BATTLEFIELD)
+
+
+@pytest.mark.parametrize("scribe_first", [True, False])
+def test_abilities_triggered_in_one_resolution_are_ordered_together(scribe_first):
+    twin, scribe, miller = card(TwinArrival), card(Scribe), card(Miller)
+    top_card, next_card = card(Bear), card(Bear)
+    t = Table(_main(Side(hand=[twin, scribe, miller], library=[top_card, next_card])))
+    # The first chosen goes on the stack first, so the other resolves first.
+    order = [ScribeAbility1, MillerAbility1] if scribe_first else [MillerAbility1, ScribeAbility1]
+    t.act(0, twin, then=[moves(twin, Zone.STACK)])
+    t.pass_(0, choices=order)
+    t.pass_(1, then=[moves(twin, Zone.GRAVEYARD), moves(scribe, Zone.BATTLEFIELD),
+                     moves(miller, Zone.BATTLEFIELD), on_stack(order[0], 0), on_stack(order[1], 0)])
+    drawn, milled = (next_card, top_card) if scribe_first else (top_card, next_card)
+    first_effect = moves(top_card, Zone.GRAVEYARD if scribe_first else Zone.HAND)
+    second_effect = moves(next_card, Zone.HAND if scribe_first else Zone.GRAVEYARD)
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(order[1]), first_effect])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(order[0]), second_effect])
+    final = t.run()
+    assert final.where(drawn) is Zone.HAND and final.where(milled) is Zone.GRAVEYARD
+
+
+def test_an_unanswered_trigger_order_diverges():
+    twin, scribe, miller = card(TwinArrival), card(Scribe), card(Miller)
+    t = Table(_main(Side(hand=[twin, scribe, miller], library=[card(Bear), card(Bear)])))
+    t.act(0, twin, then=[moves(twin, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(twin, Zone.GRAVEYARD), moves(scribe, Zone.BATTLEFIELD),
+                     moves(miller, Zone.BATTLEFIELD), on_stack(ScribeAbility1, 0),
+                     on_stack(MillerAbility1, 0)])
+    with pytest.raises(PlayDiverged, match="answers this question"):
+        t.run()

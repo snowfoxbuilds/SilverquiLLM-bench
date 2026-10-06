@@ -39,6 +39,7 @@ def game(players: list[DeterministicPlayer]) -> GameState:
 def _resolve_all(game: GameState) -> None:
     from engine.stack import resolve_top_of_stack
 
+    game.trigger_manager.put_pending_on_stack(game)
     while not game.stack.is_empty():
         resolve_top_of_stack(game)
 
@@ -108,6 +109,8 @@ def _enter(game: GameState, player, card) -> None:
     card.controller = player
     player.zones[Zone.HAND].add(card)
     move_to_zone(game, card, Zone.HAND, Zone.BATTLEFIELD)
+    # What the entry triggered goes on the stack when the game settles (rule 117.5).
+    game.trigger_manager.put_pending_on_stack(game)
 
 
 class TestOwnETBFiresOnOwnEntry:

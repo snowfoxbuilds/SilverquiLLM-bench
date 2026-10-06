@@ -41,6 +41,7 @@ class TestGainlifeTaplandTrigger:
         game.get_hand(player).add(land)
 
         play_land(game, player, land)
+        game.trigger_manager.put_pending_on_stack(game)  # settles before priority
 
         assert game.get_battlefield(player).contains(land)
         assert land.is_tapped is True
@@ -60,6 +61,7 @@ class TestGainlifeTaplandTrigger:
         game.get_hand(player).add(land)
 
         play_land(game, player, land)
+        game.trigger_manager.put_pending_on_stack(game)  # settles before priority
         resolve_top_of_stack(game)
 
         assert player.life == 21
@@ -76,6 +78,7 @@ class TestGainlifeTaplandTrigger:
         game.get_hand(player).add(land)
 
         play_land(game, player, land)
+        game.trigger_manager.put_pending_on_stack(game)  # settles before priority
         resolve_top_of_stack(game)
         # Stack is empty; a further settle must not re-gain.
         resolve_top_of_stack(game)

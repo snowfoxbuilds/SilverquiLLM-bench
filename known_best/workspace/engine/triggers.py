@@ -117,8 +117,8 @@ class TriggerRegistration:
             *controller*) are stored on the :class:`~engine.stack.StackObject` and
             passed to ``effect`` at resolution — targets are never re-selected.
         capture: Optional callable ``(game, event, controller) -> Any`` run **as
-            the trigger is put on the stack** (rule 603.3 — a trigger's
-            event-specific facts are fixed then, not at resolution). *controller*
+            the ability triggers** (rule 603.2 — a trigger's event-specific
+            facts are fixed then, not when it goes on the stack or resolves). *controller*
             is the same fire-time controller ``targeting`` receives. Its return
             value — arbitrary immutable per-fire state — is stored on the
             :class:`~engine.stack.StackObject` as
@@ -150,42 +150,43 @@ class TriggerManager:
     via other game actions) and unregistered when the source leaves.
 
     :meth:`fire_event` checks all registered triggers of a matching
-    event type, evaluates their conditions, and pushes matching triggers
-    onto the game stack as :class:`StackObject` instances.  Triggers are
-    ordered according to APNAP (Active Player, Non-Active Player):
+    event type and evaluates their conditions; each triggered occurrence,
+    with its event and fire-time controller, waits until the game next
+    settles before a player would receive priority (rule 117.5, 603.3), when
+    :meth:`put_pending_on_stack` puts every waiting occurrence on the stack
+    as :class:`StackObject` instances, in APNAP order (rule 603.3b):
 
-    * Active player's triggers are pushed first (end up on the bottom
-      of the batch).
-    * Non-active player's triggers are pushed second (end up on top).
-    * A player with two or more of them chooses the order they are put on
-      the stack in, through an ordering Player Query (rule 603.3b).
+    * The active player orders all of theirs, through an ordering Player
+      Query when there are two or more, and puts them on the stack —
+      choosing each one's targets — before the non-active player is asked.
+    * The non-active player's then go on top of them the same way.
     """
 
     def __init__(self) -> None:
         self._triggers: list[TriggerRegistration] = []
         self._batch_depth = 0
-        self._pending: list[tuple[TriggerRegistration, Any, TriggeredEvent]] = []
+        self._pending: list[tuple[TriggerRegistration, Any, TriggeredEvent, Any]] = []
 
     @contextmanager
     def batch(self, game: GameState) -> Iterator[None]:
-        """Hold the triggered abilities that trigger inside the block, and put
-        them all on the stack together when it ends — one APNAP batch, each
-        player ordering all of their own (rule 603.3b) — for events that
-        happen at once, such as attackers being declared, combat damage being
-        dealt or state-based actions being performed. Nested blocks join the
-        outermost; a block left by an exception puts nothing on the stack."""
+        """Settle the game when the block ends, for a caller that drives
+        events outside the step lifecycle (a declaration or a combat damage
+        pass run directly): it reaches the same boundary the game settles at
+        before a player would receive priority
+        (:func:`~engine.state_based_actions.resolve_state_based_actions`), so
+        every ability that triggered in the block goes on the stack together
+        (rule 117.5, 603.3b). Nested blocks settle at the outermost; a block
+        left by an exception leaves the waiting abilities to the enclosing
+        rollback."""
         self._batch_depth += 1
         try:
             yield
-        except BaseException:
-            if self._batch_depth == 1:
-                self._pending = []
-            raise
         finally:
             self._batch_depth -= 1
-        if self._batch_depth == 0 and self._pending:
-            pending, self._pending = self._pending, []
-            self._put_on_stack(game, pending)
+        if self._batch_depth == 0:
+            from engine.state_based_actions import resolve_state_based_actions
+
+            resolve_state_based_actions(game)
 
     def register(self, trigger: TriggerRegistration) -> None:
         """Register a triggered ability."""
@@ -238,24 +239,50 @@ class TriggerManager:
                 return last_known.controller or trigger.controller
             return getattr(trigger.source, "controller", None) or trigger.controller
 
-        matched = [(trigger, _fire_controller(trigger), event) for trigger in matching]
-        if self._batch_depth:
-            self._pending.extend(matched)
-            return
-        self._put_on_stack(game, matched)
+        for trigger in matching:
+            controller = _fire_controller(trigger)
+            # An occurrence's event facts are fixed when it triggers (rule 603.2,
+            # 603.10a), even though it goes on the stack only when the game settles.
+            state = trigger.capture(game, event, controller) if trigger.capture is not None else None
+            self._pending.append((trigger, controller, event, state))
 
-    def _put_on_stack(
-        self, game: GameState, matched: list[tuple[TriggerRegistration, Any, TriggeredEvent]]
+    def has_pending(self) -> bool:
+        """Whether triggered abilities are waiting to be put on the stack."""
+        return bool(self._pending)
+
+    def put_pending_on_stack(self, game: GameState) -> bool:
+        """Put every triggered ability waiting since a player last received
+        priority on the stack, and return whether there were any (rule
+        117.5, 603.3b).
+
+        Each player in APNAP order, starting with the active player, chooses
+        the order of all of their own and puts them on the stack, choosing
+        targets as each goes on, before the next player is asked. One
+        player's placement is an attempt (:func:`engine.attempts.attempt`):
+        a rejected choice rolls back only that player's placement, waiting
+        occurrences included, and asks again. An ability that triggers while
+        these are placed waits for the next settling iteration.
+        """
+        if not self._pending:
+            return False
+        from engine import attempts
+
+        pending, self._pending = self._pending, []
+        for player in _apnap(game):
+            group = [m for m in pending if m[1] is player]
+            if group:
+                attempts.attempt(game, lambda group=group: self._place(game, _chosen_order(game, group)))
+        others = [m for m in pending if all(m[1] is not p for p in _apnap(game))]
+        if others:
+            self._place(game, others)
+        return True
+
+    def _place(
+        self, game: GameState, ordered: list[tuple[TriggerRegistration, Any, TriggeredEvent, Any]]
     ) -> None:
-        """Put triggered abilities that triggered together on the stack:
-        the active player's in the order they choose, then the non-active
-        player's (rule 603.3b)."""
-        active_player = game.active_player
-        active_triggers = [m for m in matched if m[1] is active_player]
-        non_active_triggers = [m for m in matched if m[1] is not active_player]
-        ordered = _chosen_order(game, active_triggers) + _chosen_order(game, non_active_triggers)
-
-        for trigger, fire_controller, event in ordered:
+        """Put one player's triggered abilities on the stack in *ordered*
+        order, the first at the bottom."""
+        for trigger, fire_controller, event, captured in ordered:
             if trigger.targeting is not None:
                 # Choose targets as the trigger goes on the stack.
                 chosen = trigger.targeting(game, event, fire_controller)
@@ -282,12 +309,12 @@ class TriggerManager:
                 )
                 game.stack.push(stack_obj)
             elif trigger.capture is not None:
-                # Untargeted trigger that captures per-fire event state (rule
-                # 603.3): capture NOW (fire time) and store it on this trigger's
-                # own StackObject, so two pending triggers of the same source hold
+                # Untargeted trigger that captured per-fire event state when it
+                # triggered (rule 603.3), stored on this trigger's own
+                # StackObject, so two pending triggers of the same source hold
                 # independent state. The effect reads the immutable fire-time
                 # controller and that state — never a mutable source-level slot.
-                event_state = trigger.capture(game, event, fire_controller)
+                event_state = captured
                 context = capture_activation_context(
                     game, trigger.source, fire_controller, []
                 )
@@ -386,6 +413,14 @@ def register_delayed_trigger(
             printed=printed,
         )
     )
+
+
+def _apnap(game: GameState) -> list[Any]:
+    """The players in APNAP order: the active player, then the others in turn
+    order (rule 101.4)."""
+    players = list(game.players)
+    start = next((i for i, p in enumerate(players) if p is game.active_player), 0)
+    return players[start:] + players[:start]
 
 
 def _chosen_order(game: GameState, group: list[tuple[Any, ...]]) -> list[tuple[Any, ...]]:
