@@ -1218,10 +1218,17 @@ def test_the_attacker_divides_its_damage_among_two_blockers():
     t.run()
 
 
-def test_an_attack_declared_only_through_per_query_still_reaches_blockers():
+def test_an_attack_declared_only_through_per_query_needs_the_hint():
     bear = card(Bear)
     t = _to_attacks(bear)
-    t.act(0, per_query={(lambda query: True): [bear]}, then=[taps(bear)])
+    with pytest.raises(ScriptError, match="attacks=True or attacks=False"):
+        t.act(0, per_query={(lambda query: True): [bear]}, then=[taps(bear)])
+
+
+def test_an_attack_declared_only_through_per_query_reaches_blockers_with_the_hint():
+    bear = card(Bear)
+    t = _to_attacks(bear)
+    t.act(0, per_query={(lambda query: True): [bear]}, attacks=True, then=[taps(bear)])
     t.pass_(0)
     t.pass_(1)
     t.pass_(1)  # declares no blockers
@@ -1358,3 +1365,68 @@ def test_an_unanswered_trigger_order_diverges():
                      on_stack(MillerAbility1, 0)])
     with pytest.raises(PlayDiverged, match="answers this question"):
         t.run()
+
+
+def test_a_declaration_falling_back_to_nothing_needs_the_hint():
+    bear = card(Bear)
+    t = _to_attacks(bear)
+    with pytest.raises(ScriptError, match="attacks=True or attacks=False"):
+        t.act(0, branches=[branch(Hawk), branch()])
+
+
+def test_an_illegal_declaration_falling_back_to_nothing_skips_to_end_of_combat():
+    bear = card(Bear)
+    t = _to_attacks(bear)
+    t.act(0, branches=[branch(Hawk), branch()], attacks=False)
+    t.pass_(0)
+    t.pass_(1)
+    final = t.run()
+    assert (final.step, final.asked) == (Step.END_COMBAT, 0)
+
+
+def test_a_legal_fallback_declaration_attacks_without_the_hint():
+    bear = card(Bear)
+    t = _to_attacks(bear)
+    t.act(0, branches=[branch(Hawk), branch(bear)], then=[taps(bear)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)  # declares no blockers
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 18)])
+    assert t.run().players[1].life == 18
+
+
+def test_an_explicit_empty_override_declares_nothing():
+    bear = card(Bear)
+    t = _to_attacks(bear)
+    t.act(0, bear, per_query={(lambda query: True): []}, attacks=False)
+    t.pass_(0)
+    t.pass_(1)
+    final = t.run()
+    assert (final.step, final.asked) == (Step.END_COMBAT, 0)
+
+
+class Sentinel(Creature):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Sentinel")
+        super().__init__(base_power=2, base_toughness=2, keywords=Keyword.VIGILANCE, **kwargs)
+
+
+def test_a_vigilant_attacker_attacks_without_tapping():
+    sentinel = card(Sentinel)
+    t = _to_attacks(sentinel)
+    t.act(0, sentinel)
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)  # declares no blockers
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 18)])
+    final = t.run()
+    assert final.players[1].life == 18 and not final.players[0].battlefield[0].tapped
+
+
+def test_a_per_query_only_attack_is_narrated_by_what_it_answers():
+    bear = card(Bear)
+    t = _to_attacks(bear)
+    entry = t.act(0, per_query={(lambda query: True): [bear]}, attacks=True, then=[taps(bear)])
+    assert "per question" in entry.narration and "nothing" not in entry.narration

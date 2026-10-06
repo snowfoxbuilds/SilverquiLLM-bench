@@ -209,15 +209,27 @@ class Table:
         """``seat`` takes an action; ``options`` are those of
         ``test_interface.act`` (``choices``, ``per_query``, ``distinct``,
         ``branches``). At a declare-attackers question, ``attacks`` says
-        whether the declaration makes anything attack; by default it does
-        when the entry names a creature in its preferences, ``per_query`` or
-        ``scoped`` answers."""
+        whether the declaration makes anything attack. The table works it out
+        only when the entry settles it without asking the engine — every
+        branch names creatures in its preferences, or none does; a
+        ``per_query`` answer, a ``scoped`` answer with no creature named, or
+        branches that mix a declaration with declaring nothing need the hint,
+        and its absence is a ``ScriptError``."""
         if attacks is not None and self._declaring != "attackers":
             raise ScriptError("attacks= applies only to a declare-attackers question")
         entry = _ti().act(*preferences, **options)
         if self._declaring:
             if self._declaring == "attackers":
-                self._declared_attack = _declares_something(entry) if attacks is None else attacks
+                if attacks is None:
+                    attacks = _declares_something(entry)
+                if attacks is None:
+                    raise ScriptError(
+                        "whether this declaration makes anything attack depends on the "
+                        "engine's questions: say attacks=True or attacks=False"
+                    )
+                self._declared_attack = attacks
+                if not attacks:
+                    return self._write(seat, entry, then, note, "declares attackers: nothing")
             return self._write(seat, entry, then, note, f"declares {self._declaring}: " + _wants(entry))
         return self._write(seat, entry, then, note, "acts: " + _wants(entry))
 
@@ -439,19 +451,29 @@ def _name(item: Any) -> str:
     return repr(item)
 
 
-def _declares_something(entry: Any) -> bool:
-    """Whether a declaration entry names a creature to declare in any branch:
-    in its preferences, a non-empty ``per_query`` answer or a ``scoped`` one."""
-    return any(
-        b.preferences or b.scoped or any(prefs for _, prefs in b.per_query)
-        for b in entry.branches
-    )
+def _declares_something(entry: Any) -> bool | None:
+    """Whether a declaration entry makes something attack, when the entry
+    alone settles it: ``True`` when every branch names creatures in its
+    preferences, ``False`` when none does, and ``None`` when the outcome
+    depends on what the engine offers — a branch with ``per_query`` answers
+    or ``scoped`` answers but no creature named, or branches that mix a
+    declaration with declaring nothing."""
+    outcomes = set()
+    for b in entry.branches:
+        if b.per_query or (b.scoped and not b.preferences):
+            return None
+        outcomes.add(bool(b.preferences))
+    return outcomes.pop() if len(outcomes) == 1 else None
 
 
 def _wants(entry: Any) -> str:
     parts = []
     for b in entry.branches:
-        text = ", ".join(map(_name_preference, b.preferences)) or "nothing"
+        text = ", ".join(map(_name_preference, b.preferences))
+        if b.per_query:
+            asked = "; ".join(", ".join(map(_name_preference, prefs)) or "nothing" for _, prefs in b.per_query)
+            text = ", ".join(filter(None, [text, f"per question: {asked}"]))
+        text = text or "nothing"
         if b.choices:
             text += f" (answering {', '.join(map(_name_preference, b.choices))})"
         for key, values in b.scoped:
