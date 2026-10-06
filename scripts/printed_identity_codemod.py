@@ -41,7 +41,18 @@ remains:
   file does not establish;
 - a ``("name", "Name")`` pair naming a predefined card outside a
   ``GameRef(card=...)`` field; any other pair outside one is not a card
-  identity and is left alone.
+  identity and is left alone;
+- in a file it would otherwise convert, a wildcard import
+  (``from m import *``), which may bind any name the rewrite relies on;
+- a rewrite whose result would not compile.
+
+A name's bindings are every site in the file, in any scope, that binds it:
+an assignment or deletion target, a parameter, a def or class, an import, an
+``except ... as``, a match capture (``case X``, ``*X``, ``**X``), a
+``global``/``nonlocal`` declaration, a type parameter — every identifier a
+node carries except the few that only name something (an attribute, a
+keyword argument, a module). A construct the codemod does not know counts as
+a binding, so it can make a file manual but never let a rewrite through.
 
 A file is converted whole or not at all: if any site in it needs a hand
 edit, the file keeps its original text and every such site is reported.
@@ -272,21 +283,40 @@ def _built_names(tree: ast.Module) -> tuple[set[str], list[ast.AST]]:
     return built, unknown
 
 
+# The identifier fields that name something without binding it. Every other
+# string field of a node — a def, class, parameter, import, except, match
+# capture, ``global``/``nonlocal`` or type-parameter name, and any field a
+# later Python adds — counts as a binding, so an unknown construct can only
+# make a file manual, never let a rewrite through.
+_NOT_BINDING = {
+    (ast.Attribute, "attr"),
+    (ast.keyword, "arg"),
+    (ast.ImportFrom, "module"),
+    (ast.MatchClass, "kwd_attrs"),
+    (ast.Constant, "value"),
+    (ast.Constant, "kind"),
+    (ast.TypeIgnore, "tag"),
+}
+
+
 def _bindings(tree: ast.Module) -> dict[str, list[ast.AST]]:
-    """Every site in the file, in any scope, that binds each name."""
+    """Every site in the file, in any scope, that binds each name. An import
+    binds at its statement; ``from m import *`` binds ``*``."""
     bindings: dict[str, list[ast.AST]] = {}
     for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
-            bindings.setdefault(node.id, []).append(node)
-        elif isinstance(node, ast.arg):
-            bindings.setdefault(node.arg, []).append(node)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            bindings.setdefault(node.name, []).append(node)
+        if isinstance(node, ast.Name):
+            if not isinstance(node.ctx, ast.Load):
+                bindings.setdefault(node.id, []).append(node)
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             for alias in node.names:
                 bindings.setdefault((alias.asname or alias.name).split(".")[0], []).append(node)
-        elif isinstance(node, ast.ExceptHandler) and node.name or isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
-            bindings.setdefault(node.name, []).append(node)
+        elif not isinstance(node, ast.alias):
+            for field_name, value in ast.iter_fields(node):
+                if field_name == "type_comment" or (type(node), field_name) in _NOT_BINDING:
+                    continue
+                for name in value if isinstance(value, list) else [value]:
+                    if isinstance(name, str):
+                        bindings.setdefault(name, []).append(node)
     return bindings
 
 
@@ -535,6 +565,9 @@ def rewrite_file(path: Path, catalog: Catalog) -> Rewrite:
     if rw.edits:
         for site in visitor.unknown_built:
             rw.note(site, "an object in this file is built with a name that is not a literal")
+    if rw.edits:
+        for site in visitor.bindings.get("*", []):
+            rw.note(site, "a wildcard import may bind a name this rewrite relies on")
     if rw.manual or not rw.edits:
         return rw
     text = source
@@ -545,6 +578,11 @@ def rewrite_file(path: Path, catalog: Catalog) -> Rewrite:
         edits = sorted(edits + [(at, at, imports)], reverse=True)
     for start, end, new in edits:
         text = text[:start] + new + text[end:]
+    try:
+        compile(text, str(path), "exec", dont_inherit=True)
+    except SyntaxError as error:
+        rw.manual.append(f"{path}:{error.lineno}: the rewrite would not compile: {error.msg}")
+        return rw
     rw.source = text
     return rw
 

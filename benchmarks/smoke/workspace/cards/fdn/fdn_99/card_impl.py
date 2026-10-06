@@ -46,7 +46,9 @@ class ApothecaryStomper(Creature):
     Modal enters trigger: the mode is chosen as the trigger goes on the stack
     (``_enters_targets``, rule 603.3d) and kept for that occurrence; mode 0
     then chooses a "target creature you control", mode 1 (gain life) is
-    non-targeted. The effect resolves once the Stomper is on the battlefield.
+    non-targeted. Choosing mode 0 with no creature to target is rejected and
+    the mode asked again (rule 700.2a). The effect resolves once the Stomper
+    is on the battlefield.
     """
 
     def __init__(self, **kwargs: Any) -> None:
@@ -122,6 +124,7 @@ class ApothecaryStomper(Creature):
             self._enters,
             targets=self._enters_targets,
             remember=lambda game, controller: self.chosen_mode,
+            modal=True,
         )
 
     def _enters(self, game: "GameState", targets: list[Any], controller: Any, remembered: int | None) -> None:

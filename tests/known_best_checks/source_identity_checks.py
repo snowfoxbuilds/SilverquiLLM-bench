@@ -23,6 +23,12 @@ from cards.fdn.fdn_122.card_impl import (
     KykarZephyrAwakenerAbility4,
 )
 from cards.fdn.fdn_218.card_impl import DwynensElite
+from cards.fdn.fdn_99.card_impl import (
+    ApothecaryStomper,
+    ApothecaryStomperAbility2,
+    ApothecaryStomperAbility3,
+    ApothecaryStomperAbility4,
+)
 from engine.card import Creature, Instant
 from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, PostconditionError
 from engine.events import SpellCastTriggeredEvent
@@ -258,3 +264,96 @@ def test_a_flicker_whose_target_became_illegal_does_nothing():
     _resolve_all(game)
     assert game.get_battlefield(game.players[0]).contains(other)
     assert _tokens(game, "Spirit") == []
+
+
+# ---- Apothecary Stomper: a chosen counters mode with no target is rejected ---
+
+COUNTERS = Decision.mode(printed=ApothecaryStomperAbility3)
+LIFE = Decision.mode(printed=ApothecaryStomperAbility4)
+
+
+def _bear(*, protected: bool = False):
+    bear = Creature(name="Bear", base_power=2, base_toughness=2)
+    if protected:
+        bear.protections = [ProtectionAbility(quality=Color.GREEN)]
+    return bear
+
+
+def _stomper_enters(game, stomper, *branches, gone: bool = False):
+    """*stomper* enters from player 0's hand; with *gone* it leaves again
+    before its trigger is put on the stack. Then the trigger is placed."""
+    _enter(game, stomper)
+    if gone:
+        move_to_zone(game, stomper, Zone.BATTLEFIELD, Zone.EXILE)
+    game.players[0].set_baseline(Intent(pattern=GameRef(), branches=tuple(branches)))
+    _settle(game)
+
+
+def _life(game):
+    return game.players[0].life
+
+
+def _counters(creature):
+    return creature.counters.get("+1/+1", 0)
+
+
+@pytest.mark.parametrize("protected", [False, True], ids=["no creature", "only a protected creature"])
+def test_a_counters_mode_with_no_legal_target_is_rejected(protected):
+    stomper = ApothecaryStomper()
+    game = _table(hand=[stomper], battlefield=[_bear(protected=True)] if protected else [])
+    # Its only branch is rejected, so the script runs out.
+    with pytest.raises(PostconditionError) as failed:
+        _stomper_enters(game, stomper, branch(COUNTERS), gone=True)
+    assert isinstance(failed.value.__cause__, InvalidPlayerChoiceError)
+    assert game.stack.is_empty() and _life(game) == 20
+
+
+@pytest.mark.parametrize("protected", [False, True], ids=["no creature", "only a protected creature"])
+def test_a_rejected_counters_mode_is_asked_again_and_life_chosen(protected):
+    stomper = ApothecaryStomper()
+    game = _table(hand=[stomper], battlefield=[_bear(protected=True)] if protected else [])
+    _stomper_enters(game, stomper, branch(COUNTERS), branch(LIFE), gone=True)
+    (obj,) = game.stack.objects()
+    assert obj.printed is ApothecaryStomperAbility2
+    assert not game.trigger_manager.has_pending()
+    _resolve_all(game)
+    assert _life(game) == 24
+
+
+def test_a_legal_counters_mode_puts_two_counters_and_gains_no_life():
+    stomper, bear = ApothecaryStomper(), _bear()
+    game = _table(hand=[stomper], battlefield=[bear])
+    _stomper_enters(game, stomper, branch(COUNTERS, _other_ref(game, bear)))
+    _resolve_all(game)
+    assert _counters(bear) == 2 and _life(game) == 20
+
+
+def test_a_chosen_life_mode_gains_four_with_a_legal_counters_target_present():
+    stomper, bear = ApothecaryStomper(), _bear()
+    game = _table(hand=[stomper], battlefield=[bear])
+    _stomper_enters(game, stomper, branch(LIFE))
+    _resolve_all(game)
+    assert _counters(bear) == 0 and _life(game) == 24
+
+
+def test_a_counters_mode_whose_target_became_illegal_does_nothing():
+    stomper, bear = ApothecaryStomper(), _bear()
+    game = _table(hand=[stomper], battlefield=[bear])
+    _stomper_enters(game, stomper, branch(COUNTERS, _other_ref(game, bear)))
+    bear.protections = [ProtectionAbility(quality=Color.GREEN)]
+    _resolve_all(game)
+    assert _counters(bear) == 0 and _life(game) == 20
+
+
+def test_two_occurrences_of_one_stomper_keep_their_own_modes():
+    stomper, bear = ApothecaryStomper(), _bear()
+    game = _table(hand=[stomper], battlefield=[bear])
+    _stomper_enters(game, stomper, branch(COUNTERS, _other_ref(game, bear)))
+    # It leaves and returns, and the new occurrence chooses the other mode
+    # while the first still waits on the stack.
+    _leave_and_return(game, stomper)
+    game.players[0].set_baseline(Intent(pattern=GameRef(), branches=(branch(LIFE),)))
+    _settle(game)
+    assert [o.printed for o in game.stack.objects()] == [ApothecaryStomperAbility2] * 2
+    _resolve_all(game)
+    assert _counters(bear) == 2 and _life(game) == 24

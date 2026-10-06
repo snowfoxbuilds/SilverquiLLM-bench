@@ -357,6 +357,26 @@ from engine.decisions import GameRef as Ref
 def test_label():
     assert dict(Ref(card=frozenset({("name", "Abrade")})).card)["name"] == "Abrade"
 ''',
+    # A wildcard import may bind any name the rewrite relies on, and extending
+    # one with another name would not compile.
+    "wildcard import from the card's own module": '''
+from cards.fdn.fdn_188.card_impl import *  # noqa: F403
+from engine.decisions import Decision
+
+
+def test_label():
+    assert Decision.obj(name="Abrade") is not None
+''',
+    "class name captured by a match mapping's rest": '''
+from engine.decisions import Decision
+
+
+def test_label():
+    match {"x": 1}:
+        case {**Abrade}:
+            assert Abrade == {"x": 1}
+            assert Decision.obj(name="Abrade") is not None
+''',
     "name pair naming a card outside a GameRef card field": '''
 def test_metadata():
     metadata = dict([("name", "Abrade")])
@@ -400,6 +420,19 @@ from decision_helpers import Decision
 def test_label():
     assert Decision.obj(name="Abrade") == {"name": "Abrade"}
 '''),
+    "Decision rebound by a later wildcard import": ("decision_helpers.py", '''
+class Decision:
+    @staticmethod
+    def obj(**attrs):
+        return attrs
+''', '''
+from engine.decisions import Decision
+from decision_helpers import *  # noqa: F403
+
+
+def test_label():
+    assert Decision.obj(name="Abrade") == {"name": "Abrade"}
+'''),
     "GameRef called on an unrelated module": ("ref_helpers.py", '''
 def GameRef(**attrs):
     return attrs
@@ -424,7 +457,68 @@ def test_a_constructor_from_another_module_is_reported_and_the_file_left_whole(t
     result = _codemod(path)
     assert "changed 0 files" in result.stdout and "0 sites need a hand edit" not in result.stdout, result.stdout
     assert path.read_text() == original and _pytest(path, beside=True).returncode == 0
-    assert _codemod(path, check=True).returncode == 1
+    for _ in range(2):
+        assert _codemod(path, check=True).returncode == 1
+
+
+# Every construct that binds a name, each binding X. Any of them binding a
+# constructor or the class a rewrite would import leaves the file manual.
+_BINDS_X = {
+    "assignment": "X = None",
+    "annotation": "X: int",
+    "augmented assignment": "X += 1",
+    "deletion": "del X",
+    "for target": "for X in ():\n    pass",
+    "with target": "with open(__file__) as X:\n    pass",
+    "walrus": "(X := 1)",
+    "comprehension target": "[X for X in ()]",
+    "def": "def X():\n    pass",
+    "async def": "async def X():\n    pass",
+    "class": "class X:\n    pass",
+    "parameter": "def f(X):\n    pass",
+    "positional-only parameter": "def f(X, /):\n    pass",
+    "keyword-only parameter": "def f(*, X):\n    pass",
+    "star parameter": "def f(*X):\n    pass",
+    "double-star parameter": "def f(**X):\n    pass",
+    "lambda parameter": "lambda X: X",
+    "import alias": "import os as X",
+    "from-import alias": "from os import path as X",
+    "except name": "try:\n    pass\nexcept Exception as X:\n    pass",
+    "match capture": "match 1:\n    case X:\n        pass",
+    "match as": "match 1:\n    case 1 as X:\n        pass",
+    "match star": "match []:\n    case [*X]:\n        pass",
+    "match mapping rest": "match {}:\n    case {**X}:\n        pass",
+    "global": "def f():\n    global X",
+    "type parameter": "def f[X]():\n    pass",
+    "class type parameter": "class C[X]:\n    pass",
+    "type alias": "type X = int",
+    "type alias parameter": "type A[X] = int",
+}
+
+_USES = {
+    "Decision": "from engine.decisions import Decision\n\n\ndef test_label():\n    Decision.obj(name=\"Abrade\")\n",
+    "GameRef": "from engine.decisions import GameRef\n\n\ndef test_label():\n"
+               "    GameRef(card=frozenset({(\"name\", \"Abrade\")}))\n",
+    "Abrade": "from engine.decisions import Decision\n\n\ndef test_label():\n    Decision.obj(name=\"Abrade\")\n",
+}
+
+
+def test_any_binding_of_a_name_the_rewrite_relies_on_leaves_the_file_whole(tmp_path):
+    folder = tmp_path / "fdn" / "fdn_188"
+    files = {}
+    for shadowed, use in _USES.items():
+        for i, binds in enumerate(_BINDS_X.values()):
+            source = use + "\n\n" + binds.replace("X", shadowed) + "\n"
+            files[_write(folder / f"test_{shadowed}_{i}.py", source)] = source
+    controls = [_write(folder / f"test_control_{name}.py", use) for name, use in _USES.items()]
+    result = _codemod(folder)
+    assert result.returncode == 0, result.stderr
+    for path, source in files.items():
+        assert path.read_text() == source, path.name
+        assert f"{path}:" in result.stdout, path.name
+    # The same uses with nothing rebinding them convert.
+    for path in controls:
+        assert "printed=Abrade" in path.read_text() or '("printed", Abrade)' in path.read_text()
 
 
 def test_a_reexported_engine_decision_still_converts(tmp_path):
@@ -519,3 +613,30 @@ def test_refuses_names():
         cast_spell(create_game(), 0, "Abrade")
 ''')
     assert "changed 0 files; 0 sites need a hand edit" in _codemod(path).stdout
+
+
+def test_a_rewrite_that_would_not_compile_is_reported_and_not_written(tmp_path, monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("printed_identity_codemod", CODEMOD)
+    codemod = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, codemod)
+    spec.loader.exec_module(codemod)
+    catalog = codemod.Catalog(
+        by_name={"Abrade": codemod.PrintedRef("Abrade", "cards.fdn.fdn_188.card_impl")},
+        modes={},
+        canonical={"Decision": frozenset({"engine.decisions"}), "GameRef": frozenset({"engine.decisions"})},
+    )
+    path = _write(tmp_path / "fdn" / "fdn_188" / "tests.py", '''
+from engine.decisions import Decision
+
+
+def test_label():
+    Decision.obj(name="Abrade")
+''')
+    original = path.read_text()
+    assert "printed=Abrade" in codemod.rewrite_file(path, catalog).source
+    monkeypatch.setattr(codemod, "_import_edits", lambda rw, tree: ([], "from broken import (\n"))
+    rewrite = codemod.rewrite_file(path, catalog)
+    assert rewrite.source == original
+    assert any("would not compile" in line for line in rewrite.manual)
