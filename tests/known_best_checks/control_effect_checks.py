@@ -92,6 +92,27 @@ def test_auras_taking_each_other_over_apply_in_timestamp_order():
     assert (second.controller, first.controller) == (p0, p0)
 
 
+def test_a_dependency_loop_applies_before_a_later_effect_its_member_depends_on():
+    game, p0, p1 = _game()
+    first = _put(game, Aura(name="First"), p0)
+    second = _put(game, Aura(name="Second"), p1)
+    third = _put(game, Aura(name="Third"), p1)
+    _aura_control(game, first, second)
+    _aura_control(game, second, first)
+    competing = _aura_control(game, third, second)
+    # The First and Second form a loop; ignoring its inner dependencies leaves
+    # the First ready at once, while the Second still waits for the Third,
+    # which takes the Second for p1 before the Second takes the First (rule
+    # 613.8b–c): First → Third → Second.
+    game.effect_manager.apply_all(game)
+    assert (first.controller, second.controller) == (p1, p1)
+    game.effect_manager.apply_all(game)
+    assert (first.controller, second.controller) == (p1, p1)
+    game.effect_manager.remove(competing)
+    game.effect_manager.apply_all(game)
+    assert (first.controller, second.controller) == (p0, p0)
+
+
 def test_a_control_change_makes_the_permanent_summoning_sick_once():
     game, p0, p1 = _game()
     bear = _put(game, Creature(name="Bear"), p1)
