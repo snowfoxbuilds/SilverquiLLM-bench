@@ -22,7 +22,7 @@ CHECKS = Path(__file__).resolve().parent / "known_best_checks"
 
 
 @pytest.mark.parametrize("checks", ["trigger_lifetime_checks.py", "combat_damage_checks.py", "targeted_trigger_checks.py",
-                                    "reflexive_trigger_checks.py"])
+                                    "reflexive_trigger_checks.py", "source_identity_checks.py"])
 def test_known_best_gameplay_regressions_pass(checks: str):
     result = subprocess.run(
         [sys.executable, "-m", "pytest", str(CHECKS / checks), "-q", "-p", "no:cacheprovider",

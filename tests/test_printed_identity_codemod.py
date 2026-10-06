@@ -25,11 +25,12 @@ WORKSPACE = REPO / "known_best/workspace"
 CODEMOD = REPO / "scripts/printed_identity_codemod.py"
 
 
-def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
+def _run(args: list[str], *, path: tuple[Path, ...] = ()) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, *args],
         cwd=WORKSPACE, capture_output=True, text=True, timeout=600, check=False,
-        env={**os.environ, "PYTHONPATH": str(WORKSPACE), "PYTHONDONTWRITEBYTECODE": "1"},
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, (WORKSPACE, *path))),
+             "PYTHONDONTWRITEBYTECODE": "1"},
     )
 
 
@@ -38,9 +39,11 @@ def _codemod(path: Path, *, check: bool = False) -> subprocess.CompletedProcess[
                  str(path)])
 
 
-def _pytest(path: Path) -> subprocess.CompletedProcess[str]:
+def _pytest(path: Path, *, beside: bool = False) -> subprocess.CompletedProcess[str]:
+    """Run the test file *path*; with *beside*, modules next to it import."""
     return _run(["-m", "pytest", str(path), "-q", "-p", "no:cacheprovider", "-p", "no:xdist",
-                 "-c", str(WORKSPACE / "pytest.ini"), "--rootdir", str(path.parent)])
+                 "-c", str(WORKSPACE / "pytest.ini"), "--rootdir", str(path.parent)],
+                path=(path.parent,) if beside else ())
 
 
 def _write(path: Path, source: str) -> Path:
@@ -316,6 +319,44 @@ class Decision:
 def test_label():
     assert Decision.obj(name="Abrade") == {"name": "Abrade"}
 ''',
+    # A constructor counts only as the engine's own, imported by name.
+    "GameRef redefined after its import": '''
+from engine.decisions import GameRef
+
+
+def GameRef(**attrs):
+    return attrs
+
+
+def test_label():
+    assert dict(GameRef(card=frozenset({("name", "Abrade")}))["card"])["name"] == "Abrade"
+''',
+    "GameRef shadowed by a parameter and an assignment": '''
+from engine.decisions import GameRef
+
+
+def test_parameter(GameRef=lambda **attrs: attrs):
+    assert dict(GameRef(card=frozenset({("name", "Abrade")}))["card"])["name"] == "Abrade"
+
+
+def test_assignment():
+    GameRef = lambda **attrs: attrs  # noqa: E731
+    assert dict(GameRef(card=frozenset({("name", "Abrade")}))["card"])["name"] == "Abrade"
+''',
+    "qualified GameRef call": '''
+import engine.decisions as decisions
+
+
+def test_label():
+    assert dict(decisions.GameRef(card=frozenset({("name", "Abrade")})).card)["name"] == "Abrade"
+''',
+    "aliased GameRef import": '''
+from engine.decisions import GameRef as Ref
+
+
+def test_label():
+    assert dict(Ref(card=frozenset({("name", "Abrade")})).card)["name"] == "Abrade"
+''',
     "name pair naming a card outside a GameRef card field": '''
 def test_metadata():
     metadata = dict([("name", "Abrade")])
@@ -344,6 +385,62 @@ def test_a_name_site_needing_inference_is_reported_and_the_file_left_whole(tmp_p
     for _ in range(2):
         check = _codemod(path, check=True)
         assert check.returncode == 1 and "0 sites need a hand edit" not in check.stdout, check.stdout
+
+
+_FOREIGN = {
+    "Decision imported from an unrelated module": ("decision_helpers.py", '''
+class Decision:
+    @staticmethod
+    def obj(**attrs):
+        return attrs
+''', '''
+from decision_helpers import Decision
+
+
+def test_label():
+    assert Decision.obj(name="Abrade") == {"name": "Abrade"}
+'''),
+    "GameRef called on an unrelated module": ("ref_helpers.py", '''
+def GameRef(**attrs):
+    return attrs
+''', '''
+import ref_helpers
+
+
+def test_label():
+    assert dict(ref_helpers.GameRef(card=frozenset({("name", "Abrade")}))["card"])["name"] == "Abrade"
+'''),
+}
+
+
+@pytest.mark.parametrize("case", list(_FOREIGN))
+def test_a_constructor_from_another_module_is_reported_and_the_file_left_whole(tmp_path, case):
+    helper, helper_source, source = _FOREIGN[case]
+    _write(tmp_path / "fdn" / "fdn_188" / helper, helper_source)
+    path = _write(tmp_path / "fdn" / "fdn_188" / "tests.py", source)
+    original = path.read_text()
+    before = _pytest(path, beside=True)
+    assert before.returncode == 0, before.stdout[-3000:]
+    result = _codemod(path)
+    assert "changed 0 files" in result.stdout and "0 sites need a hand edit" not in result.stdout, result.stdout
+    assert path.read_text() == original and _pytest(path, beside=True).returncode == 0
+    assert _codemod(path, check=True).returncode == 1
+
+
+def test_a_reexported_engine_decision_still_converts(tmp_path):
+    path = _write(tmp_path / "fdn" / "fdn_188" / "tests.py", '''
+from test_interface import Decision
+
+
+def test_label():
+    assert Decision.obj(name="Abrade") is not None
+''')
+    assert "changed 1 files; 0 sites need a hand edit" in _codemod(path).stdout
+    rewritten = path.read_text()
+    assert "Decision.obj(printed=Abrade)" in rewritten
+    assert "from cards.fdn.fdn_188.card_impl import Abrade" in rewritten
+    assert _pytest(path).returncode == 0
+    assert _codemod(path, check=True).returncode == 0
 
 
 # ---- class-based code is left alone -------------------------------------------

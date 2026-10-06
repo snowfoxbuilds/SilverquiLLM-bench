@@ -30,8 +30,15 @@ remains:
   name the test's own object after a printed card;
 - a literal whose class name the file binds to anything other than the
   import of that very class from its own card module;
-- a helper or ``Decision`` call whose name the file binds to anything other
-  than its import;
+- a helper call whose name the file binds to anything other than its
+  import from ``test_utils``;
+- a ``Decision`` or ``GameRef`` call whose name the file binds to anything
+  other than one unaliased import from a module that provides the engine's
+  own class (``engine.decisions``, or a module re-exporting that very
+  class, such as ``test_interface``) — a second binding of any kind, a
+  parameter, an assignment, a def, an alias or an import from elsewhere —
+  or that is a qualified call (``decisions.GameRef(...)``), whose binding the
+  file does not establish;
 - a ``("name", "Name")`` pair naming a predefined card outside a
   ``GameRef(card=...)`` field; any other pair outside one is not a card
   identity and is left alone.
@@ -54,10 +61,15 @@ import ast
 import importlib
 import json
 import sys
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 
 HELPER_MODULE = "test_utils"
+# The engine constructors whose card identities the codemod rewrites, and the
+# workspace modules that may re-export them.
+CONSTRUCTORS = ("Decision", "GameRef")
+REEXPORTERS = ("test_interface", "test_utils")
 
 # Suites whose subject is name-keyed by design, not a test identifying a card.
 EXEMPT = {
@@ -79,6 +91,9 @@ class Catalog:
 
     by_name: dict[str, PrintedRef]
     modes: dict[str, dict[str, PrintedRef]]  # card dir module → mode name → class
+    # Constructor name → the modules a file may import it from: those whose
+    # attribute of that name is the engine's own class.
+    canonical: dict[str, frozenset[str]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, workspace: Path) -> Catalog:
@@ -127,7 +142,27 @@ class Catalog:
 
         if clashes:
             raise SystemExit(f"ambiguous printed names: {clashes}")
-        return cls(by_name, modes)
+        return cls(by_name, modes, _canonical_modules())
+
+
+def _canonical_modules() -> dict[str, frozenset[str]]:
+    """For ``Decision`` and ``GameRef``, the workspace modules providing the
+    engine's own class: ``engine.decisions`` and any that re-export that very
+    object."""
+    decisions = importlib.import_module("engine.decisions")
+    out: dict[str, frozenset[str]] = {}
+    for name in CONSTRUCTORS:
+        engine_cls = getattr(decisions, name)
+        modules = {"engine.decisions"}
+        for module_name in REEXPORTERS:
+            try:
+                module = importlib.import_module(module_name)
+            except ImportError:
+                continue
+            if getattr(module, name, None) is engine_cls:
+                modules.add(module_name)
+        out[name] = frozenset(modules)
+    return out
 
 
 def _mode_map(impl: Path, module_name: str) -> dict[str, PrintedRef]:
@@ -267,14 +302,20 @@ class _Visitor(ast.NodeVisitor):
     _in_raises = 0
     _in_card_field = 0
 
-    def _imported_only(self, name: str, module: str | None = None) -> bool:
-        """Whether *name* means one import of itself in this file — from
-        *module*, when given — and nothing else: no def, assignment,
+    def _imported_only(self, name: str, modules: Collection[str]) -> bool:
+        """Whether *name* means one unaliased import of itself in this file
+        from one of *modules*, and nothing else: no def, assignment,
         parameter or second import rebinds it."""
         sites = self.bindings.get(name, [])
         return len(sites) == 1 and isinstance(sites[0], ast.ImportFrom) and (
-            module is None or sites[0].module == module
+            sites[0].level == 0 and sites[0].module in modules
         ) and any(a.name == name and a.asname in (None, name) for a in sites[0].names)
+
+    def _canonical(self, name: str) -> bool:
+        """Whether *node* calls the engine's own *name* constructor: a bare
+        ``name`` the file binds only by importing it from a module that
+        provides it (see :func:`_canonical_modules`)."""
+        return self._imported_only(name, self.catalog.canonical.get(name, frozenset()))
 
     def _emit(self, node: ast.AST, literal: ast.Constant, ref: PrintedRef | None, text: str) -> None:
         """Replace *node* by *text* naming *ref*'s class, or report why not."""
@@ -323,7 +364,7 @@ class _Visitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:
         name = node.func.id if isinstance(node.func, ast.Name) else None
         args = node.args
-        if name in self.helpers and not self._in_raises and not self._imported_only(name, HELPER_MODULE):
+        if name in self.helpers and not self._in_raises and not self._imported_only(name, {HELPER_MODULE}):
             if any(_is_str(a) and a.value in self.catalog.by_name for a in ast.walk(node)):
                 self.rw.note(node, f"{name} is bound to something else in this file")
         elif name in self.helpers and not self._in_raises:
@@ -339,12 +380,17 @@ class _Visitor(ast.NodeVisitor):
                     if isinstance(value, (ast.List, ast.Tuple)):
                         for elt in value.elts:
                             self._card(elt)
-        if isinstance(node.func, ast.Attribute) and getattr(node.func.value, "id", None) == "Decision":
-            if self._imported_only("Decision"):
+        decision = node.func.value if isinstance(node.func, ast.Attribute) else None
+        if getattr(decision, "id", getattr(decision, "attr", None)) == "Decision":
+            if isinstance(decision, ast.Name) and self._canonical("Decision"):
                 self._decision(node)
             elif any(k.arg == "name" for k in node.keywords) or (node.func.attr == "mode" and node.args):
-                self.rw.note(node, "Decision is bound to something else in this file")
-        if getattr(node.func, "id", getattr(node.func, "attr", None)) == "GameRef":
+                self.rw.note(node, "Decision is not the engine's Decision imported by name in this file")
+        callee = node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", None)
+        if callee == "GameRef" and not (isinstance(node.func, ast.Name) and self._canonical("GameRef")):
+            if any(kw.arg == "card" and _has_name_pair(kw.value) for kw in node.keywords):
+                self.rw.note(node, "GameRef is not the engine's GameRef imported by name in this file")
+        elif callee == "GameRef":
             for child in [node.func, *node.args]:
                 self.visit(child)
             for kw in node.keywords:
@@ -404,6 +450,14 @@ class _Visitor(ast.NodeVisitor):
             ):
                 self.rw.note(node, "name comparison with a predefined card's name; compare printed_class")
         self.generic_visit(node)
+
+
+def _has_name_pair(node: ast.AST) -> bool:
+    """Whether *node* contains a ``("name", ...)`` pair."""
+    return any(
+        isinstance(n, ast.Tuple) and len(n.elts) == 2 and _is_str(n.elts[0]) and n.elts[0].value == "name"
+        for n in ast.walk(node)
+    )
 
 
 def _helpers_imported(tree: ast.Module) -> set[str]:

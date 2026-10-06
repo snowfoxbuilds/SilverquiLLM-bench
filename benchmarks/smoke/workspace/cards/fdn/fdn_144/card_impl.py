@@ -53,16 +53,18 @@ class MischievousPup(Creature):
         )
         super().__init__(**kwargs)
 
-    def _is_other_permanent_you_control(self, obj: Any, controller: Any) -> bool:
-        """Legal target: another permanent controlled by this card's controller
-        (the ability's controller). Shared by the targeting and the resolution revalidation."""
-        return obj is not self and getattr(obj, "controller", None) is controller
+    @staticmethod
+    def _is_other_permanent_you_control(game: Any, obj: Any, controller: Any, source: Any) -> bool:
+        """Legal target: a permanent the ability's controller controls, other
+        than the ability's *source* as it triggered. Shared by the targeting
+        and the resolution revalidation."""
+        return not source.is_source(game, obj) and getattr(obj, "controller", None) is controller
 
-    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
+    def _enters_targets(self, game: "GameState", controller: Any, source: Any) -> list[Any]:
         """Up to one OTHER target permanent you control (optional/declinable)."""
         return [
             TargetRequirement(
-                filter_fn=lambda obj, _c=controller: self._is_other_permanent_you_control(obj, _c),
+                filter_fn=lambda obj: self._is_other_permanent_you_control(game, obj, controller, source),
                 description="up to one other target permanent you control",
                 zone=Zone.BATTLEFIELD,
                 optional=True,
@@ -74,9 +76,11 @@ class MischievousPup(Creature):
         on the stack (rule 603.3d)."""
         from engine.triggers import register_enters_trigger
 
-        register_enters_trigger(game, self, MischievousPupAbility2, self._enters, targets=self._enters_targets)
+        register_enters_trigger(
+            game, self, MischievousPupAbility2, self._enters, targets=self._enters_targets, knows_source=True
+        )
 
-    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any, source: Any) -> None:
         """Return the chosen permanent (if any) to its owner's hand.
 
         Revalidate the COMPLETE predicate at resolution: still *another*
@@ -91,6 +95,6 @@ class MischievousPup(Creature):
             return
         if not _on_battlefield(game, target):
             return
-        if not self._is_other_permanent_you_control(target, controller):
+        if not self._is_other_permanent_you_control(game, target, controller, source):
             return
         move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)

@@ -22,6 +22,15 @@ class DwynensEliteAbility1:
 # endregion Printed abilities
 
 
+def _controls_another_elf(game: "GameState", controller: Any, source: Any) -> bool:
+    """Whether *controller* controls an Elf other than the ability's *source*
+    as it triggered (a :class:`~engine.triggers.TriggerSource`)."""
+    return controller is not None and any(
+        not source.is_source(game, obj) and "Elf" in getattr(obj, "subtypes", set())
+        for obj in game.get_battlefield(controller).get_all()
+    )
+
+
 class DwynensElite(Creature):
     """Dwynen's Elite — {1}{G} — 2/2 — Elf Warrior.
 
@@ -45,34 +54,19 @@ class DwynensElite(Creature):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: "GameState") -> None:
-        """The enters ability is a triggered ability that uses the stack."""
+        """The enters ability is a triggered ability that uses the stack. Its
+        intervening "if" is checked as it triggers and again as it resolves."""
         from engine.triggers import register_enters_trigger
 
-        def _condition(game: Any, controller: Any) -> bool:
-            return controller is not None and any(
-                obj is not self and "Elf" in getattr(obj, "subtypes", set())
-                for obj in game.get_battlefield(controller).get_all()
-            )
+        register_enters_trigger(
+            game, self, DwynensEliteAbility1, self._enters, condition=_controls_another_elf, knows_source=True
+        )
 
-        register_enters_trigger(game, self, DwynensEliteAbility1, self._enters, condition=_condition)
-
-    def _enters(self, game: "GameState", controller: Any) -> None:
-        """ETB: if you control another Elf, create a 1/1 Elf Warrior token."""
+    def _enters(self, game: "GameState", controller: Any, source: Any) -> None:
+        """ETB: create a 1/1 Elf Warrior token."""
         from engine.game import create_token
 
-        if controller is None:
-            return
-
-        bf = game.get_battlefield(controller)
-        has_other_elf = False
-        for obj in bf.get_all():
-            if obj is self:
-                continue
-            if "Elf" in getattr(obj, "subtypes", set()):
-                has_other_elf = True
-                break
-
-        if has_other_elf:
+        if controller is not None:
             token = make_creature_token(
                 "Elf Warrior",
                 {"Elf", "Warrior"},

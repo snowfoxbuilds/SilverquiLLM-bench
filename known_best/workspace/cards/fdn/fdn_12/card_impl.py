@@ -56,12 +56,12 @@ class FelidarSavior(Creature):
         )
         super().__init__(**kwargs)
 
-    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
-        """Return targeting requirement: up to two other creatures you control."""
-        source = self
+    def _enters_targets(self, game: "GameState", controller: Any, source: Any) -> list[Any]:
+        """Return targeting requirement: up to two creatures you control other
+        than the ability's *source* as it triggered."""
 
         def _filter(obj: Any) -> bool:
-            if obj is source:
+            if source.is_source(game, obj):
                 return False
             if CardType.CREATURE not in getattr(obj, "card_types", set()):
                 return False
@@ -89,9 +89,11 @@ class FelidarSavior(Creature):
         """The enters ability is a triggered ability that uses the stack."""
         from engine.triggers import register_enters_trigger
 
-        register_enters_trigger(game, self, FelidarSaviorAbility2, self._enters, targets=self._enters_targets)
+        register_enters_trigger(
+            game, self, FelidarSaviorAbility2, self._enters, targets=self._enters_targets, knows_source=True
+        )
 
-    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any, source: Any) -> None:
         """ETB: put a +1/+1 counter on each of up to two other target
         creatures you control."""
         from engine.game import add_counter
@@ -104,7 +106,7 @@ class FelidarSavior(Creature):
             return
 
         for target in chosen[:2]:
-            if target is self:
+            if target is None or source.is_source(game, target):
                 continue
             if not _is_on_battlefield(game, target):
                 continue
