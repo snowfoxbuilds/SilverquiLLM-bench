@@ -12,6 +12,7 @@ from card_impl import (
     SarkhanTheMasterlessAbility2,
     SarkhanTheMasterlessAbility3,
 )
+from cards.fdn.fdn_40.card_impl import HighFaeTrickster
 from cards.fdn.fdn_86.card_impl import FieryAnnihilation
 from cards.fdn.fdn_95.card_impl import SowerOfChaos
 from cards.fdn.fdn_134.card_impl import (
@@ -27,9 +28,10 @@ from cards.fdn.fdn_206.card_impl import ShivanDragon
 from cards.fdn.fdn_227.card_impl import LlanowarElves
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_276.card_impl import Swamp
+from cards.fdn.fdn_709.card_impl import Confiscate
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, player, token
 
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
+from silverquillm.table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 PINGS = SarkhanTheMasterlessAbility1
@@ -150,6 +152,72 @@ def test_an_animated_planeswalker_dies_to_creature_removal():
     t.pass_(0, then=[moves(annihilation, Zone.GRAVEYARD), moves(sarkhan, Zone.EXILE)])
     t.run()
 
+
+
+def _confiscate_in_response(t: Table, sarkhan, ability, confiscate) -> None:
+    """Player 0 activates ``ability``; player 1, with High Fae Trickster's
+    flash, Confiscates Sarkhan in response; the ability is left to resolve."""
+    t.act(0, ability, then=[on_stack(ability, 0)])
+    t.pass_(0)
+    t.act(1, confiscate, choices=[sarkhan], then=[moves(confiscate, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(confiscate, Zone.BATTLEFIELD), gains_control(sarkhan, 1)])
+    t.pass_(0)
+
+
+def _thief():
+    trickster, confiscate = card(HighFaeTrickster), card(Confiscate)
+    return Side(hand=[confiscate], battlefield=[trickster], mana={ManaType.BLUE: 6}, library=_library()), confiscate
+
+
+def test_a_plus_one_stolen_in_response_animates_its_activators_planeswalkers():
+    """The +1 still belongs to player 0 after player 1 takes Sarkhan: player
+    0's Ajani becomes a Dragon and attacks for 4. Sarkhan, now player 1's,
+    triggers on the attack, but player 1 controls no Dragon."""
+    sarkhan, ajani = card(SarkhanTheMasterless), card(AjaniCallerOfThePride)
+    seat1, confiscate = _thief()
+    game = create_game(Side(battlefield=[sarkhan, ajani], library=_library()), seat1, start=MAIN)
+    t = Table(game)
+    _confiscate_in_response(t, sarkhan, ANIMATE, confiscate)
+    t.pass_(1, then=[off_stack(ANIMATE)])
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, ajani, scoped={ajani: player(1)}, then=[taps(ajani), on_stack(PINGS, 1)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(PINGS)], note="no Dragon of player 1's to deal damage")
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 16)])
+    t.run()
+
+
+def test_a_minus_three_stolen_in_response_makes_its_activators_dragon():
+    """The −3 still belongs to player 0 after player 1 takes Sarkhan: the
+    Dragon token is player 0's."""
+    sarkhan = card(SarkhanTheMasterless)
+    seat1, confiscate = _thief()
+    game = create_game(Side(battlefield=[sarkhan], library=_library()), seat1, start=MAIN)
+    t = Table(game)
+    _confiscate_in_response(t, sarkhan, DRAGON, confiscate)
+    t.pass_(1, then=[off_stack(DRAGON), appears(0)])
+    t.run()
+
+
+def test_a_minus_three_resolves_after_sarkhan_is_destroyed():
+    """Destroyed in response, Sarkhan still makes player 0 its Dragon token."""
+    sarkhan, downfall = card(SarkhanTheMasterless), card(HerosDownfall)
+    game = create_game(Side(battlefield=[sarkhan], library=_library()),
+                       Side(hand=[downfall], mana={ManaType.BLACK: 3}, library=_library()), start=MAIN)
+    t = Table(game)
+    t.act(0, DRAGON, then=[on_stack(DRAGON, 0)])
+    t.pass_(0)
+    t.act(1, downfall, choices=[sarkhan], then=[moves(downfall, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(downfall, Zone.GRAVEYARD), moves(sarkhan, Zone.GRAVEYARD)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(DRAGON), appears(0)])
+    t.run()
 
 def test_the_dragons_stay_dragons_after_sarkhan_leaves():
     """Exiled after its +1 resolves, Sarkhan leaves Ajani a 4/4 flier for the

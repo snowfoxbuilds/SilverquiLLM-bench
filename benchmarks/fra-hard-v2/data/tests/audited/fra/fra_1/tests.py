@@ -29,7 +29,7 @@ from cards.fdn.fdn_276.card_impl import Swamp
 from cards.fdn.fdn_278.card_impl import Mountain
 from cards.fdn.fdn_280.card_impl import Forest, ForestAbility1
 from cards.fdn.fdn_687.card_impl import DemolitionField, DemolitionFieldAbility2
-from test_interface import Decision, ManaType, Phase, Side, Step, Zone, ability, card, create_game, player
+from test_interface import Decision, ManaType, Phase, Side, Step, Zone, ability, branch, card, create_game, player
 
 from silverquillm.table import Table, life, moves, off_stack, on_stack, taps, untaps
 
@@ -245,7 +245,7 @@ def test_ward_counters_a_spell_whose_controller_cannot_pay():
     game, emrakul, downfall = _ward_game([card(Plains), card(Plains)])
     t = Table(game)
     t.act(1, downfall, choices=[emrakul], then=[moves(downfall, Zone.STACK), on_stack(WARD, 0)])
-    t.pass_(1, choices=[Decision.yes()])
+    t.pass_(1, branches=[branch(choices=[Decision.yes()]), branch(choices=[Decision.no()])])
     t.pass_(0, then=[off_stack(WARD), moves(downfall, Zone.GRAVEYARD)], note="willing or not, two permanents cannot pay ward")
     t.run()
 

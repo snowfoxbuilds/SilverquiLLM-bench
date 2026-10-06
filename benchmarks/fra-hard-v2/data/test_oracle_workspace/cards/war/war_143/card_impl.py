@@ -79,10 +79,9 @@ class SarkhanTheMasterless(Planeswalker):
         ))
 
     def get_loyalty_abilities(self):
-        source = self
-
-        def planeswalkers_become_dragons(game):
-            controller = source.controller
+        # Each takes the player who activated it, not Sarkhan's controller as
+        # it resolves: a stolen Sarkhan's pending ability stays theirs (rule 113.8).
+        def planeswalkers_become_dragons(game, controller):
             # The planeswalkers it affects are fixed as it resolves (rule 611.2c).
             walkers = [card for card in _controlled(game, controller)
                        if CardType.PLANESWALKER in getattr(card, 'card_types', ())
@@ -125,8 +124,7 @@ class SarkhanTheMasterless(Planeswalker):
                 )))
             game.effect_manager.apply_all(game)
 
-        def dragon_token(game):
-            controller = source.controller
+        def dragon_token(game, controller):
             create_token(game, controller, factory=lambda: make_creature_token(
                 'Dragon', {'Dragon'}, [Color.RED], 4, 4, keywords=Keyword.FLYING))
 

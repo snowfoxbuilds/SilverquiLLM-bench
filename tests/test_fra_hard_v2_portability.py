@@ -245,6 +245,62 @@ def _reversed(game, player):
 _priority.priority_query = _reversed
 '''
 
+# Asks how to pay an additional cost — Eaten Alive's sacrifice or {3}{B} —
+# offering every alternative, payable or not, rather than only the payable
+# ones; paying an unpayable one is rejected and asked again (rule 601.2b).
+COSTS_ALL_OFFERED = '''
+import engine.additional_costs as _additional_costs
+
+_additional_costs._feasible = lambda *args, **kwargs: True
+'''
+
+# Offers an additional cost's alternatives in reverse order.
+COSTS_REVERSED = '''
+import dataclasses as _dataclasses
+import engine.queries as _queries
+
+_original_ask = _queries.ask
+
+
+def _cost_reversed(player, query):
+    if query.prompt == "Choose how to pay the additional cost":
+        query = _dataclasses.replace(query, options=tuple(reversed(query.options)))
+    return _original_ask(player, query)
+
+
+_queries.ask = _cost_reversed
+'''
+
+# Faulty: a spell's additional cost is never paid.
+COSTS_WAIVED = '''
+import engine.additional_costs as _additional_costs
+
+_additional_costs.announce = lambda *args, **kwargs: []
+'''
+
+# Emrakul only: agreeing to pay ward with fewer than three permanents is
+# rejected and asked again, rather than leaving the spell to be countered.
+WARD_REJECTED = '''
+from engine.decisions import InvalidPlayerChoiceError as _Invalid
+
+_ward_cost = EmrakulTheExigentDoom.ward_cost
+
+
+def _ward_or_reject(self, game, player):
+    if len(game.get_battlefield(player).get_all()) < 3:
+        raise _Invalid("three permanents are needed to pay ward")
+    return _ward_cost(self, game, player)
+
+
+EmrakulTheExigentDoom.ward_cost = _ward_or_reject
+'''
+
+# Faulty: ward counts as paid when its controller cannot sacrifice three permanents.
+WARD_UNPAID_ACCEPTED = '''
+_paid_ward_cost = EmrakulTheExigentDoom.ward_cost
+EmrakulTheExigentDoom.ward_cost = lambda self, game, player: _paid_ward_cost(self, game, player) or True
+'''
+
 # Hall of Echoes only: keeps offering, first, the copy ability of a Hall that is
 # currently a copy of something else, rejecting it when chosen.
 HALL_REMOVED_ABILITY_FIRST = '''
@@ -415,14 +471,22 @@ TARGETS = ("fra_1", "fra_49", "fra_64", "fra_159", "fra_179", "war_143", "fut_78
 @pytest.mark.parametrize("card", TARGETS)
 @pytest.mark.parametrize("variant", ["offer_then_reject", "card_then_face", "card_then_face_all_sources",
                                      "exiled_source_first", "consumed_face_first", "reversed",
-                                     "exiled_abilities_first"])
+                                     "exiled_abilities_first", "costs_all_offered", "costs_reversed",
+                                     "costs_all_offered_reversed"])
 def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None:
     suffix = {"offer_then_reject": OFFER_THEN_REJECT, "card_then_face": CARD_THEN_FACE,
               "card_then_face_all_sources": CARD_THEN_FACE_ALL_SOURCES,
               "consumed_face_first": CONSUMED_FACE_FIRST,
               "exiled_source_first": EXILED_SOURCE_FIRST, "reversed": REVERSED,
-              "exiled_abilities_first": OFFER_THEN_REJECT + EXILED_ABILITIES_FIRST}[variant]
+              "exiled_abilities_first": OFFER_THEN_REJECT + EXILED_ABILITIES_FIRST,
+              "costs_all_offered": COSTS_ALL_OFFERED, "costs_reversed": COSTS_REVERSED,
+              "costs_all_offered_reversed": COSTS_ALL_OFFERED + COSTS_REVERSED}[variant]
     passed, failed, output = run_suite(card, suffix)
+    assert passed and not failed, output[-4000:]
+
+
+def test_emrakul_suite_accepts_an_unpayable_ward_rejected() -> None:
+    passed, failed, output = run_suite("fra_1", WARD_REJECTED)
     assert passed and not failed, output[-4000:]
 
 
@@ -447,6 +511,8 @@ def test_uldaros_suite_accepts_forbidden_choices_offered_then_rejected(suffix: s
     ("fut_78", OFFER_THEN_REJECT + PACT_TARGETS_ANY_CREATURE),
     ("fra_159", ULDAROS_CASTS_OVER_BUDGET),
     ("fra_159", ULDAROS_EXILES_OPPONENTS_CARDS),
+    ("fra_159", COSTS_WAIVED),
+    ("fra_1", WARD_UNPAID_ACCEPTED),
 ])
 def test_suite_catches_an_illegal_action_taking_effect(card: str, suffix: str) -> None:
     _passed, failed, output = run_suite(card, suffix)

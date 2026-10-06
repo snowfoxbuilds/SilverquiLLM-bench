@@ -20,7 +20,7 @@ from cards.fdn.fdn_116.card_impl import AnthemOfChampions
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride, AjaniCallerOfThePrideAbility2
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_163.card_impl import SelfReflection
-from cards.fdn.fdn_172.card_impl import EatenAlive
+from cards.fdn.fdn_172.card_impl import EatenAlive, EatenAliveAbility1
 from cards.fdn.fdn_173.card_impl import Exsanguinate
 from cards.fdn.fdn_175.card_impl import HerosDownfall
 from cards.fdn.fdn_184.card_impl import RuneScarredDemon
@@ -60,6 +60,8 @@ from silverquillm.table import (
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 TRIGGER = UldarosTheorixAbility2
 ULDAROS_MANA = {ManaType.BLUE: 1, ManaType.BLACK: 2, ManaType.COLORLESS: 3}
+SACRIFICE = Decision.ability(index=0, printed=EatenAliveAbility1)
+PAY_MANA = Decision.ability(index=1, printed=EatenAliveAbility1)
 
 
 def _library(n: int = 3) -> list:
@@ -477,7 +479,7 @@ def test_a_free_eaten_alive_copy_still_pays_its_additional_cost():
     game, uldaros = _game([eaten], battlefield=[mine], seat1=Side(battlefield=[theirs], library=_library()))
     t = Table(game)
     _cast_uldaros(t, uldaros, [eaten])
-    _resolve_trigger(t, [EatenAlive, theirs, mine], then=[
+    _resolve_trigger(t, [EatenAlive, SACRIFICE, theirs, mine], then=[
         moves(eaten, Zone.EXILE), copied(EatenAlive, 0), moves(mine, Zone.GRAVEYARD),
     ])
     _resolve_top(t, EatenAlive, then=[moves(theirs, Zone.EXILE)])
@@ -497,7 +499,8 @@ def test_a_free_eaten_alive_copy_with_no_creature_and_no_mana_is_not_cast():
     t.act(1, downfall, choices=[uldaros], then=[moves(downfall, Zone.STACK)])
     t.pass_(1)
     t.pass_(0, then=[moves(downfall, Zone.GRAVEYARD), moves(uldaros, Zone.GRAVEYARD)])
-    t.pass_(0, branches=[branch(choices=[EatenAlive, theirs]), branch(choices=[])])
+    t.pass_(0, branches=[branch(choices=[EatenAlive, SACRIFICE, theirs]), branch(choices=[EatenAlive, PAY_MANA, theirs]),
+                         branch(choices=[])])
     t.pass_(1, then=[off_stack(TRIGGER), moves(eaten, Zone.EXILE)],
-            note="casting the copy is offered or not; either way its additional cost cannot be paid")
+            note="casting the copy, with either alternative, is offered or not; neither can be paid")
     t.run()
