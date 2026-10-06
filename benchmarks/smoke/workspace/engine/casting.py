@@ -160,11 +160,16 @@ def _candidate_decision(game: GameState, candidate: Any, zone: Any) -> Any:
 
 
 def _source_decision(game: GameState, card: Any) -> Any:
-    """The OBJECT decision for the spell/ability raising a query (routing source)."""
+    """The OBJECT decision for the spell/ability raising a query (routing
+    source): a permanent whose ability asks is named as it is on the
+    battlefield, so naming it never starts a new stint for it; anything else
+    is named as a spell on the stack."""
+    from engine.stack import battlefield_stint_id
+
     controller = getattr(card, "controller", None)
     return game.refs.object_decision(
         card,
-        zone="stack",
+        zone="battlefield" if battlefield_stint_id(game, card) is not None else "stack",
         controller_seat=_seat_of(game, controller) if controller is not None else None,
     )
 

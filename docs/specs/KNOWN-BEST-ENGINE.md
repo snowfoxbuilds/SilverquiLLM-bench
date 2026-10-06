@@ -82,6 +82,7 @@ It owns only the copied paths in the table above, the Test Oracle Workspace's mi
 Each Known Defect is recorded as a patch against the Known-Best Workspace, `data/known_defects/<id>.patch`, which the port applies to the Workspace in manifest order; oracle engine extensions may likewise be recorded as patches in `data/oracle_patches/`.
 A patch that no longer applies fails the port, and the defect is re-recorded against the new Known-Best code.
 A malformed patch, a deletion that would leave content behind, or a path outside the patched tree fails it too, and a failing patch changes nothing; the paths the port owns are synchronized with the Known-Best Workspace, deletions included.
+The port builds the whole result in a staged copy and publishes only what differs, so a failure at any step changes nothing; it follows no symlinks — a link anywhere in the benchmark or the Known-Best input fails it before anything is built — checks every path it will replace before replacing any, and replaces whole a path whose type changed, a file that became a directory or the reverse.
 
 ### Known Defects
 

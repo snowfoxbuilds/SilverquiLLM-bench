@@ -1,15 +1,12 @@
 """Reference test for FDN 75 — Vampire Soulcaller.
 
-Exemplar for a **targeted ETB creature** (Phase D, Pattern 1): the enters
-ability targets a creature card in your graveyard. The target is chosen at cast
-via ``get_targets`` (answered by an Intent through ``cast_spell(targets=...)``),
-stored on the stack object, and applied in ``on_resolve`` before the creature
-arrives. The graveyard card returns to hand.
+Exemplar for a **targeted enters trigger**: the Soulcaller enters, then its
+enters ability goes on the stack targeting a creature card in your graveyard
+(rule 603.3d; answered by an Intent through ``cast_spell(targets=...)``), and
+returns it to hand as it resolves, checking the target again (rule 608.2b).
 """
 
 from __future__ import annotations
-
-import pytest
 
 from cards.fdn.fdn_75.card_impl import VampireSoulcaller
 from engine.card import Creature, Instant, printed_class
@@ -18,20 +15,19 @@ from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Zone
-from test_utils import (
-    TestSetupError as _TestSetupError,
-    cast_spell,
-    create_game,
-    set_board_state,
-)
+from test_utils import cast_spell, create_game, set_board_state
 
 
 def _bear(name: str = "Bear") -> Creature:
     return Creature(name=name, base_power=2, base_toughness=2)
 
 
-def _cast_no_resolve(game, player_index, card, targets, zone=Zone.BATTLEFIELD):
-    """Cast *card* but leave it on the stack (targets chosen, not resolved)."""
+def _cast_and_place_trigger(game, player_index, card, targets, zone=Zone.BATTLEFIELD):
+    """Cast *card*, resolve the creature spell, and let its enters trigger go
+    on the stack choosing *targets* (rule 603.3d) — stopping there, so a test
+    can change the board before the trigger resolves."""
+    from engine.state_based_actions import resolve_state_based_actions
+
     player = game.players[player_index]
     game.active_player_index = player_index
     game.priority_player_index = player_index
@@ -40,15 +36,11 @@ def _cast_no_resolve(game, player_index, card, targets, zone=Zone.BATTLEFIELD):
     prefs = tuple(
         Decision.obj(instance=game.refs.instance_id(t, zone.value)) for t in targets
     )
-    player.start_intent(
-        "cast",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
-            preferences=prefs,
-        ),
-    )
+    player.start_intent("cast", Intent(pattern=GameRef(), preferences=prefs))
     try:
         engine_cast_spell(game, player, card)
+        resolve_top_of_stack(game)
+        resolve_state_based_actions(game)
     finally:
         player.end_intent("cast")
 
@@ -79,7 +71,8 @@ class TestVampireSoulcallerProperties:
 
     def test_declares_a_single_required_target(self):
         game, p1, p2, soulcaller, dead = _setup()
-        specs = soulcaller.get_targets(game)
+        assert soulcaller.get_targets(game) == []  # the spell targets nothing
+        specs = soulcaller._enters_targets(game, p1)
         assert len(specs) == 1
         assert specs[0].optional is False
 
@@ -109,13 +102,14 @@ class TestVampireSoulcallerETB:
                         graveyard=[my_creature, my_instant])
         set_board_state(game, 1, graveyard=[opp_creature])
 
-        spec = soulcaller.get_targets(game)[0]
+        spec = soulcaller._enters_targets(game, p1)[0]
         assert spec.filter_fn(my_creature) is True
         assert spec.filter_fn(my_instant) is False
         assert spec.filter_fn(opp_creature) is False
 
-    def test_no_legal_target_makes_cast_illegal(self):
-        """A required target with no legal candidate rejects the cast."""
+    def test_no_legal_target_removes_the_trigger(self):
+        """A required target with no legal candidate: the Soulcaller still
+        enters, and its trigger is removed from the stack (rule 603.3c)."""
         game = create_game()
         p1, p2 = game.players
         game.active_player_index = 0
@@ -123,10 +117,9 @@ class TestVampireSoulcallerETB:
         set_board_state(game, 0, hand=[soulcaller],
                         mana={ManaType.BLACK: 1, ManaType.COLORLESS: 4})
         game.phase = Phase.PRECOMBAT_MAIN
-        with pytest.raises(_TestSetupError):
-            cast_spell(game, 0, VampireSoulcaller)
-        # The cast was rejected — the Soulcaller never resolved onto the field.
-        assert not game.get_battlefield(p1).contains(soulcaller)
+        cast_spell(game, 0, VampireSoulcaller)
+        assert game.get_battlefield(p1).contains(soulcaller)
+        assert game.stack.is_empty()
 
 
 class TestVampireSoulcallerRevalidation:
@@ -135,11 +128,12 @@ class TestVampireSoulcallerRevalidation:
 
     def test_no_return_when_target_ceases_to_be_creature_card(self):
         game, p1, p2, soulcaller, dead = _setup()
-        _cast_no_resolve(game, 0, soulcaller, [dead], zone=Zone.GRAVEYARD)
-        # Before resolution the target stops being a creature card.
+        _cast_and_place_trigger(game, 0, soulcaller, [dead], zone=Zone.GRAVEYARD)
+        (trigger,) = game.stack.objects()
+        assert trigger.targets == [dead]
+        # Before the trigger resolves the target stops being a creature card.
         dead.card_types = set(dead.card_types) - {CardType.CREATURE}
-        while not game.stack.is_empty():
-            resolve_top_of_stack(game)
+        resolve_top_of_stack(game)
 
         # Effect did nothing: the card stays in the graveyard, not the hand.
         assert game.get_graveyard(p1).contains(dead)

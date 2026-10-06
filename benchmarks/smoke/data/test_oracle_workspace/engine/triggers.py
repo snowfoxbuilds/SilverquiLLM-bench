@@ -319,20 +319,12 @@ class TriggerManager:
                     targets=chosen_targets,
                     activation_context=context,
                 )
-                effect = trigger.effect
                 if trigger.capture is not None:
                     stack_obj.event_state = trigger.capture(game, event, fire_controller)
-                    stack_obj.on_resolve = (
-                        lambda g, _obj=stack_obj, _effect=effect: _effect(
-                            g, _obj.targets, _obj.activation_context, _obj.event_state
-                        )
-                    )
-                else:
-                    stack_obj.on_resolve = (
-                        lambda g, _obj=stack_obj, _effect=effect: _effect(
-                            g, _obj.targets, _obj.activation_context
-                        )
-                    )
+                stack_obj.on_resolve = (
+                    lambda g, _obj=stack_obj, _trigger=trigger, _req=getattr(chosen, "requirements", None):
+                    _resolve_targeted(g, _obj, _trigger, _req)
+                )
                 game.stack.push(stack_obj)
             elif trigger.capture is not None:
                 # Untargeted trigger that captured per-fire event state when it
@@ -437,6 +429,35 @@ def register_delayed_trigger(
     )
 
 
+class ChosenTargets(list):
+    """The targets :func:`choose_trigger_targets` chose, with the target
+    requirements they were chosen under — built for the ability's controller
+    as it was put on the stack — so the ability can check them again as it
+    resolves (rule 608.2b)."""
+
+    def __init__(self, targets: list[Any], requirements: list[Any]) -> None:
+        super().__init__(targets)
+        self.requirements = list(requirements)
+
+
+def _resolve_targeted(game: GameState, obj: StackObject, trigger: TriggerRegistration, requirements: Any) -> None:
+    """Resolve a targeted triggered ability (rule 608.2b): each target still
+    in the same zone stint is checked again against its whole requirement and
+    for protection, and one no longer legal is passed as ``None``. When every
+    target it had is illegal, the ability does nothing at all."""
+    from engine.stack import stint_checked_targets
+
+    targets = stint_checked_targets(game, obj.activation_context, obj.targets)
+    if requirements is not None:
+        targets = still_legal_targets(game, trigger.source, requirements, targets)
+    if obj.targets and all(t is None for t in targets):
+        return
+    if trigger.capture is not None:
+        trigger.effect(game, targets, obj.activation_context, obj.event_state)
+    else:
+        trigger.effect(game, targets, obj.activation_context)
+
+
 class _Occurrence(NamedTuple):
     """One triggered ability waiting to be put on the stack, with the facts
     fixed when it triggered: its fire-time controller, event and captured
@@ -475,7 +496,9 @@ def choose_trigger_targets(
 
     Returns ``None`` when a required target has no legal choice, so the
     ability is removed from the stack (rule 603.3c); a declined or
-    unavailable optional ("up to one") target is simply left out.
+    unavailable optional ("up to one") target is simply left out. The
+    result keeps *requirements* (:class:`ChosenTargets`), so the ability is
+    checked against them again as it resolves.
     """
     from engine.casting import CastingError, _query_target
 
@@ -487,7 +510,7 @@ def choose_trigger_targets(
             return None
         if target is not None:
             chosen.append(target)
-    return chosen
+    return ChosenTargets(chosen, requirements)
 
 
 def still_legal_targets(game: GameState, source: Any, requirements: list[Any], targets: list[Any]) -> list[Any]:

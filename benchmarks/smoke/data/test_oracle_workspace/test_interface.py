@@ -171,10 +171,11 @@ class _Numbered:
     """A game's tokens, or its spell copies, in the order they were numbered;
     holding each keeps its identity from being reused once it is gone.
 
-    Tokens are numbered from the engine's record of the tokens it made,
-    ``game.created_tokens``, so a token that has left the battlefield keeps
-    its number. A rollback undoes the tokens a rejected attempt made; their
-    numbers are given back, and tokens made again on the retry take them.
+    Each is numbered from the engine's record of what it made,
+    ``game.created_tokens`` or ``game.created_copies``, so a token that has
+    left the battlefield, or a copy that resolved or was countered, keeps its
+    number. A rollback undoes what a rejected attempt made; those numbers are
+    given back, and what is made again on the retry takes them.
     """
 
     def __init__(self, kind: type) -> None:
@@ -183,43 +184,29 @@ class _Numbered:
         self.by_id: dict[int, Any] = {}
 
     def number(self, game: Any) -> None:
-        """Number every token the game has made, or every spell copy on the
-        stack, that has none yet.
+        """Number every token the game has made, or every spell copy it has
+        made, that has none yet.
 
         Tokens made since the last numbering are numbered seat 0's first,
-        each seat's in the order they were made.
+        each seat's in the order they were made; spell copies in the order
+        they were made.
         """
+        made = game.created_tokens if self.kind is Token else game.created_copies
+        kept = {id(obj) for obj in made}
+        valid = 0
+        while valid < len(self.objects) and id(self.objects[valid]) in kept:
+            valid += 1
+        del self.objects[valid:]
+        numbered = {id(obj) for obj in self.objects}
+        fresh = [obj for obj in made if id(obj) not in numbered]
         if self.kind is Token:
-            made = game.created_tokens
-            kept = {id(obj) for obj in made}
-            valid = 0
-            while valid < len(self.objects) and id(self.objects[valid]) in kept:
-                valid += 1
-            del self.objects[valid:]
-            numbered = {id(obj) for obj in self.objects}
-            fresh = [obj for obj in made if id(obj) not in numbered]
             fresh.sort(key=lambda obj: _seat_of(game, obj))
-            self.objects.extend(fresh)
-            self.by_id = {id(obj): Token(n) for n, obj in enumerate(self.objects, 1)}
-            return
-        for obj in self._copies_on_stack(game):
-            if id(obj) not in self.by_id:
-                self.objects.append(obj)
-                self.by_id[id(obj)] = self.kind(len(self.objects))
-
-    def _copies_on_stack(self, game: Any) -> Iterable[Any]:
-        # A spell whose physical card no test placed is a copy; bottom first,
-        # the order the copies were put on the stack.
-        handles = _HANDLES.get(game, {})
-        for obj in reversed(list(game.stack.objects())):
-            card = game.refs.physical_card(obj)
-            if card is not None and id(card) not in handles and not getattr(card, "is_token", False):
-                yield card
+        self.objects.extend(fresh)
+        self.by_id = {id(obj): self.kind(n) for n, obj in enumerate(self.objects, 1)}
 
     def find(self, game: Any, followed: Token | SpellCopy) -> Any:
         """The object ``followed`` names, or ``None`` if none has that number."""
-        if self.kind is Token or followed.number > len(self.objects):
-            self.number(game)
+        self.number(game)
         if followed.number > len(self.objects):
             return None
         return self.objects[followed.number - 1]

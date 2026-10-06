@@ -1,10 +1,11 @@
 """Reference test for FDN 38 — Faebloom Trick.
 
-Pattern 1 — targeted spell, but with an *optional* ("up to one") target. The
-spell always creates two Faerie tokens; its reflexive "when you do, tap target
-creature an opponent controls" is modelled as an optional TargetRequirement so
-the spell stays castable (and still makes tokens) when there is no opponent
-creature. Targeting is intent-style via ``cast_spell(targets=...)``.
+The spell itself has no targets: it creates two Faerie tokens, and its "when
+you do, tap target creature an opponent controls" is a reflexive triggered
+ability (rule 603.12) that goes on the stack as the spell resolves, choosing
+its target then (rule 603.3d). With no opponent creature the reflexive trigger
+is removed and the tokens still appear. Targeting is intent-style via
+``cast_spell(targets=...)``.
 """
 
 from __future__ import annotations
@@ -23,14 +24,15 @@ from engine.types import (
     ManaCost,
     ManaType,
     Phase,
-    TargetRequirement,
     Zone,
 )
 from test_utils import cast_spell, create_game, set_board_state
 
 
-def _cast_no_resolve(game, player_index, card, targets):
-    """Cast *card* but leave it on the stack (targets chosen, not resolved)."""
+def _resolve_spell_only(game, player_index, card, targets):
+    """Cast *card* and resolve the spell, so its reflexive trigger goes on the
+    stack choosing *targets* — and stop there, so a test can change the board
+    before the trigger resolves."""
     player = game.players[player_index]
     game.active_player_index = player_index
     game.priority_player_index = player_index
@@ -40,15 +42,10 @@ def _cast_no_resolve(game, player_index, card, targets):
         Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value))
         for t in targets
     )
-    player.start_intent(
-        "cast",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
-            preferences=prefs,
-        ),
-    )
+    player.start_intent("cast", Intent(pattern=GameRef(), preferences=prefs))
     try:
         engine_cast_spell(game, player, card)
+        resolve_top_of_stack(game)
     finally:
         player.end_intent("cast")
 
@@ -69,13 +66,10 @@ class TestFaebloomTrickProperties:
         assert c.mana_cost == ManaCost.parse("{2}{U}")
         assert CardType.INSTANT in c.card_types
 
-    def test_target_is_optional_requirement(self):
-        c = FaebloomTrick(owner=None, controller=None)
-        specs = c.get_targets(create_game())
-        assert len(specs) == 1
-        assert isinstance(specs[0], TargetRequirement)
-        assert specs[0].zone == Zone.BATTLEFIELD
-        assert specs[0].optional is True
+    def test_the_spell_targets_nothing(self):
+        game = create_game()
+        c = FaebloomTrick(owner=game.players[0], controller=game.players[0])
+        assert c.get_targets(game) == []
 
 
 class TestFaebloomTrickResolve:
@@ -127,12 +121,13 @@ class TestFaebloomTrickRevalidation:
         set_board_state(game, 0, hand=[trick], mana={ManaType.BLUE: 3})
         set_board_state(game, 1, battlefield=[their_bear])
 
-        _cast_no_resolve(game, 0, trick, [their_bear])
-        # Before resolution, control of the target passes to the caster — it is
-        # no longer "a creature an opponent controls".
+        _resolve_spell_only(game, 0, trick, [their_bear])
+        (reflexive,) = game.stack.objects()
+        assert reflexive.targets == [their_bear]
+        # Before the reflexive trigger resolves, control of the target passes
+        # to the caster — it is no longer "a creature an opponent controls".
         their_bear.controller = p1
-        while not game.stack.is_empty():
-            resolve_top_of_stack(game)
+        resolve_top_of_stack(game)
 
         # Tap did nothing; the tokens still appeared.
         assert their_bear.is_tapped is False

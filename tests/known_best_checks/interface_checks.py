@@ -1581,3 +1581,71 @@ def test_table_plays_a_first_strike_damage_step_only_when_stated() -> None:
 
     assert _steps() == ["COMBAT_DAMAGE", "END_COMBAT"]
     assert _steps(first_strike_damage()) == ["FIRST_STRIKE_DAMAGE", "COMBAT_DAMAGE"]
+
+
+# ---------------------------------------------------------------------------
+# Spell copies keep their numbers through rejected attempts
+# ---------------------------------------------------------------------------
+
+
+def _bolt_on_the_stack():
+    from engine.stack import StackObject
+
+    bolt = card(BurstLightning)
+    game = _main(Side(hand=[bolt]))
+    original = next(c for c in game.players[0].zones[Zone.HAND].get_all())
+    game.players[0].zones[Zone.HAND].remove(original)
+    obj = StackObject(source=original, controller=game.players[0], targets=[game.players[1]], is_spell=True)
+    game.stack.push(obj)
+    return game, obj
+
+
+def _copy(game, original):
+    from engine.stack import copy_spell
+
+    copy_obj = copy_spell(game, original, game.players[0])
+    game.stack.push(copy_obj)
+    return copy_obj
+
+
+def _copy_handles(game):
+    return [seen.handle for seen in view(game).stack if isinstance(seen.handle, ti.SpellCopy)]
+
+
+def test_a_rolled_back_copy_gives_its_number_to_the_retry():
+    from engine.rollback import take_snapshot
+
+    game, original = _bolt_on_the_stack()
+    snapshot = take_snapshot(game)
+    _copy(game, original)
+    assert _copy_handles(game) == [ti.spell_copy(1)]
+    snapshot.restore()
+    assert ti._find(game, ti.spell_copy(1)) is None
+    _copy(game, original)
+    assert _copy_handles(game) == [ti.spell_copy(1)]
+
+
+def test_a_copy_made_before_a_rejected_attempt_keeps_its_number():
+    from engine.rollback import take_snapshot
+
+    game, original = _bolt_on_the_stack()
+    kept = _copy(game, original)
+    assert _copy_handles(game) == [ti.spell_copy(1)]
+    snapshot = take_snapshot(game)
+    _copy(game, original)
+    assert sorted(h.number for h in _copy_handles(game)) == [1, 2]
+    snapshot.restore()
+    retried = _copy(game, original)
+    assert ti._find(game, ti.spell_copy(1)) is kept.source
+    assert ti._find(game, ti.spell_copy(2)) is retried.source
+
+
+def test_a_copy_that_resolved_keeps_its_number():
+    from engine.stack import resolve_top_of_stack
+
+    game, original = _bolt_on_the_stack()
+    _copy(game, original)
+    assert _copy_handles(game) == [ti.spell_copy(1)]
+    resolve_top_of_stack(game)
+    _copy(game, original)
+    assert _copy_handles(game) == [ti.spell_copy(2)]

@@ -42,6 +42,7 @@ The Test Interface relies only on a small engine surface, which the workspace do
 | Zone containers, life totals, each object's `printed` class, whether it is a token, each permanent's controller and owner, the tapped flag, the current step, the active player, the player being asked, game over and winner | The Player View |
 | Each object's and each offered option's physical card — a token is its own | Following a handle's card across zones, or a token, and choosing it |
 | The tokens the game has made, in creation order, which a rollback undoes with the rest of the attempt | Numbering tokens |
+| The copies of spells the game has made, in creation order, which a rollback undoes likewise | Numbering spell copies |
 
 ### Construction
 
@@ -149,7 +150,8 @@ A token is followed by number instead: the game's tokens are numbered in the ord
 A token keeps its number after it leaves the battlefield, so a later token never takes it; a token an attempt made that the engine rejects and undoes was never made, so the retry's token takes its number.
 Tokens one effect creates are numbered seat 0's before seat 1's, each seat's in the order its text names them; tokens it makes alike are interchangeable, so every engine reaches the same view.
 A token has no class in the view: what it is — a 1/1 Soldier or a Food — shows in what it does, so engines need no predefined token classes.
-A copy of a spell on the stack is followed the same way: copies are numbered in the order they are put on the stack, and `spell_copy(n)` names the n-th, so a test can target a copy apart from its original, which shows the same class (grilling 2026-10-05).
+A copy of a spell on the stack is followed the same way: copies are numbered in the order the game makes them, keeping their numbers once they resolve or are countered, and `spell_copy(n)` names the n-th, so a test can target a copy apart from its original, which shows the same class (grilling 2026-10-05).
+As with tokens, a rejected attempt's copies give their numbers back, so the copies made on the retry take them.
 
 ## Relevant ADRs
 

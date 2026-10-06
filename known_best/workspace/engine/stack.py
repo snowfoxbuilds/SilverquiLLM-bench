@@ -454,6 +454,7 @@ def copy_spell(
     copied_card = copy.copy(original.source)
     copied_card.controller = controller
     copied_card.owner = getattr(original.source, "owner", controller)
+    game.created_copies.append(copied_card)
 
     if new_targets is not None:
         # New targets chosen for the copy — capture their current stints.
