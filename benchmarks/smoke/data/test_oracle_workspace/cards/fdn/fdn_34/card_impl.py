@@ -63,9 +63,14 @@ class CuratorOfDestinies(Creature):
         # engine's stack resolution. We set a flag for potential future use.
         self.uncounterable = True
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, CuratorOfDestiniesAbility3, self._enters)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: Fact or Fiction–style pile split."""
-        controller = self.controller
         if controller is None:
             return
         library = controller.zones[Zone.LIBRARY]

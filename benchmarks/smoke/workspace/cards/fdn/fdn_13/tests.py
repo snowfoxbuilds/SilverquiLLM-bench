@@ -10,7 +10,7 @@ reads ``chosen_targets`` and applies the effect to the chosen target.
 from __future__ import annotations
 
 from cards.fdn.fdn_13.card_impl import FleetingFlight
-from engine.card import Creature, Instant
+from engine.card import Creature, Instant, printed_class
 from engine.types import (
     CardType,
     Keyword,
@@ -28,7 +28,7 @@ class TestFleetingFlightProperties:
         assert isinstance(FleetingFlight(owner=None), Instant)
 
     def test_name(self) -> None:
-        assert FleetingFlight(owner=None).name == "Fleeting Flight"
+        assert printed_class(FleetingFlight(owner=None)) is FleetingFlight
 
     def test_mana_cost(self) -> None:
         assert FleetingFlight(owner=None).mana_cost == ManaCost.parse("{W}")

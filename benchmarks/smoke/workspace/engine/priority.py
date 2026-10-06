@@ -32,6 +32,7 @@ the same query is asked again (CR 733.2).
 from __future__ import annotations
 
 import inspect
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
 from engine.abilities import (
@@ -47,6 +48,7 @@ from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, Player
 from engine import attempts
 from engine.attempts import AttemptContext
 from engine.queries import PRIORITY_WINDOW, PlayerQuery, ask
+from engine.refs_registry import card_ref_pairs
 from engine.stack import settle_after_resolution
 from engine.types import CardType, Zone
 from engine.zones import IllegalMoveError
@@ -180,16 +182,53 @@ def _cast_and_play_offers(game: GameState, player: Player):
             for obj, action in card.cast_offers(game, player, Zone.HAND, CastMode.NORMAL):
                 yield obj, Zone.HAND, action
     for card in game.get_graveyard(player).get_all():
-        mode = _graveyard_cast_mode(player, card)
+        mode = _graveyard_cast_mode(game, player, card)
         if mode is not None:
             for obj, action in card.cast_offers(game, player, Zone.GRAVEYARD, mode):
                 yield obj, Zone.GRAVEYARD, action
 
 
-def _graveyard_cast_mode(player: Player, card: Any) -> CastMode | None:
+@dataclass(frozen=True)
+class GraveyardCastPermission:
+    """"You may cast it from your graveyard this turn", held by one card.
+
+    It belongs to the player it was granted to and ends at the next cleanup
+    step, when "this turn" effects end (CR 514.2) — a grant made in a priority
+    window opened during cleanup lasts until the next cleanup iteration — or
+    when the card leaves the graveyard: a card that returns is a new object
+    (CR 400.7) the permission never named.
+    """
+
+    player: Any
+    turn: int
+    stint: int
+
+
+def grant_graveyard_cast(game: GameState, player: Player, card: Any) -> None:
+    """Let *player* cast *card* from their graveyard this turn."""
+    card._castable_from_graveyard = GraveyardCastPermission(
+        player, game.turn_number, game.refs.instance_id(card, Zone.GRAVEYARD.value)
+    )
+    game.graveyard_cast_grants.append(card)
+
+
+def expire_graveyard_cast_grants(game: GameState) -> None:
+    """End every "cast it from your graveyard this turn" grant (CR 514.2)."""
+    for card in game.graveyard_cast_grants:
+        if isinstance(getattr(card, "_castable_from_graveyard", None), GraveyardCastPermission):
+            del card._castable_from_graveyard
+    game.graveyard_cast_grants.clear()
+
+
+def _graveyard_cast_mode(game: GameState, player: Player, card: Any) -> CastMode | None:
     """How *card* may be cast from *player*'s graveyard, if at all."""
-    # Set by an effect that grants "you may cast it from your graveyard" (Zul Ashur).
-    if getattr(card, "_castable_from_graveyard", False):
+    permission = getattr(card, "_castable_from_graveyard", None)
+    if (
+        isinstance(permission, GraveyardCastPermission)
+        and permission.player is player
+        and permission.turn == game.turn_number
+        and permission.stint == game.refs.instance_id(card, Zone.GRAVEYARD.value)
+    ):
         return CastMode.NORMAL
     owner = getattr(card, "owner", None)
     if getattr(card, "flashback_cost", None) is not None and owner in (None, player):
@@ -230,7 +269,7 @@ def _ability_decision(
     ref = GameRef(
         player=frozenset({("seat", seat)}),
         zone=frozenset({("name", zone)}),
-        card=frozenset({("name", source.name)}),
+        card=card_ref_pairs(source),
         object=frozenset({("instance", instance)}),
         ability=frozenset({("index", index)}),
     )

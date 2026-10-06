@@ -10,7 +10,7 @@ engine encodes this in :func:`engine.combat._can_block`.
 from __future__ import annotations
 
 from cards.fdn.fdn_142.card_impl import HealersHawk
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.combat import _can_block
 from engine.types import Keyword, ManaCost
 
@@ -22,7 +22,7 @@ class TestHealersHawkProperties:
         assert isinstance(HealersHawk(owner=None), Creature)
 
     def test_name(self) -> None:
-        assert HealersHawk(owner=None).name == "Healer's Hawk"
+        assert printed_class(HealersHawk(owner=None)) is HealersHawk
 
     def test_mana_cost(self) -> None:
         assert HealersHawk(owner=None).mana_cost == ManaCost.parse("{W}")

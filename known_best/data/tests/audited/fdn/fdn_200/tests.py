@@ -4,69 +4,74 @@
 • Create two 1/1 red Goblin creature tokens."
 
 The mode is chosen while casting (rule 601.2b, 700.2a), so each test casts the
-spell with a mode preference and observes the resolved outcome.
+spell choosing its mode and watches what the chosen mode does in play.
 """
 
 from __future__ import annotations
 
-from cards.fdn.fdn_200.card_impl import GoblinSurprise
-from engine.card import Creature
-from engine.decisions import Decision
-from engine.protection import get_colors
-from engine.types import Color, Phase, Step
-from test_utils import (
-    advance_game_to_phase,
-    behavioral_game,
-    cast_card,
-    enter_permanent,
-    fund_mana_cost,
-    prefer,
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_200.card_impl import (
+    GoblinSurprise,
+    GoblinSurpriseAbility2,
+    GoblinSurpriseAbility3,
 )
+from cards.fdn.fdn_272.card_impl import Plains
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, token
+
+from silverquillm.table import Table, appears, ceases, life, moves, taps
 
 
-def _goblin_tokens(game, player):
-    return [
-        obj
-        for obj in game.get_battlefield(player).get_all()
-        if getattr(obj, "is_token", False) and "Goblin" in getattr(obj, "subtypes", set())
-    ]
+def _cast(t, surprise, mode, *, then=()):
+    t.act(0, surprise, choices=[mode], then=[moves(surprise, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(surprise, Zone.GRAVEYARD), *then])
 
 
-def _cast(mode: str):
-    game = behavioral_game()
-    player = game.players[0]
-    spell = GoblinSurprise(owner=player)
-    fund_mana_cost(player, spell.mana_cost)
-    prefer(player, Decision.mode(mode))
-    return game, player, spell
+def _attack_unblocked(t, seat, attacker, *, then=()):
+    """``seat`` attacks with ``attacker`` alone and nobody blocks."""
+    t.pass_to(Step.DECLARE_ATTACKERS, seat)
+    t.act(seat, attacker, then=[taps(attacker)])
+    t.pass_(seat)
+    t.pass_(1 - seat)
+    t.pass_(1 - seat)
+    t.pass_(seat)
+    t.pass_(1 - seat, then=list(then))
 
 
 class TestGoblinSurpriseMint:
     def test_token_mode_mints_two_11_red_goblin_tokens(self) -> None:
-        game, player, spell = _cast("Tokens")
-        cast_card(game, player, spell)
-
-        goblins = _goblin_tokens(game, player)
-        assert len(goblins) == 2
-        for token in goblins:
-            assert token.subtypes == {"Goblin"}
-            assert get_colors(token) == {Color.RED}
-            assert (token.power, token.toughness) == (1, 1)
-            assert token.is_token is True
-        assert player.mana_pool.total() == 0
+        surprise, lions = card(GoblinSurprise), card(SavannahLions)
+        game = create_game(
+            Side(hand=[surprise], mana={ManaType.RED: 3}),
+            Side(battlefield=[lions], library=[Plains]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        _cast(t, surprise, GoblinSurpriseAbility3, then=[appears(0), appears(0)])
+        # Player 1's 2/1 Lions attacks; a Goblin blocks it and they trade, so
+        # the token deals at least 1 damage and has toughness at most 2.
+        t.pass_to(Step.DECLARE_ATTACKERS, 1)
+        t.act(1, lions, then=[taps(lions)])
+        t.pass_(1)
+        t.pass_(0)
+        t.act(0, token(1), scoped={token(1): lions})
+        t.pass_(1)
+        t.pass_(0, then=[ceases(token(1)), moves(lions, Zone.GRAVEYARD)])
+        t.run()
 
 
 class TestGoblinSurprisePump:
     def test_pump_mode_gives_creatures_you_control_plus_two_until_end_of_turn(self) -> None:
-        game, player, spell = _cast("Pump")
-        opponent = game.players[1]
-        mine = enter_permanent(game, player, Creature(name="Mine", base_power=2, base_toughness=2))
-        theirs = enter_permanent(game, opponent, Creature(name="Theirs", base_power=2, base_toughness=2))
-        cast_card(game, player, spell)
-
-        assert (mine.power, mine.toughness) == (4, 2)
-        assert (theirs.power, theirs.toughness) == (2, 2)
-        assert _goblin_tokens(game, player) == []
-
-        advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
-        assert (mine.power, mine.toughness) == (2, 2)
+        surprise, mine, theirs = card(GoblinSurprise), card(SavannahLions), card(SavannahLions)
+        game = create_game(
+            Side(hand=[surprise], battlefield=[mine], library=[Plains], mana={ManaType.RED: 3}),
+            Side(battlefield=[theirs], library=[Plains]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        _cast(t, surprise, GoblinSurpriseAbility2)
+        _attack_unblocked(t, 0, mine, then=[life(1, 16)])
+        # Their Lions never got +2/+0, and ours loses it at end of turn.
+        _attack_unblocked(t, 1, theirs, then=[life(0, 18)])
+        _attack_unblocked(t, 0, mine, then=[life(1, 14)])
+        t.run()

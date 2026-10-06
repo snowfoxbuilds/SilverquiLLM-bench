@@ -8,6 +8,21 @@ from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class PerforatingArtistAbility1:
+    text = 'Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)'
+
+
+class PerforatingArtistAbility2:
+    text = 'Raid — At the beginning of your end step, if you attacked this turn, each opponent loses 3 life unless that player sacrifices a nonland permanent of their choice or discards a card.'
+
+
+# endregion Printed abilities
+
+
 class PerforatingArtist(Creature):
     """Perforating Artist — {1}{B}{R} — 3/2 — Devil.
 
@@ -48,8 +63,8 @@ class PerforatingArtist(Creature):
                 attacked = getattr(ctrl, 'attacked_this_turn', False)
             return attacked
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             for player in game.players:
@@ -83,4 +98,4 @@ class PerforatingArtist(Creature):
                 if not chose_alternative:
                     from engine.game import lose_life
                     lose_life(game, player, 3)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=PerforatingArtistAbility2))

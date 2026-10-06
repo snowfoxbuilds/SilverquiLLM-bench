@@ -6,20 +6,23 @@ PROJECT_MAP.md     — This file; directory summary
 RULEBOOK.txt       — The entire MTG comprehensive rules. Grep — do not read whole.
 pytest.ini         — Pytest configuration for the workspace
 conftest.py        — Pytest fixtures shared across the workspace
-test_utils.py      — Shared test helpers (`create_game`, `set_board_state`, `put_on_battlefield`, `cast_spell`, …) built on the intent-based DeterministicPlayer.
-test_utils.md      — API reference for `test_utils.py` (Player Query / Intent test API)
+test_utils.py      — Shared test helpers (`create_game`, `set_board_state`, `script`, `run_scripts`, `cast_spell`, …) built on the Test Interface's scripted player.
+test_utils.md      — API reference for `test_utils.py` (Priority Query, action script and Intent test API)
 test_interface.py  — The Test Interface (fixed; see test_interface.md)
 .gitignore         — Git ignore rules
 engine/            — Canonical game engine source. Imported as `engine`.
                      Choice layer: `decisions.py` (Player Decisions, Game Symbols
-                     vocabulary, `satisfies`), `queries.py` (Player Query / Answer
-                     + boundary validation), `refs_registry.py` (Game Refs),
-                     `player.py` (`Player.answer`).
-engine_tests/      — Engine tests (do not modify).
+                     vocabulary, `satisfies`, `InvalidPlayerChoiceError`),
+                     `queries.py` (Player Query / Answer + boundary validation),
+                     `refs_registry.py` (Game Refs), `player.py`
+                     (`Player.answer`).
+                     Priority: `priority.py` (the Priority Query and the actions
+                     it offers), `attempts.py` / `rollback.py` (rejecting an
+                     illegal choice and rolling the game back).
+engine_tests/      — Engine tests.
 cards/             — Card implementations.
   cards/fdn/       — FDN cards: the three smoke target stubs (fdn_129, fdn_205,
-                     fdn_232 — implement these) plus completed reference cards
-                     (do not modify their tests).
+                     fdn_232 — implement these) plus completed reference cards.
 skills/            — Workspace-local skills (e.g. `grep-rulebook/SKILL.md`).
 ```
 
@@ -37,7 +40,7 @@ For each target card with collector number `N`:
 
 ```
 cards/fdn/fdn_<N>/card_spec.json   — card metadata (name, mana_cost, oracle_text, P/T, keywords, …)
-cards/fdn/fdn_<N>/card_impl.py     — implementation stub you complete
+cards/fdn/fdn_<N>/card_impl.py     — implementation stub you complete, with the card's predefined classes
 cards/fdn/fdn_<N>/tests.py         — your tests for this card (you create this)
 ```
 
@@ -70,4 +73,5 @@ from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
 from test_utils import Intent
 from engine.decisions import Decision, GameRef, DecisionKind
 from test_utils import create_game, set_board_state, put_on_battlefield, cast_spell
+from test_utils import act, script, run_scripts, resolve_stack
 ```

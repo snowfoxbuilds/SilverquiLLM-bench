@@ -59,7 +59,7 @@ class TestAnOfferCounters:
         game.get_hand(p1).add(offer)
         occ_iid = game.refs.instance_id(occurrence, Zone.STACK.value)
         p1.start_intent("offer-cast", Intent(
-            pattern=GameRef(card=frozenset({("name", "An Offer You Can't Refuse")})),
+            pattern=GameRef(card=frozenset({("printed", AnOfferYouCantRefuse)})),
             preferences=(Decision.obj(instance=occ_iid),),
         ))
         try:

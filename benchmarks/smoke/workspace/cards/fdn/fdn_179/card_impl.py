@@ -10,6 +10,17 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class PainfulQuandaryAbility1:
+    text = 'Whenever an opponent casts a spell, that player loses 5 life unless they discard a card.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Check if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -51,8 +62,7 @@ class PainfulQuandary(Enchantment):
             spell_controller = getattr(spell, 'controller', None)
             return spell_controller is not controller
 
-        def _effect(game: GameState) -> None:
-            controller = source.controller
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             from engine.game import deal_damage
@@ -61,4 +71,4 @@ class PainfulQuandary(Enchantment):
                     from engine.game import lose_life
                     lose_life(game, player, 5)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=PainfulQuandaryAbility1))

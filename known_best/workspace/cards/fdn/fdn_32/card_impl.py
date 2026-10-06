@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Any
 from engine.card import Creature
 from engine.card_queries import query_yes_no
 from engine.continuous_effects import (
-    ContinuousEffect,
     DURATION_PERMANENT,
+    ContinuousEffect,
     Layer,
 )
-from engine.types import Keyword, ManaCost, Zone
+from engine.types import ManaCost, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -64,9 +64,8 @@ class CephalidInkmage(Creature):
         super().__init__(**kwargs)
         self._unblockable_effect_ref: ContinuousEffect | None = None
 
-    def on_resolve(self, game: "GameState") -> None:
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: surveil 3."""
-        controller = self.controller
         if controller is None:
             return
         library = controller.zones[Zone.LIBRARY]
@@ -87,6 +86,10 @@ class CephalidInkmage(Creature):
 
     def register_triggers(self, game: "GameState") -> None:
         """Register threshold unblockable continuous effect."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, CephalidInkmageAbility1, self._enters)
+
         source = self
 
         def _apply_unblockable(game: Any) -> None:

@@ -13,6 +13,7 @@ from cards.fdn.fdn_66.card_impl import NineLivesFamiliar
 from engine.types import ManaCost, Zone
 from engine.zones import move_to_zone
 from test_utils import create_game, resolve_stack, set_board_state
+from engine.card import printed_class
 
 
 def _place_on_stack(game, player, card):
@@ -24,7 +25,7 @@ def _place_on_stack(game, player, card):
 class TestNineLivesProperties:
     def test_name_and_cost(self) -> None:
         card = NineLivesFamiliar(owner=None)
-        assert card.name == "Nine-Lives Familiar"
+        assert printed_class(card) is NineLivesFamiliar
         assert card.mana_cost == ManaCost.parse("{1}{B}{B}")
 
 

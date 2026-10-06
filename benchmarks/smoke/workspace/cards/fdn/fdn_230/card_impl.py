@@ -17,6 +17,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class OverrunAbility1:
+    text = "Creatures you control get +3/+3 and gain trample until end of turn. (Each of those creatures can deal excess combat damage to the player or planeswalker it's attacking.)"
+
+
+# endregion Printed abilities
+
+
 class Overrun(Sorcery):
     """Overrun — {2}{G}{G}{G} — Sorcery.
 

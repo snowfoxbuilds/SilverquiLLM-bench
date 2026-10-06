@@ -40,11 +40,6 @@ if TYPE_CHECKING:
     from engine.player import Player
 
 
-# Maximum number of turns before the game is considered a draw.
-# Prevents infinite loops in deterministic or stuck game states.
-MAX_TURNS: int = 1000
-
-
 # ---------------------------------------------------------------------------
 # Game creation
 # ---------------------------------------------------------------------------
@@ -75,6 +70,7 @@ _STARTING_STEPS: dict[Step | Phase, tuple[Phase, Step | None]] = {
     Step.BEGIN_COMBAT: (Phase.COMBAT, Step.BEGIN_COMBAT),
     Step.DECLARE_ATTACKERS: (Phase.COMBAT, Step.DECLARE_ATTACKERS),
     Step.DECLARE_BLOCKERS: (Phase.COMBAT, Step.DECLARE_BLOCKERS),
+    Step.FIRST_STRIKE_DAMAGE: (Phase.COMBAT, Step.FIRST_STRIKE_DAMAGE),
     Step.COMBAT_DAMAGE: (Phase.COMBAT, Step.COMBAT_DAMAGE),
     Step.END_COMBAT: (Phase.COMBAT, Step.END_COMBAT),
     Phase.POSTCOMBAT_MAIN: (Phase.POSTCOMBAT_MAIN, None),
@@ -479,6 +475,10 @@ def discard(game: GameState, player: Player, card: Any) -> None:
         return
 
     move_to_zone(game, card, Zone.HAND, Zone.GRAVEYARD)
+    if hasattr(game, "trigger_manager"):
+        from engine.events import DiscardsCardTriggeredEvent
+
+        game.trigger_manager.fire_event(game, DiscardsCardTriggeredEvent(player=player, card=card))
 
 
 def _place_token(game: GameState, player: Player, token: Any, grp_id: Any) -> None:
@@ -951,9 +951,6 @@ def run_game(game: GameState) -> Player | None:
     are resolved before and after each turn to catch game-ending conditions
     even when the priority loop auto-passes.
 
-    A game that reaches the safety limit of :data:`MAX_TURNS` ends in a
-    draw, so play always ends with the game over.
-
     Parameters:
         game: The game state to run.
 
@@ -976,7 +973,6 @@ def _check_game_over(game: GameState) -> None:
     The game ends when:
     - One player has lost (``has_lost``): the other player wins.
     - Both players have lost: the game is a draw (``winner = None``).
-    - The turn limit is exceeded: the game is a draw.
     """
     lost_players = [p for p in game.players if p.has_lost]
 
@@ -988,7 +984,3 @@ def _check_game_over(game: GameState) -> None:
         # One player lost — the other wins
         game.is_game_over = True
         game.winner = [p for p in game.players if not p.has_lost][0]
-    elif game.turn_number > MAX_TURNS:
-        # Turn limit exceeded — draw
-        game.is_game_over = True
-        game.winner = None

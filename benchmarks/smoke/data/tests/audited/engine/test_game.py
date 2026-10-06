@@ -15,21 +15,29 @@ Verifies:
 - create_token: token added to battlefield with is_token flag, owner/controller set.
 - add_counter / remove_counter: counter manipulation on creatures and generics.
 - tap / untap: tapped state changed.
-- run_game: basic game runs to completion.
-- run_game: player losing at 0 life.
-- run_game: max turn limit prevents infinite loop.
-- Integration: create game, run one full turn, verify phase progression and card draw.
+- the game played to its end: a player at 0 life loses, both at once is a draw,
+  drawing from an empty library loses.
+- Integration: turns follow one another — the active player changes, the
+  starting player skips their first draw, the untap step untaps.
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_193.card_impl import DrakusethMawOfFlames, DrakusethMawOfFlamesAbility2
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_278.card_impl import Mountain
+from test_interface import Side, card, player
+from test_interface import create_game as create_position
+from test_utils import DeterministicPlayer, Intent
 
 from engine.card import CardImpl, Creature
+from engine.decisions import GameRef
 from engine.game import (
-    MAX_TURNS,
     add_counter,
     create_game,
     create_token,
@@ -40,16 +48,13 @@ from engine.game import (
     exile,
     mint_token_copy,
     remove_counter,
-    run_game,
     sacrifice,
     tap,
     untap,
 )
-from engine.decisions import GameRef
 from engine.game_state import GameState
-from test_utils import DeterministicPlayer, Intent
-from engine.types import CardType, Keyword, Phase, Step, Zone
-
+from engine.types import Keyword, Phase, Step, Zone
+from silverquillm.table import Table, draw_game, life, moves, off_stack, on_stack, taps, wins
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -100,6 +105,11 @@ def _make_game(
     return game, p1, p2
 
 
+def _offers_players(query) -> bool:
+    """A question that offers a player among its options."""
+    return any(option.kind.value == "player" for option in query.options)
+
+
 def _make_bare_game(
     p1_life: int = 20,
     p2_life: int = 20,
@@ -145,20 +155,20 @@ class TestCreateGame:
     def test_card_ownership_set(self) -> None:
         """Cards in player1's hand should have owner = player1."""
         game, p1, p2 = _make_game()
-        for card in p1.zones[Zone.HAND].get_all():
-            assert card.owner is p1
-            assert card.controller is p1
-        for card in p2.zones[Zone.HAND].get_all():
-            assert card.owner is p2
-            assert card.controller is p2
+        for obj in p1.zones[Zone.HAND].get_all():
+            assert obj.owner is p1
+            assert obj.controller is p1
+        for obj in p2.zones[Zone.HAND].get_all():
+            assert obj.owner is p2
+            assert obj.controller is p2
 
     def test_library_cards_ownership(self) -> None:
         """Cards remaining in libraries should retain correct ownership."""
         game, p1, p2 = _make_game()
-        for card in p1.zones[Zone.LIBRARY].get_all():
-            assert card.owner is p1
-        for card in p2.zones[Zone.LIBRARY].get_all():
-            assert card.owner is p2
+        for obj in p1.zones[Zone.LIBRARY].get_all():
+            assert obj.owner is p1
+        for obj in p2.zones[Zone.LIBRARY].get_all():
+            assert obj.owner is p2
 
     def test_initial_phase_is_beginning_untap(self) -> None:
         """Game should start at BEGINNING/UNTAP phase."""
@@ -774,144 +784,134 @@ class TestTapUntap:
 
 
 # ===========================================================================
-# run_game — basic scenarios
+# The game played to its end
 # ===========================================================================
+
+
+def _library(n: int) -> list:
+    return [card(Plains) for _ in range(n)]
+
+
+def _pass_until_over(t: Table) -> None:
+    """Both players pass until the game ends."""
+    while t.asked is not None:
+        t.pass_(t.asked)
+
+
 class TestRunGame:
-    """Tests for run_game()."""
+    """A game ends when a player loses (rule 104.2a, 104.3)."""
 
     def test_player_losing_at_zero_life(self) -> None:
-        """A player at 0 life should lose. run_game returns the other player."""
-        game, p1, p2 = _make_bare_game()
-        # Manually set player2's life to 0 and mark lost so SBAs detect it
-        p2.life = 0
-        winner = run_game(game)
-        assert winner is p1
-        assert game.is_game_over is True
-        assert p2.has_lost is True
-
-    def test_max_turn_limit_prevents_infinite_loop(self) -> None:
-        """Game should end as draw when MAX_TURNS is exceeded.
-
-        The run_game loop exits when turn_number > MAX_TURNS. When we
-        pre-set turn_number past the limit, run_game returns None (draw)
-        without entering the loop.
-        """
-        game, p1, p2 = _make_bare_game()
-        # Set turn_number beyond MAX_TURNS so the while-loop condition fails
-        game.turn_number = MAX_TURNS + 1
-        winner = run_game(game)
-        # Winner is None (draw) because the loop never runs
-        assert winner is None
+        """A player brought to 0 life loses, and the other player wins."""
+        mountain, bolt = card(Mountain), card(BurstLightning)
+        game = create_position(
+            Side(hand=[bolt], battlefield=[mountain], library=_library(1)),
+            Side(life=2, library=_library(1)),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(0, mountain, then=[taps(mountain)])
+        t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 0), wins(0)])
+        final = t.run()
+        assert (final.game_over, final.winner) == (True, 0)
 
     def test_both_players_lose_is_draw(self) -> None:
-        """If both players lose, the game is a draw (winner is None)."""
-        game, p1, p2 = _make_bare_game()
-        p1.life = 0
-        p2.life = 0
-        winner = run_game(game)
-        assert game.is_game_over is True
-        assert winner is None
+        """Drakuseth's attack trigger deals 4 damage to player 1 and 3 to its
+        own controller: both reach 0 life at once, and the game is a draw."""
+        drakuseth = card(DrakusethMawOfFlames)
+        game = create_position(
+            Side(life=3, battlefield=[drakuseth]), Side(life=4), start=(Step.BEGIN_COMBAT, 0)
+        )
+        t = Table(game)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        # The trigger's targets are chosen as it goes on the stack, so the
+        # declaration's entry answers them; players are its only preferences
+        # for a question that offers players.
+        t.act(0, drakuseth, per_query={_offers_players: [player(1), player(0)]}, attacks=True,
+              then=[taps(drakuseth), on_stack(DrakusethMawOfFlamesAbility2, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(DrakusethMawOfFlamesAbility2), life(1, 0), life(0, 0), draw_game()])
+        final = t.run()
+        assert (final.game_over, final.winner) == (True, None)
 
     def test_run_game_with_empty_library_player_loses(self) -> None:
-        """A player who tries to draw from empty library should lose."""
-        # Create game with exactly 7 cards (library will be empty after draw-7)
-        game, p1, p2 = _make_game(deck_size=7)
-        # After create_game, both libraries are empty.
-        # Per MTG rules, the starting player (p1) skips their first draw step,
-        # so p1 survives turn 1. On turn 2, p2 (non-starting) draws from
-        # empty library → flag set → SBA → p2 loses.
-        assert len(p1.zones[Zone.LIBRARY]) == 0
-        assert len(p2.zones[Zone.LIBRARY]) == 0
-        winner = run_game(game)
-        assert game.is_game_over is True
-        # p2 should lose (draws from empty library on their draw step, turn 2)
-        assert p2.has_lost is True
-        assert winner is p1
-
-    def test_max_turns_constant_is_positive(self) -> None:
-        """MAX_TURNS should be a positive integer."""
-        assert MAX_TURNS > 0
+        """Player 1, with an empty library, loses in their first draw step."""
+        game = create_position(Side(library=_library(1)), Side(), start=(Step.END, 0))
+        t = Table(game)
+        _pass_until_over(t)
+        final = t.run()
+        assert (final.game_over, final.winner, final.step) == (True, 0, Step.DRAW)
 
 
 # ===========================================================================
-# Integration: create_game + run one full turn
+# Integration: turns played in order
 # ===========================================================================
 class TestIntegration:
-    """Integration tests combining create_game with turn execution."""
+    """Turns follow one another from the start of the game."""
 
     def test_create_game_and_run_one_turn(self) -> None:
-        """Create a game and run one full turn; verify turn advances."""
-        from engine.turn import run_turn
-
-        game, p1, p2 = _make_game(deck_size=40)
-        assert game.turn_number == 1
-        assert game.active_player is p1
-
-        hand_before = len(p1.zones[Zone.HAND])
-        lib_before = len(p1.zones[Zone.LIBRARY])
-
-        run_turn(game)
-
-        # Turn number should have advanced
-        assert game.turn_number == 2
-        # Active player should have swapped
-        assert game.active_player is p2
-        # Per MTG rules, the starting player skips their first draw step,
-        # so hand and library sizes should remain unchanged after turn 1.
-        assert len(p1.zones[Zone.HAND]) == hand_before
-        assert len(p1.zones[Zone.LIBRARY]) == lib_before
+        """After player 0's first turn, player 1's begins; player 0, who
+        started, skipped their first draw (rule 103.8a)."""
+        game = create_position(
+            Side(library=_library(3)), Side(library=_library(3)), start=(Step.UPKEEP, 0)
+        )
+        t = Table(game)
+        t.pass_to(Step.UPKEEP, 1)
+        final = t.run()
+        assert final.active == 1
+        assert (len(final.players[0].hand), len(final.players[0].library)) == (0, 3)
 
     def test_create_game_and_run_two_turns(self) -> None:
-        """Create a game and run two full turns; verify alternating active player."""
-        from engine.turn import run_turn
-
-        game, p1, p2 = _make_game(deck_size=40)
-
-        run_turn(game)
-        assert game.turn_number == 2
-        assert game.active_player is p2
-
-        lib_p2_before = len(p2.zones[Zone.LIBRARY])
-        run_turn(game)
-        assert game.turn_number == 3
-        assert game.active_player is p1
-        # Player 2 should have drawn during their turn's draw step
-        # (library shrank by 1; hand may stay at max due to cleanup discard)
-        assert len(p2.zones[Zone.LIBRARY]) == lib_p2_before - 1
+        """Two turns later it is player 0's turn again, and player 1 drew in
+        theirs."""
+        game = create_position(
+            Side(library=_library(3)), Side(library=_library(3)), start=(Step.UPKEEP, 0)
+        )
+        t = Table(game)
+        t.pass_to(Step.UPKEEP, 1)
+        t.pass_to(Step.UPKEEP, 0)
+        final = t.run()
+        assert final.active == 0
+        assert (len(final.players[1].hand), len(final.players[1].library)) == (1, 2)
 
     def test_phase_starts_at_beginning_after_turn(self) -> None:
-        """After a full turn, phase should reset to BEGINNING/UNTAP."""
-        from engine.turn import run_turn
-
-        game, p1, p2 = _make_game(deck_size=40)
-        run_turn(game)
-        # After run_turn, the game state should be at the start of the next turn
-        assert game.phase == Phase.BEGINNING
-        assert game.step == Step.UNTAP
+        """When player 0's end step ends, player 1's turn begins at its start:
+        the first question is in player 1's upkeep."""
+        game = create_position(
+            Side(library=_library(1)), Side(library=_library(1)), start=(Step.END, 0)
+        )
+        t = Table(game)
+        t.pass_(0)
+        t.pass_(1)
+        final = t.run()
+        assert (final.step, final.active, final.asked) == (Step.UPKEEP, 1, 1)
 
     def test_untap_step_untaps_creatures(self) -> None:
-        """Creatures on the active player's battlefield should be untapped during untap step."""
-        from engine.turn import run_turn
-
-        # priority_loop now auto-passes (no scripted attack choice needed);
-        # the turn-based untap step untaps the active player's creatures.
-        game, p1, p2 = _make_game(deck_size=40)
-        creature = _make_creature("TappedBear")
-        creature.owner = p1
-        creature.controller = p1
-        creature.is_tapped = True
-        p1.zones[Zone.BATTLEFIELD].add(creature)
-
-        run_turn(game)  # p1's turn
-
-        # After p1's turn, creature should have been untapped during untap step
-        assert creature.is_tapped is False
+        """The active player's permanents untap in their untap step; the other
+        player's stay tapped."""
+        lions, elves = card(SavannahLions, tapped=True), card(LlanowarElves, tapped=True)
+        game = create_position(
+            Side(battlefield=[lions], library=_library(1)),
+            Side(battlefield=[elves], library=_library(1)),
+            start=(Step.END, 1),
+        )
+        t = Table(game)
+        t.pass_(1)
+        t.pass_(0, note="player 0's Lions untaps; player 1's Elves stays tapped")
+        final = t.run()
+        assert [seen.tapped for seen in final.players[0].battlefield] == [False]
+        assert [seen.tapped for seen in final.players[1].battlefield] == [True]
 
     def test_full_game_ends_on_library_depletion(self) -> None:
-        """A game with small decks should eventually end as library is depleted."""
-        # 10 cards each: 7 drawn at start + draw per turn = library depletes quickly
-        game, p1, p2 = _make_game(deck_size=10)
-        winner = run_game(game)
-        assert game.is_game_over is True
-        # One of them should have lost (drew from empty library)
-        assert p1.has_lost or p2.has_lost
+        """With one card in each library, player 1 draws theirs in turn 2,
+        player 0 in turn 3, and player 1 loses drawing from an empty library
+        in turn 4."""
+        game = create_position(
+            Side(library=_library(1)), Side(library=_library(1)), start=(Step.UPKEEP, 0)
+        )
+        t = Table(game)
+        _pass_until_over(t)
+        final = t.run()
+        assert (final.game_over, final.winner) == (True, 0)

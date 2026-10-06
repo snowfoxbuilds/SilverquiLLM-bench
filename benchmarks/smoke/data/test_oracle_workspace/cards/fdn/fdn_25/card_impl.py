@@ -60,15 +60,15 @@ class SunBlessedHealer(Creature):
         self.kicked: bool = False
         self.kicker_cost: ManaCost = ManaCost.parse("{1}{W}")
 
-    def get_targets(self, game: "GameState") -> list[Any]:
+    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Target nonland permanent card with MV <= 2 in your graveyard (if kicked)."""
         if not self.kicked:
             return []
 
         def _filter(obj: Any) -> bool:
             # Must be in controller's graveyard (checked via owner/controller)
-            if getattr(obj, "owner", None) is not self.controller and \
-               getattr(obj, "controller", None) is not self.controller:
+            if getattr(obj, "owner", None) is not controller and \
+               getattr(obj, "controller", None) is not controller:
                 return False
             card_types = getattr(obj, "card_types", set())
             if CardType.LAND in card_types:
@@ -92,19 +92,27 @@ class SunBlessedHealer(Creature):
             )
         ]
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        def _condition(game: Any, controller: Any) -> bool:
+            return self.kicked
+
+        register_enters_trigger(game, self, SunBlessedHealerAbility3, self._enters, targets=self._enters_targets, condition=_condition)
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
         """ETB: if kicked, return target nonland permanent from graveyard to battlefield."""
         if not self.kicked:
             return
 
         from engine.zones import move_to_zone
 
-        chosen = getattr(self, "chosen_targets", None)
+        chosen = targets
         target = chosen[0] if chosen else None
         if target is None:
             return
 
-        controller = self.controller
         if controller is None:
             return
 

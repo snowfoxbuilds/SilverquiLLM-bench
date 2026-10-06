@@ -11,7 +11,7 @@ import pytest
 
 from cards.fdn.fdn_62.card_impl import HungryGhoul
 from engine.abilities import AbilityError
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import ManaCost, ManaType, Phase, Zone
@@ -27,7 +27,7 @@ def _activate_sacrificing(game, player, ghoul, sac_creature):
     Intent that answers the cost's 'choose another creature' Player Query."""
     inst = game.refs.instance_id(sac_creature, Zone.BATTLEFIELD.value)
     player.start_intent("ghoul", Intent(
-        pattern=GameRef(card=frozenset({("name", "Hungry Ghoul")})),
+        pattern=GameRef(card=frozenset({("printed", HungryGhoul)})),
         preferences=(Decision.obj(instance=inst),),
     ))
     try:
@@ -39,7 +39,7 @@ def _activate_sacrificing(game, player, ghoul, sac_creature):
 class TestHungryGhoulProperties:
     def test_static_data(self):
         ghoul = HungryGhoul(owner=None)
-        assert ghoul.name == "Hungry Ghoul"
+        assert printed_class(ghoul) is HungryGhoul
         assert ghoul.mana_cost == ManaCost.parse("{1}{B}")
         assert (ghoul.base_power, ghoul.base_toughness) == (2, 2)
 

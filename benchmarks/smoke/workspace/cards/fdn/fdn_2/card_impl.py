@@ -9,6 +9,21 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ArahboTheFirstFangAbility1:
+    text = 'Other Cats you control get +1/+1.'
+
+
+class ArahboTheFirstFangAbility2:
+    text = 'Whenever Arahbo or another nontoken Cat you control enters, create a 1/1 white Cat creature token.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -83,10 +98,10 @@ class ArahboTheFirstFang(Creature):
                 return True
             return False
 
-        def _etb_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _etb_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             token = make_creature_token("Cat", {"Cat"}, [Color.WHITE], 1, 1)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_etb_condition, effect=_etb_effect, source=self, controller=controller, printed=ArahboTheFirstFangAbility2))

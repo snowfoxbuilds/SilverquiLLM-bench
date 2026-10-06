@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BoltwaveAbility1:
+    text = 'Boltwave deals 3 damage to each opponent.'
+
+
+# endregion Printed abilities
+
+
 class Boltwave(Sorcery):
     """Boltwave — {R} — Sorcery.
 

@@ -13,7 +13,7 @@ import pytest
 
 from cards.fdn.fdn_189.card_impl import AxgardCavalry
 from engine.abilities import AbilityError
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import Keyword, ManaCost, ManaType, Zone
@@ -27,7 +27,7 @@ def _bear(p, name="Bear"):
 def _activate_targeting(game, player, source, target):
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
     player.start_intent("axgard", Intent(
-        pattern=GameRef(card=frozenset({("name", source.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(source))})),
         preferences=(Decision.obj(instance=inst),),
     ))
     try:
@@ -39,7 +39,7 @@ def _activate_targeting(game, player, source, target):
 class TestAxgardCavalryProperties:
     def test_static_data(self):
         card = AxgardCavalry(owner=None)
-        assert card.name == "Axgard Cavalry"
+        assert printed_class(card) is AxgardCavalry
         assert card.mana_cost == ManaCost.parse("{1}{R}")
         assert (card.base_power, card.base_toughness) == (2, 2)
         assert {"Dwarf", "Berserker"} <= card.subtypes

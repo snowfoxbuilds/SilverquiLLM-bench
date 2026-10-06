@@ -184,6 +184,11 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
   A copy carries the class of what it copies (grilling 2026-10-04).
 - **No raw strings**: tests place, choose and assert by predefined classes, never by a name string.
   Game Symbols values stay a closed, validated vocabulary exposed as named constants (grilling 2026-10-04).
+  Every query's source ref carries `("printed", <class>)`, so an Intent routes by class; `test_utils` helpers take a predefined class (the first matching object) or the object itself and refuse a string.
+  A synthetic test object stands for itself, and a test that must route or choose it by class gives it a test-local class.
+  `scripts/printed_identity_codemod.py` converts name-based tests and, run with `--check`, enforces the rule over the Known-Best tests. It rewrites only string literals at sites whose card identity is certain — an argument to a helper the file imports and never rebinds, a `Decision` name or mode, a name pair in a `GameRef` card field, where `Decision` and `GameRef` are the engine's own classes, each imported once by name, unaliased, from `engine.decisions` or a module re-exporting that very class (such as `test_interface`), and never rebound — mapped through the card registry, and never infers values or bindings.
+  Every other name-carrying site is reported instead of guessed — a name that is not a literal, a literal naming no predefined class, a name some object in the file is built with (or, when the file would otherwise convert, any object built with a computed name), a call through a rebound helper, a `Decision` or `GameRef` call whose binding the file does not establish as above (a second binding, a parameter, an alias, an import from another module, a qualified call), a card-naming pair outside a card field, a wildcard import in a file it would otherwise convert, a rewrite that would not compile — and a file with a report is left unchanged for a hand edit, so `--check` keeps failing until each is resolved.
+  A name is rebound by anything in the file that binds it, in any scope: every identifier a syntax node carries counts as a binding except the few that only name something (an attribute, a keyword argument, a module), so a binding construct the codemod does not know makes a file manual rather than letting a rewrite through.
 
 #### Legality
 
@@ -223,7 +228,7 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 
 How Audited Tests script the players' answers is part of the [Test Interface](TEST-INTERFACE.md); the engine side follows.
 
-- **Passing is an answer**: declining a Priority Query is the player's answer, a pass, and an attempt reports no separate outcome; the window reads the answer to move the round on, and `run_game` ends with a winner or a draw (grilling 2026-10-05).
+- **Passing is an answer**: declining a Priority Query is the player's answer, a pass, and an attempt reports no separate outcome; the window reads the answer to move the round on, and `run_game` plays until the game ends, with a winner or a draw, with no turn limit (grilling 2026-10-05).
 - **Priority round**: a step's open priority window holds the round — who holds priority and how many players have passed in succession — and only the rules change it (CR 117.3–117.4): the window opens with the active player holding priority, a player who acts receives priority again, a pass moves it on, a resolution returns it to the active player, and every player passing in succession resolves the top object or, on an empty stack, ends the step (grilling 2026-10-05).
   No driver starts or resets a round; a paused `run` leaves the window as it is and the next call carries on from it.
   A cleanup step opens a window only when its actions performed state-based actions or put triggers on the stack (CR 514.3a), and another cleanup step follows once it ends.

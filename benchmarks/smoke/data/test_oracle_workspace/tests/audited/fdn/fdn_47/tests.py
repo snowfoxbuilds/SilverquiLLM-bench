@@ -1,26 +1,46 @@
-"""Mischievous Mystic observes actual draws, including the first-draw negative."""
+"""Mischievous Mystic observes actual draws, including the first-draw negative.
 
-from cards.fdn.fdn_47.card_impl import MischievousMystic
-from engine.game import draw_card
-from engine.protection import get_colors
-from engine.types import Color, Keyword
-from test_utils import behavioral_game, enter_permanent, resolve_stack
+Its controller's draw step is their first draw of the turn and makes nothing;
+Think Twice then draws their second, which makes one Faerie token.
+"""
+
+from cards.fdn.fdn_47.card_impl import MischievousMystic, MischievousMysticAbility2
+from cards.fdn.fdn_165.card_impl import ThinkTwice
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from test_interface import Phase, Side, Step, Zone, card, create_game
+
+from silverquillm.table import Table, appears, moves, off_stack, on_stack, taps
 
 
 def test_second_draw_mints_blue_flying_faerie():
-    game = behavioral_game()
-    player = game.players[0]
-    enter_permanent(game, player, MischievousMystic())
-    draw_card(game, player)
-    resolve_stack(game)
-    assert len(game.get_hand(player).get_all()) == 1
-    assert not any(getattr(c, "is_token", False) for c in game.get_battlefield(player).get_all())
-    draw_card(game, player)
-    resolve_stack(game)
-    assert len(game.get_hand(player).get_all()) == 2
-    tokens = [c for c in game.get_battlefield(player).get_all() if getattr(c, "is_token", False)]
-    assert len(tokens) == 1
-    token = tokens[0]
-    assert token.name == "Faerie" and token.subtypes == {"Faerie"}
-    assert (token.base_power, token.base_toughness) == (1, 1)
-    assert get_colors(token) == {Color.BLUE} and token.keywords & Keyword.FLYING
+    think, islands, second = card(ThinkTwice), [card(Island), card(Island)], card(Plains)
+    game = create_game(
+        Side(),
+        Side(
+            battlefield=[MischievousMystic, *islands], hand=[think], library=[card(Plains), second]
+        ),
+        start=(Step.UPKEEP, 1),
+    )
+    t = Table(game)
+    t.pass_to(Phase.PRECOMBAT_MAIN, 1)
+    for island in islands:
+        t.act(1, island, then=[taps(island)])
+    t.act(
+        1,
+        think,
+        then=[moves(think, Zone.STACK)],
+        note="the draw step's draw was the first; nothing triggered",
+    )
+    t.pass_(1)
+    t.pass_(
+        0,
+        then=[
+            moves(think, Zone.GRAVEYARD),
+            moves(second, Zone.HAND),
+            on_stack(MischievousMysticAbility2, 1),
+        ],
+    )
+    t.pass_(1)
+    t.pass_(0, then=[off_stack(MischievousMysticAbility2), appears(1)])
+    t.run()

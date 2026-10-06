@@ -31,6 +31,7 @@ _TURN_SEQUENCE: list[tuple[Phase, Step | None]] = [
     (Phase.COMBAT, Step.BEGIN_COMBAT),
     (Phase.COMBAT, Step.DECLARE_ATTACKERS),
     (Phase.COMBAT, Step.DECLARE_BLOCKERS),
+    (Phase.COMBAT, Step.FIRST_STRIKE_DAMAGE),
     (Phase.COMBAT, Step.COMBAT_DAMAGE),
     (Phase.COMBAT, Step.END_COMBAT),
     # Postcombat main phase
@@ -156,6 +157,8 @@ class GameState:
         # Every token put onto the battlefield, in creation order, departed
         # ones included; a rollback undoes the tokens a rejected attempt made.
         self.created_tokens: list[Any] = []
+        # Every copy of a spell made, in creation order, likewise.
+        self.created_copies: list[Any] = []
 
     # ------------------------------------------------------------------
     # Player properties
@@ -257,11 +260,10 @@ class GameState:
             # End of turn — wrap around.
             self.turn_number += 1
             if self.extra_turns:
-                # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the
-                # next player seat index; that player gets the next turn.
-                # Normal rotation is NOT advanced — extra turns are
-                # inserted before the normal next turn.
-                self.active_player_index = self.extra_turns.pop(0)
+                # The most recently created extra turn is taken first
+                # (rule 500.7). Normal rotation is NOT advanced — extra
+                # turns are inserted before the normal next turn.
+                self.active_player_index = self.extra_turns.pop()
             else:
                 self.active_player_index = self._normal_next_index
                 self._normal_next_index = 1 - self._normal_next_index

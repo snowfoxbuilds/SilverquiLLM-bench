@@ -11,6 +11,7 @@ from __future__ import annotations
 from cards.fdn.fdn_106.card_impl import LootExuberantExplorer
 from engine.types import ManaCost, ManaType
 from test_utils import create_game, set_board_state
+from engine.card import printed_class
 
 
 def _setup(tapped=False):
@@ -25,7 +26,7 @@ def _setup(tapped=False):
 class TestLootProperties:
     def test_static_data(self):
         c = LootExuberantExplorer(owner=None)
-        assert c.name == "Loot, Exuberant Explorer"
+        assert printed_class(c) is LootExuberantExplorer
         assert c.mana_cost == ManaCost.parse("{2}{G}")
         assert (c.base_power, c.base_toughness) == (1, 4)
         assert {"Beast", "Noble"} <= c.subtypes

@@ -16,6 +16,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class PilferAbility1:
+    text = 'Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.'
+
+
+# endregion Printed abilities
+
+
 def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
 

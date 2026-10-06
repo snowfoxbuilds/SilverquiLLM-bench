@@ -1,0 +1,10 @@
+--- a/engine/combat.py
++++ b/engine/combat.py
+@@ -205,7 +205,2 @@
+     if has_protection_from(target, source):
+-        return
+-
+-    # "Prevent all combat damage that would be dealt to it this turn" (rule
+-    # 615.1): prevented damage is never dealt, so nothing below happens.
+-    if getattr(target, "combat_damage_prevented", False):
+         return

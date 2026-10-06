@@ -7,69 +7,61 @@ detected by the Basic supertype (there is no `is_basic_land` flag).
 
 from __future__ import annotations
 
-import pytest
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_250.card_impl import BurnishedHart, BurnishedHartAbility1
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_280.card_impl import Forest
+from engine.card import printed_class
+from engine.types import ManaCost
+from test_interface import ManaType, Phase, Side, Zone, card, create_game, shuffled
 
-from cards.fdn.fdn_250.card_impl import BurnishedHart
-from engine.basic_lands import Forest
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.types import ManaCost, ManaType, Phase, Zone
-from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
-
-
-def _put_in_library(game, player, card):
-    lib = player.zones[Zone.LIBRARY]
-    card.owner = player
-    card.controller = player
-    lib.add(card)
-    card.instance_id = game.refs.instance_id(card, Zone.LIBRARY.value)
-    return card
+from silverquillm.table import Table, moves, off_stack, on_stack, taps
 
 
 class TestBurnishedHartProperties:
     def test_static_data(self):
         h = BurnishedHart(owner=None)
-        assert h.name == "Burnished Hart"
+        assert printed_class(h) is BurnishedHart
         assert h.mana_cost == ManaCost.parse("{3}")
+
+
+def _activate(t: Table, hart) -> None:
+    t.act(0, hart, then=[moves(hart, Zone.GRAVEYARD), on_stack(BurnishedHartAbility1, 0)])
 
 
 class TestBurnishedHartSearch:
     def test_fetches_two_chosen_basics_tapped(self):
-        game = create_game()
-        p1 = game.players[0]
-        hart = BurnishedHart(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[hart], mana={ManaType.COLORLESS: 3})
-        a = _put_in_library(game, p1, Forest())
-        b = _put_in_library(game, p1, Forest())
-        game.phase = Phase.PRECOMBAT_MAIN
-
-        p1.start_intent("hart", Intent(
-            pattern=GameRef(card=frozenset({("name", "Burnished Hart")})),
-            preferences=(
-                Decision.obj(instance=a.instance_id),
-                Decision.obj(instance=b.instance_id),
-            ),
-        ))
-        try:
-            activate_card_ability(game, p1, hart)   # pays {3}, sacrifices itself
-            resolve_stack(game)
-        finally:
-            p1.end_intent("hart")
-
-        bf = game.get_battlefield(p1)
-        assert bf.contains(a) and bf.contains(b)     # both fetched
-        assert a.is_tapped and b.is_tapped           # entered tapped
-        assert not game.get_battlefield(p1).contains(hart)   # sacrificed
+        hart, a, b, plains = card(BurnishedHart), card(Forest), card(Forest), card(Plains)
+        game = create_game(
+            Side(battlefield=[hart], library=[a, plains, b], mana={ManaType.COLORLESS: 3}),
+            Side(),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        _activate(t, hart)
+        t.pass_(0, choices=[a, b])
+        t.pass_(
+            1,
+            then=[
+                off_stack(BurnishedHartAbility1),
+                moves(a, Zone.BATTLEFIELD), taps(a),
+                moves(b, Zone.BATTLEFIELD), taps(b),
+            ],
+            note="both chosen Forests enter tapped; the Plains stays",
+        )
+        t.run(chance=[shuffled(plains)])
 
     def test_declinable_search_no_basics(self):
         """With no basic land in the library the ability still resolves (the
-        min=0 search finds nothing) — no crash, Hart sacrificed."""
-        game = create_game()
-        p1 = game.players[0]
-        hart = BurnishedHart(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[hart], mana={ManaType.COLORLESS: 3})
-        game.phase = Phase.PRECOMBAT_MAIN
-        p1.set_baseline(Intent(pattern=GameRef(), preferences=()))
-        activate_card_ability(game, p1, hart)
-        resolve_stack(game)
-        assert not game.get_battlefield(p1).contains(hart)   # sacrificed, no error
+        up-to-two search finds nothing), and the Hart is sacrificed."""
+        hart, lions = card(BurnishedHart), card(SavannahLions)
+        game = create_game(
+            Side(battlefield=[hart], library=[lions], mana={ManaType.COLORLESS: 3}),
+            Side(),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        _activate(t, hart)
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(BurnishedHartAbility1)])
+        t.run(chance=[shuffled(lions)])

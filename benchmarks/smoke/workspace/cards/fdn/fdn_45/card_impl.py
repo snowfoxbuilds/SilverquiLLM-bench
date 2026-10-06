@@ -1,13 +1,31 @@
 """Card implementation for Kiora, the Rising Tide."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from cards.fdn.tokens import make_creature_token
 from engine.card import Creature
 from engine.card_queries import choose_object, query_yes_no
-from engine.types import Color, Keyword, ManaCost, Supertype, Zone
 from engine.events import AttacksTriggeredEvent
+from engine.types import Color, ManaCost, Supertype, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class KioraTheRisingTideAbility1:
+    text = 'When Kiora enters, draw two cards, then discard two cards.'
+
+
+class KioraTheRisingTideAbility2:
+    text = 'Threshold — Whenever Kiora attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.'
+
+
+# endregion Printed abilities
+
 
 class KioraTheRisingTide(Creature):
     """Kiora, the Rising Tide — {2}{U} — 3/2 — Merfolk Noble — Legendary.
@@ -31,10 +49,9 @@ class KioraTheRisingTide(Creature):
         kwargs.setdefault('rules_text', 'When Kiora enters, draw two cards, then discard two cards.\nThreshold — Whenever Kiora attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.')
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: 'GameState') -> None:
+    def _enters(self, game: 'GameState', controller: Any) -> None:
         """ETB: draw 2, then discard 2."""
         from engine.game import discard, draw_card
-        controller = self.controller
         if controller is None:
             return
         for _ in range(2):
@@ -50,6 +67,10 @@ class KioraTheRisingTide(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger: threshold → create Scion of the Deep token."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, KioraTheRisingTideAbility1, self._enters)
+
         from engine.game import create_token
         from engine.triggers import TriggerRegistration
         source = self
@@ -65,8 +86,8 @@ class KioraTheRisingTide(Creature):
             gy_count = len(list(ctrl.zones[Zone.GRAVEYARD].get_all()))
             return gy_count >= 7
 
-        def _attack_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _attack_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             create_scion = query_yes_no(game, ctrl, 'Create Scion of the Deep token?', source_card=source)
@@ -76,4 +97,4 @@ class KioraTheRisingTide(Creature):
                     supertypes={Supertype.LEGENDARY},
                 )
                 create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=KioraTheRisingTideAbility2))

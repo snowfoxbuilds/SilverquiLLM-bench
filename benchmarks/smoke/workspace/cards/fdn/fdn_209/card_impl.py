@@ -15,6 +15,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SureStrikeAbility1:
+    text = 'Target creature gets +3/+0 and gains first strike until end of turn. (It deals combat damage before creatures without first strike.)'
+
+
+# endregion Printed abilities
+
+
 def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
 
@@ -88,6 +99,7 @@ class SureStrike(Instant):
             source=self,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
+            bound_to=[creature_ref],
             apply=_apply_buff,
             duration=DURATION_END_OF_TURN,
         )

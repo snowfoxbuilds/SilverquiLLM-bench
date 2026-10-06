@@ -160,11 +160,22 @@ def _candidate_decision(game: GameState, candidate: Any, zone: Any) -> Any:
 
 
 def _source_decision(game: GameState, card: Any) -> Any:
-    """The OBJECT decision for the spell/ability raising a query (routing source)."""
+    """The OBJECT decision for the spell/ability raising a query (routing
+    source), named in the zone the source actually occupies.
+
+    Naming an object in any other zone mints it a fresh stint (see
+    ``GameRefsRegistry.instance_id``), so a departed permanent whose waiting
+    trigger asks — already in a graveyard, exile or a hand — must be named
+    there, or every target captured on it beforehand stops matching. Only a
+    source in no player's zone (a spell or copy on the stack) is named on the
+    stack.
+    """
+    from engine.stack import object_current_zone
+
     controller = getattr(card, "controller", None)
     return game.refs.object_decision(
         card,
-        zone="stack",
+        zone=object_current_zone(game, card) or Zone.STACK.value,
         controller_seat=_seat_of(game, controller) if controller is not None else None,
     )
 
@@ -331,13 +342,16 @@ def is_sorcery_speed(game: GameState, player: Player) -> bool:
     return True
 
 
-def can_cast_at_instant_speed(card: CardImpl) -> bool:
+def can_cast_at_instant_speed(card: CardImpl, player: Player | None = None) -> bool:
     """Return ``True`` if *card* may be cast at instant speed.
 
-    A card has instant-speed timing if it is an instant or has the
-    :attr:`~engine.types.Keyword.FLASH` keyword.
+    A card has instant-speed timing if it is an instant, has the
+    :attr:`~engine.types.Keyword.FLASH` keyword, or *player* may cast spells
+    as though they had flash (High Fae Trickster).
     """
     if CardType.INSTANT in card.card_types:
+        return True
+    if player is not None and getattr(player, "can_cast_as_flash", False):
         return True
     if Keyword.FLASH & card.keywords:
         return True
@@ -534,7 +548,10 @@ def _fire_spell_cast_event(
     game.trigger_manager.fire_event(
         game,
         SpellCastTriggeredEvent(
-            spell=card, card=card, player=player, controller=player
+            spell=card, card=card, player=player, controller=player,
+            # On the stack, X is its chosen value (rule 202.3e).
+            mana_value=card.mana_cost.cmc
+            + getattr(card, "x_value", 0) * card.mana_cost.x_count,
         ),
     )
 
@@ -542,6 +559,26 @@ def _fire_spell_cast_event(
 # ------------------------------------------------------------------
 # Cast spell
 # ------------------------------------------------------------------
+
+def _announce_x(game: GameState, player: Player, card: CardImpl, *, free: bool = False) -> None:
+    """Choose the value of X while casting (rule 601.2b).
+
+    A spell cast without paying its mana cost has X = 0 (rule 107.3b).
+    """
+    card.x_value = 0  # type: ignore[attr-defined]
+
+
+def _with_x(cost: ManaCost, x_value: int) -> ManaCost:
+    """*cost* with each {X} replaced by *x_value* generic mana (rule 601.2f)."""
+    if not cost.x_count:
+        return cost
+    return ManaCost(
+        generic=cost.generic + x_value * cost.x_count,
+        pips=dict(cost.pips),
+        x_count=0,
+        hybrid=list(cost.hybrid),
+    )
+
 
 def cast_spell(
     game: GameState,
@@ -587,7 +624,7 @@ def cast_spell(
         CastingError: If any legality check fails.
     """
     # 1. Timing
-    if not can_cast_at_instant_speed(card) and not is_sorcery_speed(game, player):
+    if not can_cast_at_instant_speed(card, player) and not is_sorcery_speed(game, player):
         raise CastingError(
             f"Cannot cast {card.name!r} — sorcery-speed timing not met"
         )
@@ -625,6 +662,8 @@ def cast_spell(
     # Clear any stale colors_spent from a prior cast before new payment.
     if hasattr(card, "colors_spent"):
         del card.colors_spent
+
+    _announce_x(game, player, card)
 
     # 5. Choose targets
     target_specs = card.get_targets(game)
@@ -693,11 +732,15 @@ def cast_spell(
     #   Flashback is itself an alternative cost (rule 702.34a), so a flashback
     #   cast pays only the flashback cost.
     raw_reduction = _raw_cost_reduction(game, card, player, targets=chosen_targets)
-    base_costs = (
+    candidate_costs = (
         [card.flashback_cost]  # type: ignore[attr-defined]
         if mode is CastMode.FLASHBACK
         else [card.mana_cost, *card.alternative_costs(game)]
     )
+    base_costs = [
+        _with_x(base, card.x_value)  # type: ignore[attr-defined]
+        for base in candidate_costs
+    ]
     payable: list[tuple[int, ManaCost]] = []
     for index, base in enumerate(base_costs):
         clamped = min(raw_reduction, base.generic) if raw_reduction > 0 else 0
@@ -891,6 +934,7 @@ def cast_spell_free(
     stack_zone = player.zones[Zone.STACK]
     source_zone_container.remove(card)
     stack_zone.add(card)
+    _announce_x(game, player, card, free=True)
 
     # 3. Choose targets (with rollback on failure)
     try:

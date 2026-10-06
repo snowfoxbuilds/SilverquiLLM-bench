@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GutlessPlundererAbility1:
+    text = 'Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)'
+
+
+class GutlessPlundererAbility2:
+    text = 'Raid — When this creature enters, if you attacked this turn, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.'
+
+
+# endregion Printed abilities
+
+
 class GutlessPlunderer(Creature):
     """Gutless Plunderer — {2}{B} — 2/2 — Skeleton Pirate — Deathtouch.
 
@@ -38,16 +52,24 @@ class GutlessPlunderer(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        def _condition(game: Any, controller: Any) -> bool:
+            return bool(getattr(controller, "attacked_this_turn", False))
+
+        register_enters_trigger(game, self, GutlessPlundererAbility2, self._enters, condition=_condition)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB with Raid: look at top 3, keep one on top, rest to graveyard."""
         from engine.zones import move_to_zone
 
-        controller = self.controller
         if controller is None:
             return
 
         # Check raid condition
-        # ENGINE LIMITATION: no attacked_this_turn tracking; always triggers
+        # Raid: the engine records a declared attack on the attacking player.
         attacked = getattr(controller, "attacked_this_turn", False)
         if not attacked:
             return

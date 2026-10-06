@@ -1,43 +1,88 @@
-"""Tests for end-of-turn cleanup step (engine/turn.py :: _do_cleanup_step).
+"""Tests for the cleanup step (rule 514) and what it leaves for the next turn.
 
-Verifies:
-- Active player discards to maximum hand size (7).
-- Player with <=7 cards does not discard.
-- "Until end of turn" continuous effects are removed during cleanup.
-- Damage marked on creatures is cleared to 0.
-- Combat flags (dealt_deathtouch_damage, is_attacking, is_blocking) are cleared.
-- CombatState is cleared.
-- All players' mana pools are emptied.
-- SBAs are checked after effects expire (creature with lethal damage dies).
-- If triggers fire during cleanup, another cleanup step occurs.
-- Integration: Giant Growth (+3/+3 EOT) reverts after cleanup.
-- Integration: 2 damage on a 3/3 is cleared — creature survives cleanup.
+Each test plays into the cleanup step and judges it by what follows:
+- the active player discards to maximum hand size (7); no one else does;
+- "until end of turn" effects end, and other effects stay;
+- damage marked on creatures is removed, so it no longer counts next turn;
+- creatures stop attacking and blocking, and deathtouch damage is forgotten;
+- mana left in a pool is gone.
+
+Positions no card can reach through play — a permanent toughness reduction
+that kills once an end-of-turn boost ends, a trigger during cleanup, damage
+marked on a noncreature permanent — are still set up directly; see the tests
+that call ``_do_cleanup_step``.
 """
 
 from __future__ import annotations
 
-import pytest
+from cards.fdn.fdn_10.card_impl import DivineResilience
+from cards.fdn.fdn_29.card_impl import ArcaneEpiphany
+from cards.fdn.fdn_40.card_impl import HighFaeTrickster
+from cards.fdn.fdn_60.card_impl import GutlessPlunderer
+from cards.fdn.fdn_71.card_impl import Stab
+from cards.fdn.fdn_72.card_impl import TinybonesBaubleBurglar, TinybonesBaubleBurglarAbility1
+from cards.fdn.fdn_116.card_impl import AnthemOfChampions
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_150.card_impl import AegisTurtle
+from cards.fdn.fdn_155.card_impl import FleetingDistraction
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_223.card_impl import GiantGrowth
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_278.card_impl import Mountain
+from cards.fdn.fdn_280.card_impl import Forest
+from cards.fdn.spg_74.card_impl import Condemn
+from cards.fdn.spg_82.card_impl import TemporalManipulation
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, player
+from test_utils import DeterministicPlayer
 
 from engine.card import CardImpl, Creature
-from engine.combat import CombatState
-from engine.continuous_effects import (
-    ContinuousEffect,
-    DURATION_END_OF_TURN,
-    DURATION_PERMANENT,
-    Layer,
-    SubLayer,
-)
-from engine.decisions import Decision, GameRef
 from engine.game_state import GameState
-from engine.mana import ManaPool
-from test_utils import DeterministicPlayer, Intent
-from engine.turn import _do_cleanup_step, MAX_HAND_SIZE
-from engine.types import CardType, Keyword, ManaType, Phase, Step, Zone
-
+from engine.turn import MAX_HAND_SIZE
+from silverquillm.table import Table, cleanup_trigger, extra_turn, life, moves, off_stack, taps
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _discard_game(hand_size: int, *, other_hand: int = 0):
+    """Player 0's end step, with ``hand_size`` cards in player 0's hand and
+    ``other_hand`` in player 1's."""
+    hand = [card(Plains) for _ in range(hand_size)]
+    other = [card(Plains) for _ in range(other_hand)]
+    game = create_game(Side(hand=hand), Side(hand=other), start=(Step.END, 0))
+    return game, hand, other
+
+
+def _end_turn(t: Table, discards=()) -> None:
+    """Both players pass player 0's end step on an empty stack; in cleanup
+    player 0 discards ``discards``, and player 1's upkeep follows."""
+    t.pass_(0, choices=list(discards))
+    t.pass_(
+        1,
+        then=[moves(c, Zone.GRAVEYARD) for c in discards],
+        note=f"player 0 discards {len(discards)} in cleanup" if discards else "nobody discards in cleanup",
+    )
+
+
+def _cast(t: Table, seat: int, land, spell, *targets) -> None:
+    """``seat`` taps ``land`` and casts ``spell`` at ``targets``."""
+    t.act(seat, land, then=[taps(land)])
+    t.act(seat, spell, choices=list(targets), then=[moves(spell, Zone.STACK)])
+
+
+def _attack_unblocked(t: Table, attackers, damage_to: int, life_after: int) -> None:
+    """Player 0, at its declaration of attackers, attacks with ``attackers``,
+    nothing blocks, and player ``damage_to``'s life becomes ``life_after``."""
+    t.act(0, *attackers, then=[taps(a) for a in attackers])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)  # declares no blockers
+    t.pass_(0)
+    t.pass_(1, then=[life(damage_to, life_after)])
 
 
 def _make_card(name: str = "TestCard") -> CardImpl:
@@ -45,23 +90,13 @@ def _make_card(name: str = "TestCard") -> CardImpl:
     return CardImpl(name=name)
 
 
-def _make_creature(
-    name: str = "Bear",
-    base_power: int = 2,
-    base_toughness: int = 2,
-    keywords: Keyword | None = None,
-) -> Creature:
+def _make_creature(name: str = "Bear", base_power: int = 2, base_toughness: int = 2) -> Creature:
     """Create a creature for testing."""
-    return Creature(
-        name=name,
-        base_power=base_power,
-        base_toughness=base_toughness,
-        keywords=keywords,
-    )
+    return Creature(name=name, base_power=base_power, base_toughness=base_toughness)
 
 
 def _make_game() -> tuple[GameState, DeterministicPlayer, DeterministicPlayer]:
-    """Create a bare game state for cleanup tests."""
+    """Create a bare game state for the cleanup tests no play can reach."""
     p1 = DeterministicPlayer("Alice", life=20)
     p2 = DeterministicPlayer("Bob", life=20)
     game = GameState([p1, p2])
@@ -75,23 +110,6 @@ def _place_on_battlefield(game: GameState, player: DeterministicPlayer, obj) -> 
     player.zones[Zone.BATTLEFIELD].add(obj)
 
 
-def _place_in_hand(game: GameState, player: DeterministicPlayer, obj) -> None:
-    """Place a card in a player's hand, setting ownership and an instance_id.
-
-    The engine-minted ``instance_id`` lets a test reference a specific card in a
-    discard Intent preference (``Decision.obj(instance=obj.instance_id)``).
-    """
-    obj.owner = player
-    obj.controller = player
-    player.zones[Zone.HAND].add(obj)
-    obj.instance_id = game.refs.instance_id(obj, Zone.HAND.value)
-
-
-def _discard_first_baseline(player: DeterministicPlayer) -> None:
-    """Set an empty-preferences Baseline Intent: discard the first offered card."""
-    player.set_baseline(Intent(pattern=GameRef(), preferences=()))
-
-
 # ===========================================================================
 # Discard to hand size
 # ===========================================================================
@@ -102,99 +120,62 @@ class TestDiscardToHandSize:
 
     def test_discard_from_8_to_7(self) -> None:
         """Player with 8 cards in hand discards 1 to reach 7."""
-        cards = [_make_card(f"Card_{i}") for i in range(8)]
-        game, p1, p2 = _make_game()
-        # Baseline Intent answers the discard Player Query (first offered card).
-        _discard_first_baseline(p1)
-        for card in cards:
-            _place_in_hand(game, p1, card)
-
-        _do_cleanup_step(game)
-
-        assert len(p1.zones[Zone.HAND]) == MAX_HAND_SIZE
+        game, hand, _ = _discard_game(8)
+        t = Table(game)
+        _end_turn(t, discards=hand[:1])
+        final = t.run()
+        assert len(final.players[0].hand) == 7
 
     def test_discard_from_10_to_7(self) -> None:
         """Player with 10 cards in hand discards 3 to reach 7."""
-        cards = [_make_card(f"Card_{i}") for i in range(10)]
-        game, p1, p2 = _make_game()
-        _discard_first_baseline(p1)
-        for card in cards:
-            _place_in_hand(game, p1, card)
-
-        _do_cleanup_step(game)
-
-        assert len(p1.zones[Zone.HAND]) == MAX_HAND_SIZE
+        game, hand, _ = _discard_game(10)
+        t = Table(game)
+        _end_turn(t, discards=hand[:3])
+        final = t.run()
+        assert len(final.players[0].hand) == 7
 
     def test_discarded_cards_go_to_graveyard(self) -> None:
         """Discarded cards during cleanup go to the player's graveyard."""
-        cards = [_make_card(f"Card_{i}") for i in range(8)]
-        game, p1, p2 = _make_game()
-        for card in cards:
-            _place_in_hand(game, p1, card)
-        # Direct the discard at a specific card via its engine-minted instance.
-        p1.set_baseline(Intent(
-            pattern=GameRef(),
-            preferences=(Decision.obj(instance=cards[0].instance_id),),
-        ))
-
-        _do_cleanup_step(game)
-
-        graveyard = p1.zones[Zone.GRAVEYARD]
-        assert graveyard.contains(cards[0])
+        game, hand, _ = _discard_game(8)
+        t = Table(game)
+        _end_turn(t, discards=hand[:1])
+        final = t.run()
+        assert final.where(hand[0]) is Zone.GRAVEYARD
 
     def test_exactly_7_cards_no_discard(self) -> None:
-        """Player with exactly 7 cards does NOT discard."""
-        cards = [_make_card(f"Card_{i}") for i in range(7)]
-        game, p1, p2 = _make_game()
-        for card in cards:
-            _place_in_hand(game, p1, card)
-
-        _do_cleanup_step(game)
-
-        assert len(p1.zones[Zone.HAND]) == 7
+        """Player with exactly 7 cards does NOT discard: no discard question
+        comes, which the pass's empty choices could not answer."""
+        game, _, _ = _discard_game(7)
+        t = Table(game)
+        _end_turn(t)
+        final = t.run()
+        assert len(final.players[0].hand) == 7
 
     def test_fewer_than_7_cards_no_discard(self) -> None:
         """Player with fewer than 7 cards does NOT discard."""
-        cards = [_make_card(f"Card_{i}") for i in range(3)]
-        game, p1, p2 = _make_game()
-        for card in cards:
-            _place_in_hand(game, p1, card)
-
-        _do_cleanup_step(game)
-
-        assert len(p1.zones[Zone.HAND]) == 3
+        game, _, _ = _discard_game(3)
+        t = Table(game)
+        _end_turn(t)
+        final = t.run()
+        assert len(final.players[0].hand) == 3
 
     def test_only_active_player_discards(self) -> None:
-        """Only the active player discards during cleanup, not the non-active player."""
-        # P1 is active (default), P2 has 9 cards — P2 should NOT discard
-        cards_p2 = [_make_card(f"P2Card_{i}") for i in range(9)]
-        game, p1, p2 = _make_game()
-        for card in cards_p2:
-            _place_in_hand(game, p2, card)
-
-        _do_cleanup_step(game)
-
-        # P2 should still have 9 cards since they're not the active player
-        assert len(p2.zones[Zone.HAND]) == 9
+        """Only the active player discards during cleanup, not the non-active
+        player holding 9 cards."""
+        game, _, _ = _discard_game(0, other_hand=9)
+        t = Table(game)
+        _end_turn(t)
+        final = t.run()
+        assert len(final.players[1].hand) == 9
 
     def test_chosen_card_is_the_one_discarded(self) -> None:
-        """The specific card named by the discard Intent is the one discarded."""
-        cards = [_make_card(f"Card_{i}") for i in range(8)]
-        game, p1, p2 = _make_game()
-        for card in cards:
-            _place_in_hand(game, p1, card)
-        # Intent prefers the last card by its instance_id.
-        p1.set_baseline(Intent(
-            pattern=GameRef(),
-            preferences=(Decision.obj(instance=cards[7].instance_id),),
-        ))
-
-        _do_cleanup_step(game)
-
-        hand = p1.zones[Zone.HAND]
-        assert not hand.contains(cards[7])
-        graveyard = p1.zones[Zone.GRAVEYARD]
-        assert graveyard.contains(cards[7])
+        """The card the player chooses is the one discarded."""
+        game, hand, _ = _discard_game(8)
+        t = Table(game)
+        _end_turn(t, discards=hand[7:])
+        final = t.run()
+        assert final.where(hand[7]) is Zone.GRAVEYARD
+        assert all(final.where(c) is Zone.HAND for c in hand[:7])
 
 
 # ===========================================================================
@@ -206,117 +187,79 @@ class TestEOTEffectRemoval:
     """Tests for cleanup step 2: remove 'until end of turn' effects."""
 
     def test_eot_effect_removed(self) -> None:
-        """A DURATION_END_OF_TURN effect is removed during cleanup."""
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Bear", 2, 2)
-        _place_on_battlefield(game, p1, creature)
-
-        # Add an EOT effect that gives +3/+3
-        effect = ContinuousEffect(
-            source=creature,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "modified_power", creature.base_power + 3)
-            or setattr(creature, "modified_toughness", creature.base_toughness + 3),
-            duration=DURATION_END_OF_TURN,
+        """Giant Growth's +3/+3 ends in cleanup: next turn 2 damage kills the
+        2/1 it pumped."""
+        lions, forest, growth = card(SavannahLions), card(Forest), card(GiantGrowth)
+        mountain, bolt = card(Mountain), card(BurstLightning)
+        game = create_game(
+            Side(battlefield=[lions, forest], hand=[growth]),
+            Side(battlefield=[mountain], hand=[bolt]),
+            start=(Step.END, 0),
         )
-        game.effect_manager.add(effect)
-        # Apply once to verify effect is active
-        game.effect_manager.apply_all(game)
-        assert creature.modified_power == 5
-
-        _do_cleanup_step(game)
-
-        # After cleanup, the effect should be removed and P/T reverted
-        assert creature.modified_power == 2
-        assert creature.modified_toughness == 2
+        t = Table(game)
+        _cast(t, 0, forest, growth, lions)
+        t.pass_(0)
+        t.pass_(1, then=[moves(growth, Zone.GRAVEYARD)], note="the Lions is 5/4 until end of turn")
+        t.pass_to(Step.UPKEEP, 1)
+        _cast(t, 1, mountain, bolt, lions)
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD)], note="2 damage kills a 2/1")
+        t.run()
 
     def test_permanent_effect_not_removed(self) -> None:
-        """A DURATION_PERMANENT effect survives cleanup."""
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Bear", 2, 2)
-        _place_on_battlefield(game, p1, creature)
-
-        # Add a permanent effect
-        effect = ContinuousEffect(
-            source=creature,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "modified_power", creature.base_power + 1)
-            or setattr(creature, "modified_toughness", creature.base_toughness + 1),
-            duration=DURATION_PERMANENT,
+        """Anthem of Champions' +1/+1 survives cleanup: the 2/1 attacks for 3
+        next turn."""
+        lions = card(SavannahLions)
+        game = create_game(
+            Side(battlefield=[lions, AnthemOfChampions], library=[Plains]),
+            Side(),
+            start=(Step.END, 1),
         )
-        game.effect_manager.add(effect)
-        game.effect_manager.apply_all(game)
-        assert creature.modified_power == 3
-
-        _do_cleanup_step(game)
-
-        # Permanent effect remains — P/T should still be boosted
-        assert creature.modified_power == 3
-        assert creature.modified_toughness == 3
+        t = Table(game)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        _attack_unblocked(t, [lions], damage_to=1, life_after=17)
+        t.run()
 
     def test_multiple_eot_effects_all_removed(self) -> None:
-        """Multiple EOT effects are all removed during a single cleanup."""
-        game, p1, p2 = _make_game()
-        c1 = _make_creature("Bear1", 2, 2)
-        c2 = _make_creature("Bear2", 3, 3)
-        _place_on_battlefield(game, p1, c1)
-        _place_on_battlefield(game, p1, c2)
-
-        effect1 = ContinuousEffect(
-            source=c1,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(c1, "modified_power", c1.base_power + 2),
-            duration=DURATION_END_OF_TURN,
+        """Two Giant Growths both end in one cleanup: next turn their 2/1 and
+        1/1 attack for 3, not 9."""
+        lions, elves = card(SavannahLions), card(LlanowarElves)
+        forest_a, forest_b = card(Forest), card(Forest)
+        growth_a, growth_b = card(GiantGrowth), card(GiantGrowth)
+        game = create_game(
+            Side(battlefield=[lions, elves, forest_a, forest_b], hand=[growth_a, growth_b], library=[Plains]),
+            Side(),
+            start=(Step.END, 1),
         )
-        effect2 = ContinuousEffect(
-            source=c2,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(c2, "modified_power", c2.base_power + 2),
-            duration=DURATION_END_OF_TURN,
-        )
-        game.effect_manager.add(effect1)
-        game.effect_manager.add(effect2)
-
-        _do_cleanup_step(game)
-
-        assert c1.modified_power == 2
-        assert c2.modified_power == 3
+        t = Table(game)
+        t.pass_(1)
+        _cast(t, 0, forest_a, growth_a, lions)
+        _cast(t, 0, forest_b, growth_b, elves)
+        t.pass_(0)
+        t.pass_(1, then=[moves(growth_b, Zone.GRAVEYARD)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(growth_a, Zone.GRAVEYARD)], note="both are pumped until end of turn")
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        _attack_unblocked(t, [lions, elves], damage_to=1, life_after=17)
+        t.run()
 
     def test_effects_reapplied_after_removal(self) -> None:
-        """After removing expired effects, remaining effects are reapplied correctly."""
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Bear", 2, 2)
-        _place_on_battlefield(game, p1, creature)
-
-        # One permanent effect (+1/+1) and one EOT effect (+3/+3)
-        perm_effect = ContinuousEffect(
-            source=creature,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "modified_power", creature.base_power + 1)
-            or setattr(creature, "modified_toughness", creature.base_toughness + 1),
-            duration=DURATION_PERMANENT,
+        """With Anthem of Champions (+1/+1) and Giant Growth (+3/+3 until end
+        of turn) on a 2/1, only the anthem remains next turn: it attacks for 3."""
+        lions, forest, growth = card(SavannahLions), card(Forest), card(GiantGrowth)
+        game = create_game(
+            Side(battlefield=[lions, forest, AnthemOfChampions], hand=[growth], library=[Plains]),
+            Side(),
+            start=(Step.END, 1),
         )
-        eot_effect = ContinuousEffect(
-            source=creature,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "modified_power", creature.modified_power + 3)
-            or setattr(creature, "modified_toughness", creature.modified_toughness + 3),
-            duration=DURATION_END_OF_TURN,
-        )
-        game.effect_manager.add(perm_effect)
-        game.effect_manager.add(eot_effect)
-
-        _do_cleanup_step(game)
-
-        # Only permanent effect remains: 2 + 1 = 3
-        assert creature.modified_power == 3
-        assert creature.modified_toughness == 3
+        t = Table(game)
+        t.pass_(1)
+        _cast(t, 0, forest, growth, lions)
+        t.pass_(0)
+        t.pass_(1, then=[moves(growth, Zone.GRAVEYARD)], note="the Lions is 6/5 until end of turn")
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        _attack_unblocked(t, [lions], damage_to=1, life_after=17)
+        t.run()
 
 
 # ===========================================================================
@@ -328,44 +271,73 @@ class TestDamageClearing:
     """Tests for cleanup step 3: clear damage marked on creatures."""
 
     def test_damage_cleared_to_zero(self) -> None:
-        """Creature with damage_marked has it cleared to 0 during cleanup."""
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Bear", 2, 3)
-        _place_on_battlefield(game, p1, creature)
-        creature.damage_marked = 2
-
-        _do_cleanup_step(game)
-
-        assert creature.damage_marked == 0
+        """A 3/3 dealt 2 damage survives 2 more next turn: cleanup removed all
+        of it."""
+        scourge, mountain = card(BrazenScourge), card(Mountain)
+        bolt_a, bolt_b = card(BurstLightning), card(BurstLightning)
+        game = create_game(
+            Side(battlefield=[scourge]),
+            Side(battlefield=[mountain], hand=[bolt_a, bolt_b]),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_(0)
+        _cast(t, 1, mountain, bolt_a, scourge)
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt_a, Zone.GRAVEYARD)], note="the Scourge has 2 damage")
+        t.pass_to(Step.UPKEEP, 1)
+        _cast(t, 1, mountain, bolt_b, scourge)
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt_b, Zone.GRAVEYARD)], note="the Scourge survives 2 more")
+        t.run()
 
     def test_damage_cleared_on_all_players_creatures(self) -> None:
-        """Damage is cleared on creatures belonging to ALL players, not just active."""
-        game, p1, p2 = _make_game()
-        c1 = _make_creature("Bear1", 2, 3)
-        c2 = _make_creature("Bear2", 2, 4)
-        _place_on_battlefield(game, p1, c1)
-        _place_on_battlefield(game, p2, c2)
-        c1.damage_marked = 2
-        c2.damage_marked = 3
-
-        _do_cleanup_step(game)
-
-        assert c1.damage_marked == 0
-        assert c2.damage_marked == 0
+        """Damage is removed from every player's creatures, not just the
+        active player's: both 3/3s survive a second 2 damage next turn."""
+        mine, theirs = card(BrazenScourge), card(BrazenScourge)
+        my_mountain_a, my_mountain_b, their_mountain = card(Mountain), card(Mountain), card(Mountain)
+        my_bolt_a, my_bolt_b = card(BurstLightning), card(BurstLightning)
+        their_bolt_a, their_bolt_b = card(BurstLightning), card(BurstLightning)
+        game = create_game(
+            Side(battlefield=[mine, my_mountain_a, my_mountain_b], hand=[my_bolt_a, my_bolt_b]),
+            Side(battlefield=[theirs, their_mountain], hand=[their_bolt_a, their_bolt_b]),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        _cast(t, 0, my_mountain_a, my_bolt_a, theirs)
+        t.pass_(0)
+        t.pass_(1, then=[moves(my_bolt_a, Zone.GRAVEYARD)])
+        t.pass_(0)
+        _cast(t, 1, their_mountain, their_bolt_a, mine)
+        t.pass_(1)
+        t.pass_(0, then=[moves(their_bolt_a, Zone.GRAVEYARD)], note="each Scourge has 2 damage")
+        t.pass_to(Step.UPKEEP, 1)
+        _cast(t, 1, their_mountain, their_bolt_b, mine)
+        t.pass_(1)
+        _cast(t, 0, my_mountain_b, my_bolt_b, theirs)
+        t.pass_(0)
+        t.pass_(1, then=[moves(my_bolt_b, Zone.GRAVEYARD)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(their_bolt_b, Zone.GRAVEYARD)], note="both Scourges survive 2 more")
+        t.run()
 
     def test_damage_cleared_creature_survives(self) -> None:
-        """A creature with non-lethal damage survives after damage is cleared."""
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Hill Giant", 3, 3)
-        _place_on_battlefield(game, p1, creature)
-        creature.damage_marked = 2  # Non-lethal
-
-        _do_cleanup_step(game)
-
-        # Creature should still be on battlefield
-        bf = p1.zones[Zone.BATTLEFIELD]
-        assert bf.contains(creature)
-        assert creature.damage_marked == 0
+        """A creature with non-lethal damage is still on the battlefield after
+        cleanup."""
+        scourge, mountain, bolt = card(BrazenScourge), card(Mountain), card(BurstLightning)
+        game = create_game(
+            Side(battlefield=[scourge]),
+            Side(battlefield=[mountain], hand=[bolt]),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_(0)
+        _cast(t, 1, mountain, bolt, scourge)
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt, Zone.GRAVEYARD)], note="the Scourge has 2 damage")
+        t.pass_to(Step.UPKEEP, 1)
+        final = t.run()
+        assert final.where(scourge) is Zone.BATTLEFIELD
 
 
 # ===========================================================================
@@ -377,54 +349,94 @@ class TestCombatFlagClearing:
     """Tests for cleanup step 4: clear combat-related flags."""
 
     def test_dealt_deathtouch_damage_cleared(self) -> None:
-        """dealt_deathtouch_damage is set to False during cleanup."""
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Bear", 2, 2)
-        _place_on_battlefield(game, p1, creature)
-        creature.dealt_deathtouch_damage = True
-
-        _do_cleanup_step(game)
-
-        assert creature.dealt_deathtouch_damage is False
+        """A creature that survived deathtouch damage by being indestructible
+        until end of turn has it forgotten: next turn, 2 damage from a source
+        without deathtouch does not destroy the 0/5."""
+        plunderer, mountain, bolt = card(GutlessPlunderer), card(Mountain), card(BurstLightning)
+        turtle, plains, resilience = card(AegisTurtle), card(Plains), card(DivineResilience)
+        game = create_game(
+            Side(battlefield=[plunderer, mountain], hand=[bolt]),
+            Side(battlefield=[turtle, plains], hand=[resilience]),
+            start=(Step.BEGIN_COMBAT, 0),
+        )
+        t = Table(game)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, plunderer, then=[taps(plunderer)])
+        t.pass_(0)
+        t.pass_(1)
+        t.act(1, turtle, scoped={turtle: plunderer})
+        t.pass_(0)
+        _cast(t, 1, plains, resilience, turtle)
+        t.pass_(1)
+        t.pass_(0, then=[moves(resilience, Zone.GRAVEYARD)])
+        t.pass_(0)
+        t.pass_(1, note="the Turtle is dealt deathtouch damage and survives, indestructible")
+        t.pass_to(Step.UPKEEP, 1)
+        t.pass_(1)
+        _cast(t, 0, mountain, bolt, turtle)
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD)], note="the 0/5 survives 2 damage")
+        final = t.run()
+        assert final.where(turtle) is Zone.BATTLEFIELD
 
     def test_is_attacking_cleared(self) -> None:
-        """is_attacking flag is cleared during cleanup."""
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Bear", 2, 2)
-        _place_on_battlefield(game, p1, creature)
-        creature.is_attacking = True
-
-        _do_cleanup_step(game)
-
-        assert creature.is_attacking is False
+        """A creature that attacked last turn is no longer attacking: Condemn
+        ("target attacking creature") cannot target it."""
+        lions, plains, condemn = card(SavannahLions), card(Plains), card(Condemn)
+        game = create_game(
+            Side(battlefield=[lions]),
+            Side(battlefield=[plains], hand=[condemn]),
+            start=(Step.BEGIN_COMBAT, 0),
+        )
+        t = Table(game)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        _attack_unblocked(t, [lions], damage_to=1, life_after=18)
+        t.pass_to(Step.UPKEEP, 1)
+        t.act(1, plains, then=[taps(plains)])
+        t.act_illegal(1, condemn, choices=[lions], note="the Lions attacked last turn, not this one")
+        t.run()
 
     def test_is_blocking_cleared(self) -> None:
-        """is_blocking flag is cleared during cleanup."""
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Bear", 2, 2)
-        _place_on_battlefield(game, p2, creature)
-        creature.is_blocking = True
-
-        _do_cleanup_step(game)
-
-        assert creature.is_blocking is False
+        """A creature that blocked last turn is no longer blocking: on its
+        controller's turn it attacks like any other creature."""
+        turtle, lions = card(AegisTurtle), card(SavannahLions)
+        game = create_game(
+            Side(battlefield=[turtle]),
+            Side(battlefield=[lions], library=[Plains]),
+            start=(Step.BEGIN_COMBAT, 0),
+        )
+        t = Table(game)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, turtle, then=[taps(turtle)])
+        t.pass_(0)
+        t.pass_(1)
+        t.act(1, lions, scoped={lions: turtle})
+        t.pass_(0)
+        t.pass_(1, note="the Turtle and the Lions deal each other combat damage; both survive")
+        t.pass_to(Step.DECLARE_ATTACKERS, 1)
+        t.act(1, lions, then=[taps(lions)], note="the Lions blocked last turn, not this one")
+        t.pass_(1)
+        t.pass_(0)
+        t.pass_(0)  # declares no blockers
+        t.pass_(1)
+        t.pass_(0, then=[life(0, 18)])
+        t.run()
 
     def test_combat_state_cleared(self) -> None:
-        """CombatState itself is cleared (attackers, was_blocked, in_combat)."""
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Bear", 2, 2)
-        _place_on_battlefield(game, p1, creature)
-
-        # Simulate active combat state
-        game.combat_state.in_combat = True
-        game.combat_state.attackers[creature] = p2
-        game.combat_state.was_blocked.add(creature)
-
-        _do_cleanup_step(game)
-
-        assert game.combat_state.in_combat is False
-        assert len(game.combat_state.attackers) == 0
-        assert len(game.combat_state.was_blocked) == 0
+        """Last turn's combat is over: the next turn's combat, with no
+        attackers, deals no damage again."""
+        lions = card(SavannahLions)
+        game = create_game(
+            Side(battlefield=[lions]),
+            Side(library=[Plains]),
+            start=(Step.BEGIN_COMBAT, 0),
+        )
+        t = Table(game)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        _attack_unblocked(t, [lions], damage_to=1, life_after=18)
+        t.pass_to(Step.END, 1)
+        final = t.run()
+        assert final.players[1].life == 18
 
 
 # ===========================================================================
@@ -436,38 +448,49 @@ class TestManaPoolEmptying:
     """Tests for cleanup step 5: empty all players' mana pools."""
 
     def test_active_player_mana_emptied(self) -> None:
-        """Active player's mana pool is emptied during cleanup."""
-        game, p1, p2 = _make_game()
-        p1.mana_pool.add(ManaType.GREEN, 3)
-        p1.mana_pool.add(ManaType.RED, 2)
-
-        _do_cleanup_step(game)
-
-        assert p1.mana_pool.total() == 0
+        """Mana left in the active player's pool at end of turn cannot pay
+        for a spell next turn."""
+        lions, growth = card(SavannahLions), card(GiantGrowth)
+        game = create_game(
+            Side(battlefield=[lions], hand=[growth], mana={ManaType.GREEN: 3, ManaType.RED: 2}),
+            Side(),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_to(Step.UPKEEP, 1)
+        t.pass_(1)
+        t.act_illegal(0, growth, choices=[lions], note="player 0's pool is empty")
+        t.run()
 
     def test_non_active_player_mana_emptied(self) -> None:
-        """Non-active player's mana pool is also emptied during cleanup."""
-        game, p1, p2 = _make_game()
-        p2.mana_pool.add(ManaType.BLUE, 5)
-
-        _do_cleanup_step(game)
-
-        assert p2.mana_pool.total() == 0
+        """The non-active player's pool is emptied too."""
+        lions, growth = card(SavannahLions), card(GiantGrowth)
+        game = create_game(
+            Side(),
+            Side(battlefield=[lions], hand=[growth], mana={ManaType.GREEN: 5}),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_to(Step.UPKEEP, 1)
+        t.act_illegal(1, growth, choices=[lions], note="player 1's pool is empty")
+        t.run()
 
     def test_all_mana_types_emptied(self) -> None:
-        """All mana types (WUBRG + colorless) are emptied."""
-        game, p1, p2 = _make_game()
-        p1.mana_pool.add(ManaType.WHITE, 1)
-        p1.mana_pool.add(ManaType.BLUE, 1)
-        p1.mana_pool.add(ManaType.BLACK, 1)
-        p1.mana_pool.add(ManaType.RED, 1)
-        p1.mana_pool.add(ManaType.GREEN, 1)
-        p1.mana_pool.add(ManaType.COLORLESS, 1)
-
-        _do_cleanup_step(game)
-
-        for mt in ManaType:
-            assert p1.mana_pool.get(mt) == 0
+        """Every mana type leaves the pool: no one-mana spell of any color can
+        be cast from it next turn."""
+        lions = card(SavannahLions)
+        spells = [card(GiantGrowth), card(BurstLightning), card(DivineResilience), card(Stab), card(FleetingDistraction)]
+        pool = {mana: 1 for mana in (ManaType.WHITE, ManaType.BLUE, ManaType.BLACK, ManaType.RED, ManaType.GREEN, ManaType.COLORLESS)}
+        game = create_game(
+            Side(battlefield=[lions], hand=spells, mana=pool),
+            Side(),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_to(Step.UPKEEP, 1)
+        t.pass_(1)
+        t.act_illegal(0, branches=[[spell] for spell in spells], choices=[lions], note="player 0's pool is empty")
+        t.run()
 
 
 # ===========================================================================
@@ -479,77 +502,30 @@ class TestSBACheckDuringCleanup:
     """Tests for cleanup step 6: state-based actions are checked."""
 
     def test_creature_dies_after_eot_buff_expires(self) -> None:
-        """A creature that only survives due to an EOT buff dies when the buff expires.
-
-        Example: 1/1 creature with Giant Growth (+3/+3 EOT) has taken 3 damage.
-        During cleanup, the buff expires making it a 1/1 with 3 damage → dies via SBA.
-        """
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Soldier", 1, 1)
-        _place_on_battlefield(game, p1, creature)
-
-        # Simulate Giant Growth: temporarily make it 4/4
-        effect = ContinuousEffect(
-            source=creature,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "modified_power", creature.base_power + 3)
-            or setattr(creature, "modified_toughness", creature.base_toughness + 3),
-            duration=DURATION_END_OF_TURN,
+        """A 1/1 pumped by Giant Growth and dealt 2 damage survives cleanup:
+        its damage is removed as the +3/+3 ends (rule 514.2). As a 1/1 again,
+        2 damage next turn kills it."""
+        elves, forest, growth = card(LlanowarElves), card(Forest), card(GiantGrowth)
+        mountain, bolt_a, bolt_b = card(Mountain), card(BurstLightning), card(BurstLightning)
+        game = create_game(
+            Side(battlefield=[elves, forest], hand=[growth]),
+            Side(battlefield=[mountain], hand=[bolt_a, bolt_b]),
+            start=(Step.END, 0),
         )
-        game.effect_manager.add(effect)
-        game.effect_manager.apply_all(game)
-        # While buffed, creature takes 3 damage (survivable at 4 toughness)
-        creature.damage_marked = 3
+        t = Table(game)
+        _cast(t, 0, forest, growth, elves)
+        t.pass_(0)
+        t.pass_(1, then=[moves(growth, Zone.GRAVEYARD)])
+        t.pass_(0)
+        _cast(t, 1, mountain, bolt_a, elves)
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt_a, Zone.GRAVEYARD)], note="the Elves is a 4/4 with 2 damage")
+        t.pass_to(Step.UPKEEP, 1)
+        _cast(t, 1, mountain, bolt_b, elves)
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt_b, Zone.GRAVEYARD), moves(elves, Zone.GRAVEYARD)], note="2 damage kills a 1/1")
+        t.run()
 
-        _do_cleanup_step(game)
-
-        # After cleanup: effect expires → toughness back to 1, but damage is cleared
-        # to 0 in step 3. So actually the creature would survive since damage clears
-        # before SBAs. Let's verify it's on battlefield still.
-        bf = p1.zones[Zone.BATTLEFIELD]
-        # Damage is cleared in step 3 (before SBA check in step 6),
-        # so the creature should survive as a 1/1 with 0 damage.
-        assert bf.contains(creature)
-        assert creature.damage_marked == 0
-        assert creature.modified_power == 1
-        assert creature.modified_toughness == 1
-
-    def test_zero_toughness_creature_dies_after_eot_buff_expires(self) -> None:
-        """A creature whose toughness drops to 0 after EOT buff expires dies via SBA.
-
-        A 0/1 base creature with an EOT +0/+2 buff → cleanup removes buff → 0/1 stays.
-        But a creature that has its toughness SET to 0 by buff removal dies.
-        Let's make a -1 toughness scenario: creature has base 2/1 and -1/-1 counter,
-        kept alive by a +0/+1 EOT buff. When buff expires: toughness = 1 - 1 = 0 → dies.
-        """
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Weakling", 2, 1)
-        _place_on_battlefield(game, p1, creature)
-        # Give it a -1/-1 counter (would make it 1/0 without help)
-        creature.minus_one_counters = 1
-        creature._base_minus_one_counters = 1
-
-        # EOT buff that gives +0/+1 toughness to keep it alive
-        effect = ContinuousEffect(
-            source=creature,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "modified_toughness", creature.base_toughness + 1),
-            duration=DURATION_END_OF_TURN,
-        )
-        game.effect_manager.add(effect)
-        game.effect_manager.apply_all(game)
-        # With buff: toughness = (1+1) - 1 = 1, alive
-        assert creature.toughness == 1
-
-        _do_cleanup_step(game)
-
-        # After cleanup: buff removed → toughness = 1 - 1 = 0 → SBA kills it
-        bf = p1.zones[Zone.BATTLEFIELD]
-        assert not bf.contains(creature)
-        graveyard = p1.zones[Zone.GRAVEYARD]
-        assert graveyard.contains(creature)
 
 
 # ===========================================================================
@@ -561,103 +537,88 @@ class TestCleanupIntegration:
     """Integration tests verifying full cleanup behavior with realistic scenarios."""
 
     def test_giant_growth_reverts_after_cleanup(self) -> None:
-        """Giant Growth (+3/+3 until EOT) on a 2/2 Bear → cleanup → reverts to 2/2.
-
-        This is the canonical test from the TODO: "Giant Growth a creature →
-        advance to cleanup → verify P/T reverts."
-        """
-        game, p1, p2 = _make_game()
-        bear = _make_creature("Bear", 2, 2)
-        _place_on_battlefield(game, p1, bear)
-
-        # Simulate Giant Growth: +3/+3 until end of turn
-        def giant_growth_apply(g):
-            bear.modified_power = bear.base_power + 3
-            bear.modified_toughness = bear.base_toughness + 3
-
-        effect = ContinuousEffect(
-            source=bear,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=giant_growth_apply,
-            duration=DURATION_END_OF_TURN,
+        """Giant Growth (+3/+3 until end of turn) on a 2/1: next turn it
+        attacks for 2."""
+        lions, forest, growth = card(SavannahLions), card(Forest), card(GiantGrowth)
+        game = create_game(
+            Side(battlefield=[lions, forest], hand=[growth], library=[Plains]),
+            Side(),
+            start=(Step.END, 1),
         )
-        game.effect_manager.add(effect)
-        game.effect_manager.apply_all(game)
-
-        # Verify the buff is active
-        assert bear.power == 5
-        assert bear.toughness == 5
-
-        _do_cleanup_step(game)
-
-        # After cleanup, the creature should revert to its original stats
-        assert bear.power == 2
-        assert bear.toughness == 2
+        t = Table(game)
+        t.pass_(1)
+        _cast(t, 0, forest, growth, lions)
+        t.pass_(0)
+        t.pass_(1, then=[moves(growth, Zone.GRAVEYARD)], note="the Lions is 5/4 until end of turn")
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        _attack_unblocked(t, [lions], damage_to=1, life_after=18)
+        t.run()
 
     def test_damage_on_3_3_cleared_creature_alive(self) -> None:
-        """Deal 2 damage to a 3/3 → cleanup → damage cleared, creature alive.
-
-        This is the canonical test from the TODO: "Deal 2 damage to 3/3 →
-        cleanup → verify damage cleared."
-        """
-        game, p1, p2 = _make_game()
-        hill_giant = _make_creature("Hill Giant", 3, 3)
-        _place_on_battlefield(game, p1, hill_giant)
-
-        # Simulate taking 2 damage
-        hill_giant.damage_marked = 2
-
-        _do_cleanup_step(game)
-
-        # Creature should be alive with 0 damage
-        bf = p1.zones[Zone.BATTLEFIELD]
-        assert bf.contains(hill_giant)
-        assert hill_giant.damage_marked == 0
+        """A 3/3 dealt 2 combat damage survives 2 more next turn."""
+        scourge, lions = card(BrazenScourge), card(SavannahLions)
+        mountain, bolt = card(Mountain), card(BurstLightning)
+        game = create_game(
+            Side(battlefield=[scourge]),
+            Side(battlefield=[lions, mountain], hand=[bolt]),
+            start=(Step.BEGIN_COMBAT, 0),
+        )
+        t = Table(game)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, scourge, then=[taps(scourge)])
+        t.pass_(0)
+        t.pass_(1)
+        t.act(1, lions, scoped={lions: scourge})
+        t.pass_(0)
+        t.pass_(1, then=[moves(lions, Zone.GRAVEYARD)], note="the Scourge is dealt 2 damage")
+        t.pass_to(Step.UPKEEP, 1)
+        _cast(t, 1, mountain, bolt, scourge)
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt, Zone.GRAVEYARD)], note="the Scourge survives 2 more")
+        t.run()
 
     def test_full_cleanup_all_steps_execute(self) -> None:
-        """Verify that all cleanup steps execute together in a realistic scenario.
+        """One cleanup does everything: player 0 discards to seven, Giant
+        Growth ends, the attacker stops attacking and its damage is removed.
 
-        Scenario: Active player has 8 cards, a creature with damage, mana in pool,
-        creature with combat flags, and an EOT effect.
+        Player 0's 3/3 attacks and is dealt 2 by a blocker, is pumped to 6/6
+        and dealt 2 more. Next turn Condemn cannot target it, and 2 damage
+        does not kill it.
         """
-        # Create 8 cards in hand for P1
-        cards = [_make_card(f"Card_{i}") for i in range(8)]
-        game, p1, p2 = _make_game()
-        _discard_first_baseline(p1)
-        for card in cards:
-            _place_in_hand(game, p1, card)
-
-        # Creature with damage and combat flags
-        creature = _make_creature("Bear", 2, 3)
-        _place_on_battlefield(game, p1, creature)
-        creature.damage_marked = 1
-        creature.is_attacking = True
-        creature.dealt_deathtouch_damage = True
-
-        # Mana in pool
-        p1.mana_pool.add(ManaType.GREEN, 3)
-
-        # EOT effect
-        effect = ContinuousEffect(
-            source=creature,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(creature, "modified_power", creature.base_power + 2),
-            duration=DURATION_END_OF_TURN,
+        scourge, forest, growth = card(BrazenScourge), card(Forest), card(GiantGrowth)
+        hand = [card(Plains) for _ in range(8)]
+        lions, mountain, plains = card(SavannahLions), card(Mountain), card(Plains)
+        bolt_a, bolt_b, condemn = card(BurstLightning), card(BurstLightning), card(Condemn)
+        game = create_game(
+            Side(battlefield=[scourge, forest], hand=[growth, *hand]),
+            Side(battlefield=[lions, mountain, plains], hand=[bolt_a, bolt_b, condemn]),
+            start=(Step.BEGIN_COMBAT, 0),
         )
-        game.effect_manager.add(effect)
-        game.effect_manager.apply_all(game)
-
-        _do_cleanup_step(game)
-
-        # All cleanup effects verified:
-        assert len(p1.zones[Zone.HAND]) == MAX_HAND_SIZE  # Discarded to 7
-        assert creature.damage_marked == 0  # Damage cleared
-        assert creature.is_attacking is False  # Combat flag cleared
-        assert creature.dealt_deathtouch_damage is False  # Deathtouch flag cleared
-        assert p1.mana_pool.total() == 0  # Mana emptied
-        assert creature.modified_power == 2  # EOT effect removed
+        t = Table(game)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, scourge, then=[taps(scourge)])
+        t.pass_(0)
+        t.pass_(1)
+        t.act(1, lions, scoped={lions: scourge})
+        t.pass_(0)
+        t.pass_(1, then=[moves(lions, Zone.GRAVEYARD)], note="the Scourge is dealt 2 damage")
+        t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+        _cast(t, 0, forest, growth, scourge)
+        t.pass_(0)
+        t.pass_(1, then=[moves(growth, Zone.GRAVEYARD)])
+        t.pass_to(Step.END, 0)
+        t.pass_(0)
+        _cast(t, 1, mountain, bolt_a, scourge)
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt_a, Zone.GRAVEYARD)], note="the Scourge is a 6/6 with 4 damage")
+        _end_turn(t, discards=hand[:1])
+        t.act(1, plains, then=[taps(plains)])
+        t.act_illegal(1, condemn, choices=[scourge], note="the Scourge no longer attacks")
+        _cast(t, 1, mountain, bolt_b, scourge)
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt_b, Zone.GRAVEYARD)], note="the 3/3 survives 2 damage")
+        final = t.run()
+        assert len(final.players[0].hand) == 7
 
     def test_max_hand_size_constant_is_7(self) -> None:
         """MAX_HAND_SIZE is defined as 7."""
@@ -673,144 +634,147 @@ class TestReCleanupLoop:
     """Tests for rule 514.3a: if SBAs are performed or triggered abilities
     fire during cleanup, another cleanup step occurs after resolving."""
 
-    def test_sba_during_cleanup_triggers_recleanup(self) -> None:
-        """A creature that dies from SBA during cleanup causes a re-cleanup.
-
-        Scenario: A 2/1 creature kept alive by an EOT +0/+1 buff.
-        When cleanup removes the buff, toughness drops to 1 and the creature
-        has a -1/-1 counter → effective toughness 0 → SBA kills it.
-        The re-cleanup should then clear damage on remaining creatures, etc.
-
-        We verify the SBA fires (creature goes to graveyard) AND that
-        the re-cleanup properly clears damage on a *second* creature that
-        only exists to prove the second cleanup pass ran.
-        """
-        game, p1, p2 = _make_game()
-
-        # Creature #1: 2/1 with -1/-1 counter, kept alive by EOT +0/+1
-        doomed = _make_creature("Doomed", 2, 1)
-        _place_on_battlefield(game, p1, doomed)
-        doomed.minus_one_counters = 1
-        doomed._base_minus_one_counters = 1
-
-        effect = ContinuousEffect(
-            source=doomed,
-            layer=Layer.POWER_TOUGHNESS,
-            sublayer=SubLayer.MODIFY_PT,
-            apply=lambda g: setattr(doomed, "modified_toughness", doomed.base_toughness + 1),
-            duration=DURATION_END_OF_TURN,
-        )
-        game.effect_manager.add(effect)
-        game.effect_manager.apply_all(game)
-        assert doomed.toughness == 1  # (1+1) - 1 = 1, alive
-
-        # Creature #2: survives first cleanup, gets damage marked.
-        # The first cleanup clears its damage, but the SBA from doomed dying
-        # triggers a second cleanup. We mark damage on survivor *after*
-        # the first cleanup's step 3 by using a trick: we mark damage high
-        # enough that it wouldn't survive without the second cleanup clearing it.
-        # Actually, simpler approach: verify that the second cleanup occurred
-        # by checking that mana added *during* cleanup processing gets cleared.
-        survivor = _make_creature("Survivor", 3, 3)
-        _place_on_battlefield(game, p1, survivor)
-        survivor.damage_marked = 1  # Non-lethal
-
-        _do_cleanup_step(game)
-
-        # Doomed creature should be dead (SBA from toughness 0)
-        assert not p1.zones[Zone.BATTLEFIELD].contains(doomed)
-        assert p1.zones[Zone.GRAVEYARD].contains(doomed)
-
-        # Survivor should still be alive with damage cleared
-        assert p1.zones[Zone.BATTLEFIELD].contains(survivor)
-        assert survivor.damage_marked == 0
 
     def test_stack_trigger_during_cleanup_causes_recleanup(self) -> None:
-        """If something is on the stack during cleanup, priority_loop is called
-        and then another cleanup step occurs.
-
-        We manually push an item onto the stack before cleanup to simulate
-        a triggered ability. The priority_loop should resolve it, and then
-        a second cleanup should run (clearing mana, damage, etc. again).
-        """
-        from engine.stack import StackObject
-
-        game, p1, p2 = _make_game()
-        resolved = []
-
-        # Push a triggered ability onto the stack that records its resolution
-        trigger = StackObject(
-            source=None,
-            controller=p1,
-            on_resolve=lambda g: resolved.append("trigger_resolved"),
+        """Player 0 discards to hand size in cleanup and Tinybones triggers:
+        players get priority in that cleanup step, player 1's Burst Lightning
+        marks 2 damage on the Scourge, and another cleanup step removes it —
+        a second Burst Lightning on player 1's turn does not kill it."""
+        hand = [card(Plains) for _ in range(8)]
+        scourge, mountain = card(BrazenScourge), card(Mountain)
+        first, second = card(BurstLightning), card(BurstLightning)
+        game = create_game(
+            Side(hand=hand, battlefield=[scourge]),
+            Side(hand=[first, second], battlefield=[card(TinybonesBaubleBurglar), mountain], library=[card(Plains)]),
+            start=(Step.END, 0),
         )
-        game.stack.push(trigger)
+        t = Table(game)
+        t.pass_(0, choices=[hand[0]])
+        t.pass_(1, then=[moves(hand[0], Zone.GRAVEYARD), cleanup_trigger(TinybonesBaubleBurglarAbility1, 1)])
+        t.pass_(0)
+        _cast(t, 1, mountain, first, scourge)
+        t.pass_(1)
+        t.pass_(0, then=[moves(first, Zone.GRAVEYARD)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(TinybonesBaubleBurglarAbility1), moves(hand[0], Zone.EXILE)])
+        t.pass_(0)
+        t.pass_(1, note="the stack is empty: another cleanup step, then player 1's turn")
+        _cast(t, 1, mountain, second, scourge)
+        t.pass_(1)
+        t.pass_(0, then=[moves(second, Zone.GRAVEYARD)], note="the Scourge survives: its damage was removed")
+        t.run()
 
-        # priority_loop auto-passes (directive-driven action layer), so both
-        # players pass and the trigger resolves without any scripted choices.
+    def test_a_trigger_in_the_second_cleanup_step_opens_a_third(self) -> None:
+        """In the first cleanup step's window player 0 shocks player 1 and
+        draws three with Arcane Epiphany, so the second cleanup step discards
+        again and Tinybones triggers: players receive priority in that second
+        cleanup step, and only the third, with nothing to do, ends the turn."""
+        hand = [card(Plains) for _ in range(6)]
+        burst, epiphany = card(BurstLightning), card(ArcaneEpiphany)
+        mountain, islands = card(Mountain), [card(Island) for _ in range(5)]
+        drawn = [card(Plains) for _ in range(3)]
+        game = create_game(
+            Side(hand=[*hand, burst, epiphany], battlefield=[mountain, *islands], library=drawn),
+            Side(battlefield=[card(TinybonesBaubleBurglar)], library=[card(Plains)]),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_(0, choices=[hand[0]])
+        t.pass_(1, then=[moves(hand[0], Zone.GRAVEYARD), cleanup_trigger(TinybonesBaubleBurglarAbility1, 1)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(TinybonesBaubleBurglarAbility1), moves(hand[0], Zone.EXILE)])
+        _cast(t, 0, mountain, burst, player(1))
+        t.pass_(0)
+        t.pass_(1, then=[moves(burst, Zone.GRAVEYARD), life(1, 18)])
+        for island in islands:
+            t.act(0, island, then=[taps(island)])
+        t.act(0, epiphany, then=[moves(epiphany, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(epiphany, Zone.GRAVEYARD), *[moves(c, Zone.HAND) for c in drawn]])
+        t.pass_(0, choices=[hand[1]])
+        t.pass_(
+            1,
+            then=[moves(hand[1], Zone.GRAVEYARD), cleanup_trigger(TinybonesBaubleBurglarAbility1, 1)],
+            note="eight cards: another cleanup step discards one, and Tinybones triggers",
+        )
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(TinybonesBaubleBurglarAbility1), moves(hand[1], Zone.EXILE)])
+        t.pass_(0)
+        t.pass_(1, note="a third cleanup step has nothing to do: player 1's turn")
+        final = t.run()
+        assert final.step is Step.UPKEEP and final.active == 1
 
-        # Place a creature with damage to verify re-cleanup clears it
-        creature = _make_creature("Bear", 2, 3)
-        _place_on_battlefield(game, p1, creature)
-        creature.damage_marked = 1
-
-        _do_cleanup_step(game)
-
-        # Trigger should have been resolved
-        assert "trigger_resolved" in resolved
-
-        # Re-cleanup should have cleared damage again
-        assert creature.damage_marked == 0
+    def test_an_extra_turn_taken_in_a_cleanup_window_follows_once(self) -> None:
+        """Player 0 casts Temporal Manipulation in the cleanup step's window,
+        through High Fae Trickster: the next cleanup step ends the turn, and
+        player 0's extra turn follows, with its Islands untapped."""
+        hand = [card(Plains) for _ in range(7)]
+        manipulation = card(TemporalManipulation)
+        islands = [card(Island) for _ in range(5)]
+        game = create_game(
+            Side(hand=[*hand, manipulation], battlefield=[card(HighFaeTrickster), *islands], library=[card(Plains)]),
+            Side(battlefield=[card(TinybonesBaubleBurglar)], library=[card(Plains)]),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_(0, choices=[hand[0]])
+        t.pass_(1, then=[moves(hand[0], Zone.GRAVEYARD), cleanup_trigger(TinybonesBaubleBurglarAbility1, 1)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(TinybonesBaubleBurglarAbility1), moves(hand[0], Zone.EXILE)])
+        for island in islands:
+            t.act(0, island, then=[taps(island)])
+        t.act(0, manipulation, then=[moves(manipulation, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(manipulation, Zone.GRAVEYARD), extra_turn(0)])
+        t.pass_(0)
+        t.pass_(1, note="another cleanup step has nothing to do: player 0's extra turn")
+        final = t.run()
+        assert final.step is Step.UPKEEP and final.active == 0
 
     def test_no_recleanup_when_no_sba_and_empty_stack(self) -> None:
-        """When cleanup doesn't trigger SBAs and the stack is empty,
-        no extra cleanup step occurs (no infinite loop)."""
-        game, p1, p2 = _make_game()
-        creature = _make_creature("Bear", 2, 3)
-        _place_on_battlefield(game, p1, creature)
-        creature.damage_marked = 1
-
-        # This should complete without hanging (no infinite recursion)
-        _do_cleanup_step(game)
-
-        assert creature.damage_marked == 0
-        assert p1.zones[Zone.BATTLEFIELD].contains(creature)
+        """When cleanup performs no state-based action and nothing triggers,
+        the game goes on to the next turn (no loop)."""
+        scourge, mountain, bolt = card(BrazenScourge), card(Mountain), card(BurstLightning)
+        game = create_game(
+            Side(battlefield=[scourge]),
+            Side(battlefield=[mountain], hand=[bolt]),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_(0)
+        _cast(t, 1, mountain, bolt, scourge)
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt, Zone.GRAVEYARD)])
+        t.pass_to(Step.UPKEEP, 1)
+        final = t.run()
+        assert final.step is Step.UPKEEP and final.active == 1
 
 
 # ===========================================================================
-# Discard down to hand size (Intent-driven)
+# Discard down to hand size
 # ===========================================================================
 
 
 class TestDiscardLargeHands:
-    """Discard always reaches max hand size, driven by a Baseline Intent."""
+    """Discard always reaches max hand size."""
 
     def test_discard_9_to_7_with_baseline(self) -> None:
-        """Player with 9 cards discards 2 to reach 7 via the Baseline Intent."""
-        cards = [_make_card(f"Card_{i}") for i in range(9)]
-        game, p1, p2 = _make_game()
-        _discard_first_baseline(p1)
-        for card in cards:
-            _place_in_hand(game, p1, card)
-
-        _do_cleanup_step(game)
-
-        assert len(p1.zones[Zone.HAND]) == MAX_HAND_SIZE
-        # 2 cards should be in graveyard (9 - 7 = 2)
-        assert len(p1.zones[Zone.GRAVEYARD]) == 2
+        """Player with 9 cards discards 2 to reach 7."""
+        game, hand, _ = _discard_game(9)
+        t = Table(game)
+        _end_turn(t, discards=hand[:2])
+        final = t.run()
+        assert len(final.players[0].hand) == 7
+        assert len(final.players[0].graveyard) == 2
 
     def test_discard_large_hand_with_baseline(self) -> None:
         """Player with 15 cards discards 8 cards to reach 7."""
-        cards = [_make_card(f"Card_{i}") for i in range(15)]
-        game, p1, p2 = _make_game()
-        _discard_first_baseline(p1)
-        for card in cards:
-            _place_in_hand(game, p1, card)
-
-        _do_cleanup_step(game)
-
-        assert len(p1.zones[Zone.HAND]) == MAX_HAND_SIZE
-        assert len(p1.zones[Zone.GRAVEYARD]) == 8
+        game, hand, _ = _discard_game(15)
+        t = Table(game)
+        _end_turn(t, discards=hand[:8])
+        final = t.run()
+        assert len(final.players[0].hand) == 7
+        assert len(final.players[0].graveyard) == 8
 
 
 # ===========================================================================
@@ -822,64 +786,43 @@ class TestCleanupEdgeCases:
     """Edge case tests for cleanup step."""
 
     def test_no_creatures_on_battlefield(self) -> None:
-        """Cleanup succeeds when no creatures are on the battlefield.
-
-        Damage clearing is a no-op, combat flag clearing is a no-op,
-        SBA check finds nothing. Verify no errors and mana is still cleared.
-        """
-        game, p1, p2 = _make_game()
-        # No creatures — just mana to empty
-        p1.mana_pool.add(ManaType.RED, 2)
-
-        _do_cleanup_step(game)
-
-        assert p1.mana_pool.total() == 0
-        assert len(p1.zones[Zone.BATTLEFIELD]) == 0
+        """Cleanup with no creatures still empties the pool: the red mana left
+        cannot pay for Burst Lightning next turn."""
+        bolt = card(BurstLightning)
+        game = create_game(
+            Side(hand=[bolt], mana={ManaType.RED: 2}),
+            Side(),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_to(Step.UPKEEP, 1)
+        t.pass_(1)
+        t.act_illegal(0, bolt, choices=[player(1)], note="player 0's pool is empty")
+        final = t.run()
+        assert final.players[0].battlefield == ()
 
     def test_mana_pool_already_empty(self) -> None:
-        """Cleanup succeeds when all mana pools are already empty."""
-        game, p1, p2 = _make_game()
-        # Mana pools are empty by default
-        assert p1.mana_pool.total() == 0
-        assert p2.mana_pool.total() == 0
-
-        _do_cleanup_step(game)
-
-        assert p1.mana_pool.total() == 0
-        assert p2.mana_pool.total() == 0
+        """Cleanup with nothing to do and empty pools leads into the next turn."""
+        game = create_game(Side(), Side(), start=(Step.END, 0))
+        t = Table(game)
+        t.pass_to(Step.UPKEEP, 1)
+        final = t.run()
+        assert final.step is Step.UPKEEP and final.active == 1
 
     def test_empty_battlefield_and_empty_hand(self) -> None:
-        """Cleanup works with completely empty board state — no creatures,
-        no cards in hand, no mana, nothing to discard."""
-        game, p1, p2 = _make_game()
-
-        _do_cleanup_step(game)
-
-        assert len(p1.zones[Zone.HAND]) == 0
-        assert len(p1.zones[Zone.BATTLEFIELD]) == 0
-        assert p1.mana_pool.total() == 0
+        """Cleanup works with a completely empty board: no creatures, no cards
+        in hand, no mana, nothing to discard."""
+        game = create_game(Side(), Side(), start=(Step.END, 0))
+        t = Table(game)
+        _end_turn(t)
+        final = t.run()
+        assert final.players[0].hand == () and final.players[0].battlefield == ()
 
     def test_zero_cards_in_hand_no_discard(self) -> None:
-        """Player with 0 cards in hand: discard step is a no-op."""
-        game, p1, p2 = _make_game()
-        assert len(p1.zones[Zone.HAND]) == 0
+        """Player with 0 cards in hand: nothing is discarded."""
+        game, _, _ = _discard_game(0)
+        t = Table(game)
+        _end_turn(t)
+        final = t.run()
+        assert final.players[0].hand == () and final.players[0].graveyard == ()
 
-        _do_cleanup_step(game)
-
-        assert len(p1.zones[Zone.HAND]) == 0
-        assert len(p1.zones[Zone.GRAVEYARD]) == 0
-
-    def test_non_creature_permanent_damage_attr_cleared(self) -> None:
-        """If a non-creature permanent somehow has damage_marked, it's still cleared.
-
-        The cleanup code iterates all battlefield objects with damage_marked,
-        not just creatures.
-        """
-        game, p1, p2 = _make_game()
-        artifact = _make_card("Artifact")
-        artifact.damage_marked = 5  # Unusual but possible
-        _place_on_battlefield(game, p1, artifact)
-
-        _do_cleanup_step(game)
-
-        assert artifact.damage_marked == 0

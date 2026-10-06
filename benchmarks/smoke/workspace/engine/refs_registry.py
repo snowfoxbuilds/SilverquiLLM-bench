@@ -38,6 +38,19 @@ def object_options(
     return tuple(options), by_decision
 
 
+def card_ref_pairs(obj: Any) -> frozenset[tuple[str, Hashable]]:
+    """A GameRef ``card`` field for ``obj``: its name and the predefined class it
+    stands for, so an Intent routes by printed identity (see ADR-017)."""
+    pairs: set[tuple[str, Hashable]] = set()
+    name = getattr(obj, "name", None)
+    if isinstance(name, str) and name:
+        pairs.add(("name", name))
+    printed = printed_class(obj)
+    if printed is not None:
+        pairs.add(("printed", printed))
+    return frozenset(pairs)
+
+
 def multi_attrs(obj: Any) -> list[tuple[str, Hashable]]:
     """Return the full (possibly multi-valued) blessed OBJECT attr pairs.
 
@@ -254,10 +267,8 @@ class GameRefsRegistry:
         attrs.extend(multi_attrs(presented))
         if controller_seat is not None:
             attrs.append(("controller", controller_seat))
-        card_ref: dict[str, Hashable] = dict(card or {})
-        name = getattr(presented, "name", None)
-        if isinstance(name, str) and name and "name" not in card_ref:
-            card_ref["name"] = name
+        card_ref: dict[str, Hashable] = dict(card_ref_pairs(presented))
+        card_ref.update(card or {})
         ref = GameRef(
             object=frozenset({("instance", iid)}),
             zone=frozenset({("name", ztoken)}),

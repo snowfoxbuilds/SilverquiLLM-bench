@@ -8,6 +8,17 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class WaryThespianAbility1:
+    text = 'When this creature enters or dies, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)'
+
+
+# endregion Printed abilities
+
+
 def _self_dies_condition(source: Any):
     """Return a condition callable that matches only when *source* dies."""
 
@@ -41,10 +52,10 @@ class WaryThespian(Creature):
 
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
-        source = self
 
-        def _surveil_effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
+        def _surveil_effect(game: GameState, controller: Any) -> None:
+            # The fire-time controller: as the source last existed if it died
+            # (rules 603.3a, 603.10a).
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]
@@ -54,5 +65,5 @@ class WaryThespian(Creature):
                 graveyard = controller.zones[Zone.GRAVEYARD]
                 graveyard.add(card)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_surveil_effect, source=self, controller=controller))
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_surveil_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_surveil_effect, source=self, controller=controller, printed=WaryThespianAbility1))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_surveil_effect, source=self, controller=controller, printed=WaryThespianAbility1))

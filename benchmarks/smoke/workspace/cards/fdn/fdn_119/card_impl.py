@@ -17,6 +17,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ElendaSaintOfDuskAbility1:
+    text = 'Lifelink'
+
+
+class ElendaSaintOfDuskAbility2:
+    text = 'hexproof from instants'
+
+
+class ElendaSaintOfDuskAbility3:
+    text = 'As long as your life total is greater than your starting life total, Elenda gets +1/+1 and has menace. Elenda gets an additional +5/+5 as long as your life total is at least 10 greater than your starting life total.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
     for player in game.players:

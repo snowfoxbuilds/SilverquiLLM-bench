@@ -1,0 +1,485 @@
+"""A triggered ability's "other" and "another" exclude its source as it was
+when the ability triggered: the same card in the same battlefield stint. A
+source that has left the battlefield and returned since is a new object
+(rule 400.7), so it counts as another object to an occurrence from before,
+while an occurrence of the returned card still excludes it. And a chosen mode
+whose target cannot be chosen is rejected rather than replaced by another
+mode (rule 700.2a, ADR-017). Asking a departed source's question names the
+source where it is, so it never gains a stint it did not earn.
+
+Run inside ``known_best/workspace`` by
+``tests/test_known_best_gameplay_regressions.py``.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from cards.fdn.fdn_12.card_impl import FelidarSavior
+from cards.fdn.fdn_15.card_impl import HareApparent
+from cards.fdn.fdn_122.card_impl import (
+    KykarZephyrAwakener,
+    KykarZephyrAwakenerAbility2,
+    KykarZephyrAwakenerAbility3,
+    KykarZephyrAwakenerAbility4,
+)
+from cards.fdn.fdn_218.card_impl import DwynensElite
+from cards.fdn.fdn_75.card_impl import VampireSoulcaller, VampireSoulcallerAbility3
+from cards.fdn.fdn_98.card_impl import AmbushWolf, AmbushWolfAbility2
+from cards.fdn.fdn_99.card_impl import (
+    ApothecaryStomper,
+    ApothecaryStomperAbility2,
+    ApothecaryStomperAbility3,
+    ApothecaryStomperAbility4,
+)
+from engine.card import Creature, Instant
+from engine.casting import _source_decision
+from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, PostconditionError
+from engine.events import SpellCastTriggeredEvent
+from engine.protection import ProtectionAbility
+from engine.stack import resolve_top_of_stack
+from engine.types import Color, Zone
+from engine.zones import move_to_zone
+from test_utils import Intent, branch, create_game, set_board_state
+
+
+def _table(**zones):
+    game = create_game()
+    for player in game.players:
+        player.set_baseline(Intent(pattern=GameRef()))
+    set_board_state(game, 0, **zones)
+    return game
+
+
+def _enter(game, card, from_zone=Zone.HAND):
+    move_to_zone(game, card, from_zone, Zone.BATTLEFIELD)
+
+
+def _leave_and_return(game, card):
+    move_to_zone(game, card, Zone.BATTLEFIELD, Zone.EXILE)
+    move_to_zone(game, card, Zone.EXILE, Zone.BATTLEFIELD)
+
+
+def _settle(game):
+    game.trigger_manager.put_pending_on_stack(game)
+
+
+def _resolve_all(game):
+    while not game.stack.is_empty():
+        resolve_top_of_stack(game)
+
+
+def _tokens(game, subtype):
+    return [
+        o for o in game.get_battlefield(game.players[0]).get_all()
+        if o.is_token and subtype in getattr(o, "subtypes", set())
+    ]
+
+
+# ---- Hare Apparent: "other creatures you control named Hare Apparent" --------
+
+
+def test_a_lone_hare_makes_no_rabbit():
+    hare = HareApparent()
+    game = _table(hand=[hare])
+    _enter(game, hare)
+    _settle(game)
+    _resolve_all(game)
+    assert _tokens(game, "Rabbit") == []
+
+
+def test_a_hare_entering_beside_another_makes_one_rabbit():
+    hare, other = HareApparent(), HareApparent()
+    game = _table(hand=[hare], battlefield=[other])
+    _enter(game, hare)
+    _settle(game)
+    _resolve_all(game)
+    assert len(_tokens(game, "Rabbit")) == 1
+
+
+def test_a_hare_that_returned_before_its_first_trigger_was_placed_counts_for_it():
+    hare = HareApparent()
+    game = _table(hand=[hare])
+    _enter(game, hare)
+    _leave_and_return(game, hare)
+    _settle(game)
+    assert len(game.stack.objects()) == 2
+    _resolve_all(game)
+    # The first occurrence counts the returned Hare; the second excludes it.
+    assert len(_tokens(game, "Rabbit")) == 1
+
+
+def test_a_hare_that_returned_after_its_first_trigger_was_placed_counts_for_it():
+    hare = HareApparent()
+    game = _table(hand=[hare])
+    _enter(game, hare)
+    _settle(game)
+    _leave_and_return(game, hare)
+    _settle(game)
+    resolve_top_of_stack(game)  # the returned Hare's own occurrence
+    assert _tokens(game, "Rabbit") == []
+    resolve_top_of_stack(game)  # the first occurrence
+    assert len(_tokens(game, "Rabbit")) == 1
+
+
+# ---- Dwynen's Elite: "if you control another Elf" ----------------------------
+
+
+def _elf():
+    return Creature(name="Elf", subtypes={"Elf"}, base_power=1, base_toughness=1)
+
+
+def test_the_elite_with_another_elf_makes_a_warrior():
+    elite, elf = DwynensElite(), _elf()
+    game = _table(hand=[elite], battlefield=[elf])
+    _enter(game, elite)
+    _settle(game)
+    _resolve_all(game)
+    assert len(_tokens(game, "Warrior")) == 1
+
+
+def test_the_elite_makes_nothing_when_its_last_other_elf_has_left():
+    elite, elf = DwynensElite(), _elf()
+    game = _table(hand=[elite], battlefield=[elf])
+    _enter(game, elite)
+    _settle(game)
+    move_to_zone(game, elf, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+    _resolve_all(game)
+    assert _tokens(game, "Warrior") == []
+
+
+@pytest.mark.parametrize("placed_first", [False, True], ids=["before placement", "after placement"])
+def test_an_elite_that_returned_alone_is_another_elf_to_its_first_trigger(placed_first):
+    elite, elf = DwynensElite(), _elf()
+    game = _table(hand=[elite], battlefield=[elf])
+    _enter(game, elite)
+    if placed_first:
+        _settle(game)
+    move_to_zone(game, elite, Zone.BATTLEFIELD, Zone.EXILE)
+    move_to_zone(game, elf, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+    _enter(game, elite, Zone.EXILE)  # alone: its own entry does not trigger
+    _settle(game)
+    assert len(game.stack.objects()) == 1
+    _resolve_all(game)
+    assert len(_tokens(game, "Warrior")) == 1
+
+
+# ---- Felidar Savior: "up to two other target creatures you control" ----------
+
+
+def _savior_ref(game, savior):
+    return Decision.obj(instance=game.refs.instance_id(savior, Zone.BATTLEFIELD.value))
+
+
+def test_a_lone_savior_cannot_target_itself():
+    savior = FelidarSavior()
+    game = _table(hand=[savior])
+    _enter(game, savior)
+    game.players[0].set_baseline(Intent(pattern=GameRef(), preferences=(_savior_ref(game, savior),)))
+    _settle(game)
+    _resolve_all(game)
+    assert savior.counters.get("+1/+1", 0) == 0
+
+
+def test_a_savior_that_returned_before_placement_is_another_creature_to_its_first_trigger():
+    savior = FelidarSavior()
+    game = _table(hand=[savior])
+    _enter(game, savior)
+    _leave_and_return(game, savior)
+    game.players[0].set_baseline(Intent(pattern=GameRef(), preferences=(_savior_ref(game, savior),)))
+    _settle(game)
+    targeted = [o.targets for o in game.stack.objects()]
+    # Only the first occurrence may target the returned Savior.
+    assert sorted(targeted, key=len) == [[], [savior]]
+    _resolve_all(game)
+    assert savior.counters.get("+1/+1", 0) == 1
+
+
+# ---- Kykar: a chosen flicker mode with no legal target is rejected -----------
+
+FLICKER = Decision.mode(printed=KykarZephyrAwakenerAbility3)
+TOKEN = Decision.mode(printed=KykarZephyrAwakenerAbility4)
+
+
+def _kykar(*, protected: bool):
+    """Player 0's Kykar and one other creature it controls; the other has
+    protection from white when *protected*, so Kykar cannot target it."""
+    kykar = KykarZephyrAwakener()
+    other = Creature(name="Bear", base_power=2, base_toughness=2)
+    if protected:
+        other.protections = [ProtectionAbility(quality=Color.WHITE)]
+    game = _table(battlefield=[kykar, other])
+    kykar.register_triggers(game)
+    return game, kykar, other
+
+
+def _cast_noncreature_spell(game, *branches):
+    p0 = game.players[0]
+    p0.set_baseline(Intent(pattern=GameRef(), branches=tuple(branches)))
+    game.trigger_manager.fire_event(game, SpellCastTriggeredEvent(spell=Instant(name="Spell"), player=p0))
+    _settle(game)
+
+
+def _other_ref(game, other):
+    return Decision.obj(instance=game.refs.instance_id(other, Zone.BATTLEFIELD.value))
+
+
+def test_a_flicker_mode_with_no_legal_target_is_rejected():
+    game, _, other = _kykar(protected=True)
+    # Its only branch is rejected, so the script runs out.
+    with pytest.raises(PostconditionError) as failed:
+        _cast_noncreature_spell(game, branch(FLICKER))
+    assert isinstance(failed.value.__cause__, InvalidPlayerChoiceError)
+    assert _tokens(game, "Spirit") == []
+    assert game.get_battlefield(game.players[0]).contains(other)
+
+
+def test_a_rejected_flicker_mode_is_asked_again_and_token_chosen():
+    game, _, other = _kykar(protected=True)
+    _cast_noncreature_spell(game, branch(FLICKER), branch(TOKEN))
+    (obj,) = game.stack.objects()
+    assert obj.printed is KykarZephyrAwakenerAbility2
+    assert not game.trigger_manager.has_pending()
+    _resolve_all(game)
+    assert len(_tokens(game, "Spirit")) == 1 and len(game.created_tokens) == 1
+    assert game.get_battlefield(game.players[0]).contains(other)
+
+
+def test_a_legal_flicker_exiles_its_target_and_makes_no_token():
+    game, _, other = _kykar(protected=False)
+    _cast_noncreature_spell(game, branch(FLICKER, _other_ref(game, other)))
+    _resolve_all(game)
+    assert game.players[0].zones[Zone.EXILE].contains(other)
+    assert _tokens(game, "Spirit") == []
+
+
+def test_a_chosen_token_mode_makes_a_token_with_a_legal_flicker_target_present():
+    game, _, other = _kykar(protected=False)
+    _cast_noncreature_spell(game, branch(TOKEN))
+    _resolve_all(game)
+    assert len(_tokens(game, "Spirit")) == 1
+    assert game.get_battlefield(game.players[0]).contains(other)
+
+
+def test_a_flicker_whose_target_became_illegal_does_nothing():
+    game, _, other = _kykar(protected=False)
+    _cast_noncreature_spell(game, branch(FLICKER, _other_ref(game, other)))
+    other.protections = [ProtectionAbility(quality=Color.WHITE)]
+    _resolve_all(game)
+    assert game.get_battlefield(game.players[0]).contains(other)
+    assert _tokens(game, "Spirit") == []
+
+
+# ---- Apothecary Stomper: a chosen counters mode with no target is rejected ---
+
+COUNTERS = Decision.mode(printed=ApothecaryStomperAbility3)
+LIFE = Decision.mode(printed=ApothecaryStomperAbility4)
+
+
+def _bear(*, protected: bool = False):
+    bear = Creature(name="Bear", base_power=2, base_toughness=2)
+    if protected:
+        bear.protections = [ProtectionAbility(quality=Color.GREEN)]
+    return bear
+
+
+def _stomper_enters(game, stomper, *branches, gone: bool = False):
+    """*stomper* enters from player 0's hand; with *gone* it leaves again
+    before its trigger is put on the stack. Then the trigger is placed."""
+    _enter(game, stomper)
+    if gone:
+        move_to_zone(game, stomper, Zone.BATTLEFIELD, Zone.EXILE)
+    game.players[0].set_baseline(Intent(pattern=GameRef(), branches=tuple(branches)))
+    _settle(game)
+
+
+def _life(game):
+    return game.players[0].life
+
+
+def _counters(creature):
+    return creature.counters.get("+1/+1", 0)
+
+
+@pytest.mark.parametrize("protected", [False, True], ids=["no creature", "only a protected creature"])
+def test_a_counters_mode_with_no_legal_target_is_rejected(protected):
+    stomper = ApothecaryStomper()
+    game = _table(hand=[stomper], battlefield=[_bear(protected=True)] if protected else [])
+    # Its only branch is rejected, so the script runs out.
+    with pytest.raises(PostconditionError) as failed:
+        _stomper_enters(game, stomper, branch(COUNTERS), gone=True)
+    assert isinstance(failed.value.__cause__, InvalidPlayerChoiceError)
+    assert game.stack.is_empty() and _life(game) == 20
+
+
+@pytest.mark.parametrize("protected", [False, True], ids=["no creature", "only a protected creature"])
+def test_a_rejected_counters_mode_is_asked_again_and_life_chosen(protected):
+    stomper = ApothecaryStomper()
+    game = _table(hand=[stomper], battlefield=[_bear(protected=True)] if protected else [])
+    _stomper_enters(game, stomper, branch(COUNTERS), branch(LIFE), gone=True)
+    (obj,) = game.stack.objects()
+    assert obj.printed is ApothecaryStomperAbility2
+    assert not game.trigger_manager.has_pending()
+    _resolve_all(game)
+    assert _life(game) == 24
+
+
+def test_a_legal_counters_mode_puts_two_counters_and_gains_no_life():
+    stomper, bear = ApothecaryStomper(), _bear()
+    game = _table(hand=[stomper], battlefield=[bear])
+    _stomper_enters(game, stomper, branch(COUNTERS, _other_ref(game, bear)))
+    _resolve_all(game)
+    assert _counters(bear) == 2 and _life(game) == 20
+
+
+def test_a_chosen_life_mode_gains_four_with_a_legal_counters_target_present():
+    stomper, bear = ApothecaryStomper(), _bear()
+    game = _table(hand=[stomper], battlefield=[bear])
+    _stomper_enters(game, stomper, branch(LIFE))
+    _resolve_all(game)
+    assert _counters(bear) == 0 and _life(game) == 24
+
+
+def test_a_counters_mode_whose_target_became_illegal_does_nothing():
+    stomper, bear = ApothecaryStomper(), _bear()
+    game = _table(hand=[stomper], battlefield=[bear])
+    _stomper_enters(game, stomper, branch(COUNTERS, _other_ref(game, bear)))
+    bear.protections = [ProtectionAbility(quality=Color.GREEN)]
+    _resolve_all(game)
+    assert _counters(bear) == 0 and _life(game) == 20
+
+
+def test_two_occurrences_of_one_stomper_keep_their_own_modes():
+    stomper, bear = ApothecaryStomper(), _bear()
+    game = _table(hand=[stomper], battlefield=[bear])
+    _stomper_enters(game, stomper, branch(COUNTERS, _other_ref(game, bear)))
+    # It leaves and returns, and the new occurrence chooses the other mode
+    # while the first still waits on the stack.
+    _leave_and_return(game, stomper)
+    game.players[0].set_baseline(Intent(pattern=GameRef(), branches=(branch(LIFE),)))
+    _settle(game)
+    assert [o.printed for o in game.stack.objects()] == [ApothecaryStomperAbility2] * 2
+    _resolve_all(game)
+    assert _counters(bear) == 2 and _life(game) == 24
+
+
+# ---- A departed source's question names it where it is ----------------------
+#
+# A waiting enters trigger asks its target question with its source as the
+# query's source. A source already in a graveyard, exile or a hand is named
+# there, so asking never gives it a new stint, and a target captured on it by
+# another trigger still matches.
+
+SOULCALLER_FIRST = Decision.ability(printed=VampireSoulcallerAbility3)
+
+
+def _asked_by(name):
+    return lambda query: any(("name", name) in d.attrs for d in query.source or ())
+
+
+def _in_graveyard(game, card):
+    return Decision.obj(instance=game.refs.instance_id(card, Zone.GRAVEYARD.value))
+
+
+def _stint(game, card, zone):
+    return game.refs.instance_id(card, zone.value)
+
+
+def _zone_of(game, card):
+    owner = game.players[0]
+    return next(z for z in (Zone.HAND, Zone.GRAVEYARD, Zone.EXILE, Zone.BATTLEFIELD)
+                if owner.zones[z].contains(card))
+
+
+def _both_die_before_their_triggers(game, soulcaller, wolf):
+    for card in (soulcaller, wolf):
+        _enter(game, card)
+    for card in (soulcaller, wolf):
+        move_to_zone(game, card, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+
+
+def test_a_second_triggers_question_does_not_restint_the_first_triggers_target():
+    soulcaller, wolf = VampireSoulcaller(), AmbushWolf()
+    game = _table(hand=[soulcaller, wolf])
+    _both_die_before_their_triggers(game, soulcaller, wolf)
+    wolf_stint = _stint(game, wolf, Zone.GRAVEYARD)
+    game.players[0].set_baseline(Intent(pattern=GameRef(), branches=(branch(
+        SOULCALLER_FIRST,
+        per_query={
+            _asked_by("Vampire Soulcaller"): [_in_graveyard(game, wolf)],
+            _asked_by("Ambush Wolf"): [_in_graveyard(game, soulcaller)],
+        },
+    ),)))
+    _settle(game)
+    assert _stint(game, wolf, Zone.GRAVEYARD) == wolf_stint
+    _resolve_all(game)
+    # Wolf's trigger, placed last, exiles Soulcaller; Soulcaller's still
+    # returns Wolf, which never left the graveyard.
+    assert _zone_of(game, soulcaller) is Zone.EXILE
+    assert _zone_of(game, wolf) is Zone.HAND
+
+
+@pytest.mark.parametrize("zone", [Zone.GRAVEYARD, Zone.EXILE, Zone.HAND, Zone.BATTLEFIELD])
+def test_a_source_asking_its_question_keeps_its_stint(zone):
+    wolf, bear = AmbushWolf(), _bear()
+    game = _table(hand=[wolf], graveyard=[bear])
+    _enter(game, wolf)
+    if zone is not Zone.BATTLEFIELD:
+        move_to_zone(game, wolf, Zone.BATTLEFIELD, zone)
+    before = _stint(game, wolf, zone)
+    game.players[0].set_baseline(
+        Intent(pattern=GameRef(), branches=(branch(_in_graveyard(game, bear)),))
+    )
+    _settle(game)
+    (obj,) = game.stack.objects()
+    assert obj.targets == [bear]
+    assert _stint(game, wolf, zone) == before
+
+
+def test_a_spell_in_no_zone_is_named_on_the_stack():
+    spell = Instant(name="Shock")
+    game = _table()
+    assert ("zone", "stack") in _source_decision(game, spell).attrs
+
+
+def test_a_target_that_really_left_and_returned_is_no_longer_the_target():
+    soulcaller, wolf = VampireSoulcaller(), AmbushWolf()
+    game = _table(hand=[soulcaller], graveyard=[wolf])
+    _enter(game, soulcaller)
+    game.players[0].set_baseline(
+        Intent(pattern=GameRef(), branches=(branch(_in_graveyard(game, wolf)),))
+    )
+    _settle(game)
+    move_to_zone(game, wolf, Zone.GRAVEYARD, Zone.EXILE)
+    move_to_zone(game, wolf, Zone.EXILE, Zone.GRAVEYARD)
+    _resolve_all(game)
+    assert _zone_of(game, wolf) is Zone.GRAVEYARD
+
+
+def test_a_rejected_placement_and_its_retry_leave_a_captured_target_matching():
+    # Soulcaller (protected from green, so Stomper's counters mode has no
+    # target) targets the departed Wolf's card; Wolf then asks its own question
+    # from the graveyard, and Stomper's placement is rejected once and asked
+    # again.
+    soulcaller, wolf, stomper, bear = VampireSoulcaller(), AmbushWolf(), ApothecaryStomper(), _bear()
+    soulcaller.protections = [ProtectionAbility(quality=Color.GREEN)]
+    game = _table(hand=[soulcaller, wolf, stomper], graveyard=[bear])
+    for card in (soulcaller, wolf, stomper):
+        _enter(game, card)
+    for card in (wolf, stomper):
+        move_to_zone(game, card, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+    order = [SOULCALLER_FIRST, Decision.ability(printed=AmbushWolfAbility2),
+             Decision.ability(printed=ApothecaryStomperAbility2)]
+    targets = {
+        _asked_by("Vampire Soulcaller"): [_in_graveyard(game, wolf)],
+        _asked_by("Ambush Wolf"): [_in_graveyard(game, bear)],
+    }
+    game.players[0].set_baseline(Intent(pattern=GameRef(), branches=(
+        branch(*order, COUNTERS, per_query=targets),
+        branch(*order, LIFE, per_query=targets),
+    )))
+    _settle(game)
+    _resolve_all(game)
+    assert _life(game) == 24
+    assert _zone_of(game, bear) is Zone.EXILE
+    assert _zone_of(game, wolf) is Zone.HAND

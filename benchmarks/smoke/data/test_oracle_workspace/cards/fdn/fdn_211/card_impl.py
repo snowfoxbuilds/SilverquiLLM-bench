@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
-from engine.card_queries import choose_object
 from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
@@ -44,34 +43,32 @@ class AffectionateIndrik(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
-        """ETB: fight target creature you don't control."""
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that targets as it is put
+        on the stack (rule 603.3d)."""
+        from engine.triggers import register_enters_trigger
+
+        def _creature_you_dont_control(game: Any, controller: Any) -> list[Any]:
+            def _legal(obj: Any) -> bool:
+                return CardType.CREATURE in getattr(obj, "card_types", set()) and getattr(obj, "controller", None) is not controller
+
+            return [TargetRequirement(filter_fn=_legal, description="target creature you don't control", zone=Zone.BATTLEFIELD)]
+
+        register_enters_trigger(
+            game, self, AffectionateIndrikAbility1, self._enters, targets=_creature_you_dont_control, source_aware=True
+        )
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any, source_remains: bool) -> None:
+        """This creature fights the target, if it is still legal: each deals
+        damage equal to its power to the other. Both must still be creatures
+        on the battlefield (rule 701.14b)."""
         from engine.game import deal_damage
 
-        controller = self.controller
-        if controller is None:
+        target = targets[0] if targets else None
+        if target is None or not source_remains or CardType.CREATURE not in getattr(self, "card_types", set()):
             return
-
-        # Find a target creature an opponent controls
-        targets: list[Any] = []
-        for player in game.players:
-            if player is controller:
-                continue
-            for obj in game.get_battlefield(player).get_all():
-                if CardType.CREATURE in getattr(obj, "card_types", set()):
-                    targets.append(obj)
-
-        if not targets:
-            return
-
-        target = choose_object(game, controller, targets, "creature to fight", source_card=self)
-        if target is None:
-            return
-
-        # Fight: each deals damage equal to its power to the other
         my_power = self.power
         their_power = getattr(target, "power", getattr(target, "base_power", 0))
-
         if my_power > 0:
             deal_damage(game, self, target, my_power)
         if their_power > 0:

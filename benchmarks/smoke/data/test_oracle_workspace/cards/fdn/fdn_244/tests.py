@@ -12,7 +12,7 @@ modified event.
 from __future__ import annotations
 
 from cards.fdn.fdn_244.card_impl import Progenitus
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.events import (
     CreatureDiesReplacementEvent,
     MoveToGraveyardReplacementEvent,
@@ -26,7 +26,7 @@ class TestProgenitusProperties:
     """Static card data should match the FDN 244 spec."""
 
     def test_name(self) -> None:
-        assert Progenitus(owner=None).name == "Progenitus"
+        assert printed_class(Progenitus(owner=None)) is Progenitus
 
     def test_mana_cost(self) -> None:
         cost = ManaCost.parse("{W}{W}{U}{U}{B}{B}{R}{R}{G}{G}")

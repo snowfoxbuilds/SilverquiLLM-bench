@@ -10,7 +10,7 @@ card intent picks the split via a ``Decision.number`` preference.
 from __future__ import annotations
 
 from cards.fdn.fdn_81.card_impl import ChandraFlameshaper
-from engine.card import Creature, Planeswalker
+from engine.card import Creature, Planeswalker, printed_class
 from engine.decisions import Decision, DecisionKind, GameRef
 from test_utils import Intent
 from engine.types import ManaCost, Zone
@@ -40,7 +40,7 @@ class TestChandraFlameshaperProperties:
         assert isinstance(ChandraFlameshaper(owner=None), Planeswalker)
 
     def test_name(self) -> None:
-        assert ChandraFlameshaper(owner=None).name == "Chandra, Flameshaper"
+        assert printed_class(ChandraFlameshaper(owner=None)) is ChandraFlameshaper
 
     def test_mana_cost(self) -> None:
         assert ChandraFlameshaper(owner=None).mana_cost == ManaCost.parse("{5}{R}{R}")
@@ -54,7 +54,7 @@ class TestChandraFlameshaperMinus4Split:
         p1 = game.players[0]
         pw, (a, b), minus4 = _setup_minus4(game, 2)
         p1.start_intent("split", Intent(
-            pattern=GameRef(card=frozenset({("name", "Chandra, Flameshaper")})),
+            pattern=GameRef(card=frozenset({("printed", ChandraFlameshaper)})),
             preferences=(Decision.number(5),),
         ))
         minus4.effect(game)

@@ -47,11 +47,19 @@ class SkyshipBuccaneer(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        def _condition(game: Any, controller: Any) -> bool:
+            return bool(getattr(controller, "attacked_this_turn", False))
+
+        register_enters_trigger(game, self, SkyshipBuccaneerAbility2, self._enters, condition=_condition)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: Raid — if you attacked this turn, draw a card."""
         from engine.game import draw_card
 
-        controller = self.controller
         if controller is None:
             return
 

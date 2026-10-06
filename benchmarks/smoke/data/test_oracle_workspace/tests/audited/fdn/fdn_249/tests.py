@@ -6,75 +6,67 @@ of turn. See fdn_129/tests.py for the canonical Equipment test shape.
 
 from __future__ import annotations
 
-from cards.fdn.fdn_249.card_impl import AdventuringGear
-from engine.card import Creature, Equipment, Land
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_249.card_impl import (
+    AdventuringGear,
+    AdventuringGearAbility1,
+    AdventuringGearAbility2,
+)
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_280.card_impl import Forest
+from engine.card import Equipment, printed_class
 from engine.types import ManaCost
-from test_utils import scenario_game as create_game
-from test_utils import set_board_state
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
 
-
-def _bear(p):
-    return Creature(name="Bear", base_power=2, base_toughness=2, owner=p, controller=p)
+from silverquillm.table import Table, life, moves, off_stack, on_stack, taps
 
 
 class TestAdventuringGearProperties:
     def test_static_data(self):
         gear = AdventuringGear(owner=None)
-        assert gear.name == "Adventuring Gear"
+        assert printed_class(gear) is AdventuringGear
         assert gear.mana_cost == ManaCost.parse("{1}")
         assert gear.equip_cost == ManaCost.parse("{1}")
         assert isinstance(gear, Equipment) and gear.is_equipment is True
 
 
+def _equipped(*, hand=()):
+    """Player 0's main phase: Adventuring Gear is equipped to Savannah Lions."""
+    lions, gear = card(SavannahLions), card(AdventuringGear)
+    game = create_game(
+        Side(hand=list(hand), battlefield=[lions, gear], library=[card(Plains)], mana={ManaType.COLORLESS: 1}),
+        Side(library=[card(Plains)]),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, AdventuringGearAbility2, choices=[lions], then=[on_stack(AdventuringGearAbility2, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(AdventuringGearAbility2)])
+    return t, lions
+
+
+def _attack(t: Table, lions, total: int) -> None:
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, lions, then=[taps(lions)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=[life(1, total)])
+
+
 class TestAdventuringGearBehaviour:
     def test_no_static_buff(self):
-        from engine.types import ManaType, Phase
-        from test_utils import (
-            activate_card_ability,
-            enter_permanent,
-            object_preference,
-            prefer,
-            resolve_stack,
-        )
-
-        game = create_game()
-        p1 = game.players[0]
-        bear = _bear(p1)
-        set_board_state(game, 0, battlefield=[bear], mana={ManaType.COLORLESS: 1})
-        gear = enter_permanent(game, p1, AdventuringGear())
-        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
-        prefer(p1, object_preference(game, bear))
-        activate_card_ability(game, p1, gear)
-        resolve_stack(game)
-        assert (bear.power, bear.toughness) == (2, 2)
+        t, lions = _equipped()
+        _attack(t, lions, 18)
+        t.run()
 
     def test_landfall_pumps_until_end_of_turn(self):
-        from engine.casting import play_land
-        from engine.types import ManaType, Phase, Step
-        from test_utils import (
-            activate_card_ability,
-            advance_game_to_phase,
-            enter_permanent,
-            object_preference,
-            prefer,
-            resolve_stack,
-        )
-
-        game = create_game()
-        p1 = game.players[0]
-        bear = _bear(p1)
-        set_board_state(game, 0, battlefield=[bear], mana={ManaType.COLORLESS: 1})
-        gear = enter_permanent(game, p1, AdventuringGear())
-        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
-        prefer(p1, object_preference(game, bear))
-        activate_card_ability(game, p1, gear)
-        resolve_stack(game)
-        assert (bear.power, bear.toughness) == (2, 2)
-
-        land = Land(name="Forest", owner=p1)
-        game.get_hand(p1).add(land)
-        play_land(game, p1, land)
-        resolve_stack(game)
-        assert (bear.power, bear.toughness) == (4, 4)
-        advance_game_to_phase(game, Phase.ENDING, Step.CLEANUP)
-        assert (bear.power, bear.toughness) == (2, 2)
+        forest = card(Forest)
+        t, lions = _equipped(hand=[forest])
+        t.act(0, forest, then=[moves(forest, Zone.BATTLEFIELD), on_stack(AdventuringGearAbility1, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(AdventuringGearAbility1)])
+        _attack(t, lions, 16)
+        _attack(t, lions, 14)
+        t.run()

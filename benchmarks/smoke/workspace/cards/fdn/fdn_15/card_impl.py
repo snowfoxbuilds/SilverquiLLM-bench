@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class HareApparentAbility1:
+    text = 'When this creature enters, create a number of 1/1 white Rabbit creature tokens equal to the number of other creatures you control named Hare Apparent.'
+
+
+class HareApparentAbility2:
+    text = 'A deck can have any number of cards named Hare Apparent.'
+
+
+# endregion Printed abilities
+
+
 class HareApparent(Creature):
     """Hare Apparent — {1}{W} — 2/2 — Rabbit Noble.
 
@@ -38,31 +52,25 @@ class HareApparent(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
-        """ETB: one 1/1 white Rabbit per *other* Hare Apparent you control.
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
 
-        ``on_resolve`` is the engine's enters-the-battlefield hook for a
-        creature spell (see :func:`engine.casting._resolve_spell`): it runs
-        while this card is still on the stack, so a battlefield scan
-        naturally sees only the *other* creatures already in play. The
-        ``obj is not self`` guard keeps the "other" semantics correct even
-        when a test places this card on the battlefield before resolving.
+        register_enters_trigger(game, self, HareApparentAbility1, self._enters, knows_source=True)
 
-        Note: engine-minted tokens carry no grpId identity, so replay zone
-        divergences around the Rabbit tokens are expected to persist until
-        the token-correlation phase — the win here is the ETB firing and the
-        Hare Apparent MISSING_CARD entries clearing.
-        """
+    def _enters(self, game: "GameState", controller: Any, source: Any) -> None:
+        """One 1/1 white Rabbit per *other* Hare Apparent you control: every
+        one but the ability's *source* as it triggered, so this card counts
+        if it has left and returned since (rule 400.7)."""
         from engine.game import create_token
 
-        controller = self.controller
         if controller is None:
             return
 
         count = sum(
             1
             for obj in game.get_battlefield(controller).get_all()
-            if obj is not self
+            if not source.is_source(game, obj)
             and CardType.CREATURE in getattr(obj, "card_types", set())
             and getattr(obj, "name", None) == "Hare Apparent"
         )

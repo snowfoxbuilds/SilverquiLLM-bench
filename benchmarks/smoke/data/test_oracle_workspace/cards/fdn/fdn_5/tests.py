@@ -9,10 +9,14 @@ canonical Equipment test shape.
 from __future__ import annotations
 
 from cards.fdn.fdn_5.card_impl import CelestialArmor
-from engine.card import Creature, Equipment
+from engine.card import Creature, Equipment, printed_class
+from engine.decisions import Decision, GameRef
+from engine.stack import resolve_top_of_stack
+from engine.state_based_actions import resolve_state_based_actions
 from engine.turn import cleanup_mechanical
-from engine.types import Keyword, ManaCost
-from test_utils import create_game, set_board_state
+from engine.types import Keyword, ManaCost, Zone
+from engine.zones import move_to_zone
+from test_utils import Intent, create_game, set_board_state
 
 
 def _bear(p):
@@ -22,7 +26,7 @@ def _bear(p):
 class TestCelestialArmorProperties:
     def test_static_data(self):
         armor = CelestialArmor(owner=None)
-        assert armor.name == "Celestial Armor"
+        assert printed_class(armor) is CelestialArmor
         assert armor.mana_cost == ManaCost.parse("{2}{W}")
         assert armor.equip_cost == ManaCost.parse("{3}{W}")  # colored, not approximated
         assert Keyword.FLASH in armor.keywords
@@ -45,9 +49,19 @@ class TestCelestialArmorBehaviour:
         p1 = game.players[0]
         bear = _bear(p1)
         armor = CelestialArmor(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, armor])
-        armor.chosen_targets = [bear]
-        armor.on_resolve(game)
+        set_board_state(game, 0, battlefield=[bear], hand=[armor])
+        # Its enters ability is a triggered ability: the Armor enters, the
+        # trigger goes on the stack choosing the creature (rule 603.3d), and
+        # attaches it and grants protection as it resolves.
+        inst = game.refs.instance_id(bear, Zone.BATTLEFIELD.value)
+        p1.start_intent("armor", Intent(pattern=GameRef(), preferences=(Decision.obj(instance=inst),)))
+        try:
+            move_to_zone(game, armor, Zone.HAND, Zone.BATTLEFIELD)
+            resolve_state_based_actions(game)
+        finally:
+            p1.end_intent("armor")
+        assert armor.attached_to is None
+        resolve_top_of_stack(game)
         game.effect_manager.apply_all(game)
 
         assert armor.attached_to is bear

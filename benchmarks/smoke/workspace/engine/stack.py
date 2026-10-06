@@ -98,8 +98,9 @@ class StackObject:
             is not that spell — "counter target spell" effects and
             ``Zone.STACK`` target enumeration select spell occurrences by this
             flag, never by inspecting the shared source card.
-        printed: For an activated or loyalty ability, the predefined class of
-            the printed ability it comes from (see ADR-017); ``None`` otherwise.
+        printed: For an activated, loyalty or triggered ability, the predefined
+            class of the printed ability it comes from (see ADR-017); ``None``
+            otherwise.
     """
 
     source: Any
@@ -453,6 +454,7 @@ def copy_spell(
     copied_card = copy.copy(original.source)
     copied_card.controller = controller
     copied_card.owner = getattr(original.source, "owner", controller)
+    game.created_copies.append(copied_card)
 
     if new_targets is not None:
         # New targets chosen for the copy — capture their current stints.

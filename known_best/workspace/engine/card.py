@@ -331,6 +331,7 @@ class CardImpl(GameObject):
         more per-object state override this and call ``super()``.
         """
         self._generic_counters = {}
+        self.__dict__.pop("_controller_before_effects", None)
         self.controller = self.owner
         if hasattr(self, "is_tapped"):
             self.is_tapped = False
@@ -377,7 +378,7 @@ class CardImpl(GameObject):
         """
         from engine.casting import can_cast_at_instant_speed, cast_spell, is_sorcery_speed
 
-        if not (can_cast_at_instant_speed(self) or is_sorcery_speed(game, player)):
+        if not (can_cast_at_instant_speed(self, player) or is_sorcery_speed(game, player)):
             return []
         return [
             (self, lambda: cast_spell(game, player, self, from_zone=from_zone, mode=mode))

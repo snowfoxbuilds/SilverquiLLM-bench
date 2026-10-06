@@ -13,7 +13,10 @@ subtypes (e.g. ``CreatureDiesReplacementEvent``).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from engine.last_known import LastKnownInformation
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +40,7 @@ class EntersBattlefieldTriggeredEvent(TriggeredEvent):
 class LeavesBattlefieldTriggeredEvent(TriggeredEvent):
     permanent: Any = None
     controller: Any = None
+    last_known: LastKnownInformation | None = None
 
 
 @dataclass
@@ -67,6 +71,12 @@ class DrawsCardTriggeredEvent(TriggeredEvent):
 
 
 @dataclass
+class DiscardsCardTriggeredEvent(TriggeredEvent):
+    player: Any = None
+    card: Any = None
+
+
+@dataclass
 class BeginningOfUpkeepTriggeredEvent(TriggeredEvent):
     pass
 
@@ -91,6 +101,7 @@ class CreatureDiesTriggeredEvent(TriggeredEvent):
     creature: Any = None
     controller: Any = None
     owner: Any = None
+    last_known: LastKnownInformation | None = None
 
 
 @dataclass
@@ -99,6 +110,7 @@ class SpellCastTriggeredEvent(TriggeredEvent):
     player: Any = None
     card: Any = None
     controller: Any = None
+    mana_value: int | None = None
 
 
 @dataclass

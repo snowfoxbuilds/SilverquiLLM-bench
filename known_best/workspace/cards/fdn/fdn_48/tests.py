@@ -59,7 +59,7 @@ class TestRefuteCounters:
         game.get_hand(p1).add(refute)
         occ_iid = game.refs.instance_id(occurrence, Zone.STACK.value)
         p1.start_intent("refute-cast", Intent(
-            pattern=GameRef(card=frozenset({("name", "Refute")})),
+            pattern=GameRef(card=frozenset({("printed", Refute)})),
             preferences=(Decision.obj(instance=occ_iid),),
         ))
         try:
@@ -73,7 +73,7 @@ class TestRefuteCounters:
         """Resolve the top of the stack with an intent answering Refute's
         discard query (first offered option)."""
         p1.start_intent("refute-resolve", Intent(
-            pattern=GameRef(card=frozenset({("name", "Refute")})),
+            pattern=GameRef(card=frozenset({("printed", Refute)})),
             preferences=(),
         ))
         try:

@@ -15,6 +15,25 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SlagstormAbility1:
+    text = 'Choose one —'
+
+
+class SlagstormAbility2:
+    text = '• Slagstorm deals 3 damage to each creature.'
+
+
+class SlagstormAbility3:
+    text = '• Slagstorm deals 3 damage to each player.'
+
+
+# endregion Printed abilities
+
+
 class Slagstorm(Sorcery):
     """Slagstorm — {1}{R}{R} — Choose one.
 
@@ -38,8 +57,8 @@ class Slagstorm(Sorcery):
 
     def get_modes(self) -> list[Mode]:
         return [
-            Mode(name="Creatures", description="Slagstorm deals 3 damage to each creature."),
-            Mode(name="Players", description="Slagstorm deals 3 damage to each player."),
+            Mode(name="Creatures", description="Slagstorm deals 3 damage to each creature.", printed=SlagstormAbility2),
+            Mode(name="Players", description="Slagstorm deals 3 damage to each player.", printed=SlagstormAbility3),
         ]
 
     def on_resolve(self, game: GameState) -> None:

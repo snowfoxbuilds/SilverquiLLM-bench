@@ -7,11 +7,8 @@ that the convenience wrappers behave as expected.
 from __future__ import annotations
 
 import pytest
-
 from engine.card import CardImpl, Creature, Instant
-from test_utils import DeterministicPlayer
-from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
-
+from engine.types import ManaCost, ManaType, Phase, Step
 from test_utils import (
     TestSetupError,
     advance_to_phase,
@@ -21,7 +18,6 @@ from test_utils import (
     declare_blockers,
     set_board_state,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -41,6 +37,10 @@ def _bear(name: str = "Bear") -> Creature:
         base_power=2,
         base_toughness=2,
     )
+
+
+class Phantom(Creature):
+    """A predefined class with no object in play."""
 
 
 def _instant(name: str = "Zap") -> Instant:
@@ -191,7 +191,7 @@ class TestCastSpell:
         game = create_game()
         zap = _instant("Zap")
         set_board_state(game, 0, hand=[zap], mana={ManaType.RED: 1})
-        cast_spell(game, 0, "Zap")
+        cast_spell(game, 0, zap)
         # After casting and resolving, the instant should be in graveyard
         gy = game.get_graveyard(game.players[0])
         assert gy.contains(zap)
@@ -206,19 +206,27 @@ class TestCastSpell:
             hand=[bear],
             mana={ManaType.GREEN: 1, ManaType.COLORLESS: 1},
         )
-        cast_spell(game, 0, "Bear")
+        cast_spell(game, 0, bear)
         bf = game.get_battlefield(game.players[0])
         assert bf.contains(bear)
 
     def test_card_not_in_hand_raises(self) -> None:
         game = create_game()
         with pytest.raises(TestSetupError, match="not found in player"):
-            cast_spell(game, 0, "NonExistentCard")
+            cast_spell(game, 0, Phantom)
+
+    def test_name_string_is_refused(self) -> None:
+        game = create_game()
+        zap = _instant("Zap")
+        set_board_state(game, 0, hand=[zap], mana={ManaType.RED: 1})
+        with pytest.raises(TestSetupError, match="name string"):
+            cast_spell(game, 0, "Zap")
+        assert game.get_hand(game.players[0]).contains(zap)
 
     def test_invalid_player_raises(self) -> None:
         game = create_game()
         with pytest.raises(TestSetupError, match="Invalid player_index"):
-            cast_spell(game, 5, "Card")
+            cast_spell(game, 5, Phantom)
 
     def test_insufficient_mana_raises(self) -> None:
         game = create_game()
@@ -226,7 +234,7 @@ class TestCastSpell:
         set_board_state(game, 0, hand=[bear])
         # No mana — should fail
         with pytest.raises(TestSetupError, match="Failed to cast"):
-            cast_spell(game, 0, "Bear")
+            cast_spell(game, 0, bear)
 
 
 # ===================================================================
@@ -297,7 +305,7 @@ class TestDeclareAttackers:
         bear.summoning_sick = False
         set_board_state(game, 0, battlefield=[bear])
         game.active_player_index = 0
-        declare_attackers(game, ["AttackBear"])
+        declare_attackers(game, [bear])
         assert bear.is_attacking is True
         assert bear.is_tapped is True
 
@@ -309,14 +317,24 @@ class TestDeclareAttackers:
         bear2.summoning_sick = False
         set_board_state(game, 0, battlefield=[bear1, bear2])
         game.active_player_index = 0
-        declare_attackers(game, ["Bear1", "Bear2"])
+        declare_attackers(game, [bear1, bear2])
         assert bear1.is_attacking is True
         assert bear2.is_attacking is True
 
     def test_attacker_not_found_raises(self) -> None:
         game = create_game()
         with pytest.raises(TestSetupError, match="not found on active player"):
-            declare_attackers(game, ["Phantom"])
+            declare_attackers(game, [Phantom])
+
+    def test_name_string_is_refused(self) -> None:
+        game = create_game()
+        bear = _bear("Bear")
+        bear.summoning_sick = False
+        set_board_state(game, 0, battlefield=[bear])
+        game.active_player_index = 0
+        with pytest.raises(TestSetupError, match="name string"):
+            declare_attackers(game, ["Bear"])
+        assert not bear.is_attacking
 
     def test_advances_to_combat(self) -> None:
         game = create_game()
@@ -327,7 +345,7 @@ class TestDeclareAttackers:
         # Start from beginning phase
         game.phase = Phase.BEGINNING
         game.step = Step.UNTAP
-        declare_attackers(game, ["CombatBear"])
+        declare_attackers(game, [bear])
         assert game.phase == Phase.COMBAT
         assert game.step == Step.DECLARE_ATTACKERS
 
@@ -352,11 +370,11 @@ class TestDeclareBlockers:
         game.active_player_index = 0
 
         # Declare attackers first
-        declare_attackers(game, ["Attacker"])
+        declare_attackers(game, [attacker])
 
         # Now declare blockers
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
-        declare_blockers(game, {"Attacker": ["Blocker"]})
+        declare_blockers(game, {attacker: [blocker]})
         assert blocker.is_blocking is True
 
     def test_attacker_not_found_raises(self) -> None:
@@ -370,11 +388,11 @@ class TestDeclareBlockers:
         set_board_state(game, 1, battlefield=[blocker])
         game.active_player_index = 0
 
-        declare_attackers(game, ["Attacker"])
+        declare_attackers(game, [attacker])
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
 
         with pytest.raises(TestSetupError, match="Attacker.*not found"):
-            declare_blockers(game, {"Phantom": ["Blocker"]})
+            declare_blockers(game, {Phantom: [blocker]})
 
     def test_blocker_not_found_raises(self) -> None:
         game = create_game()
@@ -384,11 +402,11 @@ class TestDeclareBlockers:
         set_board_state(game, 1, battlefield=[])
         game.active_player_index = 0
 
-        declare_attackers(game, ["Attacker"])
+        declare_attackers(game, [attacker])
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
 
         with pytest.raises(TestSetupError, match="Blocker.*not found"):
-            declare_blockers(game, {"Attacker": ["Ghost"]})
+            declare_blockers(game, {attacker: [Phantom]})
 
 
 # ===================================================================
@@ -418,7 +436,7 @@ class TestMetaIntegration:
         assert hand.contains(bear)
 
         # Cast the bear
-        cast_spell(game, 0, "Grizzly")
+        cast_spell(game, 0, bear)
 
         # Verify it resolved to the battlefield
         bf = game.get_battlefield(game.players[0])
@@ -438,11 +456,11 @@ class TestMetaIntegration:
         set_board_state(game, 1, battlefield=[blocker])
         game.active_player_index = 0
 
-        declare_attackers(game, ["Attacker"])
+        declare_attackers(game, [attacker])
         assert attacker.is_attacking
 
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
-        declare_blockers(game, {"Attacker": ["Blocker"]})
+        declare_blockers(game, {attacker: [blocker]})
         assert blocker.is_blocking
 
     def test_set_board_state_and_advance_phase(self) -> None:

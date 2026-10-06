@@ -7,6 +7,21 @@ from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BrinebornCutthroatAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class BrinebornCutthroatAbility2:
+    text = "Whenever you cast a spell during an opponent's turn, put a +1/+1 counter on this creature."
+
+
+# endregion Printed abilities
+
+
 class BrinebornCutthroat(Creature):
     """Brineborn Cutthroat — {1}{U} — 2/1 — Merfolk Pirate — Flash.
 
@@ -46,4 +61,4 @@ class BrinebornCutthroat(Creature):
 
         def _effect(game: 'GameState') -> None:
             add_counter(game, source, '+1/+1', 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=BrinebornCutthroatAbility2))

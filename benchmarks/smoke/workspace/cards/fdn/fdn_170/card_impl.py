@@ -10,6 +10,17 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BurglarRatAbility1:
+    text = 'When this creature enters, each opponent discards a card.'
+
+
+# endregion Printed abilities
+
+
 def _self_etb_condition(source: Any):
     """Return a condition callable that matches only when *source* enters."""
 
@@ -39,8 +50,7 @@ class BurglarRat(Creature):
         from engine.game import discard
         source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             for player in game.players:
@@ -52,4 +62,4 @@ class BurglarRat(Creature):
                     to_discard = choose_object(game, player, hand_cards, 'card to discard', source_card=source)
                     discard(game, player, to_discard)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller, printed=BurglarRatAbility1))

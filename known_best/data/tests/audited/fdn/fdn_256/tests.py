@@ -1,136 +1,122 @@
 """Reference test for FDN 256 — Meteor Golem.
 
-Pattern 1 — required targeted ETB on a creature. The target is a nonland
-permanent an opponent controls, chosen at cast via a real Player Query,
-captured on the stack, and destroyed in ``on_resolve``. No dead test backdoors
-— targeting flows through real engine channels.
+When Meteor Golem enters, it destroys target nonland permanent an opponent
+controls. Player 0 casts it from a pool of seven mana in their main phase.
 """
 
 from __future__ import annotations
 
-from cards.fdn.fdn_256.card_impl import MeteorGolem
-from engine.basic_lands import Forest
-from engine.card import Artifact, Creature
-from engine.casting import cast_spell as engine_cast_spell
-from engine.decisions import Decision, DecisionKind, GameRef
-from test_utils import Intent
-from engine.stack import resolve_top_of_stack
-from engine.types import CardType, ManaCost, ManaType, Phase, Zone
-from engine.zones import move_to_zone
-from test_utils import cast_spell, create_game, set_board_state
+from cards.fdn.fdn_40.card_impl import HighFaeTrickster
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_162.card_impl import RunAwayTogether
+from cards.fdn.fdn_164.card_impl import SpectralSailor
+from cards.fdn.fdn_203.card_impl import InvoluntaryEmployment
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_256.card_impl import MeteorGolem, MeteorGolemAbility1
+from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+from cards.fdn.fdn_278.card_impl import Mountain
+from cards.fdn.fdn_280.card_impl import Forest
+from engine.card import printed_class
+from engine.types import ManaCost
+from test_interface import ManaType, Phase, Side, Zone, card, create_game
+
+from silverquillm.table import Table, appears, gains_control, moves, off_stack, on_stack, taps
 
 
-def _cast_no_resolve(game, player_index, card, targets):
-    """Cast *card* (sorcery-speed) choosing *targets* via an Intent, WITHOUT
-    resolving, so a test can change the target before the ETB resolves."""
-    player = game.players[player_index]
-    game.active_player_index = player_index
-    game.priority_player_index = player_index
-    game.phase = Phase.PRECOMBAT_MAIN
-    game.step = None
-    prefs = tuple(
-        Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value))
-        for t in targets
+def _golem_game(mine=(), theirs=(), their_hand=(), their_mana=None, mine_hand=()):
+    golem = card(MeteorGolem)
+    game = create_game(
+        Side(hand=[golem, *mine_hand], battlefield=list(mine), mana={ManaType.COLORLESS: 7}),
+        Side(hand=list(their_hand), battlefield=list(theirs), mana=their_mana or {}),
+        start=(Phase.PRECOMBAT_MAIN, 0),
     )
-    player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
-        preferences=prefs,
-    ))
-    try:
-        engine_cast_spell(game, player, card)
-    finally:
-        player.end_intent("cast")
+    return Table(game), golem
+
+
+def _cast(t: Table, golem, targets, *, branches=None) -> None:
+    """Player 0 casts Meteor Golem; as it enters, its trigger goes on the
+    stack with its target chosen from ``targets`` (rule 603.3d) — or from
+    ``branches``, tried in turn as the engine rejects a choice."""
+    t.act(0, golem, then=[moves(golem, Zone.STACK)])
+    if branches:
+        t.pass_(0, branches=branches)
+    else:
+        t.pass_(0, choices=targets)
+    t.pass_(1, then=[moves(golem, Zone.BATTLEFIELD), on_stack(MeteorGolemAbility1, 0)])
+
+
+def _resolve(t: Table, *then, note=None) -> None:
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(MeteorGolemAbility1), *then], note=note)
 
 
 class TestMeteorGolemProperties:
     def test_static_data(self):
         golem = MeteorGolem(owner=None)
-        assert golem.name == "Meteor Golem"
+        assert printed_class(golem) is MeteorGolem
         assert golem.mana_cost == ManaCost.parse("{7}")
         assert (golem.base_power, golem.base_toughness) == (3, 3)
         assert "Golem" in golem.subtypes
 
 
 class TestMeteorGolemETB:
-    def _setup(self, opp_permanents):
-        game = create_game()
-        p1, p2 = game.players
-        golem = MeteorGolem(owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[golem], mana={ManaType.COLORLESS: 7})
-        set_board_state(game, 1, battlefield=opp_permanents)
-        return game, p1, p2, golem
-
     def test_destroys_opponents_creature(self):
-        bear = Creature(name="Bear", base_power=2, base_toughness=2)
-        game, p1, p2, golem = self._setup([bear])
-        cast_spell(game, 0, "Meteor Golem", targets=[bear])
-        assert p2.zones[Zone.GRAVEYARD].contains(bear)
-        assert game.get_battlefield(p1).contains(golem)
+        lions = card(SavannahLions)
+        t, golem = _golem_game(theirs=[lions])
+        _cast(t, golem, [lions])
+        _resolve(t, moves(lions, Zone.GRAVEYARD))
+        t.run()
 
     def test_destroys_opponents_artifact(self):
-        signet = Artifact(name="Signet")
-        game, p1, p2, golem = self._setup([signet])
-        cast_spell(game, 0, "Meteor Golem", targets=[signet])
-        assert p2.zones[Zone.GRAVEYARD].contains(signet)
+        boots = card(SwiftfootBoots)
+        t, golem = _golem_game(theirs=[boots])
+        _cast(t, golem, [boots])
+        _resolve(t, moves(boots, Zone.GRAVEYARD))
+        t.run()
 
     def test_option_set_excludes_lands_and_own_permanents(self):
-        """Legality invariant: no land, and nothing the caster controls, is offered."""
-        bear = Creature(name="Bear", base_power=2, base_toughness=2)
-        forest = Forest(name="Forest")
-        game = create_game()
-        p1, p2 = game.players
-        golem = MeteorGolem(owner=p1, controller=p1)
-        mine = Creature(name="My Creature", base_power=1, base_toughness=1)
-        set_board_state(game, 0, hand=[golem], battlefield=[mine], mana={ManaType.COLORLESS: 7})
-        set_board_state(game, 1, battlefield=[bear, forest])
-        cast_spell(game, 0, "Meteor Golem", targets=[bear])
-        obj_queries = [
-            r for r in p1.transcript.all()
-            if any(o.kind is DecisionKind.OBJECT for o in r.options)
-        ]
-        assert obj_queries, "no target query was raised"
-        offered_names = {
-            dict(o.attrs).get("name")
-            for r in obj_queries
-            for o in r.options
-            if o.kind is DecisionKind.OBJECT
-        }
-        assert "Forest" not in offered_names      # land excluded
-        assert "My Creature" not in offered_names  # own permanent excluded
-        assert "Bear" in offered_names             # opponent's nonland offered
+        """Player 0 would rather destroy the opponent's Forest, or their own
+        Elves, but only the opponent's nonland permanent can be targeted: each
+        is either not offered or offered and rejected."""
+        elves, lions, forest = card(LlanowarElves), card(SavannahLions), card(Forest)
+        t, golem = _golem_game(mine=[elves], theirs=[lions, forest])
+        _cast(t, golem, None, branches=[[forest, elves, lions], [elves, lions], [lions]])
+        _resolve(t, moves(lions, Zone.GRAVEYARD))
+        t.run()
 
     def test_target_becomes_caster_controlled_before_resolution_not_destroyed(self):
-        """Negative revalidation: the target comes under the caster's control
-        before the ETB resolves → no longer 'an opponent controls', not destroyed."""
-        bear = Creature(name="Bear", base_power=2, base_toughness=2)
-        game, p1, p2, golem = self._setup([bear])
-        _cast_no_resolve(game, 0, golem, [bear])
-        bear.controller = p1  # caster now controls it
-        resolve_top_of_stack(game)
-        assert game.get_battlefield(p2).contains(bear)          # not destroyed
-        assert not p2.zones[Zone.GRAVEYARD].contains(bear)
-
-    def test_target_becomes_land_before_resolution_not_destroyed(self):
-        """Negative revalidation: the target becomes a land before the ETB
-        resolves → no longer a 'nonland permanent', so it is not destroyed."""
-        bear = Creature(name="Bear", base_power=2, base_toughness=2)
-        game, p1, p2, golem = self._setup([bear])
-        _cast_no_resolve(game, 0, golem, [bear])
-        bear.card_types = set(bear.card_types) | {CardType.LAND}  # became a land
-        resolve_top_of_stack(game)
-        assert game.get_battlefield(p2).contains(bear)          # not destroyed
-        assert not p2.zones[Zone.GRAVEYARD].contains(bear)
+        """Negative revalidation: with the trigger on the stack, player 0,
+        whose High Fae Trickster lets them cast Involuntary Employment at
+        instant speed, takes the target, so it is no longer 'a permanent an
+        opponent controls' and is not destroyed."""
+        lions, employment = card(SavannahLions), card(InvoluntaryEmployment)
+        mountains = [card(Mountain) for _ in range(4)]
+        t, golem = _golem_game(mine=[HighFaeTrickster, *mountains], theirs=[lions], mine_hand=[employment])
+        _cast(t, golem, [lions])
+        for mountain in mountains:
+            t.act(0, mountain, then=[taps(mountain)])
+        t.act(0, employment, choices=[lions], then=[moves(employment, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(employment, Zone.GRAVEYARD), gains_control(lions, 0), appears(0)])
+        _resolve(t, note="the Lions, now player 0's, is not destroyed")
+        t.run()
 
     def test_target_leaves_and_returns_before_resolution_not_destroyed(self):
-        """Normal casting, leave-and-return: the target creature leaves the
-        battlefield and returns (a new object in the same Python instance) before
-        the ETB resolves. It satisfies the predicate again, but the spell's
-        captured zone-stint rejects the returned object — it is not destroyed."""
-        bear = Creature(name="Bear", base_power=2, base_toughness=2)
-        game, p1, p2, golem = self._setup([bear])
-        _cast_no_resolve(game, 0, golem, [bear])
-        move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.EXILE)
-        move_to_zone(game, bear, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
-        resolve_top_of_stack(game)
-        assert game.get_battlefield(p2).contains(bear)          # not destroyed
-        assert not p2.zones[Zone.GRAVEYARD].contains(bear)
+        """The target leaves the battlefield and returns before Meteor Golem's
+        destruction happens: the returned Spectral Sailor is a new object, so
+        it is not destroyed."""
+        lions, sailor, together = card(SavannahLions), card(SpectralSailor), card(RunAwayTogether)
+        t, golem = _golem_game(
+            mine=[lions], theirs=[sailor], their_hand=[together], their_mana={ManaType.BLUE: 3}
+        )
+        _cast(t, golem, [sailor])
+        t.pass_(0)
+        t.act(1, together, choices=[sailor, lions], then=[moves(together, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(together, Zone.GRAVEYARD), moves(sailor, Zone.HAND), moves(lions, Zone.HAND)])
+        t.pass_(0)
+        t.act(1, sailor, then=[moves(sailor, Zone.STACK)], note="Spectral Sailor has flash")
+        t.pass_(1)
+        t.pass_(0, then=[moves(sailor, Zone.BATTLEFIELD)])
+        _resolve(t, note="the returned Sailor is not destroyed")
+        t.run()

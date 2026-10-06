@@ -9,7 +9,7 @@ battlefield sweep — not the historical dead marker.
 from __future__ import annotations
 
 from cards.fdn.fdn_159.card_impl import MockingSprite
-from engine.card import Creature, Instant
+from engine.card import Creature, Instant, printed_class
 from engine.casting import get_cost_reduction
 from engine.types import Keyword, ManaCost
 from test_utils import create_game, set_board_state
@@ -18,7 +18,7 @@ from test_utils import create_game, set_board_state
 class TestMockingSpriteProperties:
     def test_name_and_cost(self) -> None:
         card = MockingSprite(owner=None)
-        assert card.name == "Mocking Sprite"
+        assert printed_class(card) is MockingSprite
         assert card.mana_cost == ManaCost.parse("{2}{U}")
         assert (card.base_power, card.base_toughness) == (2, 1)
 

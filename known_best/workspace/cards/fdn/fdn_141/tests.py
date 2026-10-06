@@ -9,7 +9,7 @@ one +1/+1 counter for each Angel you already control, on it *as* it enters.
 from __future__ import annotations
 
 from cards.fdn.fdn_141.card_impl import GiadaFontOfHope
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.types import ManaCost, Zone
 from engine.zones import move_to_zone
 from test_utils import create_game, set_board_state
@@ -23,7 +23,7 @@ def _angel(p, name):
 class TestGiadaProperties:
     def test_name_and_cost(self) -> None:
         card = GiadaFontOfHope(owner=None)
-        assert card.name == "Giada, Font of Hope"
+        assert printed_class(card) is GiadaFontOfHope
         assert card.mana_cost == ManaCost.parse("{1}{W}")
 
 

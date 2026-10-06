@@ -15,6 +15,25 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CrystalBarricadeAbility1:
+    text = "Defender (This creature can't attack.)"
+
+
+class CrystalBarricadeAbility2:
+    text = "You have hexproof. (You can't be the target of spells or abilities your opponents control.)"
+
+
+class CrystalBarricadeAbility3:
+    text = 'Prevent all noncombat damage that would be dealt to other creatures you control.'
+
+
+# endregion Printed abilities
+
+
 class CrystalBarricade(ArtifactCreature):
     """Crystal Barricade — {1}{W} — 0/4 Wall. Defender. You have hexproof.
     Prevent all noncombat damage to other creatures you control."""

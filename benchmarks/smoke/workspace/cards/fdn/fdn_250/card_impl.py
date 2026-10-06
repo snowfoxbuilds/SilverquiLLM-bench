@@ -9,6 +9,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BurnishedHartAbility1:
+    text = '{3}, Sacrifice this creature: Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.'
+
+
+# endregion Printed abilities
+
+
 class BurnishedHart(ArtifactCreature):
     """Burnished Hart — {3} — 2/2 — Elk
 
@@ -47,10 +58,11 @@ class BurnishedHart(ArtifactCreature):
             sacrifice(game, controller, src)
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from engine.card_queries import choose_object
 
-            controller = source.controller
+            # The source was sacrificed to pay the cost, so it is a new object
+            # now: the activating player searches (rules 602.2, 400.7).
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]
@@ -91,4 +103,5 @@ class BurnishedHart(ArtifactCreature):
             description="{3}, Sacrifice this creature: Search your library "
             "for up to two basic land cards, put them onto the battlefield "
             "tapped, then shuffle.",
+            printed=BurnishedHartAbility1,
         )]

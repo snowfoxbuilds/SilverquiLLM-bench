@@ -6,10 +6,28 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
 from engine.continuous_effects import ContinuousEffect, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.types import Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BillowingShriekmassAbility1:
+    text = 'Flying'
+
+
+class BillowingShriekmassAbility2:
+    text = 'When this creature enters, mill three cards. (Put the top three cards of your library into your graveyard.)'
+
+
+class BillowingShriekmassAbility3:
+    text = 'Threshold — This creature gets +2/+1 as long as there are seven or more cards in your graveyard.'
+
+
+# endregion Printed abilities
 
 
 class BillowingShriekmass(Creature):
@@ -37,11 +55,16 @@ class BillowingShriekmass(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, BillowingShriekmassAbility2, self._enters)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: mill three cards."""
         from engine.zones import move_to_zone
 
-        controller = self.controller
         if controller is None:
             return
 

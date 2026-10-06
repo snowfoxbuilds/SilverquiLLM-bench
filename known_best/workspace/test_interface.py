@@ -45,6 +45,7 @@ __all__ = [
     "Seen",
     "Side",
     "SourcedAbility",
+    "SpellCopy",
     "Step",
     "Token",
     "View",
@@ -60,6 +61,7 @@ __all__ = [
     "pass_priority",
     "player",
     "run",
+    "spell_copy",
     "shuffled",
     "token",
     "view",
@@ -145,26 +147,51 @@ def token(number: int) -> Token:
     return Token(number)
 
 
-class _Tokens:
-    """A game's tokens in the order they were numbered.
+@dataclass(frozen=True)
+class SpellCopy:
+    """A copy of a spell on the stack, followed by its number: the game's
+    spell copies are numbered in the order they are put on the stack, like
+    tokens, so ``spell_copy(1)`` is the first copy made. A copy shows the
+    class of the spell it copies; its number tells it from the original."""
 
-    Numbers come from the engine's record of the tokens it made,
-    ``game.created_tokens``, so a token that has left the battlefield keeps
-    its number. A rollback undoes the tokens a rejected attempt made; their
-    numbers are given back, and tokens made again on the retry take them.
+    number: int
+
+    def __repr__(self) -> str:
+        return f"copy {self.number}"
+
+
+def spell_copy(number: int) -> SpellCopy:
+    """The ``number``-th spell copy the game puts on the stack, counting from 1."""
+    if number < 1:
+        raise ValueError(f"spell copies are numbered from 1, not {number}")
+    return SpellCopy(number)
+
+
+class _Numbered:
+    """A game's tokens, or its spell copies, in the order they were numbered;
+    holding each keeps its identity from being reused once it is gone.
+
+    Each is numbered from the engine's record of what it made,
+    ``game.created_tokens`` or ``game.created_copies``, so a token that has
+    left the battlefield, or a copy that resolved or was countered, keeps its
+    number. A rollback undoes what a rejected attempt made; those numbers are
+    given back, and what is made again on the retry takes them.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, kind: type) -> None:
+        self.kind = kind
         self.objects: list[Any] = []
-        self.by_id: dict[int, Token] = {}
+        self.by_id: dict[int, Any] = {}
 
     def number(self, game: Any) -> None:
-        """Number every token the game has made that has no number yet.
+        """Number every token the game has made, or every spell copy it has
+        made, that has none yet.
 
         Tokens made since the last numbering are numbered seat 0's first,
-        each seat's in the order they were made.
+        each seat's in the order they were made; spell copies in the order
+        they were made.
         """
-        made = game.created_tokens
+        made = game.created_tokens if self.kind is Token else game.created_copies
         kept = {id(obj) for obj in made}
         valid = 0
         while valid < len(self.objects) and id(self.objects[valid]) in kept:
@@ -172,13 +199,13 @@ class _Tokens:
         del self.objects[valid:]
         numbered = {id(obj) for obj in self.objects}
         fresh = [obj for obj in made if id(obj) not in numbered]
-        fresh.sort(key=lambda obj: _seat_of(game, obj))
+        if self.kind is Token:
+            fresh.sort(key=lambda obj: _seat_of(game, obj))
         self.objects.extend(fresh)
-        self.by_id = {id(obj): Token(n) for n, obj in enumerate(self.objects, 1)}
+        self.by_id = {id(obj): self.kind(n) for n, obj in enumerate(self.objects, 1)}
 
-    def find(self, game: Any, followed: Token) -> Any:
-        """The token object ``followed`` names, or ``None`` if the game has
-        made no token with that number."""
+    def find(self, game: Any, followed: Token | SpellCopy) -> Any:
+        """The object ``followed`` names, or ``None`` if none has that number."""
         self.number(game)
         if followed.number > len(self.objects):
             return None
@@ -193,15 +220,27 @@ def _seat_of(game: Any, obj: Any) -> int:
     return len(game.players)
 
 
-# Each game's tokens.
-_TOKENS: weakref.WeakKeyDictionary[Any, _Tokens] = weakref.WeakKeyDictionary()
+# Each game's tokens and spell copies.
+_NUMBERED: weakref.WeakKeyDictionary[Any, dict[type, _Numbered]] = weakref.WeakKeyDictionary()
 
 
-def _tokens(game: Any) -> _Tokens:
-    tokens = _TOKENS.get(game)
-    if tokens is None:
-        tokens = _TOKENS[game] = _Tokens()
-    return tokens
+def _numbered(game: Any, kind: type) -> _Numbered:
+    kinds = _NUMBERED.setdefault(game, {})
+    if kind not in kinds:
+        kinds[kind] = _Numbered(kind)
+    return kinds[kind]
+
+
+def _tokens(game: Any) -> _Numbered:
+    return _numbered(game, Token)
+
+
+def _copies(game: Any) -> _Numbered:
+    return _numbered(game, SpellCopy)
+
+
+def _find(game: Any, followed: Token | SpellCopy) -> Any:
+    return _numbered(game, type(followed)).find(game, followed)
 
 
 # Each game's handles, by the identity of the card each follows.
@@ -259,7 +298,7 @@ class Seen:
     card: type | None
     owner: int
     tapped: bool = False
-    handle: Handle | Token | None = None
+    handle: Handle | Token | SpellCopy | None = None
 
     def _key(self) -> tuple:
         cls = self.card
@@ -271,6 +310,8 @@ class Seen:
         tapped = " tapped" if self.tapped else ""
         if isinstance(self.handle, Token):
             return f"{self.handle!r}{tapped}"
+        if isinstance(self.handle, SpellCopy):
+            return f"{self.card.__name__ if self.card else '?'} ({self.handle!r})"
         name = "?" if self.card is None else self.card.__name__
         handle = f" #{self.handle.number}" if self.handle else ""
         return f"{name}{handle}{tapped}"
@@ -320,7 +361,7 @@ class View:
         object.__setattr__(self, "players", tuple(self.players))
         object.__setattr__(self, "stack", tuple(self.stack))
 
-    def where(self, handle: Handle | Token) -> Zone | None:
+    def where(self, handle: Handle | Token | SpellCopy) -> Zone | None:
         """The zone ``handle``'s card or token is in, or ``None`` if it is in
         none."""
         if any(seen.handle == handle for seen in self.stack):
@@ -351,16 +392,24 @@ class View:
 def view(game: Any) -> View:
     """A frozen snapshot of what the players can see of ``game``."""
     handles = _HANDLES.get(game, {})
-    tokens = _tokens(game)
+    tokens, copies = _tokens(game), _copies(game)
     tokens.number(game)
+    copies.number(game)
 
-    def handle(obj: Any) -> Handle | Token | None:
+    def handle(obj: Any) -> Handle | Token | SpellCopy | None:
         physical = id(game.refs.physical_card(obj))
-        return handles.get(physical) or tokens.by_id.get(physical)
+        return handles.get(physical) or tokens.by_id.get(physical) or copies.by_id.get(physical)
 
     def seen(obj: Any, owner: int, tapped: bool = False) -> Seen:
         printed = None if getattr(obj, "is_token", False) else _printed(obj)
         return Seen(printed, owner, tapped, handle(obj))
+
+    # A permanent sits on its controller's side of the table, whoever owns it.
+    battlefields: list[list[Seen]] = [[] for _ in game.players]
+    for seat, scripted in enumerate(game.players):
+        for c in scripted.zones[Zone.BATTLEFIELD].get_all():
+            side = _seat(game, getattr(c, "controller", None) or scripted)
+            battlefields[side].append(seen(c, _owner_seat(game, c, seat), bool(getattr(c, "is_tapped", False))))
 
     sides = []
     for seat, scripted in enumerate(game.players):
@@ -369,10 +418,7 @@ def view(game: Any) -> View:
             life=scripted.life,
             library=tuple(seen(c, seat) for c in reversed(zones[Zone.LIBRARY].get_all())),
             hand=tuple(seen(c, seat) for c in zones[Zone.HAND].get_all()),
-            battlefield=tuple(
-                seen(c, seat, bool(getattr(c, "is_tapped", False)))
-                for c in zones[Zone.BATTLEFIELD].get_all()
-            ),
+            battlefield=tuple(battlefields[seat]),
             graveyard=tuple(seen(c, seat) for c in zones[Zone.GRAVEYARD].get_all()),
             exile=tuple(seen(c, seat) for c in zones[Zone.EXILE].get_all()),
         ))
@@ -412,6 +458,11 @@ def _stack_printed(obj: Any) -> type | None:
 
 def _seat(game: Any, who: Any) -> int:
     return next(seat for seat, candidate in enumerate(game.players) if candidate is who)
+
+
+def _owner_seat(game: Any, obj: Any, zone_seat: int) -> int:
+    owner = getattr(obj, "owner", None)
+    return zone_seat if owner is None else _seat(game, owner)
 
 
 def _step_name(step: Step | Phase) -> str:
@@ -606,6 +657,12 @@ def player(seat: int) -> PlayerDecision:
     return Decision.player(seat=seat)
 
 
+def _player_decision(standing_for: Any, seat: int) -> PlayerDecision:
+    """The PLAYER decision a native player option would carry for this player."""
+    name = getattr(standing_for, "name", None)
+    return Decision.player(seat=seat, **({"name": name} if isinstance(name, str) and name else {}))
+
+
 def _branches(
     preferences: Any, choices: Any, per_query: Any, distinct: bool, branches: Any, scoped: Any = None
 ) -> tuple[Branch, ...]:
@@ -633,10 +690,10 @@ def _branches(
 def _items(items: Iterable[Any]) -> tuple[Any, ...]:
     out = []
     for item in items:
-        if not isinstance(item, (PlayerDecision, Handle, Token, SourcedAbility, type)):
+        if not isinstance(item, (PlayerDecision, Handle, Token, SpellCopy, SourcedAbility, type)):
             raise TypeError(
-                "a preference is a Player Decision, a predefined class, a handle, a token or an ability of one,"
-                f" not {item!r}"
+                "a preference is a Player Decision, a predefined class, a handle, a token, a spell copy"
+                f" or an ability of a handle or token, not {item!r}"
             )
         out.append(item)
     return tuple(out)
@@ -661,7 +718,7 @@ def _scoped(mapping: Mapping[Any, Any] | None) -> tuple[tuple[Any, tuple[Any, ..
 
 
 def _describe_item(item: Any) -> str:
-    if isinstance(item, (type, Handle, Token, SourcedAbility)):
+    if isinstance(item, (type, Handle, Token, SpellCopy, SourcedAbility)):
         return item.__name__ if isinstance(item, type) else repr(item)
     attrs = dict(item.attrs)
     printed = attrs.get("printed")
@@ -754,8 +811,8 @@ class _Chance:
 def _is(item: Any, candidate: Any, handles: dict[int, Handle], game: Any) -> bool:
     if isinstance(item, Handle):
         return handles.get(id(candidate)) is item
-    if isinstance(item, Token):
-        return _tokens(game).find(game, item) is candidate
+    if isinstance(item, (Token, SpellCopy)):
+        return _find(game, item) is candidate
     if isinstance(item, type):
         return _printed(candidate) is item
     if isinstance(item, PlayerDecision):
@@ -952,7 +1009,7 @@ class ScriptedPlayer(Player):
                 hit = key(query)
             else:
                 hit = asks_for(query, key) or (
-                    isinstance(key, (Handle, Token, type))
+                    isinstance(key, (Handle, Token, SpellCopy, type))
                     and any(isinstance(i, PlayerDecision) and self._satisfied(i, key) for i in query.question)
                 )
             if hit:
@@ -1037,28 +1094,38 @@ class ScriptedPlayer(Player):
             self._chosen.extend((playing.generation, source, _object_key(o)) for o in selected)
         return Answer(tuple(selected))
 
-    def _matchers(self, items: Iterable[Any]) -> list[PlayerDecision | Handle | Token | SourcedAbility]:
+    def _matchers(self, items: Iterable[Any]) -> list[PlayerDecision | Handle | Token | SpellCopy | SourcedAbility]:
         """Each preference as Player Decisions to satisfy — a class stands for
         the card, ability or mode it prints — or as a handle."""
-        matchers: list[PlayerDecision | Handle | Token | SourcedAbility] = []
+        matchers: list[PlayerDecision | Handle | Token | SpellCopy | SourcedAbility] = []
         for item in items:
-            if isinstance(item, (PlayerDecision, Handle, Token, SourcedAbility)):
+            if isinstance(item, (PlayerDecision, Handle, Token, SpellCopy, SourcedAbility)):
                 matchers.append(item)
             else:
                 matchers += [Decision.obj(printed=item), Decision.ability(printed=item), Decision.mode(printed=item)]
         return matchers
 
-    def _matches(self, option: PlayerDecision, preference: PlayerDecision | Handle | Token | SourcedAbility) -> bool:
+    def _matches(
+        self, option: PlayerDecision, preference: PlayerDecision | Handle | Token | SpellCopy | SourcedAbility
+    ) -> bool:
         """A handle matches an option that stands for its physical card, and
         a token one that stands for that token — for an ability, the
         permanent it belongs to; a sourced ability, that printed ability of
-        that permanent."""
+        that permanent. A :func:`player` also matches an object option that
+        stands for that player, as a card's "any target" question may offer
+        players among permanents."""
         if isinstance(preference, SourcedAbility):
             return satisfies(option, Decision.ability(printed=preference.printed)) and self._matches(option, preference.source)
+        if isinstance(preference, PlayerDecision) and preference.kind.value == "player" and option.kind.value != "player":
+            standing_for = self.game.refs.physical_card(option)
+            for seat, candidate in enumerate(self.game.players):
+                if candidate is standing_for:
+                    return satisfies(_player_decision(candidate, seat), preference)
+            return False
         if isinstance(preference, Handle):
             return preference.card is not None and self.game.refs.physical_card(option) is preference.card
-        if isinstance(preference, Token):
-            followed = _tokens(self.game).find(self.game, preference)
+        if isinstance(preference, (Token, SpellCopy)):
+            followed = _find(self.game, preference)
             return followed is not None and self.game.refs.physical_card(option) is followed
         return satisfies(option, preference)
 

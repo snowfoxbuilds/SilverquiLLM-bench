@@ -9,6 +9,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SphinxsTutelageAbility1:
+    text = 'Whenever you draw a card, target opponent mills two cards. If two nonland cards that share a color were milled this way, repeat this process.'
+
+
+class SphinxsTutelageAbility2:
+    text = '{5}{U}: Draw a card, then discard a card.'
+
+
+# endregion Printed abilities
+
+
 def _get_colors_of_permanent(obj: Any) -> set[Color]:
     """Return the set of MTG colors for a permanent based on its mana cost."""
     from engine.protection import get_colors
@@ -73,8 +88,7 @@ class SphinxsTutelage(Enchantment):
             controller = source.controller or source.owner
             return event.player is controller
 
-        def _effect(g: Any) -> None:
-            controller = source.controller or source.owner
+        def _effect(g: Any, controller: Any) -> None:
             if controller is None:
                 return
             opponent = None
@@ -91,11 +105,10 @@ class SphinxsTutelage(Enchantment):
                     break
                 if not SphinxsTutelage._shared_color_among_nonlands(milled):
                     break
-        reg = TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=source.controller or source.owner)
+        reg = TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=source.controller or source.owner, printed=SphinxsTutelageAbility1)
         game.trigger_manager.register(reg)
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             controller = getattr(src, 'controller', None)
@@ -107,9 +120,8 @@ class SphinxsTutelage(Enchantment):
             controller.mana_pool.pay(cost)
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from engine.game import draw_card, discard
-            controller = source.controller or source.owner
             if controller is None:
                 return
             card_drawn = draw_card(game, controller)
@@ -118,4 +130,4 @@ class SphinxsTutelage(Enchantment):
             if cards_in_hand:
                 to_discard = cards_in_hand[0]
                 discard(game, controller, to_discard)
-        return [ActivatedAbility(cost=_cost, effect=_effect, description='{5}{U}: Draw a card, then discard a card.')]
+        return [ActivatedAbility(cost=_cost, effect=_effect, description='{5}{U}: Draw a card, then discard a card.', printed=SphinxsTutelageAbility2)]

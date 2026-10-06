@@ -1,38 +1,35 @@
 """Audited tests for FDN 131 — Ravenous Amulet.
 
-"{4}, {T}, Sacrifice this artifact: Each opponent loses life equal to the
-number of soul counters on this artifact." The number is read from the Amulet
-while it remains on the battlefield, otherwise as it last existed there (rule
-608.2h).
+"{1}, {T}, Sacrifice a creature: Draw a card and put a soul counter on this
+artifact. Activate only as a sorcery." The soul counters only show through
+the Amulet's drain, whose Known-Best form pays its sacrifice as it resolves
+(#169), so the drain is guarded by the Known-Best platform checks instead.
 """
 
 from __future__ import annotations
 
-from cards.fdn.fdn_131.card_impl import RavenousAmulet
-from engine.game import add_counter, exile
-from engine.types import ManaType
-from test_utils import activate_card_ability, behavioral_game, enter_permanent, resolve_stack
+from cards.fdn.fdn_131.card_impl import RavenousAmulet, RavenousAmuletAbility1
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_280.card_impl import Forest
+from test_interface import ManaType, Phase, Side, Zone, card, create_game
+
+from silverquillm.table import Table, moves, off_stack, on_stack, taps
 
 
-def _drain_pending():
-    game = behavioral_game()
-    player, opponent = game.players
-    amulet = enter_permanent(game, player, RavenousAmulet())
-    add_counter(game, amulet, "soul", 3)
-    player.mana_pool.add(ManaType.COLORLESS, 4)
-    activate_card_ability(game, player, amulet, 1)
-    return game, player, opponent, amulet
-
-
-class TestRavenousAmuletDrain:
-    def test_each_opponent_loses_life_equal_to_its_soul_counters(self) -> None:
-        game, player, opponent, amulet = _drain_pending()
-        resolve_stack(game)
-        assert opponent.life == 17
-        assert not game.get_battlefield(player).contains(amulet)
-
-    def test_uses_its_soul_counters_as_it_last_existed_if_it_left(self) -> None:
-        game, _player, opponent, amulet = _drain_pending()
-        exile(game, amulet)
-        resolve_stack(game)
-        assert opponent.life == 17
+def test_sacrificing_a_creature_draws_a_card():
+    amulet, lions, drawn = card(RavenousAmulet), card(SavannahLions), card(Forest)
+    game = create_game(
+        Side(battlefield=[amulet, lions], library=[drawn], mana={ManaType.COLORLESS: 1}),
+        Side(),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(
+        0,
+        RavenousAmuletAbility1,
+        then=[taps(amulet), moves(lions, Zone.GRAVEYARD), on_stack(RavenousAmuletAbility1, 0)],
+        note="the Lions is sacrificed as part of the cost",
+    )
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(RavenousAmuletAbility1), moves(drawn, Zone.HAND)])
+    t.run()

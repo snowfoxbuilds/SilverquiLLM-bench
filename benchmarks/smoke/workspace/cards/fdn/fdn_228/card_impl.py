@@ -10,6 +10,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MildManneredLibrarianAbility1:
+    text = '{3}{G}: This creature becomes a Werewolf. Put two +1/+1 counters on it and you draw a card. Activate only once.'
+
+
+# endregion Printed abilities
+
+
 class MildManneredLibrarian(Creature):
     """Mild-Mannered Librarian — {G} — 1/1 — Human Werewolf
 
@@ -50,7 +61,7 @@ class MildManneredLibrarian(Creature):
             source._librarian_activated = True
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from engine.game import add_counter, draw_card
 
             # Becomes a Werewolf (add subtype, remove Human)
@@ -59,7 +70,6 @@ class MildManneredLibrarian(Creature):
             # Put two +1/+1 counters
             add_counter(game, source, "+1/+1", 2)
             # Draw a card
-            controller = source.controller
             if controller is not None:
                 draw_card(game, controller)
 
@@ -69,4 +79,5 @@ class MildManneredLibrarian(Creature):
             description="{3}{G}: This creature becomes a Werewolf. Put "
             "two +1/+1 counters on it and you draw a card. Activate "
             "only once.",
+            printed=MildManneredLibrarianAbility1,
         )]

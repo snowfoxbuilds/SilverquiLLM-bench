@@ -8,7 +8,7 @@ fdn_129/tests.py for the canonical Equipment test shape.
 from __future__ import annotations
 
 from cards.fdn.fdn_130.card_impl import QuickDrawKatana
-from engine.card import Creature, Equipment
+from engine.card import Creature, Equipment, printed_class
 from engine.types import Keyword, ManaCost
 from test_utils import create_game, set_board_state
 
@@ -20,7 +20,7 @@ def _bear(p):
 class TestQuickDrawKatanaProperties:
     def test_static_data(self):
         katana = QuickDrawKatana(owner=None)
-        assert katana.name == "Quick-Draw Katana"
+        assert printed_class(katana) is QuickDrawKatana
         assert katana.mana_cost == ManaCost.parse("{2}")
         assert katana.equip_cost == ManaCost.parse("{2}")
         assert isinstance(katana, Equipment) and katana.is_equipment is True

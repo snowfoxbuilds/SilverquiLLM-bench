@@ -8,7 +8,9 @@ a life total changes, the game ends — and the table works out the rest from
 the rules: who is asked next (CR 117), the steps and turns that follow when
 everyone passes, who declares attackers and blockers and whether the declare
 blockers and combat damage steps happen (CR 508.8), the untap step and each
-turn's draw from the known library.
+turn's draw from the known library. A test also states the turn's shape the
+view cannot show: an extra turn, a first-strike combat damage step (CR 510.4)
+or a trigger during cleanup (CR 514.3a).
 
 These helpers need no engine. They live with the Audited Tests on the host and
 never enter the Workspace; they import the benchmark's ``test_interface``,
@@ -53,18 +55,30 @@ class Change:
             place = "the stack" if self.zone.value == "stack" else f"{where}{self.zone.value}"
             position = " (bottom)" if self.value == "bottom" else ""
             return f"{name} moves to {place}{position}"
+        if self.kind == "gains_control":
+            return f"player {self.seat} gains control of {name}"
         if self.kind == "appears":
             return f"{name} appears on player {self.seat}'s battlefield"
         if self.kind == "ceases":
             return f"{name} leaves the game"
         if self.kind in ("taps", "untaps"):
             return f"{name} {'becomes tapped' if self.kind == 'taps' else 'untaps'}"
+        if self.kind == "stays_tapped":
+            return f"{name} stays tapped"
         if self.kind == "life":
             return f"player {self.seat}'s life becomes {self.value}"
         if self.kind == "on_stack":
             return f"{name} goes on the stack for player {self.seat}"
+        if self.kind == "copied":
+            return f"a copy of {name} goes on the stack for player {self.seat}"
+        if self.kind == "cleanup_trigger":
+            return f"in cleanup, {name} goes on the stack for player {self.seat}"
         if self.kind == "off_stack":
             return f"{name} leaves the stack"
+        if self.kind == "first_strike_damage":
+            return "a first-strike combat damage step will come first"
+        if self.kind == "extra_turn":
+            return f"player {self.seat} will take an extra turn after this one"
         if self.kind == "ends":
             return "the game ends in a draw" if self.seat is None else f"player {self.seat} wins the game"
         return self.kind
@@ -72,10 +86,19 @@ class Change:
 
 def moves(item: Any, to: Any, *, seat: int | None = None, from_zone: Any = None, bottom: bool = False) -> Change:
     """``item`` — a handle, or a class when only one such card could move —
-    moves to zone ``to``; ``seat`` is the side it lands on (by default its
-    current one), ``from_zone`` narrows where a class is looked for, and
-    ``bottom`` puts it at the bottom of a library."""
+    moves to zone ``to``; ``seat`` is the side it lands on — on the stack its
+    controller, on the battlefield its controller, elsewhere its owner — by
+    default the player who cast it for a spell resolving onto the
+    battlefield and its owner otherwise; ``from_zone`` narrows where a class
+    is looked for, and ``bottom`` puts it at the bottom of a library. A
+    permanent keeps showing its owner whichever side it is on."""
     return Change("moves", item, to, seat, from_zone, "bottom" if bottom else "top")
+
+
+def gains_control(item: Any, seat: int) -> Change:
+    """Player ``seat`` gains control of the permanent ``item``: it moves to
+    their side of the battlefield, still owned and tapped as it was."""
+    return Change("gains_control", item, seat=seat)
 
 
 def appears(seat: int) -> Change:
@@ -100,6 +123,12 @@ def untaps(item: Any, seat: int | None = None) -> Change:
     return Change("untaps", item, seat=seat)
 
 
+def stays_tapped(item: Any, seat: int | None = None) -> Change:
+    """The tapped permanent ``item`` does not untap in the untap step the
+    entry leads into, as a permanent that "doesn't untap" does (CR 502.3)."""
+    return Change("stays_tapped", item, seat=seat)
+
+
 def life(seat: int, total: int) -> Change:
     """Player ``seat``'s life total becomes ``total``."""
     return Change("life", seat=seat, value=total)
@@ -111,9 +140,36 @@ def on_stack(cls: type, seat: int) -> Change:
     return Change("on_stack", cls, seat=seat)
 
 
+def cleanup_trigger(cls: type, seat: int) -> Change:
+    """An ability of predefined class ``cls`` triggers during the cleanup step
+    that follows, controlled by ``seat``: players then receive priority in that
+    cleanup step, and another cleanup step follows it (CR 514.3a)."""
+    return Change("cleanup_trigger", cls, seat=seat)
+
+
+def copied(cls: type, seat: int) -> Change:
+    """A copy of a spell of class ``cls`` goes on top of the stack, controlled
+    by ``seat``; spell copies are numbered in the order they are made."""
+    return Change("copied", cls, seat=seat)
+
+
 def off_stack(cls: type) -> Change:
     """The topmost stack object of class ``cls`` leaves the stack."""
     return Change("off_stack", cls)
+
+
+def first_strike_damage() -> Change:
+    """This combat has a first-strike combat damage step before the regular
+    one, because an attacking or blocking creature has first or double strike
+    (CR 510.4); stated before the declare blockers step ends."""
+    return Change("first_strike_damage")
+
+
+def extra_turn(seat: int) -> Change:
+    """Player ``seat`` gets an extra turn after this one (CR 500.7): the
+    table plays it next, the most recently created extra turn first, and
+    then the normal turn order resumes."""
+    return Change("extra_turn", seat=seat)
 
 
 def wins(seat: int) -> Change:
@@ -138,7 +194,7 @@ class ScriptError(Exception):
 
 _TURN = (
     "UNTAP", "UPKEEP", "DRAW", "PRECOMBAT_MAIN", "BEGIN_COMBAT", "DECLARE_ATTACKERS",
-    "DECLARE_BLOCKERS", "COMBAT_DAMAGE", "END_COMBAT", "POSTCOMBAT_MAIN", "END", "CLEANUP",
+    "DECLARE_BLOCKERS", "FIRST_STRIKE_DAMAGE", "COMBAT_DAMAGE", "END_COMBAT", "POSTCOMBAT_MAIN", "END", "CLEANUP",
 )
 _NO_PRIORITY = ("UNTAP", "CLEANUP")
 
@@ -169,17 +225,25 @@ class Table:
             for side in start.players
         ]
         self._stack: list[Any] = list(start.stack)
+        # The owner of each card on the stack, which shows its controller.
+        self._stack_owners: dict[int, int] = {}
         self._step = start.step.name
         self._active = start.active
         self._asked = start.asked
         self._turn = 1 if start.active == 0 else 2
+        self._normal_next = 1 - start.active
+        self._extra_turns: list[int] = []
+        # Abilities that trigger in the coming cleanup step (CR 514.3a).
+        self._cleanup_triggers: list[Any] = []
         self._passes = 0
         self._tokens = 0
+        self._copies = 0
         # The declaration being asked ("attackers" or "blockers"), and whether
         # anything attacks this combat.
         self._declaring: str | None = None
         self._attacking = False
         self._declared_attack = False
+        self._first_strike = False
         self._over = False
         self._winner: int | None = None
         self.scripts: list[list[Any]] = [[] for _ in start.players]
@@ -281,7 +345,8 @@ class Table:
         for n, i in enumerate(appearing, self._tokens + 1):
             changes[i] = replace(changes[i], item=ti.Token(n))
         for change in changes:
-            self._apply(change)
+            if change.kind != "stays_tapped":
+                self._apply(change)
         self._derived = []
         if not self._over and self._declaring:
             if entry.kind is not ti.Kind.ILLEGAL:
@@ -306,8 +371,16 @@ class Table:
                     self._asked = self._active
                     if not stack_before:
                         self._end_step()
+        for change in changes:
+            if change.kind == "stays_tapped":
+                # Applied over the untap step the table has just derived.
+                self._apply(replace(change, kind="taps"))
         narration = f"Player {seat} {text}"
-        said = [c.describe() for c in changes] + self._derived
+        said = (
+            [c.describe() for c in changes if c.kind != "stays_tapped"]
+            + self._derived
+            + [c.describe() for c in changes if c.kind == "stays_tapped"]
+        )
         if said:
             narration += "; " + "; ".join(said)
         entry = replace(entry, view=self._view(), note=note, narration=narration)
@@ -317,26 +390,49 @@ class Table:
     def _end_step(self) -> None:
         """The step ends: the game moves through the steps that follow, doing
         their turn-based actions, to the next one in which players receive
-        priority (CR 500.2, 508.8)."""
+        priority (CR 500.2, 508.8).
+
+        A cleanup step in which players received priority is followed by
+        another cleanup step of the same turn (CR 514.3a): it takes that
+        iteration's queued cleanup triggers, and the turn ends only after a
+        cleanup step in which nothing triggered."""
+        repeat_cleanup = self._step == "CLEANUP"
         while True:
-            index = _TURN.index(self._step) + 1
+            index = _TURN.index(self._step) + (0 if repeat_cleanup else 1)
+            repeat_cleanup = False
             if index == len(_TURN):
                 self._turn += 1
-                self._active = 1 - self._active
+                if self._extra_turns:
+                    self._active = self._extra_turns.pop()
+                else:
+                    self._active, self._normal_next = self._normal_next, 1 - self._normal_next
                 index = 0
                 self._derived.append(f"player {self._active}'s turn {self._turn} begins")
             self._step = _TURN[index]
             if self._step == "DECLARE_BLOCKERS" and not self._attacking:
                 # Nothing was declared as an attacker (CR 508.8).
                 self._step = "END_COMBAT"
+            if self._step == "FIRST_STRIKE_DAMAGE" and not self._first_strike:
+                # No first or double strike in this combat (CR 510.4).
+                self._step = "COMBAT_DAMAGE"
             if self._step == "END_COMBAT":
                 self._attacking = False
+                self._first_strike = False
             if self._step in ("DECLARE_ATTACKERS", "DECLARE_BLOCKERS"):
                 # The declaration is the step's turn-based action, asked of the
                 # active player for attackers and the other for blockers.
                 self._declaring = "attackers" if self._step == "DECLARE_ATTACKERS" else "blockers"
                 self._asked = self._active if self._declaring == "attackers" else 1 - self._active
                 self._derived.append(f"the game moves to {self._step.lower().replace('_', ' ')}")
+                return
+            if self._step == "CLEANUP" and self._cleanup_triggers:
+                # Something triggered during cleanup: players receive priority
+                # in it, and another cleanup step follows (CR 514.3a).
+                for seen in self._cleanup_triggers:
+                    self._stack.insert(0, seen)
+                self._cleanup_triggers = []
+                self._asked = self._active
+                self._derived.append("the game moves to cleanup")
                 return
             if self._step == "UNTAP":
                 for i, seen in enumerate(self._sides[self._active]["battlefield"]):
@@ -365,6 +461,10 @@ class Table:
         ti = _ti()
         if change.kind == "life":
             self._sides[change.seat]["life"] = change.value
+        elif change.kind == "first_strike_damage":
+            self._first_strike = True
+        elif change.kind == "extra_turn":
+            self._extra_turns.append(change.seat)
         elif change.kind == "ends":
             self._over, self._winner = True, change.seat
         elif change.kind == "appears":
@@ -372,6 +472,11 @@ class Table:
             self._sides[change.seat]["battlefield"].append(ti.Seen(None, change.seat, False, change.item))
         elif change.kind == "on_stack":
             self._stack.insert(0, ti.Seen(change.item, change.seat))
+        elif change.kind == "copied":
+            self._copies += 1
+            self._stack.insert(0, ti.Seen(change.item, change.seat, False, ti.SpellCopy(self._copies)))
+        elif change.kind == "cleanup_trigger":
+            self._cleanup_triggers.append(ti.Seen(change.item, change.seat))
         elif change.kind == "off_stack":
             index = next((i for i, s in enumerate(self._stack) if s.card is change.item), None)
             if index is None:
@@ -383,13 +488,26 @@ class Table:
         elif change.kind == "ceases":
             zone, index, _ = self._find(change.item, change.seat, None)
             del zone[index]
+        elif change.kind == "gains_control":
+            zone, index, seen = self._find(change.item, None, ti.Zone.BATTLEFIELD)
+            del zone[index]
+            self._sides[change.seat]["battlefield"].append(seen)
         elif change.kind == "moves":
             zone, index, seen = self._find(change.item, None, change.from_zone)
             del zone[index]
-            seat = seen.owner if change.seat is None else change.seat
-            arrived = ti.Seen(seen.card, seat, False, seen.handle)
+            from_stack = zone is self._stack
+            owner = self._stack_owners.pop(id(seen), seen.owner) if from_stack else seen.owner
+            if change.seat is not None:
+                seat = change.seat
+            elif from_stack and change.zone is ti.Zone.BATTLEFIELD:
+                seat = seen.owner  # a resolving spell enters under its controller
+            else:
+                seat = owner
+            shown = owner if change.zone is ti.Zone.BATTLEFIELD else seat
+            arrived = ti.Seen(seen.card, shown, False, seen.handle)
             if change.zone is ti.Zone.STACK:
                 self._stack.insert(0, arrived)
+                self._stack_owners[id(arrived)] = owner
             elif change.zone is ti.Zone.LIBRARY and change.value == "bottom":
                 self._sides[seat]["library"].append(arrived)
             elif change.zone is ti.Zone.LIBRARY:

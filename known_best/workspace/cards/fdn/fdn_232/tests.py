@@ -14,7 +14,7 @@ import pytest
 
 from cards.fdn.fdn_232.card_impl import ScavengingOoze
 from engine.abilities import AbilityError
-from engine.card import Creature, Instant
+from engine.card import Creature, Instant, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import ManaCost, ManaType, Zone
@@ -39,7 +39,7 @@ def _activate(game, player, ooze, target):
     """Activate Ooze targeting *target* (a graveyard card) via an Intent."""
     inst = game.refs.instance_id(target, Zone.GRAVEYARD.value)
     player.start_intent("ooze", Intent(
-        pattern=GameRef(card=frozenset({("name", ooze.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(ooze))})),
         preferences=(Decision.obj(instance=inst),),
     ))
     try:
@@ -51,7 +51,7 @@ def _activate(game, player, ooze, target):
 class TestScavengingOozeProperties:
     def test_static_data(self):
         ooze = ScavengingOoze(owner=None)
-        assert ooze.name == "Scavenging Ooze"
+        assert printed_class(ooze) is ScavengingOoze
         assert ooze.mana_cost == ManaCost.parse("{1}{G}")
         assert (ooze.base_power, ooze.base_toughness) == (2, 2)
 

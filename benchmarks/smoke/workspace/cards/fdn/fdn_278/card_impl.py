@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MountainAbility1:
+    text = '({T}: Add {R}.)'
+
+
+# endregion Printed abilities
+
+
 class Mountain(Land):
     """Mountain — Basic Land — Mountain. ({T}: Add {R}.)
 
@@ -42,5 +52,6 @@ class Mountain(Land):
                 cost=_tap_cost,
                 mana_produced=_add_red,
                 description="{T}: Add {R}.",
+                printed=MountainAbility1,
             )
         ]

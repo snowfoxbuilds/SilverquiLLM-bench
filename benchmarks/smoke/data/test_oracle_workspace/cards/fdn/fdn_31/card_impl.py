@@ -43,24 +43,33 @@ class BigfinBouncer(Creature):
         )
         super().__init__(**kwargs)
 
-    def _is_opponent_creature(self, obj: Any) -> bool:
-        """Legal target: a creature controlled by a player other than me."""
+    @staticmethod
+    def _is_opponent_creature(obj: Any, controller: Any) -> bool:
+        """Legal target: a creature controlled by a player other than the
+        ability's controller."""
         if CardType.CREATURE not in getattr(obj, "card_types", set()):
             return False
         obj_controller = getattr(obj, "controller", None)
-        return obj_controller is not None and obj_controller is not self.controller
+        return obj_controller is not None and obj_controller is not controller
 
-    def get_targets(self, game: "GameState") -> list[Any]:
-        """Target creature an opponent controls (chosen at cast/ETB)."""
+    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
+        """Target creature an opponent controls, chosen as the trigger goes on the stack."""
         return [
             TargetRequirement(
-                filter_fn=self._is_opponent_creature,
+                filter_fn=lambda obj, _c=controller: self._is_opponent_creature(obj, _c),
                 description="target creature an opponent controls",
                 zone=Zone.BATTLEFIELD,
             )
         ]
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability: it targets as it is put
+        on the stack (rule 603.3d)."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, BigfinBouncerAbility1, self._enters, targets=self._enters_targets)
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
         """ETB: bounce the chosen creature to its owner's hand.
 
         Revalidate the COMPLETE target predicate at resolution (rule 608.2b):
@@ -71,11 +80,10 @@ class BigfinBouncer(Creature):
         """
         from engine.zones import move_to_zone
 
-        targets = getattr(self, "chosen_targets", None) or []
         target = targets[0] if targets else None
         if target is None:
             return
         on_bf = any(game.get_battlefield(p).contains(target) for p in game.players)
-        if not on_bf or not self._is_opponent_creature(target):
+        if not on_bf or not self._is_opponent_creature(target, controller):
             return
         move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)

@@ -7,6 +7,17 @@ from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FirebrandArcherAbility1:
+    text = 'Whenever you cast a noncreature spell, this creature deals 1 damage to each opponent.'
+
+
+# endregion Printed abilities
+
+
 class FirebrandArcher(Creature):
     """Firebrand Archer — {1}{R} — 2/1 — Human Archer.
 
@@ -43,11 +54,11 @@ class FirebrandArcher(Creature):
             card_types = getattr(spell, 'card_types', set())
             return CardType.CREATURE not in card_types
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             for player in game.players:
                 if player is not ctrl:
                     deal_damage(game, source, player, 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=FirebrandArcherAbility1))

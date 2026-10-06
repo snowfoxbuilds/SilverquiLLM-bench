@@ -1,31 +1,52 @@
 """Regression tests for FDN 48 — Refute.
 
-Refute is cast through the REAL pipeline: its Zone.STACK target requirement
-offers exact StackObject occurrences (never source cards), the chosen
-occurrence is revalidated at resolution (it must still be on ``game.stack``),
-and the counter itself goes through the engine's shared stack-departure
-primitive (:func:`engine.stack.move_spell_off_stack`) — an ordinary countered
-spell to its owner's graveyard (rule 701.5a), a flashbacked spell to exile
-(rule 702.34a). A target occurrence that already left the stack fizzles the
-whole spell (rule 608.2b): no counter, no draw/discard, and never a move of a
-re-cast card.
+"Counter target spell. Draw a card, then discard a card." Player 1 casts
+spells on their turn and player 0 answers with Refute. A countered spell goes
+to its owner's graveyard (rule 701.5a), a flashbacked one to exile (rule
+702.34a). A target that already left the stack makes the whole spell do
+nothing (rule 608.2b): no counter, and no draw or discard.
 """
 
 from __future__ import annotations
 
-import pytest
+from cards.fdn.fdn_9.card_impl import DazzlingAngel, DazzlingAngelAbility2
 from cards.fdn.fdn_48.card_impl import Refute
-from engine.card import Creature, Instant
-from engine.casting import CastingError, CastMode, cast_spell_free
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.stack import StackObject, move_spell_off_stack, resolve_top_of_stack
-from engine.types import ManaCost, Zone
-from test_utils import scenario_game as create_game
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_165.card_impl import ThinkTwice
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_248.card_impl import ThousandYearStorm, ThousandYearStormAbility1
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_280.card_impl import Forest
+from engine.card import Instant
+from engine.types import ManaCost
+from test_interface import (
+    Decision,
+    ManaType,
+    Phase,
+    Side,
+    Zone,
+    card,
+    create_game,
+    player,
+    spell_copy,
+)
+
+from silverquillm.table import Table, copied, life, moves, off_stack, on_stack, taps
+
+KEEP_TARGETS = Decision.no()
 
 
-def _library_card(name: str = "Blank"):
-    return Creature(name=name, base_power=1, base_toughness=1)
+def _table(p0: Side, p1: Side) -> Table:
+    """Player 1's main phase; player 0 holds Refute and three blue mana."""
+    return Table(create_game(p0, p1, start=(Phase.PRECOMBAT_MAIN, 1)))
+
+
+def _refute(t: Table, refute, target, drawn, *countered) -> None:
+    """Player 0 casts Refute at ``target``; it resolves, countering it, and
+    player 0 draws ``drawn`` and discards it."""
+    t.act(0, refute, choices=[target], then=[moves(refute, Zone.STACK)])
+    t.pass_(0, choices=[drawn])
+    t.pass_(1, then=[*countered, moves(drawn, Zone.HAND), moves(drawn, Zone.GRAVEYARD), moves(refute, Zone.GRAVEYARD)])
 
 
 class TestRefuteProperties:
@@ -36,170 +57,107 @@ class TestRefuteProperties:
         assert Refute(owner=None).mana_cost == ManaCost.parse("{1}{U}{U}")
 
 
+
 class TestRefuteCounters:
-    def _game(self):
-        game = create_game()
-        p1, p2 = game.players
-        # A card for Refute's controller to draw.
-        game.get_library(p1).add(_library_card())
-        return game, p1, p2
-
-    def _spell(self, owner, *, flashback: bool = False):
-        card = Instant(name="Zap", mana_cost=ManaCost.parse("{U}"), owner=owner)
-        card.controller = owner
-        if flashback:
-            card.flashback_cost = ManaCost.parse("{2}{U}")
-        return card
-
-    def _cast_refute_at(self, game, p1, occurrence):
-        """Cast Refute through the real pipeline, selecting *occurrence* by its
-        engine-minted stack instance id — the occurrence's own identity,
-        matching what the Zone.STACK target enumeration offers."""
-        refute = Refute(owner=p1, controller=p1)
-        game.get_hand(p1).add(refute)
-        occ_iid = game.refs.instance_id(occurrence, Zone.STACK.value)
-        p1.start_intent(
-            "refute-cast",
-            Intent(
-                pattern=GameRef(card=frozenset({("name", "Refute")})),
-                preferences=(Decision.obj(instance=occ_iid),),
-            ),
-        )
-        try:
-            refute_so = cast_spell_free(game, p1, refute, Zone.HAND)
-        finally:
-            p1.end_intent("refute-cast")
-        assert refute_so.targets[0] is occurrence  # the occurrence, not the card
-        return refute, refute_so
-
-    def _resolve_top_as(self, game, p1):
-        """Resolve the top of the stack with an intent answering Refute's
-        discard query (first offered option)."""
-        p1.start_intent(
-            "refute-resolve",
-            Intent(
-                pattern=GameRef(card=frozenset({("name", "Refute")})),
-                preferences=(),
-            ),
-        )
-        try:
-            resolve_top_of_stack(game)
-        finally:
-            p1.end_intent("refute-resolve")
-
     def test_ordinary_countered_spell_to_owner_graveyard(self) -> None:
-        game, p1, p2 = self._game()
-        spell = self._spell(p2)
-        game.get_hand(p2).add(spell)
-        so = cast_spell_free(game, p2, spell, Zone.HAND)
-
-        refute, _ = self._cast_refute_at(game, p1, so)
-        self._resolve_top_as(game, p1)
-
-        # Destination ownership: the countered card goes to ITS owner's (p2's)
-        # graveyard; Refute goes to its own owner's (p1's) graveyard.
-        assert game.get_graveyard(p2).contains(spell)
-        assert not game.get_exile(p2).contains(spell)
-        assert not game.get_graveyard(p1).contains(spell)
-        assert game.get_graveyard(p1).contains(refute)
-        assert game.stack.is_empty()
+        """The countered Burst Lightning goes to its owner's graveyard, and
+        Refute to its own owner's."""
+        refute, drawn, bolt = card(Refute), card(Forest), card(BurstLightning)
+        t = _table(
+            Side(hand=[refute], library=[drawn], mana={ManaType.BLUE: 3}),
+            Side(hand=[bolt], mana={ManaType.RED: 1}),
+        )
+        t.act(1, bolt, choices=[player(0)], then=[moves(bolt, Zone.STACK)])
+        t.pass_(1)
+        _refute(t, refute, bolt, drawn, moves(bolt, Zone.GRAVEYARD))
+        t.run()
 
     def test_flashback_countered_spell_exiled(self) -> None:
-        """Countering a flashbacked spell exiles it (rule 702.34a) — the
-        departure replacement applies to countering exactly as to resolution."""
-        game, p1, p2 = self._game()
-        spell = self._spell(p2, flashback=True)
-        game.get_graveyard(p2).add(spell)
-        so = cast_spell_free(game, p2, spell, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
-
-        self._cast_refute_at(game, p1, so)
-        self._resolve_top_as(game, p1)
-
-        assert game.get_exile(p2).contains(spell)
-        assert not game.get_graveyard(p2).contains(spell)
+        """Countering a flashbacked spell exiles it (rule 702.34a)."""
+        refute, drawn, think = card(Refute), card(Forest), card(ThinkTwice)
+        t = _table(
+            Side(hand=[refute], library=[drawn], mana={ManaType.BLUE: 3}),
+            Side(graveyard=[think], mana={ManaType.BLUE: 1, ManaType.COLORLESS: 2}),
+        )
+        t.act(1, think, then=[moves(think, Zone.STACK)], note="cast by flashback")
+        t.pass_(1)
+        _refute(t, refute, think, drawn, moves(think, Zone.EXILE))
+        t.run()
 
     def test_refute_draws_and_discards_on_successful_counter(self) -> None:
-        game, p1, p2 = self._game()
-        spell = self._spell(p2)
-        game.get_hand(p2).add(spell)
-        so = cast_spell_free(game, p2, spell, Zone.HAND)
-        hand_before = len(game.get_hand(p1))
-
-        self._cast_refute_at(game, p1, so)
-        self._resolve_top_as(game, p1)
-
-        # Draw a card, then discard a card: net hand size unchanged, but the
-        # library card moved through the hand.
-        assert len(game.get_library(p1)) == 0
-        assert len(game.get_hand(p1)) == hand_before  # +1 draw, -1 discard
+        """The drawn card passes through player 0's hand to the graveyard,
+        leaving the rest of their library and hand as they were."""
+        refute, drawn, kept, held, bolt = card(Refute), card(Forest), card(Island), card(Island), card(BurstLightning)
+        t = _table(
+            Side(hand=[refute, held], library=[drawn, kept], mana={ManaType.BLUE: 3}),
+            Side(hand=[bolt], mana={ManaType.RED: 1}),
+        )
+        t.act(1, bolt, choices=[player(0)], then=[moves(bolt, Zone.STACK)])
+        t.pass_(1)
+        _refute(t, refute, bolt, drawn, moves(bolt, Zone.GRAVEYARD))
+        t.run()
 
     def test_counter_fizzles_when_occurrence_departed_and_recast(self) -> None:
-        """Rule 608.2b: the targeted OCCURRENCE left the stack, so Refute
-        fizzles entirely at resolution — the re-cast of the same card (a new
-        occurrence) is not touched, the card is not moved again, and the
-        draw/discard secondary effect does not happen."""
-        game, p1, p2 = self._game()
-        spell = self._spell(p2)
-        game.get_hand(p2).add(spell)
-        so = cast_spell_free(game, p2, spell, Zone.HAND)
-
-        refute, _ = self._cast_refute_at(game, p1, so)
-
-        # The targeted occurrence departs (countered by something else) …
-        assert move_spell_off_stack(game, so) is True
-        assert game.get_graveyard(p2).contains(spell)
-        # … and the same card is re-cast: a NEW occurrence.
-        recast_so = cast_spell_free(game, p2, spell, Zone.GRAVEYARD)
-        assert recast_so is not so
-
-        resolve_top_of_stack(game)  # the recast resolves normally
-        assert game.get_graveyard(p2).contains(spell)
-
-        library_before = len(game.get_library(p1))
-        self._resolve_top_as(game, p1)  # Refute resolves — and fizzles
-
-        assert sum(1 for o in game.get_graveyard(p2).get_all() if o is spell) == 1
-        assert not game.get_exile(p2).contains(spell)
-        assert len(game.get_library(p1)) == library_before  # no draw on fizzle
-        assert game.get_graveyard(p1).contains(refute)
-        assert game.stack.is_empty()
+        """Rule 608.2b: player 0's second Refute counters Think Twice first,
+        and player 1 casts it again by flashback; the first Refute's target
+        left the stack, so it does nothing — the recast Think Twice is not
+        touched, and player 0 draws nothing."""
+        first, second, drawn, spare = card(Refute), card(Refute), card(Forest), card(Forest)
+        think, p1_draw = card(ThinkTwice), card(Island)
+        islands = [card(Island) for _ in range(3)]
+        t = _table(
+            Side(hand=[first, second], library=[drawn, spare], mana={ManaType.BLUE: 6}),
+            Side(hand=[think], battlefield=islands, library=[p1_draw], mana={ManaType.BLUE: 1, ManaType.COLORLESS: 1}),
+        )
+        t.act(1, think, then=[moves(think, Zone.STACK)])
+        t.pass_(1)
+        t.act(0, first, choices=[think], then=[moves(first, Zone.STACK)])
+        _refute(t, second, think, drawn, moves(think, Zone.GRAVEYARD))
+        for island in islands:
+            t.act(1, island, then=[taps(island)])
+        t.act(1, think, then=[moves(think, Zone.STACK)], note="cast again by flashback")
+        t.pass_(1)
+        t.pass_(0, then=[moves(p1_draw, Zone.HAND), moves(think, Zone.EXILE)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(first, Zone.GRAVEYARD)], note="the first Refute does nothing: no draw")
+        t.run()
 
     def test_copy_countered_distinctly_from_original(self) -> None:
-        """A spell COPY is its own occurrence: countering the copy leaves the
-        original cast (and its card) untouched, and moves no card (a copy's
-        card occupies no stack zone, rule 707.10a)."""
-        from engine.stack import copy_spell
-
-        game, p1, p2 = self._game()
-        spell = self._spell(p2)
-        game.get_hand(p2).add(spell)
-        so = cast_spell_free(game, p2, spell, Zone.HAND)
-        copy_so = copy_spell(game, so, p2)
-        game.stack.push(copy_so)
-
-        _, refute_so = self._cast_refute_at(game, p1, copy_so)
-        assert refute_so.targets[0] is copy_so
-        self._resolve_top_as(game, p1)
-
-        assert not game.stack.contains(copy_so)
-        assert game.stack.contains(so)  # original untouched
-        assert p2.zones[Zone.STACK].contains(spell)
-        assert not game.get_graveyard(p2).contains(spell)
+        """A spell copy is its own stack object: Refute counters Thousand-Year
+        Storm's copy of the second Burst Lightning, and the original still
+        deals its 2."""
+        refute, drawn = card(Refute), card(Forest)
+        first, second = card(BurstLightning), card(BurstLightning)
+        t = _table(
+            Side(hand=[refute], library=[drawn], mana={ManaType.BLUE: 3}),
+            Side(hand=[first, second], battlefield=[ThousandYearStorm], mana={ManaType.RED: 2}),
+        )
+        for bolt, copies, life_after in ((first, 0, 18), (second, 1, None)):
+            t.act(1, bolt, choices=[player(0)], then=[moves(bolt, Zone.STACK), on_stack(ThousandYearStormAbility1, 1)])
+            t.pass_(1, choices=[KEEP_TARGETS])
+            t.pass_(0, then=[off_stack(ThousandYearStormAbility1), *[copied(BurstLightning, 1)] * copies])
+            if life_after is not None:
+                t.pass_(1)
+                t.pass_(0, then=[moves(bolt, Zone.GRAVEYARD), life(0, life_after)])
+        t.pass_(1)
+        _refute(t, refute, spell_copy(1), drawn, off_stack(BurstLightning))
+        t.pass_(1)
+        t.pass_(0, then=[moves(second, Zone.GRAVEYARD), life(0, 16)])
+        t.run()
 
     def test_trigger_sharing_source_card_is_not_a_target_spell(self) -> None:
-        """A triggered ability on the stack is NOT a spell, even though it has
-        a source card: with only it on the stack Refute has no legal target
-        and cannot be cast."""
-        game, p1, p2 = self._game()
-        permanent = Creature(name="Watcher", base_power=2, base_toughness=2, owner=p2)
-        permanent.controller = p2
-        game.get_battlefield(p2).add(permanent)
-        trigger = StackObject(source=permanent, controller=p2)  # is_spell=False
-        game.stack.push(trigger)
-
-        refute = Refute(owner=p1, controller=p1)
-        game.get_hand(p1).add(refute)
-        with pytest.raises(CastingError):
-            cast_spell_free(game, p1, refute, Zone.HAND)
-        assert game.get_hand(p1).contains(refute)  # rolled back
-        assert game.stack.contains(trigger)
+        """A triggered ability on the stack is not a spell, though it has a
+        source card: with only Dazzling Angel's trigger on the stack, Refute
+        has no legal target and cannot be cast."""
+        refute, lions = card(Refute), card(SavannahLions)
+        t = _table(
+            Side(hand=[refute], mana={ManaType.BLUE: 3}),
+            Side(hand=[lions], battlefield=[DazzlingAngel], mana={ManaType.WHITE: 1}),
+        )
+        t.act(1, lions, then=[moves(lions, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(lions, Zone.BATTLEFIELD), on_stack(DazzlingAngelAbility2, 1)])
+        t.pass_(1)
+        t.act_illegal(0, refute, note="no spell to target")
+        t.pass_(0, then=[off_stack(DazzlingAngelAbility2), life(1, 21)])
+        t.run()

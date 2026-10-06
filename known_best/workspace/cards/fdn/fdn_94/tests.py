@@ -12,6 +12,7 @@ from cards.fdn.fdn_94.card_impl import SlumberingCerberus
 from engine.events import EndStepTriggeredEvent
 from engine.types import ManaCost
 from test_utils import create_game, resolve_stack, set_board_state
+from engine.card import printed_class
 
 
 def _setup():
@@ -27,7 +28,7 @@ def _setup():
 class TestSlumberingCerberusProperties:
     def test_static_data(self):
         c = SlumberingCerberus(owner=None)
-        assert c.name == "Slumbering Cerberus"
+        assert printed_class(c) is SlumberingCerberus
         assert c.mana_cost == ManaCost.parse("{1}{R}")
         assert (c.base_power, c.base_toughness) == (4, 2)
         assert "Dog" in c.subtypes

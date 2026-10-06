@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AmbushWolfAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class AmbushWolfAbility2:
+    text = 'When this creature enters, exile up to one target card from a graveyard.'
+
+
+# endregion Printed abilities
+
+
 class AmbushWolf(Creature):
     """Ambush Wolf — {2}{G} — 4/2 — Wolf — Flash.
 
@@ -38,7 +52,7 @@ class AmbushWolf(Creature):
         )
         super().__init__(**kwargs)
 
-    def get_targets(self, game: "GameState") -> list[Any]:
+    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Up to one target card in any graveyard."""
 
         def _filter(obj: Any) -> bool:
@@ -53,11 +67,17 @@ class AmbushWolf(Creature):
             )
         ]
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, AmbushWolfAbility2, self._enters, targets=self._enters_targets)
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
         """Exile the chosen graveyard card (if any was targeted)."""
         from engine.zones import move_to_zone
 
-        chosen = getattr(self, "chosen_targets", None) or []
+        chosen = targets
         target = chosen[0] if chosen else None
         if target is None:
             return

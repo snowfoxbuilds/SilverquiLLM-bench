@@ -11,7 +11,7 @@ sublayer (the valid modify sublayer is ``MODIFY_PT``), passed the callable as
 from __future__ import annotations
 
 from cards.fdn.fdn_219.card_impl import ElvishArchdruid
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.continuous_effects import Layer, SubLayer
 from engine.types import ManaCost, ManaType
 from test_utils import create_game, set_board_state
@@ -20,7 +20,7 @@ from test_utils import create_game, set_board_state
 class TestElvishArchdruidProperties:
     def test_name_and_cost(self) -> None:
         card = ElvishArchdruid(owner=None)
-        assert card.name == "Elvish Archdruid"
+        assert printed_class(card) is ElvishArchdruid
         assert card.mana_cost == ManaCost.parse("{1}{G}{G}")
         assert card.subtypes == {"Elf", "Druid"}
 

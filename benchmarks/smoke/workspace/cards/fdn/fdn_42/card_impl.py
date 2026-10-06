@@ -10,6 +10,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class IcewindElementalAbility1:
+    text = 'Flying'
+
+
+class IcewindElementalAbility2:
+    text = 'When this creature enters, draw a card, then discard a card.'
+
+
+# endregion Printed abilities
+
+
 def _self_etb_condition(source: Any):
     """Return a condition callable that matches only when *source* enters."""
 
@@ -40,8 +55,7 @@ class IcewindElemental(Creature):
         from engine.game import draw_card, discard
         source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is not None:
                 drawn = draw_card(game, controller)
                 hand = game.get_hand(controller)
@@ -50,4 +64,4 @@ class IcewindElemental(Creature):
                     to_discard = choose_object(game, controller, hand_cards, 'card to discard', source_card=source)
                     discard(game, controller, to_discard)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller, printed=IcewindElementalAbility2))

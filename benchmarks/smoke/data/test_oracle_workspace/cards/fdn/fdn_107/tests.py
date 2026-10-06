@@ -10,7 +10,7 @@ doubles the counters from a nonzero base.
 from __future__ import annotations
 
 from cards.fdn.fdn_107.card_impl import MossbornHydra
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.types import CardType, ManaCost, Zone
 from engine.zones import move_to_zone
 from test_utils import create_game, resolve_stack, set_board_state
@@ -19,7 +19,7 @@ from test_utils import create_game, resolve_stack, set_board_state
 class TestMossbornHydraProperties:
     def test_name_and_cost(self) -> None:
         card = MossbornHydra(owner=None)
-        assert card.name == "Mossborn Hydra"
+        assert printed_class(card) is MossbornHydra
         assert card.mana_cost == ManaCost.parse("{2}{G}")
         assert card.base_power == 0
         assert card.base_toughness == 0

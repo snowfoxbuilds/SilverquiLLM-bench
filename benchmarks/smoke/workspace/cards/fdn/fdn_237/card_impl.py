@@ -8,6 +8,21 @@ from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BalmorBattlemageCaptainAbility1:
+    text = 'Flying'
+
+
+class BalmorBattlemageCaptainAbility2:
+    text = 'Whenever you cast an instant or sorcery spell, creatures you control get +1/+0 and gain trample until end of turn.'
+
+
+# endregion Printed abilities
+
+
 class BalmorBattlemageCaptain(Creature):
     """Balmor, Battlemage Captain — {U}{R} — 1/3 — Legendary Bird Wizard.
 
@@ -48,8 +63,8 @@ class BalmorBattlemageCaptain(Creature):
             card_types = getattr(spell, 'card_types', set())
             return bool(card_types & {CardType.INSTANT, CardType.SORCERY})
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
 
@@ -66,4 +81,4 @@ class BalmorBattlemageCaptain(Creature):
                         obj.keywords = obj.keywords | Keyword.TRAMPLE
             game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply_pt, duration=DURATION_END_OF_TURN))
             game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.ABILITY, sublayer=None, apply=_apply_trample, duration=DURATION_END_OF_TURN))
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=BalmorBattlemageCaptainAbility2))

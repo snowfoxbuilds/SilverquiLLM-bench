@@ -11,6 +11,17 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class RiteOfTheDragoncallerAbility1:
+    text = 'Whenever you cast an instant or sorcery spell, create a 5/5 red Dragon creature token with flying.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Check if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -56,11 +67,10 @@ class RiteOfTheDragoncaller(Enchantment):
             card_types = getattr(spell, 'card_types', set())
             return CardType.INSTANT in card_types or CardType.SORCERY in card_types
 
-        def _effect(game: GameState) -> None:
-            controller = source.controller
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             token = make_creature_token("Dragon", {"Dragon"}, [Color.RED], 5, 5, keywords=Keyword.FLYING)
             create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=RiteOfTheDragoncallerAbility1))

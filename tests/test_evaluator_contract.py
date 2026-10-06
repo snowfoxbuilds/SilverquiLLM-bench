@@ -28,7 +28,7 @@ from silverquillm.karn.execution import _scores
 
 REPO = Path(__file__).resolve().parents[1]
 SMOKE_WS = REPO / "benchmarks/smoke/workspace"
-HOB = REPO / "benchmarks/hob-medium/workspace/cards/fdn"
+ORACLE_CARDS = REPO / "benchmarks/smoke/data/test_oracle_workspace/cards/fdn"
 _IGNORE = shutil.ignore_patterns("__pycache__", ".pytest_cache", ".git")
 
 
@@ -132,7 +132,7 @@ class TestEvaluateRun:
         shutil.copytree(SMOKE_WS, wf, ignore=_IGNORE)
         for card_id in implement:
             shutil.copy2(
-                HOB / card_id / "card_impl.py",
+                ORACLE_CARDS / card_id / "card_impl.py",
                 wf / f"cards/fdn/{card_id}/card_impl.py",
             )
         return run_dir
@@ -177,7 +177,7 @@ class TestGradingIsolation:
     def _overlay(self, tmp_path: Path, poison: str) -> Path:
         overlay = tmp_path / "overlay"
         shutil.copytree(SMOKE_WS, overlay, ignore=_IGNORE)
-        shutil.copy2(HOB / "fdn_129" / "card_impl.py", overlay / "cards/fdn/fdn_129/card_impl.py")
+        shutil.copy2(ORACLE_CARDS / "fdn_129" / "card_impl.py", overlay / "cards/fdn/fdn_129/card_impl.py")
         tu = overlay / "test_utils.py"
         if poison == "always-pass":
             tu.write_text(

@@ -37,11 +37,11 @@ class TestRuneScarredDemonSelfETB:
         )
 
         p.start_intent("tutor", Intent(
-            pattern=GameRef(card=frozenset({("name", "Rune-Scarred Demon")})),
+            pattern=GameRef(card=frozenset({("printed", RuneScarredDemon)})),
             preferences=(Decision.obj(instance=wanted.instance_id),),
         ))
         try:
-            cast_spell(game, 0, "Rune-Scarred Demon")
+            cast_spell(game, 0, RuneScarredDemon)
         finally:
             if "tutor" in p._intents:
                 p.end_intent("tutor")

@@ -13,7 +13,7 @@ import pytest
 
 from cards.fdn.fdn_95.card_impl import SowerOfChaos
 from engine.abilities import AbilityError
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
@@ -30,7 +30,7 @@ def _activate_targeting(game, player, source, target):
     targeting *target* (chosen at activation via an Intent on *player*)."""
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
     player.start_intent("sower", Intent(
-        pattern=GameRef(card=frozenset({("name", source.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(source))})),
         preferences=(Decision.obj(instance=inst),),
     ))
     try:
@@ -42,7 +42,7 @@ def _activate_targeting(game, player, source, target):
 class TestSowerOfChaosProperties:
     def test_static_data(self):
         sower = SowerOfChaos(owner=None)
-        assert sower.name == "Sower of Chaos"
+        assert printed_class(sower) is SowerOfChaos
         assert sower.mana_cost == ManaCost.parse("{3}{R}")
         assert (sower.base_power, sower.base_toughness) == (4, 3)
         assert "Devil" in sower.subtypes

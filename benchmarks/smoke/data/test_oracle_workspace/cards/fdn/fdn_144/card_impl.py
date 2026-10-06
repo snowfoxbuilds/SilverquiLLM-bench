@@ -53,24 +53,34 @@ class MischievousPup(Creature):
         )
         super().__init__(**kwargs)
 
-    def _is_other_permanent_you_control(self, obj: Any) -> bool:
-        """Legal target: another permanent controlled by this card's controller
-        (the caster). Shared by ``get_targets`` and the resolution revalidation."""
-        controller = self.controller or getattr(self, "owner", None)
-        return obj is not self and getattr(obj, "controller", None) is controller
+    @staticmethod
+    def _is_other_permanent_you_control(game: Any, obj: Any, controller: Any, source: Any) -> bool:
+        """Legal target: a permanent the ability's controller controls, other
+        than the ability's *source* as it triggered. Shared by the targeting
+        and the resolution revalidation."""
+        return not source.is_source(game, obj) and getattr(obj, "controller", None) is controller
 
-    def get_targets(self, game: "GameState") -> list[Any]:
+    def _enters_targets(self, game: "GameState", controller: Any, source: Any) -> list[Any]:
         """Up to one OTHER target permanent you control (optional/declinable)."""
         return [
             TargetRequirement(
-                filter_fn=self._is_other_permanent_you_control,
+                filter_fn=lambda obj: self._is_other_permanent_you_control(game, obj, controller, source),
                 description="up to one other target permanent you control",
                 zone=Zone.BATTLEFIELD,
                 optional=True,
             )
         ]
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability: it targets as it is put
+        on the stack (rule 603.3d)."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(
+            game, self, MischievousPupAbility2, self._enters, targets=self._enters_targets, knows_source=True
+        )
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any, source: Any) -> None:
         """Return the chosen permanent (if any) to its owner's hand.
 
         Revalidate the COMPLETE predicate at resolution: still *another*
@@ -80,12 +90,11 @@ class MischievousPup(Creature):
         """
         from engine.zones import move_to_zone
 
-        chosen = getattr(self, "chosen_targets", None) or []
-        target = chosen[0] if chosen else None
+        target = targets[0] if targets else None
         if target is None:
             return
         if not _on_battlefield(game, target):
             return
-        if not self._is_other_permanent_you_control(target):
+        if not self._is_other_permanent_you_control(game, target, controller, source):
             return
         move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)

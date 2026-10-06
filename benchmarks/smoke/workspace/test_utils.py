@@ -16,10 +16,17 @@ Functions:
     create_game — convenience wrapper to create a GameState from card lists.
     set_board_state — directly set zone contents and player state.
     script / run_scripts — give players action scripts and play them out.
-    cast_spell — find card in hand by name, cast it through priority, and resolve.
+    source_pattern — an Intent pattern routing the queries a card raises.
+    cast_spell — find a card in hand by its predefined class, cast it through
+        priority, and resolve.
     advance_to_phase — fast-forward game state to a given phase/step.
-    declare_attackers — advance to combat and declare attackers by name.
-    declare_blockers — declare blockers by name mapping.
+    declare_attackers — advance to combat and declare attackers.
+    declare_blockers — declare blockers by attacker → blockers mapping.
+
+Tests place, choose and assert by predefined classes, never by a name string
+(ADR-017): a helper that finds a card takes its predefined class (the first
+matching object is used) or the object itself, and raises
+:class:`TestSetupError` when given a string.
 """
 
 from __future__ import annotations
@@ -32,7 +39,7 @@ from typing import Any, NoReturn
 from engine import attempts
 from engine.abilities import AbilityError
 from engine.attempts import AttemptAnswer
-from engine.card import CardImpl
+from engine.card import CardImpl, printed_class
 from engine.casting import CastingError
 from engine.decisions import (
     AmbiguousIntentError,
@@ -1082,13 +1089,14 @@ def _set_zone(
 def cast_spell(
     game: GameState,
     player_index: int,
-    card_name: str,
+    card: type | Any,
     targets: list[Any] | None = None,
 ) -> None:
-    """Find a card in hand by name, cast it, and pass priority until resolved.
+    """Find a card in hand, cast it, and pass priority until resolved.
 
     The function:
-    1. Locates the first card matching *card_name* in the player's hand.
+    1. Locates *card* in the player's hand: the object itself, or the first
+       card whose predefined class is *card*.
     2. For a sorcery-speed spell, makes the caster the active player in a main
        phase (the current one, else precombat main); a changed phase or active
        player opens that main phase's window, so later drivers carry on from
@@ -1100,16 +1108,19 @@ def cast_spell(
     Parameters:
         game: The game state.
         player_index: Index of the casting player (0 or 1).
-        card_name: Name of the card to find in hand.
+        card: The card's predefined class, or the card object itself.
         targets: Optional list of game objects/players to prefer for the
             target Player Query the engine raises during casting.  When
             provided, a transient Intent is started on the casting player
             that prefers each target by its engine-minted ``instance_id``
-            (objects) or seat (players); the intent is ended after
-            casting in a ``finally`` so it does not leak across calls.
+            (objects) or seat (players), and also answers the targets of
+            the permanent's enters trigger; the intent is ended once the
+            stack has resolved, in a ``finally`` so it does not leak across
+            calls.
 
     Raises:
-        TestSetupError: If the card is not found in hand or casting fails.
+        TestSetupError: If *card* is a string, is not found in hand, or
+            casting fails.
     """
     if player_index < 0 or player_index >= len(game.players):
         raise TestSetupError(
@@ -1117,21 +1128,11 @@ def cast_spell(
         )
 
     player = game.players[player_index]
-    hand = game.get_hand(player)
-
-    # Find the card by name
-    card = None
-    for obj in hand.get_all():
-        if getattr(obj, "name", None) == card_name:
-            card = obj
-            break
-
-    if card is None:
-        hand_names = [getattr(c, "name", repr(c)) for c in hand.get_all()]
-        raise TestSetupError(
-            f"Card {card_name!r} not found in player {player_index}'s hand. "
-            f"Hand contains: {hand_names}"
-        )
+    hand = game.get_hand(player).get_all()
+    (card,) = _find_objects(
+        hand, [card], "Card", f"in player {player_index}'s hand", "Hand contains"
+    )
+    card_name = getattr(card, "name", repr(card))
 
     # Ensure sorcery-speed timing for non-instant spells
     from engine.types import CardType, Keyword
@@ -1155,25 +1156,82 @@ def cast_spell(
         intent_name = f"_cast_{card_name}"
         player.start_intent(
             intent_name,
-            Intent(
-                pattern=GameRef(card=frozenset({("name", card_name)})),
-                preferences=prefs,
-            ),
+            Intent(pattern=source_pattern(card), preferences=prefs),
         )
 
     try:
-        _take_action(game, player, act(_hand_preference(game, card)))
-    except ScriptEntryError as exc:
-        reason = _rejection_cause(exc) or f"it is not offered at priority ({exc})"
-        raise TestSetupError(f"Failed to cast {card_name!r}: {reason}") from exc
-    except Exception as exc:
-        raise TestSetupError(f"Failed to cast {card_name!r}: {exc}") from exc
+        try:
+            _take_action(game, player, act(_hand_preference(game, card)))
+        except ScriptEntryError as exc:
+            reason = _rejection_cause(exc) or f"it is not offered at priority ({exc})"
+            raise TestSetupError(f"Failed to cast {card_name!r}: {reason}") from exc
+        except Exception as exc:
+            raise TestSetupError(f"Failed to cast {card_name!r}: {exc}") from exc
+        # Pass priority for both players to resolve the spell; the targets
+        # also answer what its enters trigger targets as it goes on the stack.
+        resolve_stack(game)
     finally:
         if intent_name is not None and intent_name in player._intents:
             player.end_intent(intent_name)
 
-    # Pass priority for both players to resolve the spell
-    resolve_stack(game)
+
+def source_pattern(card: type | Any) -> GameRef:
+    """An Intent pattern routing the queries *card* raises.
+
+    *card* is a predefined class or a game object. An object routes by the
+    predefined class it stands for; a synthetic test object that stands for
+    no printed card routes by its own name, which the test never spells out.
+    """
+    printed = card if isinstance(card, type) else printed_class(card)
+    if printed is not None:
+        return GameRef(card=frozenset({("printed", printed)}))
+    if isinstance(card, str):
+        raise TestSetupError(f"{card!r} is a name string; pass a predefined class or object")
+    return GameRef(card=frozenset({("name", card.name)}))
+
+
+def _find_objects(
+    objects: list[Any],
+    wanted: list[Any],
+    role: str,
+    where: str,
+    listing: str,
+    exclude: Any = (),
+) -> list[Any]:
+    """The objects among *objects* that *wanted* stands for, each found once.
+
+    An entry of *wanted* is a game object (standing for itself) or a predefined
+    class (the first unclaimed object whose predefined class it is). A string
+    is refused: tests never identify a card by name (ADR-017).
+    """
+    found: list[Any] = []
+    for want in wanted:
+        if isinstance(want, str):
+            raise TestSetupError(
+                f"{role} {want!r} is a name string; pass the card's predefined "
+                "class or the object itself (see ADR-017)"
+            )
+        if not isinstance(want, type):
+            found.append(want)
+            continue
+        # Prefer an object not in *exclude*; otherwise one that is, so a blocker
+        # given under two attackers is one blocker blocking both.
+        candidates = [obj for obj in objects if printed_class(obj) is want and obj not in found]
+        match = next(
+            (obj for obj in candidates if obj not in exclude), candidates[0] if candidates else None
+        )
+        if match is None:
+            raise TestSetupError(
+                f"{role} {want.__name__} not found {where}. "
+                f"{listing}: {[_describe_object(c) for c in objects]}"
+            )
+        found.append(match)
+    return found
+
+
+def _describe_object(obj: Any) -> str:
+    printed = printed_class(obj)
+    return printed.__name__ if printed is not None else getattr(obj, "name", repr(obj))
 
 
 def _target_preference(game: GameState, target: Any) -> Any:
@@ -1489,15 +1547,15 @@ def advance_to_phase(
 
 def declare_attackers(
     game: GameState,
-    attacker_names: list[Any],
+    attackers: list[Any],
     *,
     illegal: bool = False,
 ) -> None:
     """Advance to combat and declare attackers.
 
     1. Advances to the Declare Attackers step if not already there.
-    2. Finds the creatures on the active player's battlefield matching the
-       given names (a creature object may be given instead of a name).
+    2. Finds the given creatures on the active player's battlefield — each a
+       creature object or a predefined class.
     3. Declares exactly those attackers as a one-entry :func:`act` script: the
        engine asks the active player which creatures attack — and what each
        attacks, which this helper answers with the defending player — and
@@ -1509,13 +1567,14 @@ def declare_attackers(
 
     Parameters:
         game: The game state.
-        attacker_names: Names of creatures to declare as attackers.
+        attackers: The creatures to declare as attackers (objects or
+            predefined classes).
         illegal: Whether the declaration is expected to be illegal.
 
     Raises:
-        TestSetupError: If any named creature is not found on the
-            active player's battlefield.
-        ScriptEntryError: If the engine does not offer a named creature or
+        TestSetupError: If any creature is not found on the active player's
+            battlefield, or is given as a name string.
+        ScriptEntryError: If the engine does not offer a given creature or
             rejects the declaration (a creature that can't attack) — or, with
             ``illegal=True``, if it lets the declaration take effect.
     """
@@ -1525,9 +1584,7 @@ def declare_attackers(
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_ATTACKERS)
 
     active = game.active_player
-    attackers = _battlefield_objects(
-        game, active, attacker_names, "Attacker", "active", listing="Battlefield contains"
-    )
+    attackers = _battlefield_objects(game, active, attackers, "Attacker", "active")
     defending_seat = game.refs.seat_of(game.non_active_player)
     entry = (act_illegal if illegal else act)(
         *(_battlefield_preference(game, a) for a in attackers),
@@ -1547,7 +1604,7 @@ def declare_blockers(
     *,
     illegal: bool = False,
 ) -> None:
-    """Declare blockers by name mapping.
+    """Declare blockers from an attacker → blockers mapping.
 
     The blocks are declared as a one-entry :func:`act` script: the engine asks
     the defending player which creatures block and then what each blocks, and
@@ -1561,15 +1618,16 @@ def declare_blockers(
 
     Parameters:
         game: The game state.
-        assignments: A mapping of ``{"attacker_name": ["blocker_name", ...]}``.
-            Each attacker on the active player's battlefield is matched by
-            name, and each blocker on the defending player's battlefield is
-            matched by name (creature objects may be given instead of names).
+        assignments: A mapping of ``{attacker: [blocker, ...]}``. Each attacker
+            is found on the active player's battlefield and each blocker on the
+            defending player's battlefield; each is a creature object or a
+            predefined class.
         illegal: Whether the declaration is expected to be illegal.
 
     Raises:
-        TestSetupError: If any named creature is not found.
-        ScriptEntryError: If the engine does not offer a named blocker or
+        TestSetupError: If any creature is not found, or is given as a name
+            string.
+        ScriptEntryError: If the engine does not offer a given blocker or
             rejects the declaration (evasion, menace, "can't block") — or,
             with ``illegal=True``, if it lets the declaration take effect.
     """
@@ -1584,10 +1642,10 @@ def declare_blockers(
     # Each blocker once, with every attacker it is to block: a creature given
     # under several attackers multi-blocks, and the engine judges whether it may.
     blocks: dict[Any, list[Any]] = {}
-    for attacker_name, blocker_names in assignments.items():
-        (attacker,) = _battlefield_objects(game, active, [attacker_name], "Attacker", "active")
+    for attacker_key, blocker_keys in assignments.items():
+        (attacker,) = _battlefield_objects(game, active, [attacker_key], "Attacker", "active")
         for blocker in _battlefield_objects(
-            game, defending, blocker_names, "Blocker", "defending", exclude=blocks
+            game, defending, blocker_keys, "Blocker", "defending", exclude=blocks
         ):
             blocked = blocks.setdefault(blocker, [])
             if attacker not in blocked:
@@ -1606,31 +1664,16 @@ def declare_blockers(
 def _battlefield_objects(
     game: GameState,
     player: Any,
-    names: list[Any],
+    wanted: list[Any],
     role: str,
     side: str,
     exclude: Any = (),
-    listing: str = "Available",
 ) -> list[Any]:
-    """The creatures on *player*'s battlefield named by *names*, each found
-    once (a creature object stands for itself). A name prefers a creature not
-    in *exclude*, and otherwise falls back to one that is — so a blocker named
-    under two attackers is one blocker blocking both when there is only one."""
+    """The creatures on *player*'s battlefield that *wanted* stands for."""
     objects = game.get_battlefield(player).get_all()
-    found: list[Any] = []
-    for name in names:
-        if not isinstance(name, str):
-            found.append(name)
-            continue
-        named = [obj for obj in objects if getattr(obj, "name", None) == name and obj not in found]
-        match = next((obj for obj in named if obj not in exclude), named[0] if named else None)
-        if match is None:
-            raise TestSetupError(
-                f"{role} {name!r} not found on {side} player's battlefield. "
-                f"{listing}: {[getattr(c, 'name', repr(c)) for c in objects]}"
-            )
-        found.append(match)
-    return found
+    return _find_objects(
+        objects, wanted, role, f"on {side} player's battlefield", "Battlefield contains", exclude
+    )
 
 
 def _battlefield_preference(game: GameState, obj: Any) -> Any:
@@ -1790,7 +1833,7 @@ def cast_card(game, player, card, resolve=True):
         game.get_hand(player).add(card)
     elif not game.get_hand(player).contains(card):
         raise TestSetupError("cast_card expects an unzoned card or one in the caster's hand")
-    if not can_cast_at_instant_speed(card):
+    if not can_cast_at_instant_speed(card, player):
         _sorcery_timing(game, game.players.index(player), keep_main=False)
     result = _cast(game, player, card)
     if resolve:

@@ -320,6 +320,29 @@ class CardImpl(GameObject):
         self.card_types = set(self._original_card_types)
         self.keywords = self._original_keywords
 
+    def reset_for_zone_change(self) -> None:
+        """Forget everything this object accumulated on the battlefield.
+
+        An object that leaves the battlefield becomes a new object with no
+        memory of its previous existence (rule 400.7): its counters (122.2),
+        status (110.5d), controller (108.4a) and the choices made casting it
+        are gone. Its state as it last existed is kept separately as
+        last-known information (``engine.last_known``). Subclasses that hold
+        more per-object state override this and call ``super()``.
+        """
+        self._generic_counters = {}
+        self.__dict__.pop("_controller_before_effects", None)
+        self.controller = self.owner
+        if hasattr(self, "is_tapped"):
+            self.is_tapped = False
+        if hasattr(self, "x_value"):
+            self.x_value = 0
+        if hasattr(self, "chosen_targets"):
+            self.chosen_targets = []
+        if hasattr(self, "colors_spent"):
+            del self.colors_spent
+        self._reset_characteristics()
+
     @property
     def counters(self) -> dict[str, int]:
         """Return a read-only view of generic counters (type → count).
@@ -355,7 +378,7 @@ class CardImpl(GameObject):
         """
         from engine.casting import can_cast_at_instant_speed, cast_spell, is_sorcery_speed
 
-        if not (can_cast_at_instant_speed(self) or is_sorcery_speed(game, player)):
+        if not (can_cast_at_instant_speed(self, player) or is_sorcery_speed(game, player)):
             return []
         return [
             (self, lambda: cast_spell(game, player, self, from_zone=from_zone, mode=mode))
@@ -519,6 +542,19 @@ class Creature(CardImpl):
         if hasattr(self, "protections"):
             self.protections = []
 
+    def reset_for_zone_change(self) -> None:
+        self.plus_one_counters = 0
+        self.minus_one_counters = 0
+        self._base_plus_one_counters = 0
+        self._base_minus_one_counters = 0
+        self.damage_marked = 0
+        self.dealt_deathtouch_damage = False
+        self.is_attacking = False
+        self.is_blocking = False
+        self.summoning_sick = True
+        self.combat_damage_prevented = False
+        super().reset_for_zone_change()
+
     @property
     def counters(self) -> dict[str, int]:
         """Return a read-only view of all counters on this creature.
@@ -589,6 +625,10 @@ class Enchantment(CardImpl):
         kwargs["card_types"] = (kwargs.get("card_types") or set()) | {CardType.ENCHANTMENT}
         super().__init__(**kwargs)
         self.attached_to: Any | None = attached_to
+
+    def reset_for_zone_change(self) -> None:
+        self.attached_to = None
+        super().reset_for_zone_change()
 
     def apply_continuous_effect(self, game: GameState) -> None:
         """Apply the enchantment's continuous effect to the game."""
@@ -711,6 +751,11 @@ class Equipment(Artifact):
     # ------------------------------------------------------------------
     # Attach / detach lifecycle
     # ------------------------------------------------------------------
+
+    def reset_for_zone_change(self) -> None:
+        self.attached_to = None
+        self._equip_effect_refs = []
+        super().reset_for_zone_change()
 
     def make_equip_effects(self, game: GameState) -> list[Any]:
         """Return the continuous effects that buff ``self.attached_to``.
@@ -951,6 +996,10 @@ class Planeswalker(CardImpl):
         super().__init__(**kwargs)
         self.starting_loyalty: int = starting_loyalty
         self.loyalty: int = starting_loyalty
+
+    def reset_for_zone_change(self) -> None:
+        self.loyalty = self.starting_loyalty
+        super().reset_for_zone_change()
 
     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
         """Return the planeswalker's loyalty abilities."""

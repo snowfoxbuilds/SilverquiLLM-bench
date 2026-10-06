@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MicromancerAbility1:
+    text = 'When this creature enters, you may search your library for an instant or sorcery card with mana value 1, reveal it, put it into your hand, then shuffle.'
+
+
+# endregion Printed abilities
+
+
 class Micromancer(Creature):
     """Micromancer — {3}{U} — 3/3 — Human Wizard.
 
@@ -36,9 +46,14 @@ class Micromancer(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, MicromancerAbility1, self._enters)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: search library for instant/sorcery with MV 1."""
-        controller = self.controller
         if controller is None:
             return
         # Optional — ask if they want to search

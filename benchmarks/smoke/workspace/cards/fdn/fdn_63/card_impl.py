@@ -8,6 +8,17 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class InfernalVesselAbility1:
+    text = "When this creature dies, if it wasn't a Demon, return it to the battlefield under its owner's control with two +1/+1 counters on it. It's a Demon in addition to its other types."
+
+
+# endregion Printed abilities
+
+
 class InfernalVessel(Creature):
     """Infernal Vessel — {2}{B} — 2/1 — Human Cleric
 
@@ -37,10 +48,11 @@ class InfernalVessel(Creature):
             creature = event.creature
             if creature is not source:
                 return False
-            subtypes = getattr(creature, 'subtypes', set())
-            return 'Demon' not in subtypes
+            # "if it wasn't a Demon" — as it last existed (rule 603.10a).
+            lki = event.last_known
+            return lki is not None and 'Demon' not in lki.subtypes
 
-        def _effect(game: GameState) -> None:
+        def _effect(game: GameState, controller: Any) -> None:
             owner = getattr(source, 'owner', None)
             if owner is None:
                 return
@@ -52,4 +64,4 @@ class InfernalVessel(Creature):
                 move_to_zone(game, source, Zone.GRAVEYARD, Zone.BATTLEFIELD)
                 add_counter(game, source, '+1/+1', 2)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=InfernalVesselAbility1))

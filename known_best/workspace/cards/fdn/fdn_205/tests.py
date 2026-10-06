@@ -9,7 +9,7 @@ through ``engine.game.deal_damage`` so lethal marks feed state-based actions.
 from __future__ import annotations
 
 from cards.fdn.fdn_205.card_impl import SeismicRupture
-from engine.card import Creature, Sorcery
+from engine.card import Creature, Sorcery, printed_class
 from engine.types import Keyword, ManaCost, ManaType, Zone
 from test_utils import cast_spell, create_game, set_board_state
 
@@ -32,7 +32,7 @@ class TestSeismicRuptureProperties:
         assert isinstance(SeismicRupture(owner=None), Sorcery)
 
     def test_name(self) -> None:
-        assert SeismicRupture(owner=None).name == "Seismic Rupture"
+        assert printed_class(SeismicRupture(owner=None)) is SeismicRupture
 
     def test_mana_cost(self) -> None:
         assert SeismicRupture(owner=None).mana_cost == ManaCost.parse("{2}{R}")
@@ -116,7 +116,7 @@ class TestSeismicRuptureDamage:
             mana={ManaType.RED: 3},
         )
 
-        cast_spell(game, 0, "Seismic Rupture")
+        cast_spell(game, 0, SeismicRupture)
 
         assert victim.damage_marked == 2
         assert game.players[0].zones[Zone.GRAVEYARD].get_all()  # spell to GY

@@ -48,6 +48,7 @@ from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, Player
 from engine import attempts
 from engine.attempts import AttemptContext
 from engine.queries import PRIORITY_WINDOW, PlayerQuery, ask
+from engine.refs_registry import card_ref_pairs
 from engine.stack import settle_after_resolution
 from engine.types import CardType, Zone
 from engine.zones import IllegalMoveError
@@ -268,7 +269,7 @@ def _ability_decision(
     ref = GameRef(
         player=frozenset({("seat", seat)}),
         zone=frozenset({("name", zone)}),
-        card=frozenset({("name", source.name)}),
+        card=card_ref_pairs(source),
         object=frozenset({("instance", instance)}),
         ability=frozenset({("index", index)}),
     )

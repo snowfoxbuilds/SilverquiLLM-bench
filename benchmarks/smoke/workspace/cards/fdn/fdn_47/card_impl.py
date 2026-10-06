@@ -8,6 +8,21 @@ from engine.events import DrawsCardTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MischievousMysticAbility1:
+    text = 'Flying'
+
+
+class MischievousMysticAbility2:
+    text = 'Whenever you draw your second card each turn, create a 1/1 blue Faerie creature token with flying.'
+
+
+# endregion Printed abilities
+
+
 class MischievousMystic(Creature):
     """Mischievous Mystic — {1}{U} — 2/1 — Human Wizard — Flying.
 
@@ -49,10 +64,10 @@ class MischievousMystic(Creature):
             source._mystic_draws_this_turn += 1
             return source._mystic_draws_this_turn == 2
 
-        def _draw_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _draw_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             token = make_creature_token('Faerie', {'Faerie'}, [Color.BLUE], 1, 1, keywords=Keyword.FLYING)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DrawsCardTriggeredEvent, condition=_draw_condition, effect=_draw_effect, source=self, controller=controller, printed=MischievousMysticAbility2))

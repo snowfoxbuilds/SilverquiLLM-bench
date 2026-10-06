@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Instant
-from engine.events import CreatureDiesTriggeredEvent
+from engine.events import CreatureDiesReplacementEvent
 from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
@@ -119,18 +119,28 @@ class FieryAnnihilation(Instant):
         if not creature_legal:
             return
 
-        target._exile_on_death = True
-        from engine.triggers import TriggerRegistration
-        _target_ref = target
+        # "If that creature would die this turn, exile it instead" replaces
+        # its move to the graveyard (rule 614.1a) for this object only (rule
+        # 400.7) and only until the turn ends.
+        from engine.events import MoveToGraveyardReplacementEvent
+        from engine.replacement_effects import ReplacementEffect
+        from engine.stack import battlefield_stint_id
 
-        def _death_condition(game: Any, event: Any) -> bool:
-            return event.creature is _target_ref
+        stint, turn = battlefield_stint_id(game, target), game.turn_number
 
-        def _death_effect(game: 'GameState') -> None:
-            ctrl = getattr(_target_ref, 'controller', None) or getattr(_target_ref, 'owner', None)
-            if ctrl is not None:
-                graveyard = ctrl.zones[Zone.GRAVEYARD]
-                if graveyard.contains(_target_ref):
-                    graveyard.remove(_target_ref)
-                    exile(game, _target_ref)
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_death_condition, effect=_death_effect, source=self, controller=controller, printed=FieryAnnihilationAbility1))
+        def _would_die(game: Any, event: Any) -> bool:
+            return (
+                isinstance(event, CreatureDiesReplacementEvent)
+                and event.card is target
+                and game.turn_number == turn
+                and battlefield_stint_id(game, target) == stint
+            )
+
+        def _exile_instead(game: Any, event: Any) -> Any:
+            event.destination = "exile"
+            return event
+
+        game.replacement_manager.register(ReplacementEffect(
+            event_type=MoveToGraveyardReplacementEvent, source=self, condition=_would_die,
+            replacement=_exile_instead, controller=controller, printed=FieryAnnihilationAbility1,
+        ))

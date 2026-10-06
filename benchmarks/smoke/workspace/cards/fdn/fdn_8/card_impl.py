@@ -8,6 +8,17 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DauntlessVeteranAbility1:
+    text = 'Whenever this creature attacks, creatures you control get +1/+1 until end of turn.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -44,14 +55,14 @@ class DauntlessVeteran(Creature):
             """Fire when this creature attacks."""
             return event.creature is source
 
-        def _attack_effect(game: 'GameState') -> None:
+        def _attack_effect(game: 'GameState', controller: Any) -> None:
             """Creatures you control get +1/+1 until end of turn."""
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
 
             def _apply_buff(game: Any) -> None:
-                c = getattr(source, 'controller', None)
+                c = controller
                 if c is None:
                     return
                 battlefield = game.get_battlefield(c)
@@ -61,4 +72,4 @@ class DauntlessVeteran(Creature):
                     obj.modified_power += 1
                     obj.modified_toughness += 1
             game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply_buff, duration=DURATION_END_OF_TURN))
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=DauntlessVeteranAbility1))

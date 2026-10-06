@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class EvolvingWildsAbility1:
+    text = '{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.'
+
+
+# endregion Printed abilities
+
+
 class EvolvingWilds(Land):
     """Evolving Wilds — Land.
 
@@ -45,8 +55,9 @@ class EvolvingWilds(Land):
             sacrifice(game, controller, src)
             return True
 
-        def _effect(game: "GameState") -> None:
-            controller = source.controller or source.owner
+        def _effect(game: "GameState", controller: Any) -> None:
+            # The source was sacrificed to pay the cost, so it is a new object
+            # now: the activating player searches (rules 602.2, 400.7).
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]
@@ -83,5 +94,6 @@ class EvolvingWilds(Land):
                 description="{T}, Sacrifice this land: Search your library "
                 "for a basic land card, put it onto the battlefield tapped, "
                 "then shuffle.",
+                printed=EvolvingWildsAbility1,
             )
         ]

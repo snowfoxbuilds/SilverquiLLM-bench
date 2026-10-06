@@ -10,6 +10,25 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class StrixLookoutAbility1:
+    text = 'Flying'
+
+
+class StrixLookoutAbility2:
+    text = "vigilance (Attacking doesn't cause this creature to tap.)"
+
+
+class StrixLookoutAbility3:
+    text = '{1}{U}, {T}: Draw a card, then discard a card.'
+
+
+# endregion Printed abilities
+
+
 class StrixLookout(Creature):
     """Strix Lookout — {1}{U} — 1/2 — Bird
 
@@ -33,7 +52,6 @@ class StrixLookout(Creature):
         super().__init__(**kwargs)
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             if getattr(src, "is_tapped", False):
@@ -47,10 +65,9 @@ class StrixLookout(Creature):
             src.is_tapped = True
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from engine.game import draw_card, discard
 
-            controller = source.controller
             if controller is None:
                 return
             drawn = draw_card(game, controller)
@@ -65,4 +82,5 @@ class StrixLookout(Creature):
             cost=_cost,
             effect=_effect,
             description="{1}{U}, {T}: Draw a card, then discard a card.",
+            printed=StrixLookoutAbility3,
         )]

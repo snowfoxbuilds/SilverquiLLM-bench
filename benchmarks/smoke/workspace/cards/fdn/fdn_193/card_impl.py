@@ -1,12 +1,29 @@
 """Card implementation for Drakuseth, Maw of Flames."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from engine.card import Creature
-from engine.card_queries import choose_object
-from engine.types import Keyword, ManaCost
 from engine.events import AttacksTriggeredEvent
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DrakusethMawOfFlamesAbility1:
+    text = 'Flying'
+
+
+class DrakusethMawOfFlamesAbility2:
+    text = 'Whenever Drakuseth attacks, it deals 4 damage to any target and 3 damage to each of up to two other targets.'
+
+
+# endregion Printed abilities
+
 
 class DrakusethMawOfFlames(Creature):
     """Drakuseth, Maw of Flames — {4}{R}{R}{R} — 7/7 — Legendary Dragon.
@@ -32,35 +49,31 @@ class DrakusethMawOfFlames(Creature):
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger for damage dealing."""
         from engine.game import deal_damage
-        from engine.triggers import TriggerRegistration
+        from engine.stack import stint_checked_targets
+        from engine.triggers import TriggerRegistration, choose_trigger_targets
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
         def _condition(game: Any, event: dict) -> bool:
             return event.creature is source
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
-            if ctrl is None:
-                return
-            from engine.types import CardType
-            all_targets: list = []
-            for player in game.players:
-                all_targets.append(player)
-                for perm in game.get_battlefield(player).get_all():
-                    if CardType.CREATURE in getattr(perm, 'card_types', set()):
-                        all_targets.append(perm)
-            if not all_targets:
-                return
-            target1 = choose_object(game, ctrl, all_targets, 'Choose a target for 4 damage', source_card=source)
-            if target1 is not None:
-                deal_damage(game, source, target1, 4)
-            remaining = [t for t in all_targets if t is not target1]
-            for i in range(2):
-                if not remaining:
-                    break
-                target = choose_object(game, ctrl, remaining, f'Choose target {i + 1} for 3 damage (optional)', source_card=source, optional=True)
+        def _any_target(obj: Any, chosen: Any = ()) -> bool:
+            if any(obj is p for p in game.players):
+                return True
+            types = getattr(obj, 'card_types', set())
+            return CardType.CREATURE in types or CardType.PLANESWALKER in types
+
+        def _targeting(game: 'GameState', event: Any, ctrl: Any) -> list[Any] | None:
+            # Chosen as the trigger goes on the stack (rule 603.3d): one target
+            # for 4 damage, then up to two other targets for 3 each.
+            return choose_trigger_targets(game, ctrl, source, [
+                TargetRequirement(filter_fn=_any_target, description='Choose a target for 4 damage', zone=Zone.BATTLEFIELD),
+                TargetRequirement(filter_fn=_any_target, description='Choose target 1 for 3 damage (optional)', zone=Zone.BATTLEFIELD, optional=True),
+                TargetRequirement(filter_fn=_any_target, description='Choose target 2 for 3 damage (optional)', zone=Zone.BATTLEFIELD, optional=True),
+            ])
+
+        def _effect(game: 'GameState', targets: list[Any], context: Any) -> None:
+            for i, target in enumerate(stint_checked_targets(game, context, targets)):
                 if target is not None:
-                    deal_damage(game, source, target, 3)
-                    remaining = [t for t in remaining if t is not target]
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+                    deal_damage(game, source, target, 4 if i == 0 else 3)
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, targeting=_targeting, printed=DrakusethMawOfFlamesAbility2))

@@ -35,7 +35,7 @@ class TestHeroicReinforcementsMint:
             hand=[spell],
             mana={ManaType.RED: 1, ManaType.WHITE: 1, ManaType.COLORLESS: 2},
         )
-        cast_spell(game, 0, "Heroic Reinforcements")
+        cast_spell(game, 0, HeroicReinforcements)
 
         soldiers = _tokens(game, 0, "Soldier")
         assert len(soldiers) == 2

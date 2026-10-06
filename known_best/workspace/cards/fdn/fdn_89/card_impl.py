@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
-from engine.card_queries import choose_object
-from engine.types import ManaCost, TargetRequirement, Zone
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -44,41 +43,30 @@ class GorehornRaider(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
-        """ETB: Raid — deal 2 damage to any target if attacked this turn."""
+    def register_triggers(self, game: "GameState") -> None:
+        """Raid — an enters trigger with an intervening "if" (rule 603.4) that
+        targets as it is put on the stack (rule 603.3d)."""
+        from engine.triggers import register_enters_trigger
+
+        def _raided(game: "GameState", controller: Any) -> bool:
+            return bool(getattr(controller, "attacked_this_turn", False))
+
+        def _any_target(game: "GameState", controller: Any) -> list[Any]:
+            def _legal(obj: Any) -> bool:
+                if any(obj is p for p in game.players):
+                    return True
+                types = getattr(obj, "card_types", set())
+                return CardType.CREATURE in types or CardType.PLANESWALKER in types
+
+            return [TargetRequirement(filter_fn=_legal, description="any target", zone=Zone.BATTLEFIELD)]
+
+        register_enters_trigger(
+            game, self, GorehornRaiderAbility1, self._enters, targets=_any_target, condition=_raided
+        )
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
+        """Deal 2 damage to the target, if it is still legal."""
         from engine.game import deal_damage
 
-        controller = self.controller
-        if controller is None:
-            return
-
-        attacked_this_turn = getattr(game, "attacked_this_turn", False)
-        if not attacked_this_turn:
-            combat = getattr(game, "combat", None)
-            if combat is not None:
-                attackers = getattr(combat, "attackers", [])
-                for attacker in attackers:
-                    if getattr(attacker, "controller", None) is controller:
-                        attacked_this_turn = True
-                        break
-        if not attacked_this_turn:
-            attacked_this_turn = getattr(controller, "attacked_this_turn", False)
-
-        if not attacked_this_turn:
-            return
-
-        # Any target: creatures on battlefield + players
-        from engine.types import CardType
-        targets: list = list(game.players)
-        for player in game.players:
-            bf = game.get_battlefield(player)
-            for obj in bf.get_all():
-                if CardType.CREATURE in getattr(obj, "card_types", set()):
-                    targets.append(obj)
-
-        if not targets:
-            return
-
-        chosen = choose_object(game, controller, targets, "target for 2 damage", source_card=self)
-        if chosen is not None:
-            deal_damage(game, self, chosen, 2)
+        if targets and targets[0] is not None:
+            deal_damage(game, self, targets[0], 2)

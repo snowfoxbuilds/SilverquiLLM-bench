@@ -10,8 +10,8 @@ targeting flows through real engine channels.
 
 from __future__ import annotations
 
-from cards.fdn.fdn_188.card_impl import Abrade
-from engine.card import Artifact, Creature
+from cards.fdn.fdn_188.card_impl import Abrade, AbradeAbility2, AbradeAbility3
+from engine.card import Artifact, Creature, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, DecisionKind, GameRef
 from test_utils import Intent
@@ -20,15 +20,15 @@ from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from test_utils import cast_spell, create_game, set_board_state
 
 
-def _cast_modal_no_resolve(game, idx, card, mode_name, target):
+def _cast_modal_no_resolve(game, idx, card, mode, target):
     """Cast modal *card* (choosing *mode_name* + *target*) but leave it on the
     stack, so a test can mutate the target and resolve manually to exercise
     resolution-time target revalidation."""
     player = game.players[idx]
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
     player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
-        preferences=(Decision.mode(mode_name), Decision.obj(instance=inst)),
+        pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
+        preferences=(Decision.mode(printed=mode), Decision.obj(instance=inst)),
     ))
     try:
         engine_cast_spell(game, player, card)
@@ -36,17 +36,17 @@ def _cast_modal_no_resolve(game, idx, card, mode_name, target):
         player.end_intent("cast")
 
 
-def _cast_modal(game, idx, name, mode_name, target):
+def _cast_modal(game, idx, card, mode, target):
     """Cast a modal spell answering both the MODE query and the target query
     from one Intent."""
     player = game.players[idx]
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
     player.start_intent("modal", Intent(
-        pattern=GameRef(card=frozenset({("name", name)})),
-        preferences=(Decision.mode(mode_name), Decision.obj(instance=inst)),
+        pattern=GameRef(card=frozenset({("printed", card)})),
+        preferences=(Decision.mode(printed=mode), Decision.obj(instance=inst)),
     ))
     try:
-        cast_spell(game, idx, name)
+        cast_spell(game, idx, card)
     finally:
         player.end_intent("modal")
 
@@ -60,7 +60,7 @@ def _prime(game):
 class TestAbradeProperties:
     def test_static_data(self):
         abrade = Abrade(owner=None)
-        assert abrade.name == "Abrade"
+        assert printed_class(abrade) is Abrade
         assert abrade.mana_cost == ManaCost.parse("{1}{R}")
         assert len(abrade.get_modes()) == 2
 
@@ -74,7 +74,7 @@ class TestAbradeDamageMode:
         set_board_state(game, 0, hand=[abrade], mana={ManaType.RED: 2})
         set_board_state(game, 1, battlefield=[bear])
         _prime(game)
-        _cast_modal(game, 0, "Abrade", "Damage", bear)
+        _cast_modal(game, 0, Abrade, AbradeAbility2, bear)
         assert p2.zones[Zone.GRAVEYARD].contains(bear)
 
     def test_deals_exactly_3_damage(self):
@@ -85,7 +85,7 @@ class TestAbradeDamageMode:
         set_board_state(game, 0, hand=[abrade], mana={ManaType.RED: 2})
         set_board_state(game, 1, battlefield=[wall])
         _prime(game)
-        _cast_modal(game, 0, "Abrade", "Damage", wall)
+        _cast_modal(game, 0, Abrade, AbradeAbility2, wall)
         assert game.get_battlefield(p2).contains(wall)     # survives (5 > 3)
         assert wall.damage_marked == 3
 
@@ -100,7 +100,7 @@ class TestAbradeDamageMode:
         set_board_state(game, 0, hand=[abrade], mana={ManaType.RED: 2})
         set_board_state(game, 1, battlefield=[bear])
         _prime(game)
-        _cast_modal_no_resolve(game, 0, abrade, "Damage", bear)
+        _cast_modal_no_resolve(game, 0, abrade, AbradeAbility2, bear)
         # The target stops being a creature while Abrade is on the stack (still a
         # permanent — now an artifact — so it stays on the battlefield).
         bear.card_types = {CardType.ARTIFACT}
@@ -118,7 +118,7 @@ class TestAbradeDamageMode:
         set_board_state(game, 0, hand=[abrade], mana={ManaType.RED: 2})
         set_board_state(game, 1, battlefield=[bear, signet])
         _prime(game)
-        _cast_modal(game, 0, "Abrade", "Damage", bear)
+        _cast_modal(game, 0, Abrade, AbradeAbility2, bear)
         offered = {
             dict(o.attrs).get("name")
             for r in p1.transcript.queries(DecisionKind.OBJECT)
@@ -138,7 +138,7 @@ class TestAbradeDestroyArtifactMode:
         set_board_state(game, 0, hand=[abrade], mana={ManaType.RED: 2})
         set_board_state(game, 1, battlefield=[signet])
         _prime(game)
-        _cast_modal(game, 0, "Abrade", "Destroy Artifact", signet)
+        _cast_modal(game, 0, Abrade, AbradeAbility3, signet)
         assert p2.zones[Zone.GRAVEYARD].contains(signet)
 
     def test_destroy_mode_offers_only_artifacts(self):
@@ -151,7 +151,7 @@ class TestAbradeDestroyArtifactMode:
         set_board_state(game, 0, hand=[abrade], mana={ManaType.RED: 2})
         set_board_state(game, 1, battlefield=[bear, signet])
         _prime(game)
-        _cast_modal(game, 0, "Abrade", "Destroy Artifact", signet)
+        _cast_modal(game, 0, Abrade, AbradeAbility3, signet)
         offered = {
             dict(o.attrs).get("name")
             for r in p1.transcript.queries(DecisionKind.OBJECT)

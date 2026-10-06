@@ -46,7 +46,7 @@ class ReclamationSage(Creature):
         )
         super().__init__(**kwargs)
 
-    def get_targets(self, game: "GameState") -> list[Any]:
+    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """"You may" → optional target artifact or enchantment (declinable)."""
 
         def _filter(obj: Any) -> bool:
@@ -62,11 +62,17 @@ class ReclamationSage(Creature):
             )
         ]
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, ReclamationSageAbility1, self._enters, targets=self._enters_targets)
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
         """Destroy the chosen artifact/enchantment, if one was targeted."""
         from engine.game import destroy
 
-        chosen = getattr(self, "chosen_targets", None) or []
+        chosen = targets
         target = chosen[0] if chosen else None
         if target is None:
             return

@@ -10,6 +10,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ElvishArchdruidAbility1:
+    text = 'Other Elf creatures you control get +1/+1.'
+
+
+class ElvishArchdruidAbility2:
+    text = '{T}: Add {G} for each Elf you control.'
+
+
+# endregion Printed abilities
+
+
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
     if getattr(source, "is_tapped", False):
@@ -68,6 +83,7 @@ class ElvishArchdruid(Creature):
             cost=_tap_cost,
             mana_produced=_effect,
             description="{T}: Add {G} for each Elf you control.",
+            printed=ElvishArchdruidAbility2,
         )]
 
     def register_triggers(self, game: Any) -> None:

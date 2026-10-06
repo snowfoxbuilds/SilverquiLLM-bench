@@ -160,11 +160,22 @@ def _candidate_decision(game: GameState, candidate: Any, zone: Any) -> Any:
 
 
 def _source_decision(game: GameState, card: Any) -> Any:
-    """The OBJECT decision for the spell/ability raising a query (routing source)."""
+    """The OBJECT decision for the spell/ability raising a query (routing
+    source), named in the zone the source actually occupies.
+
+    Naming an object in any other zone mints it a fresh stint (see
+    ``GameRefsRegistry.instance_id``), so a departed permanent whose waiting
+    trigger asks — already in a graveyard, exile or a hand — must be named
+    there, or every target captured on it beforehand stops matching. Only a
+    source in no player's zone (a spell or copy on the stack) is named on the
+    stack.
+    """
+    from engine.stack import object_current_zone
+
     controller = getattr(card, "controller", None)
     return game.refs.object_decision(
         card,
-        zone="stack",
+        zone=object_current_zone(game, card) or Zone.STACK.value,
         controller_seat=_seat_of(game, controller) if controller is not None else None,
     )
 
@@ -331,13 +342,16 @@ def is_sorcery_speed(game: GameState, player: Player) -> bool:
     return True
 
 
-def can_cast_at_instant_speed(card: CardImpl) -> bool:
+def can_cast_at_instant_speed(card: CardImpl, player: Player | None = None) -> bool:
     """Return ``True`` if *card* may be cast at instant speed.
 
-    A card has instant-speed timing if it is an instant or has the
-    :attr:`~engine.types.Keyword.FLASH` keyword.
+    A card has instant-speed timing if it is an instant, has the
+    :attr:`~engine.types.Keyword.FLASH` keyword, or *player* may cast spells
+    as though they had flash (High Fae Trickster).
     """
     if CardType.INSTANT in card.card_types:
+        return True
+    if player is not None and getattr(player, "can_cast_as_flash", False):
         return True
     if Keyword.FLASH & card.keywords:
         return True
@@ -618,7 +632,7 @@ def cast_spell(
         CastingError: If any legality check fails.
     """
     # 1. Timing
-    if not can_cast_at_instant_speed(card) and not is_sorcery_speed(game, player):
+    if not can_cast_at_instant_speed(card, player) and not is_sorcery_speed(game, player):
         raise CastingError(
             f"Cannot cast {card.name!r} — sorcery-speed timing not met"
         )

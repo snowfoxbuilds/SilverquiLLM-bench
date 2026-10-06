@@ -59,39 +59,43 @@ class VampireSoulcaller(Creature):
         )
         super().__init__(**kwargs)
 
-    def _is_creature_card_in_my_graveyard(self, game: "GameState", obj: Any) -> bool:
+    def _is_creature_card_in_my_graveyard(self, game: "GameState", obj: Any, controller: Any) -> bool:
         """Legal target: a creature card currently in your graveyard."""
-        controller = self.controller or getattr(self, "owner", None)
         if controller is None:
             return False
         if CardType.CREATURE not in getattr(obj, "card_types", set()):
             return False
         return game.get_graveyard(controller).contains(obj)
 
-    def get_targets(self, game: "GameState") -> list[Any]:
+    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Target a creature card in your graveyard."""
         return [
             TargetRequirement(
-                filter_fn=lambda obj: self._is_creature_card_in_my_graveyard(game, obj),
+                filter_fn=lambda obj, _c=controller: self._is_creature_card_in_my_graveyard(game, obj, _c),
                 description="target creature card from your graveyard",
                 zone=Zone.GRAVEYARD,
             )
         ]
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, VampireSoulcallerAbility3, self._enters, targets=self._enters_targets)
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
         """Return the chosen creature card from your graveyard to your hand."""
         from engine.zones import move_to_zone
 
-        controller = self.controller or getattr(self, "owner", None)
         if controller is None:
             return
-        chosen = getattr(self, "chosen_targets", None) or []
+        chosen = targets
         target = chosen[0] if chosen else None
         if target is None:
             return
         # Revalidate the COMPLETE target predicate at resolution (rule 608.2b):
         # the target must still be a creature card *and* still in your
         # graveyard — not merely still present. If either fails, do nothing.
-        if not self._is_creature_card_in_my_graveyard(game, target):
+        if not self._is_creature_card_in_my_graveyard(game, target, controller):
             return
         move_to_zone(game, target, Zone.GRAVEYARD, Zone.HAND)

@@ -15,6 +15,25 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class HeraldicBannerAbility1:
+    text = 'As this artifact enters, choose a color.'
+
+
+class HeraldicBannerAbility2:
+    text = 'Creatures you control of the chosen color get +1/+0.'
+
+
+class HeraldicBannerAbility3:
+    text = '{T}: Add one mana of the chosen color.'
+
+
+# endregion Printed abilities
+
+
 class HeraldicBanner(Artifact):
     """Heraldic Banner — {3} — As enters, choose a color. Creatures of that
     color get +1/+0. {T}: Add one mana of the chosen color."""
@@ -48,5 +67,5 @@ class HeraldicBanner(Artifact):
 
         return [
             ManaAbility(cost=_tap_cost, mana_produced=_effect,
-                        description="{T}: Add one mana of the chosen color."),
+                        description="{T}: Add one mana of the chosen color.", printed=HeraldicBannerAbility3),
         ]

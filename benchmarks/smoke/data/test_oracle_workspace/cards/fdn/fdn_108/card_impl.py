@@ -1,10 +1,12 @@
 """Card implementation for Needletooth Pack."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from engine.card import Creature
-from engine.card_queries import choose_object
-from engine.types import CardType, ManaCost, Zone
 from engine.events import EndStepTriggeredEvent
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -45,7 +47,8 @@ class NeedletoothPack(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         from engine.game import add_counter
-        from engine.triggers import TriggerRegistration
+        from engine.stack import stint_checked_targets
+        from engine.triggers import TriggerRegistration, choose_trigger_targets
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -54,15 +57,13 @@ class NeedletoothPack(Creature):
                 return False
             return getattr(game, 'creature_died_this_turn', False)
 
-        def _effect(game: 'GameState', controller: Any) -> None:
-            ctrl = controller
-            if ctrl is None:
-                return
-            bf = game.get_battlefield(ctrl)
-            creatures = [obj for obj in bf.get_all() if CardType.CREATURE in getattr(obj, 'card_types', set())]
-            if not creatures:
-                return
-            target = choose_object(game, ctrl, creatures, 'creature to put +1/+1 counters on', source_card=source)
-            if target is not None and _is_on_battlefield(game, target):
+        def _targeting(game: 'GameState', event: Any, ctrl: Any) -> list[Any] | None:
+            return choose_trigger_targets(game, ctrl, source, [TargetRequirement(
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, 'card_types', set()) and getattr(obj, 'controller', None) is ctrl,
+                description='creature to put +1/+1 counters on', zone=Zone.BATTLEFIELD)])
+
+        def _effect(game: 'GameState', targets: list[Any], context: Any) -> None:
+            (target,) = stint_checked_targets(game, context, targets)
+            if target is not None and getattr(target, 'controller', None) is context.controller:
                 add_counter(game, target, '+1/+1', 2)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=NeedletoothPackAbility1))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, targeting=_targeting, printed=NeedletoothPackAbility1))

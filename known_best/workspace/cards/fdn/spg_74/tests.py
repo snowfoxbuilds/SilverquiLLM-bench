@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from cards.fdn.spg_74.card_impl import Condemn
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
@@ -44,7 +44,7 @@ def _cast_no_resolve(game, player_index, card, targets):
         for t in targets
     )
     player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
         preferences=prefs,
     ))
     try:
@@ -56,7 +56,7 @@ def _cast_no_resolve(game, player_index, card, targets):
 class TestCondemnProperties:
     def test_static_data(self):
         c = Condemn(owner=None)
-        assert c.name == "Condemn"
+        assert printed_class(c) is Condemn
         assert c.mana_cost == ManaCost.parse("{W}")
 
     def test_get_targets_requirement_filters_attackers(self):
@@ -86,7 +86,7 @@ class TestCondemnResolve:
 
     def test_puts_attacker_on_bottom_of_library(self):
         game, p1, p2, condemn, attacker = self._setup()
-        cast_spell(game, 0, "Condemn", targets=[attacker])
+        cast_spell(game, 0, Condemn, targets=[attacker])
         assert not game.get_battlefield(p2).contains(attacker)
         library = p2.zones[Zone.LIBRARY]
         assert library.contains(attacker)
@@ -95,12 +95,12 @@ class TestCondemnResolve:
 
     def test_controller_gains_life_equal_to_toughness(self):
         game, p1, p2, condemn, attacker = self._setup(toughness=5)
-        cast_spell(game, 0, "Condemn", targets=[attacker])
+        cast_spell(game, 0, Condemn, targets=[attacker])
         assert p2.life == 25  # 20 + toughness 5
 
     def test_cost_is_paid(self):
         game, p1, p2, condemn, attacker = self._setup()
-        cast_spell(game, 0, "Condemn", targets=[attacker])
+        cast_spell(game, 0, Condemn, targets=[attacker])
         assert p1.mana_pool.total() == 0
 
     def test_target_removed_from_combat_before_resolution_does_nothing(self):
@@ -127,4 +127,4 @@ class TestCondemnResolve:
         set_board_state(game, 0, hand=[condemn], mana={ManaType.WHITE: 1})
         set_board_state(game, 1, battlefield=[idle])
         with pytest.raises(_CastError):
-            cast_spell(game, 0, "Condemn")
+            cast_spell(game, 0, Condemn)

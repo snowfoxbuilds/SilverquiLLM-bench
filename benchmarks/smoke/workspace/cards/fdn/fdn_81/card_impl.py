@@ -1,7 +1,7 @@
 """Card implementation for Chandra, Flameshaper."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, LoyaltyAbility, Planeswalker
+from engine.card import Creature, LoyaltyAbility, Planeswalker, printed_class
 from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, ManaType, Supertype, Zone
 from engine.events import EndStepTriggeredEvent
@@ -9,6 +9,30 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from engine.player import Player
     from cards.registry import CardRegistry
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ChandraFlameshaperAbility1:
+    text = '+2: Add {R}{R}{R}. Exile the top three cards of your library. Choose one. You may play that card this turn.'
+
+
+class ChandraFlameshaperAbility2:
+    text = '+1: Create a token that\'s a copy of target creature you control, except it has haste and "At the beginning of the end step, sacrifice this token."'
+
+
+class ChandraFlameshaperAbility3:
+    text = '−4: Chandra deals 8 damage divided as you choose among any number of target creatures and/or planeswalkers.'
+
+
+# endregion Printed abilities
+
+
+def _is_creature_or_planeswalker(obj: Any) -> bool:
+    card_types = getattr(obj, 'card_types', set())
+    return CardType.CREATURE in card_types or CardType.PLANESWALKER in card_types
+
 
 class ChandraFlameshaper(Planeswalker):
     """Chandra, Flameshaper — {5}{R}{R} — 6 loyalty.
@@ -34,9 +58,8 @@ class ChandraFlameshaper(Planeswalker):
     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
         pw = self
 
-        def _plus2(game: Any) -> None:
+        def _plus2(game: Any, controller: Any) -> None:
             """Add {R}{R}{R}. Exile top 3, may play one this turn."""
-            controller = pw.controller
             if controller is None:
                 return
             controller.mana_pool.add(ManaType.RED, 3)
@@ -56,15 +79,15 @@ class ChandraFlameshaper(Planeswalker):
                     chosen._playable_this_turn = True
                     chosen._playable_by = controller
 
-        def _plus1(game: Any) -> None:
+        def _plus1(game: Any, controller: Any) -> None:
             """Create a token copy of target creature (with haste, sacrifice at end step)."""
             from engine.game import create_token
             from engine.triggers import TriggerRegistration
             target = None
-            controller = pw.controller
             if target is None or controller is None:
                 return
             token = Creature(name=getattr(target, 'name', 'Token'), base_power=getattr(target, 'base_power', 0), base_toughness=getattr(target, 'base_toughness', 0), subtypes=getattr(target, 'subtypes', set()).copy() if getattr(target, 'subtypes', None) else set(), keywords=getattr(target, 'keywords', Keyword(0)) | Keyword.HASTE)
+            token.printed_as = printed_class(target)
             if hasattr(target, 'card_types'):
                 token.card_types = set(target.card_types)
             create_token(game, controller, token)
@@ -78,28 +101,53 @@ class ChandraFlameshaper(Planeswalker):
                 bf = game.get_battlefield(controller)
                 if bf.contains(token):
                     sacrifice(game, controller, token)
-            game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_eot_condition, effect=_eot_effect, source=token, controller=controller))
+            game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_eot_condition, effect=_eot_effect, source=token, controller=controller, printed=ChandraFlameshaperAbility2))
 
-        def _minus4(game: Any) -> None:
-            """Deal 8 damage divided as the controller chooses among targets."""
-            from engine.card_queries import choose_number
+        def _minus4_targeting(game: Any, source: Any, controller: Any) -> list[Any]:
+            """Choose any number of target creatures and/or planeswalkers
+            (rule 601.2c via 602.2b), then divide the 8 damage among them
+            (601.2d): each target except the last gets a NUMBER Player Query
+            for at least 1, and the last takes the forced remainder."""
+            from engine.protection import has_protection_from
+
+            candidates = [
+                obj
+                for player in game.players
+                for obj in game.get_battlefield(player).get_all()
+                if _is_creature_or_planeswalker(obj) and not has_protection_from(obj, pw)
+            ]
+            chosen = choose_object(
+                game, controller, candidates,
+                'Choose any number of target creatures and/or planeswalkers',
+                source_card=pw, min=0, max=min(8, len(candidates)),
+            ) if candidates else []
+            if chosen is None:
+                targets = []
+            elif isinstance(chosen, list):
+                targets = chosen
+            else:
+                targets = [chosen]
+            return targets
+
+        def _minus4(game: Any, targets: list[Any], context: Any = None) -> None:
+            """Deal the 8 damage as divided at activation; a target that is no
+            longer legal is dealt nothing (rule 608.2b)."""
             from engine.game import deal_damage
-            # Targets resolved by the engine (the engine sets ``chosen_targets``
-            # at resolve time). "Divided as you choose" is a player choice: each
-            # target except the last gets a NUMBER Player Query (every remaining
-            # target must receive at least 1), and the last target takes the
-            # forced remainder. A single target takes all 8 with no query.
-            targets = getattr(pw, 'chosen_targets', []) or []
-            controller = pw.controller
-            if not targets or controller is None:
-                return
+            from engine.stack import surviving_targets
+            from engine.card_queries import choose_number
+            targets = surviving_targets(game, context, targets, is_legal=_is_creature_or_planeswalker)
+            amounts: list[int] = []
             remaining = 8
             for i, t in enumerate(targets):
                 left_after = len(targets) - i - 1
                 if left_after == 0:
                     dmg = remaining
                 else:
-                    dmg = choose_number(game, controller, 1, remaining - left_after, f"damage to {getattr(t, 'name', 'target')} ({remaining} of 8 left to divide)", source_card=pw)
-                deal_damage(game, pw, t, dmg)
+                    dmg = choose_number(game, pw.controller, 1, remaining - left_after, f"damage to {getattr(t, 'name', 'target')} ({remaining} of 8 left to divide)", source_card=pw)
+                amounts.append(dmg)
                 remaining -= dmg
-        return [LoyaltyAbility(loyalty_cost=+2, effect=_plus2, description='+2: Add {R}{R}{R}. Exile top 3, choose one to play this turn.'), LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description='+1: Create a hasty token copy of target creature (sacrifice at end step).'), LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description='−4: Deal 8 damage divided among target creatures and/or planeswalkers.')]
+            legal = surviving_targets(game, context, targets, is_legal=_is_creature_or_planeswalker)
+            for target, dmg in zip(targets, amounts):
+                if any(target is t for t in legal):
+                    deal_damage(game, pw, target, dmg)
+        return [LoyaltyAbility(loyalty_cost=+2, effect=_plus2, description='+2: Add {R}{R}{R}. Exile top 3, choose one to play this turn.', printed=ChandraFlameshaperAbility1), LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description='+1: Create a hasty token copy of target creature (sacrifice at end step).', printed=ChandraFlameshaperAbility2), LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description='−4: Deal 8 damage divided among target creatures and/or planeswalkers.', printed=ChandraFlameshaperAbility3)]

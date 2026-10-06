@@ -1,49 +1,38 @@
-"""Tests for cost-reduction hook in the casting pipeline.
+"""The cost-reduction hook in the casting pipeline.
 
-Covers:
-- CardImpl.cost_reduction() default returns 0
-- get_cost_reduction returns the card's cost_reduction clamped to generic mana
-- _apply_cost_reduction creates a new ManaCost with reduced generic
-- Reduction cannot go below 0 generic (colored costs are never reduced)
-- Zero reduction leaves cost unchanged
-- Reduction exactly equal to generic → generic becomes 0
-- Reduction exceeding generic → generic floors at 0
-- Integration with cast_spell: reduced cost is used for payment
-- Cost reduction hook is invoked during the casting pipeline
+A spell's cost is its printed cost less its reduction, the reduction never
+taking more than the generic part (colored mana is never reduced) and a card
+with no reduction costing its printed cost. Each is seen by what a player can
+cast with the mana in their pool: Ghalta, Primal Hunger costs {X} less, X
+being the total power of its controller's creatures, so the creatures on the
+battlefield set its reduction.
+
+``_apply_cost_reduction`` is still checked directly: it is pure arithmetic on
+a mana cost, with no game.
 """
 
 from __future__ import annotations
 
-import pytest
+from cards.fdn.fdn_100.card_impl import BeastKinRanger
+from cards.fdn.fdn_110.card_impl import QuakestriderCeratops
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_165.card_impl import ThinkTwice
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_222.card_impl import GhaltaPrimalHunger
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_280.card_impl import Forest
+from cards.fdn.spg_80.card_impl import ParadiseDruid
+from test_interface import Side, Zone, card, create_game
 
-from engine.card import CardImpl, Creature, Instant
-from engine.casting import (
-    CastingError,
-    _apply_cost_reduction,
-    get_cost_reduction,
-    cast_spell,
-)
+from engine.card import Creature
+from engine.casting import _apply_cost_reduction
 from engine.game_state import GameState
-from test_utils import DeterministicPlayer
-from engine.types import CardType, ManaCost, ManaType, Phase, Step
+from engine.types import ManaCost, ManaType, Phase
+from silverquillm.table import Table, moves, taps
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _make_game(
-    *,
-    phase: Phase = Phase.PRECOMBAT_MAIN,
-    step: Step | None = None,
-) -> GameState:
-    p1 = DeterministicPlayer("P1", life=20)
-    p2 = DeterministicPlayer("P2", life=20)
-    game = GameState(players=[p1, p2])
-    game.phase = phase
-    if step is not None:
-        game.step = step
-    return game
+MAIN = (Phase.PRECOMBAT_MAIN, 0)
 
 
 class ReducedCostCreature(Creature):
@@ -62,104 +51,84 @@ class ReducedCostCreature(Creature):
         return self._reduction
 
 
-class ReducedCostInstant(Instant):
-    """An instant with {3}{U} that gets a fixed reduction."""
-
-    def __init__(self, reduction: int = 2) -> None:
-        super().__init__(
-            name="Test Reduced Instant",
-            mana_cost=ManaCost.parse("{3}{U}"),
-        )
-        self._reduction = reduction
-
-    def cost_reduction(self, game: GameState) -> int:
-        return self._reduction
+def _short_by_one_then_paid(spell, battlefield, green: int, *, note: str) -> None:
+    """With ``green`` mana in the pool the spell cannot be cast; one more
+    green, from a Forest, pays for it, and it resolves."""
+    forest = card(Forest)
+    game = create_game(
+        Side(hand=[spell], battlefield=[forest, *battlefield], mana={ManaType.GREEN: green}),
+        Side(),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act_illegal(0, spell, note=f"{green} mana is one short: {note}")
+    t.act(0, forest, then=[taps(forest)])
+    t.act(0, spell, then=[moves(spell, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(spell, Zone.BATTLEFIELD)])
+    t.run()
 
 
 # ---------------------------------------------------------------------------
-# Unit tests: CardImpl.cost_reduction default
+# A card with no reduction costs its printed cost
 # ---------------------------------------------------------------------------
 
 class TestCostReductionDefault:
-    """The base CardImpl.cost_reduction() must return 0."""
+    """A card with no cost reduction costs exactly its printed cost."""
 
     def test_creature_default_cost_reduction_is_zero(self):
-        game = _make_game()
-        card = Creature(
-            name="Vanilla Bear",
-            mana_cost=ManaCost.parse("{1}{G}"),
-            base_power=2,
-            base_toughness=2,
-        )
-        assert card.cost_reduction(game) == 0
+        _short_by_one_then_paid(card(BeastKinRanger), [], 2, note="Beast-Kin Ranger costs its full {2}{G}")
 
     def test_instant_default_cost_reduction_is_zero(self):
-        game = _make_game()
-        card = Instant(name="Zap", mana_cost=ManaCost.parse("{R}"))
-        assert card.cost_reduction(game) == 0
+        think, island, drawn = card(ThinkTwice), card(Island), card(Plains)
+        game = create_game(
+            Side(hand=[think], battlefield=[island], library=[drawn], mana={ManaType.BLUE: 1}),
+            Side(),
+            start=MAIN,
+        )
+        t = Table(game)
+        t.act_illegal(0, think, note="Think Twice costs its full {1}{U}")
+        t.act(0, island, then=[taps(island)])
+        t.act(0, think, then=[moves(think, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(think, Zone.GRAVEYARD), moves(drawn, Zone.HAND)])
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# Unit tests: get_cost_reduction
+# How much a reduction takes off
 # ---------------------------------------------------------------------------
 
 class TestGetCostReduction:
-    """Tests for the get_cost_reduction helper."""
+    """The reduction a card gets, clamped to its generic mana."""
 
     def test_default_card_has_zero_reduction(self):
-        game = _make_game()
-        card = Creature(
-            name="Vanilla",
-            mana_cost=ManaCost.parse("{2}{G}"),
-            base_power=2,
-            base_toughness=2,
+        _short_by_one_then_paid(
+            card(QuakestriderCeratops), [], 5, note="Quakestrider Ceratops costs its full {3}{G}{G}{G}"
         )
-        assert get_cost_reduction(game, card, game.players[0]) == 0
 
     def test_card_with_reduction_of_3(self):
-        """Embercleave scenario: {4}{R}{R} with reduction 3 → returns 3."""
-        game = _make_game()
-        card = ReducedCostCreature(reduction=3)
-        assert get_cost_reduction(game, card, game.players[0]) == 3
+        _short_by_one_then_paid(
+            card(GhaltaPrimalHunger), [BrazenScourge], 8, note="power 3 takes {3} off Ghalta: {7}{G}{G}"
+        )
 
     def test_reduction_clamped_to_generic(self):
-        """Reduction cannot exceed the generic portion of the cost."""
-        game = _make_game()
-        card = ReducedCostCreature(reduction=10)
-        # Generic is 4, so reduction is clamped to 4
-        assert get_cost_reduction(game, card, game.players[0]) == 4
+        _short_by_one_then_paid(
+            card(GhaltaPrimalHunger),
+            [QuakestriderCeratops],
+            1,
+            note="power 12 takes off only Ghalta's {10}: {G}{G} remain",
+        )
 
     def test_reduction_exactly_equals_generic(self):
-        """Reduction == generic → returns generic (reduces it to 0)."""
-        game = _make_game()
-        card = ReducedCostCreature(reduction=4)
-        assert get_cost_reduction(game, card, game.players[0]) == 4
+        _short_by_one_then_paid(
+            card(GhaltaPrimalHunger),
+            [BrazenScourge, BrazenScourge, SavannahLions, SavannahLions],
+            1,
+            note="power 10 takes off all of Ghalta's {10}: {G}{G} remain",
+        )
 
-    def test_negative_reduction_clamped_to_zero(self):
-        """Negative reduction values are treated as 0."""
-        game = _make_game()
-        card = ReducedCostCreature(reduction=-1)
-        assert get_cost_reduction(game, card, game.players[0]) == 0
 
-    def test_reduction_on_card_with_no_generic_mana(self):
-        """A card like {R}{R} with no generic → reduction is 0."""
-        game = _make_game()
-
-        class PureColoredCreature(Creature):
-            def __init__(self):
-                super().__init__(
-                    name="Pure Red",
-                    mana_cost=ManaCost.parse("{R}{R}"),
-                    base_power=2,
-                    base_toughness=1,
-                )
-
-            def cost_reduction(self, game):
-                return 5
-
-        card = PureColoredCreature()
-        # Generic is 0, so even a reduction of 5 is clamped to 0
-        assert get_cost_reduction(game, card, game.players[0]) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -219,76 +188,63 @@ class TestApplyCostReduction:
 
 
 # ---------------------------------------------------------------------------
-# Integration tests: cast_spell with cost reduction
+# Casting with a reduced cost
 # ---------------------------------------------------------------------------
 
 class TestCastSpellWithReduction:
-    """Integration: cast_spell uses the cost reduction hook."""
+    """Casting pays the reduced cost from the mana pool."""
 
     def test_cast_with_reduction_succeeds_with_exact_mana(self):
-        """Card costs {4}{R}{R}, reduction 3 → effective {1}{R}{R}.
-        Player has 1 generic + 2 red = 3 total mana, should succeed."""
-        game = _make_game()
-        p1 = game.players[0]
-        card = ReducedCostCreature(reduction=3)
-        card.owner = p1
-        card.controller = p1
-        game.get_hand(p1).add(card)
-
-        # Add exactly enough mana for reduced cost: {1}{R}{R}
-        p1.mana_pool.add(ManaType.COLORLESS, 1)
-        p1.mana_pool.add(ManaType.RED, 2)
-
-        cast_spell(game, p1, card)
-        # Card should be on the stack now (as a StackObject)
-        assert not game.stack.is_empty()
+        """Power 9 makes Ghalta {1}{G}{G}: three mana casts it."""
+        ghalta = card(GhaltaPrimalHunger)
+        game = create_game(
+            Side(hand=[ghalta], battlefield=[BrazenScourge] * 3, mana={ManaType.GREEN: 3}),
+            Side(),
+            start=MAIN,
+        )
+        t = Table(game)
+        t.act(0, ghalta, then=[moves(ghalta, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(ghalta, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_cast_with_zero_reduction_needs_full_cost(self):
-        """Card with 0 reduction needs full {4}{R}{R} = 6 mana."""
-        game = _make_game()
-        p1 = game.players[0]
-        card = ReducedCostCreature(reduction=0)
-        card.owner = p1
-        card.controller = p1
-        game.get_hand(p1).add(card)
-
-        # Only 3 mana — not enough for full cost
-        p1.mana_pool.add(ManaType.COLORLESS, 1)
-        p1.mana_pool.add(ManaType.RED, 2)
-
-        with pytest.raises(CastingError):
-            cast_spell(game, p1, card)
+        """With no creatures Ghalta costs all twelve mana: three is not enough."""
+        ghalta = card(GhaltaPrimalHunger)
+        game = create_game(Side(hand=[ghalta], mana={ManaType.GREEN: 3}), Side(), start=MAIN)
+        t = Table(game)
+        t.act_illegal(0, ghalta, note="no reduction: Ghalta costs {10}{G}{G}")
+        t.run()
 
     def test_cast_with_full_reduction_only_needs_colored(self):
-        """Reduction == generic → only colored pips needed.
-        {4}{R}{R} with reduction 4 → {R}{R}."""
-        game = _make_game()
-        p1 = game.players[0]
-        card = ReducedCostCreature(reduction=4)
-        card.owner = p1
-        card.controller = p1
-        game.get_hand(p1).add(card)
-
-        # Only 2 red mana — enough when generic is fully reduced
-        p1.mana_pool.add(ManaType.RED, 2)
-
-        cast_spell(game, p1, card)
-        assert not game.stack.is_empty()
+        """Power 12 removes all of Ghalta's generic mana: {G}{G} casts it."""
+        ghalta = card(GhaltaPrimalHunger)
+        game = create_game(
+            Side(hand=[ghalta], battlefield=[QuakestriderCeratops], mana={ManaType.GREEN: 2}),
+            Side(),
+            start=MAIN,
+        )
+        t = Table(game)
+        t.act(0, ghalta, then=[moves(ghalta, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(ghalta, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_mana_pool_drained_by_reduced_cost(self):
-        """After casting with reduction, mana pool should have leftover mana."""
-        game = _make_game()
-        p1 = game.players[0]
-        card = ReducedCostCreature(reduction=3)
-        card.owner = p1
-        card.controller = p1
-        game.get_hand(p1).add(card)
-
-        # Give 5 mana total: 3 colorless + 2 red
-        # Reduced cost is {1}{R}{R} = 3 mana → should have 2 colorless left
-        p1.mana_pool.add(ManaType.COLORLESS, 3)
-        p1.mana_pool.add(ManaType.RED, 2)
-
-        cast_spell(game, p1, card)
-        # 2 colorless should remain (3 - 1 = 2)
-        assert p1.mana_pool.get(ManaType.COLORLESS) == 2
+        """Ghalta at {1}{G}{G} out of five green leaves exactly two: enough
+        for Paradise Druid's {1}{G}, and then nothing for Llanowar Elves."""
+        ghalta, druid, elves = card(GhaltaPrimalHunger), card(ParadiseDruid), card(LlanowarElves)
+        game = create_game(
+            Side(hand=[ghalta, druid, elves], battlefield=[BrazenScourge] * 3, mana={ManaType.GREEN: 5}),
+            Side(),
+            start=MAIN,
+        )
+        t = Table(game)
+        t.act(0, ghalta, then=[moves(ghalta, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(ghalta, Zone.BATTLEFIELD)])
+        t.act(0, druid, then=[moves(druid, Zone.STACK)], note="two green are left")
+        t.pass_(0)
+        t.pass_(1, then=[moves(druid, Zone.BATTLEFIELD)])
+        t.act_illegal(0, elves, note="and no more")
+        t.run()

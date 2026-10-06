@@ -43,6 +43,12 @@ class Player(ABC):
         self.has_lost: bool = False
         self.land_plays_remaining: int = 1
         self.drawn_from_empty_library: bool = False
+        # Whether this player declared an attacker this turn (rule 508.1);
+        # cleared at each turn boundary.
+        self.attacked_this_turn: bool = False
+        # Granted by an effect such as High Fae Trickster's; cleared and
+        # reapplied with continuous effects.
+        self.can_cast_as_flash: bool = False
         # Authoritative per-turn record of the instant and sorcery spells THIS
         # player has cast this turn (rule "…instant and sorcery spell you've cast
         # … this turn", e.g. Thousand-Year Storm's copy count). This belongs to

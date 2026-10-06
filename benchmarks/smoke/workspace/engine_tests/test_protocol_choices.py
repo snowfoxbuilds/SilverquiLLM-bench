@@ -1,16 +1,25 @@
 """Phase 2 protocol tests for the non-targeting converted call sites:
-ordering query (combat damage order), discard query (cleanup), and the
+damage-division query (combat damage), discard query (cleanup), and the
 legend-rule OBJECT query.
+
+The damage-division and discard tests play on the Test Interface: the
+choices come from the players' scripts and show in what happens.
 """
 
 from __future__ import annotations
 
-from engine.card import CardImpl, Creature
-from engine.decisions import DecisionKind
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_171.card_impl import DiregrafGhoul
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_272.card_impl import Plains
+from test_interface import Decision, Side, Step, card, create_game
+
+from engine.card import Creature
 from engine.game_state import GameState
 from engine.player import Player
 from engine.queries import Answer
-from engine.types import CardType, ManaCost, Supertype, Zone
+from engine.types import ManaCost, Supertype, Zone
+from silverquillm.table import Table, moves, taps
 
 
 class FnPlayer(Player):
@@ -42,58 +51,32 @@ def _put(game, player, zone, card):
     player.zones[zone].add(card)
 
 
-class TestOrderingQuery:
-    def test_damage_order_query_applies_answer_order(self):
-        from engine.combat import declare_attackers_step, declare_blockers_step
-
-        # p0 (attacker controller) reverses any ordering query it receives.
-        def reverse_orderings(query):
-            if query.min == query.max == len(query.options) and len(query.options) > 1:
-                return Answer(selected=tuple(reversed(query.options)))
-            return None
-
-        p0 = FnPlayer("P0", fn=reverse_orderings)
-        p1 = FnPlayer("P1")
-        game = GameState([p0, p1])
-
-        attacker = _creature("Attacker")
-        attacker.summoning_sick = False
-        b1 = _creature("Blocker1")
-        b2 = _creature("Blocker2")
-        _put(game, p0, Zone.BATTLEFIELD, attacker)
-        _put(game, p1, Zone.BATTLEFIELD, b1)
-        _put(game, p1, Zone.BATTLEFIELD, b2)
-
-        declare_attackers_step(game, [attacker])
-        declare_blockers_step(game, {b1: attacker, b2: attacker})
-
-        # An ordering query (min == max == len) was raised to the attacker's
-        # controller, and the Answer's order is the damage-assignment order.
-        ordering_queries = [
-            q for q in p0.transcript if q.min == q.max == len(q.options) > 1
-        ]
-        assert len(ordering_queries) == 1
-        assert game.combat_state.attacker_blockers[attacker] == [b2, b1]
+class TestDamageDivisionQuery:
+    def test_damage_division_query_applies_the_chosen_share(self):
+        """Player 0 divides its Brazen Scourge's 3 damage all to the Diregraf
+        Ghoul, so the Savannah Lions also blocking it survives."""
+        scourge, lions, ghoul = card(BrazenScourge), card(SavannahLions), card(DiregrafGhoul)
+        t = Table(create_game(Side(battlefield=[scourge]), Side(battlefield=[lions, ghoul]),
+                              start=(Step.BEGIN_COMBAT, 0)))
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, scourge, then=[taps(scourge)])
+        t.pass_(0)
+        t.pass_(1)
+        t.act(1, lions, ghoul, scoped={lions: scourge, ghoul: scourge})
+        t.pass_(0, per_query={ghoul: [Decision.number(3)], lions: [Decision.number(0)]})
+        t.pass_(1, then=[moves(scourge, Zone.GRAVEYARD), moves(ghoul, Zone.GRAVEYARD)])
+        t.run()
 
 
 class TestDiscardQuery:
     def test_cleanup_discard_raises_object_queries_until_hand_size(self):
-        from engine.turn import _do_cleanup_step
-
-        p0 = FnPlayer("P0")
-        p1 = FnPlayer("P1")
-        game = GameState([p0, p1])
-        for i in range(9):
-            _put(game, p0, Zone.HAND, CardImpl(name=f"C{i}", card_types={CardType.INSTANT}))
-
-        _do_cleanup_step(game)
-
-        assert len(p0.zones[Zone.HAND]) == 7
-        discard_queries = [
-            q for q in p0.transcript
-            if q.options and all(o.kind is DecisionKind.OBJECT for o in q.options)
-        ]
-        assert len(discard_queries) == 2  # 9 -> 7
+        """Player 0 ends their turn with nine cards in hand and discards the
+        two they choose, down to seven (rule 514.1)."""
+        hand = [card(Plains) for _ in range(9)]
+        t = Table(create_game(Side(hand=hand), Side(library=[Plains]), start=(Step.END, 0)))
+        t.pass_(0, choices=hand[:2])
+        t.pass_(1, then=[moves(hand[0], Zone.GRAVEYARD), moves(hand[1], Zone.GRAVEYARD)])
+        t.run()
 
 
 class TestLegendRuleQuery:

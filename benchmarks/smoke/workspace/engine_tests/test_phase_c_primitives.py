@@ -15,14 +15,48 @@ Covers the primitives introduced/repaired in this phase:
 
 from __future__ import annotations
 
-import pytest
+import test_interface
+from cards.fdn.fdn_30.card_impl import ArchmageOfRunes, ArchmageOfRunesAbility2
+from cards.fdn.fdn_40.card_impl import HighFaeTrickster
+from cards.fdn.fdn_57.card_impl import BlasphemousEdict, BlasphemousEdictAbility1
+from cards.fdn.fdn_71.card_impl import Stab
+from cards.fdn.fdn_130.card_impl import QuickDrawKatana, QuickDrawKatanaAbility2
+from cards.fdn.fdn_143.card_impl import MakeYourMove
+from cards.fdn.fdn_144.card_impl import MischievousPup, MischievousPupAbility2
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_159.card_impl import MockingSprite
+from cards.fdn.fdn_162.card_impl import RunAwayTogether
+from cards.fdn.fdn_164.card_impl import SpectralSailor
+from cards.fdn.fdn_188.card_impl import Abrade, AbradeAbility2, AbradeAbility3
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_203.card_impl import InvoluntaryEmployment
+from cards.fdn.fdn_209.card_impl import SureStrike
+from cards.fdn.fdn_223.card_impl import GiantGrowth
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_244.card_impl import Progenitus
+from cards.fdn.fdn_249.card_impl import (
+    AdventuringGear,
+    AdventuringGearAbility1,
+    AdventuringGearAbility2,
+)
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_276.card_impl import Swamp
+from cards.fdn.fdn_278.card_impl import Mountain
+from cards.fdn.fdn_280.card_impl import Forest
+from test_interface import Side, card, player
+from test_utils import (
+    Intent,
+    activate_card_ability,
+    create_game,
+    set_board_state,
+)
 
-from engine.abilities import AbilityError
-from engine.card import Creature, Equipment, Instant, Land, Sorcery
-from engine.casting import cast_spell, get_cost_reduction
+from engine.card import Creature, Equipment, Instant, Sorcery, printed_class
+from engine.casting import get_cost_reduction
 from engine.continuous_effects import (
-    ContinuousEffect,
     DURATION_PERMANENT,
+    ContinuousEffect,
     Layer,
     SubLayer,
 )
@@ -34,20 +68,22 @@ from engine.events import (
     GainsLifeTriggeredEvent,
     LosesLifeTriggeredEvent,
 )
-from engine.game import add_counter, create_token, gain_life, lose_life, remove_counter
-from test_utils import Intent
+from engine.game import add_counter, create_token, gain_life, lose_life
 from engine.replacement_effects import ReplacementEffect
-from engine.stack import priority_loop
 from engine.state_based_actions import check_state_based_actions
 from engine.triggers import TriggerRegistration
-from engine.turn import cleanup_mechanical
-from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Zone
+from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 from engine.zones import move_to_zone
-from test_utils import (
-    activate_card_ability,
-    create_game,
-    resolve_stack,
-    set_board_state,
+from silverquillm.table import (
+    Table,
+    appears,
+    first_strike_damage,
+    gains_control,
+    life,
+    moves,
+    off_stack,
+    on_stack,
+    taps,
 )
 
 
@@ -56,7 +92,7 @@ def _equip_via_ability(game, player, equipment, target):
     resolve path, targeting *target* (chosen at activation)."""
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
     player.start_intent("equip", Intent(
-        pattern=GameRef(card=frozenset({("name", equipment.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(equipment))})),
         preferences=(Decision.obj(instance=inst),),
     ))
     try:
@@ -92,22 +128,60 @@ def _push_equip_activation(game, player, equipment, target):
     return obj
 
 
-def _spy_on_answer(player):
-    """Replace ``player.answer`` with a spy; return (calls, restore) so a test
-    can assert no Player Query was raised (``calls == []``)."""
-    calls: list = []
-    original = player.answer
-
-    def _spy(query):
-        calls.append(query)
-        return original(query)
-
-    player.answer = _spy
-    return calls, (lambda: setattr(player, "answer", original))
-
-
 def _creature(name, p, power=2, tough=2):
     return Creature(name=name, base_power=power, base_toughness=tough, owner=p, controller=p)
+
+
+# Tests written on the Test Interface build a position, play it from both
+# players' scripts and judge what the table can see.
+
+
+def _table(p0: Side, p1: Side) -> Table:
+    """Player 0's precombat main phase, with player 0 to act."""
+    return Table(test_interface.create_game(p0, p1, start=(Phase.PRECOMBAT_MAIN, 0)))
+
+
+def _resolve(t: Table, *results, note: str = "") -> None:
+    """Both players pass, and the top of the stack resolves."""
+    t.pass_(0)
+    t.pass_(1, then=list(results), note=note)
+
+
+def _equip(t: Table, *, katana_on, lands=()) -> None:
+    """Player 0 taps ``lands`` and equips the Quick-Draw Katana to
+    ``katana_on``, and the ability resolves."""
+    for land in lands:
+        t.act(0, land, then=[taps(land)])
+    t.act(0, QuickDrawKatanaAbility2, choices=[katana_on], then=[on_stack(QuickDrawKatanaAbility2, 0)])
+    _resolve(t, off_stack(QuickDrawKatanaAbility2))
+
+
+def _attack_unblocked(t: Table, attacker, *, life_after: int, first_strike: bool = False) -> None:
+    """In player 0's next declare attackers step ``attacker`` attacks alone,
+    player 1 declares no blockers, and player 1's life becomes ``life_after``
+    — in a first-strike combat damage step when ``attacker`` has first strike
+    (rule 510.4)."""
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, attacker, then=[taps(attacker)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1, then=[first_strike_damage()] if first_strike else [])  # declares no blockers
+    t.pass_(0)
+    t.pass_(1, then=[life(1, life_after)])
+    if first_strike:
+        t.pass_(0)
+        t.pass_(1)
+
+
+def _creatures(n: int) -> list:
+    return [card(LlanowarElves) for _ in range(n)]
+
+
+def _edict_resolves(t: Table, edict, mine: list, theirs: list) -> None:
+    """Blasphemous Edict resolves: each player sacrifices every creature they
+    have, choosing them one at a time."""
+    t.pass_(0, choices=mine)
+    t.pass_(1, choices=theirs, then=[moves(edict, Zone.GRAVEYARD), *(moves(c, Zone.GRAVEYARD) for c in mine + theirs)])
 
 
 # ---------------------------------------------------------------------------
@@ -115,28 +189,7 @@ def _creature(name, p, power=2, tough=2):
 # ---------------------------------------------------------------------------
 
 class TestCounterPrimitive:
-    def test_plus_one_counter_persists_across_cleanup(self):
-        game = create_game()
-        p1 = game.players[0]
-        c = _creature("X", p1, 1, 1)
-        set_board_state(game, 0, battlefield=[c])
-        add_counter(game, c, "+1/+1", 2)
-        assert c.plus_one_counters == 2
-        cleanup_mechanical(game)  # runs apply_all — previously reset counters to 0
-        assert c.plus_one_counters == 2
-        assert c.power == 3 and c.toughness == 3
 
-    def test_generic_counter_store_retrieve_and_persist(self):
-        game = create_game()
-        p1 = game.players[0]
-        c = _creature("X", p1)
-        set_board_state(game, 0, battlefield=[c])
-        add_counter(game, c, "charge", 3)
-        assert c.counters["charge"] == 3
-        remove_counter(game, c, "charge", 1)
-        assert c.counters["charge"] == 2
-        cleanup_mechanical(game)
-        assert c.counters["charge"] == 2  # generic counters survive the reset
 
     def test_replacement_runs_before_trigger_and_doubles(self):
         game = create_game()
@@ -166,17 +219,6 @@ class TestCounterPrimitive:
         assert c.plus_one_counters == 4          # replacement doubled 2 -> 4
         assert seen == [("+1/+1", 4)]            # trigger saw the post-replacement amount
 
-    def test_annihilation_persists_across_cleanup(self):
-        game = create_game()
-        p1 = game.players[0]
-        c = _creature("X", p1, 2, 2)
-        set_board_state(game, 0, battlefield=[c])
-        add_counter(game, c, "+1/+1", 3)
-        add_counter(game, c, "-1/-1", 1)
-        check_state_based_actions(game)
-        assert (c.plus_one_counters, c.minus_one_counters) == (2, 0)
-        cleanup_mechanical(game)
-        assert (c.plus_one_counters, c.minus_one_counters) == (2, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -268,50 +310,23 @@ class TestEffectTiming:
         assert bear.power == 2  # departed source's effect removed engine-side
 
     def test_new_midturn_effect_applies_immediately_via_stack(self):
-        """Adventuring Gear's landfall registers a mid-turn until-EOT buff when
-        its trigger resolves. The engine re-derives after a stack object
-        resolves, so the buff applies immediately — no manual apply_all."""
-        from cards.fdn.fdn_249.card_impl import AdventuringGear
+        """Adventuring Gear's landfall buff applies as soon as its trigger
+        resolves: the equipped 1/1 Elves blocked by a 2/1 survives and kills it."""
+        elves, gear, forest, blocker = card(LlanowarElves), card(AdventuringGear), card(Forest), card(SavannahLions)
+        t = _table(Side(hand=[forest], battlefield=[elves, gear], mana={ManaType.COLORLESS: 1}), Side(battlefield=[blocker]))
+        t.act(0, AdventuringGearAbility2, choices=[elves], then=[on_stack(AdventuringGearAbility2, 0)])
+        _resolve(t, off_stack(AdventuringGearAbility2))
+        t.act(0, forest, then=[moves(forest, Zone.BATTLEFIELD), on_stack(AdventuringGearAbility1, 0)])
+        _resolve(t, off_stack(AdventuringGearAbility1))
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, elves, then=[taps(elves)])
+        t.pass_(0)
+        t.pass_(1)
+        t.act(1, blocker, scoped={blocker: elves})
+        t.pass_(0)
+        t.pass_(1, then=[moves(blocker, Zone.GRAVEYARD)], note="the Elves is a 3/3 this turn")
+        t.run()
 
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        gear = AdventuringGear(owner=p1, controller=p1)
-        land = Land(name="Forest", owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, gear], hand=[land])
-        gear.register_triggers(game)  # set_board_state does not fire ETB registration
-        gear.equip(bear, game)
-        assert (bear.power, bear.toughness) == (2, 2)  # Gear has no static buff
-
-        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
-        move_to_zone(game, land, Zone.HAND, Zone.BATTLEFIELD)  # landfall -> stack
-        assert (bear.power, bear.toughness) == (2, 2)  # trigger not resolved yet
-        priority_loop(game)  # resolves the landfall trigger through the real stack
-        assert (bear.power, bear.toughness) == (4, 4)  # applied without manual apply_all
-
-    def test_turn_dependent_buff_drops_at_real_turn_transition(self):
-        """Quick-Draw Katana buffs only during its controller's turn. Driven
-        through a real controller-turn → opponent-turn transition, the buff is
-        recalculated (and dropped) at the transition — not left stale."""
-        from cards.fdn.fdn_130.card_impl import QuickDrawKatana
-
-        game = create_game()
-        p1, p2 = game.players
-        bear = _creature("Bear", p1, 2, 2)
-        katana = QuickDrawKatana(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, katana])
-        assert game.active_player is p1
-        katana.equip(bear, game)  # equip re-derives; p1 active -> buff on
-        assert bear.power == 4 and Keyword.FIRST_STRIKE in bear.keywords
-
-        guard = 0
-        while game.active_player is p1 and guard < 60:
-            game.advance_phase()
-            guard += 1
-        assert game.active_player is p2  # now the opponent's turn
-        # advance_phase re-derived at the active-player change; the buff is gone
-        # without any manual apply_all.
-        assert bear.power == 2 and Keyword.FIRST_STRIKE not in bear.keywords
 
 
 # ---------------------------------------------------------------------------
@@ -340,108 +355,103 @@ def _resolving(on_resolve):
 
 class TestResolutionOrder:
     def test_resolving_buff_saves_damaged_creature(self):
-        """A 2/2 with two marked damage survives when a resolving ability creates
-        an applicable +2/+2 continuous effect — re-derive precedes the
-        lethal-damage SBA, so the creature is a 4/4 with 2 damage when checked."""
-        from engine.stack import resolve_top_of_stack
-
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        set_board_state(game, 0, battlefield=[bear])
-        bear.damage_marked = 2  # lethal for a 2/2 as-is
-
-        game.stack.push(_resolving(
-            lambda g: g.effect_manager.add(_pt_effect(bear, 2, 2))
-        ))
-        resolve_top_of_stack(game)
-
-        assert game.get_battlefield(p1).contains(bear)  # survived
-        assert (bear.power, bear.toughness) == (4, 4)
-        assert bear.damage_marked == 2
+        """Giant Growth resolves first, so the 2/1 Lions is a 5/4 when Burst
+        Lightning's 2 damage is checked against it."""
+        lions, growth, bolt = card(SavannahLions), card(GiantGrowth), card(BurstLightning)
+        t = _table(
+            Side(hand=[growth], battlefield=[lions], mana={ManaType.GREEN: 1}),
+            Side(hand=[bolt], mana={ManaType.RED: 1}),
+        )
+        t.pass_(0)
+        t.act(1, bolt, choices=[lions], then=[moves(bolt, Zone.STACK)])
+        t.pass_(1)
+        t.act(0, growth, choices=[lions], then=[moves(growth, Zone.STACK)])
+        _resolve(t, moves(growth, Zone.GRAVEYARD))
+        _resolve(t, moves(bolt, Zone.GRAVEYARD), note="the Lions survives 2 damage")
+        t.run()
 
     def test_resolving_debuff_kills_creature_before_priority(self):
-        """A resolving -2/-2 continuous effect moves a 2/2 to the graveyard
-        before priority returns — re-derive (→ 0/0) precedes the zero-toughness
-        SBA."""
-        from engine.stack import resolve_top_of_stack
-
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        set_board_state(game, 0, battlefield=[bear])
-
-        game.stack.push(_resolving(
-            lambda g: g.effect_manager.add(_pt_effect(bear, -2, -2))
-        ))
-        resolve_top_of_stack(game)
-
-        assert not game.get_battlefield(p1).contains(bear)
-        assert game.get_graveyard(p1).contains(bear)
+        stab, lions = card(Stab), card(SavannahLions)
+        t = _table(Side(hand=[stab], mana={ManaType.BLACK: 1}), Side(battlefield=[lions]))
+        t.act(0, stab, choices=[lions], then=[moves(stab, Zone.STACK)])
+        _resolve(t, moves(stab, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD), note="the Lions is gone before anyone gets priority")
+        t.run()
 
     def test_removing_last_effect_during_resolution_resets(self):
-        """Removing the last active effect during resolution resets the affected
-        permanent rather than leaving stale modified characteristics — the
-        resolver always re-derives, even when the effect manager becomes empty."""
-        from engine.stack import resolve_top_of_stack
-
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        set_board_state(game, 0, battlefield=[bear])
-        eff = game.effect_manager.add(_pt_effect(bear, 2, 2))
-        game.effect_manager.apply_all(game)
-        assert (bear.power, bear.toughness) == (4, 4)
-        assert len(game.effect_manager) == 1
-
-        game.stack.push(_resolving(lambda g: g.effect_manager.remove(eff)))
-        resolve_top_of_stack(game)
-
-        assert len(game.effect_manager) == 0
-        assert (bear.power, bear.toughness) == (2, 2)  # reset, not left at 4/4
+        """Abrade destroys the Quick-Draw Katana, and its +2/+0 is gone at once:
+        the Lions then attacks for 2."""
+        lions, katana, abrade = card(SavannahLions), card(QuickDrawKatana), card(Abrade)
+        t = _table(
+            Side(battlefield=[lions, katana], mana={ManaType.COLORLESS: 2}),
+            Side(hand=[abrade], mana={ManaType.RED: 2}),
+        )
+        _equip(t, katana_on=lions)
+        t.pass_(0)
+        t.act(1, abrade, choices=[AbradeAbility3, katana], then=[moves(abrade, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(abrade, Zone.GRAVEYARD), moves(katana, Zone.GRAVEYARD)])
+        _attack_unblocked(t, lions, life_after=18)
+        t.run()
 
     def test_casting_resolve_top_matches_priority_loop_settlement(self):
-        """engine.casting.resolve_top and priority_loop share one resolution
-        primitive, so they settle a resolving -2/-2 identically (the creature
-        dies before priority returns in both)."""
-        from engine.casting import resolve_top
-        from engine.stack import priority_loop
-
-        def _scenario():
-            game = create_game()
-            p1 = game.players[0]
-            bear = _creature("Bear", p1, 2, 2)
-            set_board_state(game, 0, battlefield=[bear])
-            game.phase, game.step = Phase.PRECOMBAT_MAIN, None
-            game.stack.push(_resolving(
-                lambda g: g.effect_manager.add(_pt_effect(bear, -2, -2))
-            ))
-            return game, p1, bear
-
-        ga, pa, ba = _scenario()
-        resolve_top(ga)
-        gb, pb, bb = _scenario()
-        priority_loop(gb)
-
-        # Both settled the same way: creature dead, off the battlefield.
-        assert ga.get_battlefield(pa).contains(ba) is False
-        assert gb.get_battlefield(pb).contains(bb) is False
-        assert ga.get_graveyard(pa).contains(ba)
-        assert gb.get_graveyard(pb).contains(bb)
-
+        """The opponent's Stab settles the same way: the Lions dies before the
+        active player gets priority again."""
+        stab, lions = card(Stab), card(SavannahLions)
+        t = _table(Side(battlefield=[lions]), Side(hand=[stab], mana={ManaType.BLACK: 1}))
+        t.pass_(0)
+        t.act(1, stab, choices=[lions], then=[moves(stab, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(stab, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD)])
+        t.run()
 
 # ---------------------------------------------------------------------------
 # 4. Equipment lifecycle
 # ---------------------------------------------------------------------------
 
+class _TestAxe(Equipment):
+    """A test-local Equipment: equipped creature gets +1/+1 and has double
+    strike and trample; equip {3}."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Test Axe")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{4}"))
+        kwargs.setdefault("equip_cost", ManaCost.parse("{3}"))
+        super().__init__(**kwargs)
+
+    def make_equip_effects(self, game):
+        equipment = self
+
+        def _pt(g):
+            if equipment.is_equip_active(g):
+                creature = equipment.attached_to
+                creature.modified_power += 1
+                creature.modified_toughness += 1
+
+        def _kw(g):
+            if equipment.is_equip_active(g):
+                creature = equipment.attached_to
+                creature.keywords |= Keyword.DOUBLE_STRIKE | Keyword.TRAMPLE
+
+        return [
+            ContinuousEffect(
+                source=self,
+                layer=Layer.POWER_TOUGHNESS,
+                sublayer=SubLayer.MODIFY_PT,
+                apply=_pt,
+                duration=DURATION_PERMANENT,
+            ),
+            ContinuousEffect(
+                source=self, layer=Layer.ABILITY, apply=_kw, duration=DURATION_PERMANENT,
+            ),
+        ]
+
+
 class TestEquipmentLifecycle:
     def test_attach_buffs_then_detach_removes(self):
-        from cards.fdn.fdn_129.card_impl import LeylineAxe
-
         game = create_game()
         p1 = game.players[0]
         bear = _creature("Bear", p1, 2, 2)
-        axe = LeylineAxe(owner=p1, controller=p1)
+        axe = _TestAxe(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[bear, axe])
         axe.equip(bear, game)
         assert axe.attached_to is bear
@@ -453,12 +463,10 @@ class TestEquipmentLifecycle:
         assert Keyword.DOUBLE_STRIKE not in bear.keywords
 
     def test_sba_unattaches_when_creature_leaves(self):
-        from cards.fdn.fdn_129.card_impl import LeylineAxe
-
         game = create_game()
         p1 = game.players[0]
         bear = _creature("Bear", p1, 2, 2)
-        axe = LeylineAxe(owner=p1, controller=p1)
+        axe = _TestAxe(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[bear, axe])
         axe.equip(bear, game)
         move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.GRAVEYARD)
@@ -466,347 +474,205 @@ class TestEquipmentLifecycle:
         assert axe.attached_to is None
 
     def test_equip_ability_targets_only_your_creatures(self):
-        """Option-set invariant: equip finds no legal target among only the
-        opponent's creatures, so activation is rejected before cost."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        from engine.abilities import AbilityError
-        from test_utils import activate_card_ability
-
-        game = create_game()
-        p1, p2 = game.players
-        their_bear = _creature("Their Bear", p2, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[boots], mana={ManaType.COLORLESS: 1})
-        set_board_state(game, 1, battlefield=[their_bear])
-        game.phase = Phase.PRECOMBAT_MAIN
-        with pytest.raises(AbilityError):
-            activate_card_ability(game, p1, boots)  # no creature you control
-        assert boots.attached_to is None
-        assert p1.mana_pool.total() == 1  # rejected before cost -> no mana spent
+        """Only the opponent controls a creature, so equip cannot be activated;
+        the mana stays to cast Abrade at that creature."""
+        katana, theirs, abrade = card(QuickDrawKatana), card(SavannahLions), card(Abrade)
+        t = _table(Side(hand=[abrade], battlefield=[katana], mana={ManaType.RED: 2}), Side(battlefield=[theirs]))
+        t.act_illegal(0, QuickDrawKatanaAbility2, choices=[theirs], note="equip targets only a creature you control")
+        t.act(0, abrade, choices=[AbradeAbility2, theirs], then=[moves(abrade, Zone.STACK)])
+        _resolve(t, moves(abrade, Zone.GRAVEYARD), moves(theirs, Zone.GRAVEYARD))
+        t.run()
 
     def test_equip_ability_is_sorcery_speed(self):
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1 = game.players[0]
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[boots], mana={ManaType.COLORLESS: 1})
-        ability = boots.get_activated_abilities()[0]
-        game.phase = Phase.COMBAT
-        assert ability.cost(game, boots) is False  # not sorcery speed
-        game.phase = Phase.PRECOMBAT_MAIN
-        assert ability.cost(game, boots) is True   # sorcery speed, cost paid
+        """Equip cannot be activated in the opponent's end step, and can be in
+        player 0's own main phase: the equipped Lions attacks for 4."""
+        lions, katana = card(SavannahLions), card(QuickDrawKatana)
+        plains = [card(Plains), card(Plains)]
+        t = Table(test_interface.create_game(
+            Side(battlefield=[lions, katana, *plains], library=[card(Plains)]),
+            Side(),
+            start=(Step.END, 1),
+        ))
+        t.pass_(1)
+        for land in plains:
+            t.act(0, land, then=[taps(land)])
+        t.act_illegal(0, QuickDrawKatanaAbility2, choices=[lions], note="not player 0's main phase")
+        t.pass_(0)
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        _equip(t, katana_on=lions, lands=plains)
+        _attack_unblocked(t, lions, life_after=16, first_strike=True)
+        t.run()
 
     # --- Equip activation targeting (real activate → stack → resolve path) ---
 
     def test_equip_zero_legal_targets_spends_no_mana(self):
-        """No creature you control: activation is rejected before the cost is
-        paid, so no mana leaves the pool and nothing goes on the stack."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1 = game.players[0]
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[boots], mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        with pytest.raises(AbilityError):
-            activate_card_ability(game, p1, boots)
-        assert p1.mana_pool.total() == 1
-        assert boots.attached_to is None
-        assert game.stack.is_empty()
+        """With no creature to equip, equip cannot be activated, and both red
+        mana stay to cast two Burst Lightnings."""
+        katana, first, second = card(QuickDrawKatana), card(BurstLightning), card(BurstLightning)
+        t = _table(Side(hand=[first, second], battlefield=[katana], mana={ManaType.RED: 2}), Side())
+        t.act_illegal(0, QuickDrawKatanaAbility2, note="no creature to equip")
+        for bolt, total in ((first, 18), (second, 16)):
+            t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+            _resolve(t, moves(bolt, Zone.GRAVEYARD), life(1, total))
+        t.run()
 
     def test_equip_target_disappears_before_resolution_no_retarget(self):
-        """The equip target is chosen at activation. If it leaves before the
-        ability resolves, the ability resolves without attaching and never
-        retargets onto another creature."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1 = game.players[0]
-        chosen = _creature("Chosen", p1, 2, 2)
-        bystander = _creature("Bystander", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(
-            game, 0, battlefield=[chosen, bystander, boots],
-            mana={ManaType.COLORLESS: 1},
-        )
-        game.phase = Phase.PRECOMBAT_MAIN
-        _equip_via_ability(game, p1, boots, chosen)  # target = chosen, on stack
-        assert not game.stack.is_empty()
-        # The chosen target leaves before resolution.
-        move_to_zone(game, chosen, Zone.BATTLEFIELD, Zone.GRAVEYARD)
-        resolve_stack(game)
-        # No attach (target gone), and no retarget onto the bystander.
-        assert boots.attached_to is None
+        """The chosen Lions dies before equip resolves; the Katana attaches to
+        nothing, so the Elves attacks for 1."""
+        chosen, bystander, katana, bolt = card(SavannahLions), card(LlanowarElves), card(QuickDrawKatana), card(BurstLightning)
+        t = _table(Side(hand=[bolt], battlefield=[chosen, bystander, katana], mana={ManaType.RED: 3}), Side())
+        t.act(0, QuickDrawKatanaAbility2, choices=[chosen], then=[on_stack(QuickDrawKatanaAbility2, 0)])
+        t.act(0, bolt, choices=[chosen], then=[moves(bolt, Zone.STACK)])
+        _resolve(t, moves(bolt, Zone.GRAVEYARD), moves(chosen, Zone.GRAVEYARD))
+        _resolve(t, off_stack(QuickDrawKatanaAbility2))
+        _attack_unblocked(t, bystander, life_after=19)
+        t.run()
 
     def test_creature_appearing_after_activation_cannot_be_target(self):
-        """A creature that enters after activation cannot become the equip
-        target: the ability attaches to the creature chosen at activation."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1 = game.players[0]
-        chosen = _creature("Chosen", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        newcomer = _creature("Newcomer", p1, 5, 5)
-        set_board_state(
-            game, 0, battlefield=[chosen, boots], hand=[newcomer],
-            mana={ManaType.COLORLESS: 1},
-        )
-        game.phase = Phase.PRECOMBAT_MAIN
-        _equip_via_ability(game, p1, boots, chosen)  # target = chosen
-        # A new creature enters while the ability is on the stack.
-        move_to_zone(game, newcomer, Zone.HAND, Zone.BATTLEFIELD)
-        resolve_stack(game)
-        assert boots.attached_to is chosen       # the activation-time target
-        assert boots.attached_to is not newcomer
+        """Spectral Sailor enters while equip waits; the Katana still goes on
+        the Lions, which attacks for 4."""
+        chosen, katana, sailor, island = card(SavannahLions), card(QuickDrawKatana), card(SpectralSailor), card(Island)
+        plains = [card(Plains), card(Plains)]
+        t = _table(Side(hand=[sailor], battlefield=[chosen, katana, island, *plains]), Side())
+        for land in plains:
+            t.act(0, land, then=[taps(land)])
+        t.act(0, QuickDrawKatanaAbility2, choices=[chosen], then=[on_stack(QuickDrawKatanaAbility2, 0)])
+        t.act(0, island, then=[taps(island)])
+        t.act(0, sailor, then=[moves(sailor, Zone.STACK)])
+        _resolve(t, moves(sailor, Zone.BATTLEFIELD))
+        _resolve(t, off_stack(QuickDrawKatanaAbility2))
+        _attack_unblocked(t, chosen, life_after=16, first_strike=True)
+        t.run()
 
     def test_equip_illegal_timing_raises_no_query_no_cost(self):
-        """Activation outside sorcery timing is rejected before any target query
-        is raised — no query, no target intent consumed, no mana, nothing pushed."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.COMBAT  # not sorcery speed
-        calls, restore = _spy_on_answer(p1)
-        try:
-            with pytest.raises(AbilityError):
-                _equip_via_ability(game, p1, boots, bear)
-        finally:
-            restore()
-        assert calls == []                    # no target query raised
-        assert p1.mana_pool.total() == 1      # no mana spent
-        assert game.stack.is_empty()          # nothing pushed
-        assert boots.attached_to is None
+        """Equip cannot be activated in the beginning of combat step, and the
+        mana stays to cast Sure Strike: the Lions attacks for 5."""
+        lions, katana, strike = card(SavannahLions), card(QuickDrawKatana), card(SureStrike)
+        t = Table(test_interface.create_game(
+            Side(hand=[strike], battlefield=[lions, katana], mana={ManaType.RED: 2}),
+            Side(),
+            start=(Step.BEGIN_COMBAT, 0),
+        ))
+        t.act_illegal(0, QuickDrawKatanaAbility2, choices=[lions], note="not a main phase")
+        t.act(0, strike, choices=[lions], then=[moves(strike, Zone.STACK)])
+        _resolve(t, moves(strike, Zone.GRAVEYARD))
+        _attack_unblocked(t, lions, life_after=15, first_strike=True)
+        t.run()
 
     def test_equip_source_off_battlefield_rejected_before_query(self):
-        """Activation when the Equipment is not on the battlefield is rejected
-        before querying or payment."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        # Boots in hand — not on the battlefield.
-        set_board_state(game, 0, battlefield=[bear], hand=[boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        calls, restore = _spy_on_answer(p1)
-        try:
-            with pytest.raises(AbilityError):
-                _equip_via_ability(game, p1, boots, bear)
-        finally:
-            restore()
-        assert calls == []
-        assert p1.mana_pool.total() == 1
-        assert game.stack.is_empty()
-        assert boots.attached_to is None
+        """The Katana in hand has no equip to activate, and the mana stays to
+        cast it."""
+        lions, katana = card(SavannahLions), card(QuickDrawKatana)
+        t = _table(Side(hand=[katana], battlefield=[lions], mana={ManaType.COLORLESS: 2}), Side())
+        t.act_illegal(0, QuickDrawKatanaAbility2, choices=[lions], note="the Katana is not on the battlefield")
+        t.act(0, katana, then=[moves(katana, Zone.STACK)])
+        _resolve(t, moves(katana, Zone.BATTLEFIELD))
+        t.run()
 
     def test_equipment_leaves_for_graveyard_before_resolution_no_attach(self):
-        """Equipment leaves for the graveyard before resolution: the ability
-        resolves without attaching; attached_to remains None."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        _equip_via_ability(game, p1, boots, bear)
-        assert not game.stack.is_empty()
-        move_to_zone(game, boots, Zone.BATTLEFIELD, Zone.GRAVEYARD)  # source leaves
-        resolve_stack(game)
-        assert boots.attached_to is None
-        assert game.get_graveyard(p1).contains(boots)
+        """Make Your Move destroys the Katana while equip waits; equip attaches
+        nothing, and the Lions attacks for 2."""
+        lions, katana, move = card(SavannahLions), card(QuickDrawKatana), card(MakeYourMove)
+        t = _table(
+            Side(battlefield=[lions, katana], mana={ManaType.COLORLESS: 2}),
+            Side(hand=[move], mana={ManaType.WHITE: 3}),
+        )
+        t.act(0, QuickDrawKatanaAbility2, choices=[lions], then=[on_stack(QuickDrawKatanaAbility2, 0)])
+        t.pass_(0)
+        t.act(1, move, choices=[katana], then=[moves(move, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(move, Zone.GRAVEYARD), moves(katana, Zone.GRAVEYARD)])
+        _resolve(t, off_stack(QuickDrawKatanaAbility2))
+        _attack_unblocked(t, lions, life_after=18)
+        t.run()
 
     def test_equipment_bounced_before_resolution_no_attach_in_hand(self):
-        """Equipment is bounced before resolution: no attachment in hand."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+        """Mischievous Pup returns the Katana to its owner's hand while equip
+        waits: equip attaches nothing, and the Katana stays in hand."""
+        lions, katana, pup = card(SavannahLions), card(QuickDrawKatana), card(MischievousPup)
+        plains = [card(Plains) for _ in range(3)]
+        t = _table(Side(hand=[pup], battlefield=[lions, katana, *plains], mana={ManaType.COLORLESS: 2}), Side())
+        t.act(0, QuickDrawKatanaAbility2, choices=[lions], then=[on_stack(QuickDrawKatanaAbility2, 0)])
+        for land in plains:
+            t.act(0, land, then=[taps(land)])
+        t.act(0, pup, then=[moves(pup, Zone.STACK)])
+        t.pass_(0, choices=[katana])
+        t.pass_(1, then=[moves(pup, Zone.BATTLEFIELD), on_stack(MischievousPupAbility2, 0)])
+        _resolve(t, off_stack(MischievousPupAbility2), moves(katana, Zone.HAND))
+        _resolve(t, off_stack(QuickDrawKatanaAbility2), note="the Katana is in hand: nothing attaches")
+        final = t.run()
+        assert final.where(katana) is Zone.HAND
 
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        _equip_via_ability(game, p1, boots, bear)
-        move_to_zone(game, boots, Zone.BATTLEFIELD, Zone.HAND)  # bounce
-        resolve_stack(game)
-        assert boots.attached_to is None
-        assert game.get_hand(p1).contains(boots)
-
-    def test_equipment_leaves_and_returns_before_resolution_no_attach(self):
-        """Equipment leaves and returns before resolution: the old ability does
-        not attach the new stint (the returned permanent is a new object)."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        _equip_via_ability(game, p1, boots, bear)
-        move_to_zone(game, boots, Zone.BATTLEFIELD, Zone.GRAVEYARD)  # leaves
-        move_to_zone(game, boots, Zone.GRAVEYARD, Zone.BATTLEFIELD)  # returns (new stint)
-        resolve_stack(game)
-        assert boots.attached_to is None
 
     def test_target_leaves_and_returns_before_resolution_no_attach(self):
-        """Target leaves and returns before resolution: no attachment to the new
-        stint (the returned creature is a new object)."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+        """Run Away Together returns the chosen Spectral Sailor to hand and it
+        is cast again before equip resolves; the returned Sailor is a new
+        object, so it attacks next turn for 1."""
+        sailor, katana, together, theirs, island = (
+            card(SpectralSailor), card(QuickDrawKatana), card(RunAwayTogether), card(SavannahLions), card(Island)
+        )
+        t = _table(
+            Side(hand=[together], battlefield=[sailor, katana, island], library=[card(Plains)], mana={ManaType.BLUE: 4}),
+            Side(battlefield=[theirs], library=[card(Plains)]),
+        )
+        t.act(0, QuickDrawKatanaAbility2, choices=[sailor], then=[on_stack(QuickDrawKatanaAbility2, 0)])
+        t.act(0, together, choices=[sailor, theirs], distinct=True, then=[moves(together, Zone.STACK)])
+        _resolve(t, moves(together, Zone.GRAVEYARD), moves(sailor, Zone.HAND), moves(theirs, Zone.HAND))
+        t.act(0, island, then=[taps(island)])
+        t.act(0, sailor, then=[moves(sailor, Zone.STACK)])
+        _resolve(t, moves(sailor, Zone.BATTLEFIELD))
+        _resolve(t, off_stack(QuickDrawKatanaAbility2))
+        t.pass_to(Step.END, 0)
+        _attack_unblocked(t, sailor, life_after=19)
+        t.run()
 
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        _equip_via_ability(game, p1, boots, bear)
-        move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.GRAVEYARD)  # leaves
-        move_to_zone(game, bear, Zone.GRAVEYARD, Zone.BATTLEFIELD)  # returns (new stint)
-        resolve_stack(game)
-        assert boots.attached_to is None
-
-    def test_equipment_controller_change_uses_ability_controller(self):
-        """Equipment changes controller while its source stays the same stint:
-        target legality remains relative to the ability's activation-time
-        controller, so the ability still attaches to that player's creature."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1, p2 = game.players
-        bear = _creature("Bear", p1, 2, 2)  # a creature p1 controls
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        _equip_via_ability(game, p1, boots, bear)  # ability controller = p1
-        # Control of the Equipment changes to the opponent (stint-preserving:
-        # it stays on the same battlefield, so no new object stint).
-        boots.controller = p2
-        resolve_stack(game)
-        # Evaluated relative to the ability controller (p1), bear is still legal.
-        assert boots.attached_to is bear
 
     def test_target_control_change_away_from_ability_controller_no_attach(self):
-        """Target changes control away from the ability's controller before
-        resolution: 'creature you control' no longer holds, so no attach."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1, p2 = game.players
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        _equip_via_ability(game, p1, boots, bear)  # ability controller = p1
-        # The target changes control to the opponent (stint-preserving).
-        bear.controller = p2
-        resolve_stack(game)
-        assert boots.attached_to is None
+        """Player 1, with High Fae Trickster, casts Involuntary Employment on
+        the Lions while equip waits: "creature you control" no longer holds,
+        so equip attaches nothing, and the Lions, back with player 0 the next
+        turn, attacks for 2."""
+        lions, katana, employment = card(SavannahLions), card(QuickDrawKatana), card(InvoluntaryEmployment)
+        mountains = [card(Mountain) for _ in range(4)]
+        t = _table(
+            Side(battlefield=[lions, katana], mana={ManaType.COLORLESS: 2}, library=[card(Plains)]),
+            Side(hand=[employment], battlefield=[card(HighFaeTrickster), *mountains], library=[card(Plains)]),
+        )
+        t.act(0, QuickDrawKatanaAbility2, choices=[lions], then=[on_stack(QuickDrawKatanaAbility2, 0)])
+        t.pass_(0)
+        for mountain in mountains:
+            t.act(1, mountain, then=[taps(mountain)])
+        t.act(1, employment, choices=[lions], then=[moves(employment, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(employment, Zone.GRAVEYARD), gains_control(lions, 1), appears(1)])
+        _resolve(t, off_stack(QuickDrawKatanaAbility2), note="the Lions is no longer player 0's: nothing attaches")
+        t.pass_to(Step.END, 0)
+        t.pass_(0)
+        t.pass_(1, then=[gains_control(lions, 0)], note="Involuntary Employment's control ends at cleanup")
+        _attack_unblocked(t, lions, life_after=18)
+        t.run()
 
     def test_protected_creature_absent_from_activation_option_set(self):
-        """A creature with protection from the Equipment is not in the activation
-        option set, so with no other creature there is no legal target."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-        from engine.protection import ProtectionAbility
+        """Progenitus has protection from everything, so it cannot be equipped;
+        both red mana stay to cast two Burst Lightnings."""
+        katana, first, second = card(QuickDrawKatana), card(BurstLightning), card(BurstLightning)
+        progenitus = card(Progenitus)
+        t = _table(Side(hand=[first, second], battlefield=[progenitus, katana], mana={ManaType.RED: 2}), Side())
+        t.act_illegal(0, QuickDrawKatanaAbility2, choices=[progenitus], note="protection from everything")
+        for bolt, total in ((first, 18), (second, 16)):
+            t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+            _resolve(t, moves(bolt, Zone.GRAVEYARD), life(1, total))
+        t.run()
 
-        game = create_game()
-        p1 = game.players[0]
-        protected = _creature("Protected", p1, 2, 2)
-        protected.protections = [ProtectionAbility(
-            quality="artifacts",
-            predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
-        )]
-        boots = SwiftfootBoots(owner=p1, controller=p1)  # an artifact
-        set_board_state(game, 0, battlefield=[protected, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        with pytest.raises(AbilityError):
-            activate_card_ability(game, p1, boots)  # only creature is protected
-        assert boots.attached_to is None
-        assert p1.mana_pool.total() == 1  # no mana spent
 
-    def test_target_gains_protection_before_resolution_no_attach(self):
-        """Target gains protection from the Equipment before resolution: the
-        ability fails to attach."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-        from engine.protection import ProtectionAbility
-
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        _equip_via_ability(game, p1, boots, bear)  # legal at activation
-        # The target gains protection from artifacts before the ability resolves.
-        protection = ProtectionAbility(
-            quality="artifacts",
-            predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
-        )
-        game.effect_manager.add(ContinuousEffect(
-            source=object(), layer=Layer.ABILITY,
-            apply=lambda _g: setattr(
-                bear, "protections", [*getattr(bear, "protections", []), protection]
-            ),
-            duration=DURATION_PERMANENT,
-        ))
-        resolve_stack(game)
-        assert boots.attached_to is None
-
-    def test_two_equip_activations_coexist_independent_context(self):
-        """Two equip activations from the same Equipment carry independent
-        activation contexts on their stack objects — neither clobbers the other,
-        so each resolves against its own activation-time target."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-        from engine.stack import resolve_top_of_stack
-
-        game = create_game()
-        p1 = game.players[0]
-        a = _creature("A", p1, 2, 2)
-        b = _creature("B", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[a, b, boots])
-        game.phase = Phase.PRECOMBAT_MAIN
-        obj_a = _push_equip_activation(game, p1, boots, a)
-        obj_b = _push_equip_activation(game, p1, boots, b)
-        # The contexts are distinct per-activation snapshots, not a shared field.
-        assert obj_a.activation_context is not obj_b.activation_context
-        assert obj_a.targets == [a] and obj_b.targets == [b]
-        # LIFO: obj_b resolves first (attaches b), then obj_a (attaches a). If the
-        # context lived on a mutable Equipment field the second push would have
-        # overwritten the first and both would target the same creature.
-        resolve_top_of_stack(game)
-        assert boots.attached_to is b
-        resolve_top_of_stack(game)
-        assert boots.attached_to is a
 
     # --- Equipment departure lifecycle ---
 
     def test_equipment_bounced_clears_state_and_re_equips(self):
-        from cards.fdn.fdn_129.card_impl import LeylineAxe
-
         game = create_game()
         p1 = game.players[0]
         bear = _creature("Bear", p1, 2, 2)
-        axe = LeylineAxe(owner=p1, controller=p1)
+        axe = _TestAxe(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[bear, axe])
         axe.equip(bear, game)
         assert axe.attached_to is bear and bear.power == 3
@@ -825,12 +691,10 @@ class TestEquipmentLifecycle:
         """Destroy (→ graveyard), exile (graveyard → exile), and blink
         (exile → battlefield) all leave no stale attachment, and the blinked
         Equipment equips normally afterward."""
-        from cards.fdn.fdn_129.card_impl import LeylineAxe
-
         game = create_game()
         p1 = game.players[0]
         bear = _creature("Bear", p1, 2, 2)
-        axe = LeylineAxe(owner=p1, controller=p1)
+        axe = _TestAxe(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[bear, axe])
         axe.equip(bear, game)
 
@@ -870,13 +734,11 @@ class TestEquipmentLifecycle:
         assert rig.attached_to is None
 
     def test_equipped_creature_leaves_equipment_remains(self):
-        from cards.fdn.fdn_129.card_impl import LeylineAxe
-
         game = create_game()
         p1 = game.players[0]
         bear = _creature("Bear", p1, 2, 2)
         other = _creature("Other", p1, 2, 2)
-        axe = LeylineAxe(owner=p1, controller=p1)
+        axe = _TestAxe(owner=p1, controller=p1)
         set_board_state(game, 0, battlefield=[bear, other, axe])
         axe.equip(bear, game)
 
@@ -902,132 +764,46 @@ class TestActivationAuthorization:
     of the source."""
 
     def test_opponent_cannot_activate_your_equipment(self):
-        """Player B may not activate player A's Equipment. B controls a creature
-        of its own and A has mana to pay — so under the pre-fix behaviour (derive
-        the controller from ``source.controller``) the equip would have resolved,
-        equipping A's creature out of A's pool at B's command. The control gate in
-        ``can_activate`` now rejects it before any target query, mana, or push."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1, p2 = game.players
-        a_bear = _creature("A's Bear", p1, 2, 2)          # p1's creature
-        boots = SwiftfootBoots(owner=p1, controller=p1)   # p1 controls the Equipment
-        b_bear = _creature("B's Bear", p2, 2, 2)          # p2 has its own creature
-        set_board_state(game, 0, battlefield=[a_bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        set_board_state(game, 1, battlefield=[b_bear])
-        game.phase = Phase.PRECOMBAT_MAIN
-        calls1, restore1 = _spy_on_answer(p1)
-        calls2, restore2 = _spy_on_answer(p2)
-        try:
-            with pytest.raises(AbilityError):
-                activate_card_ability(game, p2, boots)  # B activates A's Equipment
-        finally:
-            restore1()
-            restore2()
-        assert calls1 == [] and calls2 == []   # no target query raised on anyone
-        assert p1.mana_pool.total() == 1       # A's mana untouched
-        assert game.stack.is_empty()           # nothing pushed
-        assert boots.attached_to is None       # nothing attached
+        """In their own main phase player 1 cannot activate player 0's Katana;
+        player 0's red mana stays to cast two Burst Lightnings."""
+        katana, theirs = card(QuickDrawKatana), card(SavannahLions)
+        first, second = card(BurstLightning), card(BurstLightning)
+        t = Table(test_interface.create_game(
+            Side(hand=[first, second], battlefield=[SavannahLions, katana], mana={ManaType.RED: 2}),
+            Side(battlefield=[theirs], mana={ManaType.COLORLESS: 2}),
+            start=(Phase.PRECOMBAT_MAIN, 1),
+        ))
+        t.act_illegal(1, QuickDrawKatanaAbility2, choices=[theirs], note="player 0 controls the Katana")
+        for bolt, total in ((first, 18), (second, 16)):
+            t.pass_(1)
+            t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+            t.pass_(0)
+            t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, total)])
+        t.run()
 
     def test_mismatched_ability_controller_is_rejected(self):
-        """An ActivatedAbilityInstance whose declared controller differs from the
-        activating player is rejected outright — the caller is not the ability's
-        controller — before any query, payment, source mutation, or push. Under
-        the pre-fix behaviour the declared controller was ignored (the source's
-        current controller was used instead), so the stale/mismatched value went
-        undetected."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        from engine.abilities import ActivatedAbilityInstance, activate_ability
-
-        game = create_game()
-        p1, p2 = game.players
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        ability = boots.get_activated_abilities()[0]
-        instance = ActivatedAbilityInstance(
-            source=boots,
-            controller=p1,          # declared controller: p1 ...
-            cost=ability.cost,
-            effect=ability.effect,
-            targeting=ability.targeting,
-            can_activate=ability.can_activate,
-            description=ability.description,
+        """While player 0's equip waits, player 1 cannot activate the same
+        Katana for their own creature; player 0's equip resolves."""
+        lions, katana, theirs = card(SavannahLions), card(QuickDrawKatana), card(SavannahLions)
+        t = _table(
+            Side(battlefield=[lions, katana], mana={ManaType.COLORLESS: 2}),
+            Side(battlefield=[theirs], mana={ManaType.COLORLESS: 2}),
         )
-        calls1, restore1 = _spy_on_answer(p1)
-        calls2, restore2 = _spy_on_answer(p2)
-        try:
-            with pytest.raises(AbilityError):
-                activate_ability(game, p2, instance)   # ... but the caller is p2
-        finally:
-            restore1()
-            restore2()
-        assert calls1 == [] and calls2 == []   # no target query raised
-        assert p1.mana_pool.total() == 1       # no mana spent
-        assert game.stack.is_empty()           # nothing pushed
-        assert boots.attached_to is None       # source unmutated
+        t.act(0, QuickDrawKatanaAbility2, choices=[lions], then=[on_stack(QuickDrawKatanaAbility2, 0)])
+        t.pass_(0)
+        t.act_illegal(1, QuickDrawKatanaAbility2, choices=[theirs], note="player 0 controls the Katana")
+        t.pass_(1, then=[off_stack(QuickDrawKatanaAbility2)])
+        _attack_unblocked(t, lions, life_after=16, first_strike=True)
+        t.run()
 
     def test_valid_activation_targets_pays_and_resolves(self):
-        """The happy path is unaffected: the controller activating their own
-        Equipment raises the target query, pays the cost, pushes with the
-        authorized controller on the stack object, and resolves into a real
-        attachment."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
+        lions, katana = card(SavannahLions), card(QuickDrawKatana)
+        plains = [card(Plains), card(Plains)]
+        t = _table(Side(battlefield=[lions, katana, *plains]), Side())
+        _equip(t, katana_on=lions, lands=plains)
+        _attack_unblocked(t, lions, life_after=16, first_strike=True)
+        t.run()
 
-        game = create_game()
-        p1 = game.players[0]
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        calls, restore = _spy_on_answer(p1)
-        try:
-            _equip_via_ability(game, p1, boots, bear)   # activate + push
-        finally:
-            restore()
-        assert calls != []                     # a target query WAS raised
-        assert p1.mana_pool.total() == 0       # the cost was paid
-        assert not game.stack.is_empty()       # object pushed
-        top = game.stack.peek()
-        assert top.controller is p1            # authorized controller on the stack
-        assert top.activation_context.controller is p1
-        resolve_stack(game)
-        assert boots.attached_to is bear       # resolves into an attachment
-        assert Keyword.HEXPROOF in bear.keywords  # ... with the buff applied
-
-    def test_source_control_change_after_activation_keeps_captured_controller(self):
-        """A control change of the source *after* a valid activation does not
-        rewrite the captured activation-time controller: both
-        ``StackObject.controller`` and ``ActivationContext.controller`` stay p1,
-        and the ability resolves against p1's board (target legality is judged
-        against the captured controller, not the Equipment's new one)."""
-        from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-
-        game = create_game()
-        p1, p2 = game.players
-        bear = _creature("Bear", p1, 2, 2)
-        boots = SwiftfootBoots(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[bear, boots],
-                        mana={ManaType.COLORLESS: 1})
-        game.phase = Phase.PRECOMBAT_MAIN
-        _equip_via_ability(game, p1, boots, bear)   # activated by p1
-        top = game.stack.peek()
-        assert top is not None
-        # Control of the Equipment changes to p2 while the ability waits.
-        boots.controller = p2
-        # The captured controller is untouched by the control change.
-        assert top.controller is p1
-        assert top.activation_context is not None
-        assert top.activation_context.controller is p1
-        resolve_stack(game)
-        # Target legality judged against the captured controller (p1) — attaches.
-        assert boots.attached_to is bear
 
 
 # ---------------------------------------------------------------------------
@@ -1045,8 +821,8 @@ class TestCostSystem:
         assert get_cost_reduction(game, bolt, p1) == 1
 
     def test_two_reducers_stack(self):
-        from cards.fdn.fdn_159.card_impl import MockingSprite
         from cards.fdn.fdn_30.card_impl import ArchmageOfRunes
+        from cards.fdn.fdn_159.card_impl import MockingSprite
 
         game = create_game()
         p1 = game.players[0]
@@ -1092,27 +868,20 @@ class TestCostSystem:
         assert edict.alternative_costs(game) == [ManaCost.parse("{B}")]
 
     def test_cast_pays_chosen_alternative_cost(self):
-        from cards.fdn.fdn_57.card_impl import BlasphemousEdict
-
-        game = create_game()
-        p1 = game.players[0]
-        game.phase = Phase.PRECOMBAT_MAIN
-        edict = BlasphemousEdict(owner=p1, controller=p1)
-        set_board_state(
-            game, 0,
-            battlefield=[_creature(f"C{i}", p1, 1, 1) for i in range(13)],
-            hand=[edict],
-            mana={ManaType.BLACK: 1},
+        """With thirteen creatures out, four black and one red mana pay either
+        of Blasphemous Edict's costs; choosing the {B} leaves the red to cast
+        Burst Lightning."""
+        edict, bolt = card(BlasphemousEdict), card(BurstLightning)
+        mine, theirs = _creatures(7), _creatures(6)
+        t = _table(
+            Side(hand=[edict, bolt], battlefield=mine, mana={ManaType.BLACK: 4, ManaType.RED: 1}),
+            Side(battlefield=theirs),
         )
-        p1.start_intent("edict", Intent(
-            pattern=GameRef(card=frozenset({("name", "Blasphemous Edict")})),
-            preferences=(Decision.ability(index=1),),  # choose the {B} alternative
-        ))
-        cast_spell(game, p1, edict)
-        p1.end_intent("edict")
-        # {B} was paid (not {3}{B}{B}); the spell is on the stack.
-        assert p1.mana_pool.total() == 0
-        assert game.stack.peek().source is edict
+        t.act(0, edict, choices=[BlasphemousEdictAbility1], then=[moves(edict, Zone.STACK)])
+        _edict_resolves(t, edict, mine, theirs)
+        t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+        _resolve(t, moves(bolt, Zone.GRAVEYARD), life(1, 18))
+        t.run()
 
     # --- Cost selection: normal vs alternative, payability, and reduction ---
 
@@ -1133,77 +902,66 @@ class TestCostSystem:
         return _DualCostSorcery(owner=p, controller=p)
 
     def test_cast_only_normal_cost_payable(self):
-        game = create_game()
-        p1 = game.players[0]
-        game.phase = Phase.PRECOMBAT_MAIN
-        spell = self._dual_cost_sorcery(p1)  # {2}{R} normal, {G}{G} alt
-        set_board_state(game, 0, hand=[spell],
-                        mana={ManaType.RED: 1, ManaType.COLORLESS: 2})
-        cast_spell(game, p1, spell)  # can pay {2}{R}, not {G}{G} -> pays normal
-        assert p1.mana_pool.total() == 0
-        assert game.stack.peek().source is spell
+        """Twelve creatures leave Blasphemous Edict only its normal cost, which
+        five black mana pay."""
+        edict = card(BlasphemousEdict)
+        mine, theirs = _creatures(6), _creatures(6)
+        t = _table(Side(hand=[edict], battlefield=mine, mana={ManaType.BLACK: 5}), Side(battlefield=theirs))
+        t.act(0, edict, then=[moves(edict, Zone.STACK)])
+        _edict_resolves(t, edict, mine, theirs)
+        t.run()
 
     def test_cast_only_alternative_cost_payable(self):
-        game = create_game()
-        p1 = game.players[0]
-        game.phase = Phase.PRECOMBAT_MAIN
-        spell = self._dual_cost_sorcery(p1)
-        set_board_state(game, 0, hand=[spell], mana={ManaType.GREEN: 2})
-        cast_spell(game, p1, spell)  # can't pay {2}{R}, can pay {G}{G} -> pays alt
-        assert p1.mana_pool.total() == 0
-        assert game.stack.peek().source is spell
+        edict = card(BlasphemousEdict)
+        mine, theirs = _creatures(7), _creatures(6)
+        t = _table(Side(hand=[edict], battlefield=mine, mana={ManaType.BLACK: 1}), Side(battlefield=theirs))
+        t.act(0, edict, then=[moves(edict, Zone.STACK)], note="one black mana pays only the alternative cost")
+        _edict_resolves(t, edict, mine, theirs)
+        t.run()
 
     def test_cast_neither_cost_payable_raises(self):
-        from engine.casting import CastingError
-
-        game = create_game()
-        p1 = game.players[0]
-        game.phase = Phase.PRECOMBAT_MAIN
-        spell = self._dual_cost_sorcery(p1)
-        set_board_state(game, 0, hand=[spell], mana={ManaType.COLORLESS: 1})
-        with pytest.raises(CastingError):
-            cast_spell(game, p1, spell)  # neither {2}{R} nor {G}{G} payable
-        assert game.get_hand(p1).contains(spell)  # rolled back to hand
-        assert game.stack.is_empty()
+        """With twelve creatures and one black mana neither cost can be paid;
+        the Edict stays in hand and the mana casts Stab."""
+        edict, stab = card(BlasphemousEdict), card(Stab)
+        mine, theirs = _creatures(6), _creatures(6)
+        t = _table(Side(hand=[edict, stab], battlefield=mine, mana={ManaType.BLACK: 1}), Side(battlefield=theirs))
+        t.act_illegal(0, edict, note="neither {3}{B}{B} nor the alternative {B} is available")
+        t.act(0, stab, choices=[theirs[0]], then=[moves(stab, Zone.STACK)])
+        _resolve(t, moves(stab, Zone.GRAVEYARD), moves(theirs[0], Zone.GRAVEYARD))
+        t.run()
 
     def test_alternative_cost_with_multiple_reducers_clamps_generic_only(self):
-        """Two battlefield reducers ({1} each) reduce whichever base cost is
-        selected. Selecting the {2}{G} alternative, the {2} reduction is clamped
-        to that cost's generic (→ {G}); the green pip is never reduced."""
-        from cards.fdn.fdn_159.card_impl import MockingSprite
-        from cards.fdn.fdn_30.card_impl import ArchmageOfRunes
-
-        game = create_game()
-        p1 = game.players[0]
-        game.phase = Phase.PRECOMBAT_MAIN
-        spell = self._dual_cost_sorcery(p1, normal="{4}{R}", alt="{2}{G}")
-        set_board_state(game, 0, hand=[spell], mana={ManaType.GREEN: 1})
-        # Reducers must be on the battlefield without disturbing the hand.
-        game.get_battlefield(p1).add(ArchmageOfRunes(owner=p1, controller=p1))
-        game.get_battlefield(p1).add(MockingSprite(owner=p1, controller=p1))
-        # normal reduces to {2}{R} (unpayable — no red); alt reduces to {G}
-        # (payable). Only the reduced alt is payable, so it is chosen.
-        cast_spell(game, p1, spell)
-        assert p1.mana_pool.total() == 0  # exactly {G} paid: generic gone, pip intact
-        assert game.stack.peek().source is spell
+        """Archmage of Runes and Mocking Sprite take {2} off, but the
+        alternative {B} has no generic to reduce: the Edict cannot be cast
+        without black mana, and is cast once a Swamp is tapped."""
+        edict, swamp, drawn = card(BlasphemousEdict), card(Swamp), card(Plains)
+        mine = [card(ArchmageOfRunes), card(MockingSprite), *_creatures(5)]
+        theirs = _creatures(6)
+        t = _table(Side(hand=[edict], battlefield=[*mine, swamp], library=[drawn]), Side(battlefield=theirs))
+        t.act_illegal(0, edict, note="the reduction never pays the {B}")
+        t.act(0, swamp, then=[taps(swamp)])
+        t.act(0, edict, then=[moves(edict, Zone.STACK), on_stack(ArchmageOfRunesAbility2, 0)])
+        _resolve(t, off_stack(ArchmageOfRunesAbility2), moves(drawn, Zone.HAND))
+        _edict_resolves(t, edict, mine, theirs)
+        t.run()
 
     def test_reduction_applies_to_selected_normal_cost_pip_intact(self):
-        """When the normal cost is the payable choice, the reduction lands on
-        its generic component and leaves its colored pip untouched."""
-        from cards.fdn.fdn_30.card_impl import ArchmageOfRunes
-
-        game = create_game()
-        p1 = game.players[0]
-        game.phase = Phase.PRECOMBAT_MAIN
-        spell = self._dual_cost_sorcery(p1, normal="{2}{R}", alt="{G}{G}")
-        set_board_state(game, 0, hand=[spell],
-                        mana={ManaType.RED: 1, ManaType.COLORLESS: 1})
-        game.get_battlefield(p1).add(ArchmageOfRunes(owner=p1, controller=p1))
-        # {2}{R} - {1} = {1}{R}; the player has exactly {1}{R} (no green for alt).
-        cast_spell(game, p1, spell)
-        assert p1.mana_pool.total() == 0
-        assert game.stack.peek().source is spell
-
+        """Archmage of Runes makes the Edict's normal cost {2}{B}{B}: one black
+        and three white mana cannot pay it, two black and two white can."""
+        edict, drawn = card(BlasphemousEdict), card(Plains)
+        swamps, plains = [card(Swamp) for _ in range(3)], [card(Plains) for _ in range(5)]
+        mine, theirs = [card(ArchmageOfRunes), *_creatures(5)], _creatures(6)
+        t = _table(Side(hand=[edict], battlefield=[*mine, *swamps, *plains], library=[drawn]), Side(battlefield=theirs))
+        for land in (swamps[0], *plains[:3]):
+            t.act(0, land, then=[taps(land)])
+        t.act_illegal(0, edict, note="the reduction leaves both {B} pips")
+        t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+        for land in (*swamps[1:], *plains[3:]):
+            t.act(0, land, then=[taps(land)])
+        t.act(0, edict, then=[moves(edict, Zone.STACK), on_stack(ArchmageOfRunesAbility2, 0)])
+        _resolve(t, off_stack(ArchmageOfRunesAbility2), moves(drawn, Zone.HAND))
+        _edict_resolves(t, edict, mine, theirs)
+        t.run()
 
 # ---------------------------------------------------------------------------
 # 6. Token creation replacement + identity

@@ -13,7 +13,7 @@ enters-with-counters primitive (``enters_battlefield_with``) rather than
 from __future__ import annotations
 
 from cards.fdn.fdn_236.card_impl import WildwoodScourge
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.events import CounterAddedTriggeredEvent
 from engine.game import add_counter
 from engine.types import ManaCost, Zone
@@ -24,7 +24,7 @@ from test_utils import create_game, set_board_state
 class TestWildwoodScourgeProperties:
     def test_name_and_cost(self) -> None:
         card = WildwoodScourge(owner=None)
-        assert card.name == "Wildwood Scourge"
+        assert printed_class(card) is WildwoodScourge
         assert card.mana_cost == ManaCost.parse("{X}{G}")
 
     def test_enters_with_x_counters(self) -> None:

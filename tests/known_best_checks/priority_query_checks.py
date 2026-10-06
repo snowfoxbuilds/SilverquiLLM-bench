@@ -32,7 +32,6 @@ from engine.decisions import (
 )
 from engine.game import create_game as engine_create_game
 from engine.game import sacrifice
-from test_utils import DeterministicPlayer, Intent
 from engine.priority import grant_graveyard_cast, priority_query, take_priority
 from engine.queries import Answer, PlayerQuery, ask, is_priority_query, priority_pattern
 from engine.rollback import take_snapshot
@@ -41,7 +40,7 @@ from engine.triggers import TriggerRegistration
 from engine.turn import _do_cleanup_step, cleanup_mechanical
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 from engine.zones import move_to_zone
-from test_utils import create_game, resolve_stack, set_board_state
+from test_utils import DeterministicPlayer, Intent, create_game, resolve_stack, set_board_state
 
 
 class ScriptedPlayer(DeterministicPlayer):

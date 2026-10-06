@@ -1,11 +1,29 @@
 """Card implementation for Cat Collector."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from engine.card import Creature
-from engine.types import Color, Keyword, ManaCost
 from engine.events import GainsLifeTriggeredEvent
+from engine.types import Color, Keyword, ManaCost
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CatCollectorAbility1:
+    text = 'When this creature enters, create a Food token. (It\'s an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")'
+
+
+class CatCollectorAbility2:
+    text = 'Whenever you gain life for the first time during each of your turns, create a 1/1 white Cat creature token.'
+
+
+# endregion Printed abilities
+
 
 class CatCollector(Creature):
     """Cat Collector — {2}{W} — 3/2 — Human Citizen.
@@ -27,12 +45,10 @@ class CatCollector(Creature):
         kwargs.setdefault('rules_text', 'When this creature enters, create a Food token.\nWhenever you gain life for the first time during each of your turns, create a 1/1 white Cat creature token.')
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: 'GameState') -> None:
+    def _enters(self, game: 'GameState', controller: Any) -> None:
         """ETB: create a Food token."""
-        from engine.game import create_token
-
         from cards.fdn.tokens import make_food_token
-        controller = self.controller
+        from engine.game import create_token
         if controller is None:
             return
         create_token(game, controller, make_food_token())
@@ -40,6 +56,10 @@ class CatCollector(Creature):
     def register_triggers(self, game: 'GameState') -> None:
         """Register life-gain trigger: first life gain each of your turns
         creates a 1/1 Cat token."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, CatCollectorAbility1, self._enters)
+
         from engine.game import create_token
         from engine.triggers import TriggerRegistration
         source = self
@@ -60,13 +80,13 @@ class CatCollector(Creature):
                 return False
             return True
 
-        def _gain_life_effect(game: 'GameState') -> None:
+        def _gain_life_effect(game: 'GameState', controller: Any) -> None:
             """Create a 1/1 white Cat creature token."""
             from cards.fdn.tokens import make_creature_token
             source._cat_collector_last_triggered_turn = getattr(game, 'turn_number', 0)
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             token = make_creature_token('Cat', {'Cat'}, [Color.WHITE], 1, 1)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller, printed=CatCollectorAbility2))

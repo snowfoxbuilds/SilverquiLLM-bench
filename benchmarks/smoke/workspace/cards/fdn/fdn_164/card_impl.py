@@ -10,6 +10,25 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SpectralSailorAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class SpectralSailorAbility2:
+    text = 'Flying'
+
+
+class SpectralSailorAbility3:
+    text = '{3}{U}: Draw a card.'
+
+
+# endregion Printed abilities
+
+
 class SpectralSailor(Creature):
     """Spectral Sailor — {U} — 1/1 — Spirit Pirate
 
@@ -34,7 +53,6 @@ class SpectralSailor(Creature):
         super().__init__(**kwargs)
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             controller = src.controller
@@ -47,10 +65,9 @@ class SpectralSailor(Creature):
             controller.mana_pool.pay(ManaCost.parse("{3}{U}"))
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from engine.game import draw_card
 
-            controller = source.controller
             if controller is not None:
                 draw_card(game, controller)
 
@@ -58,4 +75,5 @@ class SpectralSailor(Creature):
             cost=_cost,
             effect=_effect,
             description="{3}{U}: Draw a card.",
+            printed=SpectralSailorAbility3,
         )]

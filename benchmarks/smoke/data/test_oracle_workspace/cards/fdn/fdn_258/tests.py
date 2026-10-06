@@ -7,7 +7,7 @@ canonical Equipment test shape.
 from __future__ import annotations
 
 from cards.fdn.fdn_258.card_impl import SwiftfootBoots
-from engine.card import Creature, Equipment
+from engine.card import Creature, Equipment, printed_class
 from engine.types import Keyword, ManaCost
 from test_utils import create_game, set_board_state
 
@@ -19,7 +19,7 @@ def _bear(p):
 class TestSwiftfootBootsProperties:
     def test_static_data(self):
         boots = SwiftfootBoots(owner=None)
-        assert boots.name == "Swiftfoot Boots"
+        assert printed_class(boots) is SwiftfootBoots
         assert boots.mana_cost == ManaCost.parse("{2}")
         assert boots.equip_cost == ManaCost.parse("{1}")
         assert isinstance(boots, Equipment) and boots.is_equipment is True

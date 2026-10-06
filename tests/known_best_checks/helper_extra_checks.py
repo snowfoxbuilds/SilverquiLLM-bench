@@ -15,13 +15,12 @@ Focus areas:
 from __future__ import annotations
 
 import pytest
-
 from engine.card import CardImpl, Creature, Instant, Sorcery
 from engine.decisions import GameRef
-from test_utils import DeterministicPlayer, Intent
-from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
-
+from engine.types import ManaCost, ManaType, Phase, Step
 from test_utils import (
+    DeterministicPlayer,
+    Intent,
     TestSetupError,
     advance_to_phase,
     cast_spell,
@@ -30,7 +29,6 @@ from test_utils import (
     declare_blockers,
     set_board_state,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,6 +51,25 @@ def _instant(name: str = "Zap") -> Instant:
         name=name,
         mana_cost=ManaCost(pips={ManaType.RED: 1}),
     )
+
+
+class SomeCard(CardImpl):
+    """A predefined class for a card in hand."""
+
+
+class MissingCard(CardImpl):
+    """A predefined class with no object in play."""
+
+
+class Bear(Creature):
+    """A predefined 2/2 creature."""
+
+    def __init__(self, **kwargs) -> None:
+        kwargs.setdefault("name", "Bear")
+        kwargs.setdefault("mana_cost", ManaCost(generic=1, pips={ManaType.GREEN: 1}))
+        kwargs.setdefault("base_power", 2)
+        kwargs.setdefault("base_toughness", 2)
+        super().__init__(**kwargs)
 
 
 def _sorcery(name: str = "Blaze") -> Sorcery:
@@ -213,10 +230,10 @@ class TestCastSpellExtra:
     def test_error_message_includes_hand_contents(self) -> None:
         """Error for missing card should list hand contents."""
         game = create_game()
-        card = CardImpl(name="SomeCard")
+        card = SomeCard(name="Some Card")
         set_board_state(game, 0, hand=[card])
-        with pytest.raises(TestSetupError, match="SomeCard") as exc_info:
-            cast_spell(game, 0, "MissingCard")
+        with pytest.raises(TestSetupError, match="MissingCard") as exc_info:
+            cast_spell(game, 0, MissingCard)
         # The error should mention what the hand contains
         assert "Hand contains:" in str(exc_info.value)
         assert "SomeCard" in str(exc_info.value)
@@ -226,7 +243,7 @@ class TestCastSpellExtra:
         game = create_game()
         blaze = _sorcery("Blaze")
         set_board_state(game, 0, hand=[blaze], mana={ManaType.RED: 1})
-        cast_spell(game, 0, "Blaze")
+        cast_spell(game, 0, blaze)
         gy = game.get_graveyard(game.players[0])
         assert gy.contains(blaze)
         hand = game.get_hand(game.players[0])
@@ -240,22 +257,22 @@ class TestCastSpellExtra:
         # Start at beginning phase
         game.phase = Phase.BEGINNING
         game.step = Step.UNTAP
-        cast_spell(game, 0, "Blaze")
+        cast_spell(game, 0, blaze)
         # After cast_spell, phase should have been adjusted
         gy = game.get_graveyard(game.players[0])
         assert gy.contains(blaze)
 
     def test_cast_with_first_matching_card(self) -> None:
-        """When multiple cards share a name, cast_spell should use the first match."""
+        """When several cards share a predefined class, cast_spell uses the first."""
         game = create_game()
-        bear1 = _bear("Bear")
-        bear2 = _bear("Bear")
+        bear1 = Bear()
+        bear2 = Bear()
         set_board_state(
             game, 0,
             hand=[bear1, bear2],
             mana={ManaType.GREEN: 1, ManaType.COLORLESS: 1},
         )
-        cast_spell(game, 0, "Bear")
+        cast_spell(game, 0, Bear)
         bf = game.get_battlefield(game.players[0])
         # The first bear should be on the battlefield
         assert bf.contains(bear1)
@@ -268,7 +285,7 @@ class TestCastSpellExtra:
         game = create_game()
         zap = _instant("Zap")
         set_board_state(game, 1, hand=[zap], mana={ManaType.RED: 1})
-        cast_spell(game, 1, "Zap")
+        cast_spell(game, 1, zap)
         gy = game.get_graveyard(game.players[1])
         assert gy.contains(zap)
 
@@ -354,13 +371,13 @@ class TestDeclareAttackersExtra:
     def test_error_message_lists_battlefield_contents(self) -> None:
         """Attacker-not-found error should list what IS on the battlefield."""
         game = create_game()
-        bear = _bear("ActualBear")
+        bear = Bear()
         bear.summoning_sick = False
         set_board_state(game, 0, battlefield=[bear])
         game.active_player_index = 0
         with pytest.raises(TestSetupError, match="Battlefield contains:") as exc_info:
-            declare_attackers(game, ["Phantom"])
-        assert "ActualBear" in str(exc_info.value)
+            declare_attackers(game, [MissingCard])
+        assert "Bear" in str(exc_info.value)
 
     def test_declare_attackers_requires_deterministic_player(self) -> None:
         """If active player is not a DeterministicPlayer, should error."""
@@ -373,7 +390,7 @@ class TestDeclareAttackersExtra:
         set_board_state(game, 0, battlefield=[bear])
         game.active_player_index = 0
         # Should not raise - active player IS a DeterministicPlayer
-        declare_attackers(game, ["TestBear"])
+        declare_attackers(game, [bear])
         assert bear.is_attacking
 
 
@@ -390,24 +407,24 @@ class TestDeclareBlockersExtra:
         game = create_game()
         attacker = _bear("Attacker")
         attacker.summoning_sick = False
-        defender = _bear("RealDefender")
+        defender = Bear()
         defender.summoning_sick = False
 
         set_board_state(game, 0, battlefield=[attacker])
         set_board_state(game, 1, battlefield=[defender])
         game.active_player_index = 0
 
-        declare_attackers(game, ["Attacker"])
+        declare_attackers(game, [attacker])
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
 
         with pytest.raises(TestSetupError, match="not found on defending") as exc_info:
-            declare_blockers(game, {"Attacker": ["NonExistent"]})
-        assert "RealDefender" in str(exc_info.value)
+            declare_blockers(game, {attacker: [MissingCard]})
+        assert "Bear" in str(exc_info.value)
 
     def test_attacker_error_message_lists_active_battlefield(self) -> None:
         """Attacker-not-found in blockers should list active player's battlefield."""
         game = create_game()
-        attacker = _bear("RealAttacker")
+        attacker = Bear()
         attacker.summoning_sick = False
         blocker = _bear("Blocker")
         blocker.summoning_sick = False
@@ -416,12 +433,12 @@ class TestDeclareBlockersExtra:
         set_board_state(game, 1, battlefield=[blocker])
         game.active_player_index = 0
 
-        declare_attackers(game, ["RealAttacker"])
+        declare_attackers(game, [attacker])
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
 
         with pytest.raises(TestSetupError, match="not found on active") as exc_info:
-            declare_blockers(game, {"WrongAttacker": ["Blocker"]})
-        assert "RealAttacker" in str(exc_info.value)
+            declare_blockers(game, {MissingCard: [blocker]})
+        assert "Bear" in str(exc_info.value)
 
     def test_multiple_blockers_on_one_attacker(self) -> None:
         """Multiple creatures should be able to block a single attacker."""
@@ -445,9 +462,9 @@ class TestDeclareBlockersExtra:
         assert isinstance(p0, DeterministicPlayer)
         p0.set_baseline(Intent(pattern=GameRef()))
 
-        declare_attackers(game, ["Attacker"])
+        declare_attackers(game, [attacker])
         advance_to_phase(game, Phase.COMBAT, Step.DECLARE_BLOCKERS)
-        declare_blockers(game, {"Attacker": ["Blocker1", "Blocker2"]})
+        declare_blockers(game, {attacker: [blocker1, blocker2]})
         assert blocker1.is_blocking
         assert blocker2.is_blocking
 
@@ -472,13 +489,13 @@ class TestMetaIntegrationExtra:
         )
 
         # Cast the instant first
-        cast_spell(game, 0, "Zap")
+        cast_spell(game, 0, zap)
         gy = game.get_graveyard(game.players[0])
         assert gy.contains(zap)
 
         # Now cast the creature (need to re-add mana since it may have been used)
         set_board_state(game, 0, mana={ManaType.GREEN: 1, ManaType.COLORLESS: 1})
-        cast_spell(game, 0, "Bear")
+        cast_spell(game, 0, bear)
         bf = game.get_battlefield(game.players[0])
         assert bf.contains(bear)
 
@@ -525,7 +542,7 @@ class TestMetaIntegrationExtra:
             life=18,
         )
 
-        cast_spell(game, 0, "WorkflowBear")
+        cast_spell(game, 0, bear)
         bf = game.get_battlefield(game.players[0])
         assert bf.contains(bear)
 
@@ -546,7 +563,7 @@ class TestMetaIntegrationExtra:
             mana={ManaType.GREEN: 1, ManaType.COLORLESS: 1},
         )
 
-        cast_spell(game, 0, "CombatBear")
+        cast_spell(game, 0, bear)
         bf = game.get_battlefield(game.players[0])
         assert bf.contains(bear)
 
@@ -554,5 +571,5 @@ class TestMetaIntegrationExtra:
         bear.summoning_sick = False
         game.active_player_index = 0
 
-        declare_attackers(game, ["CombatBear"])
+        declare_attackers(game, [bear])
         assert bear.is_attacking

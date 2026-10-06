@@ -1,11 +1,14 @@
 """Card implementation for Dreadwing Scavenger."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from engine.card import Creature
 from engine.card_queries import choose_object
-from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import Keyword, ManaCost, Zone
+from engine.continuous_effects import DURATION_PERMANENT, ContinuousEffect, Layer, SubLayer
 from engine.events import AttacksTriggeredEvent
+from engine.types import Keyword, ManaCost, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -58,10 +61,9 @@ class DreadwingScavenger(Creature):
         super().__init__(**kwargs)
         self._threshold_effect_ref: ContinuousEffect | None = None
 
-    def on_resolve(self, game: 'GameState') -> None:
+    def _enters(self, game: 'GameState', controller: Any) -> None:
         """ETB: draw a card, then discard a card."""
-        from engine.game import draw_card, discard
-        controller = self.controller
+        from engine.game import discard, draw_card
         if controller is None:
             return
         draw_card(game, controller)
@@ -73,7 +75,11 @@ class DreadwingScavenger(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger (loot) and threshold continuous effect."""
-        from engine.game import draw_card, discard
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, DreadwingScavengerAbility2, self._enters)
+
+        from engine.game import discard, draw_card
         from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player

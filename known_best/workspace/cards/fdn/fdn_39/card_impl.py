@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
 from engine.events import EntersBattlefieldTriggeredEvent
-from engine.types import CardType, ManaCost
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -52,9 +52,9 @@ class GrapplingKraken(Creature):
 
     def register_triggers(self, game: "GameState") -> None:
         """Register the landfall trigger: tap + stun an opponent's creature."""
-        from engine.card_queries import choose_object
         from engine.game import add_counter, tap
-        from engine.triggers import TriggerRegistration
+        from engine.stack import stint_checked_targets
+        from engine.triggers import TriggerRegistration, choose_trigger_targets
 
         source = self
 
@@ -72,31 +72,21 @@ class GrapplingKraken(Creature):
                 return game.get_battlefield(ctrl).contains(permanent)
             return perm_ctrl is ctrl
 
-        def _landfall_effect(game: "GameState", controller: Any) -> None:
-            ctrl = controller
-            if ctrl is None:
-                return
-            candidates = [
-                obj
-                for player in game.players
-                if player is not ctrl
-                for obj in game.get_battlefield(player).get_all()
-                if CardType.CREATURE in getattr(obj, "card_types", set())
-            ]
-            if not candidates:
-                return
-            target = choose_object(
-                game,
-                ctrl,
-                candidates,
-                "tap target creature an opponent controls",
-                source_card=source,
-            )
-            if target is None:
-                return
-            # Tap via the engine helper so tap-triggered machinery can fire.
-            tap(game, target)
-            add_counter(game, target, "stun", 1)
+        def _opponent_creature(game: Any, event: Any, controller: Any) -> list[Any] | None:
+            def _legal(obj: Any) -> bool:
+                return CardType.CREATURE in getattr(obj, "card_types", set()) and getattr(obj, "controller", None) is not controller
+
+            return choose_trigger_targets(game, controller, source, [
+                TargetRequirement(filter_fn=_legal, description="tap target creature an opponent controls", zone=Zone.BATTLEFIELD)
+            ])
+
+        def _landfall_effect(game: "GameState", targets: list[Any], context: Any) -> None:
+            for target in stint_checked_targets(game, context, targets):
+                if target is None or getattr(target, "controller", None) is context.controller:
+                    continue
+                # Tap via the engine helper so tap-triggered machinery can fire.
+                tap(game, target)
+                add_counter(game, target, "stun", 1)
 
         controller = getattr(self, "controller", None) or game.active_player
         game.trigger_manager.register(
@@ -106,6 +96,7 @@ class GrapplingKraken(Creature):
                 effect=_landfall_effect,
                 source=self,
                 controller=controller,
+                targeting=_opponent_creature,
                 printed=GrapplingKrakenAbility1,
             )
         )

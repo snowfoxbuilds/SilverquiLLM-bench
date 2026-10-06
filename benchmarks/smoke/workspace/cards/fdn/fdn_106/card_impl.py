@@ -8,6 +8,21 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class LootExuberantExplorerAbility1:
+    text = 'You may play an additional land on each of your turns.'
+
+
+class LootExuberantExplorerAbility2:
+    text = '{4}{G}{G}, {T}: Look at the top six cards of your library. You may reveal a creature card with mana value less than or equal to the number of lands you control from among them and put it onto the battlefield. Put the rest on the bottom in a random order.'
+
+
+# endregion Printed abilities
+
+
 class LootExuberantExplorer(Creature):
     """Loot, Exuberant Explorer — {2}{G} — 1/4 — Legendary Beast Noble.
 
@@ -56,9 +71,9 @@ class LootExuberantExplorer(Creature):
             src.is_tapped = True
             return True
 
-        def _effect(game: Any) -> None:
+        def _effect(game: Any, controller: Any) -> None:
             from engine.game import create_token, move_to_zone
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             library = ctrl.zones[Zone.LIBRARY]
@@ -84,4 +99,4 @@ class LootExuberantExplorer(Creature):
             rest[:] = game.shuffle(rest)
             for card in rest:
                 library.add(card, position='bottom')
-        return [ActivatedAbility(cost=_cost, effect=_effect, description='{4}{G}{G}, {T}: Look at top six, put creature onto battlefield.')]
+        return [ActivatedAbility(cost=_cost, effect=_effect, description='{4}{G}{G}, {T}: Look at top six, put creature onto battlefield.', printed=LootExuberantExplorerAbility2)]

@@ -9,6 +9,21 @@ from engine.types import ManaCost, Supertype, Zone
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ProgenitusAbility1:
+    text = 'Protection from everything'
+
+
+class ProgenitusAbility2:
+    text = "If Progenitus would be put into a graveyard from anywhere, reveal Progenitus and shuffle it into its owner's library instead."
+
+
+# endregion Printed abilities
+
+
 class Progenitus(Creature):
     """Progenitus — {W}{W}{U}{U}{B}{B}{R}{R}{G}{G} — 10/10 — Legendary Hydra Avatar.
 
@@ -52,13 +67,13 @@ class Progenitus(Creature):
         def _condition(game: Any, event: dict) -> bool:
             return event.card is source
 
-        def _replacement(game: Any, event: dict) -> dict:
+        def _replacement(game: Any, event: Any) -> Any:
             owner = getattr(source, 'owner', None)
             if owner is not None:
                 library = owner.zones[Zone.LIBRARY]
                 library.add(source)
-                library.shuffle(game)
+                library.shuffle()
             event.prevented = True
             return event
         controller = getattr(self, 'controller', None)
-        game.replacement_manager.register(ReplacementEffect(event_type=MoveToGraveyardReplacementEvent, source=self, condition=_condition, replacement=_replacement, controller=controller))
+        game.replacement_manager.register(ReplacementEffect(event_type=MoveToGraveyardReplacementEvent, source=self, condition=_condition, replacement=_replacement, controller=controller, printed=ProgenitusAbility2))

@@ -9,11 +9,22 @@ from engine.continuous_effects import (
     ContinuousEffect,
     DURATION_END_OF_TURN,
     Layer,
+    set_controller,
 )
 from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class InvoluntaryEmploymentAbility1:
+    text = 'Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. Create a Treasure token. (It\'s an artifact with "{T}, Sacrifice this token: Add one mana of any color.")'
+
+
+# endregion Printed abilities
 
 
 class InvoluntaryEmployment(Sorcery):
@@ -67,19 +78,17 @@ class InvoluntaryEmployment(Sorcery):
 
         controller = self.controller
         creature_ref = target
-        original_controller = getattr(target, "controller", None)
 
-        # Gain control until end of turn via continuous effect only.
-        # We do NOT set target.controller directly — the continuous
-        # effect layer is authoritative and will be cleaned up at EOT,
-        # restoring the original controller.
+        # Gain control until end of turn: the effect manager restores the
+        # previous controller once the effect is gone.
         def _apply_control(game: Any) -> None:
-            creature_ref.controller = controller
+            set_controller(creature_ref, controller)
 
         game.effect_manager.add(ContinuousEffect(
             source=self,
             layer=Layer.CONTROL,
             sublayer=None,
+            bound_to=[creature_ref],
             apply=_apply_control,
             duration=DURATION_END_OF_TURN,
         ))
@@ -100,6 +109,7 @@ class InvoluntaryEmployment(Sorcery):
             source=self,
             layer=Layer.ABILITY,
             sublayer=None,
+            bound_to=[creature_ref],
             apply=_apply_haste,
             duration=DURATION_END_OF_TURN,
         ))

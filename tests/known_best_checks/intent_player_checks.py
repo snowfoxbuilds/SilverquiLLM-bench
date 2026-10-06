@@ -8,7 +8,7 @@ queries, postconditions, and the query transcript.
 from __future__ import annotations
 
 import pytest
-
+from cards.fdn.fdn_215.card_impl import Bushwhack
 from engine.decisions import (
     AmbiguousIntentError,
     Decision,
@@ -17,12 +17,24 @@ from engine.decisions import (
     PostconditionError,
     UnmatchedQueryError,
 )
-from test_utils import DeterministicPlayer, Intent
 from engine.queries import PlayerQuery
+from test_utils import DeterministicPlayer, Intent
 
 
-def _card_source(name: str):
-    return Decision.obj(ref=GameRef(card=frozenset({("name", name)})))
+class OtherCard:
+    """A printed identity no intent routes to."""
+
+
+class AnyCard:
+    """A printed identity only the Baseline Intent answers for."""
+
+
+class C:
+    """A printed identity for postcondition tests."""
+
+
+def _card_source(printed: type):
+    return Decision.obj(ref=GameRef(card=frozenset({("printed", printed)})))
 
 
 def _obj_option(instance: int, **attrs):
@@ -30,9 +42,9 @@ def _obj_option(instance: int, **attrs):
                         instance=instance, **attrs)
 
 
-def _query(source_name, options, *, min=1, max=1):
+def _query(source, options, *, min=1, max=1):
     return PlayerQuery(
-        source=(_card_source(source_name),),
+        source=(_card_source(source),),
         prompt="?",
         options=tuple(options),
         min=min,
@@ -44,47 +56,47 @@ class TestRouting:
     def test_card_intent_routes_and_preference_selects(self):
         p = DeterministicPlayer("P0")
         p.start_intent("strike", Intent(
-            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            pattern=GameRef(card=frozenset({("printed", Bushwhack)})),
             preferences=(Decision.obj(color="R"),),
         ))
         red = _obj_option(1, color="R")
         green = _obj_option(2, color="G")
-        ans = p.answer(_query("Bushwhack", [green, red]))
+        ans = p.answer(_query(Bushwhack, [green, red]))
         assert ans.selected == (red,)
 
     def test_unmatched_query_with_no_baseline_raises(self):
         p = DeterministicPlayer("P0")
         p.start_intent("strike", Intent(
-            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            pattern=GameRef(card=frozenset({("printed", Bushwhack)})),
             preferences=(Decision.yes(),),
         ))
         with pytest.raises(UnmatchedQueryError):
-            p.answer(_query("OtherCard", [Decision.yes(), Decision.no()]))
+            p.answer(_query(OtherCard, [Decision.yes(), Decision.no()]))
 
     def test_two_matching_intents_is_ambiguous(self):
         p = DeterministicPlayer("P0")
-        pattern = GameRef(card=frozenset({("name", "Bushwhack")}))
+        pattern = GameRef(card=frozenset({("printed", Bushwhack)}))
         p.start_intent("a", Intent(pattern=pattern, preferences=(Decision.yes(),)))
         p.start_intent("b", Intent(pattern=pattern, preferences=(Decision.no(),)))
         with pytest.raises(AmbiguousIntentError):
-            p.answer(_query("Bushwhack", [Decision.yes(), Decision.no()]))
+            p.answer(_query(Bushwhack, [Decision.yes(), Decision.no()]))
 
 
 class TestBaseline:
     def test_baseline_used_when_no_card_intent_matches(self):
         p = DeterministicPlayer("P0")
         p.set_baseline(Intent(pattern=GameRef(), preferences=(Decision.no(),)))
-        ans = p.answer(_query("AnyCard", [Decision.yes(), Decision.no()]))
+        ans = p.answer(_query(AnyCard, [Decision.yes(), Decision.no()]))
         assert ans.selected == (Decision.no(),)
 
     def test_card_intent_takes_precedence_over_baseline(self):
         p = DeterministicPlayer("P0")
         p.set_baseline(Intent(pattern=GameRef(), preferences=(Decision.no(),)))
         p.start_intent("yes", Intent(
-            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            pattern=GameRef(card=frozenset({("printed", Bushwhack)})),
             preferences=(Decision.yes(),),
         ))
-        ans = p.answer(_query("Bushwhack", [Decision.yes(), Decision.no()]))
+        ans = p.answer(_query(Bushwhack, [Decision.yes(), Decision.no()]))
         assert ans.selected == (Decision.yes(),)
 
 
@@ -92,7 +104,7 @@ class TestDeclineAndOrdering:
     def test_decline_when_min_zero_and_no_preference_matches(self):
         p = DeterministicPlayer("P0")
         p.set_baseline(Intent(pattern=GameRef(), preferences=()))
-        q = _query("AnyCard", [_obj_option(1, color="R")], min=0, max=1)
+        q = _query(AnyCard, [_obj_option(1, color="R")], min=0, max=1)
         ans = p.answer(q)
         assert ans.selected == ()
 
@@ -106,7 +118,7 @@ class TestDeclineAndOrdering:
             preferences=(Decision.obj(color="W"), Decision.obj(color="G")),
         ))
         # ordering query: min == max == len; preferences W,G come first, R fills.
-        q = _query("AnyCard", [a, b, c], min=3, max=3)
+        q = _query(AnyCard, [a, b, c], min=3, max=3)
         ans = p.answer(q)
         assert ans.selected == (c, b, a)
 
@@ -115,7 +127,7 @@ class TestPostcondition:
     def test_passing_postcondition_is_ok(self):
         p = DeterministicPlayer("P0")
         p.start_intent("x", Intent(
-            pattern=GameRef(card=frozenset({("name", "C")})),
+            pattern=GameRef(card=frozenset({("printed", C)})),
             preferences=(Decision.yes(),),
             postcondition=lambda g: True,
         ))
@@ -124,7 +136,7 @@ class TestPostcondition:
     def test_failing_postcondition_raises(self):
         p = DeterministicPlayer("P0")
         p.start_intent("x", Intent(
-            pattern=GameRef(card=frozenset({("name", "C")})),
+            pattern=GameRef(card=frozenset({("printed", C)})),
             preferences=(Decision.yes(),),
             postcondition=lambda g: False,
         ))
@@ -136,8 +148,8 @@ class TestTranscript:
     def test_transcript_logs_queries_filterable_by_kind(self):
         p = DeterministicPlayer("P0")
         p.set_baseline(Intent(pattern=GameRef(), preferences=()))
-        p.answer(_query("C", [Decision.yes(), Decision.no()]))  # BOOL
-        p.answer(_query("C", [_obj_option(1, color="R")]))       # OBJECT
+        p.answer(_query(C, [Decision.yes(), Decision.no()]))  # BOOL
+        p.answer(_query(C, [_obj_option(1, color="R")]))       # OBJECT
         object_queries = p.transcript.queries(kind=DecisionKind.OBJECT)
         assert len(object_queries) == 1
         assert any(("color", "R") in opt.attrs for opt in object_queries[-1].options)
@@ -150,37 +162,37 @@ class TestPreferenceMiss:
         # as a probable wrong option set or typo'd preference.
         p = DeterministicPlayer("P0")
         p.start_intent("strike", Intent(
-            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            pattern=GameRef(card=frozenset({("printed", Bushwhack)})),
             preferences=(Decision.obj(color="B"),),  # not offered
         ))
-        ans = p.answer(_query("Bushwhack", [_obj_option(1, color="R")]))
+        ans = p.answer(_query(Bushwhack, [_obj_option(1, color="R")]))
         assert ans.selected == (_obj_option(1, color="R"),)  # filled, not chosen
         assert p.transcript.all()[-1].preference_miss is True
 
     def test_card_intent_with_matching_preference_is_not_flagged(self):
         p = DeterministicPlayer("P0")
         p.start_intent("strike", Intent(
-            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            pattern=GameRef(card=frozenset({("printed", Bushwhack)})),
             preferences=(Decision.obj(color="R"),),
         ))
-        p.answer(_query("Bushwhack", [_obj_option(1, color="R")]))
+        p.answer(_query(Bushwhack, [_obj_option(1, color="R")]))
         assert p.transcript.all()[-1].preference_miss is False
 
     def test_baseline_fill_is_never_flagged(self):
         # First-offered fill is the baseline's job, not a miss.
         p = DeterministicPlayer("P0")
         p.set_baseline(Intent(pattern=GameRef(), preferences=()))
-        p.answer(_query("C", [Decision.yes(), Decision.no()]))
+        p.answer(_query(C, [Decision.yes(), Decision.no()]))
         assert p.transcript.all()[-1].preference_miss is False
 
     def test_decline_on_min_zero_is_not_flagged(self):
         # min == 0 with no preference match is a legal decline, not a miss.
         p = DeterministicPlayer("P0")
         p.start_intent("strike", Intent(
-            pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+            pattern=GameRef(card=frozenset({("printed", Bushwhack)})),
             preferences=(Decision.obj(color="B"),),
         ))
-        ans = p.answer(_query("Bushwhack", [_obj_option(1, color="R")],
+        ans = p.answer(_query(Bushwhack, [_obj_option(1, color="R")],
                               min=0, max=1))
         assert ans.selected == ()
         assert p.transcript.all()[-1].preference_miss is False

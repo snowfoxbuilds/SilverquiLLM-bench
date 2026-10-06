@@ -45,7 +45,7 @@ class TestArahboSelfETB:
             game, 0, hand=[arahbo],
             mana={ManaType.WHITE: 1, ManaType.COLORLESS: 2},
         )
-        cast_spell(game, 0, "Arahbo, the First Fang")
+        cast_spell(game, 0, ArahboTheFirstFang)
         bf = game.players[0].zones[Zone.BATTLEFIELD]
         assert bf.contains(arahbo)
         assert len(_cat_tokens(game, 0)) == 1
@@ -61,7 +61,7 @@ class TestArahboSelfETB:
             game, 0, hand=[arahbo],
             mana={ManaType.WHITE: 1, ManaType.COLORLESS: 2},
         )
-        cast_spell(game, 0, "Arahbo, the First Fang")
+        cast_spell(game, 0, ArahboTheFirstFang)
         cats = _cat_tokens(game, 0)
         assert len(cats) == 1
         cat = cats[0]

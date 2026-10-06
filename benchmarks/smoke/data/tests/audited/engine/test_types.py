@@ -155,8 +155,8 @@ class TestStep:
     def test_member_exists(self, name: str) -> None:
         assert name in Step.__members__
 
-    def test_exactly_ten_members(self) -> None:
-        assert len(Step) == 10
+    def test_exactly_eleven_members(self) -> None:
+        assert len(Step) == 11
 
     def test_none_is_valid_for_main_phase_steps(self) -> None:
         """The spec says Step is None for main phases; verify None is a valid value."""

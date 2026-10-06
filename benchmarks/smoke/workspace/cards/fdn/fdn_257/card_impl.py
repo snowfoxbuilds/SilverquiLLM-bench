@@ -9,6 +9,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SolemnSimulacrumAbility1:
+    text = 'When this creature enters, you may search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.'
+
+
+class SolemnSimulacrumAbility2:
+    text = 'When this creature dies, you may draw a card.'
+
+
+# endregion Printed abilities
+
+
 def _self_dies_condition(source: Any):
     """Return a condition callable that matches only when *source* dies."""
 
@@ -47,8 +62,7 @@ class SolemnSimulacrum(ArtifactCreature):
         from engine.game import draw_card
         source = self
 
-        def _etb_effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
+        def _etb_effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]
@@ -66,10 +80,11 @@ class SolemnSimulacrum(ArtifactCreature):
             bf.add(chosen)
             library.shuffle(game)
 
-        def _dies_effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
+        def _dies_effect(game: GameState, controller: Any) -> None:
+            # The fire-time controller: as the source last existed if it died
+            # (rules 603.3a, 603.10a).
             if controller is not None:
                 draw_card(game, controller)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_etb_effect, source=self, controller=controller))
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_dies_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_etb_effect, source=self, controller=controller, printed=SolemnSimulacrumAbility1))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_dies_effect, source=self, controller=controller, printed=SolemnSimulacrumAbility2))

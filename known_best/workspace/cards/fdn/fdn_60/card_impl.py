@@ -52,11 +52,19 @@ class GutlessPlunderer(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        def _condition(game: Any, controller: Any) -> bool:
+            return bool(getattr(controller, "attacked_this_turn", False))
+
+        register_enters_trigger(game, self, GutlessPlundererAbility2, self._enters, condition=_condition)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB with Raid: look at top 3, keep one on top, rest to graveyard."""
         from engine.zones import move_to_zone
 
-        controller = self.controller
         if controller is None:
             return
 

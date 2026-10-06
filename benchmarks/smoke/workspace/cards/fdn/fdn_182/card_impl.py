@@ -10,6 +10,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ReassemblingSkeletonAbility1:
+    text = '{1}{B}: Return this card from your graveyard to the battlefield tapped.'
+
+
+# endregion Printed abilities
+
+
 class ReassemblingSkeleton(Creature):
     """Reassembling Skeleton — {1}{B} — 1/1 — Skeleton Warrior
 
@@ -82,4 +93,5 @@ class ReassemblingSkeleton(Creature):
             effect=_effect,
             description="{1}{B}: Return this card from your graveyard to "
             "the battlefield tapped.",
+            printed=ReassemblingSkeletonAbility1,
         )]

@@ -10,6 +10,7 @@ from typing import Any
 
 from engine.combat import CombatState
 from engine.continuous_effects import EffectManager
+from engine.last_known import LastKnownInformation
 from engine.player import Player
 from engine.refs_registry import GameRefsRegistry
 from engine.replacement_effects import ReplacementManager
@@ -30,6 +31,7 @@ _TURN_SEQUENCE: list[tuple[Phase, Step | None]] = [
     (Phase.COMBAT, Step.BEGIN_COMBAT),
     (Phase.COMBAT, Step.DECLARE_ATTACKERS),
     (Phase.COMBAT, Step.DECLARE_BLOCKERS),
+    (Phase.COMBAT, Step.FIRST_STRIKE_DAMAGE),
     (Phase.COMBAT, Step.COMBAT_DAMAGE),
     (Phase.COMBAT, Step.END_COMBAT),
     # Postcombat main phase
@@ -141,9 +143,22 @@ class GameState:
         # normal rotation.  When extras are exhausted the game picks up
         # from _normal_next_index.
         self._normal_next_index: int = 1
+        # Each object's snapshot from its most recent departure from the
+        # battlefield, keyed by ``object_id`` (see engine.last_known).
+        self.last_known: dict[int, LastKnownInformation] = {}
+        # Each battlefield stint's departure snapshot, keyed by the stint's
+        # instance id; never overwritten (see engine.last_known.as_it_exists).
+        self.last_known_by_stint: dict[int, LastKnownInformation] = {}
+        # Whether a creature died this turn (morbid, rule 700.4); cleared in
+        # the cleanup step.
+        self.creature_died_this_turn: bool = False
+        # Cards holding a "cast it from your graveyard this turn" grant; cleanup ends them.
+        self.graveyard_cast_grants: list[Any] = []
         # Every token put onto the battlefield, in creation order, departed
         # ones included; a rollback undoes the tokens a rejected attempt made.
         self.created_tokens: list[Any] = []
+        # Every copy of a spell made, in creation order, likewise.
+        self.created_copies: list[Any] = []
 
     # ------------------------------------------------------------------
     # Player properties
@@ -245,16 +260,17 @@ class GameState:
             # End of turn — wrap around.
             self.turn_number += 1
             if self.extra_turns:
-                # ENGINE LIMITATION: Extra turns queue (FIFO). Pop the
-                # next player seat index; that player gets the next turn.
-                # Normal rotation is NOT advanced — extra turns are
-                # inserted before the normal next turn.
-                self.active_player_index = self.extra_turns.pop(0)
+                # The most recently created extra turn is taken first
+                # (rule 500.7). Normal rotation is NOT advanced — extra
+                # turns are inserted before the normal next turn.
+                self.active_player_index = self.extra_turns.pop()
             else:
                 self.active_player_index = self._normal_next_index
                 self._normal_next_index = 1 - self._normal_next_index
             self.phase = _TURN_SEQUENCE[0][0]
             self.step = _TURN_SEQUENCE[0][1]
+            for player in self.players:
+                player.attacked_this_turn = False
 
             # The active player has changed. Re-derive continuous effects so a
             # turn-dependent buff ("during your turn ...", e.g. Quick-Draw

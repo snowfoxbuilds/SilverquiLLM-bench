@@ -18,18 +18,40 @@ The engine may have deficiencies and bugs, and so may the existing tests. It's y
 implementations behave correctly according to the rules in `RULEBOOK.txt`, and
 that your changes don't break existing cards.
 
-Card choices go through the **Player Query / Player Decision** protocol: an
-implementation that needs a choice raises a Player Query through the engine's
-query machinery (it never calls a player `choose_*` method — there is none).
-Tests answer those queries with **Intents** (see `test_utils.md`).
+Every choice a player makes goes through the **Player Query / Player
+Decision** protocol: the engine offers the options and the player picks
+among them. An implementation that needs a choice raises a Player Query
+through the engine's query machinery (it never calls a player `choose_*`
+method — there is none).
+
+- **This is how the game runs.** When a player receives priority, the engine
+  raises a **Priority Query** offering the choices a real player could make at
+  that moment: casting a spell or playing a land is an OBJECT option, activating
+  an ability (mana and loyalty abilities included) is an ABILITY option, and
+  declining passes priority. The engine carries out the chosen action.
+  Declaring attackers and blockers are Player Queries too.
+- **Predefined classes.** Every card and every printed ability has a predefined,
+  behavior-free class: the card's class and one `<ClassName>Ability<N>` class
+  per printed line of text, numbered in printed order. Every OBJECT, ABILITY and
+  MODE option the engine offers carries the predefined class it stands for in
+  its `printed` attr.
+- **Illegal choices.** The engine may offer a choice the rules forbid, but it
+  must never let one take effect: it rejects it by raising
+  `InvalidPlayerChoiceError` (`engine.decisions`), rolls the game back to the
+  start of the action and asks again.
+
+Tests drive play with action scripts and answer every other choice with
+**Intents**, and identify cards by their predefined classes, never by name
+(see `test_utils.md`).
 
 ## Rules
 
 1. **Card location** — Each target card's implementation class stays in its
    stub file (`cards/fdn/fdn_129/card_impl.py`, `cards/fdn/fdn_205/card_impl.py`,
    `cards/fdn/fdn_232/card_impl.py`), under the class name the stub gives. Do
-   not move or rename card directories. Your own tests for a target card belong
-   at `cards/fdn/fdn_<N>/tests.py` (the targets ship without one).
+   not move or rename card directories, or rename the predefined classes the
+   stub declares. Your own tests for a target card belong at
+   `cards/fdn/fdn_<N>/tests.py` (the targets ship without one).
 
 2. **The engine is yours to change** — You may add, change, rename, move,
    refactor, or delete anything inside `engine/`. Prefer generic, reusable
@@ -102,6 +124,7 @@ from engine.types import CardType, Keyword, ManaCost, ManaType, Zone
 from test_utils import Intent
 from engine.decisions import Decision, GameRef, DecisionKind
 from test_utils import create_game, set_board_state, put_on_battlefield, cast_spell
+from test_utils import act, act_illegal, script, run_scripts, resolve_stack, source_pattern
 ```
 
 ## Rules questions → grep RULEBOOK.txt

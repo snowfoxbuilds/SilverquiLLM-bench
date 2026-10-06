@@ -155,7 +155,7 @@ class TestLazyTargetFilter:
         assert filter_fn(creature) is True
 
     def test_controller_based_filter_sees_controller_change(self) -> None:
-        """BanishingLight targets 'nonland permanent an opponent controls'.
+        """BanishingLight's enters trigger targets 'nonland permanent an opponent controls'.
         If control of a permanent changes after filter creation, the filter
         should reflect the new controller."""
         from cards.fdn.fdn_138.card_impl import BanishingLight
@@ -167,7 +167,7 @@ class TestLazyTargetFilter:
         game.get_battlefield(p2).add(creature)
 
         spell = BanishingLight(owner=p1, controller=p1)
-        target_reqs = spell.get_targets(game)
+        target_reqs = spell._enters_targets(game, p1)
         assert len(target_reqs) == 1
         filter_fn = target_reqs[0].filter_fn
 

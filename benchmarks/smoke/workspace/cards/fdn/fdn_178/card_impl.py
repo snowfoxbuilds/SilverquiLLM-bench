@@ -7,6 +7,17 @@ from engine.events import GainsLifeTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MaraudingBlightPriestAbility1:
+    text = 'Whenever you gain life, each opponent loses 1 life.'
+
+
+# endregion Printed abilities
+
+
 class MaraudingBlightPriest(Creature):
     """Marauding Blight-Priest — {2}{B} — 3/2 — Vampire Cleric.
 
@@ -34,12 +45,12 @@ class MaraudingBlightPriest(Creature):
             ctrl = getattr(source, 'controller', None)
             return event.player is ctrl
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             for player in game.players:
                 if player is not ctrl:
                     from engine.game import lose_life
                     lose_life(game, player, 1)
-        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=MaraudingBlightPriestAbility1))

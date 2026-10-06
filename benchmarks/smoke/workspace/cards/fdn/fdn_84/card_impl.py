@@ -9,6 +9,17 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DragonTrainerAbility1:
+    text = 'When this creature enters, create a 4/4 red Dragon creature token with flying.'
+
+
+# endregion Printed abilities
+
+
 def _self_etb_condition(source: Any):
     """Return a condition callable that matches only when *source* enters."""
 
@@ -36,15 +47,13 @@ class DragonTrainer(Creature):
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
         from engine.game import create_token
-        source = self
 
-        def _effect(game: GameState) -> None:
+        def _effect(game: GameState, controller: Any) -> None:
             from cards.fdn.tokens import make_creature_token
-            controller = getattr(source, 'controller', None)
             if controller is not None:
                 token = make_creature_token(
                     'Dragon', {'Dragon'}, [Color.RED], 4, 4, keywords=Keyword.FLYING
                 )
                 create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller, printed=DragonTrainerAbility1))

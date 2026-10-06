@@ -18,7 +18,9 @@ from cards.fdn.fdn_134.card_impl import (
     AjaniCallerOfThePrideAbility1,
     AjaniCallerOfThePrideAbility3,
 )
+from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_203.card_impl import InvoluntaryEmployment
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_278.card_impl import Mountain, MountainAbility1
 from engine.attempts import attempt
@@ -26,7 +28,7 @@ from engine.card import Artifact, Creature, ManaAbility, Sorcery
 from engine.card_queries import choose_object, query_yes_no
 from engine.decisions import Decision, InvalidPlayerChoiceError
 from engine.game import gain_life
-from engine.decisions import Decision
+from engine.refs_registry import object_options
 from engine.types import CardType, Keyword, ManaType, Phase, Step, Zone
 from test_interface import (
     PlayDiverged,
@@ -53,10 +55,13 @@ from silverquillm.table import (
     Table,
     appears,
     ceases,
+    extra_turn,
+    gains_control,
     life,
     moves,
     off_stack,
     on_stack,
+    stays_tapped,
     taps,
     wins,
 )
@@ -84,6 +89,19 @@ class CoinToss(Sorcery):
     def on_resolve(self, game):
         if game.flip_coin():
             gain_life(game, self.controller, 5)
+
+
+class Blessing(Sorcery):
+    """A player chosen as it resolves — offered as objects, as a card's "any
+    target" question may offer them — gains 1 life."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Blessing")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        chosen = choose_object(game, self.controller, list(game.players), "Choose a player", source_card=self)
+        gain_life(game, chosen, 1)
 
 
 class RandomDiscard(Sorcery):
@@ -262,6 +280,76 @@ def test_seat_0_starts_on_turn_1_and_skips_its_first_draw():
     assert final.step is Step.DRAW and final.where(library[0]) is Zone.LIBRARY
 
 
+def test_the_table_untaps_the_active_player_except_what_stays_tapped():
+    stays, untaps_ = card(Bear, tapped=True), card(Mountain, tapped=True)
+    t = Table(create_game(Side(battlefield=[stays, untaps_], library=[Plains]), start=(Step.END, 1)))
+    t.pass_(1)
+    entry = t.pass_(0, then=[stays_tapped(stays)])
+    tapped = {seen.handle: seen.tapped for seen in t.expected.players[0].battlefield}
+    assert tapped == {stays: True, untaps_: False}
+    assert entry.narration.endswith("stays tapped")
+
+
+def test_the_table_plays_extra_turns_most_recent_first_then_the_normal_order():
+    t = Table(_main(Side(library=[Plains, Plains, Plains]), Side(library=[Plains])))
+    t.pass_(0, then=[extra_turn(0), extra_turn(0)])
+    entry = t.pass_(1)
+    assert "extra turn" in t.scripts[0][0].narration
+    actives = []
+    for _ in range(3):
+        t.pass_to(Step.UPKEEP)
+        actives.append(t.expected.active)
+    assert actives == [0, 0, 1]
+    assert entry is t.scripts[1][0]
+
+
+def test_a_player_preference_answers_a_question_offering_players_as_objects():
+    blessing = card(Blessing)
+    t = Table(_main(Side(hand=[blessing])))
+    t.act(0, blessing, then=[moves(blessing, Zone.STACK)])
+    t.pass_(0, choices=[player(1)])
+    t.pass_(1, then=[moves(blessing, Zone.GRAVEYARD), life(1, 21)])
+    t.run()
+
+
+def test_a_player_preference_skips_permanents_in_a_mixed_any_target_menu():
+    bolt, mountain, lions = card(BurstLightning), card(Mountain), card(SavannahLions)
+    t = Table(_main(Side(hand=[bolt], battlefield=[mountain]), Side(battlefield=[lions])))
+    t.act(0, MountainAbility1, then=[taps(mountain)])
+    t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+    final = t.run()
+    assert final.where(lions) is Zone.BATTLEFIELD
+
+
+def test_an_unconstrained_player_preference_chooses_a_player_never_a_permanent():
+    bolt, mountain, lions = card(BurstLightning), card(Mountain), card(SavannahLions)
+    t = Table(_main(Side(hand=[bolt], battlefield=[mountain]), Side(battlefield=[lions])))
+    t.act(0, MountainAbility1, then=[taps(mountain)])
+    t.act(0, bolt, choices=[Decision.player()], then=[moves(bolt, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(0, 18)])
+    final = t.run()
+    assert final.where(lions) is Zone.BATTLEFIELD
+
+
+def test_a_player_preference_matches_an_object_option_only_for_its_own_player():
+    game = _main(Side(), Side(battlefield=[SavannahLions]))
+    lions = game.get_battlefield(game.players[1]).get_all()[0]
+    options, _ = object_options(
+        game.refs, [(c, Zone.BATTLEFIELD, game.refs.seat_of(getattr(c, "controller", None))) for c in [lions, *game.players]]
+    )
+    creature, first, second = options
+    scripted = game.players[0]
+    assert not scripted._matches(creature, Decision.player())
+    assert not scripted._matches(creature, player(1))
+    assert scripted._matches(second, player(1)) and not scripted._matches(first, player(1))
+    assert scripted._matches(first, Decision.player())
+    assert not scripted._matches(second, player(5))
+    assert not scripted._matches(second, Decision.player(seat=1, role="opponent"))
+
+
 def test_constructed_permanents_are_ready_tapped_or_loyal():
     bear, tapped = card(Bear), card(Mountain, tapped=True)
     game = _main(Side(battlefield=[bear, tapped, AjaniCallerOfThePride]))
@@ -305,6 +393,20 @@ def test_the_view_shows_only_what_a_player_sees():
     assert not hasattr(seen, "power") and not v.stack and not v.game_over
     with pytest.raises(dataclasses.FrozenInstanceError):
         v.active = 1
+
+
+def test_a_permanent_shows_on_its_controllers_side_owned_by_its_owner():
+    employment, lions = card(InvoluntaryEmployment), card(SavannahLions)
+    game = _main(Side(hand=[employment], mana={ManaType.RED: 4}), Side(battlefield=[lions]))
+    t = Table(game)
+    t.act(0, employment, choices=[lions], then=[moves(employment, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(employment, Zone.GRAVEYARD), gains_control(lions, 0), appears(0)])
+    assert "player 0 gains control of" in t.scripts[1][-1].narration
+    t.run()
+    v = view(game)
+    stolen = next(seen for seen in v.players[0].battlefield if seen.handle == lions)
+    assert stolen.owner == 1 and not v.players[1].battlefield
 
 
 def test_unordered_zones_compare_whatever_the_order():
@@ -1461,3 +1563,89 @@ def test_lethal_combat_damage_ends_the_game_before_its_triggers_are_ordered():
     t.pass_(1, then=[life(1, 0), wins(0)])
     final = t.run()
     assert final.game_over and final.winner == 0
+
+
+def test_table_plays_a_first_strike_damage_step_only_when_stated() -> None:
+    from silverquillm.table import Change, Table, first_strike_damage
+
+    def _steps(*changes: Change) -> list[str]:
+        game = ti.create_game(ti.Side(), ti.Side(), start=(Step.DECLARE_BLOCKERS, 0))
+        t = Table(game)
+        t._attacking = True
+        t.pass_(0, then=list(changes))
+        t.pass_(1)
+        first = t.expected.step.name
+        t.pass_(0)
+        t.pass_(1)
+        return [first, t.expected.step.name]
+
+    assert _steps() == ["COMBAT_DAMAGE", "END_COMBAT"]
+    assert _steps(first_strike_damage()) == ["FIRST_STRIKE_DAMAGE", "COMBAT_DAMAGE"]
+
+
+# ---------------------------------------------------------------------------
+# Spell copies keep their numbers through rejected attempts
+# ---------------------------------------------------------------------------
+
+
+def _bolt_on_the_stack():
+    from engine.stack import StackObject
+
+    bolt = card(BurstLightning)
+    game = _main(Side(hand=[bolt]))
+    original = next(c for c in game.players[0].zones[Zone.HAND].get_all())
+    game.players[0].zones[Zone.HAND].remove(original)
+    obj = StackObject(source=original, controller=game.players[0], targets=[game.players[1]], is_spell=True)
+    game.stack.push(obj)
+    return game, obj
+
+
+def _copy(game, original):
+    from engine.stack import copy_spell
+
+    copy_obj = copy_spell(game, original, game.players[0])
+    game.stack.push(copy_obj)
+    return copy_obj
+
+
+def _copy_handles(game):
+    return [seen.handle for seen in view(game).stack if isinstance(seen.handle, ti.SpellCopy)]
+
+
+def test_a_rolled_back_copy_gives_its_number_to_the_retry():
+    from engine.rollback import take_snapshot
+
+    game, original = _bolt_on_the_stack()
+    snapshot = take_snapshot(game)
+    _copy(game, original)
+    assert _copy_handles(game) == [ti.spell_copy(1)]
+    snapshot.restore()
+    assert ti._find(game, ti.spell_copy(1)) is None
+    _copy(game, original)
+    assert _copy_handles(game) == [ti.spell_copy(1)]
+
+
+def test_a_copy_made_before_a_rejected_attempt_keeps_its_number():
+    from engine.rollback import take_snapshot
+
+    game, original = _bolt_on_the_stack()
+    kept = _copy(game, original)
+    assert _copy_handles(game) == [ti.spell_copy(1)]
+    snapshot = take_snapshot(game)
+    _copy(game, original)
+    assert sorted(h.number for h in _copy_handles(game)) == [1, 2]
+    snapshot.restore()
+    retried = _copy(game, original)
+    assert ti._find(game, ti.spell_copy(1)) is kept.source
+    assert ti._find(game, ti.spell_copy(2)) is retried.source
+
+
+def test_a_copy_that_resolved_keeps_its_number():
+    from engine.stack import resolve_top_of_stack
+
+    game, original = _bolt_on_the_stack()
+    _copy(game, original)
+    assert _copy_handles(game) == [ti.spell_copy(1)]
+    resolve_top_of_stack(game)
+    _copy(game, original)
+    assert _copy_handles(game) == [ti.spell_copy(2)]

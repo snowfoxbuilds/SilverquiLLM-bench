@@ -7,6 +7,25 @@ from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class QuilledGreatwurmAbility1:
+    text = 'Trample'
+
+
+class QuilledGreatwurmAbility2:
+    text = 'Whenever a creature you control deals combat damage during your turn, put that many +1/+1 counters on it. (It must survive to get the counters.)'
+
+
+class QuilledGreatwurmAbility3:
+    text = 'You may cast this card from your graveyard by removing six counters from among creatures you control in addition to paying its other costs.'
+
+
+# endregion Printed abilities
+
+
 class QuilledGreatwurm(Creature):
     """Quilled Greatwurm — {4}{G}{G} — 7/7 — Wurm — Trample.
 
@@ -68,5 +87,5 @@ class QuilledGreatwurm(Creature):
                     if game.get_battlefield(player).contains(creature):
                         add_counter(game, creature, '+1/+1', amount)
                         return
-            game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition_with_capture, effect=_captured_effect, source=source, controller=controller))
+            game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition_with_capture, effect=_captured_effect, source=source, controller=controller, printed=QuilledGreatwurmAbility2))
         _make_trigger(game)

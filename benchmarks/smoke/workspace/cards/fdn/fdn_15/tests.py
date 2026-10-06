@@ -2,10 +2,10 @@
 
 Illustrative test covering a **self-referential ETB token multiplier**: on
 entry, the creature counts the *other* creatures you control that share its
-name and mints that many 1/1 white Rabbit tokens. ``on_resolve`` is the
-engine's enters-the-battlefield hook for a creature spell, so these tests
-drive it directly (the isolated postcondition style) and also once through
-the full cast pipeline (the real resolution path).
+name and mints that many 1/1 white Rabbit tokens. The enters ability is a
+triggered ability that uses the stack, so these tests put a Hare onto the
+battlefield and resolve its trigger (the isolated postcondition style), and
+also once through the full cast pipeline (the real resolution path).
 
 Note: engine-minted tokens carry no grpId identity, so the replay layer's
 Rabbit-token zone divergences persist until the token-correlation phase —
@@ -15,10 +15,23 @@ what this card fixes is the ETB firing and the MISSING_CARD entries clearing.
 from __future__ import annotations
 
 from cards.fdn.fdn_15.card_impl import HareApparent
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.protection import get_colors
 from engine.types import Color, ManaCost, ManaType, Zone
 from test_utils import cast_spell, create_game, set_board_state
+
+
+def _enter(game, hare) -> None:
+    """Put *hare* from its owner's hand onto the battlefield and resolve the
+    enters trigger it puts on the stack."""
+    from engine.stack import resolve_top_of_stack
+    from engine.state_based_actions import resolve_state_based_actions
+    from engine.zones import move_to_zone
+
+    move_to_zone(game, hare, Zone.HAND, Zone.BATTLEFIELD)
+    resolve_state_based_actions(game)
+    while not game.stack.is_empty():
+        resolve_top_of_stack(game)
 
 
 def _rabbit_tokens(game, player) -> list:
@@ -38,7 +51,7 @@ class TestHareApparentProperties:
         assert isinstance(HareApparent(owner=None), Creature)
 
     def test_name(self) -> None:
-        assert HareApparent(owner=None).name == "Hare Apparent"
+        assert printed_class(HareApparent(owner=None)) is HareApparent
 
     def test_mana_cost(self) -> None:
         assert HareApparent(owner=None).mana_cost == ManaCost.parse("{1}{W}")
@@ -60,9 +73,9 @@ class TestHareApparentEtb:
         game = create_game()
         p1 = game.players[0]
         hare = HareApparent(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[hare])
+        set_board_state(game, 0, hand=[hare])
 
-        hare.on_resolve(game)
+        _enter(game, hare)
 
         assert _rabbit_tokens(game, p1) == []
 
@@ -72,9 +85,9 @@ class TestHareApparentEtb:
         entering = HareApparent(owner=p1, controller=p1)
         other1 = HareApparent(owner=p1, controller=p1)
         other2 = HareApparent(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[entering, other1, other2])
+        set_board_state(game, 0, hand=[entering], battlefield=[other1, other2])
 
-        entering.on_resolve(game)
+        _enter(game, entering)
 
         assert len(_rabbit_tokens(game, p1)) == 2
 
@@ -84,7 +97,7 @@ class TestHareApparentEtb:
         p1, p2 = game.players
         entering = HareApparent(owner=p1, controller=p1)
         mine = HareApparent(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[entering, mine])
+        set_board_state(game, 0, hand=[entering], battlefield=[mine])
         set_board_state(
             game, 1,
             battlefield=[
@@ -93,7 +106,7 @@ class TestHareApparentEtb:
             ],
         )
 
-        entering.on_resolve(game)
+        _enter(game, entering)
 
         # One *other* Hare of mine -> exactly one Rabbit; the opponent's two
         # do not contribute.
@@ -104,9 +117,9 @@ class TestHareApparentEtb:
         p1 = game.players[0]
         entering = HareApparent(owner=p1, controller=p1)
         other = HareApparent(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[entering, other])
+        set_board_state(game, 0, hand=[entering], battlefield=[other])
 
-        entering.on_resolve(game)
+        _enter(game, entering)
 
         tokens = _rabbit_tokens(game, p1)
         assert len(tokens) == 1
@@ -122,9 +135,9 @@ class TestHareApparentEtb:
         p1 = game.players[0]
         entering = HareApparent(owner=p1, controller=p1)
         other = HareApparent(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[entering, other])
+        set_board_state(game, 0, hand=[entering], battlefield=[other])
 
-        entering.on_resolve(game)
+        _enter(game, entering)
 
         tok = _rabbit_tokens(game, p1)[0]
         assert get_colors(tok) == {Color.WHITE}
@@ -134,8 +147,8 @@ class TestHareApparentEtb:
 
     def test_etb_fires_through_the_cast_pipeline(self) -> None:
         """End-to-end: casting Hare Apparent with two others already in play
-        resolves the ETB and leaves two fresh Rabbit tokens — proving
-        ``on_resolve`` is driven at spell resolution, not only by hand."""
+        resolves the Hare and then its enters trigger, leaving two fresh Rabbit
+        tokens."""
         game = create_game()
         p1 = game.players[0]
         set_board_state(
@@ -148,7 +161,7 @@ class TestHareApparentEtb:
             mana={ManaType.WHITE: 1, ManaType.RED: 1},
         )
 
-        cast_spell(game, 0, "Hare Apparent")
+        cast_spell(game, 0, HareApparent)
 
         # Three Hares (two originals + the cast one) plus two new Rabbits.
         bf = game.get_battlefield(p1).get_all()

@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ArcaneEpiphanyAbility1:
+    text = 'This spell costs {1} less to cast if you control a Wizard.'
+
+
+class ArcaneEpiphanyAbility2:
+    text = 'Draw three cards.'
+
+
+# endregion Printed abilities
+
+
 class ArcaneEpiphany(Instant):
     """Arcane Epiphany — {3}{U}{U} — Instant.
 

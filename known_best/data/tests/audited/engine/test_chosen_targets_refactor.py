@@ -1,468 +1,207 @@
-"""Tests for chosen_targets refactor — targets live on StackObject, not card.
+"""Targets chosen as a spell is cast belong to that spell on the stack until it
+resolves (rules 601.2c, 608.2b).
 
-Verifies:
-- card.chosen_targets is NOT set at cast time
-- StackObject.targets holds targets between cast and resolve
-- card.chosen_targets IS set at resolve time (backward compat)
-- Targets are available to on_resolve callbacks
-- Multiple spells on the stack have independent targets
-- Cloned/copied cards don't inherit stale targets from the original
-
-Targets are answered through the Player Query / Intent protocol: each test card
-defines a real ``get_targets`` (a battlefield-creature ``TargetRequirement``), and
-the casting player carries an Intent that prefers a specific creature for the
-target query the engine raises during casting.
+Seen at the table:
+- casting a targeted spell does nothing to its target yet;
+- the spell resolves against the targets chosen when it was cast, however
+  many it has, and a targetless spell asks for none;
+- each spell on the stack keeps its own targets, and resolving one leaves
+  the others' alone;
+- a card cast again chooses its targets anew, never reusing an earlier
+  casting's.
 """
 
 from __future__ import annotations
 
-import copy
+from cards.fdn.fdn_43.card_impl import InspirationFromBeyond
+from cards.fdn.fdn_79.card_impl import Boltwave
+from cards.fdn.fdn_90.card_impl import IncineratingBlast
+from cards.fdn.fdn_105.card_impl import FellingBlow
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_162.card_impl import RunAwayTogether
+from cards.fdn.fdn_165.card_impl import ThinkTwice
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_212.card_impl import BiteDown
+from cards.fdn.fdn_223.card_impl import GiantGrowth
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_278.card_impl import Mountain
+from test_interface import ManaType, Phase, Side, Zone, card, create_game, player
 
-import pytest
-
-from engine.card import CardImpl, Creature, Instant, Sorcery
-from engine.casting import cast_spell, CastingError
-from engine.decisions import Decision, GameRef
-from engine.game_state import GameState
-from test_utils import DeterministicPlayer, Intent
-from engine.stack import StackObject
-from engine.types import (
-    CardType,
-    ManaCost,
-    ManaType,
-    Phase,
-    Step,
-    TargetRequirement,
-    Zone,
-)
+from silverquillm.table import Table, life, moves, taps
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _make_game(*, phase: Phase = Phase.PRECOMBAT_MAIN) -> GameState:
-    """Create a minimal 2-player GameState at the specified phase."""
-    p1 = DeterministicPlayer("Alice")
-    p2 = DeterministicPlayer("Bob")
-    game = GameState([p1, p2])
-    game.phase = phase
-    return game
+def _main_phase(p0: Side, p1: Side) -> Table:
+    """Player 0's precombat main phase, with player 0 to act."""
+    return Table(create_game(p0, p1, start=(Phase.PRECOMBAT_MAIN, 0)))
 
 
-def _add_to_hand(game: GameState, player_idx: int, card: CardImpl) -> None:
-    game.get_hand(game.players[player_idx]).add(card)
-
-
-def _add_mana(player: DeterministicPlayer, mana_type: ManaType, amount: int) -> None:
-    player.mana_pool.add(mana_type, amount)
-
-
-def _put_creature(game: GameState, player_idx: int, name: str, slot: int = 0) -> Creature:
-    """Put a vanilla creature on a player's battlefield and return it.
-
-    The creature is given an engine-minted ``instance_id`` so a test can
-    reference it in an Intent preference, and a ``slot`` marker so multi-target
-    spells can offer disjoint option sets across their target queries.
-    """
-    player = game.players[player_idx]
-    creature = Creature(
-        name=name,
-        mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
-        base_power=2,
-        base_toughness=2,
-    )
-    creature.owner = player
-    creature.controller = player
-    creature.slot = slot
-    player.zones[Zone.BATTLEFIELD].add(creature)
-    creature.instance_id = game.refs.instance_id(creature, Zone.BATTLEFIELD.value)
-    return creature
-
-
-def _target_creature_spec(slot: int | None = None) -> TargetRequirement:
-    """A creature-target requirement, optionally restricted to a ``slot``.
-
-    Restricting by ``slot`` lets a multi-target spell raise two queries with
-    disjoint option sets (the engine raises one query per spec and does not
-    track cross-query target distinctness).
-    """
-    def _ok(obj: object) -> bool:
-        if CardType.CREATURE not in getattr(obj, "card_types", set()):
-            return False
-        return slot is None or getattr(obj, "slot", None) == slot
-
-    return TargetRequirement(
-        filter_fn=_ok,
-        description="target creature",
-        zone=Zone.BATTLEFIELD,
-    )
-
-
-def _aim(player: DeterministicPlayer, card_name: str, targets) -> None:
-    """Start an Intent on *player* preferring *targets* for *card_name*'s query."""
-    prefs = tuple(Decision.obj(instance=t.instance_id) for t in targets)
-    player.start_intent(
-        card_name,
-        Intent(
-            pattern=GameRef(card=frozenset({("name", card_name)})),
-            preferences=prefs,
-        ),
-    )
+def _resolve(t: Table, *results, note: str = "") -> None:
+    """Both players pass, and the top of the stack resolves."""
+    t.pass_(0)
+    t.pass_(1, then=list(results), note=note)
 
 
 # ---------------------------------------------------------------------------
-# Test cards
+# Casting a spell does nothing to its targets yet
 # ---------------------------------------------------------------------------
 
-class _TargetedBolt(Instant):
-    """An instant that requires one creature target."""
-
-    def get_targets(self, game: GameState):
-        return [_target_creature_spec()]
-
-
-class _TargetedSorcery(Sorcery):
-    """A sorcery that requires one creature target."""
-
-    def get_targets(self, game: GameState):
-        return [_target_creature_spec()]
-
-    def on_resolve(self, game: GameState) -> None:
-        # on_resolve reads chosen_targets for backward compat
-        self._resolved_targets = getattr(self, "chosen_targets", None)
-
-
-class _MultiTargetSpell(Instant):
-    """An instant that requires two creature targets."""
-
-    def get_targets(self, game: GameState):
-        return [_target_creature_spec(slot=0), _target_creature_spec(slot=1)]
-
-    def on_resolve(self, game: GameState) -> None:
-        self._resolved_targets = getattr(self, "chosen_targets", None)
-
-
-# ---------------------------------------------------------------------------
-# card.chosen_targets NOT set at cast time
-# ---------------------------------------------------------------------------
 
 class TestChosenTargetsNotSetAtCastTime:
-    """After cast_spell(), card.chosen_targets must NOT be set."""
-
     def test_targeted_instant_no_chosen_targets_after_cast(self):
-        """Casting a targeted instant should NOT set card.chosen_targets."""
-        game = _make_game()
-        player = game.players[0]
-        goblin = _put_creature(game, 1, "Goblin")
-        bolt = _TargetedBolt(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, bolt)
-        _add_mana(player, ManaType.RED, 1)
-
-        _aim(player, "Bolt", [goblin])
-        cast_spell(game, player, bolt)
-        player.end_intent("Bolt")
-
-        # chosen_targets should not exist on the card after casting
-        assert not hasattr(bolt, "chosen_targets"), (
-            "card.chosen_targets should not be set at cast time"
-        )
+        bolt, lions = card(BurstLightning), card(SavannahLions)
+        t = _main_phase(Side(hand=[bolt], mana={ManaType.RED: 1}), Side(battlefield=[lions]))
+        t.act(0, bolt, choices=[lions], then=[moves(bolt, Zone.STACK)], note="the Lions is untouched while Burst Lightning waits")
+        _resolve(t, moves(bolt, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD))
+        t.run()
 
     def test_targeted_sorcery_no_chosen_targets_after_cast(self):
-        """Casting a targeted sorcery should NOT set card.chosen_targets."""
-        game = _make_game()
-        player = game.players[0]
-        enemy = _put_creature(game, 1, "Enemy Creature")
-        spell = _TargetedSorcery(
-            name="Fireball", mana_cost=ManaCost(pips={ManaType.RED: 1})
-        )
-        _add_to_hand(game, 0, spell)
-        _add_mana(player, ManaType.RED, 1)
-
-        _aim(player, "Fireball", [enemy])
-        cast_spell(game, player, spell)
-        player.end_intent("Fireball")
-
-        assert not hasattr(spell, "chosen_targets"), (
-            "card.chosen_targets should not be set at cast time"
-        )
+        blast, scourge = card(IncineratingBlast), card(BrazenScourge)
+        t = _main_phase(Side(hand=[blast], mana={ManaType.RED: 5}), Side(battlefield=[scourge]))
+        t.act(0, blast, choices=[scourge], then=[moves(blast, Zone.STACK)], note="the Scourge is untouched while the sorcery waits")
+        _resolve(t, moves(blast, Zone.GRAVEYARD), moves(scourge, Zone.GRAVEYARD))
+        t.run()
 
     def test_no_targets_spell_no_chosen_targets_after_cast(self):
-        """A spell with no targets should also not set chosen_targets at cast."""
-        game = _make_game()
-        player = game.players[0]
-        spell = Instant(name="Opt", mana_cost=ManaCost(pips={ManaType.BLUE: 1}))
-        _add_to_hand(game, 0, spell)
-        _add_mana(player, ManaType.BLUE, 1)
-
-        cast_spell(game, player, spell)
-
-        assert not hasattr(spell, "chosen_targets"), (
-            "card.chosen_targets should not be set at cast time for targetless spells"
-        )
+        think, plains = card(ThinkTwice), card(Plains)
+        t = _main_phase(Side(hand=[think], library=[plains], mana={ManaType.BLUE: 2}), Side(battlefield=[SavannahLions]))
+        t.act(0, think, then=[moves(think, Zone.STACK)], note="Think Twice asks for no target")
+        _resolve(t, moves(think, Zone.GRAVEYARD), moves(plains, Zone.HAND))
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# StackObject.targets holds targets between cast and resolve
+# A spell on the stack holds the targets chosen as it was cast
 # ---------------------------------------------------------------------------
+
 
 class TestStackObjectTargets:
-    """StackObject.targets is the single source of truth between cast and resolve."""
-
     def test_stack_object_stores_chosen_targets(self):
-        """After cast_spell, StackObject.targets should contain the chosen targets."""
-        game = _make_game()
-        player = game.players[0]
-        goblin = _put_creature(game, 1, "Target Goblin")
-        bolt = _TargetedBolt(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, bolt)
-        _add_mana(player, ManaType.RED, 1)
-
-        _aim(player, "Bolt", [goblin])
-        cast_spell(game, player, bolt)
-        player.end_intent("Bolt")
-
-        top = game.stack.peek()
-        assert top is not None
-        assert top.targets == [goblin]
+        bolt, lions, elves = card(BurstLightning), card(SavannahLions), card(LlanowarElves)
+        t = _main_phase(Side(hand=[bolt], mana={ManaType.RED: 1}), Side(battlefield=[lions, elves]))
+        t.act(0, bolt, choices=[elves], then=[moves(bolt, Zone.STACK)])
+        _resolve(t, moves(bolt, Zone.GRAVEYARD), moves(elves, Zone.GRAVEYARD))
+        final = t.run()
+        assert final.where(lions) is Zone.BATTLEFIELD
 
     def test_stack_object_targets_for_multi_target_spell(self):
-        """Multi-target spells should store all targets on StackObject."""
-        game = _make_game()
-        player = game.players[0]
-        creature_a = _put_creature(game, 1, "Creature A", slot=0)
-        creature_b = _put_creature(game, 1, "Creature B", slot=1)
-        spell = _MultiTargetSpell(
-            name="DualStrike", mana_cost=ManaCost(pips={ManaType.RED: 1})
+        together = card(RunAwayTogether)
+        mine, my_other = card(SavannahLions), card(LlanowarElves)
+        theirs, their_other = card(BrazenScourge), card(SavannahLions)
+        t = _main_phase(
+            Side(hand=[together], battlefield=[mine, my_other], mana={ManaType.BLUE: 2}),
+            Side(battlefield=[theirs, their_other]),
         )
-        _add_to_hand(game, 0, spell)
-        _add_mana(player, ManaType.RED, 1)
-
-        _aim(player, "DualStrike", [creature_a, creature_b])
-        cast_spell(game, player, spell)
-        player.end_intent("DualStrike")
-
-        top = game.stack.peek()
-        assert top.targets == [creature_a, creature_b]
+        t.act(0, together, choices=[mine, theirs], distinct=True, then=[moves(together, Zone.STACK)])
+        _resolve(t, moves(together, Zone.GRAVEYARD), moves(mine, Zone.HAND), moves(theirs, Zone.HAND))
+        t.run()
 
     def test_no_targets_spell_has_empty_targets_on_stack(self):
-        """A spell with no targets should have empty list on StackObject."""
-        game = _make_game()
-        player = game.players[0]
-        spell = Instant(name="Opt", mana_cost=ManaCost(pips={ManaType.BLUE: 1}))
-        _add_to_hand(game, 0, spell)
-        _add_mana(player, ManaType.BLUE, 1)
-
-        cast_spell(game, player, spell)
-
-        top = game.stack.peek()
-        assert top.targets == []
+        wave = card(Boltwave)
+        t = _main_phase(Side(hand=[wave], mana={ManaType.RED: 1}), Side(battlefield=[SavannahLions]))
+        t.act(0, wave, then=[moves(wave, Zone.STACK)], note="Boltwave asks for no target")
+        _resolve(t, moves(wave, Zone.GRAVEYARD), life(1, 17))
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# card.chosen_targets IS set at resolve time
+# The spell resolves against its chosen targets
 # ---------------------------------------------------------------------------
+
 
 class TestChosenTargetsSetAtResolveTime:
-    """card.chosen_targets must be set at resolve time for backward compat."""
-
     def test_chosen_targets_set_on_card_during_resolution(self):
-        """After on_resolve, card.chosen_targets should be set."""
-        game = _make_game()
-        player = game.players[0]
-        enemy = _put_creature(game, 1, "Enemy Creature")
-        spell = _TargetedSorcery(
-            name="Fireball", mana_cost=ManaCost(pips={ManaType.RED: 1})
-        )
-        _add_to_hand(game, 0, spell)
-        _add_mana(player, ManaType.RED, 1)
-
-        _aim(player, "Fireball", [enemy])
-        cast_spell(game, player, spell)
-        player.end_intent("Fireball")
-
-        # Before resolve: no chosen_targets on card
-        assert not hasattr(spell, "chosen_targets")
-
-        # Resolve
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        # After resolve: chosen_targets set on card
-        assert hasattr(spell, "chosen_targets"), (
-            "card.chosen_targets should be set at resolve time"
-        )
-        assert spell.chosen_targets == [enemy]
+        blast, spared, chosen = card(IncineratingBlast), card(BrazenScourge), card(BrazenScourge)
+        t = _main_phase(Side(hand=[blast], mana={ManaType.RED: 5}), Side(battlefield=[spared, chosen]))
+        t.act(0, blast, choices=[chosen], then=[moves(blast, Zone.STACK)])
+        _resolve(t, moves(blast, Zone.GRAVEYARD), moves(chosen, Zone.GRAVEYARD), note="only the chosen Scourge is dealt 6")
+        t.run()
 
     def test_chosen_targets_available_inside_on_resolve_callback(self):
-        """The on_resolve callback should be able to read card.chosen_targets."""
-        game = _make_game()
-        player = game.players[0]
-        elf = _put_creature(game, 1, "Target Elf")
-        spell = _TargetedSorcery(
-            name="Doom", mana_cost=ManaCost(pips={ManaType.RED: 1})
+        """Bite Down reads its first target's power as it resolves: a Giant
+        Growth that resolves first lets the 2/1 Lions deal 5 to the 3/3."""
+        bite, growth, lions, scourge = card(BiteDown), card(GiantGrowth), card(SavannahLions), card(BrazenScourge)
+        t = _main_phase(
+            Side(hand=[bite, growth], battlefield=[lions], mana={ManaType.GREEN: 3}),
+            Side(battlefield=[scourge]),
         )
-        _add_to_hand(game, 0, spell)
-        _add_mana(player, ManaType.RED, 1)
-
-        _aim(player, "Doom", [elf])
-        cast_spell(game, player, spell)
-        player.end_intent("Doom")
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        # The on_resolve callback stored what it saw
-        assert spell._resolved_targets == [elf]
+        t.act(0, bite, choices=[lions, scourge], then=[moves(bite, Zone.STACK)])
+        t.act(0, growth, choices=[lions], then=[moves(growth, Zone.STACK)])
+        _resolve(t, moves(growth, Zone.GRAVEYARD))
+        _resolve(t, moves(bite, Zone.GRAVEYARD), moves(scourge, Zone.GRAVEYARD))
+        t.run()
 
     def test_multi_target_available_in_on_resolve(self):
-        """Multi-target chosen_targets should be fully available in on_resolve."""
-        game = _make_game()
-        player = game.players[0]
-        alpha = _put_creature(game, 1, "Alpha", slot=0)
-        beta = _put_creature(game, 1, "Beta", slot=1)
-        spell = _MultiTargetSpell(
-            name="DualStrike", mana_cost=ManaCost(pips={ManaType.RED: 1})
+        """Felling Blow uses both its targets as it resolves: the Lions gets a
+        +1/+1 counter, then deals 3 damage to the 3/3 Scourge."""
+        blow, lions, scourge, bystander = card(FellingBlow), card(SavannahLions), card(BrazenScourge), card(BrazenScourge)
+        t = _main_phase(
+            Side(hand=[blow], battlefield=[lions], mana={ManaType.GREEN: 3}),
+            Side(battlefield=[bystander, scourge]),
         )
-        _add_to_hand(game, 0, spell)
-        _add_mana(player, ManaType.RED, 1)
-
-        _aim(player, "DualStrike", [alpha, beta])
-        cast_spell(game, player, spell)
-        player.end_intent("DualStrike")
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert spell._resolved_targets == [alpha, beta]
+        t.act(0, blow, choices=[lions, scourge], then=[moves(blow, Zone.STACK)])
+        _resolve(t, moves(blow, Zone.GRAVEYARD), moves(scourge, Zone.GRAVEYARD))
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# Multiple spells on the stack have independent targets
+# Each spell on the stack keeps its own targets
 # ---------------------------------------------------------------------------
+
 
 class TestMultipleSpellsIndependentTargets:
-    """Each StackObject maintains its own independent targets list."""
-
     def test_two_spells_different_targets_on_stack(self):
-        """Two spells on the stack should have different, independent targets."""
-        game = _make_game()
-        player = game.players[0]
-        target_a = _put_creature(game, 1, "Target A")
-        target_b = _put_creature(game, 1, "Target B")
-
-        bolt1 = _TargetedBolt(
-            name="Bolt1", mana_cost=ManaCost(pips={ManaType.RED: 1})
-        )
-        bolt2 = _TargetedBolt(
-            name="Bolt2", mana_cost=ManaCost(pips={ManaType.RED: 1})
-        )
-
-        _add_to_hand(game, 0, bolt1)
-        _add_to_hand(game, 0, bolt2)
-        _add_mana(player, ManaType.RED, 2)
-
-        _aim(player, "Bolt1", [target_a])
-        cast_spell(game, player, bolt1)
-        player.end_intent("Bolt1")
-
-        _aim(player, "Bolt2", [target_b])
-        cast_spell(game, player, bolt2)
-        player.end_intent("Bolt2")
-
-        objects = game.stack.objects()  # top to bottom
-        assert len(objects) == 2
-        # bolt2 is on top (LIFO)
-        assert objects[0].targets == [target_b]
-        assert objects[1].targets == [target_a]
+        first, second, lions = card(BurstLightning), card(BurstLightning), card(SavannahLions)
+        t = _main_phase(Side(hand=[first, second], mana={ManaType.RED: 2}), Side(battlefield=[lions]))
+        t.act(0, first, choices=[lions], then=[moves(first, Zone.STACK)])
+        t.act(0, second, choices=[player(1)], then=[moves(second, Zone.STACK)])
+        _resolve(t, moves(second, Zone.GRAVEYARD), life(1, 18))
+        _resolve(t, moves(first, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD))
+        t.run()
 
     def test_resolving_first_does_not_affect_second_targets(self):
-        """Resolving one spell doesn't change the other's StackObject targets."""
-        game = _make_game()
-        player = game.players[0]
-        victim_a = _put_creature(game, 1, "Victim A")
-        victim_b = _put_creature(game, 1, "Victim B")
-
-        spell1 = _TargetedBolt(
-            name="Spell1", mana_cost=ManaCost(pips={ManaType.RED: 1})
-        )
-        spell2 = _TargetedBolt(
-            name="Spell2", mana_cost=ManaCost(pips={ManaType.RED: 1})
-        )
-
-        _add_to_hand(game, 0, spell1)
-        _add_to_hand(game, 0, spell2)
-        _add_mana(player, ManaType.RED, 2)
-
-        _aim(player, "Spell1", [victim_a])
-        cast_spell(game, player, spell1)
-        player.end_intent("Spell1")
-
-        _aim(player, "Spell2", [victim_b])
-        cast_spell(game, player, spell2)
-        player.end_intent("Spell2")
-
-        # Resolve top (spell2)
-        top = game.stack.pop()
-        top.on_resolve(game)
-
-        # The remaining stack object still has its own targets
-        remaining = game.stack.peek()
-        assert remaining.targets == [victim_a]
+        first, second = card(BurstLightning), card(BurstLightning)
+        lions, elves = card(SavannahLions), card(LlanowarElves)
+        t = _main_phase(Side(hand=[first, second], mana={ManaType.RED: 2}), Side(battlefield=[lions, elves]))
+        t.act(0, first, choices=[lions], then=[moves(first, Zone.STACK)])
+        t.act(0, second, choices=[elves], then=[moves(second, Zone.STACK)])
+        _resolve(t, moves(second, Zone.GRAVEYARD), moves(elves, Zone.GRAVEYARD), note="the Lions survives the first to resolve")
+        _resolve(t, moves(first, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD))
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# Cloned/copied cards don't inherit stale targets
+# A card cast again chooses its targets anew
 # ---------------------------------------------------------------------------
+
 
 class TestNoStaleTargetLeakage:
-    """Cloned or shallow-copied cards should not carry stale chosen_targets."""
-
     def test_copy_before_resolve_has_no_chosen_targets(self):
-        """Copying a card between cast and resolve: copy has no chosen_targets."""
-        game = _make_game()
-        player = game.players[0]
-        some_target = _put_creature(game, 1, "Some Target")
-        spell = _TargetedSorcery(
-            name="Original", mana_cost=ManaCost(pips={ManaType.RED: 1})
+        """Burst Lightning kills the Lions, comes back to hand through
+        Inspiration from Beyond, and is cast again at player 1."""
+        bolt, inspiration, lions, mountain = card(BurstLightning), card(InspirationFromBeyond), card(SavannahLions), card(Mountain)
+        milled = [card(Plains), card(Plains), card(Plains)]
+        t = _main_phase(
+            Side(hand=[bolt, inspiration], battlefield=[mountain], library=milled, mana={ManaType.RED: 1, ManaType.BLUE: 3}),
+            Side(battlefield=[lions]),
         )
-        _add_to_hand(game, 0, spell)
-        _add_mana(player, ManaType.RED, 1)
-
-        _aim(player, "Original", [some_target])
-        cast_spell(game, player, spell)
-        player.end_intent("Original")
-
-        # Copy the card before resolution
-        clone = copy.copy(spell)
-
-        # Neither original nor clone should have chosen_targets before resolve
-        assert not hasattr(spell, "chosen_targets")
-        assert not hasattr(clone, "chosen_targets")
+        t.act(0, bolt, choices=[lions], then=[moves(bolt, Zone.STACK)])
+        _resolve(t, moves(bolt, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD))
+        t.act(0, inspiration, then=[moves(inspiration, Zone.STACK)])
+        t.pass_(0, choices=[bolt])
+        t.pass_(1, then=[*(moves(c, Zone.GRAVEYARD) for c in milled), moves(bolt, Zone.HAND), moves(inspiration, Zone.GRAVEYARD)])
+        t.act(0, mountain, then=[taps(mountain)])
+        t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)], note="the second casting targets player 1")
+        _resolve(t, moves(bolt, Zone.GRAVEYARD), life(1, 18))
+        t.run()
 
     def test_resolve_original_does_not_affect_clone(self):
-        """After resolving the original, a pre-resolve clone stays clean."""
-        game = _make_game()
-        player = game.players[0]
-        the_target = _put_creature(game, 1, "The Target")
-        spell = _TargetedSorcery(
-            name="Original", mana_cost=ManaCost(pips={ManaType.RED: 1})
-        )
-        _add_to_hand(game, 0, spell)
-        _add_mana(player, ManaType.RED, 1)
-
-        _aim(player, "Original", [the_target])
-        cast_spell(game, player, spell)
-        player.end_intent("Original")
-
-        # Clone before resolve
-        clone = copy.copy(spell)
-
-        # Resolve the original
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        # Original gets chosen_targets from resolution
-        assert hasattr(spell, "chosen_targets")
-        assert spell.chosen_targets == [the_target]
-
-        # Clone should NOT have chosen_targets (it was copied before resolve)
-        assert not hasattr(clone, "chosen_targets")
+        first, second = card(BurstLightning), card(BurstLightning)
+        lions, elves = card(SavannahLions), card(LlanowarElves)
+        t = _main_phase(Side(hand=[first, second], mana={ManaType.RED: 2}), Side(battlefield=[lions, elves]))
+        t.act(0, first, choices=[lions], then=[moves(first, Zone.STACK)])
+        _resolve(t, moves(first, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD))
+        t.act(0, second, choices=[elves], then=[moves(second, Zone.STACK)], note="a second Burst Lightning chooses its own target")
+        _resolve(t, moves(second, Zone.GRAVEYARD), moves(elves, Zone.GRAVEYARD))
+        t.run()
