@@ -547,6 +547,25 @@ def _rejecting(*args, **kwargs):
 _casting._cast_spell = _rejecting
 '''
 
+# Bilbo's trigger offers every graveyard card, the opponent's too, and rejects
+# the ones it may not cast.
+BILBO_OFFERS_EVERY_GRAVEYARD_CARD = '''
+from engine.decisions import InvalidPlayerChoiceError as _Invalid
+
+_offered_by_bilbo = choose_object
+
+
+def choose_object(g, controller, options, prompt, **kwargs):
+    extra = [c for p in g.players for c in p.zones[Zone.GRAVEYARD].get_all() if c not in options]
+    chosen = _offered_by_bilbo(g, controller, list(options) + extra, prompt, **kwargs)
+    if chosen in extra:
+        raise _Invalid("Bilbo cannot cast that card")
+    return chosen
+'''
+
+# Faulty: Bilbo's trigger casts any card from its controller's graveyard.
+BILBO_CASTS_ANY_CARD = "_castable_by_trigger = lambda face: True\n"
+
 # Faulty: spells cost nothing.
 CASTS_UNPAID = '''
 from engine.mana import ManaPool as _ManaPool
@@ -649,10 +668,12 @@ def test_uldaros_suite_accepts_forbidden_choices_offered_then_rejected(suffix: s
     ("fra_159", COSTS_WAIVED),
     ("fra_1", WARD_UNPAID_ACCEPTED),
     ("hob_33", CASTS_UNPAID),
+    ("hob_33", BILBO_CASTS_ANY_CARD),
     ("hob_76", PAYS_MANA_INSTEAD_OF_LIFE),
     ("hob_86", FOOD_GRANT_OUTLIVES_FOOD),
     ("hob_174", OFFER_THEN_REJECT + CASTS_ANYTHING_IN_EXILE),
     ("hob_174", ADVENTURE_FROM_ADVENTURE_EXILE),
+    ("hob_174", CARD_THEN_FACE + ADVENTURE_FROM_ADVENTURE_EXILE),
     ("hob_174", CASTS_UNPAID),
 ])
 def test_suite_catches_an_illegal_action_taking_effect(card: str, suffix: str) -> None:
@@ -665,6 +686,11 @@ def test_suite_catches_an_illegal_action_taking_effect(card: str, suffix: str) -
 ])
 def test_suite_accepts_kept_abilities_rejected_on_activation(card: str, suffix: str) -> None:
     passed, failed, output = run_suite(card, suffix)
+    assert passed and not failed, output[-4000:]
+
+
+def test_bilbo_suite_accepts_uncastable_graveyard_cards_rejected() -> None:
+    passed, failed, output = run_suite("hob_33", BILBO_OFFERS_EVERY_GRAVEYARD_CARD)
     assert passed and not failed, output[-4000:]
 
 
