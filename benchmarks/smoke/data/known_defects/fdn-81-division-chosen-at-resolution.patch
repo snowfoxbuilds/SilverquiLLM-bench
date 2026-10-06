@@ -1,0 +1,41 @@
+--- a/cards/fdn/fdn_81/card_impl.py
++++ b/cards/fdn/fdn_81/card_impl.py
+@@ -105,6 +105,2 @@
+ 
+-        # Each activation's division, keyed by the identity of the targets it
+-        # chose; set while activating and read when that activation resolves.
+-        divisions: dict[tuple[int, ...], list[int]] = {}
+-
+         def _minus4_targeting(game: Any, source: Any, controller: Any) -> list[Any]:
+@@ -114,3 +110,2 @@
+             for at least 1, and the last takes the forced remainder."""
+-            from engine.card_queries import choose_number
+             from engine.protection import has_protection_from
+@@ -134,2 +129,11 @@
+                 targets = [chosen]
++            return targets
++
++        def _minus4(game: Any, targets: list[Any], context: Any = None) -> None:
++            """Deal the 8 damage as divided at activation; a target that is no
++            longer legal is dealt nothing (rule 608.2b)."""
++            from engine.game import deal_damage
++            from engine.stack import surviving_targets
++            from engine.card_queries import choose_number
++            targets = surviving_targets(game, context, targets, is_legal=_is_creature_or_planeswalker)
+             amounts: list[int] = []
+@@ -141,14 +145,5 @@
+                 else:
+-                    dmg = choose_number(game, controller, 1, remaining - left_after, f"damage to {getattr(t, 'name', 'target')} ({remaining} of 8 left to divide)", source_card=pw)
++                    dmg = choose_number(game, pw.controller, 1, remaining - left_after, f"damage to {getattr(t, 'name', 'target')} ({remaining} of 8 left to divide)", source_card=pw)
+                 amounts.append(dmg)
+                 remaining -= dmg
+-            divisions[tuple(map(id, targets))] = amounts
+-            return targets
+-
+-        def _minus4(game: Any, targets: list[Any], context: Any = None) -> None:
+-            """Deal the 8 damage as divided at activation; a target that is no
+-            longer legal is dealt nothing (rule 608.2b)."""
+-            from engine.game import deal_damage
+-            from engine.stack import surviving_targets
+-            amounts = divisions.pop(tuple(map(id, targets)), [])
+             legal = surviving_targets(game, context, targets, is_legal=_is_creature_or_planeswalker)

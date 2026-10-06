@@ -1,0 +1,20 @@
+--- a/cards/fdn/fdn_244/card_impl.py
++++ b/cards/fdn/fdn_244/card_impl.py
+@@ -7,3 +7,3 @@
+ from engine.replacement_effects import ReplacementEffect
+-from engine.types import ManaCost, Supertype
++from engine.types import ManaCost, Supertype, Zone
+ if TYPE_CHECKING:
+@@ -70,6 +70,8 @@
+         def _replacement(game: Any, event: Any) -> Any:
+-            # The engine still performs the move — Progenitus leaves the
+-            # battlefield as usual (rule 614.6), just into its owner's library.
+-            event.destination = 'library'
+-            event.position = 'shuffle'
++            owner = getattr(source, 'owner', None)
++            if owner is not None:
++                library = owner.zones[Zone.LIBRARY]
++                library.add(source)
++                library.shuffle()
++            event.prevented = True
+             return event

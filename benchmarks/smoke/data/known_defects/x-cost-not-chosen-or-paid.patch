@@ -1,0 +1,14 @@
+--- a/engine/casting.py
++++ b/engine/casting.py
+@@ -553,11 +553,3 @@
+     """
+-    from engine.card_queries import choose_number
+-
+     card.x_value = 0  # type: ignore[attr-defined]
+-    x_count = card.mana_cost.x_count
+-    if x_count and not free:
+-        maximum = max(0, player.mana_pool.total() - card.mana_cost.cmc) // x_count
+-        card.x_value = choose_number(  # type: ignore[attr-defined]
+-            game, player, 0, maximum, "Choose X", source_card=card
+-        )
+ 

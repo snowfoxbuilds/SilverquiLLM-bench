@@ -31,11 +31,15 @@ RUN-ARTIFACTS-AND-TELEMETRY.md → Smoke runs.
 ## Layout
 
 - `config.json` — identity + `leaderboard.eligible: false`.
-- `workspace/` — a hard copy of the hob-medium workspace (sibling benchmarks
-  never share). The target cards (`cards/fdn/fdn_129`, `fdn_205`, `fdn_232`) are
-  reduced to stubs for the candidate to fill; every other FDN card stays a filled
-  reference implementation. Its engine and FDN implementations carry the Known
-  Defects listed in `data/known_defects.json`.
+- `workspace/` — a hard copy of the Known-Best Workspace (sibling benchmarks
+  never share), with its Audited Engine Tests as `engine_tests/`. The target
+  cards (`cards/fdn/fdn_129`, `fdn_205`, `fdn_232`) are reduced to generated
+  stubs carrying their predefined classes, for the candidate to fill; every
+  other FDN card stays a filled reference implementation. Its engine and FDN
+  implementations carry the Known Defects listed in `data/known_defects.json`,
+  each applied from its patch in `data/known_defects/<id>.patch`. The agent
+  documents (`AGENTS.md`, `PROJECT_MAP.md`, `test_utils.md`, `skills/`) are
+  smoke's own.
 - `data/pool.json` — spec data (name, mana cost, type line, oracle text) for the
   three target cards.
 - `data/tests/audited/` — hard copies of the Known-Best Workspace's FDN Audited
@@ -60,3 +64,18 @@ Three distinct card types across three distinct mechanics — a broad, still-che
 slice of the engine. `tests/test_smoke_benchmark.py` proves the target suites are
 green on smoke's own engine with the Test Oracle Impls swapped in, and
 `tests/test_ported_benchmarks.py` checks the Known Defect manifest.
+
+## Re-porting
+
+Smoke follows the Known-Best Workspace. After the Known-Best Workspace changes,
+re-port it with:
+
+```bash
+python3 scripts/port_from_known_best.py smoke
+```
+
+This rewrites the copied engine, FDN cards, Test Interface, test helpers and Audited Tests,
+regenerates the target stubs and reapplies the Known Defect patches; a patch
+that no longer applies stops the port, and the defect is then re-recorded
+against the new Known-Best code. `tests/test_port_from_known_best.py` fails
+while smoke is behind (`--check` reports what a port would change).
