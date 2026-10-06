@@ -45,6 +45,8 @@ TARGET_CLASSES = {
     "fdn_205": "SeismicRupture",
     "fdn_232": "ScavengingOoze",
 }
+# The docstring scripts/generate_printed_classes.py gives a face stub.
+STUB_MARKER = "Implementation task: see card_spec.json."
 
 
 # ---------------------------------------------------------------------------
@@ -101,8 +103,8 @@ class TestSmokeStructure:
             assert not (SMOKE / "workspace" / "cards" / "fdn" / t / "tests.py").exists()
 
     def test_targets_are_stubs(self) -> None:
-        """Each target impl is a bare CardImpl stub: class name pinned, TODO
-        docstring, no behavior."""
+        """Each target impl is the generated stub: class name pinned, its printed
+        characteristics as constructor defaults, and no behavior."""
         for t, cls in TARGET_CLASSES.items():
             src = (SMOKE / "workspace" / "cards" / "fdn" / t / "card_impl.py").read_text()
             tree = ast.parse(src)
@@ -110,21 +112,19 @@ class TestSmokeStructure:
                 n for n in ast.walk(tree)
                 if isinstance(n, ast.ClassDef) and n.name == cls
             )
-            bases = {b.id for b in classdef.bases if isinstance(b, ast.Name)}
-            assert "CardImpl" in bases, f"{cls} must subclass CardImpl"
-            assert "TODO" in (ast.get_docstring(classdef) or "")
+            assert STUB_MARKER in (ast.get_docstring(classdef) or "")
             methods = [
-                n for n in classdef.body
+                n.name for n in classdef.body
                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
             ]
-            assert not methods, f"{cls} stub should define no behavior"
+            assert methods == ["__init__"], f"{cls} stub should define no behavior"
 
     def test_only_the_targets_are_stubbed(self) -> None:
         """No non-target FDN card was accidentally reduced to a stub."""
         stubbed = [
             p.parent.name
             for p in (SMOKE / "workspace" / "cards" / "fdn").glob("*/card_impl.py")
-            if "TODO: Implement" in p.read_text()
+            if STUB_MARKER in p.read_text()
         ]
         assert sorted(stubbed) == sorted(TARGETS), f"unexpected stubs: {stubbed}"
 
@@ -197,11 +197,12 @@ def _build_overlay(root: Path) -> Path:
 
 
 def _subprocess_env(ws: Path) -> dict[str, str]:
-    """Environment for the overlay run: the overlay is the *only* PYTHONPATH
-    entry, so neither the committed workspaces nor an inherited PYTHONPATH can
-    supply ``engine`` / ``cards``."""
+    """Environment for the overlay run: the overlay, then the repo root for the
+    host-side Audited Test helpers (``silverquillm.table``), as grading puts
+    them; the repo root has no ``engine`` / ``cards``, so neither the committed
+    workspaces nor an inherited PYTHONPATH can supply them."""
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    env["PYTHONPATH"] = str(ws)
+    env["PYTHONPATH"] = os.pathsep.join((str(ws), str(REPO_ROOT)))
     return env
 
 
@@ -231,11 +232,11 @@ class TestSmokeAuditedSuiteGreen:
             assert not filecmp.cmp(SMOKE_WS / rel, overlay / rel, shallow=False), (
                 f"{rel} in the overlay is still the smoke stub"
             )
-            assert "TODO: Implement" not in (overlay / rel).read_text()
+            assert STUB_MARKER not in (overlay / rel).read_text()
         # The committed workspaces were not mutated.
         for t in TARGETS:
             src = (SMOKE_WS / "cards" / "fdn" / t / "card_impl.py").read_text()
-            assert "TODO: Implement" in src, f"committed smoke stub {t} was modified"
+            assert STUB_MARKER in src, f"committed smoke stub {t} was modified"
 
     def test_subprocess_resolves_engine_from_the_overlay(self, overlay: Path) -> None:
         """Negative regression: the run's ``engine`` and ``cards`` come from

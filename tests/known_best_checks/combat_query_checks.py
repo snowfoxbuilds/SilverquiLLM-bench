@@ -258,7 +258,7 @@ def test_declare_attackers_helper_attacks_the_player_past_a_planeswalker():
     (bear,) = _ready(Bear())
     set_board_state(game, 0, battlefield=[bear])
     set_board_state(game, 1, battlefield=[Walker()])
-    declare_attackers(game, ["Bear"])
+    declare_attackers(game, [Bear])
     assert game.combat_state.attackers == {bear: game.players[1]}
 
 
@@ -268,8 +268,8 @@ def test_declare_attackers_helper_surfaces_a_rejection():
     sick.summoning_sick = True
     set_board_state(game, 0, battlefield=[sick])
     with pytest.raises(ScriptEntryError):
-        declare_attackers(game, ["Bear"])
-    declare_attackers(game, ["Bear"], illegal=True)
+        declare_attackers(game, [Bear])
+    declare_attackers(game, [Bear], illegal=True)
     assert game.combat_state.attackers == {}
 
 
@@ -334,7 +334,7 @@ def test_a_single_block_of_a_menace_attacker_is_rejected():
 def test_two_blockers_satisfy_menace_and_the_attacker_divides_its_damage():
     attacker, b1, b2 = Brute(), Bear(), Bear(name="Cub")
     game = _blocking_game(attacker, b1, b2)
-    declare_blockers(game, {"Brute": ["Bear", "Cub"]})
+    declare_blockers(game, {Brute: [b1, b2]})
     assert game.combat_state.attacker_blockers[attacker] == [b1, b2]
     bear = Decision.obj(instance=game.refs.instance_id(b1, Zone.BATTLEFIELD.value))
     game.players[0].set_baseline(Intent(pattern=GameRef(), per_query={bear: [Decision.number(1)]}))
@@ -351,7 +351,7 @@ def test_two_blockers_satisfy_menace_and_the_attacker_divides_its_damage():
 def test_a_trampler_assigns_past_its_blockers_only_once_each_has_lethal_damage():
     trampler, b1, b2 = Trampler(), Bear(), Bear(name="Cub")
     game = _blocking_game(trampler, b1, b2)
-    declare_blockers(game, {"Trampler": ["Bear", "Cub"]})
+    declare_blockers(game, {Trampler: [b1, b2]})
     first, second = (
         Decision.obj(instance=game.refs.instance_id(b, Zone.BATTLEFIELD.value)) for b in (b1, b2)
     )
@@ -371,7 +371,7 @@ def test_an_attacker_with_no_power_divides_nothing(power):
     attacker, b1, b2 = Brute(), Bear(), Bear(name="Cub")
     attacker.base_power = attacker.modified_power = power
     game = _blocking_game(attacker, b1, b2)
-    declare_blockers(game, {"Brute": ["Bear", "Cub"]})
+    declare_blockers(game, {attacker: [b1, b2]})
     combat_damage_step(game)
     # It assigns no combat damage (rule 510.1a), so nothing is asked.
     assert not [r for r in game.players[0].transcript.all() if r.query.question]
@@ -382,8 +382,8 @@ def test_declare_blockers_helper_with_an_illegal_block():
     attacker, ground = Hawk(), Bear()
     game = _blocking_game(attacker, ground)
     with pytest.raises(ScriptEntryError):
-        declare_blockers(game, {"Hawk": ["Bear"]})
-    declare_blockers(game, {"Hawk": ["Bear"]}, illegal=True)
+        declare_blockers(game, {Hawk: [Bear]})
+    declare_blockers(game, {Hawk: [Bear]}, illegal=True)
     assert game.combat_state.blockers == {}
 
 
@@ -716,7 +716,8 @@ def _helper_and_script_agree(build, assignments, scoped, *, illegal=False):
                 declare_blockers_step(game)
         except ScriptEntryError as exc:
             error = exc.reason
-        blocks = {b.name: [a.name for a in attackers]
+        label = {id(bear): "bear", id(cub): "cub", id(brute): "brute"}
+        blocks = {label[id(b)]: [label[id(a)] for a in attackers]
                   for b, attackers in game.combat_state.blockers.items()}
         results.append((error, blocks, brute.is_blocking))
     return results
@@ -734,9 +735,9 @@ def _double():
 
 @pytest.mark.parametrize("assignments", [
     lambda bear, cub, brute: {bear: [brute], cub: [brute]},
-    lambda bear, cub, brute: {bear: ["Brute"], cub: [brute]},
-    lambda bear, cub, brute: {"Bear": [brute], "Cub": ["Brute"]},
-], ids=["objects", "mixed", "names"])
+    lambda bear, cub, brute: {bear: [Brute], cub: [brute]},
+    lambda bear, cub, brute: {bear: [Brute], cub: [Brute]},
+], ids=["objects", "mixed", "classes"])
 def test_the_blockers_helper_keeps_every_attacker_a_blocker_is_given(assignments):
     both = lambda bear, cub: [bear, cub]  # noqa: E731
     helper, direct = _helper_and_script_agree(_ordinary, assignments, both)
@@ -744,7 +745,7 @@ def test_the_blockers_helper_keeps_every_attacker_a_blocker_is_given(assignments
     helper, direct = _helper_and_script_agree(_ordinary, assignments, both, illegal=True)
     assert helper == direct == (None, {}, False)
     helper, direct = _helper_and_script_agree(_double, assignments, both)
-    assert helper == direct == (None, {"Brute": ["Bear", "Cub"]}, True)
+    assert helper == direct == (None, {"brute": ["bear", "cub"]}, True)
 
 
 def test_a_duplicate_assignment_is_one_block():
@@ -797,7 +798,7 @@ def test_the_attackers_helper_attacks_the_player_without_a_planeswalker():
     game = _game()
     (bear,) = _ready(Bear())
     set_board_state(game, 0, battlefield=[bear])
-    declare_attackers(game, ["Bear"])
+    declare_attackers(game, [Bear])
     assert game.combat_state.attackers == {bear: game.players[1]}
 
 
@@ -1079,7 +1080,7 @@ def test_a_block_whose_completion_raises_ends_its_entry(monkeypatch, through_hel
     monkeypatch.setattr(p1, "confirm_declaration", fail)
     with pytest.raises((RuntimeError, TestSetupError)):
         if through_helper:
-            declare_blockers(game, {"Bear": ["Wall"]})
+            declare_blockers(game, {attacker: [wall]})
         else:
             script(game, 1, act(_ref(game, wall), choices=[Decision.number(7)]))
             declare_blockers_step(game)
