@@ -198,6 +198,53 @@ def _exiled_first(game, player):
 _priority.priority_query = _exiled_first
 '''
 
+# Offers first every activated ability of every card in the player's exile,
+# named by its real source and zone — such as an exiled Emrakul's "exile this
+# from your hand" ability, which shares its printed class with the mana ability
+# it grants a land — and activates it through the engine's own checks.
+EXILED_ABILITIES_FIRST = '''
+import engine.priority as _priority
+from engine.types import Zone as _Zone
+
+_original_exiled = _priority.priority_query
+
+
+def _exiled_abilities_first(game, player):
+    query, actions = _original_exiled(game, player)
+    seat = _priority._seat(game, player)
+    exiled = {}
+    for card in list(player.zones[_Zone.EXILE].get_all()):
+        for index, ability in enumerate(_priority.activatable_abilities(card, game)):
+            decision = _priority._ability_decision(game, seat, card, index, ability, in_zone=_Zone.EXILE)
+            exiled[decision] = _priority._activation(game, player, card, ability)
+    actions = {**exiled, **{d: a for d, a in actions.items() if d not in exiled}}
+    options = tuple(actions)
+    return query.__class__(source=query.source, prompt=query.prompt, options=options,
+                           min=0, max=min(1, len(options))), actions
+
+
+_priority.priority_query = _exiled_abilities_first
+'''
+
+# Offers the Priority Query's actions in reverse order, so a land's granted
+# ability comes before its own and a later source before an earlier one.
+REVERSED = '''
+import engine.priority as _priority
+
+_original_order = _priority.priority_query
+
+
+def _reversed(game, player):
+    query, actions = _original_order(game, player)
+    actions = dict(reversed(list(actions.items())))
+    options = tuple(actions)
+    return query.__class__(source=query.source, prompt=query.prompt, options=options,
+                           min=0, max=min(1, len(options))), actions
+
+
+_priority.priority_query = _reversed
+'''
+
 # Hall of Echoes only: keeps offering, first, the copy ability of a Hall that is
 # currently a copy of something else, rejecting it when chosen.
 HALL_REMOVED_ABILITY_FIRST = '''
@@ -367,13 +414,14 @@ TARGETS = ("fra_1", "fra_49", "fra_64", "fra_159", "fra_179", "war_143", "fut_78
 
 @pytest.mark.parametrize("card", TARGETS)
 @pytest.mark.parametrize("variant", ["offer_then_reject", "card_then_face", "card_then_face_all_sources",
-                                     "exiled_source_first",
-                                     "consumed_face_first"])
+                                     "exiled_source_first", "consumed_face_first", "reversed",
+                                     "exiled_abilities_first"])
 def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None:
     suffix = {"offer_then_reject": OFFER_THEN_REJECT, "card_then_face": CARD_THEN_FACE,
               "card_then_face_all_sources": CARD_THEN_FACE_ALL_SOURCES,
               "consumed_face_first": CONSUMED_FACE_FIRST,
-              "exiled_source_first": EXILED_SOURCE_FIRST}[variant]
+              "exiled_source_first": EXILED_SOURCE_FIRST, "reversed": REVERSED,
+              "exiled_abilities_first": OFFER_THEN_REJECT + EXILED_ABILITIES_FIRST}[variant]
     passed, failed, output = run_suite(card, suffix)
     assert passed and not failed, output[-4000:]
 

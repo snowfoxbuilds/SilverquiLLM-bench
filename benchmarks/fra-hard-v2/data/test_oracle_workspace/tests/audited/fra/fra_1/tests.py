@@ -29,14 +29,15 @@ from cards.fdn.fdn_276.card_impl import Swamp
 from cards.fdn.fdn_278.card_impl import Mountain
 from cards.fdn.fdn_280.card_impl import Forest, ForestAbility1
 from cards.fdn.fdn_687.card_impl import DemolitionField, DemolitionFieldAbility2
-from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game, player
+from test_interface import Decision, ManaType, Phase, Side, Step, Zone, ability, card, create_game, player
 
 from silverquillm.table import Table, life, moves, off_stack, on_stack, taps, untaps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 EXILE_ABILITY = EmrakulTheExigentDoomAbility5
-GRANTED = EmrakulTheExigentDoomAbility5  # the "{T}: Add {C}{C}" the land gains
+GRANTED = EmrakulTheExigentDoomAbility5  # the "{T}: Add {C}{C}" the land gains: name it as ability(land, GRANTED)
 CAST_TRIGGER = EmrakulTheExigentDoomAbility1
+CAST = EmrakulTheExigentDoom  # casting Emrakul: its handle would also name Emrakul's own abilities
 WARD = EmrakulTheExigentDoomAbility4
 FLICKER = Decision.mode(printed=KykarZephyrAwakenerAbility3)
 
@@ -53,7 +54,7 @@ def _library(n: int = 3) -> list:
 
 def _exile(t: Table, emrakul, land) -> None:
     """Player 0 pays {3} and exiles Emrakul from hand, targeting ``land``; it resolves."""
-    t.act(0, EXILE_ABILITY, choices=[land], then=[moves(emrakul, Zone.EXILE), on_stack(EXILE_ABILITY, 0)],
+    t.act(0, ability(emrakul, EXILE_ABILITY), choices=[land], then=[moves(emrakul, Zone.EXILE), on_stack(EXILE_ABILITY, 0)],
           note="exiling Emrakul is part of the cost")
     t.pass_(0)
     t.pass_(1, then=[off_stack(EXILE_ABILITY)])
@@ -79,7 +80,7 @@ def _in_exile(lands: int = 8, *, seat1: Side | None = None):
 def _cast_from_exile(t: Table, emrakul, untapped) -> None:
     """Player 0 casts Emrakul from exile; its cast trigger untaps ``untapped``,
     then Emrakul resolves."""
-    t.act(0, emrakul, then=[moves(emrakul, Zone.STACK), on_stack(CAST_TRIGGER, 0)])
+    t.act(0, CAST, then=[moves(emrakul, Zone.STACK), on_stack(CAST_TRIGGER, 0)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(CAST_TRIGGER), *[untaps(land) for land in untapped]])
     t.pass_(0)
@@ -89,11 +90,11 @@ def _cast_from_exile(t: Table, emrakul, untapped) -> None:
 def test_exiling_is_a_cost_and_the_grant_waits_for_resolution():
     game, emrakul, target, _ = _in_exile(0)
     t = Table(game)
-    t.act(0, EXILE_ABILITY, choices=[target], then=[moves(emrakul, Zone.EXILE), on_stack(EXILE_ABILITY, 0)])
-    t.act_illegal(0, GRANTED, note="the land has no granted ability yet")
+    t.act(0, ability(emrakul, EXILE_ABILITY), choices=[target], then=[moves(emrakul, Zone.EXILE), on_stack(EXILE_ABILITY, 0)])
+    t.act_illegal(0, ability(target, GRANTED), note="the land has no granted ability yet")
     t.pass_(0)
     t.pass_(1, then=[off_stack(EXILE_ABILITY)])
-    t.act(0, GRANTED, then=[taps(target)])
+    t.act(0, ability(target, GRANTED), then=[taps(target)])
     t.run()
 
 
@@ -101,7 +102,7 @@ def test_the_grant_is_in_addition_to_the_lands_own_ability():
     game, emrakul, target, _ = _in_exile(0)
     t = Table(game)
     _exile(t, emrakul, target)
-    t.act(0, ForestAbility1, then=[taps(target)])
+    t.act(0, ability(target, ForestAbility1), then=[taps(target)])
     t.run()
 
 
@@ -111,10 +112,10 @@ def test_granted_mana_pays_for_emrakul_and_casting_it_untaps_the_lands():
     game, emrakul, target, forests = _in_exile(8)
     t = Table(game)
     _exile(t, emrakul, target)
-    t.act(0, GRANTED, then=[taps(target)])
+    t.act(0, ability(target, GRANTED), then=[taps(target)])
     _tap(t, 0, forests)
     _cast_from_exile(t, emrakul, [target, *forests])
-    t.act_illegal(0, GRANTED, note="casting Emrakul from exile ended the grant")
+    t.act_illegal(0, ability(target, GRANTED), note="casting Emrakul from exile ended the grant")
     t.run()
 
 
@@ -122,9 +123,9 @@ def test_without_the_grant_nine_lands_cannot_cast_emrakul():
     game, emrakul, target, forests = _in_exile(8)
     t = Table(game)
     _exile(t, emrakul, target)
-    t.act(0, ForestAbility1, then=[taps(target)])
+    t.act(0, ability(target, ForestAbility1), then=[taps(target)])
     _tap(t, 0, forests)
-    t.act_illegal(0, emrakul, note="{9} cannot pay {10}")
+    t.act_illegal(0, CAST, note="{9} cannot pay {10}")
     t.run()
 
 
@@ -137,7 +138,7 @@ def test_casting_emrakul_untaps_only_its_controllers_lands():
         start=MAIN,
     )
     t = Table(game)
-    t.act(0, emrakul, then=[moves(emrakul, Zone.STACK), on_stack(CAST_TRIGGER, 0)])
+    t.act(0, CAST, then=[moves(emrakul, Zone.STACK), on_stack(CAST_TRIGGER, 0)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(CAST_TRIGGER), untaps(mine)], note="player 1's Forest stays tapped")
     t.pass_(0)
@@ -154,7 +155,7 @@ def test_countering_emrakul_does_not_counter_its_cast_trigger():
         start=MAIN,
     )
     t = Table(game)
-    t.act(0, emrakul, then=[moves(emrakul, Zone.STACK), on_stack(CAST_TRIGGER, 0)])
+    t.act(0, CAST, then=[moves(emrakul, Zone.STACK), on_stack(CAST_TRIGGER, 0)])
     t.pass_(0)
     _tap(t, 1, islands)
     t.act(1, scatter, choices=[emrakul], then=[moves(scatter, Zone.STACK)])
@@ -171,9 +172,9 @@ def test_casting_from_exile_needs_sorcery_timing():
     _exile(t, emrakul, target)
     t.pass_to(Step.UPKEEP, 1)
     t.pass_(1)
-    t.act(0, GRANTED, then=[taps(target)])
+    t.act(0, ability(target, GRANTED), then=[taps(target)])
     _tap(t, 0, forests)
-    t.act_illegal(0, emrakul, note="it is the opponent's turn")
+    t.act_illegal(0, CAST, note="it is the opponent's turn")
     t.run()
 
 
@@ -182,7 +183,7 @@ def test_the_grant_lasts_through_later_turns():
     t = Table(game)
     _exile(t, emrakul, target)
     t.pass_to(Phase.PRECOMBAT_MAIN, 0)
-    t.act(0, GRANTED, then=[taps(target)], note="two turns later the land still has the grant")
+    t.act(0, ability(target, GRANTED), then=[taps(target)], note="two turns later the land still has the grant")
     t.run()
 
 
@@ -198,8 +199,8 @@ def test_an_opponents_land_can_get_the_grant_but_not_the_permission():
     t = Table(game)
     _exile(t, emrakul, theirs)
     t.pass_to(Phase.PRECOMBAT_MAIN, 1)
-    t.act(1, GRANTED, then=[taps(theirs)])
-    t.act_illegal(1, emrakul)
+    t.act(1, ability(theirs, GRANTED), then=[taps(theirs)])
+    t.act_illegal(1, CAST)
     t.act(1, katana, then=[moves(katana, Zone.STACK)], note="{C}{C} pays the Katana's {2}")
     t.pass_(1)
     t.pass_(0, then=[moves(katana, Zone.BATTLEFIELD)])
@@ -214,7 +215,7 @@ def test_exiling_needs_three_mana():
         start=MAIN,
     )
     t = Table(game)
-    t.act_illegal(0, EXILE_ABILITY, choices=[target], note="Emrakul stays in hand")
+    t.act_illegal(0, ability(emrakul, EXILE_ABILITY), choices=[target], note="Emrakul stays in hand")
     t.run()
 
 
@@ -226,7 +227,7 @@ def test_exiling_works_only_from_hand():
         start=MAIN,
     )
     t = Table(game)
-    t.act_illegal(0, EXILE_ABILITY, choices=[target])
+    t.act_illegal(0, ability(emrakul, EXILE_ABILITY), choices=[target])
     t.run()
 
 
@@ -316,7 +317,7 @@ def test_exiling_with_swamps_also_works():
     t = Table(game)
     _tap(t, 0, swamps)
     _exile(t, emrakul, target)
-    t.act(0, GRANTED, then=[taps(target)])
+    t.act(0, ability(target, GRANTED), then=[taps(target)])
     t.run()
 
 
@@ -329,7 +330,7 @@ def test_an_emrakul_exiled_some_other_way_cannot_be_cast():
         start=MAIN,
     )
     t = Table(game)
-    t.act_illegal(0, emrakul)
+    t.act_illegal(0, CAST)
     t.run()
 
 
@@ -347,16 +348,16 @@ def test_a_target_land_destroyed_in_response_leaves_emrakul_uncastable_in_exile(
         start=MAIN,
     )
     t = Table(game)
-    t.act(0, EXILE_ABILITY, choices=[target], then=[moves(emrakul, Zone.EXILE), on_stack(EXILE_ABILITY, 0)])
+    t.act(0, ability(emrakul, EXILE_ABILITY), choices=[target], then=[moves(emrakul, Zone.EXILE), on_stack(EXILE_ABILITY, 0)])
     t.pass_(0)
     _tap(t, 1, plains)
-    t.act(1, DemolitionFieldAbility2, choices=[target],
+    t.act(1, ability(field, DemolitionFieldAbility2), choices=[target],
           then=[moves(field, Zone.GRAVEYARD), on_stack(DemolitionFieldAbility2, 1)])
     t.pass_(1, choices=[Decision.no()], note="declines Demolition Field's search")
     t.pass_(0, choices=[Decision.no()], then=[off_stack(DemolitionFieldAbility2), moves(target, Zone.GRAVEYARD)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(EXILE_ABILITY)])
-    t.act_illegal(0, emrakul, note="13 mana, but no permission to cast Emrakul from exile")
+    t.act_illegal(0, CAST, note="13 mana, but no permission to cast Emrakul from exile")
     t.run()
 
 
