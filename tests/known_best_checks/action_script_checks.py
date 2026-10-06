@@ -2619,3 +2619,48 @@ def test_an_instant_wrapper_cast_in_a_completed_step_opens_its_window():
 
     run_turn(game)
     assert game.turn_number == 2 and game.stack.is_empty()
+
+
+# ---- the lifecycle settles before every priority, and enters the steps it plays
+
+
+def test_an_all_pass_window_settles_before_each_priority():
+    """CR 117.5: a creature with lethal damage dies before a player receives
+    priority, even when that player's answer is a pass the driver already knows."""
+    from engine.turn import advance
+
+    game = _game()
+    doomed = Creature(name="Doomed", mana_cost=ManaCost(), base_power=2, base_toughness=2)
+    set_board_state(game, 0, battlefield=[doomed])
+    game.open_window()
+    doomed.damage_marked = 2
+
+    advance(game, all_pass=True)
+
+    assert _in_zone(game, doomed, Zone.GRAVEYARD)
+
+
+def test_priority_loop_enters_a_pending_step_before_its_window():
+    game = _game()
+    card = _artifact("Drawn")
+    game.get_library(game.players[0]).add(card)
+    game.turn_number = 3
+    game.phase, game.step = Phase.BEGINNING, Step.DRAW
+    game.close_window(StepState.PENDING)
+
+    priority_loop(game)
+
+    assert _in_zone(game, card, Zone.HAND)
+
+
+def test_priority_loop_leaves_a_completed_step_alone():
+    game = _game()
+    resolved = []
+    game.close_window(StepState.DONE)
+    game.stack.push(StackObject(
+        source="A", controller=game.players[0], on_resolve=lambda g: resolved.append("A"),
+    ))
+
+    priority_loop(game)
+
+    assert resolved == []

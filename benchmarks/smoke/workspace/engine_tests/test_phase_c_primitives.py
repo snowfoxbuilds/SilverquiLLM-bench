@@ -283,6 +283,7 @@ class TestEffectTiming:
         gear.equip(bear, game)
         assert (bear.power, bear.toughness) == (2, 2)  # Gear has no static buff
 
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         move_to_zone(game, land, Zone.HAND, Zone.BATTLEFIELD)  # landfall -> stack
         assert (bear.power, bear.toughness) == (2, 2)  # trigger not resolved yet
         priority_loop(game)  # resolves the landfall trigger through the real stack
@@ -411,6 +412,7 @@ class TestResolutionOrder:
             p1 = game.players[0]
             bear = _creature("Bear", p1, 2, 2)
             set_board_state(game, 0, battlefield=[bear])
+            game.phase, game.step = Phase.PRECOMBAT_MAIN, None
             game.stack.push(_resolving(
                 lambda g: g.effect_manager.add(_pt_effect(bear, -2, -2))
             ))
@@ -755,10 +757,17 @@ class TestEquipmentLifecycle:
         game.phase = Phase.PRECOMBAT_MAIN
         _equip_via_ability(game, p1, boots, bear)  # legal at activation
         # The target gains protection from artifacts before the ability resolves.
-        bear.protections = [ProtectionAbility(
+        protection = ProtectionAbility(
             quality="artifacts",
             predicate=lambda src: CardType.ARTIFACT in getattr(src, "card_types", set()),
-        )]
+        )
+        game.effect_manager.add(ContinuousEffect(
+            source=object(), layer=Layer.ABILITY,
+            apply=lambda _g: setattr(
+                bear, "protections", [*getattr(bear, "protections", []), protection]
+            ),
+            duration=DURATION_PERMANENT,
+        ))
         resolve_stack(game)
         assert boots.attached_to is None
 

@@ -18,7 +18,7 @@ from engine.events import BeginningOfUpkeepTriggeredEvent
 from engine.game import add_counter
 from engine.intent_player import Intent
 from engine.stack import priority_loop
-from engine.types import ManaCost, Zone
+from engine.types import ManaCost, Phase, Zone
 from test_utils import create_game, set_board_state
 
 
@@ -40,6 +40,7 @@ def _fire_upkeep_copying(game, p1, replication, chosen):
     )
     try:
         game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         priority_loop(game)
     finally:
         p1.end_intent("replicate")

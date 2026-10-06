@@ -18,7 +18,7 @@ from engine.events import AttacksTriggeredEvent
 from engine.intent_player import Intent
 from engine.protection import get_colors
 from engine.stack import priority_loop
-from engine.types import Color, Supertype
+from engine.types import Color, Phase, Supertype
 from test_utils import create_game, set_board_state
 
 
@@ -57,6 +57,7 @@ class TestKioraToken:
         game.trigger_manager.fire_event(
             game, AttacksTriggeredEvent(attacker=kiora, creature=kiora)
         )
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         priority_loop(game)
         p1.end_intent("kiora")
 

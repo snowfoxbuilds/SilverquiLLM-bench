@@ -13,8 +13,8 @@ from cards.fdn.fdn_47.card_impl import MischievousMystic
 from engine.events import DrawsCardTriggeredEvent
 from engine.protection import get_colors
 from engine.stack import priority_loop
-from engine.types import Color, Keyword
-from test_utils import create_game, set_board_state
+from engine.types import Color, Keyword, Phase
+from test_utils import create_game, set_board_state, start_step
 
 
 def _faerie_tokens(game, player):
@@ -37,11 +37,13 @@ class TestMischievousMysticToken:
 
         # First draw this turn: nothing (only the *second* draw triggers).
         game.trigger_manager.fire_event(game, DrawsCardTriggeredEvent(player=p1))
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         priority_loop(game)
         assert len(_faerie_tokens(game, p1)) == 0
 
         # Second draw this turn mints the Faerie.
         game.trigger_manager.fire_event(game, DrawsCardTriggeredEvent(player=p1))
+        start_step(game)
         priority_loop(game)
 
         tokens = _faerie_tokens(game, p1)
