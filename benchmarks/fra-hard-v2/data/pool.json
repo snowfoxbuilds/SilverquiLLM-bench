@@ -159,25 +159,6 @@
     "mana_cost_str": "{1}{B}"
   },
   {
-    "name": "Thranduil, the Elvenking",
-    "mana_cost": "{2}{B}{G}{U}",
-    "type_line": "Legendary Creature — Elf Noble",
-    "oracle_text": "Thranduil has all activated abilities of all Elf cards in your graveyard.\nWhenever another legendary Elf you control enters, draw two cards, then discard a card.",
-    "colors": [
-      "B",
-      "G",
-      "U"
-    ],
-    "keywords": [],
-    "rarity": "rare",
-    "set": "hob",
-    "collector_number": "167",
-    "power": "5",
-    "toughness": "6",
-    "layout": "normal",
-    "mana_cost_str": "{2}{B}{G}{U}"
-  },
-  {
     "name": "Glamdring, Foe-hammer // Gleam of Death",
     "mana_cost": "{2} // {3}{U}",
     "type_line": "Legendary Artifact — Equipment // Sorcery — Adventure",
@@ -213,5 +194,39 @@
       }
     ],
     "mana_cost_str": "{2} // {3}{U}"
+  },
+  {
+    "name": "Sarkhan the Masterless",
+    "mana_cost": "{3}{R}{R}",
+    "type_line": "Legendary Planeswalker — Sarkhan",
+    "oracle_text": "Whenever a creature attacks you or a planeswalker you control, each Dragon you control deals 1 damage to that creature.\n+1: Until end of turn, each planeswalker you control becomes a 4/4 red Dragon creature and gains flying.\n−3: Create a 4/4 red Dragon creature token with flying.",
+    "colors": [
+      "R"
+    ],
+    "keywords": [],
+    "rarity": "rare",
+    "set": "war",
+    "collector_number": "143",
+    "loyalty": "5",
+    "layout": "normal",
+    "mana_cost_str": "{3}{R}{R}"
+  },
+  {
+    "name": "Slaughter Pact",
+    "mana_cost": "{0}",
+    "type_line": "Instant",
+    "oracle_text": "Destroy target nonblack creature.\nAt the beginning of your next upkeep, pay {2}{B}. If you don't, you lose the game.",
+    "colors": [
+      "B"
+    ],
+    "keywords": [],
+    "rarity": "rare",
+    "set": "fut",
+    "collector_number": "78",
+    "color_indicator": [
+      "B"
+    ],
+    "layout": "normal",
+    "mana_cost_str": "{0}"
   }
 ]

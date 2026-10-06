@@ -15,20 +15,27 @@ ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "benchmarks/fra-hard-v2"
 POOL = (
     ("fra", "1"), ("fra", "49"), ("fra", "64"), ("fra", "159"), ("fra", "179"),
-    ("hob", "33"), ("hob", "76"), ("hob", "86"), ("hob", "167"), ("hob", "174"),
+    ("hob", "33"), ("hob", "76"), ("hob", "86"), ("hob", "174"),
+    ("war", "143"), ("fut", "78"),
 )
 # The HOB targets' oracle implementations and suites are not ported yet (#157).
 PORTED_TARGETS = tuple((code, number) for code, number in POOL if code == "fra")
 
 
-def test_pool_matches_fra_hard_v1_and_preserves_both_sets():
+def test_pool_keeps_each_targets_set():
     config = json.loads((BENCH / "config.json").read_text())
-    v1 = json.loads((ROOT / "benchmarks/fra-hard/config.json").read_text())
     assert config["id"] == "fra-hard-v2"
-    assert config["cards"] == v1["cards"] == [f"{code}:{number}" for code, number in POOL]
-    assert config["draft_set"] == v1["draft_set"]
+    assert config["cards"] == [f"{code}:{number}" for code, number in POOL]
+    assert config["draft_set"] == {"primary_set_code": "FRA", "collector_range": "001-290",
+                                   "extra_set_codes": ["HOB", "WAR", "FUT"]}
     assert config["tier"] == "Beta"
-    assert (BENCH / "data/pool.json").read_bytes() == (ROOT / "benchmarks/fra-hard/data/pool.json").read_bytes()
+    pool = json.loads((BENCH / "data/pool.json").read_text())
+    assert [(entry["set"], entry["collector_number"]) for entry in pool] == list(POOL)
+    for entry in pool:
+        spec = json.loads((BENCH / "workspace/cards" / entry["set"] / f"{entry['set']}_{entry['collector_number']}"
+                           / "card_spec.json").read_text())
+        assert (spec["name"], spec["oracle_text" if "oracle_text" in spec else "name"]) == (
+            entry["name"], entry["oracle_text" if "oracle_text" in entry else "name"])
 
 
 def _methods(tree: ast.Module) -> dict[str, list[str]]:

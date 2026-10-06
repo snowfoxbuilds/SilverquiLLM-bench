@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-02
+Last updated: 2026-10-05
 
 # HOB Benchmarks
 
@@ -32,8 +32,8 @@ Operator picks, made 2026-08-28 (hard, medium) and 2026-09-01 (easy) on issue #6
 
 **hob-hard (5)** — extensive engine changes:
 
-These five selections also form the HOB portion of the ten-card [FRA Hard Benchmark](FRA-HARD-BENCHMARK.md).
-Its mixed-set Workspace, oracle, and Audited Tests are independent assets under `benchmarks/fra-hard/`.
+These five selections also form the HOB portion of the ten-card fra-hard v1, and all but Thranduil stay in fra-hard-v2 ([FRA Hard Benchmark](FRA-HARD-BENCHMARK.md); grilling 2026-10-05).
+Their mixed-set Workspaces, oracles, and Audited Tests are independent assets under `benchmarks/fra-hard/` and `benchmarks/fra-hard-v2/`.
 
 | # | Card | Why it's hard |
 | --- | --- | --- |

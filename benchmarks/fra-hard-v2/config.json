@@ -1,12 +1,14 @@
 {
   "schema_version": 1,
   "id": "fra-hard-v2",
-  "display_name": "Reality Fracture + The Hobbit — Hard v2",
+  "display_name": "Reality Fracture + The Hobbit \u2014 Hard v2",
   "draft_set": {
     "primary_set_code": "FRA",
     "collector_range": "001-290",
     "extra_set_codes": [
-      "HOB"
+      "HOB",
+      "WAR",
+      "FUT"
     ]
   },
   "tier": "Beta",
@@ -19,8 +21,9 @@
     "hob:33",
     "hob:76",
     "hob:86",
-    "hob:167",
-    "hob:174"
+    "hob:174",
+    "war:143",
+    "fut:78"
   ],
   "leaderboard": {
     "requires_full_set": true,

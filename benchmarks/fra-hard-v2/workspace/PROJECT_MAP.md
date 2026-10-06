@@ -24,7 +24,9 @@ cards/             — Card implementations.
   cards/fdn/       — Completed FDN reference cards; `tokens.py` holds the FDN tokens.
   cards/fra/       — The five FRA targets, and `tokens.py` with the predefined
                      classes of the tokens FRA keyword actions create.
-  cards/hob/       — The five HOB targets.
+  cards/hob/       — The four HOB targets.
+  cards/war/       — The WAR target.
+  cards/fut/       — The FUT target.
 skills/            — Workspace-local skills (e.g. `grep-rulebook/SKILL.md`).
 ```
 

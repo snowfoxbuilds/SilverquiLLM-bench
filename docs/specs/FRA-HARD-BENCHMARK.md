@@ -4,13 +4,13 @@ Last updated: 2026-10-05
 
 # FRA Hard Benchmark
 
-`fra-hard-v2` is a ten-card implementation benchmark combining five Reality Fracture cards with the five previously selected HOB hard cards.
+`fra-hard-v2` is an eleven-card implementation benchmark combining five Reality Fracture cards, four of the previously selected HOB hard cards, Sarkhan the Masterless (WAR) and Slaughter Pact (FUT).
 
 ## Context
 
 This pool tests substantial engine extensions across copying, casting permissions, zone changes, preparation, and planeswalker rules.
 It uses the V2 Player Query / Player Decision protocol and the independent Karn execution contract.
-The HOB selections retain their original card identities; they are not relabeled as FRA cards.
+The HOB, WAR and FUT selections retain their original card identities; they are not relabeled as FRA cards.
 
 ## Design
 
@@ -29,11 +29,15 @@ Collector numbers identify the original printings, not alternate treatments.
 | HOB | 33 | Bilbo, Thief in the Night |
 | HOB | 76 | Inside Information |
 | HOB | 86 | Supper for Spiders |
-| HOB | 167 | Thranduil, the Elvenking |
 | HOB | 174 | Glamdring, Foe-hammer // Gleam of Death |
+| WAR | 143 | Sarkhan the Masterless |
+| FUT | 78 | Slaughter Pact |
+
+The operator revised the pool on 2026-10-05: Thranduil, the Elvenking left it, and Sarkhan the Masterless and Slaughter Pact joined, so the hidden suites can reach a planeswalker that is a creature with lifelink, and copies and casts with mana value 0 (grilling 2026-10-05).
+fra-hard v1 keeps the original ten.
 
 `benchmarks/fra-hard-v2/config.json` records each selected card as a qualified `set:collector_number` identifier.
-The primary set is FRA and the additional set is HOB.
+The primary set is FRA and the additional sets are HOB, WAR and FUT.
 An unqualified collector number in an existing benchmark still denotes its primary set.
 Staging, oracle selection, grading, and result reporting preserve the set of each card.
 Collector numbers in different sets are distinct targets even when their numbers match.
@@ -41,10 +45,10 @@ Collector numbers in different sets are distinct targets even when their numbers
 ### Workspaces and instructions
 
 The candidate Workspace is ported from the Known-Best Workspace with `scripts/port_from_known_best.py`: the Known-Best engine and FDN implementations plus the benchmark's Known Defects.
-It contains ten behavior-free card stubs with Card Specs under `cards/fra/fra_<N>/` and `cards/hob/hob_<N>/`, and `cards/fra/tokens.py` predefines the Jace token "empower Jace" creates and its abilities.
+It contains eleven behavior-free card stubs with Card Specs under `cards/<set>/<set>_<N>/` for FRA, HOB, WAR and FUT, and `cards/fra/tokens.py` predefines the Jace token "empower Jace" creates and its abilities.
 Both parts of preparation and Adventure cards belong to their one target card.
 Each stub predefines one behavior-free class per face and per printed line of text, such as `GlamdringFoehammer` and `GleamOfDeath`, or `EmrakulTheExigentDoomAbility1`; how those classes relate is the candidate's design (grilling 2026-10-04).
-Each Benchmark Run implements the entire ten-card pool in one Workspace.
+Each Benchmark Run implements the entire eleven-card pool in one Workspace.
 
 Hard-tier guidance supplies workspace conventions and Card Specs without per-card implementation hints.
 Candidates may change the engine, but their implementations must preserve FDN and engine behavior.
@@ -59,14 +63,14 @@ Candidate-authored tests do not replace these suites.
 
 ### Evaluation
 
-The three evaluation dimensions are target-card correctness across FRA and HOB, FDN card regression, and engine regression.
+The three evaluation dimensions are target-card correctness across the four sets, FDN card regression, and engine regression.
 Target results retain canonical IDs such as `fra_159` and `hob_33`.
 There is no extra weighting for a card's set or rarity.
 
 Audited Tests exercise observable gameplay through the public engine and test interfaces.
 The candidate and oracle Workspaces provide the byte-identical, benchmark-owned [Test Interface](TEST-INTERFACE.md) and its documentation; `test_utils.py` is only the Reference Tests' helper module (grilling 2026-10-05).
 Each selected card has at most 30 tests, covering its positive behavior, restrictions, and relevant interactions.
-Validation must account for all ten selected cards and fail on missing implementations, missing suites, or unsynchronized oracle test copies.
+Validation must account for all eleven selected cards and fail on missing implementations, missing suites, or unsynchronized oracle test copies.
 The oracle must also pass FDN and engine regression checks.
 
 The audited coverage includes target legality and zone changes, permission lifetimes, mana and life payment boundaries, copy characteristics, countered spells and abilities, and effects whose controller changes before resolution.
@@ -76,7 +80,7 @@ These interactions intentionally depend on both selected implementations; a fail
 The test envelope uses the baseline engine's two-player games; multiplayer variants and arbitrary additional casting costs are outside the validated scope.
 
 Play is driven through Priority Queries, so the casting call's signature is not part of the test contract (grilling 2026-10-04).
-Adopting them made fra-hard-v2 a separate benchmark, `benchmarks/fra-hard-v2/`, with the same pool, ported from the Known-Best Workspace and starting in Beta.
+Adopting them made fra-hard-v2 a separate benchmark, `benchmarks/fra-hard-v2/`, starting from v1's pool, ported from the Known-Best Workspace and starting in Beta.
 fra-hard v1 stays read-only with its runs and grades: it takes no fixes and no new runs, and its runs are never regraded against fra-hard-v2's suites (grilling 2026-10-04).
 
 Execution and network-less candidate grading follow [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md).

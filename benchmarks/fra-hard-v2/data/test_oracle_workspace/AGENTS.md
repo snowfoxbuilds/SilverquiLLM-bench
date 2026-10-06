@@ -4,8 +4,8 @@
 
 Read `instructions.md` and each target card's `card_spec.json` before implementing.
 
-You are implementing FRA and HOB card implementations. Each card's implementation class
-must be placed in its assigned file under the FRA and HOB target-card tree at `cards/fra/` and `cards/hob/`:
+You are implementing FRA, HOB, WAR and FUT card implementations. Each card's implementation class
+must be placed in its assigned file under the target-card tree at `cards/fra/`, `cards/hob/`, `cards/war/` and `cards/fut/`:
 
 ```
 cards/{set_code}/{card_id}/card_impl.py
