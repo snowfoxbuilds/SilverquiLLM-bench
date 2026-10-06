@@ -58,7 +58,7 @@ _Avoid_: "gold tests", "grader tests" (informal — say "Audited Tests"), "bench
 
 **Base Set**
 
-The FDN Draft Set: MTG Foundations limited format card pool (FDN 001–291 + SPG 074–083 Special Guests). Serves as engine validation, agent reference examples, and regression suite. Ported from XMage Java source. Engine validated via Replay Validation against 17lands GRE JSON data.
+The FDN Draft Set — the MTG Foundations limited format card pool (FDN 001–291 + SPG 074–083 Special Guests) — plus three supporting FDN cards outside it that Audited Tests need to reach positions no Draft Set card reaches: Basilisk Collar (669), Demolition Field (687) and Confiscate (709) (grilling 2026-10-05). Serves as engine validation, agent reference examples, and regression suite. Ported from XMage Java source. Engine validated via Replay Validation against 17lands GRE JSON data.
 
 _Avoid_: "foundation cards" (use "Foundations cards" or "base set")
 
@@ -581,7 +581,7 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - A Draft Set may span multiple Scryfall set codes (e.g., FDN + SPG).
 - Draft Set defines the card pool for Replay Validation (17lands replays are draft games).
 - All card tests follow a uniform structure: `tests/audited/{set_code}/{collector_number}/tests.py`, importing from `card_impl`. FDN and SOS tests share this structure.
-- The Base Set (FDN 001–291 + SPG 074–083) is validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.
+- The Base Set's Draft Set cards (FDN 001–291 + SPG 074–083) are validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.
 - A Pipeline Validation Run exercises the orchestration pipeline; its observations are retained as learning data alongside other run outcomes.
 - The existing publication pipeline requires a Promoted Candidate that verifies by recomputation and permits its knowledge to be published; these publication rules do not gate collection or analysis of Karn run data.
 - A Batch holds ordered run specs; the scheduler executes one run at a time, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.

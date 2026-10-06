@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-05-30
+Last updated: 2026-10-05
 
 # Project Overview
 
@@ -24,7 +24,7 @@ Existing coding benchmarks (HumanEval, SWE-bench) don't capture the structured c
 | --- | --- |
 | Language | Python |
 | Engine | Python port of XMage (Java, MIT) |
-| Base set | MTG Foundations limited pool (FDN 001–291, ported from XMage) |
+| Base set | MTG Foundations limited pool (FDN 001–291 + SPG 074–083, ported from XMage) plus three supporting FDN cards (669, 687, 709) |
 | Target set | Secrets of Strixhaven (SOS, released 2026-04-24) |
 | Agentic tool | Docker container images: Pi (default), OpenCode, Claude Code, Aider (containerized black-box agents) |
 | Card scope | Full set (all card types) |

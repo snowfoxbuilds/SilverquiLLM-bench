@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-04-28
+Last updated: 2026-10-05
 
 # Game Engine
 
@@ -20,7 +20,7 @@ Source: `github.com/magefree/mage` (Java, MIT — license-compatible with Silver
 
 - Core rules engine — game loop, stack, priority, combat, state-based actions, continuous effects, zones
 - Card framework — base classes and ability infrastructure
-- MTG Foundations cards — the fixed 301-card Base Set pool (see Base Set below)
+- MTG Foundations cards — the fixed Base Set pool (see Base Set below)
 **How to port:**
 
 - Preserve XMage's class hierarchy; translate to Pythonic idioms (snake_case, dataclasses, type hints). Requires Python ≥3.12. All project config (`pyproject.toml`, `ruff.toml`) must target 3.12.
@@ -50,7 +50,7 @@ Source: `github.com/magefree/mage` (Java, MIT — license-compatible with Silver
 
 ### Base Set: MTG Foundations Draft Set
 
-The Base Set is the primary reference set agents can browse during benchmarking: a fixed pool of **301 limited-format cards — FDN 001–291 plus SPG 074–083 Special Guests** — a direct XMage port of the MTG Foundations Draft Set, sourced from Scryfall/MTGJson. The pool is fixed: there is no Expanded Pool of extra reference cards, and none is planned. Agents implement new mechanics from scratch using oracle text plus the comprehensive rules, with no curated reference implementations for target-set mechanics.
+The Base Set is the primary reference set agents can browse during benchmarking: a fixed pool of **301 limited-format cards — FDN 001–291 plus SPG 074–083 Special Guests** — a direct XMage port of the MTG Foundations Draft Set, sourced from Scryfall/MTGJson. Three FDN cards outside the Draft Set join it as supporting cards, because Audited Tests need them to reach positions no Draft Set card reaches: Basilisk Collar (FDN 669), Demolition Field (FDN 687) and Confiscate (FDN 709) (grilling 2026-10-05). The pool is otherwise fixed: there is no Expanded Pool of extra reference cards, and none is planned. Replay Validation covers the Draft Set cards only, since 17lands replays are draft games. Agents implement new mechanics from scratch using oracle text plus the comprehensive rules, with no curated reference implementations for target-set mechanics.
 
 The Base Set serves as:
 
