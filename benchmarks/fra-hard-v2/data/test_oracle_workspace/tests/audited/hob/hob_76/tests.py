@@ -15,9 +15,10 @@ from cards.fdn.fdn_175.card_impl import HerosDownfall
 from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_274.card_impl import Island
+from cards.fut.fut_78.card_impl import SlaughterPact, SlaughterPactAbility2
 from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game, player
 
-from silverquillm.table import Table, appears, life, moves, taps, wins
+from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps, wins
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 
@@ -232,4 +233,36 @@ def test_a_countered_exiled_spell_does_not_refund_the_life():
     t.act(1, offer, choices=[bolt], then=[moves(offer, Zone.STACK)])
     t.pass_(1)
     t.pass_(0, then=[moves(offer, Zone.GRAVEYARD), moves(bolt, Zone.GRAVEYARD), appears(0), appears(0)])
+    t.run()
+
+
+def test_a_spell_with_mana_value_zero_is_cast_for_no_life():
+    """Slaughter Pact's mana value is 0, so at 1 life player 0 still casts it,
+    paying nothing, and stays at 1."""
+    pact, lions = card(SlaughterPact), card(SavannahLions)
+    library = [pact, card(Plains)]
+    game, info = _game(library, x=1, life_total=1, seat1_battlefield=[lions])
+    t = Table(game)
+    _cast_info(t, info, library, 1)
+    t.act(0, pact, choices=[lions], then=[moves(pact, Zone.STACK, seat=0)], note="0 life is paid")
+    _resolve(t, then=[moves(pact, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD)])
+    t.run()
+
+
+def test_a_pact_cast_this_way_still_comes_due_for_its_caster():
+    """Paying life replaces only the mana cost: the pact player 0 cast from
+    player 1's exile comes due at player 0's next upkeep, and with no mana to
+    pay {2}{B} player 0 loses."""
+    pact, lions = card(SlaughterPact), card(SavannahLions)
+    library = [pact, card(Plains), card(Plains)]
+    game, info = _game(library, x=1, seat1_battlefield=[lions])
+    t = Table(game)
+    _cast_info(t, info, library, 1)
+    t.act(0, pact, choices=[lions], then=[moves(pact, Zone.STACK, seat=0)])
+    _resolve(t, then=[moves(pact, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD)])
+    t.pass_to(Step.END, 1)
+    t.pass_(1)
+    t.pass_(0, then=[on_stack(SlaughterPactAbility2, 0)], note="the pact comes due at its caster's upkeep")
+    t.pass_(0, choices=[Decision.no()], note="no mana to pay {2}{B}")
+    t.pass_(1, then=[off_stack(SlaughterPactAbility2), wins(1)])
     t.run()
