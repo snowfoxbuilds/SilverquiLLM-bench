@@ -14,7 +14,11 @@ from card_impl import (
 )
 from cards.fdn.fdn_86.card_impl import FieryAnnihilation
 from cards.fdn.fdn_95.card_impl import SowerOfChaos
-from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride
+from cards.fdn.fdn_134.card_impl import (
+    AjaniCallerOfThePride,
+    AjaniCallerOfThePrideAbility1,
+    AjaniCallerOfThePrideAbility2,
+)
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_171.card_impl import DiregrafGhoul
 from cards.fdn.fdn_175.card_impl import HerosDownfall
@@ -113,6 +117,22 @@ def test_every_planeswalker_its_controller_controls_becomes_a_dragon():
     t = Table(game)
     _activate(t, 0, ANIMATE)
     _attack_unblocked(t, 0, sarkhan, ajani, then=[life(1, 12)])
+    t.run()
+
+
+def test_an_animated_planeswalker_keeps_its_own_loyalty_abilities():
+    """A Dragon Ajani is no planeswalker but keeps its abilities: its +1 puts a
+    +1/+1 counter on itself, so it attacks for 5, and it still may activate
+    only one loyalty ability a turn."""
+    sarkhan, ajani = card(SarkhanTheMasterless), card(AjaniCallerOfThePride)
+    game = create_game(Side(battlefield=[sarkhan, ajani], library=_library()), Side(library=_library()), start=MAIN)
+    t = Table(game)
+    _activate(t, 0, ANIMATE)
+    t.act(0, AjaniCallerOfThePrideAbility1, choices=[ajani], then=[on_stack(AjaniCallerOfThePrideAbility1, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(AjaniCallerOfThePrideAbility1)])
+    t.act_illegal(0, AjaniCallerOfThePrideAbility2, choices=[ajani], note="Ajani has used its loyalty ability")
+    _attack_unblocked(t, 0, ajani, then=[life(1, 15)])
     t.run()
 
 

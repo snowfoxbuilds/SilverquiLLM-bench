@@ -33,7 +33,7 @@ Collector numbers identify the original printings, not alternate treatments.
 | WAR | 143 | Sarkhan the Masterless |
 | FUT | 78 | Slaughter Pact |
 
-The operator revised the pool on 2026-10-05: Thranduil, the Elvenking left it, and Sarkhan the Masterless and Slaughter Pact joined, so the hidden suites can reach a planeswalker that is a creature with lifelink, and copies and casts with mana value 0 (grilling 2026-10-05).
+The operator revised the pool on 2026-10-05: Thranduil, the Elvenking left it, and Sarkhan the Masterless and Slaughter Pact joined, so the hidden suites can reach a planeswalker that becomes a creature, and copies and casts with mana value 0 (grilling 2026-10-05).
 fra-hard v1 keeps the original ten.
 
 `benchmarks/fra-hard-v2/config.json` records each selected card as a qualified `set:collector_number` identifier.
@@ -75,7 +75,7 @@ The oracle must also pass FDN and engine regression checks.
 
 The audited coverage includes target legality and zone changes, permission lifetimes, mana and life payment boundaries, copy characteristics, countered spells and abilities, and effects whose controller changes before resolution.
 Separate oracle regression tests exercise interactions between selected cards.
-Selected per-card hidden suites also exercise explicit cross-card interactions: Bilbo imports the Workspace's Glamdring implementation to test the discount on a legal cast from exile after its Adventure resolves, with a payment control without Bilbo; Hall imports Bloodline Recollector to test preparing and casting the copied inset spell (grilling 2026-10-03); Sanctum Lurker imports Sarkhan the Masterless, whose +1 makes a planeswalker a creature that Basilisk Collar can give lifelink, and Uldaros imports Slaughter Pact for a copy with mana value 0 (grilling 2026-10-05).
+Selected per-card hidden suites also exercise explicit cross-card interactions: Bilbo imports the Workspace's Glamdring implementation to test the discount on a legal cast from exile after its Adventure resolves, with a payment control without Bilbo; Hall imports Bloodline Recollector to test preparing and casting the copied inset spell (grilling 2026-10-03); Sanctum Lurker imports Sarkhan the Masterless, whose +1 makes a planeswalker a Dragon creature and no longer a planeswalker (rule 205.1a), so the Lurker's granted ability leaves it until the turn ends while Basilisk Collar gives it lifelink in combat, and Uldaros imports Slaughter Pact for a copy with mana value 0 (grilling 2026-10-05).
 These interactions intentionally depend on both selected implementations; a failure can originate in either card or the shared engine.
 The test envelope uses the baseline engine's two-player games; multiplayer variants and arbitrary additional casting costs are outside the validated scope.
 

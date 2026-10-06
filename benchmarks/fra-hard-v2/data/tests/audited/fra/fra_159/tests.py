@@ -90,9 +90,13 @@ def _cast_uldaros(t: Table, uldaros, targets=(), **options) -> None:
     t.pass_(1, then=[moves(uldaros, Zone.BATTLEFIELD), on_stack(TRIGGER, 0)])
 
 
-def _resolve_trigger(t: Table, casts=(), *, then=(), note: str = "") -> None:
-    """The trigger resolves; player 0 answers its questions with ``casts``."""
-    t.pass_(0, choices=list(casts))
+def _resolve_trigger(t: Table, casts=(), *, then=(), note: str = "", branches=None) -> None:
+    """The trigger resolves; player 0 answers its questions with ``casts``, or
+    from ``branches`` when an engine may reject one of them and ask again."""
+    if branches is not None:
+        t.pass_(0, branches=branches)
+    else:
+        t.pass_(0, choices=list(casts))
     t.pass_(1, then=[off_stack(TRIGGER), *then], note=note)
 
 
@@ -190,12 +194,14 @@ def test_only_one_card_of_a_type_is_exiled():
 
 
 def test_the_casts_share_a_budget_of_six_mana_value():
-    """A 7-mana-value creature is exiled but cannot be cast; Boltwave can."""
+    """A 7-mana-value creature is exiled but cannot be cast; Boltwave can. An
+    engine that offers the Demon's copy rejects casting it, and player 0 then
+    casts only Boltwave."""
     demon, wave = card(RuneScarredDemon), card(Boltwave)
     game, uldaros = _game([demon, wave])
     t = Table(game)
     _cast_uldaros(t, uldaros, [demon, wave])
-    _resolve_trigger(t, [RuneScarredDemon, Boltwave], then=[
+    _resolve_trigger(t, branches=[branch(choices=[RuneScarredDemon, Boltwave]), branch(choices=[Boltwave])], then=[
         moves(demon, Zone.EXILE), moves(wave, Zone.EXILE), copied(Boltwave, 0),
     ], note="the Demon's copy is over the budget")
     _resolve_top(t, Boltwave, then=[life(1, 17)])
@@ -220,12 +226,15 @@ def test_exactly_six_mana_value_casts_three_spells():
 
 def test_a_copy_over_the_remaining_budget_is_not_cast():
     """After Ajani (3) and Anthem (2) only 1 of the budget remains, so Hero's
-    Downfall (3) is exiled but not cast."""
+    Downfall (3) is exiled but not cast. An engine that offers its copy rejects
+    casting it, keeps the two casts already made, and player 0 then declines."""
     ajani, anthem, downfall = card(AjaniCallerOfThePride), card(AnthemOfChampions), card(HerosDownfall)
     game, uldaros = _game([ajani, anthem, downfall])
     t = Table(game)
     _cast_uldaros(t, uldaros, [ajani, anthem, downfall])
-    _resolve_trigger(t, [AjaniCallerOfThePride, AnthemOfChampions, HerosDownfall], then=[
+    _resolve_trigger(t, branches=[
+        branch(choices=[AjaniCallerOfThePride, AnthemOfChampions, HerosDownfall]), branch(choices=[]),
+    ], then=[
         moves(ajani, Zone.EXILE), moves(anthem, Zone.EXILE), moves(downfall, Zone.EXILE),
         copied(AjaniCallerOfThePride, 0), copied(AnthemOfChampions, 0),
     ], note="Hero's Downfall (3) no longer fits the budget")
@@ -235,10 +244,12 @@ def test_a_copy_over_the_remaining_budget_is_not_cast():
 
 
 def test_the_opponents_graveyard_is_not_eligible():
+    """An engine that offers player 1's Lions as a target rejects choosing it,
+    and player 0 then chooses nothing."""
     theirs = card(SavannahLions)
     game, uldaros = _game(seat1=Side(graveyard=[theirs], library=_library()))
     t = Table(game)
-    _cast_uldaros(t, uldaros, [theirs])
+    _cast_uldaros(t, uldaros, branches=[branch(choices=[theirs]), branch(choices=[])])
     _resolve_trigger(t, [SavannahLions], note="nothing of player 1's is exiled")
     t.run()
 

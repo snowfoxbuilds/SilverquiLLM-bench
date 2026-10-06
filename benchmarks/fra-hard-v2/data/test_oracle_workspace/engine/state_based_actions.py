@@ -305,9 +305,12 @@ def _sba_aura_unattached(game: GameState) -> bool:
                 target = obj.attached_to
                 # Equipment stays on the battlefield but becomes unattached when
                 # its creature is gone (rule 704.5q) or the attachment is illegal
-                # due to protection.
+                # due to protection, or because the permanent stopped being a
+                # creature, as a planeswalker Sarkhan animated does at end of
+                # turn (rule 704.5n).
                 if target is not None and (
                     id(target) not in all_on_battlefield
+                    or CardType.CREATURE not in getattr(target, "card_types", {CardType.CREATURE})
                     or _attachment_illegal_due_to_protection(obj)
                 ):
                     to_unattach.append(obj)

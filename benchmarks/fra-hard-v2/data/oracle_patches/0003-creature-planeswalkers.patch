@@ -2,7 +2,7 @@ diff --git a/engine/card.py b/engine/card.py
 index 2e6c311..e33ed70 100644
 --- a/engine/card.py
 +++ b/engine/card.py
-@@ -1009,11 +1009,57 @@ class Planeswalker(CardImpl):
+@@ -1009,11 +1009,59 @@ class Planeswalker(CardImpl):
          super().__init__(**kwargs)
          self.starting_loyalty: int = starting_loyalty
          self.loyalty: int = starting_loyalty
@@ -32,12 +32,14 @@ index 2e6c311..e33ed70 100644
 +            self.colors = self.__dict__.pop("_colors_before_effects")
 +
 +    def become_creature(self, *creature_types: str) -> None:
-+        """Layer 4: it is also a creature of ``creature_types``, with the 0/0
-+        base a type change gives a permanent that has no printed power and
++        """Layer 4: it becomes a creature of ``creature_types`` and nothing
++        else — no longer a planeswalker, with no other subtypes — but keeps
++        its supertypes, abilities and counters (rule 205.1a–b). It has the
++        0/0 base a type change gives a permanent that has no printed power and
 +        toughness, until effects in layer 7 set them."""
 +        self.__dict__.setdefault("_subtypes_before_effects", set(self.subtypes))
-+        self.card_types = self.card_types | {CardType.CREATURE}
-+        self.subtypes = set(self.subtypes) | set(creature_types)
++        self.card_types = {CardType.CREATURE}
++        self.subtypes = set(creature_types)
 +        self.base_power = self.base_toughness = 0
 +        self.modified_power = self.modified_toughness = 0
 +        for name in ("plus_one_counters", "minus_one_counters", "damage_marked"):
@@ -60,3 +62,20 @@ index 2e6c311..e33ed70 100644
      def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
          """Return the planeswalker's loyalty abilities."""
          return []
+diff --git a/engine/state_based_actions.py b/engine/state_based_actions.py
+--- a/engine/state_based_actions.py
++++ b/engine/state_based_actions.py
+@@ -305,9 +305,12 @@
+                 target = obj.attached_to
+                 # Equipment stays on the battlefield but becomes unattached when
+                 # its creature is gone (rule 704.5q) or the attachment is illegal
+-                # due to protection.
++                # due to protection, or because the permanent stopped being a
++                # creature, as a planeswalker Sarkhan animated does at end of
++                # turn (rule 704.5n).
+                 if target is not None and (
+                     id(target) not in all_on_battlefield
++                    or CardType.CREATURE not in getattr(target, "card_types", {CardType.CREATURE})
+                     or _attachment_illegal_due_to_protection(obj)
+                 ):
+                     to_unattach.append(obj)

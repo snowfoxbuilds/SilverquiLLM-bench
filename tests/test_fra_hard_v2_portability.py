@@ -230,6 +230,50 @@ def _removed_first(game, player):
 _priority.priority_query = _removed_first
 '''
 
+# Uldaros only: offers every copy still in exile as a cast, over the remaining
+# budget or not, when ``_OVER_BUDGET`` is set, and every graveyard card of the
+# asked card type as a target, the opponent's too, when ``_OPPONENTS`` is set;
+# choosing one the rules forbid is rejected and asked again, unless the faulty
+# ``_ACCEPT`` lets it through.
+ULDAROS_OFFERS = '''
+from engine.decisions import InvalidPlayerChoiceError as _Invalid
+
+_choose_object = choose_object
+
+
+def _forbidden(state, player, prompt, options):
+    if prompt == "Cast a copied spell" and _OVER_BUDGET:
+        return [card for card in player.zones[Zone.EXILE].get_all()
+                if getattr(card, "is_card_copy", False) and card not in options]
+    kind = next((t for t in CardType if prompt == f"Exile up to one {t.value} card"), None)
+    if kind is not None and _OPPONENTS:
+        return [card for other in state.players if other is not player
+                for card in other.zones[Zone.GRAVEYARD].get_all()
+                if kind in card.card_types and card not in options]
+    return []
+
+
+def choose_object(state, player, options, prompt, **kwargs):
+    options = list(options)
+    chosen = _choose_object(state, player, options + _forbidden(state, player, prompt, options), prompt, **kwargs)
+    if chosen is not None and chosen not in options and not _ACCEPT:
+        raise _Invalid("the rules forbid that choice")
+    return chosen
+'''
+ULDAROS_OVER_BUDGET_OFFERED = "_OVER_BUDGET, _OPPONENTS, _ACCEPT = True, False, False\n" + ULDAROS_OFFERS
+ULDAROS_OPPONENTS_CARDS_OFFERED = "_OVER_BUDGET, _OPPONENTS, _ACCEPT = False, True, False\n" + ULDAROS_OFFERS
+
+# Faulty: Uldaros casts a copy over the remaining budget.
+ULDAROS_CASTS_OVER_BUDGET = "_OVER_BUDGET, _OPPONENTS, _ACCEPT = True, False, True\n" + ULDAROS_OFFERS + '''
+_cast_spell_free = cast_spell_free
+cast_spell_free = lambda state, player, card, zone, mana_value_limit=None: _cast_spell_free(state, player, card, zone)
+'''
+
+# Faulty: Uldaros exiles a card from the opponent's graveyard.
+ULDAROS_EXILES_OPPONENTS_CARDS = "_OVER_BUDGET, _OPPONENTS, _ACCEPT = False, True, True\n" + ULDAROS_OFFERS + '''
+surviving_targets = lambda state, context, targets, legal: list(targets)
+'''
+
 # Faulty: a card in exile, or a spell copy held for a later cast, may be cast
 # with no permission at all.
 CASTS_ANYTHING_IN_EXILE = '''
@@ -267,6 +311,23 @@ def consume_preparation(game, spell):
 # Faulty: Slaughter Pact may target and destroy a black creature.
 PACT_TARGETS_ANY_CREATURE = '''
 _nonblack_creature = lambda obj: CardType.CREATURE in getattr(obj, "card_types", ())
+'''
+
+# Faulty: Sarkhan's +1 leaves a planeswalker a planeswalker as well as a creature.
+ANIMATION_KEEPS_PLANESWALKER = '''
+from engine.card import Planeswalker as _Planeswalker
+from engine.types import CardType as _CardType
+
+_become_creature = _Planeswalker.become_creature
+
+
+def _also_a_creature(self, *creature_types):
+    card_types = set(self.card_types)
+    _become_creature(self, *creature_types)
+    self.card_types = card_types | {_CardType.CREATURE}
+
+
+_Planeswalker.become_creature = _also_a_creature
 '''
 
 # Faulty: a planeswalker's loyalty abilities may be activated any number of times a turn.
@@ -322,12 +383,22 @@ def test_hall_suite_accepts_a_copied_halls_removed_ability_rejected() -> None:
     assert passed and not failed, output[-4000:]
 
 
+@pytest.mark.parametrize("suffix", [ULDAROS_OVER_BUDGET_OFFERED, ULDAROS_OPPONENTS_CARDS_OFFERED],
+                         ids=["over_budget_offered", "opponents_cards_offered"])
+def test_uldaros_suite_accepts_forbidden_choices_offered_then_rejected(suffix: str) -> None:
+    passed, failed, output = run_suite("fra_159", suffix)
+    assert passed and not failed, output[-4000:]
+
+
 @pytest.mark.parametrize("card,suffix", [
     ("fra_1", OFFER_THEN_REJECT + CASTS_ANYTHING_IN_EXILE),
     ("fra_49", PREPARED_AFTER_CASTING),
     ("fra_64", LOYALTY_EVERY_TIME),
+    ("fra_64", ANIMATION_KEEPS_PLANESWALKER),
     ("war_143", LOYALTY_EVERY_TIME),
     ("fut_78", OFFER_THEN_REJECT + PACT_TARGETS_ANY_CREATURE),
+    ("fra_159", ULDAROS_CASTS_OVER_BUDGET),
+    ("fra_159", ULDAROS_EXILES_OPPONENTS_CARDS),
 ])
 def test_suite_catches_an_illegal_action_taking_effect(card: str, suffix: str) -> None:
     _passed, failed, output = run_suite(card, suffix)

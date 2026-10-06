@@ -348,11 +348,10 @@ def test_stolen_lurker_stops_protecting_its_owners_jace():
     t.run()
 
 
-def test_a_planeswalker_with_lifelink_gains_its_controller_more_life():
-    """Sarkhan the Masterless makes Ajani a 4/4 creature, Basilisk Collar gives
-    it lifelink, and Ajani's granted +2 then gains 1 life from lifelink besides
-    the ability's own 1. Sarkhan has used its loyalty ability this turn, so
-    Ajani's is the +2 that may be activated."""
+def test_an_animated_planeswalker_loses_the_granted_ability():
+    """Sarkhan the Masterless makes Ajani a 4/4 Dragon creature and nothing
+    else (rule 205.1a), so Ajani is no planeswalker and the Lurker's +2 leaves
+    it, Basilisk Collar or not; the Collar's lifelink shows in combat instead."""
     lurker, ajani, sarkhan, collar = (card(SanctumLurker), card(AjaniCallerOfThePride),
                                       card(SarkhanTheMasterless), card(BasiliskCollar))
     game = _game(Side(battlefield=[lurker, ajani, sarkhan, collar], mana={ManaType.WHITE: 2}))
@@ -362,7 +361,27 @@ def test_a_planeswalker_with_lifelink_gains_its_controller_more_life():
           note="equip the Collar to Ajani")
     t.pass_(0)
     t.pass_(1, then=[off_stack(BasiliskCollarAbility2)])
-    _activate(t, 0, DRAIN, then=[life(0, 22), life(1, 19)])
+    t.act_illegal(0, DRAIN, note="a Dragon creature that is no planeswalker has no +2")
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, ajani, then=[taps(ajani)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 16), life(0, 24)])
+    t.run()
+
+
+def test_the_granted_ability_returns_when_the_animation_ends():
+    """Next turn Sarkhan's +1 has ended: Ajani is a planeswalker again and has
+    the Lurker's +2."""
+    lurker, ajani, sarkhan = card(SanctumLurker), card(AjaniCallerOfThePride), card(SarkhanTheMasterless)
+    game = _game(Side(battlefield=[lurker, ajani, sarkhan], library=[Plains]))
+    t = Table(game)
+    _activate(t, 0, SarkhanTheMasterlessAbility2, note="Ajani and Sarkhan become 4/4 Dragons")
+    t.act_illegal(0, DRAIN, note="a Dragon creature that is no planeswalker has no +2")
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    _activate(t, 0, DRAIN, then=[life(0, 21), life(1, 19)])
     t.run()
 
 

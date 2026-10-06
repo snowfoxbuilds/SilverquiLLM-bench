@@ -1035,12 +1035,14 @@ class Planeswalker(CardImpl):
             self.colors = self.__dict__.pop("_colors_before_effects")
 
     def become_creature(self, *creature_types: str) -> None:
-        """Layer 4: it is also a creature of ``creature_types``, with the 0/0
-        base a type change gives a permanent that has no printed power and
+        """Layer 4: it becomes a creature of ``creature_types`` and nothing
+        else — no longer a planeswalker, with no other subtypes — but keeps
+        its supertypes, abilities and counters (rule 205.1a–b). It has the
+        0/0 base a type change gives a permanent that has no printed power and
         toughness, until effects in layer 7 set them."""
         self.__dict__.setdefault("_subtypes_before_effects", set(self.subtypes))
-        self.card_types = self.card_types | {CardType.CREATURE}
-        self.subtypes = set(self.subtypes) | set(creature_types)
+        self.card_types = {CardType.CREATURE}
+        self.subtypes = set(creature_types)
         self.base_power = self.base_toughness = 0
         self.modified_power = self.modified_toughness = 0
         for name in ("plus_one_counters", "minus_one_counters", "damage_marked"):
