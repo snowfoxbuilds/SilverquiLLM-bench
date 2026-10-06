@@ -1551,9 +1551,9 @@ def declare_blockers(
 
     The blocks are declared as a one-entry :func:`act` script: the engine asks
     the defending player which creatures block and then what each blocks, and
-    registers them. When an attacker is multi-blocked the engine raises a
-    damage-order Player Query to the attacker's controller — set a Baseline
-    Intent on that player if so.
+    registers them. When an attacker is multi-blocked the engine asks the
+    attacker's controller how its combat damage is divided — set an Intent
+    on that player that answers the division if so.
 
     With ``illegal=True`` the blocks are ones the rules forbid, scripted as
     :func:`act_illegal`: the engine may decline to offer them or reject them,

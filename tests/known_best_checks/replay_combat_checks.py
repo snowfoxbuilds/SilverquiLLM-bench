@@ -270,7 +270,7 @@ def test_a_first_strike_pass_divides_its_own_damage():
 
 
 def test_a_rejected_division_is_an_engine_failure_and_its_intent_is_ended(monkeypatch):
-    import silverquillm.replay.executor as executor
+    from silverquillm.replay import executor
 
     def illegal(*, power, trample, blockers, died, lethal):
         return {id(b): 0 for b in blockers}

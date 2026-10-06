@@ -74,6 +74,7 @@ The test states the view it expects as play goes, and `run` compares the Player 
 Play also diverges, failing the test, when an `act` entry's action is not offered, is rejected with no branch left to answer from, or misses what it expects; when an `act_illegal` entry's action takes effect; when a query has nothing to answer it; when play reaches a player whose script is empty while another script still has entries; or when the game ends with entries left (grilling 2026-10-05).
 
 Scripting a stretch of play, such as passing through a turn, uses helpers that build script entries and expected views from the rules alone; they need no engine, so they live with the Audited Tests on the host and never enter the Workspace (grilling 2026-10-05).
+Because they never ask the engine, such a helper works out whether a declaration makes anything attack only when the entry settles it — every branch declares creatures, or none does; otherwise the test states it.
 
 ### Scripts
 

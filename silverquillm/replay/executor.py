@@ -1607,7 +1607,7 @@ class ReplayExecutor:
                 trample=Keyword.TRAMPLE in getattr(attacker, "keywords", Keyword(0)),
                 blockers=[b for b, _ in keyed],
                 died=died,
-                lethal=lambda b: _get_lethal_damage(b, attacker),
+                lethal=lambda b, attacker=attacker: _get_lethal_damage(b, attacker),
             )
             per_query = {
                 _asks_about(iid): [Decision.number(shares[id(b)])] for b, iid in keyed
