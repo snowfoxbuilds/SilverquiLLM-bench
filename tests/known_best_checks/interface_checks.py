@@ -21,14 +21,17 @@ from cards.fdn.fdn_134.card_impl import (
 from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_278.card_impl import Mountain, MountainAbility1
-from engine.card import Creature, Sorcery
+from engine.attempts import attempt
+from engine.card import Artifact, Creature, ManaAbility, Sorcery
 from engine.card_queries import choose_object, query_yes_no
 from engine.decisions import Decision, InvalidPlayerChoiceError
 from engine.game import gain_life
 from engine.types import CardType, ManaType, Phase, Step, Zone
 from test_interface import (
     PlayDiverged,
+    ScriptedPlayer,
     Side,
+    ability,
     act,
     act_illegal,
     branch,
@@ -845,3 +848,267 @@ def test_the_table_numbers_tokens_appearing_together_seat_0_first():
     expected = t.expected
     assert expected.players[0].battlefield[0].handle == token(1)
     assert expected.players[1].battlefield[0].handle == token(2)
+
+
+# ---------------------------------------------------------------------------
+# Distinct choices belong to one entry
+# ---------------------------------------------------------------------------
+
+
+class ChooserAbility1:
+    text = "Choose a permanent you control: You gain 1 life."
+
+
+class Chooser(Artifact):
+    """Choose a permanent you control: you gain 1 life. A mana ability that
+    adds nothing, so it can be activated again and again; ``optional`` lets
+    the choice be declined, and then no life is gained."""
+
+    optional = False
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Chooser")
+        super().__init__(**kwargs)
+
+    def get_mana_abilities(self):
+        source = self
+
+        def cost(game, src):
+            mine = game.get_battlefield(source.controller).get_all()
+            chosen = choose_object(game, source.controller, mine, "choose a permanent",
+                                   source_card=source, optional=source.optional)
+            if chosen is not None:
+                gain_life(game, source.controller, 1)
+            return True
+
+        return [ManaAbility(cost=cost, mana_produced=lambda game: None, printed=ChooserAbility1)]
+
+
+class OptionalChooser(Chooser):
+    optional = True
+
+
+@pytest.mark.parametrize("cls", [Chooser, OptionalChooser])
+def test_separate_distinct_entries_may_choose_the_same_permanent_from_one_source(cls):
+    mountain = card(Mountain)
+    t = Table(_main(Side(battlefield=[cls, mountain])))
+    for n in range(100):
+        t.act(0, ChooserAbility1, choices=[mountain], distinct=True, then=[life(0, 21 + n)])
+    final = t.run()
+    assert final == t.expected and final.players[0].life == 120
+
+
+def test_separate_runs_may_choose_the_same_permanent_from_one_source():
+    mountain = card(Mountain)
+    game = _main(Side(battlefield=[Chooser, mountain]))
+    for n in range(3):
+        t = Table(game)
+        t.act(0, ChooserAbility1, choices=[mountain], distinct=True, then=[life(0, 21 + n)])
+        final = t.run()
+        assert final == t.expected and final.players[0].life == 21 + n
+
+
+def test_one_distinct_entry_never_chooses_the_same_permanent_twice_from_one_source():
+    game = _main(Side(hand=[PickTwice], battlefield=[Bear]))
+    with pytest.raises(PlayDiverged, match="nothing in player 0's script answers"):
+        run(game, [act(PickTwice), pass_priority(choices=[Bear], distinct=True)], [pass_priority()], check_views=False)
+
+
+def test_entry_generations_never_repeat():
+    # A freed entry's id() can be reused; its generation never is.
+    player = ScriptedPlayer("check")
+    entry = pass_priority()
+    generations = [player._start(entry).generation for _ in range(1000)]
+    assert len(set(generations)) == 1000
+
+
+class ChooseThenTry(Sorcery):
+    """Choose a permanent you control: you gain 1 life. Then, as its own
+    attempt, choose a permanent you control and confirm it — declining or a
+    Bear is refused: you gain 3 life for a Bear, 5 for a Plains, 10 for a
+    Mountain."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Choose Then Try")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        mine = game.get_battlefield(self.controller).get_all()
+        choose_object(game, self.controller, mine, "choose a permanent", source_card=self)
+        gain_life(game, self.controller, 1)
+
+        def confirmed():
+            chosen = choose_object(game, self.controller, mine, "choose a permanent", source_card=self)
+            if not query_yes_no(game, self.controller, "confirm it?", source_card=self):
+                raise InvalidPlayerChoiceError("the choice must be confirmed")
+            return chosen
+
+        chosen = attempt(game, confirmed)
+        gain_life(game, self.controller, 3 if isinstance(chosen, Bear) else 5 if isinstance(chosen, Plains) else 10)
+
+
+def test_a_retry_forgets_the_choices_it_undoes_and_keeps_those_before_it():
+    # The first answer's Mountain stays chosen through the inner retry, so the
+    # second branch cannot pick it again; the refused attempt's Bear is undone,
+    # so the second branch may pick it.
+    mountain, bear = card(Mountain), card(Bear)
+    game = _main(Side(hand=[ChooseThenTry], battlefield=[mountain, bear, Plains]))
+    resolving = pass_priority(
+        distinct=True,
+        branches=[[mountain, bear, Decision.no()], [mountain, bear, Decision.yes()]],
+        note="declining is refused",
+    )
+    final = run(game, [act(ChooseThenTry), resolving], [pass_priority()], check_views=False)
+    assert final.players[0].life == 24
+
+
+# ---------------------------------------------------------------------------
+# An ability of one permanent
+# ---------------------------------------------------------------------------
+
+
+class SharedAbility:
+    text = "You gain life."
+
+
+class OtherAbility:
+    text = "You gain 10 life."
+
+
+class Refused:
+    """A Shared ability that can never be paid for."""
+
+
+def _gains(source, amount, printed, payable=True):
+    return ManaAbility(
+        cost=lambda game, src: payable,
+        mana_produced=lambda game: gain_life(game, source.controller, amount),
+        printed=printed,
+    )
+
+
+class SharedFirst(Artifact):
+    """Shared: you gain 1 life; Other: you gain 10 life."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Shared First")
+        super().__init__(**kwargs)
+
+    def get_mana_abilities(self):
+        return [_gains(self, 1, SharedAbility), _gains(self, 10, OtherAbility)]
+
+
+class SharedSecond(Artifact):
+    """Other: you gain 10 life; Shared: you gain 3 life."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Shared Second")
+        super().__init__(**kwargs)
+
+    def get_mana_abilities(self):
+        return [_gains(self, 10, OtherAbility), _gains(self, 3, SharedAbility)]
+
+
+class SharedUnpayable(Artifact):
+    """Shared, which cannot be paid for: you would gain 7 life."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Shared Unpayable")
+        super().__init__(**kwargs)
+
+    def get_mana_abilities(self):
+        return [_gains(self, 7, SharedAbility, payable=False)]
+
+
+@pytest.mark.parametrize(("cls", "gained"), [(SharedFirst, 1), (SharedSecond, 3)])
+@pytest.mark.parametrize("listed_first", [True, False])
+def test_an_ability_of_a_permanent_names_that_permanents_printed_ability(cls, gained, listed_first):
+    other = SharedSecond if cls is SharedFirst else SharedFirst
+    chosen = card(cls)
+    battlefield = [chosen, other] if listed_first else [other, chosen]
+    t = Table(_main(Side(battlefield=battlefield)))
+    t.act(0, ability(chosen, SharedAbility), then=[life(0, 20 + gained)])
+    assert t.run().players[0].life == 20 + gained
+
+
+def test_an_ability_of_a_permanent_never_takes_another_permanents_ability():
+    unpayable, payable = card(SharedUnpayable), card(SharedFirst)
+    t = Table(_main(Side(battlefield=[unpayable, payable])))
+    t.act(0, ability(payable, SharedAbility), then=[life(0, 21)])
+    assert t.run().players[0].life == 21
+    unpayable = card(SharedUnpayable)
+    game = _main(Side(battlefield=[unpayable, SharedFirst]))
+    with pytest.raises(PlayDiverged, match="rejected with no branch left"):
+        run(game, [act(ability(unpayable, SharedAbility))], [], check_views=False)
+
+
+def test_a_rejected_ability_of_a_permanent_is_retried_from_the_next_branch():
+    unpayable, payable = card(SharedUnpayable), card(SharedFirst)
+    t = Table(_main(Side(battlefield=[unpayable, payable])))
+    t.act(0, branches=[[ability(unpayable, SharedAbility)], [ability(payable, SharedAbility)]],
+          then=[life(0, 21)], note="the first cannot be paid for")
+    assert t.run().players[0].life == 21
+
+
+def test_an_ability_of_a_permanent_is_not_offered_from_another_permanent():
+    shared, bear = card(SharedFirst), card(Bear)
+    game = _main(Side(battlefield=[shared, bear]))
+    with pytest.raises(PlayDiverged, match="is not offered"):
+        run(game, [act(ability(bear, SharedAbility))], [], check_views=False)
+
+
+class Blink(Sorcery):
+    """Exile each artifact you control, then return them to the battlefield."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Blink")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        from engine.zones import move_to_zone
+
+        for obj in list(game.get_battlefield(self.controller).get_all()):
+            if isinstance(obj, Artifact):
+                move_to_zone(game, obj, Zone.BATTLEFIELD, Zone.EXILE)
+                move_to_zone(game, obj, Zone.EXILE, Zone.BATTLEFIELD)
+
+
+def test_an_ability_of_a_permanent_follows_it_across_a_zone_change():
+    shared, blink = card(SharedSecond), card(Blink)
+    game = _main(Side(hand=[blink], battlefield=[SharedFirst, shared]))
+    final = run(
+        game,
+        [act(blink), pass_priority(), act(ability(shared, SharedAbility))],
+        [pass_priority()],
+        check_views=False,
+    )
+    assert final.where(shared) is Zone.BATTLEFIELD and final.players[0].life == 23
+
+
+def test_an_ability_of_a_permanent_is_not_offered_once_it_left():
+    shared, destroy = card(SharedSecond), card(Destroyer)
+    game = _main(Side(hand=[destroy], battlefield=[SharedFirst, shared]))
+    with pytest.raises(PlayDiverged, match="is not offered"):
+        run(game, [act(destroy), pass_priority(), act(ability(shared, SharedAbility))], [pass_priority()], check_views=False)
+
+
+class Destroyer(Sorcery):
+    """Destroy each Shared Second you control."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Destroyer")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        from engine.game import destroy
+
+        for obj in list(game.get_battlefield(self.controller).get_all()):
+            if isinstance(obj, SharedSecond):
+                destroy(game, obj)
+
+
+def test_an_ability_needs_a_handle_or_token_and_a_class():
+    with pytest.raises(TypeError):
+        ability(SharedFirst, SharedAbility)
+    with pytest.raises(TypeError):
+        ability(card(SharedFirst), "SharedAbility")

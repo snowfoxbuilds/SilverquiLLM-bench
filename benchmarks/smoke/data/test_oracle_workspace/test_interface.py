@@ -44,10 +44,12 @@ __all__ = [
     "ScriptedPlayer",
     "Seen",
     "Side",
+    "SourcedAbility",
     "Step",
     "Token",
     "View",
     "Zone",
+    "ability",
     "act",
     "act_illegal",
     "branch",
@@ -558,6 +560,30 @@ def pass_priority(
     )
 
 
+@dataclass(frozen=True)
+class SourcedAbility:
+    """An ability of one permanent: the printed ability ``printed`` of the
+    card or token ``source``, made with :func:`ability`."""
+
+    source: Handle | Token
+    printed: type
+
+    def __repr__(self) -> str:
+        return f"{self.printed.__name__} of {self.source!r}"
+
+
+def ability(source: Handle | Token, printed: type) -> SourcedAbility:
+    """The printed ability ``printed`` of ``source``'s permanent: an option
+    is chosen only when it is that ability and ``source`` is where it comes
+    from — so one of several objects with the same printed ability, such as
+    a card's own and the one it grants another permanent, can be named."""
+    if not isinstance(source, (Handle, Token)):
+        raise TypeError(f"an ability's source is a card(...) handle or a token(n), not {source!r}")
+    if not isinstance(printed, type):
+        raise TypeError(f"an ability is named by its predefined class, not {printed!r}")
+    return SourcedAbility(source, printed)
+
+
 def player(seat: int) -> PlayerDecision:
     """The preference that chooses the player in ``seat``."""
     return Decision.player(seat=seat)
@@ -585,9 +611,10 @@ def _branches(
 def _items(items: Iterable[Any]) -> tuple[Any, ...]:
     out = []
     for item in items:
-        if not isinstance(item, (PlayerDecision, Handle, Token, type)):
+        if not isinstance(item, (PlayerDecision, Handle, Token, SourcedAbility, type)):
             raise TypeError(
-                f"a preference is a Player Decision, a predefined class, a handle or a token, not {item!r}"
+                "a preference is a Player Decision, a predefined class, a handle, a token or an ability of one,"
+                f" not {item!r}"
             )
         out.append(item)
     return tuple(out)
@@ -604,7 +631,7 @@ def _per_query(mapping: Mapping[Any, Any] | None) -> tuple[tuple[Any, tuple[Any,
 
 
 def _describe_item(item: Any) -> str:
-    if isinstance(item, (type, Handle, Token)):
+    if isinstance(item, (type, Handle, Token, SourcedAbility)):
         return item.__name__ if isinstance(item, type) else repr(item)
     attrs = dict(item.attrs)
     printed = attrs.get("printed")
@@ -732,9 +759,14 @@ class PlayDiverged(AssertionError):
 @dataclass(eq=False)
 class _Playing:
     """The entry a player is playing, the branch it answers with, and
-    whether its action question is being asked again after a rejection."""
+    whether its action question is being asked again after a rejection.
+
+    ``generation`` names the entry for as long as the player lives: each entry
+    a player starts, in this run or a later one, takes the next number, and a
+    retry of the same entry keeps it."""
 
     entry: Entry
+    generation: int
     branch: int = 0
     reasked: bool = False
     rejected: InvalidPlayerChoiceError | None = None
@@ -748,9 +780,10 @@ class ScriptedPlayer(Player):
     """A player who answers every question from their script, and nothing
     else: no defaults, no guesses."""
 
-    # Script position is the test's, not the game's, so a rollback leaves it;
-    # the objects an entry chose are the game's, and a rollback undoes them.
-    rollback_exempt = frozenset({"game", "seat", "script", "_playing", "_run"})
+    # Script position and entry numbering are the test's, not the game's, so a
+    # rollback leaves them; the objects an entry chose are the game's, and a
+    # rollback undoes them.
+    rollback_exempt = frozenset({"game", "seat", "script", "_playing", "_run", "_entries"})
 
     def __init__(self, name: str, life: int = 20) -> None:
         super().__init__(name, life)
@@ -759,6 +792,8 @@ class ScriptedPlayer(Player):
         self.script: list[Entry] = []
         self._playing: _Playing | None = None
         self._run: _Run | None = None
+        self._entries = 0
+        # (entry generation, question source, chosen object) for ``distinct``.
         self._chosen: list[tuple[int, Any, Any]] = []
 
     def answer(self, query: PlayerQuery) -> Answer:
@@ -811,8 +846,7 @@ class ScriptedPlayer(Player):
         while True:
             if not self.script:
                 run.out_of_script(self.seat)
-            playing = _Playing(self.script.pop(0))
-            self._playing = playing
+            playing = self._start(self.script.pop(0))
             run.started(self.seat, playing)
             if playing.entry.kind is Kind.PASS:
                 return Answer()
@@ -820,6 +854,15 @@ class ScriptedPlayer(Player):
             if chosen is not None:
                 return chosen
             run.completed(playing)
+
+    def _start(self, entry: Entry) -> _Playing:
+        """Play ``entry`` next, under a generation no earlier entry had. Only
+        the entry being played answers, so the choices earlier entries made
+        are forgotten."""
+        self._entries += 1
+        self._playing = _Playing(entry, self._entries)
+        self._chosen = []
+        return self._playing
 
     def _choose_action(self, run: _Run, playing: _Playing, query: PlayerQuery) -> Answer | None:
         """The current branch's action, skipping branches whose action is not
@@ -868,7 +911,7 @@ class ScriptedPlayer(Player):
         # an ordering question is answered by its order.
         forced = len(options) == query.min <= 1
         if playing is not None and playing.current.distinct:
-            taken = {obj for owner, src, obj in self._chosen if owner == id(playing) and src == source}
+            taken = {obj for entry, src, obj in self._chosen if entry == playing.generation and src == source}
             options = [o for o in options if _object_key(o) not in taken]
         selected: list[PlayerDecision] = []
         for preference in self._matchers(preferences):
@@ -884,24 +927,27 @@ class ScriptedPlayer(Player):
             if len(selected) < query.min:
                 run.diverge(f"nothing in player {self.seat}'s script answers this question", query)
         if playing is not None:
-            self._chosen.extend((id(playing), source, _object_key(o)) for o in selected)
+            self._chosen.extend((playing.generation, source, _object_key(o)) for o in selected)
         return Answer(tuple(selected))
 
-    def _matchers(self, items: Iterable[Any]) -> list[PlayerDecision | Handle | Token]:
+    def _matchers(self, items: Iterable[Any]) -> list[PlayerDecision | Handle | Token | SourcedAbility]:
         """Each preference as Player Decisions to satisfy — a class stands for
         the card, ability or mode it prints — or as a handle."""
-        matchers: list[PlayerDecision | Handle | Token] = []
+        matchers: list[PlayerDecision | Handle | Token | SourcedAbility] = []
         for item in items:
-            if isinstance(item, (PlayerDecision, Handle, Token)):
+            if isinstance(item, (PlayerDecision, Handle, Token, SourcedAbility)):
                 matchers.append(item)
             else:
                 matchers += [Decision.obj(printed=item), Decision.ability(printed=item), Decision.mode(printed=item)]
         return matchers
 
-    def _matches(self, option: PlayerDecision, preference: PlayerDecision | Handle | Token) -> bool:
+    def _matches(self, option: PlayerDecision, preference: PlayerDecision | Handle | Token | SourcedAbility) -> bool:
         """A handle matches an option that stands for its physical card, and
         a token one that stands for that token — for an ability, the
-        permanent it belongs to."""
+        permanent it belongs to; a sourced ability, that printed ability of
+        that permanent."""
+        if isinstance(preference, SourcedAbility):
+            return satisfies(option, Decision.ability(printed=preference.printed)) and self._matches(option, preference.source)
         if isinstance(preference, Handle):
             return preference.card is not None and self.game.refs.physical_card(option) is preference.card
         if isinstance(preference, Token):
