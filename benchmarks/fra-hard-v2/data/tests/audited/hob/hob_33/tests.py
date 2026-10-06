@@ -127,7 +127,8 @@ def test_a_creature_card_is_not_offered():
     t = _table(game, bilbo)
     _attack(t, bilbo)
     _tap(t, [plains])
-    _resolve(t, choices=[lions], then=[off_stack(TRIGGER)], note="the Lions stays in the graveyard")
+    _resolve(t, branches=[branch(choices=[lions]), branch()], then=[off_stack(TRIGGER)],
+             note="the Lions stays in the graveyard, whether or not it is offered and rejected")
     t.run()
 
 
@@ -138,7 +139,8 @@ def test_the_opponents_graveyard_is_not_offered():
     t = _table(game, bilbo)
     _attack(t, bilbo)
     _tap(t, lands)
-    _resolve(t, choices=[downfall, lions], then=[off_stack(TRIGGER)])
+    _resolve(t, branches=[branch(choices=[downfall, lions]), branch()], then=[off_stack(TRIGGER)],
+             note="the opponent's Hero's Downfall stays put, whether or not it is offered and rejected")
     t.run()
 
 

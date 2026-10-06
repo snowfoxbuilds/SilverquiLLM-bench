@@ -32,6 +32,12 @@ GLEAM_MANA = {ManaType.BLUE: 1, ManaType.COLORLESS: 3}
 EQUIPMENT_MANA = {ManaType.COLORLESS: 2}
 
 
+def offers_gleam(query) -> bool:
+    """A question that offers Gleam of Death among its options, such as which
+    face of the card to cast."""
+    return any(dict(getattr(option, "attrs", ())).get("printed") is GleamOfDeath for option in query.options)
+
+
 def _plains(n: int = 3) -> list:
     return [card(Plains) for _ in range(n)]
 
@@ -130,7 +136,10 @@ def test_the_adventure_cannot_be_cast_again_from_its_exile():
     _cast_gleam(t, glamdring)
     _gleam_resolves(t, glamdring, library)
     t.act_illegal(0, GleamOfDeath, note="only the Equipment may be cast from this exile")
-    t.act(0, GlamdringFoehammer, glamdring, then=[moves(glamdring, Zone.STACK)])
+    t.act(0, branches=[branch(GlamdringFoehammer, glamdring, per_query={offers_gleam: [GleamOfDeath]}),
+                       branch(GlamdringFoehammer, glamdring)],
+          then=[moves(glamdring, Zone.STACK)],
+          note="asked which face to cast, player 0 tries Gleam of Death first; only the Equipment is cast")
     _resolve(t, then=[moves(glamdring, Zone.BATTLEFIELD)])
     t.run()
 
@@ -288,10 +297,10 @@ def test_the_discount_does_not_reduce_colored_mana():
 
 
 def test_the_discount_does_not_apply_to_creature_spells():
-    """Burnished Hart costs {3}; equipped power 2 leaves {1}, and the pool
-    is empty."""
+    """Burnished Hart costs {3}: the {1} left after equipping would pay it
+    only if equipped power 2 discounted it."""
     hart = card(BurnishedHart)
-    t, _, _ = _equipped(hand=[hart])
+    t, _, _ = _equipped(hand=[hart], mana={ManaType.COLORLESS: 3})
     t.act_illegal(0, hart)
     t.run()
 

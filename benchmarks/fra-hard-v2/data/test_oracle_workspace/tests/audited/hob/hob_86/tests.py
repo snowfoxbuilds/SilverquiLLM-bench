@@ -217,7 +217,11 @@ def test_a_sacrificed_food_is_a_creature_card_again():
     t.act(1, zombify, choices=[lions], then=[moves(zombify, Zone.STACK)])
     t.pass_(1)
     t.pass_(0, then=[moves(zombify, Zone.GRAVEYARD), moves(lions, Zone.BATTLEFIELD, seat=1)])
-    t.act_illegal(1, FOOD, note="{2} is in the pool, but this Lions is a new object, not a Food")
+    t.pass_to(Phase.PRECOMBAT_MAIN, 1)
+    for swamp in swamps[:2]:
+        t.act(1, swamp, then=[taps(swamp)])
+    t.act_illegal(1, FOOD, note="on player 1's next turn the Lions could pay {T} and {2}, but it is a new "
+                                "object, not a Food")
     t.run()
 
 
