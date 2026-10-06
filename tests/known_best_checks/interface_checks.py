@@ -168,6 +168,19 @@ class PickTwice(Sorcery):
             gain_life(game, self.controller, 1)
 
 
+class PickOne(Sorcery):
+    """Choose a permanent you control; you gain 1 life."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Pick One")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        mine = game.get_battlefield(self.controller).get_all()
+        choose_object(game, self.controller, mine, "choose a permanent", source_card=self)
+        gain_life(game, self.controller, 1)
+
+
 class PickBoth(Sorcery):
     """Choose both permanents you control, in an order; you gain 1 life if the
     first chosen is a Plains."""
@@ -530,6 +543,20 @@ def test_an_empty_per_query_answer_never_fills_an_order():
     script = [act(PickBoth), pass_priority(per_query={(lambda query: True): []})]
     with pytest.raises(PlayDiverged, match="nothing in player 0's script answers"):
         run(game, script, [pass_priority()], check_views=False)
+
+
+@pytest.mark.parametrize("order", [(Mountain, Plains), (Plains, Mountain)])
+def test_an_empty_per_query_answer_never_fills_a_choice_of_one_of_two(order):
+    game = _main(Side(hand=[PickOne], battlefield=list(order)))
+    script = [act(PickOne), pass_priority(per_query={(lambda query: True): []})]
+    with pytest.raises(PlayDiverged, match="nothing in player 0's script answers"):
+        run(game, script, [pass_priority()], check_views=False)
+
+
+def test_an_empty_per_query_answer_fills_a_forced_singleton():
+    game = _main(Side(hand=[PickOne], battlefield=[Mountain]))
+    final = run(game, [act(PickOne), pass_priority(per_query={(lambda query: True): []})], [pass_priority()], check_views=False)
+    assert final.players[0].life == 21
 
 
 # ---------------------------------------------------------------------------

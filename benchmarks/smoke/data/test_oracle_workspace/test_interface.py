@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any, Self
 
 from engine.card import printed_class
-from engine.decisions import Decision, DecisionKind, InvalidPlayerChoiceError, PlayerDecision, satisfies
+from engine.decisions import Decision, InvalidPlayerChoiceError, PlayerDecision, satisfies
 from engine.game import Side as _EngineSide
 from engine.game import create_game as _engine_create_game
 from engine.player import Player
@@ -823,7 +823,7 @@ class ScriptedPlayer(Player):
         current = playing.current
         matched = current.matched(query)
         preferences = current.preferences + current.choices if matched is None else matched
-        return self._select(run, query, preferences, playing, explicit=matched is not None)
+        return self._select(run, query, preferences, playing)
 
     def _select(
         self,
@@ -831,16 +831,13 @@ class ScriptedPlayer(Player):
         query: PlayerQuery,
         preferences: Sequence[Any],
         playing: _Playing | None,
-        *,
-        explicit: bool = False,
     ) -> Answer:
         """Preference-major selection: each preference picks the first offered
         option it is satisfied by and that is not picked yet. A mandatory
         question with exactly one possible answer — one option, required — is
-        filled, unless ``distinct`` rules that option out; an explicitly empty
-        ``per_query`` answer is filled to its minimum, unless the question
-        requires every option it offers (an order) or asks for a number (a
-        division of damage). Any other shortfall diverges."""
+        filled, unless ``distinct`` rules that option out, whether the
+        preferences came from the branch or an empty ``per_query`` answer.
+        Any other shortfall diverges."""
         source = _source_key(query)
         options = list(query.options)
         # Only a question with exactly one possible answer is filled for the
@@ -859,9 +856,7 @@ class ScriptedPlayer(Player):
                     selected.append(option)
                     break
         if len(selected) < query.min:
-            if explicit and not preferences and not _answer_is_chosen_by_test(query, options):
-                selected += [o for o in options if o not in selected][: query.min - len(selected)]
-            elif forced:
+            if forced:
                 selected += [o for o in options if o not in selected]
             if len(selected) < query.min:
                 run.diverge(f"nothing in player {self.seat}'s script answers this question", query)
@@ -890,13 +885,6 @@ class ScriptedPlayer(Player):
             followed = _tokens(self.game).find(self.game, preference)
             return followed is not None and self.game.refs.physical_card(option) is followed
         return satisfies(option, preference)
-
-
-def _answer_is_chosen_by_test(query: PlayerQuery, options: Sequence[PlayerDecision]) -> bool:
-    """Whether filling *query* would choose for the test: it requires every one
-    of several options, so its answer is an order, or it asks for a number."""
-    requires_all = query.min == len(options) > 1
-    return requires_all or any(o.kind is DecisionKind.NUMBER for o in options)
 
 
 def _source_key(query: PlayerQuery) -> Any:
