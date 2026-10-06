@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 # FRA Hard Benchmark
 
@@ -64,8 +64,7 @@ Target results retain canonical IDs such as `fra_159` and `hob_33`.
 There is no extra weighting for a card's set or rarity.
 
 Audited Tests exercise observable gameplay through the public engine and test interfaces.
-The candidate and oracle Workspaces provide byte-identical `test_utils.py` helpers and matching API documentation.
-For this benchmark, `resolve_stack` checks state-based actions before resolving the stack, including when the stack is empty.
+The candidate and oracle Workspaces provide the byte-identical, benchmark-owned [Test Interface](TEST-INTERFACE.md) and its documentation; `test_utils.py` is only the Reference Tests' helper module (grilling 2026-10-05).
 Each selected card has at most 30 tests, covering its positive behavior, restrictions, and relevant interactions.
 Validation must account for all ten selected cards and fail on missing implementations, missing suites, or unsynchronized oracle test copies.
 The oracle must also pass FDN and engine regression checks.

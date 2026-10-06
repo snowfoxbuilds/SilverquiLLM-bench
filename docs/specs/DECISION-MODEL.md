@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-03
+Last updated: 2026-10-05
 
 # V2 Player Choice / Decision Model
 
@@ -106,7 +106,7 @@ class PostconditionError(IntentError): ...
 
 **Ordering queries** — `min == max == len(options)`; the order of `Answer.selected` is the assignment order (damage assignment, trigger ordering).
 
-**Intent shape** — frozen dataclass: `pattern: GameRef` (matched against query source refs, subset rule per field), `preferences: tuple[PlayerDecision, ...]` (scanned in order; first satisfied and offered option wins), optional `postcondition` (checked at `end_intent`). The registry name is passed to `start_intent(name, intent)`, not stored on the Intent.
+**Intent shape** — frozen dataclass: `pattern: GameRef` (matched against query source refs, subset rule per field), `preferences: tuple[PlayerDecision, ...]` (in rank order; each takes the first offered option that satisfies it), optional `postcondition` (checked at `end_intent`). The registry name is passed to `start_intent(name, intent)`, not stored on the Intent.
 
 **Baseline Intent slot** — a regular Intent with an empty pattern held in a dedicated slot on the player, consulted only when no card intent matches; at most one set at a time.
 
@@ -116,19 +116,22 @@ The query/decision/intent layer is the MSH workspace's task #1 (grilling 2026-06
 
 The MSH player keeps the name `DeterministicPlayer` (grilling 2026-06-10): benchmark-scoped glossary entries in [CONTEXT.md](../../CONTEXT.md) (`DeterministicPlayer (SOS)` vs `DeterministicPlayer (MSH)`) disambiguate it from the frozen V1 two-channel player, and the classes live in per-benchmark workspaces that never import each other.
 
-### Intent-driven answering (audited tests only)
+### Intent-driven answering (HOB benchmarks)
+
+From fra-hard-v2 onward, Audited Tests answer every query from the players' scripts instead, with no Intents or Baseline Intent ([Test Interface](TEST-INTERFACE.md), grilling 2026-10-05).
+
 
 - **Lifecycle**: `start_intent(player, name)` → imperative actions → `end_intent(player, name)`, where the postcondition is checked. Multiple intents may be active; intent status is driven by the test.
 - **Subset-asking**: the DeterministicPlayer accepts a range of potential queries per intent; a valid engine may ask any subset, in any order or decomposition (three small prompts, one combined prompt, or only the final choice).
 - **Answering is preference-based**: the named intent is the scoping/lifecycle layer; answers come from preferences over Player Decisions, which generalize across decompositions (declining "none" on a sacrifice query must cohere with answering "no" to a yes/no offer).
-- **Determinism**: the player scans the implementation-ordered options and takes the first option that is both intended (satisfies a preferred decision) and valid. Greedy, single pass, no search; the postcondition then asserts the goal actually held.
+- **Determinism**: selection is preference-major — each preference in rank order takes the first remaining offered option, in the implementation's order, that satisfies it, until `max` is reached, and a mandatory query is then filled to `min` in option order (grilling 2026-10-05). Greedy, single pass, no search; the postcondition then asserts the goal actually held.
 - **Preference misses are transcript data, not errors**: when a card intent matches a query but none of its preferences match any offered option (and `min > 0`), the player still answers deterministically (first valid option) and flags `preference_miss` on the transcript record. The exception hierarchy stays locked; audited tests that need a miss to be a failure assert it over the query transcript.
 - **Routing**: queries route to intents by pattern-matching on structured source refs; most patterns are statically writable (card identity is known a priori). Dynamic binding is reserved for opaque instance ids. An ambiguous match is a hard test-authoring error.
 - **Baseline Intent**: always-active defaults for system-level query patterns (trigger ordering, replacement choice); card intents take precedence; a query matched by neither is an explicit failure. The baseline is part of the frozen benchmark contract.
 ### Priority actions (fra-hard-v2 onward)
 
 When a player receives priority, the engine raises a Priority Query offering that player's available actions.
-Audited tests choose one through an Intent, and the engine turns the chosen action into its own casting or activation call (grilling 2026-10-03).
+Audited Tests choose one through their scripts, and the engine turns the chosen action into its own casting or activation call (grilling 2026-10-03).
 The Priority Query is how the game runs, not a test hook: it corresponds to the set of choices a user interface would offer a real player at that moment (grilling 2026-10-04).
 This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; fra-hard v1, the HOB tiers and SOS keep directive-driven priority.
 
@@ -171,24 +174,24 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
   Uldaros's targets are up to one card of each card type, judged by the graveyard characteristics of each card: the chosen cards must be distinct cards that can be assigned to distinct card types they have, though their type sets may overlap.
   Glamdring in the graveyard is an artifact card, never a sorcery (CR 715.4), whatever object an engine presents for it, so with Divination, Glamdring and Leyline Axe in the graveyard an engine fails if it lets all three be exiled; Divination with either artifact is legal.
   Choosing which face to cast happens later and separately, when a copy is cast (CR 715.3a): with Divination and Glamdring exiled, casting only the copy as Gleam of Death (mana value 4) and declining Divination stays within the budget of 6.
-  When presentation can change which legal outcome results, the postcondition asserts the rule's invariant (the exiled cards can be assigned to distinct card types) plus the intended part, never one exact outcome (grilling 2026-10-04).
-- **Uldaros acceptance cases**: two artifact creatures fill the artifact and creature slots; one card is never chosen twice, so a single multi-type card is exiled and copied once; two cards that are only sorceries are never both chosen; and a copy's face is chosen while it is cast, whether the engine offers the faces in one query or across two.
+  Presentation varies only how questions are asked and answered, never what happens: a test's branches and per-question preferences are written so that every presentation converges on the same outcome, and the test expects that one outcome, never alternatives (grilling 2026-10-05).
+- **Uldaros acceptance cases**: two artifact creatures fill the artifact and creature slots; one card is never chosen twice, so a single multi-type card is exiled and copied once — the suite may first repeat a card to probe the engine, falling back to a `distinct` branch when the repeat is rejected, so it converges under every presentation (grilling 2026-10-05); two cards that are only sorceries are never both chosen; and a copy's face is chosen while it is cast, whether the engine offers the faces in one query or across two.
 
-#### Action scripts
+#### Turn structure
 
-- **Entries**: each player has an ordered script of action entries, and each Priority Query or combat declaration the player receives consumes the next one.
-  An entry is one action and answers every query within it (choosing Glamdring and then Gleam of Death, or Gleam of Death at once); its goal is checked when the action completes (grilling 2026-10-04).
-- **Positive and expected-illegal entries**: a positive entry (`act`) fails the test with `PostconditionError` if its action is not offered, is rejected with `InvalidPlayerChoiceError`, or misses its goal.
-  An expected-illegal entry (`act_illegal`, the successor to SOS `perform_illegal_action`) passes if its action is not offered or is rejected, and fails if it takes effect and play reaches the next Priority Query (grilling 2026-10-04).
-- **Driving**: tests insert explicit pass entries for priority windows they skip, and a dry script passes through the Baseline Intent.
-  `advance_to_phase` consumes no entries; `run_scripts` stops once every script is consumed and leaves the stack in place, and `resolve_stack` then resolves with every player passing (grilling 2026-10-04).
-- **Choices outside the script**: choices raised while casting or resolving, including effect-granted casts such as Uldaros's or Bilbo's, go to choice Intents routed by source.
-  An `InvalidPlayerChoiceError` raised under a negative choice Intent counts as a pass once the engine has rolled back to the choice's rejection boundary, and the resolution continues from there (grilling 2026-10-04).
+How Audited Tests script the players' answers is part of the [Test Interface](TEST-INTERFACE.md); the engine side follows.
+
+- **Passing is an answer**: declining a Priority Query is the player's answer, a pass, and an attempt reports no separate outcome; the window reads the answer to move the round on, and `run_game` ends with a winner or a draw (grilling 2026-10-05).
+- **Priority round**: a step's open priority window holds the round — who holds priority and how many players have passed in succession — and only the rules change it (CR 117.3–117.4): the window opens with the active player holding priority, a player who acts receives priority again, a pass moves it on, a resolution returns it to the active player, and every player passing in succession resolves the top object or, on an empty stack, ends the step (grilling 2026-10-05).
+  No driver starts or resets a round; a paused `run` leaves the window as it is and the next call carries on from it.
+  A cleanup step opens a window only when its actions performed state-based actions or put triggers on the stack (CR 514.3a), and another cleanup step follows once it ends.
+- **One step lifecycle**: the game owns where the current step is — its turn-based actions pending, its priority window open, or complete — and only the engine's one stepping entry advances it, whether `run` or the turn loop calls it, so a step's turn-based actions happen once, a step with no window (untap, a cleanup step that opens none) is never opened, and a completed step is never reopened (grilling 2026-10-05).
+  Playing with every player passing is a priority policy over that lifecycle, not a separate path; no helper writes the lifecycle, and only construction chooses the step play starts in.
 
 ### Rigor (three independent layers)
 
-1. **Option-set invariants over the query transcript** — the harness logs every query raised (source, options, min/max, answer); tests assert pattern-based invariants over the log (e.g. every creature offered to sacrifice has controller = player0). Decomposition-robust; catches engines that offer illegal options even when the intent never picks one. From fra-hard-v2 onward, what was offered never fails a test; only an illegal choice allowed to take effect does (grilling 2026-10-04).
-2. **Postconditions** checked at `end_intent`.
+1. **Option-set invariants over the query transcript** — the harness logs every query raised (source, options, min/max, answer); tests assert pattern-based invariants over the log (e.g. every creature offered to sacrifice has controller = player0). Decomposition-robust; catches engines that offer illegal options even when the intent never picks one. HOB benchmarks only: from fra-hard-v2 onward, what was offered never fails a test and tests never assert over the transcript; only an illegal choice allowed to take effect does, judged by the Player View (grilling 2026-10-04, 2026-10-05).
+2. **Postconditions** checked at `end_intent` (HOB); from fra-hard-v2 onward, expected Player Views checked at every action question (grilling 2026-10-05).
 3. **Intent spreads as suite design**: each audited test asserts a single must-achieve intent; optionality is covered by separate tests per option (one test per color for "any color", plus a decline test where legal), including negative/impossible intents that must fail cleanly.
 ### Minimal engine enforcement
 
@@ -196,7 +199,7 @@ Two things legitimately remain engine-side:
 
 1. Computing the legal option set (generalizes the existing `TargetRequirement.filter_fn`).
 2. The spend-time predicate for restricted decisions (natural home: the existing `add_restricted` primitive).
-The engine guarantees only legal options are offered and restricted decisions are validated at use; the test, via intent, only ever picks among already-legal options.
+The engine computes the options it offers and validates restricted decisions at use, but offering is not the guarantee: an engine may offer a choice it then rejects with `InvalidPlayerChoiceError`, and only a choice allowed to take effect is judged (grilling 2026-10-05).
 
 ### Worked example — "Add one mana of any color" (V1: sos_257)
 
