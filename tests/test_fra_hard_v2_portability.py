@@ -433,6 +433,11 @@ def _also_a_creature(self, *creature_types):
 _Planeswalker.become_creature = _also_a_creature
 '''
 
+# Faulty: Sarkhan's +1 lasts forever instead of until end of turn.
+ANIMATION_NEVER_ENDS = '''
+from engine.continuous_effects import DURATION_PERMANENT as DURATION_END_OF_TURN
+'''
+
 # Faulty: a planeswalker's loyalty abilities may be activated any number of times a turn.
 LOYALTY_EVERY_TIME = '''
 import engine.abilities as _abilities
@@ -508,6 +513,7 @@ def test_uldaros_suite_accepts_forbidden_choices_offered_then_rejected(suffix: s
     ("fra_64", LOYALTY_EVERY_TIME),
     ("fra_64", ANIMATION_KEEPS_PLANESWALKER),
     ("war_143", LOYALTY_EVERY_TIME),
+    ("war_143", ANIMATION_NEVER_ENDS),
     ("fut_78", OFFER_THEN_REJECT + PACT_TARGETS_ANY_CREATURE),
     ("fra_159", ULDAROS_CASTS_OVER_BUDGET),
     ("fra_159", ULDAROS_EXILES_OPPONENTS_CARDS),

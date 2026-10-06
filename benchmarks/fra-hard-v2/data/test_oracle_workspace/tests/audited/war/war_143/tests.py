@@ -28,6 +28,7 @@ from cards.fdn.fdn_206.card_impl import ShivanDragon
 from cards.fdn.fdn_227.card_impl import LlanowarElves
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_276.card_impl import Swamp
+from cards.fdn.fdn_278.card_impl import Mountain
 from cards.fdn.fdn_709.card_impl import Confiscate
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, player, token
 
@@ -237,13 +238,16 @@ def test_the_dragons_stay_dragons_after_sarkhan_leaves():
 
 def test_the_effect_ends_with_the_turn():
     """On the opponent's turn Sarkhan is no creature: "target creature" cannot
-    take it."""
+    take it, though the opponent has the mana to cast Fiery Annihilation."""
     sarkhan, annihilation = card(SarkhanTheMasterless), card(FieryAnnihilation)
+    mountains = [card(Mountain) for _ in range(3)]
     game = create_game(Side(battlefield=[sarkhan], library=_library()),
-                       Side(hand=[annihilation], mana={ManaType.RED: 3}, library=_library()), start=MAIN)
+                       Side(hand=[annihilation], battlefield=mountains, library=_library()), start=MAIN)
     t = Table(game)
     _activate(t, 0, ANIMATE)
     t.pass_to(Phase.PRECOMBAT_MAIN, 1)
+    for mountain in mountains:
+        t.act(1, mountain, then=[taps(mountain)])
     t.act_illegal(1, annihilation, choices=[sarkhan])
     t.run()
 
