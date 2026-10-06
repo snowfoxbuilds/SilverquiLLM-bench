@@ -131,6 +131,22 @@ def test_an_animated_planeswalker_dies_to_creature_removal():
     t.run()
 
 
+def test_the_dragons_stay_dragons_after_sarkhan_leaves():
+    """Exiled after its +1 resolves, Sarkhan leaves Ajani a 4/4 flier for the
+    turn (rule 611.2a)."""
+    sarkhan, ajani, annihilation = card(SarkhanTheMasterless), card(AjaniCallerOfThePride), card(FieryAnnihilation)
+    game = create_game(Side(battlefield=[sarkhan, ajani], library=_library()),
+                       Side(hand=[annihilation], mana={ManaType.RED: 3}, library=_library()), start=MAIN)
+    t = Table(game)
+    _activate(t, 0, ANIMATE)
+    t.pass_(0)
+    t.act(1, annihilation, choices=[sarkhan], then=[moves(annihilation, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(annihilation, Zone.GRAVEYARD), moves(sarkhan, Zone.EXILE)])
+    _attack_unblocked(t, 0, ajani, then=[life(1, 16)])
+    t.run()
+
+
 def test_the_effect_ends_with_the_turn():
     """On the opponent's turn Sarkhan is no creature: "target creature" cannot
     take it."""

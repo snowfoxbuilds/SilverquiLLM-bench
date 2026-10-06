@@ -11,16 +11,25 @@ from card_impl import (
     EmrakulTheExigentDoomAbility4,
     EmrakulTheExigentDoomAbility5,
 )
+from cards.fdn.fdn_95.card_impl import SowerOfChaos, SowerOfChaosAbility1
+from cards.fdn.fdn_122.card_impl import (
+    KykarZephyrAwakener,
+    KykarZephyrAwakenerAbility2,
+    KykarZephyrAwakenerAbility3,
+)
 from cards.fdn.fdn_130.card_impl import QuickDrawKatana
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_153.card_impl import EssenceScatter
 from cards.fdn.fdn_164.card_impl import SpectralSailor
 from cards.fdn.fdn_175.card_impl import HerosDownfall
+from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_274.card_impl import Island
 from cards.fdn.fdn_276.card_impl import Swamp
+from cards.fdn.fdn_278.card_impl import Mountain
 from cards.fdn.fdn_280.card_impl import Forest, ForestAbility1
-from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game
+from cards.fdn.fdn_687.card_impl import DemolitionField, DemolitionFieldAbility2
+from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game, player
 
 from silverquillm.table import Table, life, moves, off_stack, on_stack, taps, untaps
 
@@ -29,6 +38,13 @@ EXILE_ABILITY = EmrakulTheExigentDoomAbility5
 GRANTED = EmrakulTheExigentDoomAbility5  # the "{T}: Add {C}{C}" the land gains
 CAST_TRIGGER = EmrakulTheExigentDoomAbility1
 WARD = EmrakulTheExigentDoomAbility4
+FLICKER = Decision.mode(printed=KykarZephyrAwakenerAbility3)
+
+
+def _asked_by(printed):
+    """A ``per_query`` key: a question whose source is ``printed``'s object, so
+    Kykar's questions are answered apart from the spell's own."""
+    return lambda query: any(dict(source.attrs).get("printed") is printed for source in query.source)
 
 
 def _library(n: int = 3) -> list:
@@ -314,4 +330,112 @@ def test_an_emrakul_exiled_some_other_way_cannot_be_cast():
     )
     t = Table(game)
     t.act_illegal(0, emrakul)
+    t.run()
+
+
+def test_a_target_land_destroyed_in_response_leaves_emrakul_uncastable_in_exile():
+    """Player 1's Demolition Field destroys the targeted land in response: the
+    exile ability's only target is gone, so it does nothing (rule 608.2b) — no
+    mana grant and no permission to cast Emrakul — though Emrakul stays exiled,
+    since exiling it was the cost."""
+    emrakul, target = card(EmrakulTheExigentDoom), card(DemolitionField)
+    field, plains = card(DemolitionField), [card(Plains), card(Plains)]
+    game = create_game(
+        Side(hand=[emrakul], battlefield=[target], library=[SavannahLions] * 3,
+             mana={ManaType.COLORLESS: 13}),
+        Side(battlefield=[field, *plains], library=[SavannahLions] * 3),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act(0, EXILE_ABILITY, choices=[target], then=[moves(emrakul, Zone.EXILE), on_stack(EXILE_ABILITY, 0)])
+    t.pass_(0)
+    _tap(t, 1, plains)
+    t.act(1, DemolitionFieldAbility2, choices=[target],
+          then=[moves(field, Zone.GRAVEYARD), on_stack(DemolitionFieldAbility2, 1)])
+    t.pass_(1)
+    t.pass_(0, then=[off_stack(DemolitionFieldAbility2), moves(target, Zone.GRAVEYARD)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(EXILE_ABILITY)])
+    t.act_illegal(0, emrakul, note="13 mana, but no permission to cast Emrakul from exile")
+    t.run()
+
+
+def test_emrakul_entering_without_being_cast_untaps_nothing():
+    """Kykar exiles Emrakul and returns it at the next end step: Emrakul enters
+    without being cast, so its cast trigger does not untap the tapped
+    Mountain."""
+    emrakul, kykar, mountain, bolt = (card(EmrakulTheExigentDoom), card(KykarZephyrAwakener), card(Mountain),
+                                      card(BurstLightning))
+    game = create_game(
+        Side(hand=[bolt], battlefield=[emrakul, kykar, mountain], library=_library()),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    t.act(0, mountain, then=[taps(mountain)])
+    kykar_asks = {_asked_by(KykarZephyrAwakener): [FLICKER, emrakul]}
+    t.act(0, bolt, choices=[player(1)], per_query=kykar_asks,
+          then=[moves(bolt, Zone.STACK), on_stack(KykarZephyrAwakenerAbility2, 0)])
+    t.pass_(0, choices=[FLICKER, emrakul])
+    t.pass_(1, then=[off_stack(KykarZephyrAwakenerAbility2), moves(emrakul, Zone.EXILE)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+    t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+    t.pass_(0)
+    t.pass_(1, then=[on_stack(KykarZephyrAwakenerAbility3, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(KykarZephyrAwakenerAbility3), moves(emrakul, Zone.BATTLEFIELD)],
+            note="the Mountain stays tapped")
+    t.run()
+
+
+def _sower_game():
+    emrakul, sower = card(EmrakulTheExigentDoom), card(SowerOfChaos)
+    mountains = [card(Mountain) for _ in range(3)]
+    game = create_game(
+        Side(battlefield=[emrakul], library=_library()),
+        Side(battlefield=[sower, *mountains], library=_library()),
+        start=(Phase.PRECOMBAT_MAIN, 1),
+    )
+    return game, emrakul, sower, mountains
+
+
+def test_ward_counters_an_opponents_activated_ability_unless_paid():
+    """Player 1 declines to sacrifice three permanents: the Sower's ability is
+    countered, so Emrakul still blocks — and kills — the Sower."""
+    game, emrakul, sower, mountains = _sower_game()
+    t = Table(game)
+    _tap(t, 1, mountains)
+    t.act(1, SowerOfChaosAbility1, choices=[emrakul], then=[on_stack(SowerOfChaosAbility1, 1), on_stack(WARD, 0)])
+    t.pass_(1, choices=[Decision.no()])
+    t.pass_(0, then=[off_stack(WARD), off_stack(SowerOfChaosAbility1)])
+    t.pass_to(Step.DECLARE_ATTACKERS, 1)
+    t.act(1, sower, then=[taps(sower)])
+    t.pass_(1)
+    t.pass_(0)
+    t.act(0, emrakul, scoped={emrakul: sower})
+    t.pass_(1)
+    t.pass_(0, then=[moves(sower, Zone.GRAVEYARD)])
+    t.run()
+
+
+def test_ward_paid_lets_the_opponents_activated_ability_resolve():
+    """Player 1 sacrifices three permanents for ward: Emrakul cannot block this
+    turn, and the Sower's 4 damage gets through."""
+    game, emrakul, sower, mountains = _sower_game()
+    t = Table(game)
+    _tap(t, 1, mountains)
+    t.act(1, SowerOfChaosAbility1, choices=[emrakul], then=[on_stack(SowerOfChaosAbility1, 1), on_stack(WARD, 0)])
+    t.pass_(1, choices=[Decision.yes(), *mountains])
+    t.pass_(0, then=[off_stack(WARD), *[moves(m, Zone.GRAVEYARD) for m in mountains]])
+    t.pass_(1)
+    t.pass_(0, then=[off_stack(SowerOfChaosAbility1)])
+    t.pass_to(Step.DECLARE_ATTACKERS, 1)
+    t.act(1, sower, then=[taps(sower)])
+    t.pass_(1)
+    t.pass_(0)
+    t.act_illegal(0, emrakul, scoped={emrakul: sower}, note="Emrakul can't block this turn")
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(0, then=[life(0, 16)])
     t.run()

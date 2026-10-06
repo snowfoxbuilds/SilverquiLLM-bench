@@ -8,6 +8,7 @@ Craving: a prepared Recollector shows nothing else on the table.
 
 from card_impl import AncestralCraving, BloodlineRecollector, BloodlineRecollectorAbility1
 from cards.fdn.fdn_48.card_impl import Refute
+from cards.fdn.fdn_86.card_impl import FieryAnnihilation
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride
 from cards.fdn.fdn_145.card_impl import ResoluteReinforcements, ResoluteReinforcementsAbility2
 from cards.fdn.fdn_146.card_impl import SavannahLions
@@ -431,4 +432,56 @@ def test_recollector_attacks_as_a_two_two():
     t.pass_(1)
     t.pass_(0)
     t.pass_(1, then=[life(1, 18)])
+    t.run()
+
+
+def test_prepared_again_on_a_later_turn_still_casts_one_copy():
+    """Prepared at one end step and not cast, the Recollector is prepared again
+    after three more deaths on its controller's next turn — still once: one
+    copy may be cast, not two."""
+    swamps, mountains = [card(Swamp), card(Swamp)], [card(Mountain) for _ in range(3)]
+    lions = [card(SavannahLions) for _ in range(6)]
+    bolts = [card(BurstLightning) for _ in range(6)]
+    recollector, library = card(BloodlineRecollector), _library(6)
+    game = create_game(
+        Side(hand=bolts, battlefield=[recollector, *lions, *swamps, *mountains], library=_library(),
+             mana={ManaType.RED: 3}),
+        Side(library=library),
+        start=MAIN,
+    )
+    t = Table(game)
+    _kill(t, 0, bolts[:3], lions[:3])
+    _into_end_step(t)
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    for mountain in mountains:
+        t.act(0, mountain, then=[taps(mountain)])
+    _kill(t, 0, bolts[3:], lions[3:])
+    _into_end_step(t)
+    _cast_craving(t, 0, swamps[0], 1, recollector)
+    t.act(0, swamps[1], then=[taps(swamps[1])])
+    t.act_illegal(0, branches=craving(1, recollector), note="preparing twice gives one copy")
+    _resolve_craving(t, 0, 1, library[1:4], 17)
+    t.run()
+
+
+def test_creatures_exiled_instead_of_dying_do_not_count():
+    """Fiery Annihilation exiles each Lions it would kill: no creature died, so
+    the Recollector does not become prepared."""
+    swamp, recollector = card(Swamp), card(BloodlineRecollector)
+    lions = [card(SavannahLions) for _ in range(3)]
+    annihilations = [card(FieryAnnihilation) for _ in range(3)]
+    game = create_game(
+        Side(hand=annihilations, battlefield=[recollector, *lions, swamp], library=_library(),
+             mana={ManaType.RED: 9}),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    for annihilation, lion in zip(annihilations, lions):
+        _bolt(t, 0, annihilation, lion, then=[moves(lion, Zone.EXILE)])
+    t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+    t.pass_(0)
+    t.pass_(1, note="no Recollector trigger: the Lions were exiled, not killed")
+    t.act(0, swamp, then=[taps(swamp)])
+    t.act_illegal(0, branches=craving(1, recollector))
     t.run()

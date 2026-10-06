@@ -1,4 +1,4 @@
-from engine.card import LoyaltyAbility, Planeswalker
+from engine.card import CardImpl, LoyaltyAbility, Planeswalker
 from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer, SubLayer
 from engine.events import AttacksTriggeredEvent
 from engine.game import create_token, deal_damage
@@ -90,6 +90,9 @@ class SarkhanTheMasterless(Planeswalker):
             if not walkers:
                 return
             effects = []
+            # An effect of a resolved ability outlasts its source (rule 611.2a), so
+            # it is not sourced by Sarkhan, whose departure removes what it sources.
+            marker = CardImpl(name='Sarkhan the Masterless +1', owner=controller)
 
             def affected():
                 return [card for card in effects[0].bound_to if _on_battlefield(game, card)]
@@ -117,7 +120,7 @@ class SarkhanTheMasterless(Planeswalker):
                 (Layer.POWER_TOUGHNESS, SubLayer.SET_PT, four_four),
             ):
                 effects.append(game.effect_manager.add(ContinuousEffect(
-                    source=source, layer=layer, sublayer=sublayer, apply=apply,
+                    source=marker, layer=layer, sublayer=sublayer, apply=apply,
                     duration=DURATION_END_OF_TURN, bound_to=list(walkers),
                 )))
             game.effect_manager.apply_all(game)

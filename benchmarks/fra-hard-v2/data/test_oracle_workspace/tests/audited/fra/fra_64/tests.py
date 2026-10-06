@@ -8,6 +8,11 @@ it may activate and whether it survives at 0.
 """
 
 from card_impl import SanctumLurker, SanctumLurkerAbility1, SanctumLurkerAbility3
+from cards.fdn.fdn_44.card_impl import (
+    KaitoCunningInfiltrator,
+    KaitoCunningInfiltratorAbility2,
+    KaitoCunningInfiltratorAbility3,
+)
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride
 from cards.fdn.fdn_175.card_impl import HerosDownfall
 from cards.fdn.fdn_192.card_impl import BurstLightning
@@ -15,7 +20,10 @@ from cards.fdn.fdn_203.card_impl import InvoluntaryEmployment
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_276.card_impl import Swamp
 from cards.fdn.fdn_278.card_impl import Mountain
+from cards.fdn.fdn_669.card_impl import BasiliskCollar, BasiliskCollarAbility2
+from cards.fdn.fdn_709.card_impl import Confiscate
 from cards.fra.tokens import JaceTokenAbility1, JaceTokenAbility2
+from cards.war.war_143.card_impl import SarkhanTheMasterless, SarkhanTheMasterlessAbility2
 from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game, token
 
 from silverquillm.table import (
@@ -337,4 +345,55 @@ def test_stolen_lurker_stops_protecting_its_owners_jace():
     t.act(1, employment, choices=[lurker], then=[moves(employment, Zone.STACK)])
     t.pass_(1)
     t.pass_(0, then=[moves(employment, Zone.GRAVEYARD), gains_control(lurker, 1), appears(1), ceases(JACE)])
+    t.run()
+
+
+def test_a_planeswalker_with_lifelink_gains_its_controller_more_life():
+    """Sarkhan the Masterless makes Ajani a 4/4 creature, Basilisk Collar gives
+    it lifelink, and Ajani's granted +2 then gains 1 life from lifelink besides
+    the ability's own 1. Sarkhan has used its loyalty ability this turn, so
+    Ajani's is the +2 that may be activated."""
+    lurker, ajani, sarkhan, collar = (card(SanctumLurker), card(AjaniCallerOfThePride),
+                                      card(SarkhanTheMasterless), card(BasiliskCollar))
+    game = _game(Side(battlefield=[lurker, ajani, sarkhan, collar], mana={ManaType.WHITE: 2}))
+    t = Table(game)
+    _activate(t, 0, SarkhanTheMasterlessAbility2, note="Ajani and Sarkhan become 4/4 Dragons")
+    t.act(0, BasiliskCollarAbility2, choices=[ajani], then=[on_stack(BasiliskCollarAbility2, 0)],
+          note="equip the Collar to Ajani")
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(BasiliskCollarAbility2)])
+    _activate(t, 0, DRAIN, then=[life(0, 22), life(1, 19)])
+    t.run()
+
+
+def test_a_stolen_planeswalker_gets_its_new_controllers_grant():
+    """Confiscate gives player 1 Ajani; player 1's Lurker grants it the +2."""
+    lurker, ajani, confiscate = card(SanctumLurker), card(AjaniCallerOfThePride), card(Confiscate)
+    game = _game(Side(battlefield=[ajani], library=[Plains, Plains]),
+                 Side(battlefield=[lurker], hand=[confiscate], mana={ManaType.BLUE: 6}, library=[Plains]),
+                 start=(Phase.PRECOMBAT_MAIN, 1))
+    t = Table(game)
+    t.act(1, confiscate, choices=[ajani], then=[moves(confiscate, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(confiscate, Zone.BATTLEFIELD), gains_control(ajani, 1)])
+    _activate(t, 1, DRAIN, then=[life(1, 21), life(0, 19)])
+    t.run()
+
+
+def test_a_nontoken_planeswalker_at_zero_loyalty_stays_with_the_lurker():
+    """Kaito pays its own loyalty down to 0 — −2, +1, −2 — and stays while the
+    Lurker remains; once the Lurker dies, Kaito goes to the graveyard."""
+    lurker, kaito, mountain, bolt = card(SanctumLurker), card(KaitoCunningInfiltrator), card(Mountain), card(BurstLightning)
+    library = [card(Plains) for _ in range(4)]
+    game = _game(Side(battlefield=[lurker, kaito, mountain], hand=[bolt], library=library),
+                 Side(library=[Plains, Plains, Plains]))
+    t = Table(game)
+    _activate(t, 0, KaitoCunningInfiltratorAbility3, then=[appears(0)], note="Kaito 3 → 1")
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    _activate(t, 0, KaitoCunningInfiltratorAbility2, choices=[library[1]],
+              then=[moves(library[1], Zone.GRAVEYARD)], note="Kaito 1 → 2; draw, then discard that card")
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    _activate(t, 0, KaitoCunningInfiltratorAbility3, then=[appears(0)], note="Kaito 2 → 0, kept by the Lurker")
+    t.act(0, mountain, then=[taps(mountain)])
+    _kill(t, 0, bolt, lurker, then=[moves(lurker, Zone.GRAVEYARD), moves(kaito, Zone.GRAVEYARD)])
     t.run()

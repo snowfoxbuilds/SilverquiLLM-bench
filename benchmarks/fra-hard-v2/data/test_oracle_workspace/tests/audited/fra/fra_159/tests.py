@@ -28,7 +28,9 @@ from cards.fdn.fdn_196.card_impl import FirebrandArcher, FirebrandArcherAbility1
 from cards.fdn.fdn_212.card_impl import BiteDown
 from cards.fdn.fdn_250.card_impl import BurnishedHart
 from cards.fdn.fdn_272.card_impl import Plains
+from cards.fut.fut_78.card_impl import SlaughterPact, SlaughterPactAbility2
 from test_interface import (
+    Decision,
     ManaType,
     Phase,
     Side,
@@ -51,6 +53,7 @@ from silverquillm.table import (
     off_stack,
     on_stack,
     taps,
+    wins,
 )
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
@@ -90,6 +93,12 @@ def _resolve_trigger(t: Table, casts=(), *, then=(), note: str = "") -> None:
     """The trigger resolves; player 0 answers its questions with ``casts``."""
     t.pass_(0, choices=list(casts))
     t.pass_(1, then=[off_stack(TRIGGER), *then], note=note)
+
+
+def _asked_by(printed):
+    """A ``per_query`` key: a question whose source is a ``printed`` object, so
+    each copy's target is answered apart from the others'."""
+    return lambda query: any(dict(source.attrs).get("printed") is printed for source in query.source)
 
 
 def _resolve_top(t: Table, cls, *, then=()) -> None:
@@ -394,4 +403,55 @@ def test_a_token_copy_leaving_does_not_return_the_original():
     t.act(1, bolt, choices=[token(1)], then=[moves(bolt, Zone.STACK)])
     t.pass_(1)
     t.pass_(0, then=[moves(bolt, Zone.GRAVEYARD), ceases(token(1))])
+    t.run()
+
+
+def test_a_slaughter_pact_copy_is_cast_free_and_still_comes_due():
+    """Slaughter Pact's copy has mana value 0, so it fits the budget; it destroys
+    player 1's Lions, and its pact comes due at player 0's next upkeep, which
+    player 0 cannot pay."""
+    pact, theirs = card(SlaughterPact), card(SavannahLions)
+    game, uldaros = _game([pact], seat1=Side(battlefield=[theirs], library=_library()))
+    t = Table(game)
+    _cast_uldaros(t, uldaros, [pact])
+    _resolve_trigger(t, [SlaughterPact, theirs], then=[moves(pact, Zone.EXILE), copied(SlaughterPact, 0)])
+    _resolve_top(t, SlaughterPact, then=[moves(theirs, Zone.GRAVEYARD)])
+    t.pass_to(Step.END, 1)
+    t.pass_(1)
+    t.pass_(0, then=[on_stack(SlaughterPactAbility2, 0)])
+    t.pass_(0, choices=[Decision.no()])
+    t.pass_(1, then=[off_stack(SlaughterPactAbility2), wins(1)])
+    t.run()
+
+
+def test_a_slaughter_pact_copy_with_only_uldaros_to_target_is_not_cast():
+    """Uldaros is black, so with no other creature the Pact's copy has no legal
+    target: the card is exiled and its copy is never cast."""
+    pact = card(SlaughterPact)
+    game, uldaros = _game([pact])
+    t = Table(game)
+    _cast_uldaros(t, uldaros, [pact])
+    t.pass_(0, branches=[branch(choices=[SlaughterPact]), branch(choices=[])])
+    t.pass_(1, then=[off_stack(TRIGGER), moves(pact, Zone.EXILE)],
+            note="casting the copy is offered or not; either way it has no legal target")
+    t.run()
+
+
+def test_a_zero_mana_value_copy_leaves_the_budget_for_a_six():
+    """Self-Reflection (6) and Slaughter Pact (0) together fit the budget of 6:
+    both are cast."""
+    reflection, pact = card(SelfReflection), card(SlaughterPact)
+    mine, theirs = card(SavannahLions), card(SavannahLions)
+    game, uldaros = _game([reflection, pact], battlefield=[mine],
+                          seat1=Side(battlefield=[theirs], library=_library()))
+    t = Table(game)
+    _cast_uldaros(t, uldaros, [reflection, pact])
+    t.pass_(0, choices=[SelfReflection, SlaughterPact],
+            per_query={_asked_by(SelfReflection): [mine], _asked_by(SlaughterPact): [theirs]})
+    t.pass_(1, then=[
+        off_stack(TRIGGER), moves(reflection, Zone.EXILE), moves(pact, Zone.EXILE),
+        copied(SelfReflection, 0), copied(SlaughterPact, 0),
+    ])
+    _resolve_top(t, SlaughterPact, then=[moves(theirs, Zone.GRAVEYARD)])
+    _resolve_top(t, SelfReflection, then=[appears(0)])
     t.run()

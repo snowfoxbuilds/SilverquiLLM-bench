@@ -1,0 +1,35 @@
+diff --git a/engine/copying.py b/engine/copying.py
+index 332e12d..d9d42ec 100644
+--- a/engine/copying.py
++++ b/engine/copying.py
+@@ -46,6 +46,7 @@ def become_copy(game, card, target):
+     if not hasattr(card, "_copy_original_class"):
+         card._copy_original_class = type(card)
+         card._copy_original_values = copiable_values(card)
++        card._copy_object_id = card.object_id
+     game.trigger_manager.unregister(card)
+     try:
+         printed = type(target)()
+@@ -75,6 +76,12 @@ def become_copy(game, card, target):
+ def end_copy(card, game):
+     if not hasattr(card, "_copy_original_class"):
+         return
++    if card.__dict__.get("_copy_object_id") != card.object_id:
++        # A token copy of a permanent that was a copy copied what that
++        # permanent copied (rule 707.3); the copy effect ending is not its own.
++        for name in ("_copy_original_class", "_copy_original_values", "_copy_object_id"):
++            card.__dict__.pop(name, None)
++        return
+     game.trigger_manager.unregister(card)
+     game.replacement_manager.unregister(card)
+     original = card._copy_original_values
+@@ -89,7 +96,8 @@ def end_copy(card, game):
+                 card._generic_counters[counter] = amount
+             card.__dict__.pop(attribute, None)
+             card.__dict__.pop("_base_" + attribute, None)
+-    for name in ("_copy_original_class", "_copy_original_values", "_printed_loyalty_method", "get_loyalty_abilities", "_printed_mana_method", "get_mana_abilities"):
++    for name in ("_copy_original_class", "_copy_original_values", "_copy_object_id", "_printed_loyalty_method",
++                 "get_loyalty_abilities", "_printed_mana_method", "get_mana_abilities"):
+         card.__dict__.pop(name, None)
+     card._reset_characteristics()
+ 
