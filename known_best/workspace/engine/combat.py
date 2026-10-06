@@ -676,7 +676,8 @@ def combat_damage_step(game: GameState, *, sub_step: str | None = None) -> None:
             resolve_state_based_actions(game)
 
     # --- Normal damage sub-step ---
-    if sub_step in (None, "normal"):
+    # A game that first-strike damage ended deals no more (rule 104.2a).
+    if sub_step in (None, "normal") and not game.is_game_over:
         with game.trigger_manager.batch(game):
             _assign_combat_damage(all_attackers, combat, game, is_first_strike=False)
             resolve_state_based_actions(game)

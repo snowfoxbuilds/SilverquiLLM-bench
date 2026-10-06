@@ -365,24 +365,36 @@ def resolve_state_based_actions(game: GameState) -> bool:
     704.3): perform state-based actions until none apply, then put every
     triggered ability waiting since a player last received priority on the
     stack (:meth:`~engine.triggers.TriggerManager.put_pending_on_stack`), and
-    repeat until neither happens.
+    repeat until neither happens. Once a pass makes a player lose, the game
+    is over: settling stops there and nothing waiting goes on the stack
+    (rule 104.2a).
 
     Returns ``True`` if any SBAs were performed during the entire process,
     ``False`` if the game state was already stable.
     """
     any_performed = False
-    while True:
+    while not game.is_game_over:
         sba_this_round = False
         while check_state_based_actions(game):
             sba_this_round = True
             any_performed = True
+            if _someone_lost(game):
+                break
+        if _someone_lost(game):
+            # A player who loses leaves the game at once, which ends it (rule
+            # 104.2a, 104.4a): losses from one pass are simultaneous, and
+            # nothing waiting is put on the stack afterwards.
+            from engine.game import _check_game_over
+
+            _check_game_over(game)
+            break
         triggers_placed = game.trigger_manager.put_pending_on_stack(game)
         if not sba_this_round and not triggers_placed:
             break
-
-    if any(player.has_lost for player in game.players):
-        # A player who lost leaves the game at once, which ends it (CR 104.2a).
-        from engine.game import _check_game_over
-
-        _check_game_over(game)
+    if game.is_game_over:
+        game.trigger_manager.discard_pending()
     return any_performed
+
+
+def _someone_lost(game: GameState) -> bool:
+    return any(player.has_lost for player in game.players)

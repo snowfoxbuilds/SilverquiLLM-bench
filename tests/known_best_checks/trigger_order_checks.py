@@ -282,3 +282,251 @@ def test_a_rejected_trigger_target_rolls_back_only_that_players_placement():
     (top, bottom) = game.stack.objects()
     assert (top.source, top.targets, bottom.source) == (cub, [cub], bear)
     assert not game.trigger_manager.has_pending()
+
+
+# ---------------------------------------------------------------------------
+# A game a state-based action ends places nothing more (CR 104.2a, 104.4a)
+# ---------------------------------------------------------------------------
+
+
+def _damage_trigger(source, controller, *, targeting=None) -> TriggerRegistration:
+    from engine.events import DealsDamageTriggeredEvent
+
+    return TriggerRegistration(
+        event_type=DealsDamageTriggeredEvent,
+        condition=lambda game, event, _s=source: getattr(event, "source", None) is _s,
+        effect=(lambda game, targets, context: None) if targeting else (lambda game: None),
+        source=source, controller=controller, targeting=targeting,
+    )
+
+
+def _unblocked_attack(game, attacker, defender_life):
+    from engine.combat import combat_damage_step, declare_attackers_step
+    from engine.types import Phase, Step
+    from test_utils import act, script
+
+    game.players[1].life = defender_life
+    attacker.summoning_sick = False
+    game.active_player_index = game.priority_player_index = 0
+    game.phase, game.step = Phase.COMBAT, Step.DECLARE_ATTACKERS
+    script(game, 0, act(Decision.obj(instance=game.refs.instance_id(attacker, Zone.BATTLEFIELD.value))))
+    declare_attackers_step(game)
+    asked = len(game.players[0].transcript.all())
+    combat_damage_step(game)
+    return game.players[0].transcript.all()[asked:]
+
+
+def test_lethal_combat_damage_ends_the_game_before_its_triggers_are_ordered():
+    bear = Bear()
+    game = _game([bear])
+    p0 = game.players[0]
+    for _ in range(2):
+        game.trigger_manager.register(_damage_trigger(bear, p0))
+    questions = _unblocked_attack(game, bear, 2)
+    assert game.is_game_over and game.winner is p0
+    assert _orderings(p0) == [] and questions == []
+    assert game.stack.is_empty() and not game.trigger_manager.has_pending()
+
+
+def test_lethal_combat_damage_chooses_no_target_for_a_waiting_targeted_trigger():
+    bear = Bear()
+    game = _game([bear])
+    p0 = game.players[0]
+    chosen: list[int] = []
+
+    def _targeting(game, event, controller):
+        chosen.append(1)
+        return [game.players[1]]
+
+    game.trigger_manager.register(_damage_trigger(bear, p0, targeting=_targeting))
+    _unblocked_attack(game, bear, 2)
+    assert game.is_game_over and chosen == [] and game.stack.is_empty()
+
+
+def test_a_lethal_spell_ends_the_game_before_a_trigger_it_caused_goes_on_the_stack():
+    from engine.stack import StackObject, resolve_top_of_stack
+
+    bear = Bear()
+    game = _game([bear])
+    p0, p1 = game.players
+    game.trigger_manager.register(_upkeep_trigger(bear, p0))
+    game.trigger_manager.register(_upkeep_trigger(bear, p0))
+
+    def _bolt(game) -> None:
+        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        p1.life -= 3
+
+    p1.life = 3
+    game.stack.push(StackObject(source=Bear(owner=p0, controller=p0), controller=p0, on_resolve=_bolt))
+    resolve_top_of_stack(game)
+    assert game.is_game_over and game.winner is p0
+    assert _orderings(p0) == [] and game.stack.is_empty()
+
+
+def test_simultaneous_losses_are_a_draw_and_place_nothing():
+    from engine.state_based_actions import resolve_state_based_actions
+
+    bear = Bear()
+    game = _game([bear])
+    p0, p1 = game.players
+    for _ in range(2):
+        game.trigger_manager.register(_upkeep_trigger(bear, p0))
+    game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    p0.life = p1.life = 0
+    resolve_state_based_actions(game)
+    assert game.is_game_over and game.winner is None
+    assert _orderings(p0) == [] and game.stack.is_empty()
+
+
+def test_lethal_first_strike_damage_leaves_no_regular_damage_pass():
+    from engine.combat import combat_damage_step, declare_attackers_step
+    from engine.events import DealsDamageTriggeredEvent
+    from engine.types import Keyword, Phase, Step
+    from test_utils import act, script
+
+    striker, bear = Bear(name="Striker"), Bear()
+    striker.keywords = striker.keywords | Keyword.FIRST_STRIKE
+    game = _game([striker, bear])
+    p0, p1 = game.players
+    dealt: list[object] = []
+    game.trigger_manager.register(TriggerRegistration(
+        event_type=DealsDamageTriggeredEvent,
+        condition=lambda game, event: dealt.append(event.source) or False,
+        effect=lambda game: None, source=bear, controller=p0,
+    ))
+
+    p1.life = 2
+    for c in (striker, bear):
+        c.summoning_sick = False
+    game.active_player_index = game.priority_player_index = 0
+    game.phase, game.step = Phase.COMBAT, Step.DECLARE_ATTACKERS
+    script(game, 0, act(*(Decision.obj(instance=game.refs.instance_id(c, Zone.BATTLEFIELD.value)) for c in (striker, bear))))
+    declare_attackers_step(game)
+    combat_damage_step(game)
+    assert game.is_game_over and game.winner is p0
+    assert bear not in dealt and p1.life == 0
+
+
+def test_nonlethal_settling_still_orders_the_waiting_triggers():
+    from engine.state_based_actions import resolve_state_based_actions
+
+    bear, cub = Bear(), Bear(name="Cub")
+    game = _game([bear, cub])
+    p0 = game.players[0]
+    for source in (bear, cub):
+        game.trigger_manager.register(_upkeep_trigger(source, p0))
+    game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    game.players[1].life = 1
+    resolve_state_based_actions(game)
+    assert not game.is_game_over and len(_orderings(p0)) == 1 and len(game.stack.objects()) == 2
+
+
+# ---------------------------------------------------------------------------
+# An occurrence keeps its source's identity from when it triggered (CR 400.7)
+# ---------------------------------------------------------------------------
+
+
+def _counter_on_own_source(source, controller, hits) -> TriggerRegistration:
+    """A targeted upkeep trigger whose effect touches its own source — here,
+    records a hit — only if the source is still the object that triggered."""
+    from engine.stack import same_stint
+
+    def _effect(game, targets, context, _s=source):
+        if same_stint(game, _s, context.source_instance_id):
+            hits.append(_s)
+
+    return TriggerRegistration(
+        event_type=BeginningOfUpkeepTriggeredEvent, condition=None, effect=_effect,
+        source=source, controller=controller, targeting=lambda game, event, controller: [game.players[1]],
+    )
+
+
+def _blink(game, card):
+    from engine.zones import move_to_zone
+
+    move_to_zone(game, card, Zone.BATTLEFIELD, Zone.EXILE)
+    move_to_zone(game, card, Zone.EXILE, Zone.BATTLEFIELD)
+
+
+def _resolve_all(game):
+    from engine.stack import resolve_top_of_stack
+
+    while not game.stack.is_empty():
+        resolve_top_of_stack(game)
+
+
+def test_a_source_that_leaves_and_returns_before_placement_is_a_new_object():
+    bear = Bear()
+    game = _game([bear])
+    p0 = game.players[0]
+    hits: list[object] = []
+    game.trigger_manager.register(_counter_on_own_source(bear, p0, hits))
+    game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    _blink(game, bear)
+    game.trigger_manager.put_pending_on_stack(game)
+    _resolve_all(game)
+    assert hits == []
+
+
+def test_a_source_that_stays_gets_its_counter():
+    bear = Bear()
+    game = _game([bear])
+    hits: list[object] = []
+    game.trigger_manager.register(_counter_on_own_source(bear, game.players[0], hits))
+    _fire(game)
+    _resolve_all(game)
+    assert hits == [bear]
+
+
+def test_a_source_that_left_for_good_is_no_longer_the_triggering_object():
+    from engine.stack import battlefield_stint_id, same_stint
+    from engine.zones import move_to_zone
+
+    bear = Bear()
+    game = _game([bear])
+    hits: list[object] = []
+    game.trigger_manager.register(_counter_on_own_source(bear, game.players[0], hits))
+    fired_as = battlefield_stint_id(game, bear)
+    game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.EXILE)
+    game.trigger_manager.put_pending_on_stack(game)
+    (obj,) = game.stack.objects()
+    assert obj.activation_context.source_instance_id == fired_as
+    assert not same_stint(game, bear, fired_as)
+    _resolve_all(game)
+    assert hits == []
+
+
+def test_occurrences_from_two_stints_of_one_card_keep_their_own_stints():
+    from engine.stack import battlefield_stint_id
+
+    bear = Bear()
+    game = _game([bear])
+    hits: list[object] = []
+    game.trigger_manager.register(_counter_on_own_source(bear, game.players[0], hits))
+    first = battlefield_stint_id(game, bear)
+    game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    _blink(game, bear)
+    # The returned card is a new object with its abilities registered anew.
+    game.trigger_manager.register(_counter_on_own_source(bear, game.players[0], hits))
+    second = battlefield_stint_id(game, bear)
+    game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    game.trigger_manager.put_pending_on_stack(game)
+    stints = sorted(o.activation_context.source_instance_id for o in game.stack.objects())
+    assert stints == sorted([first, second]) and first != second
+    _resolve_all(game)
+    assert hits == [bear]
+
+
+def test_an_occurrence_offered_for_ordering_names_its_source_as_it_triggered():
+    bear, cub = Bear(), Bear(name="Cub")
+    game = _game([bear, cub])
+    p0 = game.players[0]
+    for source in (bear, cub):
+        game.trigger_manager.register(_upkeep_trigger(source, p0))
+    fired_as = game.refs.instance_id(bear, Zone.BATTLEFIELD.value)
+    game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+    _blink(game, bear)
+    game.trigger_manager.put_pending_on_stack(game)
+    (ordering,) = _orderings(p0)
+    assert fired_as in {dict(o.attrs)["source"] for o in ordering.options}

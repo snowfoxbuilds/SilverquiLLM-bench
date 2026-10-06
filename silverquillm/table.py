@@ -292,7 +292,10 @@ class Table:
                 self._declaring = None
                 self._asked = self._active
                 self._passes = 0
-        elif not self._over:
+        elif not self._over or entry.kind is ti.Kind.PASS:
+            # A pass that ends the step also moves the game into the next one,
+            # even when that step's turn-based actions — combat damage, a draw
+            # from an empty library — end the game (CR 104.2a).
             if entry.kind is ti.Kind.ACT:
                 self._passes = 0
             elif entry.kind is ti.Kind.PASS:

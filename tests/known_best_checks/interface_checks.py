@@ -1430,3 +1430,34 @@ def test_a_per_query_only_attack_is_narrated_by_what_it_answers():
     t = _to_attacks(bear)
     entry = t.act(0, per_query={(lambda query: True): [bear]}, attacks=True, then=[taps(bear)])
     assert "per question" in entry.narration and "nothing" not in entry.narration
+
+
+class _Raider(Bear):
+    """A 2/2 with two "Whenever this creature deals damage, nothing happens."
+    abilities."""
+
+    def register_triggers(self, game) -> None:
+        from engine.events import DealsDamageTriggeredEvent
+        from engine.triggers import TriggerRegistration
+
+        for _ in range(2):
+            game.trigger_manager.register(TriggerRegistration(
+                event_type=DealsDamageTriggeredEvent,
+                condition=lambda game, event, _s=self: event.source is _s,
+                effect=lambda game: None, source=self, controller=self.controller,
+            ))
+
+
+def test_lethal_combat_damage_ends_the_game_before_its_triggers_are_ordered():
+    raider = card(_Raider)
+    game = _main(Side(battlefield=[raider]), Side(life=2))
+    t = Table(game)
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, raider, then=[taps(raider)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)  # declares no blockers
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 0), wins(0)])
+    final = t.run()
+    assert final.game_over and final.winner == 0

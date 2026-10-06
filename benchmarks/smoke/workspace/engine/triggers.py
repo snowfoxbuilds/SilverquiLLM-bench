@@ -13,13 +13,13 @@ Event types live in :mod:`engine.events` as typed dataclasses.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Iterator
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple
 
 import inspect
 
 from engine.events import TriggeredEvent
-from engine.stack import StackObject, capture_activation_context
+from engine.stack import StackObject, battlefield_stint_id, capture_activation_context
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -148,7 +148,7 @@ class TriggerManager:
     def __init__(self) -> None:
         self._triggers: list[TriggerRegistration] = []
         self._batch_depth = 0
-        self._pending: list[tuple[TriggerRegistration, Any, TriggeredEvent, Any]] = []
+        self._pending: list[_Occurrence] = []
 
     @contextmanager
     def batch(self, game: GameState) -> Iterator[None]:
@@ -180,17 +180,14 @@ class TriggerManager:
         self._triggers = [t for t in self._triggers if t.source is not source]
 
     def fire_event(self, game: GameState, event: TriggeredEvent) -> None:
-        """Fire an event and push all matching triggers onto the stack.
+        """Fire an event: every matching trigger's occurrence waits, with the
+        facts fixed as it triggers, until :meth:`put_pending_on_stack` puts it
+        on the stack when the game next settles.
 
         Parameters:
             game: The current game state.
             event: The typed event object.  Triggers registered for the
                 event's class or any of its parent classes will fire.
-
-        Matching triggers are pushed in APNAP order:
-
-        1. Active player's matching triggers, in the order they choose.
-        2. Non-active player's matching triggers, in the order they choose.
         """
         matching: list[TriggerRegistration] = []
         for trigger in self._triggers:
@@ -221,11 +218,28 @@ class TriggerManager:
             # An occurrence's event facts are fixed when it triggers (rule 603.2,
             # 603.10a), even though it goes on the stack only when the game settles.
             state = trigger.capture(game, event, controller) if trigger.capture is not None else None
-            self._pending.append((trigger, controller, event, state))
+            # So is its source's identity: a source that leaves and returns before
+            # the occurrence is placed is a new object (rule 400.7), so the
+            # occurrence keeps the stint its source had when it triggered.
+            self._pending.append(
+                _Occurrence(
+                    trigger=trigger,
+                    controller=controller,
+                    event=event,
+                    captured=state,
+                    source_stint=battlefield_stint_id(game, trigger.source),
+                    source_instance=game.refs.instance_id(trigger.source, _zone_of(game, trigger.source)),
+                )
+            )
 
     def has_pending(self) -> bool:
         """Whether triggered abilities are waiting to be put on the stack."""
         return bool(self._pending)
+
+    def discard_pending(self) -> None:
+        """Drop every waiting occurrence: the game ended before they could be
+        put on the stack (rule 104.1)."""
+        self._pending = []
 
     def put_pending_on_stack(self, game: GameState) -> bool:
         """Put every triggered ability waiting since a player last received
@@ -240,26 +254,30 @@ class TriggerManager:
         occurrences included, and asks again. An ability that triggers while
         these are placed waits for the next settling iteration.
         """
+        if game.is_game_over:
+            self.discard_pending()
+            return False
         if not self._pending:
             return False
         from engine import attempts
 
         pending, self._pending = self._pending, []
         for player in _apnap(game):
-            group = [m for m in pending if m[1] is player]
+            group = [m for m in pending if m.controller is player]
             if group:
                 attempts.attempt(game, lambda group=group: self._place(game, _chosen_order(game, group)))
-        others = [m for m in pending if all(m[1] is not p for p in _apnap(game))]
+        others = [m for m in pending if all(m.controller is not p for p in _apnap(game))]
         if others:
             self._place(game, others)
         return True
 
-    def _place(
-        self, game: GameState, ordered: list[tuple[TriggerRegistration, Any, TriggeredEvent, Any]]
-    ) -> None:
+    def _place(self, game: GameState, ordered: list[_Occurrence]) -> None:
         """Put one player's triggered abilities on the stack in *ordered*
-        order, the first at the bottom."""
-        for trigger, fire_controller, event, captured in ordered:
+        order, the first at the bottom. Targets are chosen, and their stints
+        captured, now; each source's stint is the one it had when it
+        triggered."""
+        for occurrence in ordered:
+            trigger, fire_controller, event, captured = occurrence[:4]
             if trigger.targeting is not None:
                 # Choose targets as the trigger goes on the stack.
                 chosen = trigger.targeting(game, event, fire_controller)
@@ -268,9 +286,7 @@ class TriggerManager:
                     # put on the stack at all (rule 603.3c).
                     continue
                 chosen_targets = list(chosen)
-                context = capture_activation_context(
-                    game, trigger.source, fire_controller, chosen_targets
-                )
+                context = _occurrence_context(game, occurrence, chosen_targets)
                 stack_obj = StackObject(
                     source=trigger.source,
                     controller=fire_controller,
@@ -291,9 +307,7 @@ class TriggerManager:
                 # independent state. The effect reads the immutable fire-time
                 # controller and that state — never a mutable source-level slot.
                 event_state = captured
-                context = capture_activation_context(
-                    game, trigger.source, fire_controller, []
-                )
+                context = _occurrence_context(game, occurrence, [])
                 stack_obj = StackObject(
                     source=trigger.source,
                     controller=fire_controller,
@@ -314,9 +328,7 @@ class TriggerManager:
                     # controller-sensitive untargeted effect (effect(game,
                     # controller)); capture the context for consistency so the
                     # stack object reflects the same fire-time controller.
-                    context = capture_activation_context(
-                        game, trigger.source, fire_controller, []
-                    )
+                    context = _occurrence_context(game, occurrence, [])
                     stack_obj = StackObject(
                         source=trigger.source,
                         controller=fire_controller,
@@ -345,6 +357,27 @@ class TriggerManager:
         """Remove all registered triggers."""
         self._triggers.clear()
 
+class _Occurrence(NamedTuple):
+    """One triggered ability waiting to be put on the stack, with the facts
+    fixed when it triggered: its fire-time controller, event and captured
+    state, and its source's battlefield stint and instance id then
+    (rule 400.7, 603.2)."""
+
+    trigger: TriggerRegistration
+    controller: Any
+    event: TriggeredEvent
+    captured: Any
+    source_stint: int | None
+    source_instance: int
+
+
+def _occurrence_context(game: GameState, occurrence: _Occurrence, targets: list[Any]) -> Any:
+    """The activation context of *occurrence* as it goes on the stack: its
+    targets' stints as chosen now, its source's stint as it triggered."""
+    context = capture_activation_context(game, occurrence.trigger.source, occurrence.controller, targets)
+    return replace(context, source_instance_id=occurrence.source_stint)
+
+
 def _apnap(game: GameState) -> list[Any]:
     """The players in APNAP order: the active player, then the others in turn
     order (rule 101.4)."""
@@ -353,7 +386,7 @@ def _apnap(game: GameState) -> list[Any]:
     return players[start:] + players[:start]
 
 
-def _chosen_order(game: GameState, group: list[tuple[Any, ...]]) -> list[tuple[Any, ...]]:
+def _chosen_order(game: GameState, group: list[_Occurrence]) -> list[_Occurrence]:
     """*group* — one player's triggered abilities that triggered together — in
     the order its controller puts them on the stack (rule 603.3b).
 
@@ -369,14 +402,14 @@ def _chosen_order(game: GameState, group: list[tuple[Any, ...]]) -> list[tuple[A
     from engine.decisions import Decision, GameRef
     from engine.queries import PlayerQuery, ask
 
-    controller = group[0][1]
+    controller = group[0].controller
     seat = game.refs.seat_of(controller)
-    by_decision: dict[Any, tuple[Any, ...]] = {}
+    by_decision: dict[Any, _Occurrence] = {}
     ordinals: dict[int, int] = {}
     for item in group:
-        source, printed = item[0].source, getattr(item[0], "printed", None)
+        source, printed = item.trigger.source, getattr(item.trigger, "printed", None)
         ordinal = ordinals[id(source)] = ordinals.get(id(source), -1) + 1
-        instance = game.refs.instance_id(source, _zone_of(game, source))
+        instance = item.source_instance
         attrs: dict[str, Any] = {"source": instance, "index": ordinal}
         if printed is not None:
             attrs["printed"] = printed
@@ -404,4 +437,3 @@ def _zone_of(game: GameState, obj: Any) -> str:
             if zone in player.zones and player.zones[zone].contains(obj):
                 return zone.value
     return "stack"
-
