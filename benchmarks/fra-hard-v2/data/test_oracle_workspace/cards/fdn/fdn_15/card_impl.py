@@ -56,14 +56,12 @@ class HareApparent(Creature):
         """The enters ability is a triggered ability that uses the stack."""
         from engine.triggers import register_enters_trigger
 
-        register_enters_trigger(game, self, HareApparentAbility1, self._enters)
+        register_enters_trigger(game, self, HareApparentAbility1, self._enters, knows_source=True)
 
-    def _enters(self, game: "GameState", controller: Any) -> None:
-        """One 1/1 white Rabbit per *other* Hare Apparent you control.
-
-        The ``obj is not self`` guard keeps the "other" semantics: the
-        trigger resolves with this creature already on the battlefield.
-        """
+    def _enters(self, game: "GameState", controller: Any, source: Any) -> None:
+        """One 1/1 white Rabbit per *other* Hare Apparent you control: every
+        one but the ability's *source* as it triggered, so this card counts
+        if it has left and returned since (rule 400.7)."""
         from engine.game import create_token
 
         if controller is None:
@@ -72,7 +70,7 @@ class HareApparent(Creature):
         count = sum(
             1
             for obj in game.get_battlefield(controller).get_all()
-            if obj is not self
+            if not source.is_source(game, obj)
             and CardType.CREATURE in getattr(obj, "card_types", set())
             and getattr(obj, "name", None) == "Hare Apparent"
         )

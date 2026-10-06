@@ -18,7 +18,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple
 
 from engine.events import TriggeredEvent
-from engine.stack import StackObject, battlefield_stint_id, capture_activation_context
+from engine.stack import StackObject, battlefield_stint_id, capture_activation_context, same_stint
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -111,6 +111,10 @@ class TriggerRegistration:
               empty-list return for the genuinely-optional "up to N" case; reserve
               ``None`` for required targets.
 
+            A ``targeting`` that declares a fourth positional parameter also
+            gets this occurrence's :class:`TriggerSource` — its source as it
+            was when it triggered — for a target that must be "another" object.
+
             The chosen targets and a fire-time
             :class:`~engine.stack.ActivationContext` (with the fire-time
             *controller*) are stored on the :class:`~engine.stack.StackObject` and
@@ -140,6 +144,31 @@ class TriggerRegistration:
     targeting: Callable[..., Any] | None = None
     capture: Callable[..., Any] | None = None
     printed: type | None = None
+
+
+@dataclass(frozen=True)
+class TriggerSource:
+    """The source of one occurrence of a triggered ability as it was when the
+    ability triggered: the physical card and its battlefield stint then.
+
+    A card that has left the battlefield and returned since is a new object
+    (rule 400.7), so to that occurrence it is "another" object like any
+    other, while it is still the source of an occurrence it triggered after
+    returning. ``is_source`` — never ``obj is card`` — is how an "other" or
+    "another" check excludes the source.
+    """
+
+    card: Any
+    stint: int | None
+
+    def is_source(self, game: GameState, obj: Any) -> bool:
+        """Whether *obj* is this occurrence's source: the same card, in the
+        same battlefield stint it triggered in."""
+        return obj is self.card and same_stint(game, obj, self.stint)
+
+    def remains(self, game: GameState) -> bool:
+        """Whether the source is still that object on the battlefield."""
+        return same_stint(game, self.card, self.stint)
 
 
 class TriggerManager:
@@ -313,7 +342,11 @@ class TriggerManager:
             trigger, fire_controller, event, captured = occurrence[:4]
             if trigger.targeting is not None:
                 # Choose targets as the trigger goes on the stack.
-                chosen = trigger.targeting(game, event, fire_controller)
+                if _required_positional(trigger.targeting) >= 4:
+                    this = TriggerSource(trigger.source, occurrence.source_stint)
+                    chosen = trigger.targeting(game, event, fire_controller, this)
+                else:
+                    chosen = trigger.targeting(game, event, fire_controller)
                 if chosen is None:
                     # A required target with no legal choice — the trigger is not
                     # put on the stack at all (rule 603.3c).
@@ -604,6 +637,7 @@ def register_enters_trigger(
     targets: Callable[[GameState, Player], list[Any]] | None = None,
     condition: Callable[[GameState, Player], bool] | None = None,
     source_aware: bool = False,
+    knows_source: bool = False,
     remember: Callable[[GameState, Player], Any] | None = None,
 ) -> None:
     """Register *source*'s "when this enters" triggered ability: it triggers
@@ -627,20 +661,35 @@ def register_enters_trigger(
     *source* is still the same object on the battlefield, for an effect that
     acts on it — attaching it, fighting with it, or exiling "until it leaves".
     With *remember*, it gets ``remembered=``.
+
+    With *knows_source*, *targets*, *condition* and *effect* each also get
+    ``source=``: this occurrence's :class:`TriggerSource`, the source as it
+    was when the ability triggered — never as it is when the callback runs.
+    An ability that counts or targets "other" or "another" objects excludes
+    one with ``source.is_source(game, obj)``, not ``obj is self``: if the
+    card leaves and returns before an occurrence is put on the stack or
+    resolves, the returned card is another object to that occurrence and
+    counts like any other, while a new occurrence of the returned card
+    excludes it (rule 400.7). Two occurrences of the same card each keep
+    their own.
     """
     from engine.events import EntersBattlefieldTriggeredEvent
-    from engine.stack import battlefield_stint_id, same_stint
+
+    def _this(stint: int | None) -> dict[str, Any]:
+        return {"source": TriggerSource(source, stint)} if knows_source else {}
 
     def _fires(game: GameState, event: Any) -> bool:
         if event.permanent is not source:
             return False
-        return condition is None or condition(game, getattr(source, "controller", None))
+        if condition is None:
+            return True
+        return condition(game, getattr(source, "controller", None), **_this(battlefield_stint_id(game, source)))
 
-    def _holds(game: GameState, controller: Player) -> bool:
-        return condition is None or condition(game, controller)
+    def _holds(game: GameState, controller: Player, stint: int | None) -> bool:
+        return condition is None or condition(game, controller, **_this(stint))
 
     def _extras(game: GameState, stint: Any, remembered: Any) -> dict[str, Any]:
-        extras: dict[str, Any] = {}
+        extras: dict[str, Any] = _this(stint)
         if source_aware:
             extras["source_remains"] = same_stint(game, source, stint)
         if remember is not None:
@@ -651,8 +700,9 @@ def register_enters_trigger(
     capture = None
     if targets is not None:
 
-        def targeting(game: GameState, event: Any, controller: Player) -> list[Any] | None:
-            return choose_trigger_targets(game, controller, source, list(targets(game, controller)))
+        def targeting(game: GameState, event: Any, controller: Player, this: TriggerSource) -> list[Any] | None:
+            requirements = targets(game, controller, **_this(this.stint))
+            return choose_trigger_targets(game, controller, source, list(requirements))
 
         if remember is not None:
 
@@ -660,24 +710,24 @@ def register_enters_trigger(
                 return remember(game, controller)
 
         def _effect(game: GameState, legal: list[Any], context: Any, remembered: Any = None) -> None:
-            controller = context.controller
-            if _holds(game, controller):
-                effect(game, legal, controller, **_extras(game, context.source_instance_id, remembered))
+            controller, stint = context.controller, context.source_instance_id
+            if _holds(game, controller, stint):
+                effect(game, legal, controller, **_extras(game, stint, remembered))
 
-    elif source_aware or remember is not None:
+    elif source_aware or knows_source or remember is not None:
 
         def capture(game: GameState, event: Any, controller: Player) -> Any:
             return battlefield_stint_id(game, source), remember(game, controller) if remember is not None else None
 
         def _effect(game: GameState, controller: Player, state: Any) -> None:
             stint, remembered = state
-            if _holds(game, controller):
+            if _holds(game, controller, stint):
                 effect(game, controller, **_extras(game, stint, remembered))
 
     else:
 
         def _effect(game: GameState, controller: Player) -> None:
-            if _holds(game, controller):
+            if _holds(game, controller, None):
                 effect(game, controller)
 
     game.trigger_manager.register(

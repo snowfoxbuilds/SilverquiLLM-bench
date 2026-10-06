@@ -11,6 +11,7 @@ from __future__ import annotations
 from cards.fdn.fdn_12.card_impl import FelidarSavior
 from engine.card import Creature, printed_class
 from engine.types import ManaCost, ManaType
+from engine.triggers import TriggerSource
 from test_utils import cast_spell, create_game, set_board_state
 
 
@@ -28,7 +29,7 @@ class TestFelidarSaviorProperties:
         game = create_game()
         fs = FelidarSavior(owner=game.players[0], controller=game.players[0])
         assert fs.get_targets(game) == []  # the spell targets nothing
-        specs = fs._enters_targets(game, game.players[0])
+        specs = fs._enters_targets(game, game.players[0], TriggerSource(fs, None))
         assert len(specs) == 2
         assert all(s.optional for s in specs)
 
