@@ -81,7 +81,7 @@ class UldarosTheorix(Creature):
                     return None
                 face = choose_face(state, player, chosen[0], affordable)
                 # A copy is numbered as it is cast (rule 707.12).
-                state.created_copies.append(chosen[0])
+                state.created_copies.append(whole_card(chosen[0]))
                 cast_spell_free(state, player, face, Zone.EXILE, mana_value_limit=budget[0])
                 return face
 
