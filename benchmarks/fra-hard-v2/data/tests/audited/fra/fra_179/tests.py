@@ -29,6 +29,7 @@ from cards.fra.fra_49.card_impl import (
     BloodlineRecollectorAbility1,
 )
 from test_interface import (
+    Decision,
     ManaType,
     Phase,
     Side,
@@ -340,8 +341,8 @@ def test_the_hall_destroyed_in_response_copies_nothing_but_still_lifts_the_legen
         t.act(1, land, then=[taps(land)])
     t.act(1, DemolitionFieldAbility2, choices=[hall],
           then=[moves(field, Zone.GRAVEYARD), on_stack(DemolitionFieldAbility2, 1)])
-    t.pass_(1)
-    t.pass_(0, then=[off_stack(DemolitionFieldAbility2), moves(hall, Zone.GRAVEYARD)])
+    t.pass_(1, choices=[Decision.no()], note="declines Demolition Field's search")
+    t.pass_(0, choices=[Decision.no()], then=[off_stack(DemolitionFieldAbility2), moves(hall, Zone.GRAVEYARD)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(COPY)])
     t.act(0, another, then=[moves(another, Zone.STACK)])

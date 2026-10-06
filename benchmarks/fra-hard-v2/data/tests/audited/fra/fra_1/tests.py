@@ -352,8 +352,8 @@ def test_a_target_land_destroyed_in_response_leaves_emrakul_uncastable_in_exile(
     _tap(t, 1, plains)
     t.act(1, DemolitionFieldAbility2, choices=[target],
           then=[moves(field, Zone.GRAVEYARD), on_stack(DemolitionFieldAbility2, 1)])
-    t.pass_(1)
-    t.pass_(0, then=[off_stack(DemolitionFieldAbility2), moves(target, Zone.GRAVEYARD)])
+    t.pass_(1, choices=[Decision.no()], note="declines Demolition Field's search")
+    t.pass_(0, choices=[Decision.no()], then=[off_stack(DemolitionFieldAbility2), moves(target, Zone.GRAVEYARD)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(EXILE_ABILITY)])
     t.act_illegal(0, emrakul, note="13 mana, but no permission to cast Emrakul from exile")
