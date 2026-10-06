@@ -639,6 +639,7 @@ def register_enters_trigger(
     source_aware: bool = False,
     knows_source: bool = False,
     remember: Callable[[GameState, Player], Any] | None = None,
+    modal: bool = False,
 ) -> None:
     """Register *source*'s "when this enters" triggered ability: it triggers
     as *source* enters the battlefield and uses the stack like any other.
@@ -661,6 +662,12 @@ def register_enters_trigger(
     *source* is still the same object on the battlefield, for an effect that
     acts on it — attaching it, fighting with it, or exiling "until it leaves".
     With *remember*, it gets ``remembered=``.
+
+    With *modal*, *targets* chooses the ability's mode before giving that
+    mode's requirements. A chosen mode whose required target has no legal
+    choice could not have been chosen (rule 700.2a), so it is rejected and
+    the controller chooses again (ADR-017) — the ability is not removed, as
+    a nonmodal one with no legal target is (rule 603.3c).
 
     With *knows_source*, *targets*, *condition* and *effect* each also get
     ``source=``: this occurrence's :class:`TriggerSource`, the source as it
@@ -701,8 +708,13 @@ def register_enters_trigger(
     if targets is not None:
 
         def targeting(game: GameState, event: Any, controller: Player, this: TriggerSource) -> list[Any] | None:
-            requirements = targets(game, controller, **_this(this.stint))
-            return choose_trigger_targets(game, controller, source, list(requirements))
+            requirements = list(targets(game, controller, **_this(this.stint)))
+            chosen = choose_trigger_targets(game, controller, source, requirements)
+            if chosen is None and modal:
+                from engine.decisions import InvalidPlayerChoiceError
+
+                raise InvalidPlayerChoiceError("the chosen mode has no legal target")
+            return chosen
 
         if remember is not None:
 
