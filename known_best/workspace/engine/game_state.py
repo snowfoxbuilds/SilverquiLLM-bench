@@ -98,6 +98,8 @@ class GameState:
         # Whether a creature died this turn (morbid, rule 700.4); cleared in
         # the cleanup step.
         self.creature_died_this_turn: bool = False
+        # Cards holding a "cast it from your graveyard this turn" grant; cleanup ends them.
+        self.graveyard_cast_grants: list[Any] = []
 
     # ------------------------------------------------------------------
     # Player properties

@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 from cards.fdn.fdn_2.card_impl import ArahboTheFirstFang
 from cards.fdn.fdn_48.card_impl import Refute
+from cards.fdn.fdn_77.card_impl import ZulAshurLichLord
 from cards.fdn.fdn_131.card_impl import RavenousAmulet, RavenousAmuletAbility1
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride
 from cards.fdn.fdn_163.card_impl import SelfReflection
@@ -21,6 +22,7 @@ from cards.fdn.fdn_227.card_impl import LlanowarElves, LlanowarElvesAbility1
 from cards.fdn.fdn_280.card_impl import Forest, ForestAbility1
 from engine.card import Artifact, Creature, Instant, ManaAbility, Sorcery
 from engine.casting import CastingError, can_cast_at_instant_speed, cast_spell, is_sorcery_speed
+from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer, SubLayer
 from engine.decisions import (
     Decision,
     DecisionKind,
@@ -36,7 +38,8 @@ from engine.queries import Answer, PlayerQuery, ask, is_priority_query, priority
 from engine.rollback import take_snapshot
 from engine.stack import StackObject, priority_loop, settle_after_resolution
 from engine.triggers import TriggerRegistration
-from engine.types import CardType, ManaCost, ManaType, Phase, Step, Zone
+from engine.turn import _do_cleanup_step, cleanup_mechanical
+from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 from engine.zones import move_to_zone
 from test_utils import create_game, resolve_stack, set_board_state
 
@@ -696,6 +699,94 @@ def test_a_graveyard_cast_permission_is_only_its_grantees():
     set_board_state(game, 0, graveyard=[growth])
     grant_graveyard_cast(game, game.players[1], growth)
 
+    query, _ = priority_query(game, game.players[0])
+    assert _printed(query, DecisionKind.OBJECT) == []
+
+
+class _Zombie(Creature):
+    """A free Zombie with flash, castable in any priority window."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Free Zombie")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{0}"))
+        kwargs.setdefault("subtypes", {"Zombie"})
+        kwargs.setdefault("keywords", Keyword.FLASH)
+        kwargs.setdefault("base_power", 1)
+        kwargs.setdefault("base_toughness", 1)
+        super().__init__(**kwargs)
+
+
+class _Husk(Creature):
+    """A 0/0 creature, kept alive only by an until-end-of-turn boost."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Husk")
+        kwargs.setdefault("base_power", 0)
+        kwargs.setdefault("base_toughness", 0)
+        super().__init__(**kwargs)
+
+
+def _grant_through_zul_ashur(game, player, zul, zombie, keep_source: bool) -> None:
+    """Zul Ashur's ability resolves for *zombie*; the source may then leave."""
+    zul.get_activated_abilities(game)[0].effect(game, player)
+    assert getattr(zombie, "_castable_from_graveyard", None) is not None
+    if not keep_source:
+        sacrifice(game, player, zul)
+
+
+def _boost_until_end_of_turn(game, creature) -> None:
+    def _apply(game) -> None:
+        creature.modified_toughness += 1
+
+    game.effect_manager.add(
+        ContinuousEffect(
+            source=creature, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT,
+            bound_to=[creature], apply=_apply, duration=DURATION_END_OF_TURN,
+        )
+    )
+    game.effect_manager.apply_all(game)
+
+
+@pytest.mark.parametrize("keep_source", [True, False])
+def test_a_graveyard_cast_grant_ends_in_cleanup_before_its_priority_window(keep_source):
+    p0 = ScriptedPlayer("Player1", [Decision.obj(printed=_Zombie)] * 4)
+    game = _game(p0)
+    zul, zombie, husk = ZulAshurLichLord(), _Zombie(), _Husk()
+    set_board_state(game, 0, graveyard=[zombie], battlefield=[zul, husk])
+    _boost_until_end_of_turn(game, husk)
+    _grant_through_zul_ashur(game, p0, zul, zombie, keep_source)
+    game.phase, game.step = Phase.ENDING, Step.CLEANUP
+
+    _do_cleanup_step(game)  # the Husk dies, so cleanup opens a priority window
+
+    assert game.get_graveyard(p0).contains(husk)
+    assert game.get_graveyard(p0).contains(zombie)
+    assert not game.get_battlefield(p0).contains(zombie)
+    assert game.stack.is_empty()
+
+
+def test_a_graveyard_cast_grant_lasts_through_the_end_step():
+    p0 = ScriptedPlayer("Player1", [Decision.obj(printed=_Zombie), None])
+    game = _game(p0)
+    zul, zombie = ZulAshurLichLord(), _Zombie()
+    set_board_state(game, 0, graveyard=[zombie], battlefield=[zul])
+    _grant_through_zul_ashur(game, p0, zul, zombie, keep_source=False)
+    game.phase, game.step = Phase.ENDING, Step.END
+
+    assert take_priority(game, p0) is False
+    assert game.stack.peek().source is zombie
+
+
+def test_a_grant_made_during_cleanup_ends_at_the_next_cleanup_iteration():
+    game = _game()
+    zombie = _Zombie()
+    set_board_state(game, 0, graveyard=[zombie])
+    game.phase, game.step = Phase.ENDING, Step.CLEANUP
+    grant_graveyard_cast(game, game.players[0], zombie)
+    query, _ = priority_query(game, game.players[0])
+    assert _printed(query, DecisionKind.OBJECT) == [_Zombie]
+
+    cleanup_mechanical(game)
     query, _ = priority_query(game, game.players[0])
     assert _printed(query, DecisionKind.OBJECT) == []
 

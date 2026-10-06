@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-05
+Last updated: 2026-10-06
 
 # V2 Player Choice / Decision Model
 
@@ -145,6 +145,7 @@ This applies to the Known-Best Engine, smoke, fra-hard-v2 and later benchmarks; 
 - **Settling first**: before each Priority Query the game is settled — continuous effects re-derived and state-based actions performed — including after an action that paid a cost or left the stack empty (CR 117.5).
 - **What is offered**: every action the player may begin under timing, zone and cast-permission rules; costs and targets are not pre-checked (grilling 2026-10-04).
   Card conditions that depend on targets or other casting-time checks are not pre-checked either, so such a spell is offered and its cast rejected.
+  A "cast it from your graveyard this turn" permission is offered only to the player it was granted to, only while the card stays in the graveyard as the object it named (CR 400.7), and ends at the next cleanup step, as "this turn" effects do (CR 514.2), so a priority window that cleanup opens no longer offers it; a permission granted in that window lasts until the next cleanup iteration.
   The timing of a multi-face card is judged by the face being cast (CR 715.3a), so the card, not the engine's generic timing check, decides which of its faces may begin casting, and an instant face of a creature card is offered at instant speed.
 - **Combat declarations**: declaring attackers and declaring blockers are Player Queries too — a multi-select of OBJECT options for the creatures that could attack or block, with whom each attacks or blocks.
   They replace the imperative `declare_attackers` / `declare_blockers` calls and the convention that the engine silently filters illegal attackers and blockers (grilling 2026-10-04).

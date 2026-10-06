@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Any
 from engine.card import ActivatedAbility, Creature
 from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, Zone
-from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -43,23 +42,6 @@ class ZulAshurLichLord(Creature):
         kwargs.setdefault('base_toughness', 2)
         kwargs.setdefault('rules_text', 'Ward—Pay 2 life.\n{T}: You may cast target Zombie creature card from your graveyard this turn.')
         super().__init__(**kwargs)
-        self._granted_castable: list[Any] = []
-
-    def register_triggers(self, game: 'GameState') -> None:
-        """Register end-of-turn cleanup to remove graveyard casting permission."""
-        from engine.triggers import TriggerRegistration
-        source = self
-
-        def _cleanup_condition(game: Any, event: dict) -> bool:
-            return True
-
-        def _cleanup_effect(game: 'GameState') -> None:
-            for card in source._granted_castable:
-                if hasattr(card, '_castable_from_graveyard'):
-                    del card._castable_from_graveyard
-            source._granted_castable.clear()
-        controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_cleanup_condition, effect=_cleanup_effect, source=self, controller=controller))
 
     def get_activated_abilities(self, game: 'GameState') -> list:
         """Tap ability: cast Zombie from graveyard this turn."""
@@ -76,7 +58,6 @@ class ZulAshurLichLord(Creature):
             if chosen is not None:
                 from engine.priority import grant_graveyard_cast
                 grant_graveyard_cast(game, controller, chosen)
-                source._granted_castable.append(chosen)
         ability = ActivatedAbility(cost=lambda game, src=self: not getattr(src, 'is_tapped', False), effect=_tap_effect, description='{T}: You may cast target Zombie creature card from your graveyard this turn.', printed=ZulAshurLichLordAbility2)
         ability.tap_cost = True
         return [ability]
