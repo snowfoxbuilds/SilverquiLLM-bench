@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 from engine.card import Creature
+from engine.types import Keyword
 from engine.types import Zone as EZone
 
 from silverquillm.replay.executor import ReplayExecutor, StepResult
@@ -50,10 +51,11 @@ class _Board:
         game = self.ex.game
         game.active_player_index = game.priority_player_index = 0
 
-    def creature(self, iid: int, seat: int, power: int = 2, toughness: int = 2) -> Creature:
+    def creature(self, iid: int, seat: int, power: int = 2, toughness: int = 2,
+                 keywords: Keyword | None = None, name: str | None = None) -> Creature:
         player = self.ex.players[seat]
-        card = Creature(name=f"C{iid}", owner=player, controller=player,
-                        base_power=power, base_toughness=toughness)
+        card = Creature(name=name or f"C{iid}", owner=player, controller=player,
+                        base_power=power, base_toughness=toughness, keywords=keywords)
         card.summoning_sick = False
         player.zones[EZone.BATTLEFIELD].add(card)
         self.ex._engine_cards[iid] = card
@@ -163,3 +165,121 @@ def test_two_blockers_divide_damage_as_the_replay_shows():
     assert result.engine_failures == []
     assert sturdy.damage_marked == 0
     assert not board.ex.players[2].zones[EZone.BATTLEFIELD].contains(frail)
+
+
+def _combat(board: _Board, attackers: dict[int, list[int]], died: set[int] = frozenset(),
+            step: str = "Step_CombatDamage") -> StepResult:
+    """Declare *attackers* (attacker GRE id -> its blockers' ids), then run the
+    damage step with the replay showing *died* leave the battlefield."""
+    attacking = {a: _obj(a, 1, attack_state="AttackState_Attacking") for a in attackers}
+    assert board.step(_snapshot("Step_DeclareAttack", attacking)).engine_failures == []
+    blocking = {**attacking, **{b: _obj(b, 2, blocking_attacker_ids=[a])
+                                for a, bs in attackers.items() for b in bs}}
+    assert board.step(_snapshot("Step_DeclareBlock", blocking)).engine_failures == []
+    damage = _snapshot(step, blocking)
+    after = _snapshot(step, {k: v for k, v in blocking.items() if k not in died})
+    after.game_state_id = 2
+    board.ex.replay.snapshots = [damage, after]
+    board.ex._gsid_index = {1: 0, 2: 1}
+    return board.step(damage)
+
+
+def _alive(board: _Board, card: Creature) -> bool:
+    return board.ex.players[2].zones[EZone.BATTLEFIELD].contains(card)
+
+
+def test_a_trampler_whose_blockers_both_survive_assigns_all_its_damage_to_them():
+    board = _Board()
+    board.creature(100, 1, power=6, toughness=6, keywords=Keyword.TRAMPLE)
+    left, right = board.creature(200, 2, toughness=8), board.creature(201, 2, toughness=8)
+    result = _combat(board, {100: [200, 201]})
+    assert result.engine_failures == []
+    assert left.damage_marked + right.damage_marked == 6
+    assert _alive(board, left) and _alive(board, right) and board.ex.players[2].life == 20
+
+
+def test_a_trampler_with_one_blocker_dying_keeps_its_survivor_below_lethal():
+    board = _Board()
+    board.creature(100, 1, power=6, toughness=6, keywords=Keyword.TRAMPLE)
+    frail, sturdy = board.creature(200, 2), board.creature(201, 2, toughness=8)
+    result = _combat(board, {100: [200, 201]}, died={200})
+    assert result.engine_failures == []
+    assert not _alive(board, frail) and _alive(board, sturdy)
+    assert board.ex.players[2].life == 20
+
+
+def test_same_name_tramplers_each_divide_their_own_damage():
+    board = _Board()
+    board.creature(100, 1, power=6, toughness=6, keywords=Keyword.TRAMPLE, name="Wurm")
+    board.creature(101, 1, power=6, toughness=6, keywords=Keyword.TRAMPLE, name="Wurm")
+    blockers = [board.creature(b, 2) for b in (200, 201, 202, 203)]
+    result = _combat(board, {100: [200, 201], 101: [202, 203]}, died={200, 201, 202, 203})
+    assert result.engine_failures == []
+    assert not any(_alive(board, b) for b in blockers)
+    assert board.ex.players[2].life == 20 - 2 * 2
+
+
+def test_a_trampler_whose_blockers_all_die_tramples_the_rest_over():
+    board = _Board()
+    board.creature(100, 1, power=6, toughness=6, keywords=Keyword.TRAMPLE)
+    left, right = board.creature(200, 2), board.creature(201, 2)
+    result = _combat(board, {100: [200, 201]}, died={200, 201})
+    assert result.engine_failures == []
+    assert not _alive(board, left) and not _alive(board, right)
+    assert board.ex.players[2].life == 18
+
+
+def test_an_unobserved_division_is_still_legal_and_deterministic():
+    board = _Board()
+    board.creature(100, 1, power=6, toughness=6, keywords=Keyword.TRAMPLE)
+    left, right = board.creature(200, 2, toughness=3), board.creature(201, 2, toughness=3)
+    result = _combat(board, {100: [200, 201]})
+    assert result.engine_failures == []
+    assert not _alive(board, left) and not _alive(board, right)
+    assert board.ex.players[2].life == 20
+
+
+def test_deathtouch_assigns_one_lethal_damage_to_each_dying_blocker():
+    board = _Board()
+    board.creature(100, 1, power=3, toughness=3, keywords=Keyword.TRAMPLE | Keyword.DEATHTOUCH)
+    left, right = board.creature(200, 2, toughness=5), board.creature(201, 2, toughness=5)
+    result = _combat(board, {100: [200, 201]}, died={200, 201})
+    assert result.engine_failures == []
+    assert not _alive(board, left) and not _alive(board, right)
+    assert board.ex.players[2].life == 19
+
+
+def test_marked_damage_lowers_what_is_lethal():
+    board = _Board()
+    board.creature(100, 1, power=4, toughness=4, keywords=Keyword.TRAMPLE)
+    hurt, fresh = board.creature(200, 2, toughness=4), board.creature(201, 2, toughness=4)
+    hurt.damage_marked = 3
+    result = _combat(board, {100: [200, 201]}, died={200})
+    assert result.engine_failures == []
+    assert not _alive(board, hurt) and _alive(board, fresh) and fresh.damage_marked == 0
+    assert board.ex.players[2].life == 20
+
+
+def test_a_first_strike_pass_divides_its_own_damage():
+    board = _Board()
+    board.creature(100, 1, power=4, toughness=4, keywords=Keyword.TRAMPLE | Keyword.FIRST_STRIKE)
+    left, right = board.creature(200, 2), board.creature(201, 2, toughness=5)
+    result = _combat(board, {100: [200, 201]}, died={200}, step="Step_FirstStrikeDamage")
+    assert result.engine_failures == []
+    assert not _alive(board, left) and right.damage_marked == 0
+
+
+def test_a_rejected_division_is_an_engine_failure_and_its_intent_is_ended(monkeypatch):
+    import silverquillm.replay.executor as executor
+
+    def illegal(*, power, trample, blockers, died, lethal):
+        return {id(b): 0 for b in blockers}
+
+    monkeypatch.setattr(executor, "_legal_division", illegal)
+    board = _Board()
+    attacker = board.creature(100, 1, power=6, toughness=6, keywords=Keyword.TRAMPLE)
+    board.creature(200, 2)
+    board.creature(201, 2)
+    result = _combat(board, {100: [200, 201]})
+    assert any("combat_damage_step" in f for f in result.engine_failures)
+    assert attacker.controller._intents == {}

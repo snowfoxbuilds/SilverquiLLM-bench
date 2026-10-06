@@ -74,6 +74,47 @@ def _asks_about(instance: int) -> Any:
     return key
 
 
+def _legal_division(
+    *, power: int, trample: bool, blockers: list[Any], died: list[Any], lethal: Any
+) -> dict[int, int]:
+    """A division of *power* combat damage among *blockers* that the rules
+    allow (rule 510.1c-d, 702.19c), keyed by ``id(blocker)``.
+
+    *died* (in the order they left) are guessed to have been assigned lethal
+    damage first, and any damage left over goes to the first of them, so a
+    blocker seen to survive is assigned none — unless every blocker died,
+    when a trampler assigns the rest past them. With no blocker seen to die,
+    the survivors are kept below lethal damage while the power allows; what
+    is still left goes to the first blocker, or, with trample, to each
+    survivor up to lethal damage and then past them. With no observation at
+    all the result is still deterministic and legal.
+    """
+    shares = {id(b): 0 for b in blockers}
+    survivors = [b for b in blockers if all(b is not d for d in died)]
+    remaining = power
+    for blocker in died:
+        share = min(lethal(blocker), remaining)
+        shares[id(blocker)] += share
+        remaining -= share
+    if died:
+        if remaining and (survivors or not trample):
+            shares[id(died[0])] += remaining
+        return shares
+    for blocker in survivors:
+        share = min(max(0, lethal(blocker) - 1), remaining)
+        shares[id(blocker)] += share
+        remaining -= share
+    if remaining and not trample:
+        shares[id(blockers[0])] += remaining
+        return shares
+    for blocker in survivors:
+        share = min(lethal(blocker) - shares[id(blocker)], remaining)
+        if share > 0:
+            shares[id(blocker)] += share
+            remaining -= share
+    return shares
+
+
 def _make_replay_player(name: str, life: int) -> Any:
     """Create a DeterministicPlayer for whichever workspace engine is on sys.path.
 
@@ -1526,67 +1567,54 @@ class ReplayExecutor:
     def _mint_damage_division_intents(
         self, curr_snapshot: GameSnapshot
     ) -> list[tuple[Any, str]]:
-        """Answer damage-division queries from the replay's observed outcome.
+        """Answer damage-division queries with a legal division guided by the replay.
 
-        For each attacker blocked by 2+ creatures, the blockers that leave
-        the battlefield are assigned lethal damage, in death order, while the
-        attacker's power lasts; without trample the rest goes to the first of
-        them, so a survivor is assigned none. Each blocker's share is a NUMBER
-        preference keyed to the query whose payload names that blocker. Mints
-        one Intent per such attacker on its controller, ended by the caller
-        after the damage pass; same-name attackers are skipped as for
-        :meth:`_mint_damage_order_intents`.
+        For each attacker the engine has blocked by two or more creatures, the
+        division comes from :func:`_legal_division` over the engine's own
+        blockers, with the blockers seen to leave the battlefield as its
+        guide. Each blocker's share is a NUMBER preference keyed to the query
+        whose payload names that blocker; the Intent is routed by the
+        attacker's runtime instance ref, so same-name attackers each get their
+        own division. One Intent per attacker, ended by the caller after the
+        damage pass. A wrong guess is an honest compare-first mismatch; the
+        division itself is always one the rules allow (rule 510.1c-d,
+        702.19c).
         """
         from engine.combat import _get_lethal_damage
         from engine.decisions import Decision, GameRef
         from engine.types import Keyword
         Intent = _intent_api().Intent
 
-        by_attacker: dict[int, list[int]] = {}
-        for obj in curr_snapshot.get_zone_objects("ZoneType_Battlefield"):
-            for aid in obj.blocking_attacker_ids:
-                by_attacker.setdefault(aid, []).append(obj.instance_id)
-
-        multi = {a: b for a, b in by_attacker.items() if len(b) >= 2}
-        if not multi:
-            return []
-        names = [
-            getattr(self._engine_cards.get(a), "name", None) for a in multi
-        ]
+        combat = getattr(self.game, "combat_state", None)
+        attacker_blockers = getattr(combat, "attacker_blockers", {}) or {}
+        replay_iid = {id(card): iid for iid, card in self._engine_cards.items() if card is not None}
         intents: list[tuple[Any, str]] = []
-        for aid, blocker_iids in multi.items():
-            attacker = self._engine_cards.get(aid)
-            if attacker is None:
-                continue
-            if names.count(getattr(attacker, "name", None)) > 1:
+        for attacker, blockers in attacker_blockers.items():
+            if len(blockers) < 2:
                 continue
             controller = getattr(attacker, "controller", None)
-            if controller is None or not hasattr(controller, "start_intent"):
+            attacker_iid = self._engine_instance_id(attacker)
+            if controller is None or attacker_iid is None or not hasattr(controller, "start_intent"):
                 continue
-            remaining = max(0, getattr(attacker, "power", 0))
-            trample = Keyword.TRAMPLE in getattr(attacker, "keywords", Keyword(0))
-            died = self._blocker_deaths(blocker_iids, curr_snapshot)
-            shares: dict[int, int] = {}
-            for iid in died:
-                card = self._engine_cards.get(iid)
-                engine_iid = self._engine_instance_id(card) if card is not None else None
-                if engine_iid is None:
-                    continue
-                share = min(_get_lethal_damage(card, attacker), remaining)
-                shares[engine_iid] = share
-                remaining -= share
-            if not shares:
+            keyed = [(b, self._engine_instance_id(b)) for b in blockers]
+            if any(iid is None for _, iid in keyed):
                 continue
-            if remaining and not trample:
-                shares[next(iter(shares))] += remaining
+            observed = [replay_iid[id(b)] for b in blockers if id(b) in replay_iid]
+            died_order = self._blocker_deaths(observed, curr_snapshot)
+            died = [b for iid in died_order for b, _ in keyed if replay_iid.get(id(b)) == iid]
+            shares = _legal_division(
+                power=max(0, getattr(attacker, "power", 0)),
+                trample=Keyword.TRAMPLE in getattr(attacker, "keywords", Keyword(0)),
+                blockers=[b for b, _ in keyed],
+                died=died,
+                lethal=lambda b: _get_lethal_damage(b, attacker),
+            )
             per_query = {
-                _asks_about(engine_iid): [Decision.number(share)]
-                for engine_iid, share in shares.items()
+                _asks_about(iid): [Decision.number(shares[id(b)])] for b, iid in keyed
             }
-            per_query[_asks_division] = [Decision.number(0)]
-            intent_name = f"replay_division_{aid}"
+            intent_name = f"replay_division_{attacker_iid}"
             controller.start_intent(intent_name, Intent(
-                pattern=GameRef(card=frozenset({("name", attacker.name)})),
+                pattern=GameRef(object=frozenset({("instance", attacker_iid)})),
                 per_query=per_query,
             ))
             intents.append((controller, intent_name))
