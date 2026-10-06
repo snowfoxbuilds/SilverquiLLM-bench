@@ -11,7 +11,7 @@ correlation) to see it.
 from __future__ import annotations
 
 from cards.fdn.fdn_92.card_impl import RiteOfTheDragoncaller
-from engine.card import Instant
+from engine.card import Instant, printed_class
 from engine.events import SpellCastTriggeredEvent
 from engine.protection import get_colors
 from engine.types import Color, Keyword, ManaCost, Phase
@@ -42,7 +42,7 @@ def _cast_instant(game, p1) -> None:
 class TestRiteOfTheDragoncallerProperties:
     def test_static_data(self) -> None:
         c = RiteOfTheDragoncaller(owner=None)
-        assert c.name == "Rite of the Dragoncaller"
+        assert printed_class(c) is RiteOfTheDragoncaller
         assert c.mana_cost == ManaCost.parse("{4}{R}{R}")
 
 

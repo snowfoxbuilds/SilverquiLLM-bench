@@ -86,6 +86,12 @@ class CombatState:
     attacked_planeswalkers: dict[Any, tuple[int, Any]] = field(default_factory=dict)
     # Attacked planeswalkers that have left combat; they never rejoin it (rule 506.4).
     departed_planeswalkers: list[Any] = field(default_factory=list)
+    # Each attacking or blocking creature's controller when it was declared;
+    # a creature whose controller changes leaves combat (rule 506.4).
+    declared_controllers: dict[Any, Any] = field(default_factory=dict)
+    # The battlefield stints of the combatants that had first or double strike
+    # as the first-strike damage step began (rule 510.4).
+    first_strikers: set[Any] = field(default_factory=set)
     in_combat: bool = False
 
     def clear(self) -> None:
@@ -97,6 +103,8 @@ class CombatState:
         self.was_blocked.clear()
         self.attacked_planeswalkers.clear()
         self.departed_planeswalkers.clear()
+        self.declared_controllers.clear()
+        self.first_strikers.clear()
         self.in_combat = False
 
 
@@ -369,10 +377,13 @@ def _declaration_source(game: GameState, player: Player, window: tuple[str, str]
     )
 
 
-def _untapped_creatures(player: Player) -> list[Any]:
+def _untapped_creatures(game: GameState, player: Player) -> list[Any]:
+    """*player*'s untapped creatures: those they control on any battlefield,
+    since a permanent whose control changed stays in its owner's zone."""
     return [
-        c for c in player.zones[Zone.BATTLEFIELD].get_all()
+        c for p in game.players for c in p.zones[Zone.BATTLEFIELD].get_all()
         if hasattr(c, "base_power") and not getattr(c, "is_tapped", False)
+        and (getattr(c, "controller", None) or p) is player
     ]
 
 
@@ -454,7 +465,7 @@ def declare_attackers_step(game: GameState) -> None:
     active = game.active_player
     defending = game.non_active_player
 
-    candidates = _untapped_creatures(active)
+    candidates = _untapped_creatures(game, active)
 
     def follow_up(chosen: list[Any]) -> dict[Any, Any]:
         for creature in chosen:
@@ -488,6 +499,7 @@ def _register_attacks(game: GameState, attacks: dict) -> None:
             )
         combat.attackers[attacker] = defender
         combat.attacker_blockers[attacker] = []
+        combat.declared_controllers[attacker] = getattr(attacker, "controller", None)
         attacker.is_attacking = True
         declared.append(attacker)
 
@@ -519,8 +531,9 @@ def _choose_defender(game: GameState, active: Player, defending: Player, attacke
     control (rule 508.1b). Always asked, even when the defending player is the
     only choice, so the answer names the defender the attack really has."""
     planeswalkers = [
-        p for p in defending.zones[Zone.BATTLEFIELD].get_all()
+        p for owner in game.players for p in owner.zones[Zone.BATTLEFIELD].get_all()
         if CardType.PLANESWALKER in getattr(p, "card_types", ())
+        and (getattr(p, "controller", None) or owner) is defending
     ]
     player_option = game.refs.player_decision(defending, seat=game.refs.seat_of(defending))
     walker_options, by_decision = object_options(game.refs, _battlefield_items(game, planeswalkers))
@@ -558,7 +571,7 @@ def declare_blockers_step(game: GameState) -> None:
         return
 
     defending = game.non_active_player
-    candidates = _untapped_creatures(defending)
+    candidates = _untapped_creatures(game, defending)
 
     def follow_up(chosen: list[Any]) -> dict[Any, list[Any]]:
         blocks = {blocker: _choose_blocked(game, defending, blocker) for blocker in chosen}
@@ -581,6 +594,7 @@ def _register_blocks(game: GameState, blocks: dict) -> None:
     combat = game.combat_state
     for blocker, blocked in blocks.items():
         combat.blockers[blocker] = blocked
+        combat.declared_controllers[blocker] = getattr(blocker, "controller", None)
         blocker.is_blocking = True
         for attacker in blocked:
             combat.attacker_blockers.setdefault(attacker, []).append(blocker)
@@ -671,6 +685,13 @@ def combat_damage_step(game: GameState, *, sub_step: str | None = None) -> None:
     # Combat damage is dealt at once (rule 510.2), so what it triggers goes on
     # the stack in one batch with what the state-based actions after it trigger.
     if sub_step in (None, "first_strike") and has_first_strike_step:
+        from engine.stack import battlefield_stint_id
+
+        combat.first_strikers = {
+            battlefield_stint_id(game, c)
+            for c in list(all_attackers) + list(all_blockers)
+            if _strikes_first(c) and _on_a_battlefield(game, c)
+        }
         with game.trigger_manager.batch(game):
             _assign_combat_damage(all_attackers, combat, game, is_first_strike=True)
             resolve_state_based_actions(game)
@@ -706,7 +727,6 @@ def _assign_combat_damage(
     the battlefield (e.g. killed by first-strike damage and removed by
     SBAs) are skipped.
     """
-    from engine.types import Zone
 
     # Track which blockers have already dealt their damage this sub-step
     # (blockers only deal damage once even if blocking multiple attackers)
@@ -716,23 +736,7 @@ def _assign_combat_damage(
         if attacker not in combat.attackers:
             continue
 
-        kw = getattr(attacker, "keywords", Keyword(0))
-        has_first = Keyword.FIRST_STRIKE in kw
-        has_double = Keyword.DOUBLE_STRIKE in kw
-
-        # Determine if this attacker deals damage in this sub-step
-        if is_first_strike:
-            attacker_deals = has_first or has_double
-        else:
-            attacker_deals = not has_first or has_double
-
-        # Skip if attacker is no longer on the battlefield
-        if attacker_deals:
-            controller = getattr(attacker, "controller", None)
-            if controller is not None:
-                bf = controller.zones[Zone.BATTLEFIELD]
-                if not bf.contains(attacker):
-                    attacker_deals = False
+        attacker_deals = _deals_damage_now(game, combat, attacker, is_first_strike)
 
         defending_player = _attacked(game, combat, attacker)
         blocker_list = combat.attacker_blockers.get(attacker, [])
@@ -782,29 +786,39 @@ def _assign_combat_damage(
 
         # Blockers deal damage back to the attacker
         for blocker in blocker_list:
-            if id(blocker) not in blockers_dealt:
-                blocker_kw = getattr(blocker, "keywords", Keyword(0))
-                blocker_has_first = Keyword.FIRST_STRIKE in blocker_kw
-                blocker_has_double = Keyword.DOUBLE_STRIKE in blocker_kw
+            if id(blocker) not in blockers_dealt and _deals_damage_now(game, combat, blocker, is_first_strike):
+                blocker_power = getattr(blocker, "power", 0)
+                _deal_damage(blocker, attacker, blocker_power, game, combat)
+                blockers_dealt.add(id(blocker))
 
-                # Determine if this blocker deals damage in this sub-step
-                if is_first_strike:
-                    should_deal = blocker_has_first or blocker_has_double
-                else:
-                    should_deal = not blocker_has_first or blocker_has_double
 
-                # Skip if blocker is no longer on the battlefield
-                if should_deal:
-                    blocker_ctrl = getattr(blocker, "controller", None)
-                    if blocker_ctrl is not None:
-                        bf = blocker_ctrl.zones[Zone.BATTLEFIELD]
-                        if not bf.contains(blocker):
-                            should_deal = False
+def _strikes_first(creature: Any) -> bool:
+    keywords = getattr(creature, "keywords", Keyword(0))
+    return Keyword.FIRST_STRIKE in keywords or Keyword.DOUBLE_STRIKE in keywords
 
-                if should_deal:
-                    blocker_power = getattr(blocker, "power", 0)
-                    _deal_damage(blocker, attacker, blocker_power, game, combat)
-                    blockers_dealt.add(id(blocker))
+
+def _on_a_battlefield(game: GameState, creature: Any) -> bool:
+    """Whether *creature* is on the battlefield — in any player's zone, since
+    a permanent whose control changed stays in its owner's."""
+    from engine.types import Zone
+
+    return any(p.zones[Zone.BATTLEFIELD].contains(creature) for p in game.players)
+
+
+def _deals_damage_now(game: GameState, combat: CombatState, creature: Any, is_first_strike: bool) -> bool:
+    """Whether *creature*, still on the battlefield, assigns combat damage in
+    this damage step: in the first-strike step if it has first or double
+    strike; in the regular step if it had neither as the first-strike step
+    began, or has double strike now (rule 510.4)."""
+    from engine.stack import battlefield_stint_id
+
+    if not _on_a_battlefield(game, creature):
+        return False
+    if is_first_strike:
+        return _strikes_first(creature)
+    if Keyword.DOUBLE_STRIKE in getattr(creature, "keywords", Keyword(0)):
+        return True
+    return battlefield_stint_id(game, creature) not in combat.first_strikers
 
 
 def _attacked(game: GameState, combat: CombatState, attacker: Any) -> Any:
@@ -832,6 +846,7 @@ def note_planeswalker_departures(game: GameState) -> None:
     combat = getattr(game, "combat_state", None)
     if combat is None:
         return
+    _note_control_changes(game, combat)
     for defender, (epoch, controller) in combat.attacked_planeswalkers.items():
         if any(d is defender for d in combat.departed_planeswalkers):
             continue
@@ -841,6 +856,22 @@ def note_planeswalker_departures(game: GameState) -> None:
             or CardType.PLANESWALKER not in getattr(defender, "card_types", ())
         ):
             combat.departed_planeswalkers.append(defender)
+
+
+def _note_control_changes(game: GameState, combat: CombatState) -> None:
+    """Remove from combat each attacking or blocking creature whose controller
+    has changed since it was declared (rule 506.4)."""
+    from engine.zones import _remove_from_combat
+
+    for creature, controller in list(combat.declared_controllers.items()):
+        if getattr(creature, "controller", None) is controller:
+            continue
+        del combat.declared_controllers[creature]
+        _remove_from_combat(game, creature)
+        for blockers in combat.attacker_blockers.values():
+            blockers[:] = [b for b in blockers if b is not creature]
+        creature.is_attacking = False
+        creature.is_blocking = False
 
 
 def end_combat_step(game: GameState) -> None:

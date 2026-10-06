@@ -9,7 +9,7 @@ canonical Equipment test shape.
 from __future__ import annotations
 
 from cards.fdn.fdn_5.card_impl import CelestialArmor
-from engine.card import Creature, Equipment
+from engine.card import Creature, Equipment, printed_class
 from engine.turn import cleanup_mechanical
 from engine.types import Keyword, ManaCost
 from test_utils import create_game, set_board_state
@@ -22,7 +22,7 @@ def _bear(p):
 class TestCelestialArmorProperties:
     def test_static_data(self):
         armor = CelestialArmor(owner=None)
-        assert armor.name == "Celestial Armor"
+        assert printed_class(armor) is CelestialArmor
         assert armor.mana_cost == ManaCost.parse("{2}{W}")
         assert armor.equip_cost == ManaCost.parse("{3}{W}")  # colored, not approximated
         assert Keyword.FLASH in armor.keywords

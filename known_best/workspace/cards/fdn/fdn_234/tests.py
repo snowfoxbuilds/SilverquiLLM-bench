@@ -19,7 +19,7 @@ import pytest
 
 from cards.fdn.fdn_234.card_impl import VivienReid
 from engine.abilities import AbilityError, clear_loyalty_tracking
-from engine.card import Artifact, Creature, Enchantment
+from engine.card import Artifact, Creature, Enchantment, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import CardType, Keyword, ManaCost, Phase, Supertype, Zone
@@ -59,7 +59,7 @@ def _enchantment(p, name="Curse"):
 
 def _activate_targeting(game, player, walker, index, target):
     player.start_intent("vivien", Intent(
-        pattern=GameRef(card=frozenset({("name", walker.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(walker))})),
         preferences=(Decision.obj(instance=target.instance_id),),
     ))
     try:
@@ -75,7 +75,7 @@ def _in_graveyard(game, player, obj):
 class TestVivienProperties:
     def test_static_data(self):
         vivien = VivienReid(owner=None)
-        assert vivien.name == "Vivien Reid"
+        assert printed_class(vivien) is VivienReid
         assert vivien.mana_cost == ManaCost.parse("{3}{G}{G}")
         assert vivien.starting_loyalty == 5
         assert Supertype.LEGENDARY in vivien.supertypes

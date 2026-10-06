@@ -1,11 +1,14 @@
 """Card implementation for Frenzied Goblin."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from engine.card import Creature
-from engine.card_queries import choose_object, query_yes_no
-from engine.continuous_effects import ContinuousEffect, DURATION_END_OF_TURN, Layer
-from engine.types import CardType, ManaCost
+from engine.card_queries import query_yes_no
+from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer
 from engine.events import AttacksTriggeredEvent
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -40,33 +43,32 @@ class FrenziedGoblin(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger for can't-block."""
-        from engine.triggers import TriggerRegistration
+        from engine.stack import stint_checked_targets
+        from engine.triggers import TriggerRegistration, choose_trigger_targets
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
         def _condition(game: Any, event: dict) -> bool:
             return event.creature is source
 
-        def _effect(game: 'GameState', controller: Any) -> None:
-            ctrl = controller
+        def _targeting(game: 'GameState', event: Any, ctrl: Any) -> list[Any] | None:
+            return choose_trigger_targets(game, ctrl, source, [TargetRequirement(
+                filter_fn=lambda obj: CardType.CREATURE in getattr(obj, 'card_types', set()),
+                description="Choose a creature that can't block this turn", zone=Zone.BATTLEFIELD)])
+
+        def _effect(game: 'GameState', targets: list[Any], context: Any) -> None:
+            ctrl = context.controller
             if ctrl is None:
                 return
             if not query_yes_no(game, ctrl, 'Pay {R} to make a creature unable to block?', source_card=source):
                 return
             if not ctrl.mana_pool.pay(ManaCost.parse('{R}')):
                 return  # insufficient mana -- pay() returns False, never raises
-            all_creatures: list = []
-            for player in game.players:
-                for perm in game.get_battlefield(player).get_all():
-                    if CardType.CREATURE in getattr(perm, 'card_types', set()):
-                        all_creatures.append(perm)
-            if not all_creatures:
-                return
-            target = choose_object(game, ctrl, all_creatures, "Choose a creature that can't block this turn", source_card=source)
+            (target,) = stint_checked_targets(game, context, targets)
             if target is not None:
                 target._cant_block = True
 
                 def _apply(game: Any) -> None:
                     target._cant_block = True
                 game.effect_manager.add(ContinuousEffect(source=source, layer=Layer.ABILITY, sublayer=None, bound_to=[target], apply=_apply, duration=DURATION_END_OF_TURN))
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=FrenziedGoblinAbility1))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, targeting=_targeting, printed=FrenziedGoblinAbility1))

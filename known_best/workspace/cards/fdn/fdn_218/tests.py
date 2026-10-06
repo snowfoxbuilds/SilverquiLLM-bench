@@ -41,7 +41,7 @@ class TestDwynensEliteToken:
             mana={ManaType.GREEN: 1, ManaType.COLORLESS: 1},
         )
 
-        cast_spell(game, 0, "Dwynen's Elite")
+        cast_spell(game, 0, DwynensElite)
 
         tokens = _elf_warrior_tokens(game, p1)
         assert len(tokens) == 1

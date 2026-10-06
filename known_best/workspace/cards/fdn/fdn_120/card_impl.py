@@ -1,12 +1,14 @@
 """Card implementation for Fiendish Panda."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
-from engine.card import ArtifactCreature, Creature
-from engine.types import CardType, Keyword, ManaCost, Supertype, Zone
+
+from engine.card import Creature
 from engine.events import CreatureDiesTriggeredEvent, GainsLifeTriggeredEvent
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
-    from cards.registry import CardRegistry
 
 
 # region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
@@ -58,8 +60,9 @@ class FiendishPanda(Creature):
         super().__init__(**kwargs)
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
         from engine.game import add_counter
+        from engine.stack import stint_checked_targets
+        from engine.triggers import TriggerRegistration, choose_trigger_targets
         from engine.zones import move_to_zone
         source = self
 
@@ -72,33 +75,28 @@ class FiendishPanda(Creature):
             if _is_on_battlefield(game, source):
                 add_counter(game, source, '+1/+1', 1)
 
-        def _dies_power(game: Any, event: Any, controller: Any) -> int:
-            # "this creature's power" as it last existed, fixed for this
-            # occurrence of the trigger (rules 603.10a, 603.3).
-            return event.last_known.power
+        def _dies_targeting(game: Any, event: Any, controller: Any) -> list[Any] | None:
+            # "this creature's power" as it last existed (rule 603.10a); the
+            # target is chosen as the trigger goes on the stack (rule 603.3d).
+            power = event.last_known.power
 
-        def _dies_effect(game: GameState, controller: Any, power: int) -> None:
-            # The fire-time controller: as the source last existed (603.3a).
-            if controller is None:
-                return
-            graveyard = controller.zones[Zone.GRAVEYARD]
-            candidates = []
-            for obj in graveyard.get_all():
-                if obj is source:
-                    continue
-                card_types = getattr(obj, 'card_types', set())
-                if CardType.CREATURE not in card_types:
-                    continue
-                subtypes = getattr(obj, 'subtypes', set())
-                if 'Bear' in subtypes:
-                    continue
+            def _returnable(obj: Any) -> bool:
                 mana_cost = getattr(obj, 'mana_cost', None)
-                if mana_cost is not None and mana_cost.cmc <= power:
-                    candidates.append(obj)
-            if candidates:
-                target = candidates[0]
-                target.controller = controller
-                move_to_zone(game, target, Zone.GRAVEYARD, Zone.BATTLEFIELD)
+                return (obj is not source and controller.zones[Zone.GRAVEYARD].contains(obj)
+                        and CardType.CREATURE in getattr(obj, 'card_types', set())
+                        and 'Bear' not in getattr(obj, 'subtypes', set())
+                        and (mana_cost is None or mana_cost.cmc <= power))
+
+            return choose_trigger_targets(game, controller, source, [TargetRequirement(
+                filter_fn=_returnable, description='another target non-Bear creature card to return',
+                zone=Zone.GRAVEYARD)])
+
+        def _dies_effect(game: GameState, targets: list[Any], context: Any) -> None:
+            (target,) = stint_checked_targets(game, context, targets)
+            if target is None:
+                return
+            target.controller = context.controller
+            move_to_zone(game, target, Zone.GRAVEYARD, Zone.BATTLEFIELD)
         controller = getattr(self, 'controller', None) or game.active_player
         game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_lifegain_condition, effect=_lifegain_effect, source=self, controller=controller, printed=FiendishPandaAbility1))
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_dies_effect, source=self, controller=controller, capture=_dies_power, printed=FiendishPandaAbility2))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_dies_effect, source=self, controller=controller, targeting=_dies_targeting, printed=FiendishPandaAbility2))

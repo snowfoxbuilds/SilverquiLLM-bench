@@ -71,6 +71,12 @@ class DrawsCardTriggeredEvent(TriggeredEvent):
 
 
 @dataclass
+class DiscardsCardTriggeredEvent(TriggeredEvent):
+    player: Any = None
+    card: Any = None
+
+
+@dataclass
 class BeginningOfUpkeepTriggeredEvent(TriggeredEvent):
     pass
 

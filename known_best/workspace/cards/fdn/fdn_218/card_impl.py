@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from cards.fdn.tokens import make_creature_token
-from engine.card import CardImpl, Creature
-from engine.types import CardType, Color, ManaCost
+from engine.card import Creature
+from engine.types import Color, ManaCost
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -44,11 +44,22 @@ class DwynensElite(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        def _condition(game: Any, controller: Any) -> bool:
+            return controller is not None and any(
+                obj is not self and "Elf" in getattr(obj, "subtypes", set())
+                for obj in game.get_battlefield(controller).get_all()
+            )
+
+        register_enters_trigger(game, self, DwynensEliteAbility1, self._enters, condition=_condition)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: if you control another Elf, create a 1/1 Elf Warrior token."""
         from engine.game import create_token
 
-        controller = self.controller
         if controller is None:
             return
 

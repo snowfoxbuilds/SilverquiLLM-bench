@@ -1,10 +1,12 @@
 """Card implementation for Alesha, Who Laughs at Fate."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from engine.card import Creature
-from engine.card_queries import choose_object
-from engine.types import Keyword, ManaCost, Zone
 from engine.events import AttacksTriggeredEvent, EndStepTriggeredEvent
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -53,9 +55,9 @@ class AleshaWhoLaughsAtFate(Creature):
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger and Raid end-step trigger."""
         from engine.game import add_counter
-        from engine.triggers import TriggerRegistration
+        from engine.stack import stint_checked_targets
+        from engine.triggers import TriggerRegistration, choose_trigger_targets
         from engine.zones import move_to_zone
-        from engine.types import CardType
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -77,26 +79,28 @@ class AleshaWhoLaughsAtFate(Creature):
                 attacked = getattr(ctrl, 'attacked_this_turn', False)
             return attacked
 
-        def _stint(game: Any, event: Any, controller: Any) -> int | None:
-            from engine.stack import battlefield_stint_id
-            return battlefield_stint_id(game, source)
+        def _returnable(ctrl: Any, power: int) -> Any:
+            def _legal(obj: Any) -> bool:
+                mana_cost = getattr(obj, 'mana_cost', None)
+                return (ctrl.zones[Zone.GRAVEYARD].contains(obj) and CardType.CREATURE in getattr(obj, 'card_types', set())
+                        and mana_cost is not None and mana_cost.cmc <= power)
+            return _legal
 
-        def _raid_effect(game: 'GameState', controller: Any, stint: int | None) -> None:
+        def _raid_targeting(game: 'GameState', event: Any, ctrl: Any) -> list[Any] | None:
+            return choose_trigger_targets(game, ctrl, source, [TargetRequirement(
+                filter_fn=_returnable(ctrl, source.power), description='creature card to return from graveyard',
+                zone=Zone.GRAVEYARD)])
+
+        def _raid_effect(game: 'GameState', targets: list[Any], context: Any) -> None:
             from engine.last_known import as_it_exists
-            ctrl = controller
-            if ctrl is None:
-                return
+            ctrl = context.controller
             # "Alesha's power": current while it remains on the battlefield,
             # otherwise as it last existed there (rule 608.2h).
-            alesha = as_it_exists(game, source, stint)
+            alesha = as_it_exists(game, source, context.source_instance_id)
             power = alesha.power if alesha is not None else 0
-            graveyard = ctrl.zones[Zone.GRAVEYARD]
-            candidates = [c for c in graveyard.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and getattr(c, 'mana_cost', None) is not None and (c.mana_cost.cmc <= power)]
-            if not candidates:
-                return
-            chosen = choose_object(game, ctrl, candidates, 'creature card to return from graveyard', source_card=source)
-            if chosen is None:
+            (chosen,) = stint_checked_targets(game, context, targets)
+            if chosen is None or not _returnable(ctrl, power)(chosen):
                 return
             chosen.controller = ctrl
             move_to_zone(game, chosen, Zone.GRAVEYARD, Zone.BATTLEFIELD)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_raid_condition, effect=_raid_effect, source=self, controller=controller, capture=_stint, printed=AleshaWhoLaughsAtFateAbility3))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_raid_condition, effect=_raid_effect, source=self, controller=controller, targeting=_raid_targeting, printed=AleshaWhoLaughsAtFateAbility3))

@@ -11,7 +11,7 @@ counter.
 from __future__ import annotations
 
 from cards.fdn.fdn_39.card_impl import GrapplingKraken
-from engine.card import Creature, Land
+from engine.card import Creature, Land, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import ManaCost, Phase, Zone
@@ -23,13 +23,13 @@ def _bear(name: str = "Bear") -> Creature:
     return Creature(name=name, base_power=2, base_toughness=2)
 
 
-def _prefer(game, player, source_name, target):
+def _prefer(game, player, source, target):
     """Start an Intent on *player* selecting *target* for the landfall query."""
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
     player.start_intent(
         "kraken",
         Intent(
-            pattern=GameRef(card=frozenset({("name", source_name)})),
+            pattern=GameRef(card=frozenset({("printed", source)})),
             preferences=(Decision.obj(instance=inst),),
         ),
     )
@@ -59,7 +59,7 @@ def _setup():
 class TestGrapplingKrakenProperties:
     def test_static_data(self):
         card = GrapplingKraken(owner=None)
-        assert card.name == "Grappling Kraken"
+        assert printed_class(card) is GrapplingKraken
         assert card.mana_cost == ManaCost.parse("{4}{U}{U}")
         assert (card.base_power, card.base_toughness) == (5, 6)
         assert card.subtypes == {"Kraken"}
@@ -69,7 +69,7 @@ class TestGrapplingKrakenLandfall:
     def test_landfall_taps_and_stuns_opponent_creature(self):
         game, p1, p2, kraken, opp = _setup()
         assert opp.is_tapped is False
-        _prefer(game, p1, "Grappling Kraken", opp)
+        _prefer(game, p1, GrapplingKraken, opp)
         _trigger_landfall(game, p1)          # pushes the landfall trigger
         assert not game.stack.is_empty()
         resolve_stack(game)

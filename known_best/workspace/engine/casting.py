@@ -331,13 +331,16 @@ def is_sorcery_speed(game: GameState, player: Player) -> bool:
     return True
 
 
-def can_cast_at_instant_speed(card: CardImpl) -> bool:
+def can_cast_at_instant_speed(card: CardImpl, player: Player | None = None) -> bool:
     """Return ``True`` if *card* may be cast at instant speed.
 
-    A card has instant-speed timing if it is an instant or has the
-    :attr:`~engine.types.Keyword.FLASH` keyword.
+    A card has instant-speed timing if it is an instant, has the
+    :attr:`~engine.types.Keyword.FLASH` keyword, or *player* may cast spells
+    as though they had flash (High Fae Trickster).
     """
     if CardType.INSTANT in card.card_types:
+        return True
+    if player is not None and getattr(player, "can_cast_as_flash", False):
         return True
     if Keyword.FLASH & card.keywords:
         return True
@@ -618,7 +621,7 @@ def cast_spell(
         CastingError: If any legality check fails.
     """
     # 1. Timing
-    if not can_cast_at_instant_speed(card) and not is_sorcery_speed(game, player):
+    if not can_cast_at_instant_speed(card, player) and not is_sorcery_speed(game, player):
         raise CastingError(
             f"Cannot cast {card.name!r} — sorcery-speed timing not met"
         )

@@ -12,8 +12,12 @@ from __future__ import annotations
 
 import pytest
 
-from cards.fdn.fdn_122.card_impl import KykarZephyrAwakener
-from engine.card import Creature, Instant
+from cards.fdn.fdn_122.card_impl import (
+    KykarZephyrAwakener,
+    KykarZephyrAwakenerAbility3,
+    KykarZephyrAwakenerAbility4,
+)
+from engine.card import Creature, Instant, printed_class
 from engine.decisions import Decision, GameRef, UnmatchedQueryError
 from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
 from test_utils import Intent
@@ -49,7 +53,7 @@ class TestKykarProperties:
     """Static card data should match the FDN 122 spec."""
 
     def test_name(self) -> None:
-        assert KykarZephyrAwakener().name == "Kykar, Zephyr Awakener"
+        assert printed_class(KykarZephyrAwakener()) is KykarZephyrAwakener
 
     def test_mana_cost(self) -> None:
         assert KykarZephyrAwakener().mana_cost == ManaCost.parse("{2}{W}{U}")
@@ -65,9 +69,9 @@ class TestKykarFlicker:
         # One intent answers both queries the trigger raises: the MODE query
         # (flicker) and the OBJECT query (the bear).
         p1.start_intent("kykar", Intent(
-            pattern=GameRef(card=frozenset({("name", "Kykar, Zephyr Awakener")})),
+            pattern=GameRef(card=frozenset({("printed", KykarZephyrAwakener)})),
             preferences=(
-                Decision.mode("flicker"),
+                Decision.mode(printed=KykarZephyrAwakenerAbility3),
                 Decision.obj(instance=pre_flicker),
             ),
         ))
@@ -113,8 +117,8 @@ class TestKykarFlicker:
     def test_token_mode_creates_spirit_and_no_flicker(self) -> None:
         game, p1, kykar, bear = _flicker_setup()
         p1.start_intent("kykar", Intent(
-            pattern=GameRef(card=frozenset({("name", "Kykar, Zephyr Awakener")})),
-            preferences=(Decision.mode("token"),),
+            pattern=GameRef(card=frozenset({("printed", KykarZephyrAwakener)})),
+            preferences=(Decision.mode(printed=KykarZephyrAwakenerAbility4),),
         ))
         _cast_noncreature(game, p1)
         p1.end_intent("kykar")
@@ -130,8 +134,8 @@ class TestKykarSpiritToken:
     def test_spirit_token_has_spec_characteristics(self) -> None:
         game, p1, kykar, bear = _flicker_setup()
         p1.start_intent("kykar", Intent(
-            pattern=GameRef(card=frozenset({("name", "Kykar, Zephyr Awakener")})),
-            preferences=(Decision.mode("token"),),
+            pattern=GameRef(card=frozenset({("printed", KykarZephyrAwakener)})),
+            preferences=(Decision.mode(printed=KykarZephyrAwakenerAbility4),),
         ))
         _cast_noncreature(game, p1)
         p1.end_intent("kykar")

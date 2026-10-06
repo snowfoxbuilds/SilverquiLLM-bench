@@ -49,7 +49,7 @@ class TestKioraToken:
             "kiora",
             Intent(
                 pattern=GameRef(
-                    card=frozenset({("name", "Kiora, the Rising Tide")})
+                    card=frozenset({("printed", KioraTheRisingTide)})
                 ),
                 preferences=(Decision.yes(),),
             ),

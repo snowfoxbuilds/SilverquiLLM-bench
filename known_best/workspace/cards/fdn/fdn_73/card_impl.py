@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
 from engine.continuous_effects import (
-    ContinuousEffect,
     DURATION_END_OF_TURN,
+    ContinuousEffect,
     Layer,
     SubLayer,
 )
@@ -51,9 +51,8 @@ class TragicBanshee(Creature):
         )
         super().__init__(**kwargs)
 
-    def get_targets(self, game: "GameState") -> list:
+    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Requires target creature an opponent controls."""
-        controller = self.controller
         return [TargetRequirement(
             filter_fn=lambda obj, g=game, ctrl=controller: (
                 CardType.CREATURE in getattr(obj, "card_types", set())
@@ -63,9 +62,15 @@ class TragicBanshee(Creature):
             zone=Zone.BATTLEFIELD,
         )]
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, TragicBansheeAbility1, self._enters, targets=self._enters_targets)
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
         """ETB: -1/-1 or -13/-13 depending on morbid."""
-        chosen = getattr(self, "chosen_targets", None)
+        chosen = targets
         if not chosen or chosen[0] is None:
             return
         target = chosen[0]

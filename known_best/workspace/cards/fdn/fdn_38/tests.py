@@ -10,7 +10,7 @@ creature. Targeting is intent-style via ``cast_spell(targets=...)``.
 from __future__ import annotations
 
 from cards.fdn.fdn_38.card_impl import FaebloomTrick
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
@@ -43,7 +43,7 @@ def _cast_no_resolve(game, player_index, card, targets):
     player.start_intent(
         "cast",
         Intent(
-            pattern=GameRef(card=frozenset({("name", card.name)})),
+            pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
             preferences=prefs,
         ),
     )
@@ -65,7 +65,7 @@ def _faeries(game, player):
 class TestFaebloomTrickProperties:
     def test_static_data(self):
         c = FaebloomTrick(owner=None)
-        assert c.name == "Faebloom Trick"
+        assert printed_class(c) is FaebloomTrick
         assert c.mana_cost == ManaCost.parse("{2}{U}")
         assert CardType.INSTANT in c.card_types
 
@@ -90,7 +90,7 @@ class TestFaebloomTrickResolve:
 
     def test_creates_two_flying_faeries_and_taps_target(self):
         game, p1, p2, trick, their_bear = self._setup()
-        cast_spell(game, 0, "Faebloom Trick", targets=[their_bear])
+        cast_spell(game, 0, FaebloomTrick, targets=[their_bear])
         faeries = _faeries(game, p1)
         assert len(faeries) == 2
         for f in faeries:
@@ -101,7 +101,7 @@ class TestFaebloomTrickResolve:
 
     def test_cost_is_paid(self):
         game, p1, p2, trick, their_bear = self._setup()
-        cast_spell(game, 0, "Faebloom Trick", targets=[their_bear])
+        cast_spell(game, 0, FaebloomTrick, targets=[their_bear])
         assert p1.mana_pool.total() == 0
 
     def test_castable_with_no_target_still_makes_tokens(self):
@@ -111,7 +111,7 @@ class TestFaebloomTrickResolve:
         p1, p2 = game.players
         trick = FaebloomTrick(owner=p1, controller=p1)
         set_board_state(game, 0, hand=[trick], mana={ManaType.BLUE: 3})
-        cast_spell(game, 0, "Faebloom Trick")  # no targets available/needed
+        cast_spell(game, 0, FaebloomTrick)  # no targets available/needed
         assert len(_faeries(game, p1)) == 2
 
 

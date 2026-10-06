@@ -7,7 +7,7 @@ create a Treasure token. See fdn_129/tests.py for the canonical shape.
 from __future__ import annotations
 
 from cards.fdn.fdn_253.card_impl import GoldveinPick
-from engine.card import Creature, Equipment
+from engine.card import Creature, Equipment, printed_class
 from engine.events import DealsDamageTriggeredEvent
 from engine.stack import priority_loop
 from engine.types import ManaCost, Phase
@@ -21,7 +21,7 @@ def _bear(p):
 class TestGoldveinPickProperties:
     def test_static_data(self):
         pick = GoldveinPick(owner=None)
-        assert pick.name == "Goldvein Pick"
+        assert printed_class(pick) is GoldveinPick
         assert pick.mana_cost == ManaCost.parse("{2}")
         assert pick.equip_cost == ManaCost.parse("{1}")
         assert isinstance(pick, Equipment) and pick.is_equipment is True

@@ -41,34 +41,19 @@ class FaebloomTrick(Instant):
         )
         super().__init__(**kwargs)
 
-    def _is_opponent_creature(self, obj: Any) -> bool:
-        """Legal target: a creature controlled by a player other than me."""
+    @staticmethod
+    def _is_opponent_creature(obj: Any, controller: Any) -> bool:
+        """Legal target: a creature controlled by a player other than the
+        ability's controller."""
         if CardType.CREATURE not in getattr(obj, "card_types", set()):
             return False
         obj_controller = getattr(obj, "controller", None)
-        return obj_controller is not None and obj_controller is not self.controller
-
-    def get_targets(self, game: "GameState") -> list[Any]:
-        """Up-to-one target creature an opponent controls (the reflexive tap).
-
-        The reflexive "when you do, tap target creature an opponent controls"
-        only puts a target on the stack if a legal one exists, and the token
-        creation always happens — so the tap is modelled as an optional
-        ("up to one") requirement: the spell stays castable (and still makes
-        tokens) even with no opponent creatures.
-        """
-        return [
-            TargetRequirement(
-                filter_fn=self._is_opponent_creature,
-                description="target creature an opponent controls",
-                zone=Zone.BATTLEFIELD,
-                optional=True,
-            )
-        ]
+        return obj_controller is not None and obj_controller is not controller
 
     def on_resolve(self, game: "GameState") -> None:
         """Create two Faerie tokens, then tap the chosen opponent creature."""
-        from engine.game import create_token, tap
+        from engine.game import create_token
+        from engine.triggers import put_reflexive_trigger
 
         controller = self.controller
         if controller is None:
@@ -86,17 +71,21 @@ class FaebloomTrick(Instant):
             )
             create_token(game, controller, token)
 
-        # Reflexive trigger: tap the chosen creature an opponent controls.
-        # Revalidate the COMPLETE target predicate at resolution (rule 608.2b):
-        # the target must still be a creature an opponent controls, on the
-        # battlefield — not merely still on *a* battlefield. If it changed
-        # control to the caster or ceased to be a creature, it is illegal and
-        # nothing is tapped.
-        targets = getattr(self, "chosen_targets", None) or []
+        # "When you do" is a reflexive trigger: it targets as it goes on the
+        # stack, after the tokens are made.
+        put_reflexive_trigger(
+            game, self, controller, FaebloomTrickAbility1, self._tap_target,
+            targets=[TargetRequirement(
+                filter_fn=lambda obj, _c=controller: self._is_opponent_creature(obj, _c),
+                description="target creature an opponent controls",
+                zone=Zone.BATTLEFIELD,
+            )],
+        )
+
+    def _tap_target(self, game: "GameState", targets: list[Any], controller: Any) -> None:
+        """Tap the target, if it is still a creature an opponent controls."""
+        from engine.game import tap
+
         target = targets[0] if targets else None
-        if target is None:
-            return
-        on_bf = any(game.get_battlefield(p).contains(target) for p in game.players)
-        if not on_bf or not self._is_opponent_creature(target):
-            return
-        tap(game, target)
+        if target is not None and self._is_opponent_creature(target, controller):
+            tap(game, target)

@@ -41,7 +41,7 @@ def _pref(game, obj):
 def _activate_double(game, player, zimone, targets):
     prefs = tuple(_pref(game, t) for t in targets)
     player.start_intent("z", Intent(
-        pattern=GameRef(card=frozenset({("name", ZIMONE)})),
+        pattern=GameRef(card=frozenset({("printed", ZimoneParadoxSculptor)})),
         preferences=prefs,
     ))
     try:
@@ -157,7 +157,7 @@ class TestZimoneCombatTrigger:
     def _fire(self, game, player, targets):
         prefs = tuple(_pref(game, t) for t in targets)
         player.start_intent("zt", Intent(
-            pattern=GameRef(card=frozenset({("name", ZIMONE)})),
+            pattern=GameRef(card=frozenset({("printed", ZimoneParadoxSculptor)})),
             preferences=prefs,
         ))
         try:

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
 from engine.continuous_effects import ContinuousEffect, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, Zone
+from engine.types import Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -55,11 +55,16 @@ class BillowingShriekmass(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, BillowingShriekmassAbility2, self._enters)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: mill three cards."""
         from engine.zones import move_to_zone
 
-        controller = self.controller
         if controller is None:
             return
 

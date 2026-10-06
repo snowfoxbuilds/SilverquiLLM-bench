@@ -36,7 +36,7 @@ class TestResoluteReinforcementsMint:
             hand=[creature],
             mana={ManaType.WHITE: 1, ManaType.COLORLESS: 1},
         )
-        cast_spell(game, 0, "Resolute Reinforcements")
+        cast_spell(game, 0, ResoluteReinforcements)
 
         tokens = _soldier_tokens(game, 0)
         assert len(tokens) == 1

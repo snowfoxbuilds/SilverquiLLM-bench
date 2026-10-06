@@ -1,10 +1,12 @@
 """Card implementation for Sphinx of Forgotten Lore."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from engine.card import Creature
-from engine.card_queries import choose_object
-from engine.types import CardType, Keyword, ManaCost, Zone
 from engine.events import AttacksTriggeredEvent, EndOfTurnTriggeredEvent
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -49,7 +51,8 @@ class SphinxOfForgottenLore(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger: grant flashback to instant/sorcery in graveyard."""
-        from engine.triggers import TriggerRegistration
+        from engine.stack import stint_checked_targets
+        from engine.triggers import TriggerRegistration, choose_trigger_targets
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
 
@@ -57,15 +60,18 @@ class SphinxOfForgottenLore(Creature):
             attacker = event.attacker or event.creature
             return attacker is source
 
-        def _attack_effect(game: 'GameState', controller: Any) -> None:
-            ctrl = controller
-            if ctrl is None:
-                return
-            graveyard = ctrl.zones[Zone.GRAVEYARD]
-            eligible = [c for c in graveyard.get_all() if CardType.INSTANT in getattr(c, 'card_types', set()) or CardType.SORCERY in getattr(c, 'card_types', set())]
-            if not eligible:
-                return
-            chosen = choose_object(game, ctrl, eligible, 'Choose an instant or sorcery card to gain flashback', source_card=source)
+        def _targeting(game: 'GameState', event: Any, ctrl: Any) -> list[Any] | None:
+            def _instant_or_sorcery_in_your_graveyard(obj: Any) -> bool:
+                types = getattr(obj, 'card_types', set())
+                return (CardType.INSTANT in types or CardType.SORCERY in types) and ctrl.zones[Zone.GRAVEYARD].contains(obj)
+
+            return choose_trigger_targets(game, ctrl, source, [TargetRequirement(
+                filter_fn=_instant_or_sorcery_in_your_graveyard,
+                description='Choose an instant or sorcery card to gain flashback', zone=Zone.GRAVEYARD)])
+
+        def _attack_effect(game: 'GameState', targets: list[Any], context: Any) -> None:
+            ctrl = context.controller
+            (chosen,) = stint_checked_targets(game, context, targets)
             if chosen is not None:
                 chosen.has_flashback = True
                 chosen.flashback_cost = getattr(chosen, 'mana_cost', None)
@@ -79,4 +85,4 @@ class SphinxOfForgottenLore(Creature):
                     if hasattr(chosen, 'flashback_cost'):
                         del chosen.flashback_cost
                 game.trigger_manager.register(TriggerRegistration(event_type=EndOfTurnTriggeredEvent, condition=_cleanup_flashback, effect=_remove_flashback, source=source, controller=ctrl, printed=SphinxOfForgottenLoreAbility3))
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=SphinxOfForgottenLoreAbility3))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, targeting=_targeting, printed=SphinxOfForgottenLoreAbility3))

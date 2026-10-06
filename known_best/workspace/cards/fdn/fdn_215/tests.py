@@ -16,9 +16,9 @@ No dead test backdoors — targeting flows through real engine channels.
 
 from __future__ import annotations
 
-from cards.fdn.fdn_215.card_impl import Bushwhack
+from cards.fdn.fdn_215.card_impl import Bushwhack, BushwhackAbility2, BushwhackAbility3
 from engine.basic_lands import Forest
-from engine.card import Creature, Land
+from engine.card import Creature, Land, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, DecisionKind, GameRef
 from test_utils import Intent
@@ -26,23 +26,23 @@ from engine.types import CardType, ManaCost, ManaType, Phase, Zone
 from test_utils import cast_spell, create_game, resolve_stack, set_board_state
 
 
-def _cast_bushwhack(game, mode_name, obj_instance_ids):
+def _cast_bushwhack(game, mode, obj_instance_ids):
     """Cast Bushwhack; one Intent answers the MODE query then each OBJECT query."""
     p1 = game.players[0]
-    prefs = (Decision.mode(mode_name),) + tuple(
+    prefs = (Decision.mode(printed=mode),) + tuple(
         Decision.obj(instance=i) for i in obj_instance_ids
     )
     p1.start_intent("bw", Intent(
-        pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+        pattern=GameRef(card=frozenset({("printed", Bushwhack)})),
         preferences=prefs,
     ))
     try:
-        cast_spell(game, 0, "Bushwhack")
+        cast_spell(game, 0, Bushwhack)
     finally:
         p1.end_intent("bw")
 
 
-def _cast_bushwhack_no_resolve(game, mode_name, obj_instance_ids):
+def _cast_bushwhack_no_resolve(game, mode, obj_instance_ids):
     """Cast Bushwhack (choosing mode + targets) WITHOUT resolving, so a test can
     change a target before the fight resolves."""
     p1 = game.players[0]
@@ -50,12 +50,12 @@ def _cast_bushwhack_no_resolve(game, mode_name, obj_instance_ids):
     game.priority_player_index = 0
     game.phase = Phase.PRECOMBAT_MAIN
     game.step = None
-    bw = next(c for c in game.get_hand(p1).get_all() if c.name == "Bushwhack")
-    prefs = (Decision.mode(mode_name),) + tuple(
+    bw = next(c for c in game.get_hand(p1).get_all() if printed_class(c) is Bushwhack)
+    prefs = (Decision.mode(printed=mode),) + tuple(
         Decision.obj(instance=i) for i in obj_instance_ids
     )
     p1.start_intent("bw", Intent(
-        pattern=GameRef(card=frozenset({("name", "Bushwhack")})),
+        pattern=GameRef(card=frozenset({("printed", Bushwhack)})),
         preferences=prefs,
     ))
     try:
@@ -75,7 +75,7 @@ def _put_in_library(game, player, card):
 class TestBushwhackProperties:
     def test_static_data(self):
         bw = Bushwhack(owner=None)
-        assert bw.name == "Bushwhack"
+        assert printed_class(bw) is Bushwhack
         assert bw.mana_cost == ManaCost.parse("{G}")
         assert len(bw.get_modes()) == 2
 
@@ -93,7 +93,7 @@ class TestBushwhackFight:
 
     def test_each_creature_deals_its_power_to_the_other(self):
         game, p1, p2, ours, theirs = self._setup()
-        _cast_bushwhack(game, "Fight", [ours.instance_id, theirs.instance_id])
+        _cast_bushwhack(game, BushwhackAbility3, [ours.instance_id, theirs.instance_id])
         # Ours (3/3) deals 3 → Theirs (1/1) dies; Theirs deals 1 → Ours survives.
         assert p2.zones[Zone.GRAVEYARD].contains(theirs)
         assert game.get_battlefield(p1).contains(ours)
@@ -107,7 +107,7 @@ class TestBushwhackFight:
         theirs = Creature(name="Theirs", base_power=2, base_toughness=2)
         set_board_state(game, 0, hand=[bw], battlefield=[ours], mana={ManaType.GREEN: 1})
         set_board_state(game, 1, battlefield=[theirs])
-        _cast_bushwhack(game, "Fight", [ours.instance_id, theirs.instance_id])
+        _cast_bushwhack(game, BushwhackAbility3, [ours.instance_id, theirs.instance_id])
         assert p1.zones[Zone.GRAVEYARD].contains(ours)
         assert p2.zones[Zone.GRAVEYARD].contains(theirs)
 
@@ -115,7 +115,7 @@ class TestBushwhackFight:
         """Option-set invariant: the first target is a creature you control, the
         second a creature you don't control — the two option sets are disjoint."""
         game, p1, p2, ours, theirs = self._setup()
-        _cast_bushwhack(game, "Fight", [ours.instance_id, theirs.instance_id])
+        _cast_bushwhack(game, BushwhackAbility3, [ours.instance_id, theirs.instance_id])
         obj_records = p1.transcript.queries(DecisionKind.OBJECT)
         assert len(obj_records) == 2
         first = {dict(o.attrs).get("name") for o in obj_records[0].options}
@@ -132,7 +132,7 @@ class TestBushwhackSearch:
         set_board_state(game, 0, hand=[bw], mana={ManaType.GREEN: 1})
         forest = _put_in_library(game, p1, Forest(name="Forest"))
         _put_in_library(game, p1, Land(name="Nonbasic Land"))
-        _cast_bushwhack(game, "Search", [forest.instance_id])
+        _cast_bushwhack(game, BushwhackAbility2, [forest.instance_id])
         assert game.get_hand(p1).contains(forest)
         assert not p1.zones[Zone.LIBRARY].contains(forest)
 
@@ -144,7 +144,7 @@ class TestBushwhackSearch:
         set_board_state(game, 0, hand=[bw], mana={ManaType.GREEN: 1})
         forest = _put_in_library(game, p1, Forest(name="Forest"))
         _put_in_library(game, p1, Land(name="Nonbasic Land"))
-        _cast_bushwhack(game, "Search", [forest.instance_id])
+        _cast_bushwhack(game, BushwhackAbility2, [forest.instance_id])
         offered = {
             dict(o.attrs).get("name")
             for r in p1.transcript.queries(DecisionKind.OBJECT)
@@ -169,7 +169,7 @@ class TestBushwhackFightRevalidation:
         caster's control before resolution → no longer 'a creature you don't
         control'. The fight needs both legal targets, so nothing happens."""
         game, p1, p2, ours, theirs = self._setup()
-        _cast_bushwhack_no_resolve(game, "Fight", [ours.instance_id, theirs.instance_id])
+        _cast_bushwhack_no_resolve(game, BushwhackAbility3, [ours.instance_id, theirs.instance_id])
         theirs.controller = p1  # now controlled by the caster
         resolve_stack(game)
         assert ours.damage_marked == 0
@@ -180,7 +180,7 @@ class TestBushwhackFightRevalidation:
         """Negative revalidation: one target stops being a creature before
         resolution → illegal, so the fight does not happen."""
         game, p1, p2, ours, theirs = self._setup()
-        _cast_bushwhack_no_resolve(game, "Fight", [ours.instance_id, theirs.instance_id])
+        _cast_bushwhack_no_resolve(game, BushwhackAbility3, [ours.instance_id, theirs.instance_id])
         ours.card_types = set(ours.card_types) - {CardType.CREATURE}  # no longer a creature
         resolve_stack(game)
         assert theirs.damage_marked == 0

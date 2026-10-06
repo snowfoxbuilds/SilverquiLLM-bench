@@ -15,7 +15,7 @@ what this card fixes is the ETB firing and the MISSING_CARD entries clearing.
 from __future__ import annotations
 
 from cards.fdn.fdn_15.card_impl import HareApparent
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.protection import get_colors
 from engine.types import Color, ManaCost, ManaType, Zone
 from test_utils import cast_spell, create_game, set_board_state
@@ -38,7 +38,7 @@ class TestHareApparentProperties:
         assert isinstance(HareApparent(owner=None), Creature)
 
     def test_name(self) -> None:
-        assert HareApparent(owner=None).name == "Hare Apparent"
+        assert printed_class(HareApparent(owner=None)) is HareApparent
 
     def test_mana_cost(self) -> None:
         assert HareApparent(owner=None).mana_cost == ManaCost.parse("{1}{W}")
@@ -148,7 +148,7 @@ class TestHareApparentEtb:
             mana={ManaType.WHITE: 1, ManaType.RED: 1},
         )
 
-        cast_spell(game, 0, "Hare Apparent")
+        cast_spell(game, 0, HareApparent)
 
         # Three Hares (two originals + the cast one) plus two new Rabbits.
         bf = game.get_battlefield(p1).get_all()

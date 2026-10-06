@@ -9,7 +9,7 @@ set casts the creature with zero targets rather than making it uncastable.
 from __future__ import annotations
 
 from cards.fdn.fdn_98.card_impl import AmbushWolf
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.types import Keyword, ManaCost, ManaType, Phase, Zone
 from test_utils import cast_spell, create_game, set_board_state
 
@@ -21,7 +21,7 @@ def _bear(name: str = "Bear") -> Creature:
 class TestAmbushWolfProperties:
     def test_static_data(self):
         card = AmbushWolf(owner=None)
-        assert card.name == "Ambush Wolf"
+        assert printed_class(card) is AmbushWolf
         assert card.mana_cost == ManaCost.parse("{2}{G}")
         assert (card.base_power, card.base_toughness) == (4, 2)
         assert card.subtypes == {"Wolf"}
@@ -48,7 +48,7 @@ class TestAmbushWolfETB:
         set_board_state(game, 1, graveyard=[victim])
         game.phase = Phase.PRECOMBAT_MAIN
 
-        cast_spell(game, 0, "Ambush Wolf", targets=[victim])
+        cast_spell(game, 0, AmbushWolf, targets=[victim])
         # Exiled from the opponent's graveyard to its owner's exile.
         assert p2.zones[Zone.EXILE].contains(victim)
         assert not game.get_graveyard(p2).contains(victim)
@@ -65,7 +65,7 @@ class TestAmbushWolfETB:
                         mana={ManaType.GREEN: 1, ManaType.COLORLESS: 2})
         game.phase = Phase.PRECOMBAT_MAIN
 
-        cast_spell(game, 0, "Ambush Wolf")  # no targets available
+        cast_spell(game, 0, AmbushWolf)  # no targets available
         assert game.get_battlefield(p1).contains(wolf)
 
     def test_option_set_only_graveyard_cards(self):

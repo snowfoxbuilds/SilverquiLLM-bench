@@ -9,7 +9,7 @@ base P/T, ``is_token``).
 """
 from __future__ import annotations
 
-from cards.fdn.fdn_113.card_impl import SylvanScavenging
+from cards.fdn.fdn_113.card_impl import SylvanScavenging, SylvanScavengingAbility3
 from engine.card import Creature
 from engine.decisions import Decision, GameRef
 from engine.events import EndStepTriggeredEvent
@@ -47,8 +47,8 @@ class TestSylvanScavengingToken:
         p1.start_intent(
             "scav",
             Intent(
-                pattern=GameRef(card=frozenset({("name", "Sylvan Scavenging")})),
-                preferences=(Decision.mode("token"),),
+                pattern=GameRef(card=frozenset({("printed", SylvanScavenging)})),
+                preferences=(Decision.mode(printed=SylvanScavengingAbility3),),
             ),
         )
         game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=p1))

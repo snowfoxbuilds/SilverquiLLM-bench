@@ -74,8 +74,8 @@ class HighFaeTrickster(Creature):
                 return
             if not _is_on_battlefield(game, source):
                 return
-            # ENGINE LIMITATION: There's no native "cast as though flash"
-            # mechanism. We set a player attribute that casting could check.
+            # Casting timing checks this permission; continuous effects clear
+            # it before every reapplication.
             ctrl.can_cast_as_flash = True
 
         self._flash_effect_ref = game.effect_manager.add(ContinuousEffect(
