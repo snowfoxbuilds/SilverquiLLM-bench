@@ -366,6 +366,18 @@ def test_a_trampler_assigns_past_its_blockers_only_once_each_has_lethal_damage()
     assert game.players[1].life == 18
 
 
+@pytest.mark.parametrize("power", [0, -2])
+def test_an_attacker_with_no_power_divides_nothing(power):
+    attacker, b1, b2 = Brute(), Bear(), Bear(name="Cub")
+    attacker.base_power = attacker.modified_power = power
+    game = _blocking_game(attacker, b1, b2)
+    declare_blockers(game, {"Brute": ["Bear", "Cub"]})
+    combat_damage_step(game)
+    # It assigns no combat damage (rule 510.1a), so nothing is asked.
+    assert not [r for r in game.players[0].transcript.all() if r.query.question]
+    assert b1.damage_marked == b2.damage_marked == 0
+
+
 def test_declare_blockers_helper_with_an_illegal_block():
     attacker, ground = Hawk(), Bear()
     game = _blocking_game(attacker, ground)

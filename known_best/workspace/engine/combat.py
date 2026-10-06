@@ -731,8 +731,10 @@ def _assign_combat_damage(
         blocker_list = combat.attacker_blockers.get(attacker, [])
         attacker_kw = getattr(attacker, "keywords", Keyword(0))
 
-        if attacker_deals:
-            power = getattr(attacker, "power", 0)
+        power = getattr(attacker, "power", 0)
+        if attacker_deals and power > 0:
+            # A creature with 0 or less power assigns no combat damage
+            # (rule 510.1a), so its controller is asked nothing.
 
             # Check if attacker was blocked.  Per MTG rule 509.1h, a blocked
             # creature stays blocked even if all its blockers are removed.
