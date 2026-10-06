@@ -1160,11 +1160,18 @@ def cast_spell_free(
     #     costs, mana included (rule 118.9d); announce them (rule 601.2b).
     from engine import additional_costs
 
+    def _free_total(extra: ManaCost | None, targets: list[Any]) -> ManaCost:
+        # The mana cost is replaced by zero, the additional costs are added and
+        # cost reductions apply to the total, as for any cast (rule 601.2f).
+        total = additional_costs.plus(ManaCost(), extra)
+        reduction = _raw_cost_reduction(game, card, player, targets=targets)
+        return _apply_cost_reduction(total, min(reduction, total.generic))
+
     chosen_additional = additional_costs.announce(
         game,
         player,
         card,
-        lambda extra: extra is None or player.mana_pool.can_pay(extra),
+        lambda extra: player.mana_pool.can_pay(_free_total(extra, [])),
     )
     if chosen_additional is None:
         stack_zone.remove(card)
@@ -1217,10 +1224,15 @@ def cast_spell_free(
         game, card, player, chosen_targets
     )
 
-    # 3c. Pay the additional costs (rule 601.2h).
-    added_mana = additional_costs.extra_mana(chosen_additional)
-    if added_mana is not None:
-        player.mana_pool.pay(added_mana)
+    # 3c. Pay the additional costs (rule 601.2h), reduced now that the targets
+    #     a reduction may depend on are known.
+    total = _free_total(additional_costs.extra_mana(chosen_additional), chosen_targets)
+    if not player.mana_pool.can_pay(total):
+        stack_zone.remove(card)
+        source_zone_container.add(card)
+        raise CastingError(f"Cannot cast {card.name!r} — cannot pay its additional cost")
+    if total.cmc:
+        player.mana_pool.pay(total)
     additional_costs.pay_nonmana(game, player, card, chosen_additional)
 
     # 4. Call on_cast hook

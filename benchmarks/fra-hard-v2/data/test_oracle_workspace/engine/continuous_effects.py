@@ -123,18 +123,72 @@ class ContinuousEffect:
 
 def _in_dependency_order(effects: list[ContinuousEffect]) -> list[ContinuousEffect]:
     """``effects``, one layer's in timestamp order, reordered so an effect
-    applies after the effects it depends on; in a dependency loop the
-    earliest timestamp applies first (rule 613.8b)."""
+    applies after the effects it depends on (rule 613.8a).
+
+    Dependencies inside a dependency loop are disregarded, so the loop's
+    effects apply in timestamp order, while a dependency on an effect outside
+    the loop still holds (rule 613.8b). The remaining order is determined again
+    after each effect applies (rule 613.8c).
+    """
     pending = list(effects)
     ordered: list[ContinuousEffect] = []
     while pending:
+        loop_of = _dependency_loops(pending)
         ready = next(
-            (e for e in pending if not any(o is not e and e.depends_on(o) for o in pending)),
+            (
+                e
+                for e in pending
+                if not any(
+                    o is not e and e.depends_on(o) and loop_of[id(o)] is not loop_of[id(e)]
+                    for o in pending
+                )
+            ),
             pending[0],
         )
         ordered.append(ready)
         pending.remove(ready)
     return ordered
+
+
+def _dependency_loops(effects: list[ContinuousEffect]) -> dict[int, frozenset[int]]:
+    """Map each effect's id to the ids of the dependency loop it belongs to — the
+    strongly connected component of the "depends on" graph; an effect in no
+    loop is alone in its component."""
+    graph = {
+        id(e): [id(o) for o in effects if o is not e and e.depends_on(o)] for e in effects
+    }
+    index: dict[int, int] = {}
+    low: dict[int, int] = {}
+    on_stack: set[int] = set()
+    stack: list[int] = []
+    components: dict[int, frozenset[int]] = {}
+
+    def visit(node: int) -> None:
+        index[node] = low[node] = len(index)
+        stack.append(node)
+        on_stack.add(node)
+        for succ in graph[node]:
+            if succ not in index:
+                visit(succ)
+                low[node] = min(low[node], low[succ])
+            elif succ in on_stack:
+                low[node] = min(low[node], index[succ])
+        if low[node] == index[node]:
+            members: set[int] = set()
+            while True:
+                member = stack.pop()
+                on_stack.discard(member)
+                members.add(member)
+                if member == node:
+                    break
+            component = frozenset(members)
+            for member in members:
+                components[member] = component
+
+    for node in graph:
+        if node not in index:
+            visit(node)
+    return components
 
 
 # Map SubLayer values to a numeric ordering so 7a < 7b < 7c < 7d.

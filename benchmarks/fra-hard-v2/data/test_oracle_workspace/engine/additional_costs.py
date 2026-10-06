@@ -58,10 +58,16 @@ def plus(cost: ManaCost, extra: ManaCost | None) -> ManaCost:
 
 
 def _sacrifice_candidates(game: GameState, player: Player, option: CostOption) -> list[Any]:
+    """The permanents *player* could sacrifice for *option*: those they control
+    on any battlefield, since a permanent another player gained control of stays
+    in its owner's zone (rule 701.21a)."""
     if option.sacrifice is None:
         return []
     return [
-        obj for obj in game.get_battlefield(player).get_all() if option.sacrifice(obj)
+        obj
+        for zone_owner in game.players
+        for obj in game.get_battlefield(zone_owner).get_all()
+        if (getattr(obj, "controller", None) or zone_owner) is player and option.sacrifice(obj)
     ]
 
 
@@ -132,26 +138,33 @@ def extra_mana(chosen: list[CostOption]) -> ManaCost | None:
 
 
 def pay_nonmana(game: GameState, player: Player, card: Any, chosen: list[CostOption]) -> None:
-    """Pay the sacrifices and discards of the chosen alternatives (rule 601.2h)."""
+    """Pay the sacrifices and discards of the chosen alternatives (rule 601.2h).
+
+    A cost that can't be paid raises :class:`~engine.casting.CastingError`, so
+    the cast is rejected and rolled back rather than going ahead unpaid.
+    """
     from engine.card_queries import choose_object
+    from engine.casting import CastingError
     from engine.game import discard, sacrifice
 
     for option in chosen:
         if option.sacrifice is not None:
+            candidates = _sacrifice_candidates(game, player, option)
+            if not candidates:
+                raise CastingError(f"Cannot cast {card.name!r} — nothing to sacrifice")
             victim = choose_object(
-                game,
-                player,
-                _sacrifice_candidates(game, player, option),
-                "Choose a permanent to sacrifice",
-                source_card=card,
+                game, player, candidates, "Choose a permanent to sacrifice", source_card=card
             )
             sacrifice(game, player, victim)
+            # A replacement effect may send it somewhere other than the
+            # graveyard; what matters is that it left the battlefield.
+            if any(game.get_battlefield(p).contains(victim) for p in game.players):
+                raise CastingError(f"Cannot cast {card.name!r} — the sacrifice was not made")
         for _ in range(option.discard):
+            hand = game.get_hand(player).get_all()
+            if not hand:
+                raise CastingError(f"Cannot cast {card.name!r} — no card to discard")
             discarded = choose_object(
-                game,
-                player,
-                game.get_hand(player).get_all(),
-                "Choose a card to discard",
-                source_card=card,
+                game, player, hand, "Choose a card to discard", source_card=card
             )
             discard(game, player, discarded)
