@@ -824,6 +824,7 @@ def test_uldaros_suite_accepts_forbidden_choices_offered_then_rejected(suffix: s
     ("hob_174", CARD_THEN_FACE + ADVENTURE_FROM_ADVENTURE_EXILE),
     ("hob_174", CASTS_UNPAID),
     ("hob_33", ADVENTURE_FROM_ADVENTURE_EXILE),
+    ("hob_33", CARD_THEN_FACE + ADVENTURE_FROM_ADVENTURE_EXILE),
     ("fra_159", GLEAM_TARGET_ACCEPTED),
     ("fra_159", DUPLICATE_TARGET),
 ])

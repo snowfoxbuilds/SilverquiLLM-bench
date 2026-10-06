@@ -30,6 +30,12 @@ COMBAT = (Step.BEGIN_COMBAT, 0)
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 
 
+def offers_gleam(query) -> bool:
+    """A question that offers Gleam of Death among its options, such as which
+    face of Glamdring to cast."""
+    return any(dict(getattr(option, "attrs", ())).get("printed") is GleamOfDeath for option in query.options)
+
+
 def _plains(n: int = 3) -> list:
     return [card(Plains) for _ in range(n)]
 
@@ -336,7 +342,10 @@ def test_the_adventure_is_not_cast_again_from_its_own_exile_even_with_the_discou
     only the Equipment may be cast from the exile its Adventure left it in."""
     t = _gleam_then_glamdring(True, {ManaType.BLUE: 2, ManaType.COLORLESS: 5})
     t.act_illegal(0, GleamOfDeath, note="only the Equipment may be cast from this exile")
-    t.act(0, GlamdringFoehammer, t.glamdring, then=[moves(t.glamdring, Zone.STACK)])
+    t.act(0, branches=[branch(GlamdringFoehammer, t.glamdring, per_query={offers_gleam: [GleamOfDeath]}),
+                       branch(GlamdringFoehammer, t.glamdring)],
+          then=[moves(t.glamdring, Zone.STACK)],
+          note="asked which face to cast, player 0 tries Gleam of Death first; only the Equipment is cast")
     _resolve(t, then=[moves(t.glamdring, Zone.BATTLEFIELD)])
     t.run()
 
