@@ -429,6 +429,15 @@ class CardImpl(GameObject):
         """
         return []
 
+    def additional_costs(self, game: GameState) -> list[Any]:
+        """Return this spell's additional costs (rule 118.8), each an
+        :class:`~engine.additional_costs.AdditionalCost` listing the
+        alternatives the caster may pay, e.g. Eaten Alive's "sacrifice a
+        creature or pay {3}{B}". They are owed even when the spell is cast
+        without paying its mana cost (rule 118.9d).
+        """
+        return []
+
     def on_cast(self, game: GameState) -> None:
         """Called when the card is cast (before it goes on the stack)."""
 

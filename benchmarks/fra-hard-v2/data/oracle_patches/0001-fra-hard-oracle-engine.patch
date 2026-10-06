@@ -61,7 +61,7 @@ index 72f2ad9..2dd4429 100644
 +    from engine.ward import trigger_ward
 +    trigger_ward(game, stack_obj)
 diff --git a/engine/card.py b/engine/card.py
-index 838bfa8..3a01f65 100644
+index 8bbb00b..2e6c311 100644
 --- a/engine/card.py
 +++ b/engine/card.py
 @@ -126,6 +126,9 @@ class ActivatedAbility:
@@ -83,7 +83,7 @@ index 838bfa8..3a01f65 100644
  
  @dataclass
 diff --git a/engine/casting.py b/engine/casting.py
-index 9a5ae3e..9cc7cc2 100644
+index 834d59a..34e0aed 100644
 --- a/engine/casting.py
 +++ b/engine/casting.py
 @@ -549,17 +549,20 @@ def _fire_spell_cast_event(
@@ -301,17 +301,57 @@ index 9a5ae3e..9cc7cc2 100644
 +        reduction=_raw_cost_reduction(game, card, player, targets=[]),
 +    )
  
-     # 5. Choose targets
-     target_specs = card.get_targets(game)
-@@ -734,33 +884,43 @@ def cast_spell(
+     # 4b. Announce how each additional cost will be paid (rule 601.2b). An
+     #     alternative is offered only if its extra mana fits on top of some base
+@@ -668,18 +818,33 @@ def cast_spell(
+     #     known yet, so a cost they alone make affordable is rejected at payment.
+     from engine import additional_costs
+ 
+-    announced_bases = (
+-        [card.flashback_cost]  # type: ignore[attr-defined]
+-        if mode is CastMode.FLASHBACK
+-        else [card.mana_cost, *card.alternative_costs(game)]
+-    )
++    if permission and permission['life_cost']:
++        announced_bases = [ManaCost()]
++    else:
++        announced_bases = (
++            [card.flashback_cost]  # type: ignore[attr-defined]
++            if mode is CastMode.FLASHBACK
++            else [card.mana_cost, *card.alternative_costs(game)]
++        )
+     untargeted_reduction = _raw_cost_reduction(game, card, player, targets=[])
+ 
++    # Mana abilities may still be activated while paying (rule 601.2g), so an
++    # alternative counts as affordable when the pool plus one mana from each
++    # untapped mana source could cover it; an exact shortfall is rejected at
++    # payment like any other unpaid cost.
++    untapped_sources = sum(
++        1 for c in game.get_battlefield(player).get_all()
++        if not getattr(c, 'is_tapped', False)
++        and callable(getattr(c, 'get_mana_abilities', None)) and c.get_mana_abilities()
++    )
++
+     def _affordable(extra: ManaCost | None) -> bool:
+         for base in announced_bases:
+             total = additional_costs.plus(_with_x(base, card.x_value), extra)  # type: ignore[attr-defined]
+             reduced = _apply_cost_reduction(total, min(untargeted_reduction, total.generic))
+-            if player.mana_pool.can_pay(reduced):
++            if player.mana_pool.can_pay(reduced) or (
++                untapped_sources and player.mana_pool.total() + untapped_sources >= reduced.cmc
++            ):
+                 return True
+         return False
+ 
+@@ -762,27 +927,36 @@ def cast_spell(
          if mode is CastMode.FLASHBACK
          else [card.mana_cost, *card.alternative_costs(game)]
      )
 -    base_costs = [
 +    pay_life = bool(permission and permission['life_cost'])
 +    life_amount = card.mana_cost.cmc if pay_life else 0
-+    base_costs = [ManaCost()] if pay_life else [
-         _with_x(base, card.x_value)  # type: ignore[attr-defined]
++    base_costs = [additional_costs.plus(ManaCost(), added_mana)] if pay_life else [
+         additional_costs.plus(_with_x(base, card.x_value), added_mana)  # type: ignore[attr-defined]
          for base in candidate_costs
      ]
      payable: list[tuple[int, ManaCost]] = []
@@ -342,14 +382,15 @@ index 9a5ae3e..9cc7cc2 100644
  
      # Store colors of mana spent on the card for mechanics like Converge
      # that care about the colors used to cast the spell.
-     card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
+@@ -792,6 +966,7 @@ def cast_spell(
+     additional_costs.pay_nonmana(game, player, card, chosen_additional)
  
      # 7. Call on_cast hook
 +    card.was_cast = True
      card.on_cast(game)
  
      # 7b. The spell has now become cast (rule 601.2i). Record it in the caster's
-@@ -785,6 +945,7 @@ def cast_spell(
+@@ -816,6 +991,7 @@ def cast_spell(
          prior_qualifying_casts=prior_qualifying_casts,
          departure_zone=Zone.EXILE if mode is CastMode.FLASHBACK else None,
          is_spell=True,
@@ -357,7 +398,7 @@ index 9a5ae3e..9cc7cc2 100644
      )
  
      def _on_resolve(g: GameState) -> None:
-@@ -792,6 +953,8 @@ def cast_spell(
+@@ -823,6 +999,8 @@ def cast_spell(
  
      stack_obj.on_resolve = _on_resolve
      game.stack.push(stack_obj)
@@ -366,7 +407,7 @@ index 9a5ae3e..9cc7cc2 100644
  
      # 9. The spell is now on the stack (rule 601.2i complete). Fire the
      #    cast-triggered event so "whenever you cast …" abilities queue on top of
-@@ -799,6 +962,7 @@ def cast_spell(
+@@ -830,6 +1008,7 @@ def cast_spell(
      #    can correlate to this exact occurrence, and after the cast history is
      #    recorded so a cast-count reader sees this spell counted.
      _fire_spell_cast_event(game, player, card)
@@ -374,7 +415,7 @@ index 9a5ae3e..9cc7cc2 100644
      return stack_obj
  
  
-@@ -814,6 +978,7 @@ def cast_spell_free(
+@@ -845,6 +1024,7 @@ def cast_spell_free(
      from_zone: Zone,
      *,
      mode: CastMode = CastMode.NORMAL,
@@ -382,7 +423,7 @@ index 9a5ae3e..9cc7cc2 100644
  ) -> StackObject:
      """Cast *card* without paying its mana cost, using the stack.
  
-@@ -902,6 +1067,12 @@ def cast_spell_free(
+@@ -934,6 +1114,12 @@ def cast_spell_free(
                  f"{player.name!r}'s graveyard"
              )
  
@@ -395,15 +436,15 @@ index 9a5ae3e..9cc7cc2 100644
      # Ensure controller is set
      card.controller = player
      if card.owner is None:
-@@ -980,6 +1151,7 @@ def cast_spell_free(
-     )
+@@ -1033,6 +1219,7 @@ def cast_spell_free(
+     additional_costs.pay_nonmana(game, player, card, chosen_additional)
  
      # 4. Call on_cast hook
 +    card.was_cast = True
      card.on_cast(game)
  
      # 4b. The free-cast spell has become cast (rule 601.2i); record it in the
-@@ -1022,6 +1194,8 @@ def cast_spell_free(
+@@ -1075,6 +1262,8 @@ def cast_spell_free(
  
      stack_obj.on_resolve = _on_resolve
      game.stack.push(stack_obj)
@@ -412,7 +453,7 @@ index 9a5ae3e..9cc7cc2 100644
  
      # 6. The free-cast spell is on the stack (rule 601.2i complete). Fire the
      #    cast-triggered event, exactly as on the normal path — a spell cast
-@@ -1127,6 +1301,12 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
+@@ -1180,6 +1369,12 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
  
      # Card must be in hand
      hand = game.get_hand(player)
@@ -425,7 +466,7 @@ index 9a5ae3e..9cc7cc2 100644
      if not hand.contains(land_card):
          raise CastingError(
              f"Cannot play land {land_card.name!r} — card not in hand"
-@@ -1145,7 +1325,7 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
+@@ -1198,7 +1393,7 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
      # Move from hand to battlefield via move_to_zone, which fires
      # ENTERS_BATTLEFIELD and registers triggers/replacement effects.
      from engine.zones import move_to_zone

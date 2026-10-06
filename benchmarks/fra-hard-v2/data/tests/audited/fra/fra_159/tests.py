@@ -20,6 +20,7 @@ from cards.fdn.fdn_116.card_impl import AnthemOfChampions
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride, AjaniCallerOfThePrideAbility2
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_163.card_impl import SelfReflection
+from cards.fdn.fdn_172.card_impl import EatenAlive
 from cards.fdn.fdn_173.card_impl import Exsanguinate
 from cards.fdn.fdn_175.card_impl import HerosDownfall
 from cards.fdn.fdn_184.card_impl import RuneScarredDemon
@@ -454,4 +455,38 @@ def test_a_zero_mana_value_copy_leaves_the_budget_for_a_six():
     ])
     _resolve_top(t, SlaughterPact, then=[moves(theirs, Zone.GRAVEYARD)])
     _resolve_top(t, SelfReflection, then=[appears(0)])
+    t.run()
+
+
+def test_a_free_eaten_alive_copy_still_pays_its_additional_cost():
+    """Casting a copy without paying its mana cost still owes Eaten Alive's
+    additional cost (rule 118.9d): with the pool spent on Uldaros, player 0
+    sacrifices their Lions, and the copy exiles player 1's."""
+    eaten, mine, theirs = card(EatenAlive), card(SavannahLions), card(SavannahLions)
+    game, uldaros = _game([eaten], battlefield=[mine], seat1=Side(battlefield=[theirs], library=_library()))
+    t = Table(game)
+    _cast_uldaros(t, uldaros, [eaten])
+    _resolve_trigger(t, [EatenAlive, theirs, mine], then=[
+        moves(eaten, Zone.EXILE), copied(EatenAlive, 0), moves(mine, Zone.GRAVEYARD),
+    ])
+    _resolve_top(t, EatenAlive, then=[moves(theirs, Zone.EXILE)])
+    t.run()
+
+
+def test_a_free_eaten_alive_copy_with_no_creature_and_no_mana_is_not_cast():
+    """With Uldaros destroyed in response, player 0 has no creature to
+    sacrifice and no mana for {3}{B}: the copy cannot be cast, though its mana
+    cost is not paid."""
+    eaten, theirs, downfall = card(EatenAlive), card(SavannahLions), card(HerosDownfall)
+    game, uldaros = _game([eaten], seat1=Side(battlefield=[theirs], hand=[downfall], library=_library(),
+                                               mana={ManaType.BLACK: 3}))
+    t = Table(game)
+    _cast_uldaros(t, uldaros, [eaten])
+    t.pass_(0)
+    t.act(1, downfall, choices=[uldaros], then=[moves(downfall, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(downfall, Zone.GRAVEYARD), moves(uldaros, Zone.GRAVEYARD)])
+    t.pass_(0, branches=[branch(choices=[EatenAlive, theirs]), branch(choices=[])])
+    t.pass_(1, then=[off_stack(TRIGGER), moves(eaten, Zone.EXILE)],
+            note="casting the copy is offered or not; either way its additional cost cannot be paid")
     t.run()

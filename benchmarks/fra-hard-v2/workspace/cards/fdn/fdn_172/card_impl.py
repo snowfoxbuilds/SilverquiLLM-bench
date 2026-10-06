@@ -45,7 +45,6 @@ class EatenAlive(Sorcery):
     """Eaten Alive — {B} — Exile target creature or planeswalker.
 
     As an additional cost, sacrifice a creature or pay {3}{B}.
-    (Additional cost not implemented; only the exile effect.)
 
     FDN collector number 172.
     """
@@ -61,14 +60,22 @@ class EatenAlive(Sorcery):
         )
         super().__init__(**kwargs)
 
+    def additional_costs(self, game: GameState) -> list[Any]:
+        """Sacrifice a creature or pay {3}{B}."""
+        from engine.additional_costs import AdditionalCost, CostOption, creature
+
+        return [
+            AdditionalCost(
+                printed=EatenAliveAbility1,
+                options=(
+                    CostOption(sacrifice=creature),
+                    CostOption(mana=ManaCost.parse("{3}{B}")),
+                ),
+            )
+        ]
+
     def get_targets(self, game: GameState) -> list[Any]:
         """Target creature or planeswalker on the battlefield."""
-        targets: list[Any] = []
-        for player in game.players:
-            for obj in game.get_battlefield(player).get_all():
-                card_types = getattr(obj, "card_types", set())
-                if CardType.CREATURE in card_types or CardType.PLANESWALKER in card_types:
-                    targets.append(obj)
         return [
             TargetRequirement(
                 filter_fn=lambda obj: bool(getattr(obj, "card_types", set()) & {CardType.CREATURE, CardType.PLANESWALKER}),
