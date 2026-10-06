@@ -414,8 +414,11 @@ def move_spell_off_stack(
 
     card = stack_obj.source
     if any(p.zones[Zone.STACK].contains(card) for p in game.players):
+        from engine.faces import is_adventure, whole_card
+
         destination = stack_obj.departure_zone or to_zone
-        adventure = bool(resolving and getattr(card, 'casting_adventure', False))
+        # CR 715.4: a resolving Adventure is exiled instead of going anywhere else.
+        adventure = resolving and is_adventure(card)
         if adventure:
             destination = Zone.EXILE
         if destination == Zone.GRAVEYARD and stack_obj.graveyard_departure_zone:
@@ -428,9 +431,15 @@ def move_spell_off_stack(
                     if player.zones[Zone.STACK].contains(card):
                         player.zones[Zone.STACK].remove(card)
                 return True
-        restore = getattr(card, 'restore_front_face', None)
-        if restore is not None:
-            restore()
+        whole = whole_card(card)
+        if whole is not card:
+            # The face stood for its card on the stack; the card leaves it.
+            for player in game.players:
+                if player.zones[Zone.STACK].contains(card):
+                    player.zones[Zone.STACK].remove(card)
+                    player.zones[Zone.STACK].add(whole)
+            card.whole_card = None
+            card = whole
         move_to_zone(game, card, Zone.STACK, destination)
         if getattr(card, 'is_card_copy', False) and destination == Zone.BATTLEFIELD:
             # A copy of a permanent spell becomes a token as it resolves (rule 608.3f).

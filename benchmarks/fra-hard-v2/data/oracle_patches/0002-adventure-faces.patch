@@ -1,0 +1,340 @@
+diff --git a/engine/card.py b/engine/card.py
+index 3a01f65..e734d1c 100644
+--- a/engine/card.py
++++ b/engine/card.py
+@@ -380,13 +380,27 @@ class CardImpl(GameObject):
+         check costs, targets or :meth:`can_cast`: casting does, and a rejected
+         cast is rolled back.
+         """
+-        from engine.casting import can_cast_at_instant_speed, cast_spell, is_sorcery_speed
++        from engine import faces as card_faces
++        from engine.casting import (
++            can_cast_at_instant_speed,
++            cast_permission,
++            cast_spell,
++            is_sorcery_speed,
++        )
+ 
+-        if not (can_cast_at_instant_speed(self, player) or is_sorcery_speed(game, player)):
+-            return []
+-        return [
+-            (self, lambda: cast_spell(game, player, self, from_zone=from_zone, mode=mode))
++        permission = cast_permission(game, player, self)
++        faces = (
++            [self] if permission is not None and permission["normal_face_only"]
++            else card_faces.faces_of(self)
++        )
++        faces = [
++            face for face in faces
++            if can_cast_at_instant_speed(face, player) or is_sorcery_speed(game, player)
+         ]
++        return card_faces.cast_offers(
++            game, player, self, faces,
++            lambda face: cast_spell(game, player, face, from_zone=from_zone, mode=mode),
++        )
+ 
+     def cost_reduction(self, game: GameState, targets: list[Any] | None = None) -> int:
+         """Return this card's *self* generic-mana reduction for casting it.
+diff --git a/engine/casting.py b/engine/casting.py
+index 9cc7cc2..d68d747 100644
+--- a/engine/casting.py
++++ b/engine/casting.py
+@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
+ 
+ from engine.card import CardImpl
+ from engine.events import SpellCastTriggeredEvent
++from engine.faces import whole_card
+ from engine.stack import (
+     StackObject,
+     capture_activation_context,
+@@ -682,22 +683,24 @@ def _holding_zone(game, card, zone):
+ 
+ 
+ def cast_spell(game: GameState, player: Player, card: CardImpl, **kwargs) -> StackObject:
+-    """Cast *card*, restoring where it was if casting fails part-way."""
++    """Cast *card*, restoring where it was if casting fails part-way.
++
++    *card* may be a face of a multi-face card (:mod:`engine.faces`): the card
++    leaves its zone and the face goes on the stack.
++    """
++    whole = whole_card(card)
+     origin = next((owner.zones[zone] for owner in game.players for zone in Zone
+-                   if zone in owner.zones and owner.zones[zone].contains(card)), None)
++                   if zone in owner.zones and owner.zones[zone].contains(whole)), None)
+     controller = card.controller
+     try:
+         return _cast_spell(game, player, card, **kwargs)
+     except Exception:
+-        if origin is not None and not origin.contains(card):
++        if origin is not None and not origin.contains(whole):
+             for owner in game.players:
+                 if owner.zones[Zone.STACK].contains(card):
+                     owner.zones[Zone.STACK].remove(card)
+-                    origin.add(card)
++                    origin.add(whole)
+                     break
+-        restore = getattr(card, 'restore_front_face', None)
+-        if restore is not None:
+-            restore()
+         card.controller = controller
+         raise
+ 
+@@ -747,8 +750,8 @@ def _cast_spell(
+     Raises:
+         CastingError: If any legality check fails.
+     """
+-    if hasattr(card, 'choose_cast_face'):
+-        card.choose_cast_face(game, player)
++    # A face is cast from where its card is (CR 715.3a; see engine.faces).
++    whole = whole_card(card)
+     # 1. Timing
+     if not ignore_timing and not can_cast_at_instant_speed(card, player) and not is_sorcery_speed(game, player):
+         raise CastingError(
+@@ -777,29 +780,31 @@ def _cast_spell(
+     hand = player.zones[from_zone]
+     permission = None
+     if mode is CastMode.NORMAL and (
+-        not hand.contains(card) or from_zone != Zone.HAND
+-    ) and not getattr(card, "_castable_from_graveyard", False):
+-        permission = cast_permission(game, player, card)
++        not hand.contains(whole) or from_zone != Zone.HAND
++    ) and not getattr(whole, "_castable_from_graveyard", False):
++        permission = cast_permission(game, player, whole)
+         if permission is not None:
+-            hand = _holding_zone(game, card, permission['zone']) or hand
++            hand = _holding_zone(game, whole, permission['zone']) or hand
+         elif from_zone != Zone.HAND:
+             raise CastingError(
+                 f"Cannot cast {card.name!r} — no permission to cast it from {from_zone.value}"
+             )
+-    if not hand.contains(card):
++    if not hand.contains(whole):
+         raise CastingError(
+             f"Cannot cast {card.name!r} — card not in {from_zone.value}"
+         )
++    if permission is not None and permission['normal_face_only'] and whole is not card:
++        raise CastingError(f"Cannot cast {card.name!r} — only the card's main face may be cast")
+ 
+     from engine.stack import object_current_zone
+-    card.cast_from_zone = Zone(object_current_zone(game, card))
++    card.cast_from_zone = Zone(object_current_zone(game, whole))
+     card.controller = player
+     if card.owner is None:
+         card.owner = player
+ 
+     # 4. Move card from its zone to the stack zone
+     stack_zone = player.zones[Zone.STACK]
+-    hand.remove(card)
++    hand.remove(whole)
+     stack_zone.add(card)
+ 
+     # Clear any stale colors_spent from a prior cast before new payment.
+@@ -829,7 +834,7 @@ def _cast_spell(
+                 filter_fn, target, chosen_targets
+             ):
+                 stack_zone.remove(card)
+-                hand.add(card)
++                hand.add(whole)
+                 raise CastingError(
+                     f"Cannot cast {card.name!r} — chosen target does not "
+                     f"satisfy filter: {getattr(spec, 'description', '')}"
+@@ -844,7 +849,7 @@ def _cast_spell(
+         if has_protection_from(target, card):
+             # Rollback: move card from stack zone back to hand
+             stack_zone.remove(card)
+-            hand.add(card)
++            hand.add(whole)
+             raise CastingError(
+                 f"Cannot cast {card.name!r} — target has protection from this spell"
+             )
+@@ -902,7 +907,7 @@ def _cast_spell(
+     if not payable or player.life < life_amount:
+         # Rollback: move card from stack zone back to hand
+         stack_zone.remove(card)
+-        hand.add(card)
++        hand.add(whole)
+         for trigger in deferred:
+             game.stack.push(trigger)
+         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
+@@ -1069,8 +1074,7 @@ def cast_spell_free(
+ 
+     card.cast_from_zone = from_zone
+     card.x_value = 0
+-    if hasattr(card, 'choose_cast_face'):
+-        card.choose_cast_face(game, player, mana_value_limit=mana_value_limit)
++    whole = whole_card(card)
+     if mana_value_limit is not None and card.mana_cost.cmc > mana_value_limit:
+         raise CastingError('Spell exceeds the remaining mana-value allowance')
+     # Ensure controller is set
+@@ -1084,23 +1088,23 @@ def cast_spell_free(
+ 
+     # 2. Locate card in source zone
+     source_zone_container = player.zones[from_zone]
+-    if not source_zone_container.contains(card):
++    if not source_zone_container.contains(whole):
+         # Try to find the card in any player's zone
+         source_zone_container = None
+         for p in game.players:
+             z = p.zones[from_zone]
+-            if z.contains(card):
++            if z.contains(whole):
+                 source_zone_container = z
+                 break
+ 
+-    if source_zone_container is None or not source_zone_container.contains(card):
++    if source_zone_container is None or not source_zone_container.contains(whole):
+         raise CastingError(
+             f"Cannot cast {card.name!r} — card not found in {from_zone.name}"
+         )
+ 
+     # Move card from source zone to stack zone
+     stack_zone = player.zones[Zone.STACK]
+-    source_zone_container.remove(card)
++    source_zone_container.remove(whole)
+     stack_zone.add(card)
+     _announce_x(game, player, card, free=True)
+ 
+@@ -1138,7 +1142,7 @@ def cast_spell_free(
+     except Exception as exc:
+         # Rollback: move card from stack zone back to source zone
+         stack_zone.remove(card)
+-        source_zone_container.add(card)
++        source_zone_container.add(whole)
+         raise CastingError(str(exc)) from exc
+ 
+     # 3b. Capture the casting controller + chosen target zone-stints NOW —
+diff --git b/engine/faces.py b/engine/faces.py
+new file mode 100644
+index 0000000..eb3e317
+--- /dev/null
++++ b/engine/faces.py
+@@ -0,0 +1,77 @@
++"""Multi-face cards whose faces are separate objects (CR 715; see ADR-017).
++
++A card with more than one face lists them through ``faces()``: the card itself
++for its main face, then one object for each other face, whose ``whole_card`` is
++the card. Only the card sits in a zone; a face object stands for the card while
++that face is cast and on the stack, and the card takes its place again when the
++spell leaves the stack (CR 715.3b, 715.4).
++
++How a query presents such a card is this engine's choice: each face as its own
++option, or the card and then, once it is chosen, a question naming the face to
++cast. :data:`PRESENT_EACH_FACE` selects the first; the portability tests switch
++it off to show that every audited suite passes under either.
++"""
++
++from __future__ import annotations
++
++from typing import Any, Callable
++
++PRESENT_EACH_FACE = True
++
++
++def faces_of(card: Any) -> list[Any]:
++    """*card*'s faces, main face first; a single-faced card is its only face."""
++    faces = getattr(card, "faces", None)
++    return list(faces()) if callable(faces) else [card]
++
++
++def whole_card(obj: Any) -> Any:
++    """The card *obj* is a face of, or *obj* itself."""
++    return getattr(obj, "whole_card", None) or obj
++
++
++def is_adventure(obj: Any) -> bool:
++    return whole_card(obj) is not obj and "Adventure" in getattr(obj, "subtypes", ())
++
++
++def presented(cards: list[Any], keep: Callable[[Any], bool] = lambda face: True) -> list[Any]:
++    """The objects a query presents for *cards*: their faces that *keep* allows,
++    one option each, or each card with any such face."""
++    objects = []
++    for card in cards:
++        faces = [face for face in faces_of(card) if keep(face)]
++        if PRESENT_EACH_FACE:
++            objects.extend(faces)
++        elif faces:
++            objects.append(card)
++    return objects
++
++
++def choose_face(
++    game: Any, player: Any, chosen: Any, keep: Callable[[Any], bool] = lambda face: True
++) -> Any:
++    """The face to cast for *chosen*, an object :func:`presented` offered.
++
++    A presented face is cast as it is; a presented card whose faces *keep*
++    allows more than one is followed by a question naming the face.
++    """
++    if chosen is None or whole_card(chosen) is not chosen:
++        return chosen
++    faces = [face for face in faces_of(chosen) if keep(face)]
++    if len(faces) <= 1:
++        return faces[0] if faces else chosen
++    from engine.card_queries import choose_object
++
++    return choose_object(game, player, faces, "Choose the face to cast", source_card=chosen)
++
++
++def cast_offers(
++    game: Any, player: Any, card: Any, faces: list[Any], cast: Callable[[Any], Any]
++) -> list[tuple[Any, Callable[[], Any]]]:
++    """Priority Query offers for casting *card* as one of *faces* through *cast*."""
++    if not faces:
++        return []
++    if PRESENT_EACH_FACE:
++        return [(face, lambda face=face: cast(face)) for face in faces]
++    allowed = {id(face) for face in faces}
++    return [(card, lambda: cast(choose_face(game, player, card, lambda f: id(f) in allowed)))]
+diff --git a/engine/refs_registry.py b/engine/refs_registry.py
+index eb07b67..b764d59 100644
+--- a/engine/refs_registry.py
++++ b/engine/refs_registry.py
+@@ -315,8 +315,9 @@ class GameRefsRegistry:
+         from engine.stack import StackObject
+ 
+         if isinstance(item, StackObject):
+-            return item.source if item.is_spell else None
+-        return item
++            item = item.source if item.is_spell else None
++        # A face stands for its card (engine.faces).
++        return getattr(item, "whole_card", None) or item
+ 
+     def ref_for(
+         self,
+diff --git a/engine/stack.py b/engine/stack.py
+index 5003907..361c61d 100644
+--- a/engine/stack.py
++++ b/engine/stack.py
+@@ -414,8 +414,11 @@ def move_spell_off_stack(
+ 
+     card = stack_obj.source
+     if any(p.zones[Zone.STACK].contains(card) for p in game.players):
++        from engine.faces import is_adventure, whole_card
++
+         destination = stack_obj.departure_zone or to_zone
+-        adventure = bool(resolving and getattr(card, 'casting_adventure', False))
++        # CR 715.4: a resolving Adventure is exiled instead of going anywhere else.
++        adventure = resolving and is_adventure(card)
+         if adventure:
+             destination = Zone.EXILE
+         if destination == Zone.GRAVEYARD and stack_obj.graveyard_departure_zone:
+@@ -428,9 +431,15 @@ def move_spell_off_stack(
+                     if player.zones[Zone.STACK].contains(card):
+                         player.zones[Zone.STACK].remove(card)
+                 return True
+-        restore = getattr(card, 'restore_front_face', None)
+-        if restore is not None:
+-            restore()
++        whole = whole_card(card)
++        if whole is not card:
++            # The face stood for its card on the stack; the card leaves it.
++            for player in game.players:
++                if player.zones[Zone.STACK].contains(card):
++                    player.zones[Zone.STACK].remove(card)
++                    player.zones[Zone.STACK].add(whole)
++            card.whole_card = None
++            card = whole
+         move_to_zone(game, card, Zone.STACK, destination)
+         if adventure and destination == Zone.EXILE:
+             from engine.casting import grant_cast_permission

@@ -315,8 +315,9 @@ class GameRefsRegistry:
         from engine.stack import StackObject
 
         if isinstance(item, StackObject):
-            return item.source if item.is_spell else None
-        return item
+            item = item.source if item.is_spell else None
+        # A face stands for its card (engine.faces).
+        return getattr(item, "whole_card", None) or item
 
     def ref_for(
         self,
