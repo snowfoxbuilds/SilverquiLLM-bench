@@ -22,8 +22,8 @@ from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_278.card_impl import Mountain, MountainAbility1
 from engine.card import Creature, Sorcery
-from engine.card_queries import choose_object
-from engine.decisions import InvalidPlayerChoiceError
+from engine.card_queries import choose_object, query_yes_no
+from engine.decisions import Decision, InvalidPlayerChoiceError
 from engine.game import gain_life
 from engine.types import CardType, ManaType, Phase, Step, Zone
 from test_interface import (
@@ -48,6 +48,7 @@ from silverquillm.table import (
     ScriptError,
     Table,
     appears,
+    ceases,
     life,
     moves,
     off_stack,
@@ -714,6 +715,128 @@ def test_tokens_one_effect_makes_are_numbered_in_the_order_it_makes_them(chosen,
     _cast_and_resolve(t, make, then=[appears(0), appears(0)])
     _cast_and_resolve(t, muster, choices=[token(chosen)], then=[life(0, 20 + gained)])
     assert t.run().players[0].life == 20 + gained
+
+
+class MakeAndConfirm(Sorcery):
+    """Create a 1/1 and a 2/2 creature token, choose a token you control and
+    confirm it; declining is refused. You gain life equal to its power."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Make and Confirm")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        _make_tokens(game, self.controller, 1, 2)
+        tokens = [c for c in game.get_battlefield(self.controller).get_all() if getattr(c, "is_token", False)]
+        chosen = choose_object(game, self.controller, tokens, "choose a token", source_card=self)
+        if not query_yes_no(game, self.controller, "confirm the token?", source_card=self):
+            raise InvalidPlayerChoiceError("the token must be confirmed")
+        gain_life(game, self.controller, chosen.power)
+
+
+class MakeSacrificeMake(Sorcery):
+    """Create a 1/1 creature token, sacrifice it, then create a 2/2 creature token."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Make, Sacrifice, Make")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        from engine.game import sacrifice
+
+        _make_tokens(game, self.controller, 1)
+        (first,) = [c for c in game.get_battlefield(self.controller).get_all() if getattr(c, "is_token", False)]
+        sacrifice(game, self.controller, first)
+        _make_tokens(game, self.controller, 2)
+
+
+class SacrificeTokens(Sorcery):
+    """Sacrifice every token you control."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Sacrifice Tokens")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        from engine.game import sacrifice
+
+        for obj in list(game.get_battlefield(self.controller).get_all()):
+            if getattr(obj, "is_token", False):
+                sacrifice(game, self.controller, obj)
+
+
+class MakeForEach(Sorcery):
+    """Create a 2/2 creature token for your opponent, then a 1/1 for you."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("name", "Make for Each")
+        super().__init__(**kwargs)
+
+    def on_resolve(self, game):
+        opponent = next(p for p in game.players if p is not self.controller)
+        _make_tokens(game, opponent, 2)
+        _make_tokens(game, self.controller, 1)
+
+
+_CONFIRM_THEN = [appears(0), appears(0)]
+
+
+def test_a_retried_resolution_numbers_its_new_tokens_afresh():
+    make = card(MakeAndConfirm)
+    t = Table(_main(Side(hand=[make])))
+    t.act(0, make, then=[moves(make, Zone.STACK)])
+    t.pass_(0, branches=[[token(1), Decision.no()], [token(1), Decision.yes()]], note="declining is refused")
+    t.pass_(1, then=[moves(make, Zone.GRAVEYARD), *_CONFIRM_THEN, life(0, 21)])
+    final = t.run()
+    assert final.players[0].life == 21
+    assert {seen.handle for seen in final.players[0].battlefield} == {token(1), token(2)}
+
+
+def test_a_confirmed_token_needs_no_retry():
+    make = card(MakeAndConfirm)
+    t = Table(_main(Side(hand=[make])))
+    _cast_and_resolve(t, make, choices=[token(2), Decision.yes()], then=[*_CONFIRM_THEN, life(0, 22)])
+    assert t.run().players[0].life == 22
+
+
+def test_a_refused_resolution_with_no_branch_left_diverges():
+    make = card(MakeAndConfirm)
+    t = Table(_main(Side(hand=[make])))
+    t.act(0, make, then=[moves(make, Zone.STACK)])
+    t.pass_(0, choices=[token(1), Decision.no()])
+    t.pass_(1, then=[moves(make, Zone.GRAVEYARD), *_CONFIRM_THEN])
+    with pytest.raises(PlayDiverged, match="no branch left"):
+        t.run()
+
+
+def test_a_token_that_left_keeps_its_number():
+    make = card(MakeSacrificeMake)
+    t = Table(_main(Side(hand=[make])))
+    _cast_and_resolve(t, make, then=[appears(0), ceases(token(1)), appears(0)])
+    final = t.run()
+    assert [seen.handle for seen in final.players[0].battlefield] == [token(2)]
+    assert final.where(token(1)) is None
+
+
+def test_a_token_made_after_one_left_takes_the_next_number():
+    first, sweep, second, muster = card(MakeOne), card(SacrificeTokens), card(MakeOneAndTwo), card(Muster)
+    t = Table(_main(Side(hand=[first, sweep, second, muster])))
+    _cast_and_resolve(t, first, then=[appears(0)])
+    _cast_and_resolve(t, sweep, then=[ceases(token(1))])
+    _cast_and_resolve(t, second, then=[appears(0), appears(0)])
+    _cast_and_resolve(t, muster, choices=[token(3)], then=[life(0, 22)])
+    final = t.run()
+    assert {seen.handle for seen in final.players[0].battlefield} == {token(2), token(3)}
+
+
+def test_tokens_one_effect_makes_for_both_seats_are_numbered_seat_0_first():
+    make, muster = card(MakeForEach), card(Muster)
+    t = Table(_main(Side(hand=[make, muster])))
+    _cast_and_resolve(t, make, then=[appears(1), appears(0)])
+    _cast_and_resolve(t, muster, choices=[token(1)], then=[life(0, 21)])
+    final = t.run()
+    assert final.players[0].battlefield[0].handle == token(1)
+    assert final.players[1].battlefield[0].handle == token(2)
 
 
 def test_the_table_numbers_tokens_appearing_together_seat_0_first():

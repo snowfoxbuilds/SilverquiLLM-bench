@@ -120,13 +120,14 @@ class Side:
 @dataclass(frozen=True)
 class Token:
     """A token, followed by its number: the game's tokens are numbered in
-    the order they first appear on the battlefield, so ``token(1)`` is the
-    first token made.
+    the order the game makes them, so ``token(1)`` is the first token made,
+    and a token keeps its number after it leaves the battlefield.
 
-    Tokens that appear together — those one effect creates — are numbered
-    in the order the effect creates them, seat 0's before seat 1's; tokens
-    an effect makes alike are interchangeable. A token has no class: what it
-    is shows in what it does.
+    Tokens made together — those one effect creates — are numbered seat 0's
+    before seat 1's, each seat's in the order the effect creates them;
+    tokens an effect makes alike are interchangeable. A token a rejected
+    attempt made gives its number back. A token has no class: what it is
+    shows in what it does.
     """
 
     number: int
@@ -143,29 +144,51 @@ def token(number: int) -> Token:
 
 
 class _Tokens:
-    """A game's tokens in the order they were numbered; holding each keeps
-    its identity from being reused once it leaves the game."""
+    """A game's tokens in the order they were numbered.
+
+    Numbers come from the engine's record of the tokens it made,
+    ``game.created_tokens``, so a token that has left the battlefield keeps
+    its number. A rollback undoes the tokens a rejected attempt made; their
+    numbers are given back, and tokens made again on the retry take them.
+    """
 
     def __init__(self) -> None:
         self.objects: list[Any] = []
         self.by_id: dict[int, Token] = {}
 
     def number(self, game: Any) -> None:
-        """Number the tokens on the battlefield that have none yet."""
-        for scripted in game.players:
-            for obj in scripted.zones[Zone.BATTLEFIELD].get_all():
-                if getattr(obj, "is_token", False) and id(obj) not in self.by_id:
-                    self.objects.append(obj)
-                    self.by_id[id(obj)] = Token(len(self.objects))
+        """Number every token the game has made that has no number yet.
+
+        Tokens made since the last numbering are numbered seat 0's first,
+        each seat's in the order they were made.
+        """
+        made = game.created_tokens
+        kept = {id(obj) for obj in made}
+        valid = 0
+        while valid < len(self.objects) and id(self.objects[valid]) in kept:
+            valid += 1
+        del self.objects[valid:]
+        numbered = {id(obj) for obj in self.objects}
+        fresh = [obj for obj in made if id(obj) not in numbered]
+        fresh.sort(key=lambda obj: _seat_of(game, obj))
+        self.objects.extend(fresh)
+        self.by_id = {id(obj): Token(n) for n, obj in enumerate(self.objects, 1)}
 
     def find(self, game: Any, followed: Token) -> Any:
-        """The token object ``followed`` names, or ``None`` if none has
-        appeared with that number."""
-        if followed.number > len(self.objects):
-            self.number(game)
+        """The token object ``followed`` names, or ``None`` if the game has
+        made no token with that number."""
+        self.number(game)
         if followed.number > len(self.objects):
             return None
         return self.objects[followed.number - 1]
+
+
+def _seat_of(game: Any, obj: Any) -> int:
+    owner = getattr(obj, "owner", None)
+    for seat, scripted in enumerate(game.players):
+        if scripted is owner:
+            return seat
+    return len(game.players)
 
 
 # Each game's tokens.

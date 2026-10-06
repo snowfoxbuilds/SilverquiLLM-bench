@@ -153,6 +153,9 @@ class GameState:
         self.creature_died_this_turn: bool = False
         # Cards holding a "cast it from your graveyard this turn" grant; cleanup ends them.
         self.graveyard_cast_grants: list[Any] = []
+        # Every token put onto the battlefield, in creation order, departed
+        # ones included; a rollback undoes the tokens a rejected attempt made.
+        self.created_tokens: list[Any] = []
 
     # ------------------------------------------------------------------
     # Player properties

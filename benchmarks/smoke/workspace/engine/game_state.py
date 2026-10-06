@@ -141,6 +141,9 @@ class GameState:
         # normal rotation.  When extras are exhausted the game picks up
         # from _normal_next_index.
         self._normal_next_index: int = 1
+        # Every token put onto the battlefield, in creation order, departed
+        # ones included; a rollback undoes the tokens a rejected attempt made.
+        self.created_tokens: list[Any] = []
 
     # ------------------------------------------------------------------
     # Player properties

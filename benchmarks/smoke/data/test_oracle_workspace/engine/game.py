@@ -508,6 +508,7 @@ def _place_token(game: GameState, player: Player, token: Any, grp_id: Any) -> No
     )
     battlefield = game.get_battlefield(player)
     battlefield.add(token)
+    game.created_tokens.append(token)
 
     landed_counters = apply_entry_counter_values(game, token, enters_event)
 

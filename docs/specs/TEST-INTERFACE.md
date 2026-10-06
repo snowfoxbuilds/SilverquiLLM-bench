@@ -41,6 +41,7 @@ The Test Interface relies only on a small engine surface, which the workspace do
 | `shuffle(cards)`, `choose_at_random(options, n)`, `flip_coin()` | Every random event, so the test decides its result |
 | Zone containers, life totals, each object's `printed` class, whether it is a token, the tapped flag, the current step, the active player, the player being asked, game over and winner | The Player View |
 | Each object's and each offered option's physical card — a token is its own | Following a handle's card across zones, or a token, and choosing it |
+| The tokens the game has made, in creation order, which a rollback undoes with the rest of the attempt | Numbering tokens |
 
 ### Construction
 
@@ -141,8 +142,9 @@ What a player was asked routes answers through the scripts, never assertions, si
 
 A card is a physical object, so a test may keep a handle to a card it constructed and follow it across zones even though each zone change makes a new object (CR 400.7) — the Glamdring put in hand is now in exile (grilling 2026-10-05).
 The engine names the physical card behind each object and each offered option — for an ability, its source permanent's card — so a handle in a script chooses that very card, never one that merely looks the same.
-A token is followed by number instead: the game's tokens are numbered in the order they first appear, and `token(n)` names the n-th in the view and in scripts (grilling 2026-10-05).
-Tokens one effect creates are numbered in the order its text names them, seat 0's before seat 1's; tokens it makes alike are interchangeable, so every engine reaches the same view.
+A token is followed by number instead: the game's tokens are numbered in the order they are made, and `token(n)` names the n-th in the view and in scripts (grilling 2026-10-05).
+A token keeps its number after it leaves the battlefield, so a later token never takes it; a token an attempt made that the engine rejects and undoes was never made, so the retry's token takes its number.
+Tokens one effect creates are numbered seat 0's before seat 1's, each seat's in the order its text names them; tokens it makes alike are interchangeable, so every engine reaches the same view.
 A token has no class in the view: what it is — a 1/1 Soldier or a Food — shows in what it does, so engines need no predefined token classes.
 
 ## Relevant ADRs
