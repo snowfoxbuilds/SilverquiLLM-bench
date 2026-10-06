@@ -614,5 +614,5 @@ def priority_loop(game: GameState) -> None:
 
     if game.step_state is StepState.PENDING:
         advance(game)
-    while game.step_state is StepState.WINDOW:
+    while game.step_state is StepState.WINDOW and not game.is_game_over:
         advance(game)

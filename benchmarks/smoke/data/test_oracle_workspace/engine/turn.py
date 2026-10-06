@@ -144,7 +144,7 @@ def _do_cleanup_step(game: GameState) -> None:
     if (game.phase, game.step) != (Phase.ENDING, Step.CLEANUP):
         game.phase, game.step = Phase.ENDING, Step.CLEANUP
         game.close_window(StepState.PENDING)
-    while game.step_state is not StepState.DONE:
+    while game.step_state is not StepState.DONE and not game.is_game_over:
         advance(game)
 
 

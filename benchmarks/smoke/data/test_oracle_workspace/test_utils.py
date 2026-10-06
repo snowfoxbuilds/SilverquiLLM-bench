@@ -1209,7 +1209,7 @@ def _drain_stack(game: GameState) -> None:
     """Resolve the stack with every player passing (the open window's
     all-pass policy), or object by object when a test left objects on the
     stack outside any window."""
-    while not game.stack.is_empty():
+    while not game.stack.is_empty() and not game.is_game_over:
         if game.step_state is StepState.WINDOW:
             advance(game, all_pass=True)
         else:
@@ -1472,6 +1472,8 @@ def advance_game_to_phase(game, phase, step=None):
     first = True
     start_turn = game.turn_number
     while game.turn_number <= start_turn + 2:
+        if game.is_game_over:
+            return
         at_target = (game.phase, game.step) == (phase, step)
         if at_target and _in_cleanup(game):
             _finish_cleanup(game)
@@ -1593,7 +1595,7 @@ def _in_cleanup(game: GameState) -> bool:
 
 def _finish_cleanup(game: GameState) -> None:
     """Advance the current cleanup step to DONE with every player passing."""
-    while game.step_state is not StepState.DONE:
+    while game.step_state is not StepState.DONE and not game.is_game_over:
         advance(game, all_pass=True, forced=True)
 
 
