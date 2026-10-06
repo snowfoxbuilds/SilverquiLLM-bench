@@ -67,6 +67,9 @@ class Change:
             return f"{name} stays tapped"
         if self.kind == "life":
             return f"player {self.seat}'s life becomes {self.value}"
+        if self.kind == "shuffles":
+            order = ", ".join(map(_name, self.value)) or "nothing"
+            return f"player {self.seat}'s library is shuffled, top first: {order}"
         if self.kind == "on_stack":
             return f"{name} goes on the stack for player {self.seat}"
         if self.kind == "copied":
@@ -127,6 +130,13 @@ def stays_tapped(item: Any, seat: int | None = None) -> Change:
     """The tapped permanent ``item`` does not untap in the untap step the
     entry leads into, as a permanent that "doesn't untap" does (CR 502.3)."""
     return Change("stays_tapped", item, seat=seat)
+
+
+def shuffles(seat: int, *order: Any) -> Change:
+    """Player ``seat``'s library is shuffled into ``order``, top first — every
+    card in it, each a handle or a class; the chance script states the same
+    result."""
+    return Change("shuffles", seat=seat, value=tuple(order))
 
 
 def life(seat: int, total: int) -> Change:
@@ -488,6 +498,25 @@ class Table:
         elif change.kind == "ceases":
             zone, index, _ = self._find(change.item, change.seat, None)
             del zone[index]
+        elif change.kind == "shuffles":
+            library = self._sides[change.seat]["library"]
+            remaining = list(library)
+            ordered = []
+            for item in change.value:
+                index = next(
+                    (
+                        i
+                        for i, seen in enumerate(remaining)
+                        if ((seen.handle == item) if isinstance(item, (ti.Handle, ti.Token)) else (seen.card is item))
+                    ),
+                    None,
+                )
+                if index is None:
+                    raise ScriptError(f"{_name(item)} is not in player {change.seat}'s library to shuffle")
+                ordered.append(remaining.pop(index))
+            if remaining:
+                raise ScriptError(f"a shuffle of player {change.seat}'s library leaves out {', '.join(map(repr, remaining))}")
+            library[:] = ordered
         elif change.kind == "gains_control":
             zone, index, seen = self._find(change.item, None, ti.Zone.BATTLEFIELD)
             del zone[index]
