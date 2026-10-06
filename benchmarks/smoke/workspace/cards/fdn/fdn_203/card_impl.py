@@ -91,11 +91,12 @@ class InvoluntaryEmployment(Sorcery):
             bound_to=[creature_ref],
             apply=_apply_control,
             duration=DURATION_END_OF_TURN,
+            controls=lambda: creature_ref,
         ))
 
         # Apply the control change immediately so subsequent code in
         # this resolution sees the correct controller.
-        _apply_control(game)
+        game.effect_manager.apply_all(game)
 
         # Untap
         target.is_tapped = False

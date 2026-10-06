@@ -11,20 +11,9 @@ from cards.fdn.fdn_110.card_impl import QuakestriderCeratops
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_669.card_impl import BasiliskCollar, BasiliskCollarAbility2
-from engine.card import Equipment, printed_class
-from engine.types import ManaCost
 from test_interface import Phase, Side, Step, Zone, card, create_game
 
 from silverquillm.table import Table, life, moves, off_stack, on_stack, taps
-
-
-class TestBasiliskCollarProperties:
-    def test_static_data(self):
-        collar = BasiliskCollar(owner=None)
-        assert printed_class(collar) is BasiliskCollar
-        assert collar.mana_cost == ManaCost.parse("{1}")
-        assert collar.equip_cost == ManaCost.parse("{2}")
-        assert isinstance(collar, Equipment)
 
 
 def _equipped_lions(*theirs):
@@ -91,4 +80,25 @@ class TestBasiliskCollarBehaviour:
         t.act(1, ceratops, scoped={ceratops: lions})
         t.pass_(0)
         t.pass_(1, then=[moves(lions, Zone.GRAVEYARD)])
+        t.run()
+
+
+class TestBasiliskCollarCosts:
+    def test_casting_it_costs_one_mana(self):
+        """With no mana the Collar cannot be cast; a Plains' {W} pays its {1}."""
+        collar, plains = card(BasiliskCollar), card(Plains)
+        t = Table(create_game(Side(hand=[collar], battlefield=[plains]), Side(), start=(Phase.PRECOMBAT_MAIN, 0)))
+        t.act_illegal(0, collar)
+        t.act(0, plains, then=[taps(plains)])
+        t.act(0, collar, then=[moves(collar, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(collar, Zone.BATTLEFIELD)])
+        t.run()
+
+    def test_equip_needs_two_mana(self):
+        """With one Plains tapped for {W} the Collar's equip {2} cannot be paid."""
+        lions, collar, plains = card(SavannahLions), card(BasiliskCollar), card(Plains)
+        t = Table(create_game(Side(battlefield=[lions, collar, plains]), Side(), start=(Phase.PRECOMBAT_MAIN, 0)))
+        t.act(0, plains, then=[taps(plains)])
+        t.act_illegal(0, BasiliskCollarAbility2, choices=[lions])
         t.run()

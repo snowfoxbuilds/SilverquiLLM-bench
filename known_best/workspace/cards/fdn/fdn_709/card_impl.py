@@ -96,12 +96,8 @@ class Confiscate(Aura):
                 layer=Layer.CONTROL,
                 apply=_control,
                 duration=DURATION_PERMANENT,
+                controls=lambda: aura.attached_to,
+                reads_controller_of=aura,
             )
         )
-        # A permanent that comes under a new controller is summoning sick for
-        # that player (rule 302.6).
-        if getattr(target, "controller", None) is not self.controller and hasattr(
-            target, "summoning_sick"
-        ):
-            target.summoning_sick = True
-        _control(game)
+        game.effect_manager.apply_all(game)

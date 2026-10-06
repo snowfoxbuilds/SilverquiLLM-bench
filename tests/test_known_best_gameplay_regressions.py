@@ -1,6 +1,8 @@
 """Known-Best gameplay regressions played at the table: enters triggers keep
 what was fixed as they went on the stack, combat damage follows the
-creatures in combat (rule 510.4), and additional costs are paid (rule 601.2h).
+creatures in combat (rule 510.4), additional costs are paid (rule 601.2h),
+and control effects apply in dependency order and leave a permanent
+summoning sick only when its controller changes (rules 613.8, 302.6).
 
 The checks import the workspace's own ``engine``, ``cards`` and
 ``test_interface``, so they run in a subprocess rooted at
@@ -30,6 +32,7 @@ CHECKS = Path(__file__).resolve().parent / "known_best_checks"
         "reflexive_trigger_checks.py",
         "source_identity_checks.py",
         "additional_cost_checks.py",
+        "control_effect_checks.py",
     ],
 )
 def test_known_best_gameplay_regressions_pass(checks: str):
