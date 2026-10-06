@@ -318,20 +318,11 @@ def destroy(game: GameState, permanent: Any) -> None:
     if Keyword.INDESTRUCTIBLE in kw:
         return
 
-    controller = getattr(permanent, "controller", None)
-    if controller is None:
-        # Fallback: find which player's battlefield contains it
-        for player in game.players:
-            bf = game.get_battlefield(player)
-            if bf.contains(permanent):
-                controller = player
-                break
-    if controller is None:
+    # A permanent another player gained control of stays in its owner's zone.
+    holder = next((p for p in game.players if game.get_battlefield(p).contains(permanent)), None)
+    if holder is None:
         return
-
-    bf = game.get_battlefield(controller)
-    if not bf.contains(permanent):
-        return
+    controller = getattr(permanent, "controller", None) or holder
 
     from engine.types import CardType
 
@@ -374,8 +365,11 @@ def sacrifice(game: GameState, player: Player, permanent: Any) -> None:
         player: The player performing the sacrifice.
         permanent: The permanent to sacrifice.
     """
-    bf = game.get_battlefield(player)
-    if not bf.contains(permanent):
+    # A player sacrifices only what they control, wherever it sits: a
+    # permanent another player gained control of stays in its owner's zone.
+    on_battlefield = any(game.get_battlefield(p).contains(permanent) for p in game.players)
+    controller = getattr(permanent, "controller", None)
+    if not on_battlefield or (controller is not None and controller is not player):
         return
 
     owner = getattr(permanent, "owner", player)
@@ -508,6 +502,7 @@ def _place_token(game: GameState, player: Player, token: Any, grp_id: Any) -> No
     )
     battlefield = game.get_battlefield(player)
     battlefield.add(token)
+    game.created_tokens.append(token)
 
     landed_counters = apply_entry_counter_values(game, token, enters_event)
 

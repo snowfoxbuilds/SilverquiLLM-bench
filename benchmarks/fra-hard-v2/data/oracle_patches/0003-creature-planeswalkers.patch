@@ -1,8 +1,8 @@
 diff --git a/engine/card.py b/engine/card.py
-index 3a01f65..4fed930 100644
+index 2e6c311..e33ed70 100644
 --- a/engine/card.py
 +++ b/engine/card.py
-@@ -1000,11 +1000,57 @@ class Planeswalker(CardImpl):
+@@ -1009,11 +1009,57 @@ class Planeswalker(CardImpl):
          super().__init__(**kwargs)
          self.starting_loyalty: int = starting_loyalty
          self.loyalty: int = starting_loyalty

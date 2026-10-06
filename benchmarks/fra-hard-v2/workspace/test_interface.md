@@ -15,6 +15,7 @@ Keep these working beside the Player Query protocol; the Test Interface uses not
 | `engine.player.Player` with `answer(query)`, `on_attempt_rejected(context, answer, error)`, `on_action_ended(context)` and `confirm_declaration(query, answer, outcome)`; the context's `kind`, `actor` and `taken` | Answering questions and hearing rejections |
 | `engine.queries.PlayerQuery`, `Answer`, `asks_for`, `is_action_query`, `is_declaration_query`; `engine.decisions.Decision`, `PlayerDecision`, `satisfies`, `InvalidPlayerChoiceError` | Telling questions apart and choosing among their options |
 | `game.refs.physical_card(item)`: the physical card a game object, a spell on the stack or an offered option stands for (an ability option: its source permanent's card; a token: itself) | Following a handle's card or a token, and choosing it |
+| `game.created_tokens`: every token put onto the battlefield, in creation order, departed ones included; a rollback undoes those a rejected attempt made | Numbering tokens |
 | The game's `shuffle(cards)`, `choose_at_random(options, n)` and `flip_coin()` | Every random event, so the test decides its result; a library is shuffled top first |
 | Each player's `zones[Zone.X].get_all()` (a library bottom to top) and `life`; `game.stack.objects()` (top first) with each object's `controller`, `source`, `is_spell` and `printed`; `engine.card.printed_class`; a permanent's `is_tapped`, `is_token`, `controller` and `owner`; `game.phase`, `game.step`, `game.active_player_index`, `game.priority_player_index`, `game.is_game_over` and `game.winner` | The Player View |
 
@@ -47,7 +48,7 @@ game = create_game(
 - Each entry is a `Seen` with `.card` (its predefined card, face or ability class; `None` for a token), `.owner` (the seat that owns it; a stack object shows its controller), with a permanent on its controller's side, `.tapped` and `.handle` (a card's handle, a token's `Token`, or a spell copy's `SpellCopy`).
 - `v.step`, `v.active`, `v.asked` (the player whose action question the game is at), `v.game_over` and `v.winner`.
 - `v.where(handle)` is the `Zone` a handled card or a token is in.
-- Tokens are numbered in the order they first appear on the battlefield: `token(n)` is the n-th. Tokens one effect creates are numbered in the order it creates them, seat 0's first.
+- Tokens are numbered in the order the game makes them: `token(n)` is the n-th, and keeps its number after it leaves the battlefield. Tokens one effect creates are numbered seat 0's first, each seat's in the order it creates them. A token a rejected attempt made gives its number back, so a retry's token takes it.
 - Copies of spells are numbered in the order they are put on the stack: `spell_copy(n)` is the n-th. A copy shows the class of the spell it copies.
 
 Hand, battlefield, graveyard and exile compare without regard to order. Power, toughness, counters, damage, keywords, effects, the mana pool, targets and combat assignments are not in the view.

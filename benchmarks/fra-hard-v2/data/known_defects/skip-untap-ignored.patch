@@ -1,7 +1,7 @@
 --- a/engine/turn.py
 +++ b/engine/turn.py
-@@ -34,4 +34,3 @@
-     for obj in bf.get_all():
+@@ -41,4 +41,3 @@
+     for obj in controlled:
 -        # "doesn't untap during your untap step" (rule 502.3).
 -        if hasattr(obj, "is_tapped") and not getattr(obj, "skip_untap", False):
 +        if hasattr(obj, "is_tapped"):

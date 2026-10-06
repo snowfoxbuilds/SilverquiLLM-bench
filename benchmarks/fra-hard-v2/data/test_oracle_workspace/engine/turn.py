@@ -27,11 +27,18 @@ def _do_untap_step(game: GameState) -> None:
     """Perform untap step actions: untap all permanents controlled by the active player.
 
     Per MTG rules, the active player untaps all permanents they control
-    during their untap step. Summoning sickness is also cleared at this point.
+    during their untap step (rule 502.3), wherever they sit — a permanent
+    another player gained control of stays in its owner's zone. Summoning
+    sickness ends for those permanents at this point too (rule 302.6).
     """
     active = game.active_player
-    bf = active.zones[Zone.BATTLEFIELD]
-    for obj in bf.get_all():
+    controlled = [
+        obj
+        for player in game.players
+        for obj in player.zones[Zone.BATTLEFIELD].get_all()
+        if getattr(obj, "controller", player) is active
+    ]
+    for obj in controlled:
         # "doesn't untap during your untap step" (rule 502.3).
         if hasattr(obj, "is_tapped") and not getattr(obj, "skip_untap", False):
             obj.is_tapped = False

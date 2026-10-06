@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import ActivatedAbility, Land, ManaAbility
-from engine.card_queries import choose_object
+from engine.card_queries import choose_object, query_yes_no
 from engine.stack import surviving_targets
 from engine.types import CardType, ManaCost, ManaType, Supertype, Zone
 
@@ -39,7 +39,14 @@ def _on_battlefield(game: Any, obj: Any) -> bool:
 
 def _search_for_basic(game: GameState, player: Any, source: Any) -> None:
     """*player* may search their library for a basic land card, put it onto
-    the battlefield, then shuffle."""
+    the battlefield, then shuffle.
+
+    Searching is the player's choice whatever the library holds; a player who
+    searches may find nothing, even with a basic land there (rule 701.23b),
+    and shuffles either way.
+    """
+    if not query_yes_no(game, player, "Search your library for a basic land card?", source_card=source):
+        return
     library = player.zones[Zone.LIBRARY]
     basics = [
         c
@@ -47,22 +54,21 @@ def _search_for_basic(game: GameState, player: Any, source: Any) -> None:
         if Supertype.BASIC in getattr(c, "supertypes", set())
         and CardType.LAND in getattr(c, "card_types", set())
     ]
-    if not basics:
-        return
-    chosen = choose_object(
-        game,
-        player,
-        basics,
-        "You may search your library for a basic land card",
-        source_card=source,
-        optional=True,
-    )
-    if chosen is None:
-        return
-    from engine.zones import move_to_zone
+    chosen = None
+    if basics:
+        chosen = choose_object(
+            game,
+            player,
+            basics,
+            "Choose a basic land card to put onto the battlefield",
+            source_card=source,
+            optional=True,
+        )
+    if chosen is not None:
+        from engine.zones import move_to_zone
 
-    chosen.controller = player
-    move_to_zone(game, chosen, Zone.LIBRARY, Zone.BATTLEFIELD)
+        chosen.controller = player
+        move_to_zone(game, chosen, Zone.LIBRARY, Zone.BATTLEFIELD)
     library.shuffle(game)
 
 

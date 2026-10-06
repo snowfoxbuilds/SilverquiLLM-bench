@@ -1,5 +1,5 @@
 diff --git a/engine/abilities.py b/engine/abilities.py
-index 72f2ad97..2dd4429a 100644
+index 72f2ad9..2dd4429 100644
 --- a/engine/abilities.py
 +++ b/engine/abilities.py
 @@ -149,6 +149,42 @@ class LoyaltyAbilityInstance:
@@ -61,7 +61,7 @@ index 72f2ad97..2dd4429a 100644
 +    from engine.ward import trigger_ward
 +    trigger_ward(game, stack_obj)
 diff --git a/engine/card.py b/engine/card.py
-index 8bbb00bd..2e6c3112 100644
+index 8bbb00b..2e6c311 100644
 --- a/engine/card.py
 +++ b/engine/card.py
 @@ -126,6 +126,9 @@ class ActivatedAbility:
@@ -83,7 +83,7 @@ index 8bbb00bd..2e6c3112 100644
  
  @dataclass
 diff --git a/engine/casting.py b/engine/casting.py
-index 834d59a3..34e0aed1 100644
+index 834d59a..34e0aed 100644
 --- a/engine/casting.py
 +++ b/engine/casting.py
 @@ -549,17 +549,20 @@ def _fire_spell_cast_event(
@@ -476,7 +476,7 @@ index 834d59a3..34e0aed1 100644
      # Decrement land plays
      player.land_plays_remaining -= 1
 diff --git a/engine/combat.py b/engine/combat.py
-index 5c31d5b0..32f72605 100644
+index 5c31d5b..32f7260 100644
 --- a/engine/combat.py
 +++ b/engine/combat.py
 @@ -121,6 +121,9 @@ def _can_attack(creature: Any) -> bool:
@@ -500,10 +500,10 @@ index 5c31d5b0..32f72605 100644
          return False
  
 diff --git a/engine/continuous_effects.py b/engine/continuous_effects.py
-index 9d42ac36..f922b8c4 100644
+index a7baa3c..f0487af 100644
 --- a/engine/continuous_effects.py
 +++ b/engine/continuous_effects.py
-@@ -211,6 +211,8 @@ class EffectManager:
+@@ -243,6 +243,8 @@ class EffectManager:
              The number of effects removed.
          """
          before = len(self._effects)
@@ -512,8 +512,8 @@ index 9d42ac36..f922b8c4 100644
          remaining: list[ContinuousEffect] = []
          for eff in self._effects:
              if eff.duration == DURATION_PERMANENT:
-@@ -246,6 +248,10 @@ class EffectManager:
-         sorted_effects = sorted(self._effects, key=lambda e: e._sort_key())
+@@ -288,6 +290,10 @@ class EffectManager:
+             sorted_effects[first:first + len(control)] = _in_dependency_order(control)
          for effect in sorted_effects:
              effect.apply(game)
 +        from engine.planeswalker import refresh_granted_abilities
@@ -521,11 +521,11 @@ index 9d42ac36..f922b8c4 100644
 +        from engine.mana_grants import refresh_mana_grants
 +        refresh_mana_grants(game)
  
-     # ------------------------------------------------------------------
-     # Internal helpers
+         # A permanent that came under a new controller is summoning sick for
+         # them (rule 302.6); recalculating to the same controller is no change.
 diff --git a/engine/copying.py b/engine/copying.py
 new file mode 100644
-index 00000000..332e12df
+index 0000000..332e12d
 --- /dev/null
 +++ b/engine/copying.py
 @@ -0,0 +1,101 @@
@@ -631,7 +631,7 @@ index 00000000..332e12df
 +        for card in game.get_battlefield(player).get_all():
 +            end_copy(card, game)
 diff --git a/engine/game_state.py b/engine/game_state.py
-index 5c54504f..69d06b06 100644
+index d4d70fd..03f9dee 100644
 --- a/engine/game_state.py
 +++ b/engine/game_state.py
 @@ -127,6 +127,8 @@ class GameState:
@@ -645,7 +645,7 @@ index 5c54504f..69d06b06 100644
          self.replacement_manager: ReplacementManager = ReplacementManager()
 diff --git a/engine/mana_grants.py b/engine/mana_grants.py
 new file mode 100644
-index 00000000..0e69c016
+index 0000000..0e69c01
 --- /dev/null
 +++ b/engine/mana_grants.py
 @@ -0,0 +1,64 @@
@@ -715,7 +715,7 @@ index 00000000..0e69c016
 +            grant["active"] = False
 diff --git a/engine/planeswalker.py b/engine/planeswalker.py
 new file mode 100644
-index 00000000..ab6190c1
+index 0000000..ab6190c
 --- /dev/null
 +++ b/engine/planeswalker.py
 @@ -0,0 +1,91 @@
@@ -812,7 +812,7 @@ index 00000000..ab6190c1
 +                card.get_loyalty_abilities = _with_granted_abilities(card, game)
 diff --git a/engine/preparation.py b/engine/preparation.py
 new file mode 100644
-index 00000000..c48f54b9
+index 0000000..c48f54b
 --- /dev/null
 +++ b/engine/preparation.py
 @@ -0,0 +1,41 @@
@@ -858,7 +858,7 @@ index 00000000..c48f54b9
 +        source.prepared = False
 +        source.prepared_copy = None
 diff --git a/engine/priority.py b/engine/priority.py
-index a0953ba8..d26453be 100644
+index a0953ba..d26453b 100644
 --- a/engine/priority.py
 +++ b/engine/priority.py
 @@ -43,7 +43,13 @@ from engine.abilities import (
@@ -940,7 +940,7 @@ index a0953ba8..d26453be 100644
      attrs: dict[str, Any] = {"source": instance, "index": index}
      printed = getattr(ability, "printed", None)
 diff --git a/engine/stack.py b/engine/stack.py
-index 322c9c31..048d74ec 100644
+index 322c9c3..2c5c4ec 100644
 --- a/engine/stack.py
 +++ b/engine/stack.py
 @@ -112,6 +112,7 @@ class StackObject:
@@ -951,7 +951,7 @@ index 322c9c31..048d74ec 100644
      is_spell: bool = False
      printed: type | None = None
  
-@@ -408,10 +409,32 @@ def move_spell_off_stack(
+@@ -408,10 +409,35 @@ def move_spell_off_stack(
          # Countering fizzle: this occurrence already left the stack.
          return False
  
@@ -978,13 +978,16 @@ index 322c9c31..048d74ec 100644
 +        if restore is not None:
 +            restore()
          move_to_zone(game, card, Zone.STACK, destination)
++        if getattr(card, 'is_card_copy', False) and destination == Zone.BATTLEFIELD:
++            # A copy of a permanent spell becomes a token as it resolves (rule 608.3f).
++            game.created_tokens.append(card)
 +        if adventure and destination == Zone.EXILE:
 +            from engine.casting import grant_cast_permission
 +            grant_cast_permission(game, stack_obj.controller, card, normal_face_only=True)
      return True
  
  
-@@ -454,6 +477,8 @@ def copy_spell(
+@@ -454,6 +480,8 @@ def copy_spell(
      copied_card = copy.copy(original.source)
      copied_card.controller = controller
      copied_card.owner = getattr(original.source, "owner", controller)
@@ -993,7 +996,7 @@ index 322c9c31..048d74ec 100644
  
      if new_targets is not None:
          # New targets chosen for the copy — capture their current stints.
-@@ -496,6 +521,11 @@ def copy_spell(
+@@ -496,6 +524,11 @@ def copy_spell(
              g, copy_obj.activation_context, copy_obj.targets
          )
          copied_card.on_resolve(g)
@@ -1006,7 +1009,7 @@ index 322c9c31..048d74ec 100644
      copy_obj.on_resolve = _copy_resolve
      return copy_obj
 diff --git a/engine/state_based_actions.py b/engine/state_based_actions.py
-index 5bef4266..f7ca617d 100644
+index 5bef426..f7ca617 100644
 --- a/engine/state_based_actions.py
 +++ b/engine/state_based_actions.py
 @@ -98,7 +98,7 @@ def _sba_creature_zero_toughness(game: GameState) -> bool:
@@ -1058,7 +1061,7 @@ index 5bef4266..f7ca617d 100644
          for obj in bf.get_all():
              if (
 diff --git a/engine/triggers.py b/engine/triggers.py
-index 8264b2fe..1c1fd7ca 100644
+index 8264b2f..1c1fd7c 100644
 --- a/engine/triggers.py
 +++ b/engine/triggers.py
 @@ -318,6 +318,8 @@ class TriggerManager:
@@ -1081,7 +1084,7 @@ index 8264b2fe..1c1fd7ca 100644
  def register_enters_trigger(
 diff --git a/engine/ward.py b/engine/ward.py
 new file mode 100644
-index 00000000..f4fa7dd0
+index 0000000..f4fa7dd
 --- /dev/null
 +++ b/engine/ward.py
 @@ -0,0 +1,29 @@
@@ -1115,7 +1118,7 @@ index 00000000..f4fa7dd0
 +        game.stack.push(StackObject(source=target, controller=target.controller, on_resolve=resolve,
 +                                     printed=getattr(target, "ward_printed", None)))
 diff --git a/engine/zones.py b/engine/zones.py
-index eb8404c8..7379ff4f 100644
+index eb8404c..7379ff4 100644
 --- a/engine/zones.py
 +++ b/engine/zones.py
 @@ -290,6 +290,11 @@ def move_to_zone(

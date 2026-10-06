@@ -432,6 +432,9 @@ def move_spell_off_stack(
         if restore is not None:
             restore()
         move_to_zone(game, card, Zone.STACK, destination)
+        if getattr(card, 'is_card_copy', False) and destination == Zone.BATTLEFIELD:
+            # A copy of a permanent spell becomes a token as it resolves (rule 608.3f).
+            game.created_tokens.append(card)
         if adventure and destination == Zone.EXILE:
             from engine.casting import grant_cast_permission
             grant_cast_permission(game, stack_obj.controller, card, normal_face_only=True)
