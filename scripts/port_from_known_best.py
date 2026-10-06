@@ -372,8 +372,14 @@ def _build(benchmark_root: Path, known_best: Path) -> None:
 
 
 def _differences(left: Path, right: Path, relative: Path = Path()) -> list[str]:
+    """Every path that differs between *left* and *right*: present on one
+    side only, of a different type on each side (a file and a directory),
+    with different contents, or that could not be compared."""
     compared = filecmp.dircmp(left, right, ignore=list(_CACHES))
-    found = [str(relative / name) for name in compared.left_only + compared.right_only + compared.funny_files]
+    found = [
+        str(relative / name)
+        for name in compared.left_only + compared.right_only + compared.common_funny + compared.funny_files
+    ]
     _, mismatch, errors = filecmp.cmpfiles(left, right, compared.common_files, shallow=False)
     found += [str(relative / name) for name in mismatch + errors]
     for sub in compared.common_dirs:
@@ -381,10 +387,39 @@ def _differences(left: Path, right: Path, relative: Path = Path()) -> list[str]:
     return found
 
 
+def _refuse_links(tree: Path) -> None:
+    """Refuse a symlink anywhere beneath *tree*: porting reads and writes the
+    real tree, and a link could lead a read or a write outside it."""
+    for path in (tree, *tree.rglob("*")):
+        if path.is_symlink() and not set(_CACHES) & set(path.relative_to(tree).parts):
+            raise PortError(f"{path} is a symlink; porting follows no links")
+
+
+def _preflight(benchmark_root: Path, relatives: list[str]) -> None:
+    """Check every path a port will replace or delete before touching any:
+    each, and every directory on the way to it, lies inside
+    ``benchmark_root`` without passing through a link."""
+    root = benchmark_root.resolve()
+    for relative in relatives:
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts or not path.parts:
+            raise PortError(f"{relative!r} is not a path inside {benchmark_root}")
+        current = benchmark_root
+        for part in path.parts:
+            current = current / part
+            if current.is_symlink():
+                raise PortError(f"{current} is a symlink; porting writes through no links")
+        if not (benchmark_root / path).resolve().is_relative_to(root):
+            raise PortError(f"{relative!r} leads out of {benchmark_root}")
+
+
 @contextmanager
 def _staged(benchmark_root: Path, known_best: Path) -> Iterator[Path]:
     """A ported copy of ``benchmark_root``, built whole before anything is
-    published, so a failing step leaves the benchmark untouched."""
+    published, so a failing step leaves the benchmark untouched. Both inputs
+    must be free of links (:func:`_refuse_links`)."""
+    _refuse_links(benchmark_root)
+    _refuse_links(known_best)
     with tempfile.TemporaryDirectory(prefix="port_") as tmp:
         copy = Path(tmp) / "benchmarks" / benchmark_root.name
         shutil.copytree(benchmark_root, copy, ignore=_IGNORE)
@@ -394,9 +429,13 @@ def _staged(benchmark_root: Path, known_best: Path) -> Iterator[Path]:
 
 def port(benchmark_root: Path, known_best: Path = KNOWN_BEST) -> None:
     """Port ``known_best`` into ``benchmark_root``, rewriting only the ported
-    paths, or raise :class:`PortError` having changed nothing."""
+    paths, or raise :class:`PortError` having changed nothing. A path whose
+    type changes — a file that became a directory, or the reverse — is
+    replaced whole."""
     with _staged(benchmark_root, known_best) as staged:
-        for relative in _differences(benchmark_root, staged):
+        changed = _differences(benchmark_root, staged)
+        _preflight(benchmark_root, changed)
+        for relative in changed:
             source, destination = staged / relative, benchmark_root / relative
             if source.exists():
                 _replace(source, destination)

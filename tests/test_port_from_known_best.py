@@ -314,3 +314,124 @@ def test_a_port_whose_oracle_patch_no_longer_applies_changes_nothing(smoke_copy)
     with pytest.raises(PortError, match="does not apply"):
         port(benchmark, known_best)
     assert _snapshot(benchmark) == before
+
+
+# ---------------------------------------------------------------------------
+# Links and type changes
+# ---------------------------------------------------------------------------
+
+
+def _relink(tree: Path, relative: str, outside: Path) -> None:
+    """Move ``tree / relative`` to *outside* and leave a link to it behind."""
+    import shutil
+
+    shutil.move(tree / relative, outside)
+    (tree / relative).symlink_to(outside, target_is_directory=outside.is_dir())
+
+
+@pytest.mark.parametrize("relative", ["workspace/engine", "data/test_oracle_workspace/engine"])
+def test_a_linked_destination_directory_is_refused_and_nothing_outside_changes(smoke_copy, relative) -> None:
+    from scripts.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    outside = benchmark.parents[2] / "elsewhere"
+    _relink(benchmark, relative, outside)
+    before = (outside / "__init__.py").read_text()
+    (known_best / "workspace/engine/__init__.py").write_text(
+        (known_best / "workspace/engine/__init__.py").read_text() + "# sentinel\n"
+    )
+    for run in (check, port):
+        with pytest.raises(PortError, match="symlink"):
+            run(benchmark, known_best)
+    assert (outside / "__init__.py").read_text() == before
+
+
+def test_a_linked_defect_patch_is_refused(smoke_copy) -> None:
+    from scripts.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    patch = defect_patches(benchmark)[0]
+    outside = benchmark.parents[2] / patch.name
+    _relink(benchmark, str(patch.relative_to(benchmark)), outside)
+    before = _snapshot(benchmark)
+    for run in (check, port):
+        with pytest.raises(PortError, match="symlink"):
+            run(benchmark, known_best)
+    assert _snapshot(benchmark) == before
+
+
+def test_a_link_in_the_known_best_input_is_refused(smoke_copy) -> None:
+    known_best, benchmark = smoke_copy
+    (known_best / "workspace/cards/linked.py").symlink_to(benchmark.parents[2] / "anything.py")
+    with pytest.raises(PortError, match="symlink"):
+        check(benchmark, known_best)
+
+
+def test_a_late_destination_through_a_link_publishes_nothing(smoke_copy, monkeypatch) -> None:
+    """The publication list is checked whole before anything is replaced."""
+    import scripts.port_from_known_best as porting
+
+    known_best, benchmark = smoke_copy
+    outside = benchmark.parents[2] / "late"
+    outside.mkdir()
+    (outside / "x.py").write_text("x = 1\n")
+    (known_best / "workspace/engine/__init__.py").write_text(
+        (known_best / "workspace/engine/__init__.py").read_text() + "# a valid change\n"
+    )
+    real = porting._differences
+
+    def _with_a_late_link(left: Path, right: Path, relative: Path = Path()) -> list[str]:
+        found = real(left, right, relative)
+        if relative == Path() and left == benchmark:
+            (benchmark / "workspace/zz_late").symlink_to(outside, target_is_directory=True)
+            found.append("workspace/zz_late/x.py")
+        return found
+
+    monkeypatch.setattr(porting, "_differences", _with_a_late_link)
+    before = (benchmark / "workspace/engine/__init__.py").read_text()
+    with pytest.raises(PortError, match="symlink"):
+        porting.port(benchmark, known_best)
+    assert (benchmark / "workspace/engine/__init__.py").read_text() == before
+    assert (outside / "x.py").read_text() == "x = 1\n"
+
+
+def test_a_file_that_becomes_a_directory_is_ported_whole(smoke_copy) -> None:
+    from scripts.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    helper = known_best / "workspace/engine/review_helper"
+    helper.write_text("A = 1\n")
+    port(benchmark, known_best)
+    assert (benchmark / "workspace/engine/review_helper").is_file()
+
+    helper.unlink()
+    helper.mkdir()
+    (helper / "__init__.py").write_text("B = 2\n")
+    pending = check(benchmark, known_best)
+    assert "workspace/engine/review_helper" in pending
+    assert "data/test_oracle_workspace/engine/review_helper" in pending
+    assert (benchmark / "workspace/engine/review_helper").is_file()  # check changed nothing
+    port(benchmark, known_best)
+    for tree in ("workspace", "data/test_oracle_workspace"):
+        assert (benchmark / tree / "engine/review_helper/__init__.py").read_text() == "B = 2\n"
+    assert check(benchmark, known_best) == []
+    assert (benchmark / "workspace/engine/__init__.py").is_file()
+
+
+def test_a_directory_that_becomes_a_file_is_ported_whole(smoke_copy) -> None:
+    import shutil
+
+    from scripts.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    helper = known_best / "workspace/engine/review_helper"
+    helper.mkdir()
+    (helper / "__init__.py").write_text("B = 2\n")
+    port(benchmark, known_best)
+    shutil.rmtree(helper)
+    helper.write_text("A = 1\n")
+    assert "workspace/engine/review_helper" in check(benchmark, known_best)
+    port(benchmark, known_best)
+    for tree in ("workspace", "data/test_oracle_workspace"):
+        assert (benchmark / tree / "engine/review_helper").read_text() == "A = 1\n"
+    assert check(benchmark, known_best) == []
