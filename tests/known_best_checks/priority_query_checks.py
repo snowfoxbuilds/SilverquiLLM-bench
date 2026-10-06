@@ -31,12 +31,13 @@ from engine.decisions import (
 from engine.game import create_game as engine_create_game
 from engine.game import sacrifice
 from engine.intent_player import DeterministicPlayer, Intent
-from engine.priority import priority_query, take_priority
+from engine.priority import grant_graveyard_cast, priority_query, take_priority
 from engine.queries import Answer, PlayerQuery, ask, is_priority_query, priority_pattern
 from engine.rollback import take_snapshot
 from engine.stack import StackObject, priority_loop, settle_after_resolution
 from engine.triggers import TriggerRegistration
 from engine.types import CardType, ManaCost, ManaType, Phase, Step, Zone
+from engine.zones import move_to_zone
 from test_utils import create_game, resolve_stack, set_board_state
 
 
@@ -661,9 +662,42 @@ def test_a_graveyard_card_is_offered_only_under_a_cast_permission():
     query, _ = priority_query(game, game.players[0])
     assert _printed(query, DecisionKind.OBJECT) == []
 
-    growth._castable_from_graveyard = True
+    grant_graveyard_cast(game, game.players[0], growth)
     query, _ = priority_query(game, game.players[0])
     assert _printed(query, DecisionKind.OBJECT) == [GiantGrowth]
+
+
+def test_a_graveyard_cast_permission_lasts_only_its_turn():
+    game = _game()
+    growth = GiantGrowth()
+    set_board_state(game, 0, graveyard=[growth])
+    grant_graveyard_cast(game, game.players[0], growth)
+
+    game.turn_number += 1
+    query, _ = priority_query(game, game.players[0])
+    assert _printed(query, DecisionKind.OBJECT) == []
+
+
+def test_a_graveyard_cast_permission_ends_when_the_card_leaves_the_graveyard():
+    game = _game()
+    growth = GiantGrowth()
+    set_board_state(game, 0, graveyard=[growth])
+    grant_graveyard_cast(game, game.players[0], growth)
+
+    move_to_zone(game, growth, Zone.GRAVEYARD, Zone.EXILE)
+    move_to_zone(game, growth, Zone.EXILE, Zone.GRAVEYARD)
+    query, _ = priority_query(game, game.players[0])
+    assert _printed(query, DecisionKind.OBJECT) == []
+
+
+def test_a_graveyard_cast_permission_is_only_its_grantees():
+    game = _game()
+    growth = GiantGrowth()
+    set_board_state(game, 0, graveyard=[growth])
+    grant_graveyard_cast(game, game.players[1], growth)
+
+    query, _ = priority_query(game, game.players[0])
+    assert _printed(query, DecisionKind.OBJECT) == []
 
 
 def test_a_spell_without_a_legal_target_is_offered_but_rejected():
