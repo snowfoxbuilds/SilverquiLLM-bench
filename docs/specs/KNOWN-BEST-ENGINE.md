@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-04
+Last updated: 2026-10-06
 
 # Known-Best Engine
 
@@ -164,4 +164,4 @@ There is no per-run dispute or pending state; agents' edits to Reference Tests, 
 | [ADR-010](../adr/ADR-010-test-oracle-workspace-uses-independent-engine.md) | Oracle engines are independent and start from the ported Known-Best Engine |
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |
 | [ADR-016](../adr/ADR-016-baseline-engines-may-carry-known-defects.md) | Baseline engines may carry Known Defects, scored against a separate Known-Best Engine |
-| [ADR-017](../adr/ADR-017-priority-actions-are-player-queries.md) | Priority actions are Player Queries chosen through Intents |
+| [ADR-017](../adr/ADR-017-priority-actions-are-player-queries.md) | Priority actions are Player Queries chosen through the players' answers |
