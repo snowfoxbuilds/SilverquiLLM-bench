@@ -1,11 +1,14 @@
 """Card implementation for Kykar, Zephyr Awakener."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from cards.fdn.tokens import make_creature_token
 from engine.card import Creature
-from engine.card_queries import choose_mode, choose_object
-from engine.types import CardType, Color, Keyword, ManaCost, Zone
+from engine.card_queries import choose_mode
 from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
+from engine.types import CardType, Color, Keyword, ManaCost, TargetRequirement, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -59,7 +62,8 @@ class KykarZephyrAwakener(Creature):
     def register_triggers(self, game: 'GameState') -> None:
         """Register noncreature spell cast trigger."""
         from engine.game import create_token
-        from engine.triggers import TriggerRegistration
+        from engine.stack import stint_checked_targets
+        from engine.triggers import TriggerRegistration, choose_trigger_targets
         from engine.zones import move_to_zone
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
@@ -75,20 +79,31 @@ class KykarZephyrAwakener(Creature):
             card_types = getattr(spell, 'card_types', set())
             return CardType.CREATURE not in card_types
 
-        def _effect(game: 'GameState', controller: Any) -> None:
-            ctrl = controller
+        def _targeting(game: 'GameState', event: Any, ctrl: Any) -> list[Any]:
+            # The mode, and the flicker mode's target, are chosen as the trigger
+            # goes on the stack (rule 603.3c-d): no target means the token mode.
+            def _another_creature_you_control(obj: Any) -> bool:
+                return (CardType.CREATURE in getattr(obj, 'card_types', set()) and obj is not source
+                        and getattr(obj, 'controller', None) is ctrl)
+
+            if ctrl is None or not any(_another_creature_you_control(c) for c in game.get_battlefield(ctrl).get_all()):
+                return []
+            mode_choice = choose_mode(game, ctrl, ['flicker', 'token'], 'Choose mode for Kykar trigger', source_card=source, printed=[KykarZephyrAwakenerAbility3, KykarZephyrAwakenerAbility4])
+            if mode_choice != 'flicker':
+                return []
+            return choose_trigger_targets(game, ctrl, source, [TargetRequirement(
+                filter_fn=_another_creature_you_control, description='creature to exile and return at end step',
+                zone=Zone.BATTLEFIELD)]) or []
+
+        def _effect(game: 'GameState', targets: list[Any], context: Any) -> None:
+            ctrl = context.controller
             if ctrl is None:
                 return
-            bf = game.get_battlefield(ctrl)
-            candidates = [c for c in bf.get_all() if CardType.CREATURE in getattr(c, 'card_types', set()) and c is not source]
-            mode_choice = None
-            if candidates:
-                mode_choice = choose_mode(game, ctrl, ['flicker', 'token'], 'Choose mode for Kykar trigger', source_card=source, printed=[KykarZephyrAwakenerAbility3, KykarZephyrAwakenerAbility4])
-            else:
-                mode_choice = 'token'
-            if mode_choice == 'flicker' and candidates:
-                chosen = choose_object(game, ctrl, candidates, 'creature to exile and return at end step', source_card=source)
-                if chosen is not None:
+            if targets:
+                (chosen,) = stint_checked_targets(game, context, targets)
+                still_legal = chosen is not None and CardType.CREATURE in getattr(chosen, 'card_types', set()) \
+                    and getattr(chosen, 'controller', None) is ctrl
+                if still_legal:
                     move_to_zone(game, chosen, Zone.BATTLEFIELD, Zone.EXILE)
                     _exiled_card = chosen
                     _owner = getattr(chosen, 'owner', ctrl)
@@ -107,4 +122,4 @@ class KykarZephyrAwakener(Creature):
             else:
                 token = make_creature_token("Spirit", {"Spirit"}, [Color.WHITE], 1, 1, keywords=Keyword.FLYING)
                 create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=KykarZephyrAwakenerAbility2))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, targeting=_targeting, printed=KykarZephyrAwakenerAbility2))

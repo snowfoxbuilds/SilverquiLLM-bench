@@ -1,80 +1,53 @@
-"""Tests for engine/abilities.py — Activated abilities system.
+"""Activated abilities (rules 602, 605, 606).
 
 Covers:
-- ActivatedAbilityInstance dataclass construction and fields.
-- LoyaltyAbilityInstance dataclass construction and fields.
-- activate_ability: mana ability → resolves immediately (no stack), effect applied.
-- activate_ability: non-mana ability → pushes StackObject to stack.
-- tap_cost: succeeds when untapped, fails when already tapped, sets is_tapped.
-- Timing checks: regular activated abilities work at instant speed (no sorcery restriction).
-- Mana abilities bypass timing checks entirely (resolve immediately).
-- Only loyalty abilities have sorcery-speed restriction.
-- LoyaltyAbility: loyalty counter adjustment (+N, −N).
-- LoyaltyAbility: once-per-turn restriction.
-- LoyaltyAbility: once-per-turn resets after clear_loyalty_tracking.
-- LoyaltyAbility: insufficient loyalty for −N cost → AbilityError.
-- Cost payment failure → AbilityError, no stack entry.
-- Integration: land tap-for-mana → mana added and card tapped.
-- Multiple abilities on the same source.
-- Edge cases: unknown ability type, zero loyalty cost, etc.
+- ActivatedAbilityInstance / LoyaltyAbilityInstance construction and fields.
+- A {T} cost taps its untapped source and cannot be paid by a tapped one.
+- Mana abilities resolve at once, without the stack, whenever their
+  controller has priority — in combat, on the other player's turn.
+- Other activated abilities go on the stack under their controller, take
+  effect only when they resolve, and may be activated at instant speed.
+- Loyalty abilities: +N and −N change loyalty, a cost larger than the
+  loyalty is illegal and changes nothing, once per planeswalker per turn
+  (again the next turn), only at sorcery speed, only by the controller,
+  and their targets are chosen as they are activated.
+- Two abilities of one permanent share its {T} cost.
+
+Each is seen through real FDN cards: Krenko, Mob Boss's {T} ability makes a
+Goblin when it resolves; a Mountain's mana casts Burst Lightning; loyalty
+shows in how much damage a planeswalker survives, or in which of its
+abilities the rules allow.
 """
 
 from __future__ import annotations
 
-import pytest
+from cards.fdn.fdn_44.card_impl import (
+    KaitoCunningInfiltrator,
+    KaitoCunningInfiltratorAbility2,
+    KaitoCunningInfiltratorAbility3,
+)
+from cards.fdn.fdn_134.card_impl import (
+    AjaniCallerOfThePride,
+    AjaniCallerOfThePrideAbility1,
+    AjaniCallerOfThePrideAbility2,
+    AjaniCallerOfThePrideAbility3,
+)
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_176.card_impl import LilianaDreadhordeGeneral, LilianaDreadhordeGeneralAbility2
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_204.card_impl import KrenkoMobBoss, KrenkoMobBossAbility1
+from cards.fdn.fdn_264.card_impl import RoguesPassage, RoguesPassageAbility1, RoguesPassageAbility2
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_278.card_impl import Mountain
+from test_interface import Phase, Side, Step, Zone, card, create_game, player
+from test_utils import DeterministicPlayer
 
 from engine.abilities import (
-    AbilityError,
     ActivatedAbilityInstance,
     LoyaltyAbilityInstance,
-    activate_ability,
-    clear_loyalty_tracking,
-    tap_cost,
 )
-from engine.card import Land, Planeswalker
 from engine.game_state import GameState
-from engine.mana import ManaPool
-from test_utils import DeterministicPlayer
-from engine.stack import StackObject
-from engine.types import ManaType, Phase, Step
-
-
-# ---------------------------------------------------------------------------
-# Helpers / Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _reset_loyalty_tracker():
-    """Ensure the module-level loyalty tracker is clean for every test."""
-    clear_loyalty_tracking()
-    yield
-    clear_loyalty_tracking()
-
-
-def _make_game(
-    *,
-    phase: Phase = Phase.PRECOMBAT_MAIN,
-    step: Step | None = None,
-) -> GameState:
-    """Create a minimal 2-player GameState at the specified phase/step."""
-    p1 = DeterministicPlayer("Alice")
-    p2 = DeterministicPlayer("Bob")
-    game = GameState([p1, p2])
-    game.phase = phase
-    game.step = step
-    return game
-
-
-def _sorcery_speed_game() -> GameState:
-    """Return a game where sorcery-speed timing is met for the active player."""
-    return _make_game(phase=Phase.PRECOMBAT_MAIN, step=None)
-
-
-def _instant_speed_game() -> GameState:
-    """Return a game where sorcery-speed timing is NOT met (combat phase)."""
-    return _make_game(phase=Phase.COMBAT, step=Step.DECLARE_ATTACKERS)
-
+from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
 
 # ---------------------------------------------------------------------------
 # ActivatedAbilityInstance — construction
@@ -156,920 +129,350 @@ class TestLoyaltyAbilityInstanceConstruction:
 
 
 # ---------------------------------------------------------------------------
-# tap_cost helper
+# Engine entry points with no counterpart at the table
 # ---------------------------------------------------------------------------
+
+
+def _bare_game() -> GameState:
+    return GameState([DeterministicPlayer("Alice"), DeterministicPlayer("Bob")])
+
+
+
+
+
+
+# ---------------------------------------------------------------------------
+# {T} costs
+# ---------------------------------------------------------------------------
+
+
+def _main(p0: Side, p1: Side | None = None, *, active: int = 0) -> Table:
+    return Table(create_game(p0, p1 or Side(), start=(Phase.PRECOMBAT_MAIN, active)))
+
+
+def _resolve(t: Table, first: int, *results) -> None:
+    """Both players pass, ``first`` first, and the top of the stack resolves."""
+    t.pass_(first)
+    t.pass_(1 - first, then=list(results))
 
 
 class TestTapCost:
-    """tap_cost checks untapped state and sets is_tapped = True."""
+    def test_untapped_source_pays_by_tapping(self):
+        krenko = card(KrenkoMobBoss)
+        t = _main(Side(battlefield=[krenko]))
+        t.act(0, KrenkoMobBossAbility1, then=[taps(krenko), on_stack(KrenkoMobBossAbility1, 0)])
+        _resolve(t, 0, off_stack(KrenkoMobBossAbility1), appears(0))
+        t.run()
 
-    def test_untapped_source_returns_true(self):
-        game = _sorcery_speed_game()
-        source = Land(name="Forest")
-        assert source.is_tapped is False
-        result = tap_cost(game, source)
-        assert result is True
-
-    def test_untapped_source_becomes_tapped(self):
-        game = _sorcery_speed_game()
-        source = Land(name="Forest")
-        tap_cost(game, source)
-        assert source.is_tapped is True
-
-    def test_already_tapped_source_returns_false(self):
-        game = _sorcery_speed_game()
-        source = Land(name="Forest")
-        source.is_tapped = True
-        result = tap_cost(game, source)
-        assert result is False
-
-    def test_already_tapped_source_stays_tapped(self):
-        game = _sorcery_speed_game()
-        source = Land(name="Forest")
-        source.is_tapped = True
-        tap_cost(game, source)
-        assert source.is_tapped is True
-
-    def test_source_without_is_tapped_attribute(self):
-        """Source with no is_tapped attribute is treated as untapped."""
-        game = _sorcery_speed_game()
-
-        class Bare:
-            pass
-
-        source = Bare()
-        result = tap_cost(game, source)
-        assert result is True
-        assert source.is_tapped is True
+    def test_tapped_source_cannot_pay(self):
+        krenko = card(KrenkoMobBoss, tapped=True)
+        t = _main(Side(battlefield=[krenko]))
+        t.act_illegal(0, KrenkoMobBossAbility1, note="Krenko is already tapped; nothing goes on the stack")
+        t.pass_(0)
+        t.pass_(1)
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# activate_ability — mana ability (resolves immediately)
+# Mana abilities
 # ---------------------------------------------------------------------------
 
 
-class TestActivateManaAbility:
-    """Mana abilities resolve immediately without using the stack."""
+def _bolt_with_mountain(t: Table, seat: int, mountain, bolt, at) -> None:
+    t.act(seat, mountain, then=[taps(mountain)], note="the mana ability resolves at once, off the stack")
+    t.act(seat, bolt, choices=[at], then=[moves(bolt, Zone.STACK)], note="its mana pays for Burst Lightning")
 
-    def test_mana_ability_does_not_push_to_stack(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        source = Land(name="Forest")
-        effect_called = []
-        ability = ActivatedAbilityInstance(
-            source=source,
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: effect_called.append(True),
-            is_mana_ability=True,
-        )
-        activate_ability(game, player, ability)
-        assert game.stack.is_empty()
 
-    def test_mana_ability_effect_is_called_immediately(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        source = Land(name="Forest")
-        effect_called = []
-        ability = ActivatedAbilityInstance(
-            source=source,
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: effect_called.append(True),
-            is_mana_ability=True,
-        )
-        activate_ability(game, player, ability)
-        assert len(effect_called) == 1
+class TestManaAbility:
+    def test_resolves_at_once_without_the_stack(self):
+        mountain, bolt = card(Mountain), card(BurstLightning)
+        t = _main(Side(hand=[bolt], battlefield=[mountain]))
+        _bolt_with_mountain(t, 0, mountain, bolt, player(1))
+        _resolve(t, 0, moves(bolt, Zone.GRAVEYARD), life(1, 18))
+        t.run()
 
-    def test_mana_ability_bypasses_timing_check(self):
-        """Mana abilities can be activated even at non-sorcery-speed timing."""
-        game = _instant_speed_game()
-        player = game.players[0]
-        source = Land(name="Forest")
-        effect_called = []
-        ability = ActivatedAbilityInstance(
-            source=source,
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: effect_called.append(True),
-            is_mana_ability=True,
-        )
-        # Should not raise — mana abilities ignore sorcery-speed timing.
-        activate_ability(game, player, ability)
-        assert len(effect_called) == 1
+    def test_activated_in_combat(self):
+        mountain, bolt = card(Mountain), card(BurstLightning)
+        game = create_game(Side(hand=[bolt], battlefield=[mountain]), Side(), start=(Step.BEGIN_COMBAT, 0))
+        t = Table(game)
+        _bolt_with_mountain(t, 0, mountain, bolt, player(1))
+        _resolve(t, 0, moves(bolt, Zone.GRAVEYARD), life(1, 18))
+        t.run()
 
-    def test_mana_ability_during_non_active_player_turn(self):
-        """Mana abilities can be activated even by non-active player."""
-        game = _instant_speed_game()
-        non_active = game.players[1]
-        effect_called = []
-        source = Land(name="Island")
-        ability = ActivatedAbilityInstance(
-            source=source,
-            controller=non_active,
-            cost=lambda g, s: True,
-            effect=lambda g: effect_called.append(True),
-            is_mana_ability=True,
-        )
-        # Should not raise — mana abilities can be activated at any time.
-        activate_ability(game, non_active, ability)
-        assert len(effect_called) == 1
+    def test_activated_by_the_non_active_player(self):
+        mountain, bolt = card(Mountain), card(BurstLightning)
+        t = _main(Side(), Side(hand=[bolt], battlefield=[mountain]))
+        t.pass_(0)
+        _bolt_with_mountain(t, 1, mountain, bolt, player(0))
+        _resolve(t, 1, moves(bolt, Zone.GRAVEYARD), life(0, 18))
+        t.run()
 
-    def test_mana_ability_cost_failure_raises(self):
-        """If the cost of a mana ability cannot be paid, AbilityError is raised."""
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        source = Land(name="Forest")
-        source.is_tapped = True
-        ability = ActivatedAbilityInstance(
-            source=source,
-            controller=player,
-            cost=tap_cost,
-            effect=lambda g: None,
-            is_mana_ability=True,
-        )
-        with pytest.raises(AbilityError, match="cost could not be paid"):
-            activate_ability(game, player, ability)
+    def test_tapped_land_cannot_tap_for_mana(self):
+        mountain = card(Mountain, tapped=True)
+        t = _main(Side(battlefield=[mountain]))
+        t.act_illegal(0, mountain)
+        t.pass_(0)
+        t.pass_(1)
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# activate_ability — non-mana ability (pushes to stack)
+# Other activated abilities use the stack, at instant speed
 # ---------------------------------------------------------------------------
 
 
-class TestActivateNonManaAbility:
-    """Non-mana activated abilities go on the stack."""
+class TestActivatedAbilityOnTheStack:
+    def test_waits_on_the_stack_until_it_resolves(self):
+        krenko = card(KrenkoMobBoss)
+        t = _main(Side(battlefield=[krenko]))
+        t.act(0, KrenkoMobBossAbility1, then=[taps(krenko), on_stack(KrenkoMobBossAbility1, 0)])
+        t.pass_(0, note="no Goblin yet: the ability has not resolved")
+        t.pass_(1, then=[off_stack(KrenkoMobBossAbility1), appears(0)], note="it resolves, making a Goblin")
+        t.run()
 
-    def test_pushes_stack_object(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        source = object()
-        ability = ActivatedAbilityInstance(
-            source=source,
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: None,
-            is_mana_ability=False,
-        )
-        activate_ability(game, player, ability)
-        assert not game.stack.is_empty()
+    def test_activated_in_combat(self):
+        krenko = card(KrenkoMobBoss)
+        game = create_game(Side(battlefield=[krenko]), Side(), start=(Step.BEGIN_COMBAT, 0))
+        t = Table(game)
+        t.act(0, KrenkoMobBossAbility1, then=[taps(krenko), on_stack(KrenkoMobBossAbility1, 0)])
+        _resolve(t, 0, off_stack(KrenkoMobBossAbility1), appears(0))
+        t.run()
 
-    def test_stack_object_has_correct_source(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        source = object()
-        ability = ActivatedAbilityInstance(
-            source=source,
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        top = game.stack.peek()
-        assert top is not None
-        assert top.source is source
+    def test_activated_with_a_spell_on_the_stack(self):
+        krenko, mountain, bolt = card(KrenkoMobBoss), card(Mountain), card(BurstLightning)
+        t = _main(Side(hand=[bolt], battlefield=[krenko, mountain]))
+        _bolt_with_mountain(t, 0, mountain, bolt, player(1))
+        t.act(0, KrenkoMobBossAbility1, then=[taps(krenko), on_stack(KrenkoMobBossAbility1, 0)])
+        _resolve(t, 0, off_stack(KrenkoMobBossAbility1), appears(0))
+        _resolve(t, 0, moves(bolt, Zone.GRAVEYARD), life(1, 18))
+        t.run()
 
-    def test_stack_object_has_correct_controller(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        top = game.stack.peek()
-        assert top.controller is player
+    def test_activated_by_the_non_active_player(self):
+        krenko = card(KrenkoMobBoss)
+        t = _main(Side(), Side(battlefield=[krenko]))
+        t.pass_(0)
+        t.act(1, KrenkoMobBossAbility1, then=[taps(krenko), on_stack(KrenkoMobBossAbility1, 1)])
+        _resolve(t, 1, off_stack(KrenkoMobBossAbility1), appears(1))
+        t.run()
 
-    def test_stack_object_on_resolve_is_ability_effect(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        resolved = []
-        effect = lambda g: resolved.append("resolved")
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=player,
-            cost=lambda g, s: True,
-            effect=effect,
-        )
-        activate_ability(game, player, ability)
-        top = game.stack.peek()
-        top.on_resolve(game)
-        assert resolved == ["resolved"]
+    def test_activated_in_the_end_step(self):
+        krenko = card(KrenkoMobBoss)
+        game = create_game(Side(battlefield=[krenko]), Side(), start=(Step.END, 0))
+        t = Table(game)
+        t.act(0, KrenkoMobBossAbility1, then=[taps(krenko), on_stack(KrenkoMobBossAbility1, 0)])
+        _resolve(t, 0, off_stack(KrenkoMobBossAbility1), appears(0))
+        t.run()
 
-    def test_stack_object_is_not_mana_ability(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        top = game.stack.peek()
-        assert top.is_mana_ability is False
 
-    def test_effect_not_called_on_activation(self):
-        """Non-mana abilities effect should NOT be called immediately."""
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        effect_called = []
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: effect_called.append(True),
+class TestTwoAbilitiesOfOnePermanent:
+    def test_both_need_the_same_tap(self):
+        passage, lions = card(RoguesPassage), card(SavannahLions)
+        mountains = [card(Mountain) for _ in range(4)]
+        t = _main(Side(battlefield=[passage, lions, *mountains]))
+        t.act(0, RoguesPassageAbility1, then=[taps(passage)])
+        for mountain in mountains:
+            t.act(0, mountain, then=[taps(mountain)])
+        t.act_illegal(
+            0, RoguesPassageAbility2, choices=[lions], note="the {4} is there, but Rogue's Passage is tapped"
         )
-        activate_ability(game, player, ability)
-        assert len(effect_called) == 0
+        t.pass_(0)
+        t.pass_(1)
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# Timing checks for non-mana abilities
+# Loyalty abilities
 # ---------------------------------------------------------------------------
 
 
-class TestNonManaAbilityTiming:
-    """Regular (non-mana) activated abilities work at instant speed.
+def _ajani(*, hand=(), battlefield=(), p0_library=1) -> Table:
+    """Player 0's turn 1 with Ajani (loyalty 4); each player has enough
+    library for the next few turns."""
+    ajani = card(AjaniCallerOfThePride)
+    game = create_game(
+        Side(hand=list(hand), battlefield=[ajani, *battlefield], library=[card(Plains) for _ in range(p0_library)]),
+        Side(library=[card(Plains) for _ in range(p0_library)]),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    return Table(game)
 
-    They can be activated whenever a player has priority — during any
-    phase/step, even with items on the stack.  Priority enforcement is
-    handled externally by ``priority_loop``, not by ``activate_ability``.
-    Only *loyalty* abilities carry a sorcery-speed restriction.
-    """
 
-    def test_allowed_during_combat(self):
-        """Regular abilities can be activated during combat (instant speed)."""
-        game = _instant_speed_game()
-        player = game.players[0]
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: None,
-            is_mana_ability=False,
+def _loyalty(t: Table, ability, *, choices=(), then=(), note="") -> None:
+    """Player 0 activates the loyalty ability ``ability``, and it resolves."""
+    t.act(0, ability, choices=list(choices), then=[on_stack(ability, 0)], note=note)
+    _resolve(t, 0, off_stack(ability), *then)
+
+
+class TestLoyaltyCost:
+    def test_plus_ability_adds_loyalty_that_a_minus_may_spend_to_zero(self):
+        kaito = card(KaitoCunningInfiltrator)
+        library = [card(Plains) for _ in range(3)]
+        game = create_game(
+            Side(battlefield=[kaito], library=library),
+            Side(library=[card(Plains) for _ in range(2)]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
         )
-        # Should not raise — regular abilities are instant speed.
-        activate_ability(game, player, ability)
-        assert not game.stack.is_empty()
-
-    def test_allowed_when_stack_not_empty(self):
-        """Regular abilities can be activated even when the stack has items."""
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        # Put something on the stack.
-        game.stack.push(StackObject(source=object(), controller=player))
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: None,
-            is_mana_ability=False,
+        t = Table(game)
+        plus, minus = KaitoCunningInfiltratorAbility2, KaitoCunningInfiltratorAbility3
+        _loyalty(t, plus, then=[moves(library[0], Zone.GRAVEYARD)], note="+1 from 3: draw a card, then discard it")
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        _loyalty(t, minus, then=[appears(0)], note="−2 from 4")
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        t.act(
+            0,
+            minus,
+            then=[on_stack(minus, 0), moves(kaito, Zone.GRAVEYARD)],
+            note="−2 from exactly 2 is legal, as it is only because the +1 added one; Kaito is left with none",
         )
-        # Should not raise — regular abilities work at instant speed.
-        activate_ability(game, player, ability)
-        # Stack should now have 2 items (the existing one + the new ability).
-        assert game.stack.peek() is not None
+        _resolve(t, 0, off_stack(minus), appears(0))
+        t.run()
 
-    def test_allowed_for_non_active_player(self):
-        """Regular abilities can be activated by non-active player (with priority)."""
-        game = _sorcery_speed_game()
-        non_active = game.players[1]
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=non_active,
-            cost=lambda g, s: True,
-            effect=lambda g: None,
-            is_mana_ability=False,
+    def test_minus_ability_removes_loyalty(self):
+        lions = card(SavannahLions)
+        t = _ajani(battlefield=[lions])
+        _loyalty(t, AjaniCallerOfThePrideAbility2, choices=[lions], note="−3 from 4")
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        t.act_illegal(0, AjaniCallerOfThePrideAbility2, choices=[lions], note="−3 from 1")
+        _loyalty(t, AjaniCallerOfThePrideAbility1)
+        t.run()
+
+    def test_cost_larger_than_loyalty_is_illegal_and_changes_nothing(self):
+        lions = card(SavannahLions)
+        t = _ajani(battlefield=[lions])
+        t.act_illegal(0, AjaniCallerOfThePrideAbility3, note="−8 from 4")
+        _loyalty(
+            t,
+            AjaniCallerOfThePrideAbility1,
+            note="the refused −8 never happened, so Ajani may still activate this turn",
         )
-        # Should not raise — priority enforcement is external.
-        activate_ability(game, non_active, ability)
-        assert not game.stack.is_empty()
-
-    def test_allowed_during_end_step(self):
-        """Regular abilities can be activated during the end step."""
-        game = _make_game(phase=Phase.ENDING, step=Step.END)
-        player = game.players[0]
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=player,
-            cost=lambda g, s: True,
-            effect=lambda g: None,
-            is_mana_ability=False,
-        )
-        activate_ability(game, player, ability)
-        assert not game.stack.is_empty()
-
-
-# ---------------------------------------------------------------------------
-# Cost payment failure
-# ---------------------------------------------------------------------------
-
-
-class TestCostPaymentFailure:
-    """If cost returns False, AbilityError is raised and nothing is pushed."""
-
-    def test_cost_failure_raises_ability_error(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=player,
-            cost=lambda g, s: False,
-            effect=lambda g: None,
-        )
-        with pytest.raises(AbilityError, match="cost could not be paid"):
-            activate_ability(game, player, ability)
-
-    def test_cost_failure_leaves_stack_empty(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=player,
-            cost=lambda g, s: False,
-            effect=lambda g: None,
-        )
-        with pytest.raises(AbilityError):
-            activate_ability(game, player, ability)
-        assert game.stack.is_empty()
-
-    def test_cost_failure_effect_not_called(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        effect_called = []
-        ability = ActivatedAbilityInstance(
-            source=object(),
-            controller=player,
-            cost=lambda g, s: False,
-            effect=lambda g: effect_called.append(True),
-        )
-        with pytest.raises(AbilityError):
-            activate_ability(game, player, ability)
-        assert len(effect_called) == 0
-
-
-# ---------------------------------------------------------------------------
-# LoyaltyAbility — positive cost (+N)
-# ---------------------------------------------------------------------------
-
-
-class TestLoyaltyAbilityPositiveCost:
-    """Loyalty ability with positive cost increases loyalty counters."""
-
-    def test_positive_loyalty_cost_increases_loyalty(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=3)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=2,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        assert pw.loyalty == 5
-
-    def test_positive_cost_pushes_to_stack(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=3)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        assert not game.stack.is_empty()
-
-
-# ---------------------------------------------------------------------------
-# LoyaltyAbility — negative cost (−N)
-# ---------------------------------------------------------------------------
-
-
-class TestLoyaltyAbilityNegativeCost:
-    """Loyalty ability with negative cost decreases loyalty counters."""
-
-    def test_negative_loyalty_cost_decreases_loyalty(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=5)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=-3,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        assert pw.loyalty == 2
-
-    def test_negative_cost_exact_loyalty(self):
-        """Using -N when loyalty == N should succeed and set loyalty to 0."""
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=4)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=-4,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        assert pw.loyalty == 0
-
-    def test_insufficient_loyalty_raises(self):
-        """Cannot activate −N if source loyalty < N."""
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=2)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=-5,
-            effect=lambda g: None,
-        )
-        with pytest.raises(AbilityError, match="insufficient loyalty"):
-            activate_ability(game, player, ability)
-
-    def test_insufficient_loyalty_no_stack_entry(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=1)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=-3,
-            effect=lambda g: None,
-        )
-        with pytest.raises(AbilityError):
-            activate_ability(game, player, ability)
-        assert game.stack.is_empty()
-
-    def test_insufficient_loyalty_does_not_change_loyalty(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=2)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=-5,
-            effect=lambda g: None,
-        )
-        with pytest.raises(AbilityError):
-            activate_ability(game, player, ability)
-        assert pw.loyalty == 2  # unchanged
-
-
-# ---------------------------------------------------------------------------
-# LoyaltyAbility — zero cost
-# ---------------------------------------------------------------------------
-
-
-class TestLoyaltyAbilityZeroCost:
-    """Loyalty ability with zero cost leaves loyalty unchanged."""
-
-    def test_zero_loyalty_cost_does_not_change_loyalty(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=3)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=0,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        assert pw.loyalty == 3
-
-
-# ---------------------------------------------------------------------------
-# LoyaltyAbility — once-per-turn restriction
-# ---------------------------------------------------------------------------
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        _loyalty(t, AjaniCallerOfThePrideAbility2, choices=[lions], note="−3 from 5")
+        t.run()
 
 
 class TestLoyaltyOncePerTurn:
-    """Only one loyalty ability per source per turn."""
+    def test_second_activation_in_a_turn_is_illegal(self):
+        ajani, lions = card(AjaniCallerOfThePride), card(SavannahLions)
+        t = _main(Side(battlefield=[ajani, lions]))
+        t.act(0, AjaniCallerOfThePrideAbility1, then=[on_stack(AjaniCallerOfThePrideAbility1, 0)])
+        _resolve(t, 0, off_stack(AjaniCallerOfThePrideAbility1))
+        t.act_illegal(0, AjaniCallerOfThePrideAbility1)
+        t.act_illegal(0, AjaniCallerOfThePrideAbility2, choices=[lions])
+        t.pass_(0)
+        t.pass_(1)
+        t.run()
 
-    def test_second_activation_same_turn_raises(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=10)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: None,
+    def test_allowed_again_on_the_next_turn(self):
+        ajani = card(AjaniCallerOfThePride)
+        game = create_game(
+            Side(battlefield=[ajani], library=[card(Plains)]),
+            Side(library=[card(Plains)]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
         )
-        # First activation succeeds.
-        activate_ability(game, player, ability)
-        # Clear the stack so sorcery-speed check still passes.
-        game.stack.pop()
-        # Second activation should fail.
-        with pytest.raises(AbilityError, match="already activated this turn"):
-            activate_ability(game, player, ability)
+        t = Table(game)
+        t.act(0, AjaniCallerOfThePrideAbility1, then=[on_stack(AjaniCallerOfThePrideAbility1, 0)])
+        _resolve(t, 0, off_stack(AjaniCallerOfThePrideAbility1))
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        t.act(0, AjaniCallerOfThePrideAbility1, then=[on_stack(AjaniCallerOfThePrideAbility1, 0)])
+        _resolve(t, 0, off_stack(AjaniCallerOfThePrideAbility1))
+        t.run()
 
-    def test_second_activation_no_stack_entry(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=10)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: None,
+    def test_each_planeswalker_activates_once(self):
+        ajani, liliana = card(AjaniCallerOfThePride), card(LilianaDreadhordeGeneral)
+        t = _main(Side(battlefield=[ajani, liliana]))
+        t.act(0, AjaniCallerOfThePrideAbility1, then=[on_stack(AjaniCallerOfThePrideAbility1, 0)])
+        _resolve(t, 0, off_stack(AjaniCallerOfThePrideAbility1))
+        t.act(0, LilianaDreadhordeGeneralAbility2, then=[on_stack(LilianaDreadhordeGeneralAbility2, 0)])
+        _resolve(t, 0, off_stack(LilianaDreadhordeGeneralAbility2), appears(0))
+        t.run()
+
+
+class TestLoyaltyTiming:
+    def test_illegal_in_combat(self):
+        ajani = card(AjaniCallerOfThePride)
+        game = create_game(Side(battlefield=[ajani]), Side(), start=(Step.BEGIN_COMBAT, 0))
+        t = Table(game)
+        t.act_illegal(0, AjaniCallerOfThePrideAbility1)
+        t.pass_(0)
+        t.pass_(1)
+        t.run()
+
+    def test_illegal_with_a_spell_on_the_stack(self):
+        ajani, mountain, bolt = card(AjaniCallerOfThePride), card(Mountain), card(BurstLightning)
+        t = _main(Side(hand=[bolt], battlefield=[ajani, mountain]))
+        _bolt_with_mountain(t, 0, mountain, bolt, player(1))
+        t.act_illegal(0, AjaniCallerOfThePrideAbility1)
+        _resolve(t, 0, moves(bolt, Zone.GRAVEYARD), life(1, 18))
+        t.run()
+
+    def test_illegal_for_the_non_active_player(self):
+        ajani = card(AjaniCallerOfThePride)
+        t = _main(Side(), Side(battlefield=[ajani]))
+        t.pass_(0)
+        t.act_illegal(1, AjaniCallerOfThePrideAbility1)
+        t.pass_(1)
+        t.run()
+
+    def test_illegal_for_a_player_who_does_not_control_it(self):
+        ajani = card(AjaniCallerOfThePride)
+        t = _main(Side(battlefield=[ajani]), Side(), active=1)
+        t.act_illegal(1, AjaniCallerOfThePrideAbility1, note="player 1's own main phase, but player 0's Ajani")
+        t.pass_(1)
+        t.pass_(0)
+        t.run()
+
+
+class TestLoyaltyAbilityOnTheStack:
+    def test_resolves_for_its_controller(self):
+        liliana = card(LilianaDreadhordeGeneral)
+        t = _main(Side(battlefield=[liliana]))
+        t.act(0, LilianaDreadhordeGeneralAbility2, then=[on_stack(LilianaDreadhordeGeneralAbility2, 0)])
+        t.pass_(0, note="no Zombie yet: the ability has not resolved")
+        t.pass_(1, then=[off_stack(LilianaDreadhordeGeneralAbility2), appears(0)])
+        t.run()
+
+
+class TestLoyaltyTargets:
+    def test_target_receives_the_effect(self):
+        ajani, lions = card(AjaniCallerOfThePride), card(SavannahLions)
+        t = _main(Side(battlefield=[ajani, lions]), Side(library=[card(Plains)]))
+        t.act(0, AjaniCallerOfThePrideAbility1, choices=[lions], then=[on_stack(AjaniCallerOfThePrideAbility1, 0)])
+        _resolve(t, 0, off_stack(AjaniCallerOfThePrideAbility1))
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, lions, then=[taps(lions)])
+        t.pass_(0)
+        t.pass_(1)
+        t.pass_(1)  # declares no blockers
+        t.pass_(0)
+        t.pass_(1, then=[life(1, 17)], note="the Lions, with its +1/+1 counter, deals 3")
+        t.run()
+
+    def test_needing_a_target_is_illegal_without_one(self):
+        lions, plains = card(SavannahLions), card(Plains)
+        t = _ajani(hand=[lions], battlefield=[plains])
+        t.act_illegal(0, AjaniCallerOfThePrideAbility2, note="−3 needs a target creature; there is none")
+        _loyalty(t, AjaniCallerOfThePrideAbility1)
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        t.act(0, plains, then=[taps(plains)])
+        t.act(0, lions, then=[moves(lions, Zone.STACK)])
+        _resolve(t, 0, moves(lions, Zone.BATTLEFIELD))
+        _loyalty(
+            t,
+            AjaniCallerOfThePrideAbility2,
+            choices=[lions],
+            note="−3 from 5: no loyalty was spent on the refused −3",
         )
-        activate_ability(game, player, ability)
-        game.stack.pop()
-        with pytest.raises(AbilityError):
-            activate_ability(game, player, ability)
-        assert game.stack.is_empty()
+        t.run()
 
-    def test_clear_loyalty_tracking_allows_reactivation(self):
-        """Simulates a new turn by calling clear_loyalty_tracking."""
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=10)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        game.stack.pop()  # clear stack for sorcery-speed
-        # Clearing the tracking simulates a new turn starting.
-        clear_loyalty_tracking()
-        # Now activation should succeed again.
-        activate_ability(game, player, ability)
-        assert not game.stack.is_empty()
-
-    def test_different_turn_number_allows_reactivation(self):
-        """Different turn number means the once-per-turn has reset."""
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=10)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: None,
-        )
-        game.turn_number = 1
-        activate_ability(game, player, ability)
-        game.stack.pop()
-        # Advance to turn 2.
-        game.turn_number = 2
-        activate_ability(game, player, ability)
-        assert not game.stack.is_empty()
-
-    def test_different_sources_allowed_same_turn(self):
-        """Two different planeswalkers can each activate once per turn."""
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw1 = Planeswalker(name="Walker1", starting_loyalty=5)
-        pw2 = Planeswalker(name="Walker2", starting_loyalty=5)
-        ability1 = LoyaltyAbilityInstance(
-            source=pw1,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: None,
-        )
-        ability2 = LoyaltyAbilityInstance(
-            source=pw2,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability1)
-        game.stack.pop()  # clear stack
-        activate_ability(game, player, ability2)
-        assert not game.stack.is_empty()
-
-
-# ---------------------------------------------------------------------------
-# LoyaltyAbility — timing
-# ---------------------------------------------------------------------------
-
-
-class TestLoyaltyAbilityTiming:
-    """Loyalty abilities require sorcery-speed timing."""
-
-    def test_rejected_during_combat(self):
-        game = _instant_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=5)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: None,
-        )
-        with pytest.raises(AbilityError, match="sorcery-speed"):
-            activate_ability(game, player, ability)
-
-    def test_rejected_for_non_active_player(self):
-        game = _sorcery_speed_game()
-        non_active = game.players[1]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=5)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=non_active,
-            loyalty_cost=1,
-            effect=lambda g: None,
-        )
-        with pytest.raises(AbilityError, match="sorcery-speed"):
-            activate_ability(game, non_active, ability)
-
-
-# ---------------------------------------------------------------------------
-# Integration: land tap-for-mana
-# ---------------------------------------------------------------------------
-
-
-class TestLandTapForMana:
-    """End-to-end: tap a land for mana → mana added and card tapped."""
-
-    def test_land_tap_for_mana_adds_mana_and_taps(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        forest = Land(name="Forest")
-        forest.is_tapped = False
-
-        def forest_effect(g: GameState) -> None:
-            player.mana_pool.add(ManaType.GREEN, 1)
-
-        ability = ActivatedAbilityInstance(
-            source=forest,
-            controller=player,
-            cost=tap_cost,
-            effect=forest_effect,
-            is_mana_ability=True,
-            description="{T}: Add {G}",
-        )
-        activate_ability(game, player, ability)
-        assert forest.is_tapped is True
-        assert player.mana_pool.get(ManaType.GREEN) == 1
-
-    def test_land_tap_for_mana_stack_remains_empty(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        forest = Land(name="Forest")
-
-        ability = ActivatedAbilityInstance(
-            source=forest,
-            controller=player,
-            cost=tap_cost,
-            effect=lambda g: player.mana_pool.add(ManaType.GREEN, 1),
-            is_mana_ability=True,
-        )
-        activate_ability(game, player, ability)
-        assert game.stack.is_empty()
-
-    def test_tapped_land_cannot_tap_for_mana(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        forest = Land(name="Forest")
-        forest.is_tapped = True
-
-        ability = ActivatedAbilityInstance(
-            source=forest,
-            controller=player,
-            cost=tap_cost,
-            effect=lambda g: player.mana_pool.add(ManaType.GREEN, 1),
-            is_mana_ability=True,
-        )
-        with pytest.raises(AbilityError, match="cost could not be paid"):
-            activate_ability(game, player, ability)
-        # Mana pool should be unchanged.
-        assert player.mana_pool.get(ManaType.GREEN) == 0
-
-    def test_land_tap_for_mana_at_instant_speed(self):
-        """Mana abilities can be activated during combat, etc."""
-        game = _instant_speed_game()
-        player = game.players[0]
-        island = Land(name="Island")
-
-        ability = ActivatedAbilityInstance(
-            source=island,
-            controller=player,
-            cost=tap_cost,
-            effect=lambda g: player.mana_pool.add(ManaType.BLUE, 1),
-            is_mana_ability=True,
-        )
-        activate_ability(game, player, ability)
-        assert island.is_tapped is True
-        assert player.mana_pool.get(ManaType.BLUE) == 1
-
-
-# ---------------------------------------------------------------------------
-# Multiple abilities on the same source
-# ---------------------------------------------------------------------------
-
-
-class TestMultipleAbilitiesSameSource:
-    """Multiple abilities on a single permanent."""
-
-    def test_activate_two_different_mana_abilities_on_same_source(self):
-        """Example: a dual land with two mana abilities (but requires two taps
-        in real MTG — here we test that both abilities are independent)."""
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        dual_land = Land(name="DualLand")
-
-        ability_green = ActivatedAbilityInstance(
-            source=dual_land,
-            controller=player,
-            cost=tap_cost,
-            effect=lambda g: player.mana_pool.add(ManaType.GREEN, 1),
-            is_mana_ability=True,
-        )
-        ability_white = ActivatedAbilityInstance(
-            source=dual_land,
-            controller=player,
-            cost=tap_cost,
-            effect=lambda g: player.mana_pool.add(ManaType.WHITE, 1),
-            is_mana_ability=True,
-        )
-        # First activation taps the land.
-        activate_ability(game, player, ability_green)
-        assert dual_land.is_tapped is True
-        assert player.mana_pool.get(ManaType.GREEN) == 1
-
-        # Second activation fails because the land is already tapped.
-        with pytest.raises(AbilityError, match="cost could not be paid"):
-            activate_ability(game, player, ability_white)
-        # White mana should not have been added.
-        assert player.mana_pool.get(ManaType.WHITE) == 0
-
-
-# ---------------------------------------------------------------------------
-# Unknown ability type
-# ---------------------------------------------------------------------------
-
-
-class TestUnknownAbilityType:
-    """activate_ability rejects unknown ability types."""
-
-    def test_unknown_type_raises(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        with pytest.raises(AbilityError, match="Unknown ability type"):
-            activate_ability(game, player, "not an ability")  # type: ignore[arg-type]
-
-
-# ---------------------------------------------------------------------------
-# Loyalty stack object properties
-# ---------------------------------------------------------------------------
-
-
-class TestLoyaltyStackObject:
-    """Verify the StackObject pushed by loyalty ability has correct properties."""
-
-    def test_stack_object_source_is_planeswalker(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=5)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        top = game.stack.peek()
-        assert top.source is pw
-
-    def test_stack_object_controller_is_player(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=5)
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: None,
-        )
-        activate_ability(game, player, ability)
-        top = game.stack.peek()
-        assert top.controller is player
-
-    def test_stack_object_on_resolve_invokes_effect(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = Planeswalker(name="TestWalker", starting_loyalty=5)
-        resolved = []
-        ability = LoyaltyAbilityInstance(
-            source=pw,
-            controller=player,
-            loyalty_cost=1,
-            effect=lambda g: resolved.append("done"),
-        )
-        activate_ability(game, player, ability)
-        top = game.stack.peek()
-        top.on_resolve(game)
-        assert resolved == ["done"]
-
-
-# ---------------------------------------------------------------------------
-# LoyaltyAbility — targeting channel (Phase D)
-# ---------------------------------------------------------------------------
-
-
-class TestLoyaltyTargeting:
-    """A loyalty ability may carry a ``targeting`` hook: targets are chosen
-    before the loyalty cost is paid, stored on the stack object, and passed to
-    ``effect(game, targets, context)`` at resolution."""
-
-    def _walker_on_bf(self, game, player, loyalty=5):
-        from engine.types import Zone
-
-        pw = Planeswalker(name="Walker", starting_loyalty=loyalty)
-        pw.owner = player
-        pw.controller = player
-        player.zones[Zone.BATTLEFIELD].add(pw)
-        pw.instance_id = game.refs.instance_id(pw, Zone.BATTLEFIELD.value)
-        return pw
-
-    def _creature_on_bf(self, game, player, name="Bear"):
-        from engine.card import Creature
-        from engine.types import Zone
-
-        c = Creature(name=name, base_power=2, base_toughness=2,
-                     owner=player, controller=player)
-        player.zones[Zone.BATTLEFIELD].add(c)
-        c.instance_id = game.refs.instance_id(c, Zone.BATTLEFIELD.value)
-        return c
-
-    def test_targets_and_context_passed_to_effect(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = self._walker_on_bf(game, player, loyalty=5)
-        bear = self._creature_on_bf(game, player)
-        seen = {}
-
-        def _targeting(g, source, controller):
-            return [bear]
-
-        def _effect(g, targets, context):
-            seen["targets"] = list(targets)
-            seen["context"] = context
-
-        ability = LoyaltyAbilityInstance(
-            source=pw, controller=player, loyalty_cost=-3,
-            effect=_effect, targeting=_targeting,
-        )
-        activate_ability(game, player, ability)
-        assert pw.loyalty == 2                     # loyalty paid
-        top = game.stack.peek()
-        assert top.targets == [bear]
-        assert top.activation_context is not None
-        assert top.activation_context.controller is player
-        top.on_resolve(game)
-        assert seen["targets"] == [bear]
-        assert seen["context"] is top.activation_context
-
-    def test_required_target_none_aborts_without_spending_loyalty(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = self._walker_on_bf(game, player, loyalty=5)
-
-        ability = LoyaltyAbilityInstance(
-            source=pw, controller=player, loyalty_cost=-3,
-            effect=lambda g, t, c: None,
-            targeting=lambda g, s, c: None,   # no legal target
-        )
-        with pytest.raises(AbilityError, match="no legal target"):
-            activate_ability(game, player, ability)
-        assert pw.loyalty == 5                     # loyalty NOT spent
-        assert game.stack.is_empty()               # nothing pushed
-
-    def test_optional_empty_list_activates_with_no_target(self):
-        game = _sorcery_speed_game()
-        player = game.players[0]
-        pw = self._walker_on_bf(game, player, loyalty=5)
-
-        ability = LoyaltyAbilityInstance(
-            source=pw, controller=player, loyalty_cost=1,
-            effect=lambda g, t, c: None,
-            targeting=lambda g, s, c: [],   # "up to one target", none chosen
-        )
-        activate_ability(game, player, ability)
-        assert pw.loyalty == 6
-        assert game.stack.peek().targets == []
-
-    def test_mismatched_controller_rejected_before_payment(self):
-        game = _sorcery_speed_game()
-        p1, p2 = game.players
-        pw = self._walker_on_bf(game, p1, loyalty=5)
-        ability = LoyaltyAbilityInstance(
-            source=pw, controller=p1, loyalty_cost=-3,
-            effect=lambda g: None,
-        )
-        with pytest.raises(AbilityError, match="not the"):
-            activate_ability(game, p2, ability)   # caller p2 != controller p1
-        assert pw.loyalty == 5
-        assert game.stack.is_empty()
+    def test_up_to_one_target_may_choose_none(self):
+        lions = card(SavannahLions)
+        t = _ajani(battlefield=[lions])
+        _loyalty(t, AjaniCallerOfThePrideAbility1, note="+1 with no target")
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, lions, then=[taps(lions)])
+        t.pass_(0)
+        t.pass_(1)
+        t.pass_(1)  # declares no blockers
+        t.pass_(0)
+        t.pass_(1, then=[life(1, 18)], note="the Lions got no counter: it deals 2")
+        t.run()

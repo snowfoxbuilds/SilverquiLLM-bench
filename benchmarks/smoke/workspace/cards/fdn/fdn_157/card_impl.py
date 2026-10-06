@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class LightshellDuoAbility1:
+    text = 'Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)'
+
+
+class LightshellDuoAbility2:
+    text = 'When this creature enters, surveil 2. (Look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)'
+
+
+# endregion Printed abilities
+
+
 class LightshellDuo(Creature):
     """Lightshell Duo — {3}{U} — 3/4 — Rat Otter — Prowess.
 
@@ -33,9 +47,14 @@ class LightshellDuo(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, LightshellDuoAbility2, self._enters)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: surveil 2."""
-        controller = self.controller
         if controller is None:
             return
         library = controller.zones[Zone.LIBRARY]

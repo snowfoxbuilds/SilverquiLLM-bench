@@ -1,11 +1,26 @@
 """Card implementation for Electroduplicate."""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Any
-from engine.card import Creature, Sorcery
+from engine.card import Creature, Sorcery, printed_class
 from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
 from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ElectroduplicateAbility1:
+    text = 'Create a token that\'s a copy of target creature you control, except it has haste and "At the beginning of the end step, sacrifice this token."'
+
+
+class ElectroduplicateAbility2:
+    text = 'Flashback {2}{R}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)'
+
+
+# endregion Printed abilities
+
 
 class Electroduplicate(Sorcery):
     """Electroduplicate — {2}{R} — Sorcery.
@@ -48,6 +63,7 @@ class Electroduplicate(Sorcery):
         if hasattr(target, 'rules_text'):
             token_kwargs['rules_text'] = target.rules_text
         token = Creature(**token_kwargs)
+        token.printed_as = printed_class(target)
         # ``colors`` is an explicit instance attribute (see cards/fdn/tokens.py),
         # not a Creature constructor kwarg — copy it after construction.
         if getattr(target, 'colors', None) is not None:
@@ -66,4 +82,4 @@ class Electroduplicate(Sorcery):
             bf = game.get_battlefield(ctrl)
             if bf.contains(token):
                 sacrifice(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_sac_condition, effect=_sac_effect, source=token, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_sac_condition, effect=_sac_effect, source=token, controller=controller, printed=ElectroduplicateAbility1))

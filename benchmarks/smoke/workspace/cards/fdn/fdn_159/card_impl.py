@@ -12,6 +12,20 @@ if TYPE_CHECKING:
     from engine.player import Player
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MockingSpriteAbility1:
+    text = 'Flying'
+
+
+class MockingSpriteAbility2:
+    text = 'Instant and sorcery spells you cast cost {1} less to cast.'
+
+
+# endregion Printed abilities
+
+
 class MockingSprite(Creature):
     """Mocking Sprite — {2}{U} — 2/1 — Faerie Rogue — Flying.
 

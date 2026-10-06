@@ -114,6 +114,20 @@ _SUBLAYER_ORDER: dict[SubLayer, int] = {
 }
 
 
+
+def set_controller(obj: Any, player: Any) -> None:
+    """Apply a control-changing effect (layer 2) to *obj*: *player* controls
+    it while the effect lasts. The controller it had before any such effect is
+    restored each time effects are reapplied, so control reverts once the
+    effect ends."""
+    if _CONTROLLER_BEFORE_EFFECTS not in obj.__dict__:
+        obj.__dict__[_CONTROLLER_BEFORE_EFFECTS] = obj.controller
+    obj.controller = player
+
+
+_CONTROLLER_BEFORE_EFFECTS = "_controller_before_effects"
+
+
 class EffectManager:
     """Manages all active continuous effects and applies them in layer order.
 
@@ -242,9 +256,14 @@ class EffectManager:
 
         Iterates over every player's battlefield and calls
         ``_reset_characteristics()`` on any object that supports it
-        (i.e. :class:`~engine.card.CardImpl` and its subclasses).
+        (i.e. :class:`~engine.card.CardImpl` and its subclasses), and clears
+        the player-level permissions effects grant.
         """
         for player in game.players:
+            player.can_cast_as_flash = False
+            for obj in game.get_battlefield(player).get_all():
+                if _CONTROLLER_BEFORE_EFFECTS in obj.__dict__:
+                    obj.controller = obj.__dict__.pop(_CONTROLLER_BEFORE_EFFECTS)
             for obj in game.get_battlefield(player).get_all():
                 reset = getattr(obj, "_reset_characteristics", None)
                 if callable(reset):

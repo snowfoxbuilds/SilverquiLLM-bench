@@ -11,7 +11,7 @@ one remains legal.
 from __future__ import annotations
 
 from cards.fdn.fdn_86.card_impl import FieryAnnihilation
-from engine.card import Creature, Equipment
+from engine.card import Creature, Equipment, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
@@ -39,7 +39,7 @@ def _cast_no_resolve(game, player, card, targets):
     the spell on the stack so the test can alter the board before resolution."""
     prefs = tuple(_pref(game, t) for t in targets)
     player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
         preferences=prefs,
     ))
     try:

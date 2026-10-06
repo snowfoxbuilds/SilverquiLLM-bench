@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from cards.fdn.fdn_31.card_impl import BigfinBouncer
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
@@ -39,7 +39,7 @@ def _cast_no_resolve(game, player_index, card, targets):
         for t in targets
     )
     player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
         preferences=prefs,
     ))
     try:
@@ -51,7 +51,7 @@ def _cast_no_resolve(game, player_index, card, targets):
 class TestBigfinBouncerProperties:
     def test_static_data(self):
         c = BigfinBouncer(owner=None)
-        assert c.name == "Bigfin Bouncer"
+        assert printed_class(c) is BigfinBouncer
         assert c.mana_cost == ManaCost.parse("{3}{U}")
         assert (c.base_power, c.base_toughness) == (3, 2)
         assert {"Shark", "Pirate"} <= c.subtypes
@@ -77,7 +77,7 @@ class TestBigfinBouncerBounce:
 
     def test_bounces_target_to_owner_hand(self):
         game, p1, p2, bigfin, their_bear = self._setup()
-        cast_spell(game, 0, "Bigfin Bouncer", targets=[their_bear])
+        cast_spell(game, 0, BigfinBouncer, targets=[their_bear])
         # Target left the battlefield and returned to its owner's hand.
         assert not game.get_battlefield(p2).contains(their_bear)
         assert game.get_hand(p2).contains(their_bear)
@@ -86,7 +86,7 @@ class TestBigfinBouncerBounce:
 
     def test_cost_is_paid(self):
         game, p1, p2, bigfin, their_bear = self._setup()
-        cast_spell(game, 0, "Bigfin Bouncer", targets=[their_bear])
+        cast_spell(game, 0, BigfinBouncer, targets=[their_bear])
         assert p1.mana_pool.total() == 0
 
     def test_filter_targets_only_opponent_creatures(self):
@@ -107,7 +107,7 @@ class TestBigfinBouncerBounce:
         bigfin = BigfinBouncer(owner=p1, controller=p1)
         set_board_state(game, 0, hand=[bigfin], mana={ManaType.BLUE: 4})
         with pytest.raises(_CastError):
-            cast_spell(game, 0, "Bigfin Bouncer")
+            cast_spell(game, 0, BigfinBouncer)
 
     def test_target_control_change_before_resolution_no_bounce(self):
         """Negative revalidation: the target comes under the caster's control

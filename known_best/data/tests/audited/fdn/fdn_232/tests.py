@@ -1,140 +1,117 @@
-"""Reference test for FDN 232 — Scavenging Ooze.
+"""Audited tests for FDN 232 — Scavenging Ooze.
 
-A **targeted activated ability whose target lives in a graveyard**: the card is
-chosen at activation (before {G} is paid), captured on the stack object, and
-revalidated against its graveyard stint at resolution. A target that leaves the
-graveyard is not replaced, and no other graveyard card can be selected in its
-place — the creature reward lands only when the originally-targeted legal card is
-actually exiled.
+"{G}: Exile target card from a graveyard. If it was a creature card, put a
++1/+1 counter on this creature and you gain 1 life." The card is chosen at
+activation and revalidated at resolution: a target that leaves the graveyard
+is not replaced, and a card that reaches a graveyard later cannot become the
+target. The +1/+1 counter shows when the Ooze attacks for 3.
 """
 
 from __future__ import annotations
 
-import pytest
-from cards.fdn.fdn_232.card_impl import ScavengingOoze
-from engine.abilities import AbilityError
-from engine.card import Creature, Instant
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.types import ManaCost, ManaType, Zone
-from engine.zones import move_to_zone
-from test_utils import (
-    activate_card_ability,
-    create_game,
-    resolve_stack,
-    set_board_state,
-)
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_232.card_impl import ScavengingOoze, ScavengingOozeAbility1
+from engine.card import printed_class
+from engine.types import ManaCost
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
+
+from silverquillm.table import Table, life, moves, off_stack, on_stack, taps
 
 
-def _creature_card(p, name="Dead Bear"):
-    return Creature(name=name, base_power=2, base_toughness=2, owner=p, controller=p)
-
-
-def _noncreature_card(p, name="Dead Bolt"):
-    return Instant(name=name, owner=p, controller=p)
-
-
-def _activate(game, player, ooze, target):
-    """Activate Ooze targeting *target* (a graveyard card) via an Intent."""
-    inst = game.refs.instance_id(target, Zone.GRAVEYARD.value)
-    player.start_intent(
-        "ooze",
-        Intent(
-            pattern=GameRef(card=frozenset({("name", ooze.name)})),
-            preferences=(Decision.obj(instance=inst),),
-        ),
+def _table(graveyard, *, mine=(), theirs=(), their_mana=None, their_hand=()):
+    ooze = card(ScavengingOoze)
+    game = create_game(
+        Side(battlefield=[ooze, *mine], mana={ManaType.GREEN: 2}),
+        Side(graveyard=list(graveyard), battlefield=list(theirs), hand=list(their_hand), mana=their_mana or {}),
+        start=(Phase.PRECOMBAT_MAIN, 0),
     )
-    try:
-        activate_card_ability(game, player, ooze)
-    finally:
-        player.end_intent("ooze")
+    return Table(game), ooze
+
+
+def _activate(t, target):
+    t.act(0, ScavengingOozeAbility1, choices=[target], then=[on_stack(ScavengingOozeAbility1, 0)])
+
+
+def _resolve(t, *, then=()):
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(ScavengingOozeAbility1), *then])
+
+
+def _attack_unblocked(t, ooze, their_life):
+    """The Ooze attacks alone, unblocked, and player 1 goes to ``their_life``."""
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, ooze, then=[taps(ooze)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=[life(1, their_life)])
 
 
 class TestScavengingOozeProperties:
     def test_static_data(self):
         ooze = ScavengingOoze(owner=None)
-        assert ooze.name == "Scavenging Ooze"
+        assert printed_class(ooze) is ScavengingOoze
         assert ooze.mana_cost == ManaCost.parse("{1}{G}")
         assert (ooze.base_power, ooze.base_toughness) == (2, 2)
 
 
 class TestScavengingOozeAbility:
-    def _setup(self, gy_cards):
-        game = create_game()
-        p1, p2 = game.players
-        ooze = ScavengingOoze(owner=p1, controller=p1)
-        set_board_state(game, 0, battlefield=[ooze], mana={ManaType.GREEN: 3})
-        set_board_state(game, 1, graveyard=gy_cards)
-        return game, p1, p2, ooze
-
     def test_target_fixed_at_activation_on_stack(self):
-        target = _creature_card(None)
-        game, p1, _p2, ooze = self._setup([target])
-        _activate(game, p1, ooze, target)
-        # Chosen at activation and captured on the stack — before resolution.
-        top = game.stack.peek()
-        assert top.targets == [target]
-        # {G} was paid (targeting precedes cost payment, but a legal target and
-        # mana were both present, so the cost was paid).
-        assert p1.mana_pool.get(ManaType.GREEN) == 2
+        """Of two creature cards, the one chosen at activation is exiled."""
+        target, other = card(SavannahLions), card(SavannahLions)
+        t, _ooze = _table([other, target])
+        _activate(t, target)
+        _resolve(t, then=[moves(target, Zone.EXILE), life(0, 21)])
+        t.run()
 
     def test_no_graveyard_card_rejects_before_cost(self):
-        game, p1, _p2, ooze = self._setup([])
-        with pytest.raises(AbilityError):
-            activate_card_ability(game, p1, ooze)
-        assert p1.mana_pool.get(ManaType.GREEN) == 3  # no {G} spent
+        t, _ooze = _table([])
+        t.act_illegal(0, ScavengingOozeAbility1, note="no card in any graveyard to target")
+        t.pass_(0)
+        t.run()
 
     def test_creature_card_target_gives_reward(self):
-        target = _creature_card(None)
-        game, p1, p2, ooze = self._setup([target])
-        life_before = p1.life
-        _activate(game, p1, ooze, target)
-        resolve_stack(game)
-        # Target exiled, +1/+1 counter on Ooze, controller gained 1 life.
-        assert not game.get_graveyard(p2).contains(target)
-        assert game.get_exile(p2).contains(target)
-        assert ooze.plus_one_counters == 1
-        assert p1.life == life_before + 1
+        target = card(SavannahLions)
+        t, ooze = _table([target])
+        _activate(t, target)
+        _resolve(t, then=[moves(target, Zone.EXILE), life(0, 21)])
+        _attack_unblocked(t, ooze, 17)
+        t.run()
 
     def test_noncreature_card_target_no_reward(self):
-        target = _noncreature_card(None)
-        game, p1, p2, ooze = self._setup([target])
-        life_before = p1.life
-        _activate(game, p1, ooze, target)
-        resolve_stack(game)
-        assert game.get_exile(p2).contains(target)  # exiled
-        assert ooze.plus_one_counters == 0  # but no reward
-        assert p1.life == life_before
+        target = card(BurstLightning)
+        t, ooze = _table([target])
+        _activate(t, target)
+        _resolve(t, then=[moves(target, Zone.EXILE)])
+        _attack_unblocked(t, ooze, 18)
+        t.run()
 
     def test_target_removed_in_response_not_reselected(self):
-        """The captured card leaves the graveyard before resolution; the ability
-        does not choose another card and applies no reward."""
-        target = _creature_card(None, "Target Bear")
-        other = _creature_card(None, "Other Bear")
-        game, p1, p2, ooze = self._setup([target, other])
-        life_before = p1.life
-        _activate(game, p1, ooze, target)
-        # Remove the captured target from the graveyard, in response.
-        move_to_zone(game, target, Zone.GRAVEYARD, Zone.HAND)
-        resolve_stack(game)
-        # No other graveyard card is exiled; no counter, no life gain.
-        assert game.get_graveyard(p2).contains(other)
-        assert not game.get_exile(p2).contains(other)
-        assert ooze.plus_one_counters == 0
-        assert p1.life == life_before
+        """Player 1's own Scavenging Ooze exiles the targeted card in response;
+        player 0's ability does not choose the other card and gives no reward."""
+        target, other, their_ooze = card(SavannahLions), card(SavannahLions), card(ScavengingOoze)
+        t, ooze = _table([target, other], theirs=[their_ooze], their_mana={ManaType.GREEN: 1})
+        _activate(t, target)
+        t.pass_(0)
+        t.act(1, ScavengingOozeAbility1, choices=[target], then=[on_stack(ScavengingOozeAbility1, 1)])
+        t.pass_(1)
+        t.pass_(0, then=[off_stack(ScavengingOozeAbility1), moves(target, Zone.EXILE), life(1, 21)])
+        _resolve(t)
+        _attack_unblocked(t, ooze, 19)
+        t.run()
 
     def test_card_added_after_activation_not_selectable(self):
-        """A card added to a graveyard after activation cannot become the
-        target; only the originally-captured card is exiled."""
-        target = _creature_card(None, "Original")
-        game, p1, p2, ooze = self._setup([target])
-        _activate(game, p1, ooze, target)
-        # A fresh creature card appears in a graveyard after the target was fixed.
-        latecomer = _creature_card(p2, "Latecomer")
-        game.get_graveyard(p2).add(latecomer)
-        latecomer.instance_id = game.refs.instance_id(latecomer, Zone.GRAVEYARD.value)
-        resolve_stack(game)
-        # The captured target is exiled; the latecomer is untouched.
-        assert game.get_exile(p2).contains(target)
-        assert game.get_graveyard(p2).contains(latecomer)
-        assert not game.get_exile(p2).contains(latecomer)
+        """Player 1 kills player 0's Llanowar Elves in response; the Elves
+        card reaches the graveyard after the target was fixed and stays there."""
+        target, elves, bolt = card(SavannahLions), card(LlanowarElves), card(BurstLightning)
+        t, _ooze = _table([target], mine=[elves], their_hand=[bolt], their_mana={ManaType.RED: 1})
+        _activate(t, target)
+        t.pass_(0)
+        t.act(1, bolt, choices=[elves], then=[moves(bolt, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(bolt, Zone.GRAVEYARD), moves(elves, Zone.GRAVEYARD)])
+        _resolve(t, then=[moves(target, Zone.EXILE), life(0, 21)])
+        t.run()

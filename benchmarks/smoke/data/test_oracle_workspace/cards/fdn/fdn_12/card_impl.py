@@ -56,9 +56,8 @@ class FelidarSavior(Creature):
         )
         super().__init__(**kwargs)
 
-    def get_targets(self, game: "GameState") -> list[Any]:
+    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Return targeting requirement: up to two other creatures you control."""
-        controller = self.controller or getattr(self, "owner", None)
         source = self
 
         def _filter(obj: Any) -> bool:
@@ -86,17 +85,21 @@ class FelidarSavior(Creature):
             ),
         ]
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, FelidarSaviorAbility2, self._enters, targets=self._enters_targets)
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
         """ETB: put a +1/+1 counter on each of up to two other target
         creatures you control."""
         from engine.game import add_counter
 
-        controller = self.controller
         if controller is None:
             return
 
-        # Get targets from chosen_targets (set by StackObject.targets)
-        chosen = getattr(self, "chosen_targets", None)
+        chosen = targets
         if not chosen:
             return
 

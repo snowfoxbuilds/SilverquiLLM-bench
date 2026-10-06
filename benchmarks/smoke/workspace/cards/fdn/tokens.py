@@ -33,6 +33,16 @@ from engine.card import ActivatedAbility, Artifact, Creature, ManaAbility
 from engine.types import Color, Keyword, ManaCost, ManaType, Supertype
 
 
+# Tokens have no Card Spec, so their printed abilities are predefined here
+# (see ADR-017).
+class FoodTokenAbility1:
+    text = "{2}, {T}, Sacrifice this token: You gain 3 life."
+
+
+class TreasureTokenAbility1:
+    text = "{T}, Sacrifice this token: Add one mana of any color."
+
+
 def _controller_of(obj: Any) -> Any:
     """The player who controls *obj* (falling back to its owner)."""
     return getattr(obj, "controller", None) or getattr(obj, "owner", None)
@@ -115,6 +125,7 @@ class FoodToken(Artifact):
                 effect=_effect,
                 can_activate=_can_activate,
                 description="{2}, {T}, Sacrifice this token: You gain 3 life.",
+                printed=FoodTokenAbility1,
             )
         ]
 
@@ -180,6 +191,7 @@ class TreasureToken(Artifact):
                 cost=_cost,
                 mana_produced=_mana,
                 description="{T}, Sacrifice this token: Add one mana of any color.",
+                printed=TreasureTokenAbility1,
             )
         ]
 

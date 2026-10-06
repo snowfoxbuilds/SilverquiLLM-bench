@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ElvishRegrowerAbility1:
+    text = 'When this creature enters, return target permanent card from your graveyard to your hand.'
+
+
+# endregion Printed abilities
+
+
 _PERMANENT_TYPES = frozenset(
     {
         CardType.CREATURE,
@@ -59,9 +69,8 @@ class ElvishRegrower(Creature):
         """
         return bool(getattr(obj, "card_types", set()) & _PERMANENT_TYPES)
 
-    def get_targets(self, game: "GameState") -> list[Any]:
+    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Target a permanent card in your graveyard."""
-        controller = self.controller or getattr(self, "owner", None)
 
         def _filter(obj: Any) -> bool:
             if controller is None:
@@ -78,14 +87,19 @@ class ElvishRegrower(Creature):
             )
         ]
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, ElvishRegrowerAbility1, self._enters, targets=self._enters_targets)
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
         """Return the chosen permanent card from your graveyard to your hand."""
         from engine.zones import move_to_zone
 
-        controller = self.controller or getattr(self, "owner", None)
         if controller is None:
             return
-        chosen = getattr(self, "chosen_targets", None) or []
+        chosen = targets
         target = chosen[0] if chosen else None
         if target is None:
             return

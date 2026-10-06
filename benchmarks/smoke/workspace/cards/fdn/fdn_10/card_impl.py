@@ -16,6 +16,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DivineResilienceAbility1:
+    text = 'Kicker {2}{W} (You may pay an additional {2}{W} as you cast this spell.)'
+
+
+class DivineResilienceAbility2:
+    text = 'Target creature you control gains indestructible until end of turn. If this spell was kicked, instead any number of target creatures you control gain indestructible until end of turn. (Damage and effects that say "destroy" don\'t destroy them.)'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -106,6 +120,7 @@ class DivineResilience(Instant):
                 source=self,
                 layer=Layer.ABILITY,
                 sublayer=None,
+                bound_to=[creature_ref],
                 apply=_apply_indestructible,
                 duration=DURATION_END_OF_TURN,
             ))

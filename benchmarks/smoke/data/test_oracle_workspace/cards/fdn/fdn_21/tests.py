@@ -32,7 +32,7 @@ class TestPridefulParentSelfETB:
             game, 0, hand=[parent],
             mana={ManaType.WHITE: 1, ManaType.COLORLESS: 2},
         )
-        cast_spell(game, 0, "Prideful Parent")
+        cast_spell(game, 0, PridefulParent)
 
         bf = game.players[0].zones[Zone.BATTLEFIELD]
         assert bf.contains(parent)
@@ -50,7 +50,7 @@ class TestPridefulParentSelfETB:
             game, 0, hand=[parent],
             mana={ManaType.WHITE: 1, ManaType.COLORLESS: 2},
         )
-        cast_spell(game, 0, "Prideful Parent")
+        cast_spell(game, 0, PridefulParent)
         cats = _cat_tokens(game, 0)
         assert len(cats) == 1
         cat = cats[0]

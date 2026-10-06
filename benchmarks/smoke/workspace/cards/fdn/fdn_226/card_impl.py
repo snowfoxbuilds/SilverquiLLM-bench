@@ -16,6 +16,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class InspiringCallAbility1:
+    text = 'Draw a card for each creature you control with a +1/+1 counter on it. Those creatures gain indestructible until end of turn. (Damage and effects that say "destroy" don\'t destroy them.)'
+
+
+# endregion Printed abilities
+
+
 class InspiringCall(Instant):
     """Inspiring Call — {2}{G} — Instant.
 
@@ -66,6 +76,7 @@ class InspiringCall(Instant):
                 source=self,
                 layer=Layer.ABILITY,
                 sublayer=None,
+                bound_to=[creature_ref],
                 apply=_apply_indestructible,
                 duration=DURATION_END_OF_TURN,
             ))

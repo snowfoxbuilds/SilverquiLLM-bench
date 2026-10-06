@@ -7,6 +7,17 @@ from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SearslicerGoblinAbility1:
+    text = 'Raid — At the beginning of your end step, if you attacked this turn, create a 1/1 red Goblin creature token.'
+
+
+# endregion Printed abilities
+
+
 class SearslicerGoblin(Creature):
     """Searslicer Goblin — {1}{R} — 2/1 — Goblin Warrior.
 
@@ -43,12 +54,12 @@ class SearslicerGoblin(Creature):
                 attacked = getattr(ctrl, 'attacked_this_turn', False)
             return attacked
 
-        def _effect(game: 'GameState') -> None:
+        def _effect(game: 'GameState', controller: Any) -> None:
             from cards.fdn.tokens import make_creature_token
             from engine.game import create_token
-            ctrl = getattr(source, 'controller', None)
+            ctrl = controller
             if ctrl is None:
                 return
             token = make_creature_token('Goblin', {'Goblin'}, [Color.RED], 1, 1)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=SearslicerGoblinAbility1))

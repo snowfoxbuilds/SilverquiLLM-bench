@@ -34,11 +34,6 @@ def _creature(p, name):
     return Creature(name=name, base_power=2, base_toughness=2, owner=p, controller=p)
 
 
-def _named(objects, name):
-    (match,) = [obj for obj in objects if obj.name == name]
-    return match
-
-
 def _pref(game, obj):
     return Decision.obj(instance=game.refs.instance_id(obj, Zone.BATTLEFIELD.value))
 
@@ -46,7 +41,7 @@ def _pref(game, obj):
 def _activate_double(game, player, zimone, targets):
     prefs = tuple(_pref(game, t) for t in targets)
     player.start_intent("z", Intent(
-        pattern=GameRef(card=frozenset({("name", ZIMONE)})),
+        pattern=GameRef(card=frozenset({("printed", ZimoneParadoxSculptor)})),
         preferences=prefs,
     ))
     try:
@@ -131,20 +126,14 @@ class TestZimoneDoubleAbility:
     def test_leave_and_return_target_rejected(self):
         """A target that leaves and returns is a new object (new stint) and is
         rejected by stint validation — its counters are not doubled."""
-        game, p1, p2, z, a, b = self._setup()
+        game, p1, p2, z, a, b = self._setup()  # a starts with 2 counters
         _activate_double(game, p1, z, [a])
         move_to_zone(game, a, Zone.BATTLEFIELD, Zone.EXILE)
-        exiled = _named(p1.zones[Zone.EXILE].get_all(), "Ally A")
-        move_to_zone(game, exiled, Zone.EXILE, Zone.BATTLEFIELD)
-        returned = _named(game.get_battlefield(p1).get_all(), "Ally A")
-        # Whatever counters survive the zone change (CR 400.7), the returned
-        # object holds some now; doubling would change them.
-        add_counter(game, returned, "+1/+1", 3)
-        before = returned.plus_one_counters
+        move_to_zone(game, a, Zone.EXILE, Zone.BATTLEFIELD)
         resolve_stack(game)
         # The returned object is p1-controlled and a creature, so only stint
-        # validation can reject it: its counters are left undoubled.
-        assert returned.plus_one_counters == before
+        # validation can reject it: its counters are left undoubled (2, not 4).
+        assert a.plus_one_counters == 2
 
 
 class TestZimoneCombatTrigger:
@@ -168,7 +157,7 @@ class TestZimoneCombatTrigger:
     def _fire(self, game, player, targets):
         prefs = tuple(_pref(game, t) for t in targets)
         player.start_intent("zt", Intent(
-            pattern=GameRef(card=frozenset({("name", ZIMONE)})),
+            pattern=GameRef(card=frozenset({("printed", ZimoneParadoxSculptor)})),
             preferences=prefs,
         ))
         try:

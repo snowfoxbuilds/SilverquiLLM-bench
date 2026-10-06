@@ -7,6 +7,21 @@ from engine.events import SpellCastTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ArchmageOfRunesAbility1:
+    text = 'Instant and sorcery spells you cast cost {1} less to cast.'
+
+
+class ArchmageOfRunesAbility2:
+    text = 'Whenever you cast an instant or sorcery spell, draw a card.'
+
+
+# endregion Printed abilities
+
+
 class ArchmageOfRunes(Creature):
     """Archmage of Runes — {3}{U}{U} — 3/6 — Giant Wizard.
 
@@ -53,9 +68,9 @@ class ArchmageOfRunes(Creature):
             card_types = getattr(spell, 'card_types', set())
             return CardType.INSTANT in card_types or CardType.SORCERY in card_types
 
-        def _spell_cast_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _spell_cast_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             draw_card(game, ctrl)
-        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_spell_cast_condition, effect=_spell_cast_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=SpellCastTriggeredEvent, condition=_spell_cast_condition, effect=_spell_cast_effect, source=self, controller=controller, printed=ArchmageOfRunesAbility2))

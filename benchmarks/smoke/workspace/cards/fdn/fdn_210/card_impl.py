@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ThrillOfPossibilityAbility1:
+    text = 'As an additional cost to cast this spell, discard a card.'
+
+
+class ThrillOfPossibilityAbility2:
+    text = 'Draw two cards.'
+
+
+# endregion Printed abilities
+
+
 class ThrillOfPossibility(Instant):
     """Thrill of Possibility — {1}{R} — Instant.
 

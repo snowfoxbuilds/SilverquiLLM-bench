@@ -33,7 +33,7 @@ class TestGuardedHeirMint:
             hand=[creature],
             mana={ManaType.WHITE: 1, ManaType.COLORLESS: 5},
         )
-        cast_spell(game, 0, "Guarded Heir")
+        cast_spell(game, 0, GuardedHeir)
 
         knights = _knight_tokens(game, 0)
         assert len(knights) == 2

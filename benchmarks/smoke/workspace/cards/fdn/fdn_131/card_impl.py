@@ -15,6 +15,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class RavenousAmuletAbility1:
+    text = '{1}, {T}, Sacrifice a creature: Draw a card and put a soul counter on this artifact. Activate only as a sorcery.'
+
+
+class RavenousAmuletAbility2:
+    text = '{4}, {T}, Sacrifice this artifact: Each opponent loses life equal to the number of soul counters on this artifact.'
+
+
+# endregion Printed abilities
+
+
 class RavenousAmulet(Artifact):
     """Ravenous Amulet — {2} — Sacrifice creature to draw; sac self to drain."""
 
@@ -50,9 +65,8 @@ class RavenousAmulet(Artifact):
                     sacrifice(game, controller, creatures[0])
             return True
 
-        def _sac_creature_effect(game: Any) -> None:
+        def _sac_creature_effect(game: Any, controller: Any) -> None:
             from engine.game import draw_card, add_counter
-            controller = source.controller
             if controller is not None:
                 draw_card(game, controller)
                 # Soul counters live in the engine counter system (readable via
@@ -65,12 +79,15 @@ class RavenousAmulet(Artifact):
             src.is_tapped = True
             return True
 
-        def _drain_effect(game: Any) -> None:
+        def _drain_effect(game: Any, controller: Any, context: Any) -> None:
             from engine.game import sacrifice
-            controller = source.controller
+            from engine.last_known import as_it_exists
             if controller is not None:
+                # Its soul counters: current while it remains on the
+                # battlefield, otherwise as it last existed there (608.2h).
+                amulet = as_it_exists(game, source, context.source_instance_id)
+                soul = amulet.counters.get('soul', 0) if amulet is not None else 0
                 # Sacrifice this artifact
-                soul = source.counters.get('soul', 0)
                 sacrifice(game, controller, source)
                 for p in game.players:
                     if p is not controller:
@@ -82,10 +99,12 @@ class RavenousAmulet(Artifact):
                 cost=_sac_creature_cost,
                 effect=_sac_creature_effect,
                 description="{1}, {T}, Sacrifice a creature: Draw a card and put a soul counter.",
+                printed=RavenousAmuletAbility1,
             ),
             ActivatedAbility(
                 cost=_drain_cost,
                 effect=_drain_effect,
                 description="{4}, {T}, Sacrifice: Each opponent loses life equal to soul counters.",
+                printed=RavenousAmuletAbility2,
             ),
         ]

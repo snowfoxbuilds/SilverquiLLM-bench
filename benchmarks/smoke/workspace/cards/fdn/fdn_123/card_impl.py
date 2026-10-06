@@ -7,6 +7,25 @@ from engine.events import DealsDamageTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class NivMizzetVisionaryAbility1:
+    text = 'Flying'
+
+
+class NivMizzetVisionaryAbility2:
+    text = 'You have no maximum hand size.'
+
+
+class NivMizzetVisionaryAbility3:
+    text = 'Whenever a source you control deals noncombat damage to an opponent, you draw that many cards.'
+
+
+# endregion Printed abilities
+
+
 class NivMizzetVisionary(Creature):
     """Niv-Mizzet, Visionary — {4}{U}{R} — 5/5 — Legendary Dragon Wizard.
 
@@ -59,14 +78,14 @@ class NivMizzetVisionary(Creature):
             _amount_queue.append(event.amount)
             return True
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             amount = _amount_queue.popleft() if _amount_queue else 1
             for _ in range(amount):
                 draw_card(game, ctrl)
-        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=NivMizzetVisionaryAbility3))
 
     def unregister_triggers(self, game: 'GameState') -> None:
         """Clean up no-max-hand-size on controller."""

@@ -8,6 +8,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GleamingBarrierAbility1:
+    text = 'Defender'
+
+
+class GleamingBarrierAbility2:
+    text = 'When this creature dies, create a Treasure token. (It\'s an artifact with "{T}, Sacrifice this token: Add one mana of any color.")'
+
+
+# endregion Printed abilities
+
+
 def _self_dies_condition(source: Any):
     """Return a condition callable that matches only when *source* dies."""
 
@@ -36,13 +51,13 @@ class GleamingBarrier(ArtifactCreature):
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
         from engine.game import create_token
-        source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
+        def _effect(game: GameState, controller: Any) -> None:
+            # The fire-time controller: as the source last existed if it died
+            # (rules 603.3a, 603.10a).
             if controller is None:
                 return
             from cards.fdn.tokens import make_treasure_token
             create_token(game, controller, make_treasure_token())
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_self_dies_condition(self), effect=_effect, source=self, controller=controller, printed=GleamingBarrierAbility2))

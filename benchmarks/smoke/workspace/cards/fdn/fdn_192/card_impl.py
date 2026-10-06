@@ -15,6 +15,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BurstLightningAbility1:
+    text = 'Kicker {4} (You may pay an additional {4} as you cast this spell.)'
+
+
+class BurstLightningAbility2:
+    text = 'Burst Lightning deals 2 damage to any target. If this spell was kicked, it deals 4 damage instead.'
+
+
+# endregion Printed abilities
+
+
 def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
 

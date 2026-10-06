@@ -12,12 +12,13 @@ from cards.fdn.fdn_87.card_impl import GoblinBoarders
 from engine.types import ManaCost, Zone
 from engine.zones import move_to_zone
 from test_utils import create_game, set_board_state
+from engine.card import printed_class
 
 
 class TestGoblinBoardersProperties:
     def test_name_and_cost(self) -> None:
         card = GoblinBoarders(owner=None)
-        assert card.name == "Goblin Boarders"
+        assert printed_class(card) is GoblinBoarders
         assert card.mana_cost == ManaCost.parse("{2}{R}")
         assert card.base_power == 3
         assert card.base_toughness == 2

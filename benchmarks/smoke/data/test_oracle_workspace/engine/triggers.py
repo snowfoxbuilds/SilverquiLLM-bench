@@ -12,11 +12,10 @@ Event types live in :mod:`engine.events` as typed dataclasses.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple
-
 import inspect
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple
 
 from engine.events import TriggeredEvent
 from engine.stack import StackObject, battlefield_stint_id, capture_activation_context
@@ -127,8 +126,8 @@ class TriggerRegistration:
             how a trigger correlates itself to *this* firing's facts (Thousand-Year
             Storm captures the triggering spell's ``StackObject`` and its copy
             count) **without** a mutable source-level slot that later firings would
-            clobber. ``capture`` is for *untargeted* triggers (a targeted trigger
-            uses ``targeting`` + the effect's ``targets``/``context`` instead).
+            clobber. On a targeted trigger it runs right after ``targeting``, and
+            ``effect`` is called ``effect(game, targets, context, event_state)``.
         printed: The predefined class of the printed ability this trigger
             comes from (see ADR-017); its stack objects carry it.
     """
@@ -240,7 +239,10 @@ class TriggerManager:
             controller = _fire_controller(trigger)
             # An occurrence's event facts are fixed when it triggers (rule 603.2,
             # 603.10a), even though it goes on the stack only when the game settles.
-            state = trigger.capture(game, event, controller) if trigger.capture is not None else None
+            # A targeted trigger captures right after choosing its targets
+            # instead, since what it keeps may depend on them.
+            fire_time = trigger.capture is not None and trigger.targeting is None
+            state = trigger.capture(game, event, controller) if fire_time else None
             # So is its source's identity: a source that leaves and returns before
             # the occurrence is placed is a new object (rule 400.7), so the
             # occurrence keeps the stint its source had when it triggered.
@@ -318,11 +320,19 @@ class TriggerManager:
                     activation_context=context,
                 )
                 effect = trigger.effect
-                stack_obj.on_resolve = (
-                    lambda g, _obj=stack_obj, _effect=effect: _effect(
-                        g, _obj.targets, _obj.activation_context
+                if trigger.capture is not None:
+                    stack_obj.event_state = trigger.capture(game, event, fire_controller)
+                    stack_obj.on_resolve = (
+                        lambda g, _obj=stack_obj, _effect=effect: _effect(
+                            g, _obj.targets, _obj.activation_context, _obj.event_state
+                        )
                     )
-                )
+                else:
+                    stack_obj.on_resolve = (
+                        lambda g, _obj=stack_obj, _effect=effect: _effect(
+                            g, _obj.targets, _obj.activation_context
+                        )
+                    )
                 game.stack.push(stack_obj)
             elif trigger.capture is not None:
                 # Untargeted trigger that captured per-fire event state when it
@@ -454,6 +464,205 @@ def _apnap(game: GameState) -> list[Any]:
     players = list(game.players)
     start = next((i for i, p in enumerate(players) if p is game.active_player), 0)
     return players[start:] + players[:start]
+
+
+def choose_trigger_targets(
+    game: GameState, controller: Player, source: Any, requirements: list[Any]
+) -> list[Any] | None:
+    """Choose a triggered ability's targets as it is put on the stack (rule
+    603.3d): one Player Query per target requirement, asked of the ability's
+    *controller*, each target distinct from those already chosen.
+
+    Returns ``None`` when a required target has no legal choice, so the
+    ability is removed from the stack (rule 603.3c); a declined or
+    unavailable optional ("up to one") target is simply left out.
+    """
+    from engine.casting import CastingError, _query_target
+
+    chosen: list[Any] = []
+    for requirement in requirements:
+        try:
+            target = _query_target(game, controller, source, requirement, exclude=chosen, protect_from=source)
+        except CastingError:
+            return None
+        if target is not None:
+            chosen.append(target)
+    return chosen
+
+
+def still_legal_targets(game: GameState, source: Any, requirements: list[Any], targets: list[Any]) -> list[Any]:
+    """*targets* with each one no longer legal on resolution replaced by
+    ``None`` (rule 608.2b): it must still be in its requirement's zone, satisfy
+    the requirement's whole predicate — the one built for the ability's
+    controller when it was put on the stack — and not have protection from
+    *source*. Targets are never re-chosen. An optional requirement left
+    unchosen is skipped, so each target is checked against the next
+    requirement it can belong to."""
+    from engine.casting import _safe_filter
+    from engine.protection import has_protection_from
+
+    def _in_zone(obj: Any, zone: Any) -> bool:
+        from engine.types import Zone
+
+        if zone is None or any(obj is p for p in game.players):
+            return True
+        if zone == Zone.STACK:
+            return any(obj is o for o in game.stack.objects())
+        return any(zone in p.zones and p.zones[zone].contains(obj) for p in game.players)
+
+    checked: list[Any] = []
+    earlier: list[Any] = []
+    index = 0
+    for target in targets:
+        legal = False
+        while target is not None and index < len(requirements):
+            requirement = requirements[index]
+            index += 1
+            filter_fn = getattr(requirement, "filter_fn", None)
+            if (
+                _in_zone(target, getattr(requirement, "zone", None))
+                and (filter_fn is None or _safe_filter(filter_fn, target, earlier))
+                and not has_protection_from(target, source)
+            ):
+                legal = True
+                break
+            if not getattr(requirement, "optional", False):
+                break
+        checked.append(target if legal else None)
+        if legal:
+            earlier.append(target)
+    return checked
+
+
+def put_reflexive_trigger(
+    game: GameState,
+    source: Any,
+    controller: Player,
+    printed: type,
+    effect: Callable[..., None],
+    *,
+    targets: list[Any] = (),  # type: ignore[assignment]
+) -> None:
+    """Put a reflexive triggered ability ("when you do", rule 603.12) on the
+    stack now, choosing its *targets* requirements as it goes there (rule
+    603.3d); a required target with no legal choice keeps it off the stack
+    (rule 603.3c). *effect* is called ``effect(game, targets, controller)`` as
+    for :func:`register_enters_trigger`."""
+    from engine.stack import stint_checked_targets
+
+    requirements = list(targets)
+    chosen = choose_trigger_targets(game, controller, source, requirements)
+    if chosen is None:
+        return
+    context = capture_activation_context(game, source, controller, chosen)
+    stack_obj = StackObject(
+        source=source, controller=controller, printed=printed, targets=chosen, activation_context=context
+    )
+    stack_obj.on_resolve = lambda g: effect(
+        g, still_legal_targets(g, source, requirements, stint_checked_targets(g, context, chosen)), controller
+    )
+    game.stack.push(stack_obj)
+
+
+def register_enters_trigger(
+    game: GameState,
+    source: Any,
+    printed: type,
+    effect: Callable[..., None],
+    *,
+    targets: Callable[[GameState, Player], list[Any]] | None = None,
+    condition: Callable[[GameState, Player], bool] | None = None,
+    source_aware: bool = False,
+    remember: Callable[[GameState, Player], Any] | None = None,
+) -> None:
+    """Register *source*'s "when this enters" triggered ability: it triggers
+    as *source* enters the battlefield and uses the stack like any other.
+
+    Everything about one occurrence is fixed as it is put on the stack and
+    kept on its stack object, never read back from *source*: the controller
+    (rule 603.3a), the target requirements built for that controller, and
+    whatever *remember* returns — a mode chosen while targeting, say.
+
+    *targets*, for a targeted ability, gives its target requirements for the
+    fire-time controller; they are chosen as the ability is put on the stack
+    (:func:`choose_trigger_targets`), and *effect* is called
+    ``effect(game, targets, controller)`` with each target in order, ``None``
+    for one no longer legal on resolution (rule 608.2b,
+    :func:`still_legal_targets`). An untargeted *effect* is called
+    ``effect(game, controller)``. *condition* is an intervening "if" clause,
+    checked both as the ability triggers and as it resolves (rule 603.4).
+
+    With *source_aware*, *effect* also gets ``source_remains=``: whether
+    *source* is still the same object on the battlefield, for an effect that
+    acts on it — attaching it, fighting with it, or exiling "until it leaves".
+    With *remember*, it gets ``remembered=``.
+    """
+    from engine.events import EntersBattlefieldTriggeredEvent
+    from engine.stack import battlefield_stint_id, same_stint, stint_checked_targets
+
+    def _fires(game: GameState, event: Any) -> bool:
+        if event.permanent is not source:
+            return False
+        return condition is None or condition(game, getattr(source, "controller", None))
+
+    def _holds(game: GameState, controller: Player) -> bool:
+        return condition is None or condition(game, controller)
+
+    def _extras(game: GameState, stint: Any, remembered: Any) -> dict[str, Any]:
+        extras: dict[str, Any] = {}
+        if source_aware:
+            extras["source_remains"] = same_stint(game, source, stint)
+        if remember is not None:
+            extras["remembered"] = remembered
+        return extras
+
+    targeting = None
+    capture = None
+    if targets is not None:
+        requirements_now: list[list[Any]] = [[]]
+
+        def targeting(game: GameState, event: Any, controller: Player) -> list[Any] | None:
+            requirements_now[0] = list(targets(game, controller))
+            return choose_trigger_targets(game, controller, source, requirements_now[0])
+
+        def capture(game: GameState, event: Any, controller: Player) -> Any:
+            return requirements_now[0], remember(game, controller) if remember is not None else None
+
+        def _effect(game: GameState, chosen: list[Any], context: Any, state: Any) -> None:
+            requirements, remembered = state
+            controller = context.controller
+            if _holds(game, controller):
+                legal = still_legal_targets(game, source, requirements, stint_checked_targets(game, context, chosen))
+                effect(game, legal, controller, **_extras(game, context.source_instance_id, remembered))
+
+    elif source_aware or remember is not None:
+
+        def capture(game: GameState, event: Any, controller: Player) -> Any:
+            return battlefield_stint_id(game, source), remember(game, controller) if remember is not None else None
+
+        def _effect(game: GameState, controller: Player, state: Any) -> None:
+            stint, remembered = state
+            if _holds(game, controller):
+                effect(game, controller, **_extras(game, stint, remembered))
+
+    else:
+
+        def _effect(game: GameState, controller: Player) -> None:
+            if _holds(game, controller):
+                effect(game, controller)
+
+    game.trigger_manager.register(
+        TriggerRegistration(
+            event_type=EntersBattlefieldTriggeredEvent,
+            condition=_fires,
+            effect=_effect,
+            source=source,
+            controller=getattr(source, "controller", None),
+            targeting=targeting,
+            capture=capture,
+            printed=printed,
+        )
+    )
 
 
 def _chosen_order(game: GameState, group: list[_Occurrence]) -> list[_Occurrence]:

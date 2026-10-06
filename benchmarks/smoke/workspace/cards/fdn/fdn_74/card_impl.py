@@ -8,6 +8,17 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class VampireGourmandAbility1:
+    text = "Whenever this creature attacks, you may sacrifice another creature. If you do, draw a card and this creature can't be blocked this turn."
+
+
+# endregion Printed abilities
+
+
 class VampireGourmand(Creature):
     """Vampire Gourmand — {1}{B} — 2/2 — Vampire.
 
@@ -35,8 +46,7 @@ class VampireGourmand(Creature):
         def _condition(game: Any, event: dict) -> bool:
             return event.creature is source
 
-        def _effect(game: 'GameState') -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
             if controller is None:
                 return
             bf = game.get_battlefield(controller)
@@ -50,4 +60,4 @@ class VampireGourmand(Creature):
             draw_card(game, controller)
             source._cant_be_blocked = True
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=VampireGourmandAbility1))

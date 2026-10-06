@@ -15,6 +15,8 @@ abilities actually work end to end.
 from __future__ import annotations
 
 from cards.fdn.tokens import (
+    FoodToken,
+    TreasureToken,
     make_creature_token,
     make_food_token,
     make_treasure_token,
@@ -24,6 +26,7 @@ from test_utils import Intent
 from engine.protection import get_colors
 from engine.types import CardType, Color, Keyword, ManaType
 from test_utils import create_game, set_board_state
+from engine.card import printed_class
 
 
 def _names(zone) -> list[str]:
@@ -33,7 +36,7 @@ def _names(zone) -> list[str]:
 class TestFoodToken:
     def test_characteristics_match_the_token_map(self) -> None:
         food = make_food_token()
-        assert food.name == "Food"
+        assert printed_class(food) is FoodToken
         assert food.card_types == {CardType.ARTIFACT}
         assert food.subtypes == {"Food"}
         # Explicit colourlessness (positive evidence for correlation).
@@ -81,7 +84,7 @@ class TestFoodToken:
 class TestTreasureToken:
     def test_characteristics_match_the_token_map(self) -> None:
         treasure = make_treasure_token()
-        assert treasure.name == "Treasure"
+        assert printed_class(treasure) is TreasureToken
         assert treasure.card_types == {CardType.ARTIFACT}
         assert treasure.subtypes == {"Treasure"}
         assert get_colors(treasure) == set()
@@ -106,7 +109,7 @@ class TestTreasureToken:
 
         # "Add one mana of any color" — the controller chooses; answer red.
         player.start_intent("treasure", Intent(
-            pattern=GameRef(card=frozenset({("name", "Treasure")})),
+            pattern=GameRef(card=frozenset({("printed", TreasureToken)})),
             preferences=(Decision.color("R"),),
         ))
         try:

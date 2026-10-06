@@ -9,6 +9,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GuardedHeirAbility1:
+    text = 'Lifelink (Damage dealt by this creature also causes you to gain that much life.)'
+
+
+class GuardedHeirAbility2:
+    text = 'When this creature enters, create two 3/3 white Knight creature tokens.'
+
+
+# endregion Printed abilities
+
+
 def _self_etb_condition(source: Any):
     """Return a condition callable that matches only when *source* enters."""
 
@@ -38,13 +53,11 @@ class GuardedHeir(Creature):
         from engine.triggers import TriggerRegistration
         from cards.fdn.tokens import make_creature_token
         from engine.game import create_token
-        source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is not None:
                 for _ in range(2):
                     token = make_creature_token('Knight', {'Knight'}, [Color.WHITE], 3, 3)
                     create_token(game, controller, token)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller, printed=GuardedHeirAbility2))

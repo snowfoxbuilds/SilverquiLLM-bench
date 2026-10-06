@@ -1,23 +1,28 @@
-"""Chandra's +2 and −4 through canonical loyalty activation."""
+"""Chandra, Flameshaper's +2 and −4, activated at the table.
 
-import pytest
-from engine.game import destroy
-from cards.fdn.fdn_81.card_impl import ChandraFlameshaper
-from engine.abilities import AbilityError
-from engine.card import Creature, Planeswalker
-from engine.decisions import Decision, DecisionKind, GameRef
-from test_utils import Intent
-from engine.types import ManaCost, ManaType, Phase
-from test_utils import (
-    activate_loyalty_ability,
-    behavioral_game,
-    create_game,
-    enter_permanent,
-    object_preference,
-    prefer,
-    put_on_battlefield,
-    resolve_stack,
++2 is judged by what its mana casts and by the cards it exiles; −4's division
+by which targets die: a creature dies when its share reaches its toughness.
+"""
+
+from cards.fdn.fdn_39.card_impl import GrapplingKraken
+from cards.fdn.fdn_81.card_impl import (
+    ChandraFlameshaper,
+    ChandraFlameshaperAbility1,
+    ChandraFlameshaperAbility3,
 )
+from cards.fdn.fdn_83.card_impl import CracklingCyclops
+from cards.fdn.fdn_87.card_impl import GoblinBoarders
+from cards.fdn.fdn_110.card_impl import QuakestriderCeratops
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_278.card_impl import Mountain
+from engine.card import Planeswalker, printed_class
+from engine.decisions import Decision
+from engine.types import ManaCost, ManaType
+from test_interface import Phase, Side, Zone, card, create_game
+
+from silverquillm.table import Table, moves, off_stack, on_stack
 
 
 def test_is_planeswalker():
@@ -25,70 +30,80 @@ def test_is_planeswalker():
 
 
 def test_name():
-    assert ChandraFlameshaper().name == "Chandra, Flameshaper"
+    assert printed_class(ChandraFlameshaper()) is ChandraFlameshaper
 
 
 def test_mana_cost():
     assert ChandraFlameshaper().mana_cost == ManaCost.parse("{5}{R}{R}")
 
 
+def _plus_two(library, played):
+    """Player 0 activates Chandra's +2 with ``library`` (top first) and both
+    players pass, so it resolves; Goblin Boarders ({2}{R}) and Burst
+    Lightning ({R}) wait in hand to spend the mana it adds; player 0 chooses
+    ``played`` among the exiled cards as it resolves."""
+    boarders, bolt = card(GoblinBoarders), card(BurstLightning)
+    game = create_game(
+        Side(hand=[boarders, bolt], battlefield=[card(ChandraFlameshaper)], library=library),
+        Side(),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, ChandraFlameshaperAbility1, then=[on_stack(ChandraFlameshaperAbility1, 0)])
+    t.pass_(0, choices=[played])
+    return t, boarders, bolt
+
+
+def _spend_three_red(t, boarders, bolt):
+    """The three red mana cast Goblin Boarders, and none is left for Burst
+    Lightning."""
+    t.act(0, boarders, then=[moves(boarders, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(boarders, Zone.BATTLEFIELD)])
+    t.act_illegal(0, bolt, choices=[boarders], note="the pool held exactly three mana")
+
+
 def test_plus_two_adds_mana_and_exiles_three_cards():
-    game = behavioral_game()
-    player = game.players[0]
-    card = enter_permanent(game, player, ChandraFlameshaper())
-    before = len(game.get_library(player).get_all())
-    activate_loyalty_ability(game, player, card, 0)
-    assert card.loyalty == 8 and player.mana_pool.total() == 0
-    resolve_stack(game)
-    assert player.mana_pool.get(ManaType.RED) == 3
-    assert len(game.get_exile(player).get_all()) == 3
-    assert len(game.get_library(player).get_all()) == before - 3
-    assert not game.get_hand(player).get_all()
+    top = [card(SavannahLions), card(LlanowarElves), card(Mountain)]
+    rest = card(Mountain)
+    t, boarders, bolt = _plus_two([*top, rest], top[0])
+    t.pass_(1, then=[
+        off_stack(ChandraFlameshaperAbility1), *(moves(c, Zone.EXILE) for c in top),
+    ], note="the top three cards are exiled and none is drawn")
+    _spend_three_red(t, boarders, bolt)
+    t.run()
 
 
 def test_plus_two_handles_fewer_than_three_library_cards():
-    game = create_game()
-    player = game.players[0]
-    game.phase, game.step = Phase.PRECOMBAT_MAIN, None
-    player.set_baseline(Intent(pattern=GameRef()))
-    top = Creature(name="Only card", base_power=1, base_toughness=1, owner=player)
-    game.get_library(player).add(top)
-    card = enter_permanent(game, player, ChandraFlameshaper())
-    activate_loyalty_ability(game, player, card, 0)
-    resolve_stack(game)
-    assert game.get_exile(player).get_all() == [top]
-    assert not game.get_library(player).get_all()
-    assert player.mana_pool.get(ManaType.RED) == 3
+    only = card(SavannahLions)
+    t, boarders, bolt = _plus_two([only], only)
+    t.pass_(1, then=[off_stack(ChandraFlameshaperAbility1), moves(only, Zone.EXILE)],
+            note="the only card is exiled; the mana is still added")
+    _spend_three_red(t, boarders, bolt)
+    t.run()
 
 
 def test_plus_two_cannot_be_repeated_in_the_same_turn():
-    game = behavioral_game()
-    player = game.players[0]
-    card = enter_permanent(game, player, ChandraFlameshaper())
-    activate_loyalty_ability(game, player, card, 0)
-    resolve_stack(game)
-    with pytest.raises(AbilityError):
-        activate_loyalty_ability(game, player, card, 0)
-    assert card.loyalty == 8 and player.mana_pool.get(ManaType.RED) == 3
-    assert len(game.get_exile(player).get_all()) == 3
+    top = [card(SavannahLions), card(LlanowarElves), card(Mountain)]
+    t, _boarders, _bolt = _plus_two(top, top[0])
+    t.pass_(1, then=[
+        off_stack(ChandraFlameshaperAbility1), *(moves(c, Zone.EXILE) for c in top),
+    ])
+    t.act_illegal(0, ChandraFlameshaperAbility1, note="one loyalty ability per turn")
+    t.run()
 
 
-def _minus4_setup(n_targets):
-    """Chandra (loyalty 6) on p1's battlefield and ``n_targets`` 4/9 creatures
-    on p2's, so no target dies to the damage."""
-    game = behavioral_game()
-    p1, p2 = game.players
-    chandra = enter_permanent(game, p1, ChandraFlameshaper())
-    targets = [
-        put_on_battlefield(game, p2, Creature(name=f"Target{i}", base_power=4, base_toughness=9))
-        for i in range(n_targets)
-    ]
-    return game, p1, chandra, targets
-
-
-def _activate_minus4(game, player, chandra):
-    activate_loyalty_ability(game, player, chandra, 2)
-    resolve_stack(game)
+def _minus_four(targets, *, library=(), opponent_library=()):
+    """Chandra (loyalty 6) on player 0's battlefield and ``targets`` on
+    player 1's."""
+    chandra = card(ChandraFlameshaper)
+    game = create_game(
+        Side(battlefield=[chandra], hand=[card(BurstLightning)], library=list(library),
+             mana={ManaType.RED: 1}),
+        Side(battlefield=list(targets), library=list(opponent_library)),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    return Table(game), chandra
 
 
 class TestChandraFlameshaperMinus4Split:
@@ -96,59 +111,70 @@ class TestChandraFlameshaperMinus4Split:
     target creatures and/or planeswalkers (rules 601.2c-d via 602.2b)."""
 
     def test_intent_chooses_the_split(self) -> None:
-        game, p1, chandra, (a, b) = _minus4_setup(2)
-        prefer(p1, object_preference(game, a), object_preference(game, b), Decision.number(5))
-        _activate_minus4(game, p1, chandra)
-        assert (a.damage_marked, b.damage_marked) == (5, 3)
-        assert chandra.loyalty == 2
+        """5 to a 0/4 kills it; 3 to the other leaves it alive; and Chandra,
+        at 2 loyalty, cannot −4 again on her controller's next turn."""
+        a, b = card(CracklingCyclops), card(CracklingCyclops)
+        t, _chandra = _minus_four([a, b], library=[card(Mountain)], opponent_library=[card(Mountain)])
+        t.act(0, ChandraFlameshaperAbility3, choices=[a, b, Decision.number(5)],
+              then=[on_stack(ChandraFlameshaperAbility3, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(ChandraFlameshaperAbility3), moves(a, Zone.GRAVEYARD)])
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        t.act_illegal(0, ChandraFlameshaperAbility3, choices=[b, Decision.number(4)],
+                      note="2 loyalty cannot pay −4")
+        t.run()
 
     def test_baseline_takes_first_offered_lowest(self) -> None:
-        # NUMBER options are offered ascending, so with no number preference
-        # each queried target gets 1 and the last takes the remainder.
-        game, p1, chandra, targets = _minus4_setup(3)
-        prefer(p1, *(object_preference(game, t) for t in targets))
-        _activate_minus4(game, p1, chandra)
-        assert [t.damage_marked for t in targets] == [1, 1, 6]
-        assert chandra.loyalty == 2
+        """Choosing 1 for each queried target leaves the last the remaining
+        6: the two 0/4s live and the 5/6 dies."""
+        a, b, c = card(CracklingCyclops), card(CracklingCyclops), card(GrapplingKraken)
+        t, _chandra = _minus_four([a, b, c])
+        t.act(0, ChandraFlameshaperAbility3, choices=[a, b, c, Decision.number(1)],
+              then=[on_stack(ChandraFlameshaperAbility3, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(ChandraFlameshaperAbility3), moves(c, Zone.GRAVEYARD)])
+        t.run()
 
     def test_each_queried_target_must_get_at_least_one(self) -> None:
-        # Asking for a zero share must not work: each of three targets gets at
-        # least 1 of the 8 (rule 601.2d), however the division is queried.
-        game, p1, chandra, targets = _minus4_setup(3)
-        prefer(p1, *(object_preference(game, t) for t in targets), Decision.number(0))
-        _activate_minus4(game, p1, chandra)
-        damage = [t.damage_marked for t in targets]
-        assert min(damage) >= 1 and sum(damage) == 8
-        offered = [
-            dict(option.attrs)["value"]
-            for query in p1.transcript.queries(DecisionKind.NUMBER)
-            for option in query.options
-        ]
-        assert all(1 <= value <= 6 for value in offered)
-        assert chandra.loyalty == 2
+        """A zero share is illegal (rule 601.2d) — not offered, or offered and
+        rejected: preferring 0, then 1, gives each 1/1 one damage and the 5/6
+        the remaining 6, so all die."""
+        a, b, c = card(LlanowarElves), card(LlanowarElves), card(GrapplingKraken)
+        t, _chandra = _minus_four([a, b, c])
+        t.act(0, branches=[
+            [ChandraFlameshaperAbility3, a, b, c, Decision.number(0), Decision.number(1)],
+            [ChandraFlameshaperAbility3, a, b, c, Decision.number(1)],
+        ], then=[on_stack(ChandraFlameshaperAbility3, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[
+            off_stack(ChandraFlameshaperAbility3),
+            moves(a, Zone.GRAVEYARD), moves(b, Zone.GRAVEYARD), moves(c, Zone.GRAVEYARD),
+        ])
+        t.run()
 
     def test_single_target_takes_all_8_without_a_query(self) -> None:
-        # A single target can only be dealt all 8; any amount offered is 8.
-        game, p1, chandra, (only,) = _minus4_setup(1)
-        prefer(p1, object_preference(game, only))
-        _activate_minus4(game, p1, chandra)
-        assert only.damage_marked == 8
-        offered = [
-            dict(option.attrs)["value"]
-            for query in p1.transcript.queries(DecisionKind.NUMBER)
-            for option in query.options
-        ]
-        assert all(value == 8 for value in offered)
-        assert chandra.loyalty == 2
+        """A single target can only be dealt all 8, so no amount needs
+        choosing: the 12/8 dies."""
+        only = card(QuakestriderCeratops)
+        t, _chandra = _minus_four([only])
+        t.act(0, ChandraFlameshaperAbility3, choices=[only],
+              then=[on_stack(ChandraFlameshaperAbility3, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(ChandraFlameshaperAbility3), moves(only, Zone.GRAVEYARD)])
+        t.run()
 
     def test_division_is_locked_in_at_activation(self) -> None:
         """The division is announced while activating (rule 601.2d via
         602.2b); a target that becomes illegal is dealt nothing and the other
-        keeps exactly its share (608.2b)."""
-        game, p1, chandra, (a, b) = _minus4_setup(2)
-        prefer(p1, object_preference(game, a), object_preference(game, b), Decision.number(5))
-        activate_loyalty_ability(game, p1, chandra, 2)
-        destroy(game, a)
-        resolve_stack(game)
-        assert b.damage_marked == 3
-        assert chandra.loyalty == 2
+        keeps exactly its share (608.2b): the 0/4 survives its 3."""
+        a, b = card(LlanowarElves), card(CracklingCyclops)
+        t, _chandra = _minus_four([a, b])
+        bolt = t.start.players[0].hand[0].handle
+        t.act(0, ChandraFlameshaperAbility3, choices=[a, b, Decision.number(5)],
+              then=[on_stack(ChandraFlameshaperAbility3, 0)])
+        t.act(0, bolt, choices=[a], then=[moves(bolt, Zone.STACK)], note="in response, Burst Lightning kills a")
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), moves(a, Zone.GRAVEYARD)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(ChandraFlameshaperAbility3)], note="the 0/4 takes only its 3")
+        t.run()

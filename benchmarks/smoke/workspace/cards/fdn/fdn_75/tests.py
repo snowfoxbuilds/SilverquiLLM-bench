@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from cards.fdn.fdn_75.card_impl import VampireSoulcaller
-from engine.card import Creature, Instant
+from engine.card import Creature, Instant, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
@@ -43,7 +43,7 @@ def _cast_no_resolve(game, player_index, card, targets, zone=Zone.BATTLEFIELD):
     player.start_intent(
         "cast",
         Intent(
-            pattern=GameRef(card=frozenset({("name", card.name)})),
+            pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
             preferences=prefs,
         ),
     )
@@ -71,7 +71,7 @@ def _setup():
 class TestVampireSoulcallerProperties:
     def test_static_data(self):
         card = VampireSoulcaller(owner=None)
-        assert card.name == "Vampire Soulcaller"
+        assert printed_class(card) is VampireSoulcaller
         assert card.mana_cost == ManaCost.parse("{4}{B}")
         assert (card.base_power, card.base_toughness) == (3, 2)
         assert card.subtypes == {"Vampire", "Warlock"}
@@ -88,7 +88,7 @@ class TestVampireSoulcallerETB:
     def test_returns_targeted_creature_card_to_hand(self):
         game, p1, p2, soulcaller, dead = _setup()
         assert game.get_graveyard(p1).contains(dead)
-        cast_spell(game, 0, "Vampire Soulcaller", targets=[dead])
+        cast_spell(game, 0, VampireSoulcaller, targets=[dead])
         # Effect landed: the creature card is back in hand, out of the graveyard.
         assert game.get_hand(p1).contains(dead)
         assert not game.get_graveyard(p1).contains(dead)
@@ -124,7 +124,7 @@ class TestVampireSoulcallerETB:
                         mana={ManaType.BLACK: 1, ManaType.COLORLESS: 4})
         game.phase = Phase.PRECOMBAT_MAIN
         with pytest.raises(_TestSetupError):
-            cast_spell(game, 0, "Vampire Soulcaller")
+            cast_spell(game, 0, VampireSoulcaller)
         # The cast was rejected — the Soulcaller never resolved onto the field.
         assert not game.get_battlefield(p1).contains(soulcaller)
 

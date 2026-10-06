@@ -1,32 +1,38 @@
 """Regression tests for FDN 160 — An Offer You Can't Refuse.
 
-An Offer You Can't Refuse is cast through the REAL pipeline: its Zone.STACK
-target requirement offers exact StackObject occurrences (noncreature spells
-only — an ability sharing a source card is not a spell), the counter routes
-through :func:`engine.stack.move_spell_off_stack` (owner's graveyard for an
-ordinary spell, exile for a flashbacked one, rule 702.34a), and the Treasure
-consolation is created for the countered spell's controller exactly when the
-counter succeeds — a fizzled cast (target occurrence departed) creates
-nothing.
+"Counter target noncreature spell. Its controller creates two Treasure
+tokens." Player 1 casts spells on their turn and player 0 answers with An
+Offer. A countered spell goes to its owner's graveyard, a flashbacked one to
+exile (rule 702.34a), and the countered spell's controller gets the Treasures
+only when the counter happens: a target that already left the stack makes
+the whole spell do nothing (rule 608.2b).
 """
 
 from __future__ import annotations
 
-import pytest
+from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_160.card_impl import AnOfferYouCantRefuse
-from engine.card import Creature, Instant
-from engine.casting import CastingError, CastMode, cast_spell_free
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.stack import move_spell_off_stack, resolve_top_of_stack
-from engine.types import ManaCost, Zone
-from test_utils import create_game
+from cards.fdn.fdn_165.card_impl import ThinkTwice
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_274.card_impl import Island
+from engine.card import Instant
+from engine.types import ManaCost
+from test_interface import ManaType, Phase, Side, Zone, card, create_game, player
+
+from silverquillm.table import Table, appears, moves, taps
 
 
-def _treasures(game, player):
-    return [
-        o for o in game.get_battlefield(player).get_all() if getattr(o, "name", "") == "Treasure"
-    ]
+def _table(p0: Side, p1: Side) -> Table:
+    """Player 1's main phase; player 0 holds An Offer."""
+    return Table(create_game(p0, p1, start=(Phase.PRECOMBAT_MAIN, 1)))
+
+
+def _offer(t: Table, offer, target, *countered) -> None:
+    """Player 0 casts An Offer at ``target``; it resolves, countering it, and
+    player 1 makes two Treasures."""
+    t.act(0, offer, choices=[target], then=[moves(offer, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[*countered, appears(1), appears(1), moves(offer, Zone.GRAVEYARD)])
 
 
 class TestAnOfferProperties:
@@ -38,108 +44,59 @@ class TestAnOfferProperties:
 
 
 class TestAnOfferCounters:
-    def _game(self):
-        game = create_game()
-        p1, p2 = game.players
-        return game, p1, p2
-
-    def _spell(self, owner, *, flashback: bool = False):
-        card = Instant(name="Zap", mana_cost=ManaCost.parse("{U}"), owner=owner)
-        card.controller = owner
-        if flashback:
-            card.flashback_cost = ManaCost.parse("{2}{U}")
-        return card
-
-    def _cast_offer_at(self, game, p1, occurrence):
-        """Cast An Offer through the real pipeline, selecting *occurrence* by
-        its engine-minted stack instance id."""
-        offer = AnOfferYouCantRefuse(owner=p1, controller=p1)
-        game.get_hand(p1).add(offer)
-        occ_iid = game.refs.instance_id(occurrence, Zone.STACK.value)
-        p1.start_intent(
-            "offer-cast",
-            Intent(
-                pattern=GameRef(card=frozenset({("name", "An Offer You Can't Refuse")})),
-                preferences=(Decision.obj(instance=occ_iid),),
-            ),
-        )
-        try:
-            offer_so = cast_spell_free(game, p1, offer, Zone.HAND)
-        finally:
-            p1.end_intent("offer-cast")
-        assert offer_so.targets[0] is occurrence
-        return offer, offer_so
-
     def test_countered_spell_to_owner_graveyard_with_treasures(self) -> None:
-        game, p1, p2 = self._game()
-        spell = self._spell(p2)
-        game.get_hand(p2).add(spell)
-        so = cast_spell_free(game, p2, spell, Zone.HAND)
-
-        offer, _ = self._cast_offer_at(game, p1, so)
-        resolve_top_of_stack(game)
-
-        # Destination ownership: countered card to ITS owner's (p2's)
-        # graveyard; An Offer to p1's graveyard.
-        assert game.get_graveyard(p2).contains(spell)
-        assert not game.get_exile(p2).contains(spell)
-        assert game.get_graveyard(p1).contains(offer)
-        # Consolation: the countered spell's CONTROLLER gets the Treasures.
-        assert len(_treasures(game, p2)) == 2
-        assert len(_treasures(game, p1)) == 0
-        assert game.stack.is_empty()
+        offer, bolt = card(AnOfferYouCantRefuse), card(BurstLightning)
+        t = _table(Side(hand=[offer], mana={ManaType.BLUE: 1}), Side(hand=[bolt], mana={ManaType.RED: 1}))
+        t.act(1, bolt, choices=[player(0)], then=[moves(bolt, Zone.STACK)])
+        t.pass_(1)
+        _offer(t, offer, bolt, moves(bolt, Zone.GRAVEYARD))
+        t.run()
 
     def test_flashback_countered_spell_exiled_with_treasures(self) -> None:
         """Countering a flashbacked spell exiles it (rule 702.34a); the
-        Treasure consolation still applies — the counter succeeded."""
-        game, p1, p2 = self._game()
-        spell = self._spell(p2, flashback=True)
-        game.get_graveyard(p2).add(spell)
-        so = cast_spell_free(game, p2, spell, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
-
-        self._cast_offer_at(game, p1, so)
-        resolve_top_of_stack(game)
-
-        assert game.get_exile(p2).contains(spell)
-        assert not game.get_graveyard(p2).contains(spell)
-        assert len(_treasures(game, p2)) == 2
+        Treasures still come, since the counter happened."""
+        offer, think = card(AnOfferYouCantRefuse), card(ThinkTwice)
+        t = _table(
+            Side(hand=[offer], mana={ManaType.BLUE: 1}),
+            Side(graveyard=[think], mana={ManaType.BLUE: 1, ManaType.COLORLESS: 2}),
+        )
+        t.act(1, think, then=[moves(think, Zone.STACK)], note="cast by flashback")
+        t.pass_(1)
+        _offer(t, offer, think, moves(think, Zone.EXILE))
+        t.run()
 
     def test_creature_spell_is_not_targetable(self) -> None:
-        """Only noncreature spells qualify: with just a creature spell on the
-        stack, An Offer has no legal target and cannot be cast."""
-        game, p1, p2 = self._game()
-        creature = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2)
-        creature.controller = p2
-        game.get_hand(p2).add(creature)
-        cast_spell_free(game, p2, creature, Zone.HAND)
-
-        offer = AnOfferYouCantRefuse(owner=p1, controller=p1)
-        game.get_hand(p1).add(offer)
-        with pytest.raises(CastingError):
-            cast_spell_free(game, p1, offer, Zone.HAND)
-        assert game.get_hand(p1).contains(offer)  # rolled back
+        """With only a creature spell on the stack, An Offer has no legal
+        target and cannot be cast."""
+        offer, lions = card(AnOfferYouCantRefuse), card(SavannahLions)
+        t = _table(Side(hand=[offer], mana={ManaType.BLUE: 1}), Side(hand=[lions], mana={ManaType.WHITE: 1}))
+        t.act(1, lions, then=[moves(lions, Zone.STACK)])
+        t.pass_(1)
+        t.act_illegal(0, offer, note="a creature spell is not a target")
+        t.pass_(0, then=[moves(lions, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_counter_fizzles_when_occurrence_departed_no_treasures(self) -> None:
-        """Rule 608.2b: the targeted occurrence left the stack, so An Offer
-        fizzles entirely — no counter, no Treasures, and never a move of the
-        re-cast occurrence's card."""
-        game, p1, p2 = self._game()
-        spell = self._spell(p2)
-        game.get_hand(p2).add(spell)
-        so = cast_spell_free(game, p2, spell, Zone.HAND)
-
-        offer, _ = self._cast_offer_at(game, p1, so)
-
-        assert move_spell_off_stack(game, so) is True  # departs (other counter)
-        recast_so = cast_spell_free(game, p2, spell, Zone.GRAVEYARD)
-        assert recast_so is not so
-
-        resolve_top_of_stack(game)  # the recast resolves normally
-        assert game.get_graveyard(p2).contains(spell)
-
-        resolve_top_of_stack(game)  # An Offer resolves — and fizzles
-        assert sum(1 for o in game.get_graveyard(p2).get_all() if o is spell) == 1
-        assert not game.get_exile(p2).contains(spell)
-        assert len(_treasures(game, p2)) == 0  # no consolation on a fizzle
-        assert game.get_graveyard(p1).contains(offer)
-        assert game.stack.is_empty()
+        """Rule 608.2b: player 0's second Offer counters Think Twice first,
+        and player 1 casts it again by flashback; the first Offer's target
+        left the stack, so it does nothing — no counter and no more
+        Treasures."""
+        first, second = card(AnOfferYouCantRefuse), card(AnOfferYouCantRefuse)
+        think, p1_draw = card(ThinkTwice), card(Island)
+        islands = [card(Island) for _ in range(3)]
+        t = _table(
+            Side(hand=[first, second], mana={ManaType.BLUE: 2}),
+            Side(hand=[think], battlefield=islands, library=[p1_draw], mana={ManaType.BLUE: 1, ManaType.COLORLESS: 1}),
+        )
+        t.act(1, think, then=[moves(think, Zone.STACK)])
+        t.pass_(1)
+        t.act(0, first, choices=[think], then=[moves(first, Zone.STACK)])
+        _offer(t, second, think, moves(think, Zone.GRAVEYARD))
+        for island in islands:
+            t.act(1, island, then=[taps(island)])
+        t.act(1, think, then=[moves(think, Zone.STACK)], note="cast again by flashback")
+        t.pass_(1)
+        t.pass_(0, then=[moves(p1_draw, Zone.HAND), moves(think, Zone.EXILE)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(first, Zone.GRAVEYARD)], note="the first Offer does nothing: no Treasures")
+        t.run()

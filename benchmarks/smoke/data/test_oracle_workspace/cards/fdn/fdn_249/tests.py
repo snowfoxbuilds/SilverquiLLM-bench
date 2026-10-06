@@ -7,7 +7,7 @@ of turn. See fdn_129/tests.py for the canonical Equipment test shape.
 from __future__ import annotations
 
 from cards.fdn.fdn_249.card_impl import AdventuringGear
-from engine.card import Creature, Equipment, Land
+from engine.card import Creature, Equipment, Land, printed_class
 from engine.stack import priority_loop
 from engine.turn import cleanup_mechanical
 from engine.types import ManaCost, Phase, Zone
@@ -22,7 +22,7 @@ def _bear(p):
 class TestAdventuringGearProperties:
     def test_static_data(self):
         gear = AdventuringGear(owner=None)
-        assert gear.name == "Adventuring Gear"
+        assert printed_class(gear) is AdventuringGear
         assert gear.mana_cost == ManaCost.parse("{1}")
         assert gear.equip_cost == ManaCost.parse("{1}")
         assert isinstance(gear, Equipment) and gear.is_equipment is True

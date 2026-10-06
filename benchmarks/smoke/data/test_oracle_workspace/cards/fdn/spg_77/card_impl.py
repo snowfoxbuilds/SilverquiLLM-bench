@@ -5,14 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Equipment
-from engine.card_queries import choose_object
 from engine.continuous_effects import (
-    ContinuousEffect,
     DURATION_PERMANENT,
+    ContinuousEffect,
     Layer,
     SubLayer,
 )
-from engine.types import CardType, Keyword, ManaCost, Supertype
+from engine.types import CardType, Keyword, ManaCost, Supertype, TargetRequirement, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
@@ -120,24 +119,24 @@ class Embercleave(Equipment):
             ),
         ]
 
-    def on_resolve(self, game: "GameState") -> None:
-        """ETB: attach to a creature you control (chosen via Player Query)."""
-        controller = self.controller or self.owner
-        if controller is None:
-            return
-        creatures = [
-            obj
-            for obj in game.get_battlefield(controller).get_all()
-            if CardType.CREATURE in getattr(obj, "card_types", set())
-        ]
-        if not creatures:
-            return
-        target = choose_object(
-            game,
-            controller,
-            creatures,
-            "Choose a creature to attach Embercleave to",
-            source_card=self,
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that targets as it is put
+        on the stack (rule 603.3d)."""
+        from engine.triggers import register_enters_trigger
+
+        def _creature_you_control(game: Any, controller: Any) -> list[Any]:
+            def _legal(obj: Any) -> bool:
+                return CardType.CREATURE in getattr(obj, "card_types", set()) and getattr(obj, "controller", None) is controller
+
+            return [TargetRequirement(filter_fn=_legal, description="target creature you control", zone=Zone.BATTLEFIELD)]
+
+        register_enters_trigger(
+            game, self, EmbercleaveAbility3, self._enters, targets=_creature_you_control, source_aware=True
         )
-        if target is not None:
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any, source_remains: bool) -> None:
+        """Attach to the target creature, if it is still a creature you control
+        and this Equipment is still on the battlefield."""
+        target = targets[0] if targets else None
+        if target is not None and source_remains:
             self.equip(target, game)

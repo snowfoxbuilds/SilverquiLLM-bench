@@ -17,6 +17,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class RoguesPassageAbility1:
+    text = '{T}: Add {C}.'
+
+
+class RoguesPassageAbility2:
+    text = "{4}, {T}: Target creature can't be blocked this turn."
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Check if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -62,6 +76,7 @@ class RoguesPassage(Land):
                 cost=_tap_cost,
                 mana_produced=_add_colorless,
                 description="{T}: Add {C}.",
+                printed=RoguesPassageAbility1,
             )
         ]
 
@@ -80,7 +95,7 @@ class RoguesPassage(Land):
             src.is_tapped = True
             return True
 
-        def _effect(game: "GameState") -> None:
+        def _effect(game: "GameState", controller: Any) -> None:
             # The target comes from a Player Query — the protocol's native
             # choice surface (answered by Intents in tests and by
             # replay-derived Intents in validation).
@@ -92,7 +107,6 @@ class RoguesPassage(Land):
             ]
             if not creatures:
                 return
-            controller = source.controller or source.owner
             target = choose_object(
                 game,
                 controller,
@@ -114,6 +128,7 @@ class RoguesPassage(Land):
                     ContinuousEffect(
                         source=source,
                         layer=Layer.ABILITY,
+                        bound_to=[chosen],
                         apply=_apply,
                         duration=DURATION_END_OF_TURN,
                     )
@@ -124,5 +139,6 @@ class RoguesPassage(Land):
                 cost=_cost,
                 effect=_effect,
                 description="{4}, {T}: Target creature can't be blocked this turn.",
+                printed=RoguesPassageAbility2,
             )
         ]

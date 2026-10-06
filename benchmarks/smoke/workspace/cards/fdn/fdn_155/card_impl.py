@@ -15,6 +15,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FleetingDistractionAbility1:
+    text = 'Target creature gets -1/-0 until end of turn.'
+
+
+class FleetingDistractionAbility2:
+    text = 'Draw a card.'
+
+
+# endregion Printed abilities
+
+
 def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
 
@@ -87,6 +102,7 @@ class FleetingDistraction(Instant):
             source=self,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
+            bound_to=[creature_ref],
             apply=_apply_debuff,
             duration=DURATION_END_OF_TURN,
         )

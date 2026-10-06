@@ -8,6 +8,25 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GnarlidColonyAbility1:
+    text = 'Kicker {2}{G} (You may pay an additional {2}{G} as you cast this spell.)'
+
+
+class GnarlidColonyAbility2:
+    text = 'If this creature was kicked, it enters with two +1/+1 counters on it.'
+
+
+class GnarlidColonyAbility3:
+    text = "Each creature you control with a +1/+1 counter on it has trample. (It can deal excess combat damage to the player or planeswalker it's attacking.)"
+
+
+# endregion Printed abilities
+
+
 def _get_controller(card: Any) -> Any:
     """Return the controller of a card, or None."""
     return getattr(card, 'controller', None)

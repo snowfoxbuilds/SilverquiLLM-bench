@@ -12,7 +12,7 @@ import pytest
 
 from cards.fdn.fdn_139.card_impl import CatharCommando
 from engine.abilities import AbilityError
-from engine.card import Artifact, Creature, Enchantment
+from engine.card import Artifact, Creature, Enchantment, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import Keyword, ManaCost, ManaType, Zone
@@ -26,7 +26,7 @@ def _on_battlefield(game, obj):
 def _activate_targeting(game, player, source, target):
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
     player.start_intent("cathar", Intent(
-        pattern=GameRef(card=frozenset({("name", source.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(source))})),
         preferences=(Decision.obj(instance=inst),),
     ))
     try:
@@ -38,7 +38,7 @@ def _activate_targeting(game, player, source, target):
 class TestCatharCommandoProperties:
     def test_static_data(self):
         card = CatharCommando(owner=None)
-        assert card.name == "Cathar Commando"
+        assert printed_class(card) is CatharCommando
         assert card.mana_cost == ManaCost.parse("{1}{W}")
         assert (card.base_power, card.base_toughness) == (3, 1)
         assert {"Human", "Soldier"} <= card.subtypes

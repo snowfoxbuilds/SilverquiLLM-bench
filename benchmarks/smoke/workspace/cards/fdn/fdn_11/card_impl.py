@@ -7,6 +7,25 @@ from engine.events import GainsLifeTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ExemplarOfLightAbility1:
+    text = 'Flying'
+
+
+class ExemplarOfLightAbility2:
+    text = 'Whenever you gain life, put a +1/+1 counter on this creature.'
+
+
+class ExemplarOfLightAbility3:
+    text = 'Whenever you put one or more +1/+1 counters on this creature, draw a card. This ability triggers only once each turn.'
+
+
+# endregion Printed abilities
+
+
 class ExemplarOfLight(Creature):
     """Exemplar of Light — {2}{W}{W} — 3/3 — Angel — Flying.
 
@@ -41,12 +60,12 @@ class ExemplarOfLight(Creature):
                 return False
             return event.player is ctrl
 
-        def _gain_life_effect(game: 'GameState') -> None:
+        def _gain_life_effect(game: 'GameState', controller: Any) -> None:
             add_counter(game, source, '+1/+1', 1)
             current_turn = getattr(game, 'turn_number', 0)
             if getattr(source, '_exemplar_drew_on_turn', -1) != current_turn:
                 source._exemplar_drew_on_turn = current_turn
-                ctrl = getattr(source, 'controller', None)
+                ctrl = controller
                 if ctrl is not None:
                     draw_card(game, ctrl)
-        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=_gain_life_condition, effect=_gain_life_effect, source=self, controller=controller, printed=ExemplarOfLightAbility2))

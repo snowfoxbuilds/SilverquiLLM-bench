@@ -50,7 +50,7 @@ def cleanup_mechanical(game: GameState) -> None:
     """The deterministic core of the cleanup step (rule 514 steps 2-5).
 
     Expires "until end of turn" continuous effects (and reapplies the
-    rest), clears marked damage, deathtouch/combat flags, and per-turn
+    rest) and "cast it from your graveyard this turn" grants, clears marked damage, deathtouch/combat flags, and per-turn
     trackers (``cards_drawn_this_turn``, ``creature_died_this_turn``),
     resets the combat state, and empties mana pools.
 
@@ -59,6 +59,9 @@ def cleanup_mechanical(game: GameState) -> None:
     mechanical core at GRE turn boundaries (discards there are explicit
     GRE zone moves, and deaths are GRE-observed events).
     """
+    from engine.priority import expire_graveyard_cast_grants
+
+    expire_graveyard_cast_grants(game)
     if hasattr(game, "effect_manager"):
         game.effect_manager.remove_expired(game)
         # Reapply remaining effects so the game state is consistent.
@@ -75,6 +78,8 @@ def cleanup_mechanical(game: GameState) -> None:
                 obj.is_attacking = False
             if hasattr(obj, "is_blocking"):
                 obj.is_blocking = False
+            if hasattr(obj, "combat_damage_prevented"):
+                obj.combat_damage_prevented = False
         if hasattr(player, "cards_drawn_this_turn"):
             player.cards_drawn_this_turn = 0
 
@@ -120,8 +125,10 @@ def _do_combat_step(game: GameState, step: Step) -> None:
         declare_attackers_step(game)
     elif step == Step.DECLARE_BLOCKERS:
         declare_blockers_step(game)
+    elif step == Step.FIRST_STRIKE_DAMAGE:
+        combat_damage_step(game, sub_step="first_strike")
     elif step == Step.COMBAT_DAMAGE:
-        combat_damage_step(game)
+        combat_damage_step(game, sub_step="normal")
     elif step == Step.END_COMBAT:
         end_combat_step(game)
 
@@ -223,7 +230,9 @@ def advance(game: GameState, *, all_pass: bool = False, forced: bool = False) ->
       window closes and the step is complete — in cleanup, another cleanup
       step follows.
     * A completed step moves the game to the next one — past the declare
-      blockers and combat damage steps when nothing attacks (CR 508.8).
+      blockers and combat damage steps when nothing attacks (CR 508.8), and
+      past the first-strike combat damage step when no attacking or blocking
+      creature has first or double strike (CR 510.4).
     * Once the game is over, nothing happens.
 
     ``all_pass`` is the priority policy of every player passing without
@@ -243,8 +252,21 @@ def advance(game: GameState, *, all_pass: bool = False, forced: bool = False) ->
         if game.step is Step.DECLARE_BLOCKERS and not game.combat_state.attackers:
             # CR 508.8: with no attackers, the declare blockers and combat
             # damage steps are skipped.
+            while game.step is not Step.END_COMBAT:
+                game.advance_phase()
+        if game.step is Step.FIRST_STRIKE_DAMAGE and not _first_strike_in_combat(game):
             game.advance_phase()
-            game.advance_phase()
+
+
+def _first_strike_in_combat(game: GameState) -> bool:
+    """Whether an attacking or blocking creature has first or double strike,
+    so combat has a first-strike combat damage step (rule 510.4)."""
+    from engine.types import Keyword
+
+    combat = game.combat_state
+    combatants = list(combat.attackers) + [b for bs in combat.attacker_blockers.values() for b in bs]
+    strikes = Keyword.FIRST_STRIKE | Keyword.DOUBLE_STRIKE
+    return any(getattr(c, "keywords", Keyword(0)) & strikes for c in combatants)
 
 
 def start_step(game: GameState) -> None:

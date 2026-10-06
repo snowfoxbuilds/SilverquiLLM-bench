@@ -20,9 +20,13 @@ from engine.decisions import (
 from engine.queries import Answer, PlayerQuery, validate_answer, validate_query
 
 
+class Strike:
+    """The printed identity of a query's source."""
+
+
 def _bool_query(min_=1, max_=1):
     return PlayerQuery(
-        source=(Decision.obj(name="Strike"),),
+        source=(Decision.obj(printed=Strike),),
         prompt="yes or no?",
         options=(Decision.yes(), Decision.no()),
         min=min_,

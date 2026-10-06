@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SelfReflectionAbility1:
+    text = "Create a token that's a copy of target creature you control."
+
+
+class SelfReflectionAbility2:
+    text = 'Flashback {3}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)'
+
+
+# endregion Printed abilities
+
+
 class SelfReflection(Sorcery):
     """Self-Reflection — {4}{U}{U} — Sorcery.
 

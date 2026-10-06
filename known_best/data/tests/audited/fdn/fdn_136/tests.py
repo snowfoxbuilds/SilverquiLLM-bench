@@ -1,30 +1,49 @@
 """Reference test for FDN 136 — Angel of Finality.
 
-Pattern 1 — targeted ETB on a creature. The target (a **player**) is chosen at
-cast via a real Player Query answered by an Intent (built here by
-``cast_spell(targets=...)``), captured on the stack, and read from
-``chosen_targets`` in ``on_resolve``, which exiles that player's whole
-graveyard. No dead test backdoors — targeting flows through real engine channels.
+"When this creature enters, exile target player's graveyard." The enters
+ability is a triggered ability whose target player is chosen as it goes on
+the stack (rule 603.3d).
 """
 
 from __future__ import annotations
 
-from cards.fdn.fdn_136.card_impl import AngelOfFinality
-from engine.card import Creature
-from engine.decisions import DecisionKind
-from engine.types import Keyword, ManaCost, Zone
-from test_utils import cast_spell, create_game, set_board_state
-from engine.types import ManaType
+from cards.fdn.fdn_136.card_impl import AngelOfFinality, AngelOfFinalityAbility2
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_280.card_impl import Forest
+from engine.card import printed_class
+from engine.types import Keyword, ManaCost
+from test_interface import ManaType, Phase, Side, Zone, card, create_game, player
+
+from silverquillm.table import Table, moves, off_stack, on_stack
 
 
-def _card(name="Corpse"):
-    return Creature(name=name, base_power=1, base_toughness=1)
+def _angel_exiles(targets, exiled, *, mine=None, theirs=None, branches=None):
+    """Player 0 casts Angel of Finality; its trigger targets one of
+    ``targets`` — or answers from ``branches``, tried in turn as the engine
+    rejects a choice — and exiles ``exiled``."""
+    angel = card(AngelOfFinality)
+    mine = mine or Side()
+    game = create_game(
+        Side(hand=[angel], graveyard=mine.graveyard, mana={ManaType.WHITE: 4}),
+        theirs or Side(),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, angel, then=[moves(angel, Zone.STACK)])
+    if branches:
+        t.pass_(0, branches=branches)
+    else:
+        t.pass_(0, choices=list(targets))
+    t.pass_(1, then=[moves(angel, Zone.BATTLEFIELD), on_stack(AngelOfFinalityAbility2, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(AngelOfFinalityAbility2), *[moves(c, Zone.EXILE) for c in exiled]])
+    t.run()
 
 
 class TestAngelOfFinalityProperties:
     def test_static_data(self):
         angel = AngelOfFinality(owner=None)
-        assert angel.name == "Angel of Finality"
+        assert printed_class(angel) is AngelOfFinality
         assert angel.mana_cost == ManaCost.parse("{3}{W}")
         assert (angel.base_power, angel.base_toughness) == (3, 4)
         assert "Angel" in angel.subtypes
@@ -32,43 +51,18 @@ class TestAngelOfFinalityProperties:
 
 
 class TestAngelOfFinalityETB:
-    def _setup(self):
-        game = create_game()
-        p1, p2 = game.players
-        angel = AngelOfFinality(owner=p1, controller=p1)
-        gy = [_card("A"), _card("B"), _card("C")]
-        set_board_state(game, 0, hand=[angel], mana={ManaType.WHITE: 4})
-        set_board_state(game, 1, graveyard=gy)
-        return game, p1, p2, angel, gy
-
     def test_exiles_target_players_graveyard(self):
-        game, p1, p2, angel, gy = self._setup()
-        cast_spell(game, 0, "Angel of Finality", targets=[p2])
-        assert len(p2.zones[Zone.GRAVEYARD].get_all()) == 0
-        exile = p2.zones[Zone.EXILE].get_all()
-        assert all(c in exile for c in gy)
-        # The Angel itself entered the battlefield.
-        assert game.get_battlefield(p1).contains(angel)
+        gy = [card(SavannahLions), card(Forest), card(Forest)]
+        _angel_exiles([player(1)], gy, theirs=Side(graveyard=gy))
 
     def test_can_target_own_graveyard(self):
-        game = create_game()
-        p1, p2 = game.players
-        angel = AngelOfFinality(owner=p1, controller=p1)
-        mine = [_card("Mine1"), _card("Mine2")]
-        set_board_state(game, 0, hand=[angel], graveyard=mine, mana={ManaType.WHITE: 4})
-        cast_spell(game, 0, "Angel of Finality", targets=[p1])
-        assert len(p1.zones[Zone.GRAVEYARD].get_all()) == 0
-        assert all(c in p1.zones[Zone.EXILE].get_all() for c in mine)
+        mine = [card(SavannahLions), card(Forest)]
+        _angel_exiles([player(0)], mine, mine=Side(graveyard=mine))
 
     def test_target_query_offers_only_players(self):
-        """Option-set invariant: the ETB target query offers players, nothing else."""
-        game, p1, p2, angel, gy = self._setup()
-        cast_spell(game, 0, "Angel of Finality", targets=[p2])
-        player_queries = [
-            r for r in p1.transcript.all()
-            if any(o.kind is DecisionKind.PLAYER for o in r.options)
-        ]
-        assert player_queries, "no player-target query was raised"
-        for record in player_queries:
-            assert all(o.kind is DecisionKind.PLAYER for o in record.options)
-            assert len(record.options) == 2
+        """Player 0 would rather target the opponent's Savannah Lions, or a card
+        in their graveyard, but only a player is a legal target: each is either
+        not offered or offered and rejected, and the trigger targets player 1."""
+        lions, dead = card(SavannahLions), card(Forest)
+        _angel_exiles(None, [dead], theirs=Side(battlefield=[lions], graveyard=[dead]),
+                      branches=[[lions, dead, player(1)], [dead, player(1)], [player(1)]])

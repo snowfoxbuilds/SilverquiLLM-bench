@@ -9,7 +9,7 @@ fdn_129/tests.py for the canonical Equipment test shape.
 from __future__ import annotations
 
 from cards.fdn.spg_77.card_impl import Embercleave
-from engine.card import Creature, Equipment
+from engine.card import Creature, Equipment, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import Keyword, ManaCost, Supertype, Zone
@@ -23,7 +23,7 @@ def _bear(p, name="Bear"):
 class TestEmbercleaveProperties:
     def test_static_data(self):
         cleave = Embercleave(owner=None)
-        assert cleave.name == "Embercleave"
+        assert printed_class(cleave) is Embercleave
         assert cleave.mana_cost == ManaCost.parse("{4}{R}{R}")
         assert cleave.equip_cost == ManaCost.parse("{3}")
         assert Supertype.LEGENDARY in cleave.supertypes
@@ -61,7 +61,7 @@ class TestEmbercleaveBehaviour:
         set_board_state(game, 0, battlefield=[bear, cleave])
         inst = game.refs.instance_id(bear, Zone.BATTLEFIELD.value)
         p1.start_intent("cleave", Intent(
-            pattern=GameRef(card=frozenset({("name", "Embercleave")})),
+            pattern=GameRef(card=frozenset({("printed", Embercleave)})),
             preferences=(Decision.obj(instance=inst),),
         ))
         cleave.on_resolve(game)

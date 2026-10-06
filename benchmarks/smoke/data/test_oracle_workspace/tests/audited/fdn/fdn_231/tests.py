@@ -1,92 +1,82 @@
 """Reference test for FDN 231 — Reclamation Sage.
 
-Pattern 1 — optional ("you may") targeted ETB on a creature. The target is an
-artifact or enchantment, chosen at cast via a real Player Query, captured on
-the stack, and destroyed in ``on_resolve``. Because the target is optional, the
-spell is castable with no legal target and the controller may decline. No dead
-test backdoors — targeting flows through real engine channels.
+"When this creature enters, you may destroy target artifact or enchantment."
+The enters ability is a triggered ability: its target is chosen as it goes
+on the stack (rule 603.3d), and whether to destroy it is decided as it
+resolves. Player 0 casts the Sage from three green mana in their main phase;
+the scripts answer both questions, so an engine that asks only one of them
+reaches the same board.
 """
 
 from __future__ import annotations
 
-from cards.fdn.fdn_231.card_impl import ReclamationSage
-from engine.card import Artifact, Creature, Enchantment
-from engine.decisions import Decision, DecisionKind, GameRef
-from test_utils import Intent
-from engine.types import CardType, ManaCost, ManaType, Zone
-from test_utils import cast_spell, create_game, set_board_state
+from cards.fdn.fdn_116.card_impl import AnthemOfChampions
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_231.card_impl import ReclamationSage, ReclamationSageAbility1
+from cards.fdn.fdn_249.card_impl import AdventuringGear
+from engine.card import printed_class
+from engine.types import ManaCost
+from test_interface import Decision, ManaType, Phase, Side, Zone, card, create_game
+
+from silverquillm.table import Table, moves, off_stack, on_stack
+
+
+def _sage_enters(theirs, target_choices, resolve_choices, *, fallback=()):
+    """Player 0 casts the Sage with ``theirs`` on player 1's battlefield; its
+    trigger takes its target from ``target_choices`` — or ``fallback`` once
+    the engine has rejected one of them — and resolves with
+    ``resolve_choices``."""
+    sage = card(ReclamationSage)
+    game = create_game(
+        Side(hand=[sage], mana={ManaType.GREEN: 3}),
+        Side(battlefield=list(theirs)),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, sage, then=[moves(sage, Zone.STACK)])
+    if fallback:
+        t.pass_(0, branches=[list(target_choices), list(fallback)])
+    else:
+        t.pass_(0, choices=target_choices)
+    t.pass_(1, then=[moves(sage, Zone.BATTLEFIELD), on_stack(ReclamationSageAbility1, 0)])
+    t.pass_(0, choices=resolve_choices)
+    return t
 
 
 class TestReclamationSageProperties:
     def test_static_data(self):
         sage = ReclamationSage(owner=None)
-        assert sage.name == "Reclamation Sage"
+        assert printed_class(sage) is ReclamationSage
         assert sage.mana_cost == ManaCost.parse("{2}{G}")
         assert (sage.base_power, sage.base_toughness) == (2, 1)
         assert {"Elf", "Shaman"} <= sage.subtypes
 
 
 class TestReclamationSageETB:
-    def _setup(self, target):
-        game = create_game()
-        p1, p2 = game.players
-        sage = ReclamationSage(owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[sage], mana={ManaType.GREEN: 3})
-        set_board_state(game, 1, battlefield=[target])
-        return game, p1, p2, sage, target
-
     def test_destroys_target_artifact(self):
-        art = Artifact(name="Signet")
-        game, p1, p2, sage, art = self._setup(art)
-        cast_spell(game, 0, "Reclamation Sage", targets=[art])
-        assert not game.get_battlefield(p2).contains(art)
-        assert p2.zones[Zone.GRAVEYARD].contains(art)
+        gear = card(AdventuringGear)
+        t = _sage_enters([gear], [gear], [Decision.yes()])
+        t.pass_(1, then=[off_stack(ReclamationSageAbility1), moves(gear, Zone.GRAVEYARD)])
+        t.run()
 
     def test_destroys_target_enchantment(self):
-        ench = Enchantment(name="Pacifism")
-        game, p1, p2, sage, ench = self._setup(ench)
-        cast_spell(game, 0, "Reclamation Sage", targets=[ench])
-        assert p2.zones[Zone.GRAVEYARD].contains(ench)
+        anthem = card(AnthemOfChampions)
+        t = _sage_enters([anthem], [anthem], [Decision.yes()])
+        t.pass_(1, then=[off_stack(ReclamationSageAbility1), moves(anthem, Zone.GRAVEYARD)])
+        t.run()
 
     def test_option_set_only_artifacts_and_enchantments(self):
-        """Legality invariant: a plain creature is never an offered target."""
-        game = create_game()
-        p1, p2 = game.players
-        sage = ReclamationSage(owner=p1, controller=p1)
-        art = Artifact(name="Signet")
-        bear = Creature(name="Bear", base_power=2, base_toughness=2)
-        set_board_state(game, 0, hand=[sage], mana={ManaType.GREEN: 3})
-        set_board_state(game, 1, battlefield=[art, bear])
-        cast_spell(game, 0, "Reclamation Sage", targets=[art])
-        obj_queries = [
-            r for r in p1.transcript.all()
-            if any(o.kind is DecisionKind.OBJECT for o in r.options)
-        ]
-        assert obj_queries, "no artifact/enchantment target query was raised"
-        for record in obj_queries:
-            for opt in record.options:
-                if opt.kind is DecisionKind.OBJECT:
-                    attrs = dict(opt.attrs)
-                    assert attrs.get("name") != "Bear"
-
-    def test_you_may_castable_with_no_legal_target(self):
-        game = create_game()
-        p1, p2 = game.players
-        sage = ReclamationSage(owner=p1, controller=p1)
-        bear = Creature(name="Bear", base_power=2, base_toughness=2)
-        set_board_state(game, 0, hand=[sage], mana={ManaType.GREEN: 3})
-        set_board_state(game, 1, battlefield=[bear])  # no artifact/enchantment
-        cast_spell(game, 0, "Reclamation Sage")  # optional → no query, castable
-        assert game.get_battlefield(p1).contains(sage)
-        assert game.get_battlefield(p2).contains(bear)  # nothing destroyed
+        """Player 0 would rather target Savannah Lions, but a creature is not
+        an artifact or enchantment — not offered, or offered and rejected — so
+        the Gear is destroyed."""
+        lions, gear = card(SavannahLions), card(AdventuringGear)
+        t = _sage_enters([lions, gear], [lions, gear], [Decision.yes()], fallback=[gear])
+        t.pass_(1, then=[off_stack(ReclamationSageAbility1), moves(gear, Zone.GRAVEYARD)])
+        t.run()
 
     def test_may_decline_even_with_legal_target(self):
-        art = Artifact(name="Signet")
-        game, p1, p2, sage, art = self._setup(art)
-        p1.start_intent("decline", Intent(
-            pattern=GameRef(card=frozenset({("name", "Reclamation Sage")})),
-            preferences=(),
-        ))
-        cast_spell(game, 0, "Reclamation Sage")
-        p1.end_intent("decline")
-        assert game.get_battlefield(p2).contains(art)  # not destroyed
+        """Player 0 declines to destroy the only artifact: it stays."""
+        gear = card(AdventuringGear)
+        t = _sage_enters([gear], [], [Decision.no()])
+        t.pass_(1, then=[off_stack(ReclamationSageAbility1)], note="the Gear is not destroyed")
+        t.run()

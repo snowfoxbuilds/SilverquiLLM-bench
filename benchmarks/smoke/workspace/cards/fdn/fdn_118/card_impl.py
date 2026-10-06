@@ -1,13 +1,35 @@
 """Card implementation for Dreadwing Scavenger."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from engine.card import Creature
 from engine.card_queries import choose_object
-from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import Keyword, ManaCost, Zone
+from engine.continuous_effects import DURATION_PERMANENT, ContinuousEffect, Layer, SubLayer
 from engine.events import AttacksTriggeredEvent
+from engine.types import Keyword, ManaCost, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class DreadwingScavengerAbility1:
+    text = 'Flying'
+
+
+class DreadwingScavengerAbility2:
+    text = 'Whenever this creature enters or attacks, draw a card, then discard a card.'
+
+
+class DreadwingScavengerAbility3:
+    text = 'Threshold — This creature gets +1/+1 and has deathtouch as long as there are seven or more cards in your graveyard.'
+
+
+# endregion Printed abilities
+
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Return True if *obj* is on any player's battlefield."""
@@ -39,10 +61,9 @@ class DreadwingScavenger(Creature):
         super().__init__(**kwargs)
         self._threshold_effect_ref: ContinuousEffect | None = None
 
-    def on_resolve(self, game: 'GameState') -> None:
+    def _enters(self, game: 'GameState', controller: Any) -> None:
         """ETB: draw a card, then discard a card."""
-        from engine.game import draw_card, discard
-        controller = self.controller
+        from engine.game import discard, draw_card
         if controller is None:
             return
         draw_card(game, controller)
@@ -54,7 +75,11 @@ class DreadwingScavenger(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger (loot) and threshold continuous effect."""
-        from engine.game import draw_card, discard
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, DreadwingScavengerAbility2, self._enters)
+
+        from engine.game import discard, draw_card
         from engine.triggers import TriggerRegistration
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
@@ -62,8 +87,8 @@ class DreadwingScavenger(Creature):
         def _attack_condition(game: Any, event: dict) -> bool:
             return event.creature is source
 
-        def _attack_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _attack_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             draw_card(game, ctrl)
@@ -72,7 +97,7 @@ class DreadwingScavenger(Creature):
                 chosen = choose_object(game, ctrl, hand, 'card to discard', source_card=source)
                 if chosen is not None:
                     discard(game, ctrl, chosen)
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=DreadwingScavengerAbility2))
 
         def _apply_threshold(game: Any) -> None:
             ctrl = getattr(source, 'controller', None)

@@ -17,6 +17,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ClawsOutAbility1:
+    text = 'Affinity for Cats (This spell costs {1} less to cast for each Cat you control.)'
+
+
+class ClawsOutAbility2:
+    text = 'Creatures you control get +2/+2 until end of turn.'
+
+
+# endregion Printed abilities
+
+
 class ClawsOut(Instant):
     """Claws Out — {3}{W}{ Instant.W} 
 

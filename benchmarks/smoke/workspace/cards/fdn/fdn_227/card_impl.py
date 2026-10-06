@@ -10,6 +10,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class LlanowarElvesAbility1:
+    text = '{T}: Add {G}.'
+
+
+# endregion Printed abilities
+
+
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
     if getattr(source, "is_tapped", False):
@@ -46,4 +57,5 @@ class LlanowarElves(Creature):
             cost=_tap_cost,
             mana_produced=_effect,
             description="{T}: Add {G}.",
+            printed=LlanowarElvesAbility1,
         )]

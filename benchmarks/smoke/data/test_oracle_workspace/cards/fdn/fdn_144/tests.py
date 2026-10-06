@@ -10,7 +10,7 @@ backdoors — targeting flows through real engine channels.
 from __future__ import annotations
 
 from cards.fdn.fdn_144.card_impl import MischievousPup
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
@@ -35,7 +35,7 @@ def _cast_no_resolve(game, player_index, card, targets):
         for t in targets
     )
     player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
         preferences=prefs,
     ))
     try:
@@ -47,7 +47,7 @@ def _cast_no_resolve(game, player_index, card, targets):
 class TestMischievousPupProperties:
     def test_static_data(self):
         pup = MischievousPup(owner=None)
-        assert pup.name == "Mischievous Pup"
+        assert printed_class(pup) is MischievousPup
         assert pup.mana_cost == ManaCost.parse("{2}{W}")
         assert (pup.base_power, pup.base_toughness) == (3, 1)
         assert "Dog" in pup.subtypes
@@ -68,7 +68,7 @@ class TestMischievousPupETB:
 
     def test_bounces_chosen_permanent(self):
         game, p1, p2, pup, bear = self._setup()
-        cast_spell(game, 0, "Mischievous Pup", targets=[bear])
+        cast_spell(game, 0, MischievousPup, targets=[bear])
         assert game.get_hand(p1).contains(bear)          # returned to owner's hand
         assert not game.get_battlefield(p1).contains(bear)
         assert game.get_battlefield(p1).contains(pup)     # the Pup itself entered
@@ -82,7 +82,7 @@ class TestMischievousPupETB:
         game.active_player_index = 0
         game.priority_player_index = 0
         game.phase = Phase.PRECOMBAT_MAIN
-        cast_spell(game, 0, "Mischievous Pup")  # no target offered, no query
+        cast_spell(game, 0, MischievousPup)  # no target offered, no query
         assert game.get_battlefield(p1).contains(pup)
 
     def test_optional_target_can_be_declined(self):
@@ -91,10 +91,10 @@ class TestMischievousPupETB:
         # An intent that matches the Pup's target query but expresses no
         # preference: a min==0 (optional) query is declined rather than filled.
         p1.start_intent("decline", Intent(
-            pattern=GameRef(card=frozenset({("name", "Mischievous Pup")})),
+            pattern=GameRef(card=frozenset({("printed", MischievousPup)})),
             preferences=(),
         ))
-        cast_spell(game, 0, "Mischievous Pup")
+        cast_spell(game, 0, MischievousPup)
         p1.end_intent("decline")
         assert game.get_battlefield(p1).contains(bear)   # not bounced
         assert game.get_battlefield(p1).contains(pup)

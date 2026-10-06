@@ -15,6 +15,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class StrokeOfMidnightAbility1:
+    text = 'Destroy target nonland permanent. Its controller creates a 1/1 white Human creature token.'
+
+
+# endregion Printed abilities
+
+
 def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
 

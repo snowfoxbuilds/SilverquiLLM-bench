@@ -93,7 +93,7 @@ class TestTargetingQuery:
         assert all(opt.kind is DecisionKind.OBJECT for opt in query.options)
         # Option-set invariant: the engine never offered the hexproof creature.
         assert not any(("keyword", "hexproof") in opt.attrs for opt in query.options)
-        assert any(("name", "Bear") in opt.attrs for opt in query.options)
+        assert any(("instance", game.refs.instance_id(plain, "battlefield")) in opt.attrs for opt in query.options)
 
     def test_chosen_target_maps_back_to_game_object(self):
         from engine.casting import cast_spell
@@ -177,11 +177,12 @@ class TestQuerySpellTargetProtection:
         query = p0.transcript[-1]
         # Option-set invariant: the red-protected creature is never offered; the
         # unprotected one is, and is chosen.
-        assert not any(("name", "Warded") in opt.attrs for opt in query.options)
-        assert any(("name", "Bear") in opt.attrs for opt in query.options)
+        assert not any(("instance", game.refs.instance_id(warded, "battlefield")) in opt.attrs for opt in query.options)
+        assert any(("instance", game.refs.instance_id(plain, "battlefield")) in opt.attrs for opt in query.options)
         assert chosen is plain
-        # Provenance: the query is raised as the spell (stack zone), by name.
-        assert any(("name", "Fire Bolt") in s.ref.card for s in query.source)
+        # Provenance: the query is raised as the spell, on the stack.
+        stack_id = game.refs.instance_id(spell, "stack")
+        assert any(("instance", stack_id) in s.ref.object for s in query.source)
 
     def test_unprotected_permanent_selectable(self):
         from engine.casting import query_spell_target
@@ -202,4 +203,4 @@ class TestQuerySpellTargetProtection:
         p0.prefs = []
         chosen = query_spell_target(game, p0, spell, spell.get_targets(game)[0])
         assert chosen is blue_warded
-        assert any(("name", "BlueWarded") in opt.attrs for opt in p0.transcript[-1].options)
+        assert any(("instance", game.refs.instance_id(blue_warded, "battlefield")) in opt.attrs for opt in p0.transcript[-1].options)

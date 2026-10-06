@@ -52,7 +52,7 @@ class TestEssenceScatterCounters:
         game.get_hand(p1).add(scatter)
         occ_iid = game.refs.instance_id(occurrence, Zone.STACK.value)
         p1.start_intent("scatter-cast", Intent(
-            pattern=GameRef(card=frozenset({("name", "Essence Scatter")})),
+            pattern=GameRef(card=frozenset({("printed", EssenceScatter)})),
             preferences=(Decision.obj(instance=occ_iid),),
         ))
         try:

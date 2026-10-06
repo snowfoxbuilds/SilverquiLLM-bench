@@ -15,6 +15,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ExsanguinateAbility1:
+    text = 'Each opponent loses X life. You gain life equal to the life lost this way.'
+
+
+# endregion Printed abilities
+
+
 def _get_controller(card: Any) -> Any:
     """Return the controller of a card, or None."""
     return getattr(card, "controller", None)

@@ -15,6 +15,17 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SnakeskinVeilAbility1:
+    text = "Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)"
+
+
+# endregion Printed abilities
+
+
 def _get_chosen_target(card: Any, game: Any) -> Any:
     """Retrieve the first chosen target for a spell.
 
@@ -97,6 +108,7 @@ class SnakeskinVeil(Instant):
             source=self,
             layer=Layer.ABILITY,
             sublayer=None,
+            bound_to=[creature_ref],
             apply=_apply_hexproof,
             duration=DURATION_END_OF_TURN,
         )

@@ -5,11 +5,20 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from engine.card import Creature
-from engine.card_queries import choose_object
-from engine.types import CardType, ManaCost, Zone
+from engine.types import CardType, ManaCost, TargetRequirement, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SoulShackledZombieAbility1:
+    text = 'When this creature enters, exile up to two target cards from a single graveyard. If at least one creature card was exiled this way, each opponent loses 2 life and you gain 2 life.'
+
+
+# endregion Printed abilities
 
 
 class SoulShackledZombie(Creature):
@@ -36,57 +45,41 @@ class SoulShackledZombie(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
-        """ETB: exile up to two cards from a single graveyard."""
-        from engine.game import exile
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that targets as it is put
+        on the stack (rule 603.3d)."""
+        from engine.triggers import register_enters_trigger
 
-        controller = self.controller
-        if controller is None:
-            return
+        def _up_to_two_from_one_graveyard(game: Any, controller: Any) -> list[Any]:
+            def _first(obj: Any) -> bool:
+                return any(p.zones[Zone.GRAVEYARD].contains(obj) for p in game.players)
 
-        # Find all cards in all graveyards
-        # Let controller choose cards from a single graveyard
-        all_gy_cards: list = []
-        for player in game.players:
-            gy = player.zones[Zone.GRAVEYARD]
-            cards = gy.get_all()
-            if cards:
-                all_gy_cards.extend(cards)
+            def _same_graveyard(obj: Any, chosen: Any) -> bool:
+                if not chosen:
+                    return _first(obj)
+                return getattr(obj, "owner", None) is getattr(chosen[0], "owner", None) and _first(obj)
 
-        if not all_gy_cards:
-            return
+            return [
+                TargetRequirement(filter_fn=_first, description="up to two target cards from a single graveyard", zone=Zone.GRAVEYARD, optional=True),
+                TargetRequirement(filter_fn=_same_graveyard, description="second target card from the same graveyard", zone=Zone.GRAVEYARD, optional=True),
+            ]
+
+        register_enters_trigger(game, self, SoulShackledZombieAbility1, self._enters, targets=_up_to_two_from_one_graveyard)
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
+        """Exile the targets still in a graveyard; if a creature card was
+        exiled, each opponent loses 2 life and you gain 2 life."""
+        from engine.game import exile, gain_life, lose_life
 
         exiled_creature = False
-        exiled_count = 0
-
-        # Choose up to two from a single graveyard
-        first = choose_object(game, controller, all_gy_cards, "card to exile from graveyard", source_card=self, optional=True)
-
-        if first is None:
-            return
-
-        if CardType.CREATURE in getattr(first, "card_types", set()):
-            exiled_creature = True
-        exile(game, first)
-        exiled_count += 1
-
-        # Find remaining cards from the same graveyard
-        owner = getattr(first, "owner", None)
-        if owner is not None and exiled_count < 2:
-            gy = owner.zones[Zone.GRAVEYARD]
-            remaining = gy.get_all()
-            if remaining:
-                second = choose_object(game, controller, remaining, "second card to exile", source_card=self, optional=True)
-                if second is not None:
-                    if CardType.CREATURE in getattr(second, "card_types", set()):
-                        exiled_creature = True
-                    exile(game, second)
-
-        # If at least one creature was exiled, drain
+        for target in targets:
+            if target is None:
+                continue
+            exile(game, target)
+            if CardType.CREATURE in getattr(target, "card_types", set()):
+                exiled_creature = True
         if exiled_creature:
             for player in game.players:
                 if player is not controller:
-                    from engine.game import lose_life
                     lose_life(game, player, 2)
-            from engine.game import gain_life
             gain_life(game, controller, 2)

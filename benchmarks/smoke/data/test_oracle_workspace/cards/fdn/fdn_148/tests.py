@@ -38,7 +38,7 @@ class TestStrokeOfMidnightMint:
         set_board_state(
             game, 0, hand=[spell], mana={ManaType.WHITE: 1, ManaType.COLORLESS: 2}
         )
-        cast_spell(game, 0, "Stroke of Midnight", targets=[victim])
+        cast_spell(game, 0, StrokeOfMidnight, targets=[victim])
 
         # Victim destroyed.
         assert not game.players[0].zones[Zone.BATTLEFIELD].contains(victim)

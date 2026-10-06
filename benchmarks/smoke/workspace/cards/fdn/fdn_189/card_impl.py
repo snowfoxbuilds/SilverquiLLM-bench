@@ -18,6 +18,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AxgardCavalryAbility1:
+    text = '{T}: Target creature gains haste until end of turn. (It can attack and {T} this turn.)'
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     """Return ``True`` if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -119,6 +129,7 @@ class AxgardCavalry(Creature):
                 ContinuousEffect(
                     source=source,
                     layer=Layer.ABILITY,
+                    bound_to=[chosen],
                     apply=_apply,
                     duration=DURATION_END_OF_TURN,
                 )
@@ -131,5 +142,6 @@ class AxgardCavalry(Creature):
                 targeting=_targeting,
                 can_activate=_can_activate,
                 description="{T}: Target creature gains haste until end of turn.",
+                printed=AxgardCavalryAbility1,
             )
         ]

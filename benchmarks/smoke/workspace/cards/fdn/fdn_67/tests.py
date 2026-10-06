@@ -9,7 +9,7 @@ cards in the graveyard and each token is tapped.
 from __future__ import annotations
 
 from cards.fdn.fdn_67.card_impl import RevengeOfTheRats
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.protection import get_colors
 from engine.types import CardType, Color, ManaCost, ManaType
 from test_utils import cast_spell, create_game, set_board_state
@@ -27,7 +27,7 @@ def _rats(game, player):
 class TestRevengeOfTheRatsProperties:
     def test_static_data(self):
         c = RevengeOfTheRats(owner=None)
-        assert c.name == "Revenge of the Rats"
+        assert printed_class(c) is RevengeOfTheRats
         assert c.mana_cost == ManaCost.parse("{2}{B}{B}")
         assert CardType.SORCERY in c.card_types
 
@@ -40,7 +40,7 @@ class TestRevengeOfTheRatsResolve:
         gy = [_creature("A"), _creature("B"), _creature("C")]
         set_board_state(game, 0, hand=[revenge], graveyard=gy,
                         mana={ManaType.BLACK: 4})
-        cast_spell(game, 0, "Revenge of the Rats")
+        cast_spell(game, 0, RevengeOfTheRats)
         rats = _rats(game, p1)
         assert len(rats) == 3
         for r in rats:
@@ -56,7 +56,7 @@ class TestRevengeOfTheRatsResolve:
         revenge = RevengeOfTheRats(owner=p1, controller=p1)
         set_board_state(game, 0, hand=[revenge], graveyard=[_creature("A")],
                         mana={ManaType.BLACK: 4})
-        cast_spell(game, 0, "Revenge of the Rats")
+        cast_spell(game, 0, RevengeOfTheRats)
         rats = _rats(game, p1)
         assert len(rats) == 1
         rat = rats[0]
@@ -72,5 +72,5 @@ class TestRevengeOfTheRatsResolve:
         revenge = RevengeOfTheRats(owner=p1, controller=p1)
         set_board_state(game, 0, hand=[revenge], graveyard=[],
                         mana={ManaType.BLACK: 4})
-        cast_spell(game, 0, "Revenge of the Rats")
+        cast_spell(game, 0, RevengeOfTheRats)
         assert _rats(game, p1) == []

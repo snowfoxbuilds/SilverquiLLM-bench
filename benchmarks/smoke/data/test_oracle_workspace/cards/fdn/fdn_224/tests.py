@@ -11,7 +11,7 @@ creatures with a +1/+1 counter.
 from __future__ import annotations
 
 from cards.fdn.fdn_224.card_impl import GnarlidColony
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.continuous_effects import Layer
 from engine.types import Keyword, ManaCost, Zone
 from engine.zones import move_to_zone
@@ -21,7 +21,7 @@ from test_utils import create_game, set_board_state
 class TestGnarlidColonyProperties:
     def test_name_and_cost(self) -> None:
         card = GnarlidColony(owner=None)
-        assert card.name == "Gnarlid Colony"
+        assert printed_class(card) is GnarlidColony
         assert card.mana_cost == ManaCost.parse("{1}{G}")
         assert (card.base_power, card.base_toughness) == (2, 2)
 

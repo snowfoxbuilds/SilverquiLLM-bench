@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class StrongboxRaiderAbility1:
+    text = 'Raid — When this creature enters, if you attacked this turn, exile the top two cards of your library. Choose one of them. Until the end of your next turn, you may play that card.'
+
+
+# endregion Printed abilities
+
+
 class StrongboxRaider(Creature):
     """Strongbox Raider — {2}{R}{R} — 5/2 — Orc Pirate.
 
@@ -36,11 +46,19 @@ class StrongboxRaider(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        def _condition(game: Any, controller: Any) -> bool:
+            return bool(getattr(controller, "attacked_this_turn", False))
+
+        register_enters_trigger(game, self, StrongboxRaiderAbility1, self._enters, condition=_condition)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: Raid — exile top 2, choose one playable until end of next turn."""
         from engine.zones import move_to_zone
 
-        controller = self.controller
         if controller is None:
             return
 

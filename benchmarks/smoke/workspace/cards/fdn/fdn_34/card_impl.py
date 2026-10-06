@@ -12,6 +12,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class CuratorOfDestiniesAbility1:
+    text = "This spell can't be countered."
+
+
+class CuratorOfDestiniesAbility2:
+    text = 'Flying'
+
+
+class CuratorOfDestiniesAbility3:
+    text = 'When this creature enters, look at the top five cards of your library and separate them into a face-down pile and a face-up pile. An opponent chooses one of those piles. Put that pile into your hand and the other into your graveyard.'
+
+
+# endregion Printed abilities
+
+
 class CuratorOfDestinies(Creature):
     """Curator of Destinies — {4}{U}{U} — 5/5 — Sphinx — Flying.
 
@@ -45,9 +63,14 @@ class CuratorOfDestinies(Creature):
         # engine's stack resolution. We set a flag for potential future use.
         self.uncounterable = True
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, CuratorOfDestiniesAbility3, self._enters)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: Fact or Fiction–style pile split."""
-        controller = self.controller
         if controller is None:
             return
         library = controller.zones[Zone.LIBRARY]

@@ -1,14 +1,34 @@
 """Card implementation for Garruk's Uprising."""
 from __future__ import annotations
-from dataclasses import dataclass
+
 from typing import TYPE_CHECKING, Any
-from engine.card import ActivatedAbility, Creature, Enchantment
-from engine.continuous_effects import ContinuousEffect, DURATION_PERMANENT, Layer, SubLayer
-from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+
+from engine.card import Enchantment
+from engine.continuous_effects import DURATION_PERMANENT, ContinuousEffect, Layer
 from engine.events import EntersBattlefieldTriggeredEvent
+from engine.types import CardType, Keyword, ManaCost
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
-    from cards.registry import CardRegistry
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GarruksUprisingAbility1:
+    text = 'When this enchantment enters, if you control a creature with power 4 or greater, draw a card.'
+
+
+class GarruksUprisingAbility2:
+    text = "Creatures you control have trample. (Each of those creatures can deal excess combat damage to the player or planeswalker it's attacking.)"
+
+
+class GarruksUprisingAbility3:
+    text = 'Whenever a creature you control with power 4 or greater enters, draw a card.'
+
+
+# endregion Printed abilities
+
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     """Check if *obj* is on any player's battlefield."""
@@ -36,15 +56,6 @@ class GarruksUprising(Enchantment):
         self._effect_ref: ContinuousEffect | None = None
 
     def on_resolve(self, game: GameState) -> None:
-        controller = self.controller
-        if controller is not None:
-            for obj in game.get_battlefield(controller).get_all():
-                if CardType.CREATURE in getattr(obj, 'card_types', set()):
-                    power = getattr(obj, 'power', getattr(obj, 'base_power', 0))
-                    if power >= 4:
-                        from engine.game import draw_card
-                        draw_card(game, controller)
-                        break
         self._register_effect(game)
 
     def _register_effect(self, game: GameState) -> None:
@@ -63,9 +74,21 @@ class GarruksUprising(Enchantment):
         self._effect_ref = game.effect_manager.add(effect)
 
     def register_triggers(self, game: GameState) -> None:
-        from engine.triggers import TriggerRegistration
         from engine.game import draw_card
+        from engine.triggers import TriggerRegistration, register_enters_trigger
         source = self
+
+        def _controls_power_four(game: Any, controller: Any) -> bool:
+            return controller is not None and any(
+                CardType.CREATURE in getattr(obj, 'card_types', set())
+                and getattr(obj, 'power', getattr(obj, 'base_power', 0)) >= 4
+                for obj in game.get_battlefield(controller).get_all()
+            )
+
+        register_enters_trigger(
+            game, self, GarruksUprisingAbility1, lambda game, controller: draw_card(game, controller),
+            condition=_controls_power_four,
+        )
 
         def _condition(game: Any, event: dict) -> bool:
             permanent = event.permanent
@@ -81,12 +104,11 @@ class GarruksUprising(Enchantment):
             power = getattr(permanent, 'power', getattr(permanent, 'base_power', 0))
             return power >= 4
 
-        def _effect(game: GameState) -> None:
-            controller = source.controller
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is not None:
                 draw_card(game, controller)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=GarruksUprisingAbility3))
 
     def register_replacement_effects(self, game: GameState) -> None:
         if self._effect_ref is None:

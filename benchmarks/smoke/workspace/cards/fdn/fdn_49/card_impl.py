@@ -10,6 +10,21 @@ if TYPE_CHECKING:
 
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class RuneSealedWallAbility1:
+    text = 'Defender'
+
+
+class RuneSealedWallAbility2:
+    text = '{T}: Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)'
+
+
+# endregion Printed abilities
+
+
 def _tap_cost(game: Any, source: Any) -> bool:
     """Generic tap-cost: check untapped, then tap."""
     if getattr(source, "is_tapped", False):
@@ -40,13 +55,11 @@ class RuneSealedWall(ArtifactCreature):
         super().__init__(**kwargs)
 
     def get_activated_abilities(self) -> list[ActivatedAbility]:
-        source = self
 
         def _cost(game: Any, src: Any) -> bool:
             return _tap_cost(game, src)
 
-        def _effect(game: Any) -> None:
-            controller = source.controller
+        def _effect(game: Any, controller: Any) -> None:
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]
@@ -62,4 +75,5 @@ class RuneSealedWall(ArtifactCreature):
             cost=_cost,
             effect=_effect,
             description="{T}: Surveil 1.",
+            printed=RuneSealedWallAbility2,
         )]

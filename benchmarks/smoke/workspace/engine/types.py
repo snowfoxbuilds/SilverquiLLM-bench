@@ -68,6 +68,9 @@ class Step(enum.Enum):
     BEGIN_COMBAT = "begin_combat"
     DECLARE_ATTACKERS = "declare_attackers"
     DECLARE_BLOCKERS = "declare_blockers"
+    # The first of two combat damage steps, which happens only when an
+    # attacking or blocking creature has first or double strike (rule 510.4).
+    FIRST_STRIKE_DAMAGE = "first_strike_damage"
     COMBAT_DAMAGE = "combat_damage"
     END_COMBAT = "end_combat"
     END = "end"

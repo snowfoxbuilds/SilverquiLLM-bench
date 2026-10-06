@@ -18,6 +18,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SowerOfChaosAbility1:
+    text = "{2}{R}: Target creature can't block this turn."
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     """Return ``True`` if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -113,6 +123,7 @@ class SowerOfChaos(Creature):
                 ContinuousEffect(
                     source=source,
                     layer=Layer.ABILITY,
+                    bound_to=[chosen],
                     apply=_apply,
                     duration=DURATION_END_OF_TURN,
                 )
@@ -125,5 +136,6 @@ class SowerOfChaos(Creature):
                 targeting=_targeting,
                 can_activate=_can_activate,
                 description="{2}{R}: Target creature can't block this turn.",
+                printed=SowerOfChaosAbility1,
             )
         ]

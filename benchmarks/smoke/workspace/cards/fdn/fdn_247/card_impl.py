@@ -7,6 +7,17 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class TatyovaBenthicDruidAbility1:
+    text = 'Landfall — Whenever a land you control enters, you gain 1 life and draw a card.'
+
+
+# endregion Printed abilities
+
+
 class TatyovaBenthicDruid(Creature):
     """Tatyova, Benthic Druid — {3}{G}{U} — 3/3 — Legendary Merfolk Druid.
 
@@ -48,11 +59,11 @@ class TatyovaBenthicDruid(Creature):
                 return bf.contains(permanent)
             return perm_ctrl is ctrl
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             from engine.game import gain_life
             gain_life(game, ctrl, 1)
             draw_card(game, ctrl)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=TatyovaBenthicDruidAbility1))

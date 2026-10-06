@@ -1,27 +1,30 @@
-"""Regression test for FDN 224 — Gnarlid Colony.
+"""Audited tests for FDN 224 — Gnarlid Colony.
 
-The crash surface is ``get_continuous_effects``: it built a
-``ContinuousEffect`` with three errors on one line — ``Layer.ABILITY_ADDING``
-and ``SubLayer.DEFAULT`` (neither is a real enum member) passed via a
-misspelled ``sub_layer=`` kwarg. This test drives ``get_continuous_effects``
-and asserts the effect constructs at ``Layer.ABILITY`` and grants trample to
-creatures with a +1/+1 counter.
+"Kicker {2}{G}. If this creature was kicked, it enters with two +1/+1
+counters on it. Each creature you control with a +1/+1 counter on it has
+trample." Unkicked it is a 2/2.
+
+Known-Best offers no way to pay kicker and never applies the trample grant
+(#169), so those are guarded by the Known-Best platform checks instead.
 """
 
 from __future__ import annotations
 
+from cards.fdn.fdn_191.card_impl import BrazenScourge
 from cards.fdn.fdn_224.card_impl import GnarlidColony
-from engine.card import Creature
+from cards.fdn.fdn_272.card_impl import Plains
+from engine.card import printed_class
 from engine.continuous_effects import Layer
-from engine.types import Keyword, ManaCost, Zone
-from engine.zones import move_to_zone
-from test_utils import create_game, set_board_state
+from engine.types import ManaCost
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
+
+from silverquillm.table import Table, moves, taps
 
 
 class TestGnarlidColonyProperties:
     def test_name_and_cost(self) -> None:
         card = GnarlidColony(owner=None)
-        assert card.name == "Gnarlid Colony"
+        assert printed_class(card) is GnarlidColony
         assert card.mana_cost == ManaCost.parse("{1}{G}")
         assert (card.base_power, card.base_toughness) == (2, 2)
 
@@ -29,27 +32,27 @@ class TestGnarlidColonyProperties:
 class TestGnarlidColonyKickerEntry:
     """Kicker: enters with two +1/+1 counters if it was kicked (rule 614.1c)."""
 
-    def test_kicked_enters_as_four_four(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        card = GnarlidColony(owner=p1, controller=p1)
-        card.kicked = True
-        set_board_state(game, 0, hand=[card])
-        move_to_zone(game, card, Zone.HAND, Zone.BATTLEFIELD)
-        assert card.plus_one_counters == 2
-        assert card.power == 4
-        assert card.toughness == 4
-
     def test_unkicked_enters_as_two_two(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        card = GnarlidColony(owner=p1, controller=p1)
-        # kicked defaults to False; no evidence => no counters fabricated.
-        set_board_state(game, 0, hand=[card])
-        move_to_zone(game, card, Zone.HAND, Zone.BATTLEFIELD)
-        assert card.plus_one_counters == 0
-        assert card.power == 2
-        assert card.toughness == 2
+        """Cast without kicker, the Colony blocks a 3/3 and dies without
+        killing it."""
+        colony, scourge = card(GnarlidColony), card(BrazenScourge)
+        game = create_game(
+            Side(hand=[colony], mana={ManaType.GREEN: 1, ManaType.COLORLESS: 1}),
+            Side(battlefield=[scourge], library=[Plains]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(0, colony, then=[moves(colony, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(colony, Zone.BATTLEFIELD)])
+        t.pass_to(Step.DECLARE_ATTACKERS, 1)
+        t.act(1, scourge, then=[taps(scourge)])
+        t.pass_(1)
+        t.pass_(0)
+        t.act(0, colony, scoped={colony: scourge})
+        t.pass_(1)
+        t.pass_(0, then=[moves(colony, Zone.GRAVEYARD)])
+        t.run()
 
 
 class TestGnarlidColonyContinuousEffect:
@@ -61,20 +64,3 @@ class TestGnarlidColonyContinuousEffect:
         assert len(effects) == 1
         assert effects[0].layer is Layer.ABILITY
         assert effects[0].sublayer is None
-
-    def test_grants_trample_to_creatures_with_counters(self) -> None:
-        game = create_game()
-        p1 = game.players[0]
-        gnarlid = GnarlidColony(owner=p1, controller=p1)
-        buffed = Creature(name="Beast", subtypes={"Beast"}, base_power=1, base_toughness=1)
-        plain = Creature(name="Bear", subtypes={"Bear"}, base_power=2, base_toughness=2)
-        set_board_state(game, 0, battlefield=[gnarlid, buffed, plain])
-        from engine.game import add_counter
-        add_counter(game, buffed, "+1/+1", 1)
-
-        for eff in gnarlid.get_continuous_effects():
-            game.effect_manager.add(eff)
-        game.effect_manager.apply_all(game)
-
-        assert Keyword.TRAMPLE in buffed.keywords
-        assert Keyword.TRAMPLE not in plain.keywords

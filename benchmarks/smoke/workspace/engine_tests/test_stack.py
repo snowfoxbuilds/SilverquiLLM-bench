@@ -1,12 +1,15 @@
-"""Tests for engine/stack.py — Stack, StackObject, and priority_loop.
+"""Tests for engine/stack.py — Stack, StackObject, and resolving the stack.
 
 Verifies:
 - StackObject dataclass construction and defaults.
 - Stack push/pop/peek/is_empty/objects methods.
-- LIFO resolution order.
-- priority_loop with empty stack (auto-pass, returns immediately).
-- priority_loop with items on stack (resolves in LIFO order).
-- priority_loop with DeterministicPlayer scripts for priority passing.
+- Passing with an empty stack ends the step; with objects on the stack the
+  topmost resolves (last in, first out), seen through spells played at the
+  table, and a response changes what the earlier spell does.
+- A turn plays through to the next with the stack empty.
+- A spell's copy checks its targets as it resolves (Thousand-Year Storm).
+- A spell leaves the stack once, to where its cast sends it: a counterspell
+  aimed at a departed spell does nothing, and only a flashback cast is exiled.
 - Mana abilities resolve immediately without using the stack.
 - check_state_based_actions stub is callable.
 - GameState.stack is initialized as a Stack instance.
@@ -15,11 +18,27 @@ Verifies:
 from __future__ import annotations
 
 import pytest
+from cards.fdn.fdn_36.card_impl import ElementalistAdept
+from cards.fdn.fdn_48.card_impl import Refute
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_151.card_impl import Aetherize
+from cards.fdn.fdn_160.card_impl import AnOfferYouCantRefuse
+from cards.fdn.fdn_165.card_impl import ThinkTwice
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_223.card_impl import GiantGrowth
+from cards.fdn.fdn_248.card_impl import ThousandYearStorm, ThousandYearStormAbility1
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_278.card_impl import Mountain
+from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game, player
+from test_utils import DeterministicPlayer
 
 from engine.game_state import GameState
-from test_utils import DeterministicPlayer
-from engine.stack import Stack, StackObject, check_state_based_actions, priority_loop
-from engine.types import Phase
+from engine.stack import Stack, StackObject, check_state_based_actions
+from silverquillm.table import Table, appears, copied, life, moves, off_stack, on_stack, taps
+
+MAIN = (Phase.PRECOMBAT_MAIN, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -29,10 +48,7 @@ def _make_game() -> GameState:
     """Create a 2-player GameState with intent-based DeterministicPlayers."""
     p1 = DeterministicPlayer("Alice", life=20)
     p2 = DeterministicPlayer("Bob", life=20)
-    game = GameState([p1, p2])
-    # A stack only resolves in a step that grants priority (CR 502.4).
-    game.phase, game.step = Phase.PRECOMBAT_MAIN, None
-    return game
+    return GameState([p1, p2])
 
 
 def _make_stack_object(
@@ -49,11 +65,6 @@ def _make_stack_object(
         on_resolve=on_resolve or (lambda _g: None),
         is_mana_ability=is_mana_ability,
     )
-
-
-def _make_resolver(label: str, resolved: list[str]):
-    """Return an on_resolve callback that appends *label* to *resolved*."""
-    return lambda g: resolved.append(label)
 
 
 # ===========================================================================
@@ -232,139 +243,137 @@ class TestStack:
 
 
 # ===========================================================================
-# priority_loop — empty stack (auto-pass)
+# An empty stack: everyone passes and the step ends
 # ===========================================================================
 class TestPriorityLoopEmptyStack:
-    """priority_loop should return immediately when both players auto-pass with empty stack."""
+    """With nothing on the stack, all players passing in succession ends the step."""
 
     def test_returns_immediately_with_empty_stack(self) -> None:
-        """With an empty stack, priority_loop returns immediately (advances phase)."""
-        game = _make_game()
-        priority_loop(game)  # Should not raise or loop forever
-        assert game.stack.is_empty()
+        game = create_game(Side(library=[Plains]), Side(library=[Plains]), start=MAIN)
+        t = Table(game)
+        t.pass_(0)
+        t.pass_(1, note="nothing on the stack: the step ends")
+        final = t.run()
+        assert final.step is Step.BEGIN_COMBAT and not final.stack
 
 
 # ===========================================================================
-# priority_loop — stack resolution (LIFO)
+# Resolving the stack: last in, first out
 # ===========================================================================
 class TestPriorityLoopResolution:
-    """priority_loop should resolve stack objects in LIFO order via on_resolve callbacks."""
+    """When all players pass in succession, the top object resolves, and the
+    active player gets priority again with the rest still on the stack."""
 
     def test_single_object_resolved(self) -> None:
-        """A single object on the stack should have its on_resolve called."""
-        resolved: list[str] = []
-        game = _make_game()
-        game.stack.push(
-            StackObject(
-                source="A",
-                controller=game.active_player,
-                on_resolve=lambda g: resolved.append("A"),
-            )
-        )
-        priority_loop(game)
-        assert resolved == ["A"]
+        bolt = card(BurstLightning)
+        game = create_game(Side(hand=[bolt], mana={ManaType.RED: 1}), Side(), start=MAIN)
+        t = Table(game)
+        t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+        t.run()
 
     def test_two_objects_lifo_order(self) -> None:
-        """Two objects should resolve in LIFO order (last pushed = first resolved)."""
-        resolved: list[str] = []
-        game = _make_game()
-        game.stack.push(
-            StackObject(source="A", controller=game.active_player, on_resolve=_make_resolver("A", resolved))
-        )
-        game.stack.push(
-            StackObject(source="B", controller=game.active_player, on_resolve=_make_resolver("B", resolved))
-        )
-        priority_loop(game)
-        assert resolved == ["B", "A"]
+        first, second = card(BurstLightning), card(BurstLightning)
+        game = create_game(Side(hand=[first, second], mana={ManaType.RED: 2}), Side(), start=MAIN)
+        t = Table(game)
+        t.act(0, first, choices=[player(1)], then=[moves(first, Zone.STACK)])
+        t.act(0, second, choices=[player(1)], then=[moves(second, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(second, Zone.GRAVEYARD), life(1, 18)], note="the last one cast resolves first")
+        t.pass_(0)
+        t.pass_(1, then=[moves(first, Zone.GRAVEYARD), life(1, 16)])
+        t.run()
 
     def test_three_objects_lifo_order(self) -> None:
-        """Three objects should resolve in LIFO order: Z, Y, X."""
-        resolved: list[str] = []
-        game = _make_game()
-        for label in ["X", "Y", "Z"]:
-            game.stack.push(
-                StackObject(
-                    source=label,
-                    controller=game.active_player,
-                    on_resolve=_make_resolver(label, resolved),
-                )
-            )
-        priority_loop(game)
-        assert resolved == ["Z", "Y", "X"]
+        bolts = [card(BurstLightning) for _ in range(3)]
+        game = create_game(Side(hand=bolts, mana={ManaType.RED: 3}), Side(), start=MAIN)
+        t = Table(game)
+        for bolt in bolts:
+            t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+        for total, bolt in zip((18, 16, 14), reversed(bolts)):
+            t.pass_(0)
+            t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, total)], note="the topmost resolves")
+        t.run()
 
     def test_stack_empty_after_full_resolution(self) -> None:
-        """After priority_loop completes all resolutions, the stack should be empty."""
-        game = _make_game()
-        game.stack.push(StackObject(source="A", controller=game.active_player))
-        priority_loop(game)
-        assert game.stack.is_empty()
+        bolt = card(BurstLightning)
+        game = create_game(Side(hand=[bolt], library=[Plains], mana={ManaType.RED: 1}), Side(), start=MAIN)
+        t = Table(game)
+        t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+        t.pass_(0)
+        t.pass_(1, note="the stack is empty, so passing ends the step")
+        final = t.run()
+        assert final.step is Step.BEGIN_COMBAT
 
     def test_on_resolve_receives_game_state(self) -> None:
-        """on_resolve callback should receive the GameState as its argument."""
-        received: list = []
-        game = _make_game()
-        game.stack.push(
-            StackObject(
-                source="test",
-                controller=game.active_player,
-                on_resolve=lambda g: received.append(g),
-            )
-        )
-        priority_loop(game)
-        assert len(received) == 1
-        assert received[0] is game
+        bolt, lions = card(BurstLightning), card(SavannahLions)
+        game = create_game(Side(hand=[bolt], mana={ManaType.RED: 1}), Side(battlefield=[lions]), start=MAIN)
+        t = Table(game)
+        t.act(0, bolt, choices=[lions], then=[moves(bolt, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD)], note="the spell acts on the game it resolves in")
+        t.run()
 
     def test_on_resolve_side_effect_persists(self) -> None:
-        """on_resolve should be able to mutate game state (e.g., change life total)."""
-        game = _make_game()
-        original_life = game.active_player.life
-
-        def bolt_resolve(g):
-            g.non_active_player.life -= 3
-
-        game.stack.push(
-            StackObject(source="Bolt", controller=game.active_player, on_resolve=bolt_resolve)
-        )
-        priority_loop(game)
-        assert game.non_active_player.life == original_life - 3
+        bolt = card(BurstLightning)
+        game = create_game(Side(hand=[bolt], library=[Plains], mana={ManaType.RED: 1}), Side(), start=MAIN)
+        t = Table(game)
+        t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+        t.pass_to(Step.END, 0)
+        final = t.run()
+        assert final.players[1].life == 18
 
 
 # ===========================================================================
-# priority_loop — multi-object resolution ordering
+# Responses resolve before what they respond to
 # ===========================================================================
 class TestPriorityMultiObjectResolution:
-    """Multiple stacked objects resolve top-down across resolution rounds.
-
-    Priority is now directive-driven (``priority_loop`` auto-passes; the player
-    is never queried for a priority action), so these verify resolution order
-    rather than the deleted priority-choice scripting.
-    """
+    """A response, put on the stack later, resolves first and can change what
+    the earlier object does."""
 
     def test_two_objects_resolve_top_then_bottom(self) -> None:
-        """Two stacked objects resolve in LIFO order: top (B) then bottom (A)."""
-        resolved: list[str] = []
-        game = _make_game()
-        game.stack.push(
-            StackObject(source="A", controller=game.active_player, on_resolve=_make_resolver("A", resolved))
+        bolt, growth, lions = card(BurstLightning), card(GiantGrowth), card(SavannahLions)
+        game = create_game(
+            Side(hand=[bolt], mana={ManaType.RED: 1}),
+            Side(hand=[growth], battlefield=[lions], mana={ManaType.GREEN: 1}),
+            start=MAIN,
         )
-        game.stack.push(
-            StackObject(source="B", controller=game.active_player, on_resolve=_make_resolver("B", resolved))
-        )
-        priority_loop(game)
-        assert resolved == ["B", "A"]
-        assert game.stack.is_empty()
+        t = Table(game)
+        t.act(0, bolt, choices=[lions], then=[moves(bolt, Zone.STACK)])
+        t.pass_(0)
+        t.act(1, growth, choices=[lions], then=[moves(growth, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(growth, Zone.GRAVEYARD)], note="Giant Growth, on top, resolves first")
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD)], note="the 5/4 Lions survives 2 damage")
+        t.run()
 
     def test_full_stack_drains_in_lifo_order(self) -> None:
-        """priority_loop resolves every stacked object, top-down, until empty."""
-        resolved: list[str] = []
-        game = _make_game()
-        for label in ["A", "B", "C"]:
-            game.stack.push(
-                StackObject(source=label, controller=game.active_player, on_resolve=_make_resolver(label, resolved))
-            )
-        priority_loop(game)
-        assert resolved == ["C", "B", "A"]
-        assert game.stack.is_empty()
+        first, growth, second, lions = card(BurstLightning), card(GiantGrowth), card(BurstLightning), card(SavannahLions)
+        game = create_game(
+            Side(hand=[first, second], mana={ManaType.RED: 2}),
+            Side(hand=[growth], battlefield=[lions], mana={ManaType.GREEN: 1}),
+            start=MAIN,
+        )
+        t = Table(game)
+        t.act(0, first, choices=[lions], then=[moves(first, Zone.STACK)])
+        t.pass_(0)
+        t.act(1, growth, choices=[lions], then=[moves(growth, Zone.STACK)])
+        t.pass_(1)
+        t.act(0, second, choices=[lions], then=[moves(second, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(second, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD)], note="the last Burst Lightning kills the 2/1 first")
+        t.pass_(0)
+        t.pass_(1, then=[moves(growth, Zone.GRAVEYARD)], note="Giant Growth's target is gone")
+        t.pass_(0)
+        t.pass_(1, then=[moves(first, Zone.GRAVEYARD)], note="and so is the first Burst Lightning's")
+        final = t.run()
+        assert not final.stack
 
 
 # ===========================================================================
@@ -441,110 +450,151 @@ class TestGameStateStackInit:
 
 
 # ===========================================================================
-# Integration — run_turn with stack
+# Playing through a turn
 # ===========================================================================
 class TestRunTurnWithStack:
-    """Verify run_turn works correctly with the real priority_loop from engine.stack."""
+    """A turn plays through to the next player's turn, with the stack empty."""
 
     def test_run_turn_completes_with_empty_stack(self) -> None:
-        """run_turn should complete normally with an empty stack and advance to turn 2."""
-        from engine.turn import run_turn
-
-        game = _make_game()
-        run_turn(game)
-        assert game.turn_number == 2
+        game = create_game(Side(), Side(), start=(Step.UPKEEP, 0))
+        t = Table(game)
+        t.pass_to(Step.UPKEEP, 1)
+        final = t.run()
+        assert (final.active, final.step) == (1, Step.UPKEEP) and not final.stack
 
     def test_run_turn_stack_remains_empty(self) -> None:
-        """After run_turn, the stack should still be empty."""
-        from engine.turn import run_turn
+        bolt = card(BurstLightning)
+        game = create_game(Side(hand=[bolt], mana={ManaType.RED: 1}), Side(), start=MAIN)
+        t = Table(game)
+        t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+        t.pass_to(Step.UPKEEP, 1)
+        final = t.run()
+        assert final.active == 1 and not final.stack
 
-        game = _make_game()
-        run_turn(game)
-        assert game.stack.is_empty()
+
+def _storm_copies_second_bolt(t, first, second, target, *, new_target=None):
+    """Player 0, with Thousand-Year Storm, casts ``first`` at player 1 and lets
+    it resolve, then casts ``second`` at ``target``: Storm copies it once,
+    keeping its target or, with ``new_target``, choosing that one."""
+    t.act(0, first, choices=[player(1)], then=[moves(first, Zone.STACK), on_stack(ThousandYearStormAbility1, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(ThousandYearStormAbility1)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(first, Zone.GRAVEYARD), life(1, 18)])
+    _second_bolt_copied(t, second, target, new_target, opponent=1)
+
+
+def _second_bolt_copied(t, second, target, new_target, *, opponent):
+    t.act(0, second, choices=[target], then=[moves(second, Zone.STACK), on_stack(ThousandYearStormAbility1, 0)])
+    retarget = [Decision.no()] if new_target is None else [Decision.yes(), new_target]
+    t.pass_(0, choices=retarget)
+    t.pass_(opponent, then=[off_stack(ThousandYearStormAbility1), copied(BurstLightning, 0)], note="the second spell is copied")
+
+
+def _attacking_adept_bounced_and_recast(t, first, second, adept, aetherize, mountains, islands, *, new_target=None, target=None):
+    """On player 1's turn the Elementalist Adept attacks; player 0 copies a
+    Burst Lightning aimed at it (or at ``target``, the copy choosing the
+    Adept), and player 1 answers with Aetherize, returning the Adept to hand,
+    and casts it again: a new object."""
+    t.pass_to(Step.DECLARE_ATTACKERS, 1)
+    t.act(1, adept, then=[taps(adept)])
+    t.pass_(1)
+    t.act(0, mountains[0], then=[taps(mountains[0])])
+    t.act(0, first, choices=[player(1)], then=[moves(first, Zone.STACK), on_stack(ThousandYearStormAbility1, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(ThousandYearStormAbility1)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(first, Zone.GRAVEYARD), life(1, 18)])
+    t.pass_(1)
+    t.act(0, mountains[1], then=[taps(mountains[1])])
+    _second_bolt_copied(t, second, target or adept, new_target, opponent=1)
+    for island in islands[:4]:
+        t.act(1, island, then=[taps(island)])
+    t.act(1, aetherize, then=[moves(aetherize, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(aetherize, Zone.GRAVEYARD), moves(adept, Zone.HAND)])
+    for island in islands[4:]:
+        t.act(1, island, then=[taps(island)])
+    t.act(1, adept, then=[moves(adept, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(adept, Zone.BATTLEFIELD)], note="the Elementalist Adept is back as a new object")
+
+
+def _combat_board(target=None):
+    first, second, adept, aetherize = card(BurstLightning), card(BurstLightning), card(ElementalistAdept), card(Aetherize)
+    mountains = [card(Mountain), card(Mountain)]
+    islands = [card(Island) for _ in range(6)]
+    game = create_game(
+        Side(hand=[first, second], battlefield=[ThousandYearStorm, *mountains]),
+        Side(hand=[aetherize], battlefield=[adept, *islands, *([target] if target else [])], library=[Plains]),
+        start=(Step.BEGIN_COMBAT, 1),
+    )
+    return game, first, second, adept, aetherize, mountains, islands
 
 
 class TestCopySpellStintRevalidation:
-    """copy_spell carries an ActivationContext so a copied spell stint-revalidates
-    its targets at resolution — retained targets inherit the original's stint
-    ids; newly chosen targets capture their current stints; either is rejected on
-    a leave-and-return."""
+    """A copy of a spell checks its targets as it resolves, like the spell:
+    a copy keeping the original's target, or choosing a new one, affects it
+    if it is still there, and does nothing to a creature that left the
+    battlefield and came back, which is a new object (CR 400.7).
 
-    def _mark_spell(self, owner):
-        from engine.card import Instant
-
-        class _MarkCreature(Instant):
-            def on_resolve(self, game):
-                chosen = getattr(self, "chosen_targets", None) or []
-                target = chosen[0] if chosen else None
-                if target is not None:
-                    target._marked = True
-
-        return _MarkCreature(name="Mark Copy", owner=owner, controller=owner)
-
-    def _board(self):
-        from test_utils import create_game, set_board_state
-        from engine.card import Creature
-        game = create_game()
-        p1, p2 = game.players
-        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
-        other = Creature(name="Other", base_power=2, base_toughness=2, owner=p2, controller=p2)
-        set_board_state(game, 1, battlefield=[bear, other])
-        return game, p1, p2, bear, other
-
-    def _original(self, game, p1, spell, targets):
-        from engine.stack import StackObject, capture_activation_context
-        return StackObject(
-            source=spell,
-            controller=p1,
-            targets=list(targets),
-            activation_context=capture_activation_context(game, spell, p1, list(targets)),
-        )
+    Thousand-Year Storm copies the second instant a player casts in a turn,
+    and Aetherize returns an attacking creature to hand, to be cast again."""
 
     def test_retained_targets_copy_marks_when_target_stays(self):
-        from engine.stack import copy_spell, resolve_top_of_stack
-        game, p1, p2, bear, other = self._board()
-        spell = self._mark_spell(p1)
-        original = self._original(game, p1, spell, [bear])
-        game.stack.push(copy_spell(game, original, p1))   # retain targets
-        resolve_top_of_stack(game)
-        assert getattr(bear, "_marked", False) is True
+        first, second, scourge = card(BurstLightning), card(BurstLightning), card(BrazenScourge)
+        game = create_game(
+            Side(hand=[first, second], battlefield=[ThousandYearStorm], mana={ManaType.RED: 2}),
+            Side(battlefield=[scourge]),
+            start=MAIN,
+        )
+        t = Table(game)
+        _storm_copies_second_bolt(t, first, second, scourge)
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(BurstLightning)], note="the copy deals 2 to Brazen Scourge")
+        t.pass_(0)
+        t.pass_(1, then=[moves(second, Zone.GRAVEYARD), moves(scourge, Zone.GRAVEYARD)], note="the original's 2 more destroy the 3/3")
+        t.run()
 
     def test_retained_targets_copy_rejects_leave_and_return(self):
-        from engine.stack import copy_spell, resolve_top_of_stack
-        from engine.types import Zone
-        from engine.zones import move_to_zone
-        game, p1, p2, bear, other = self._board()
-        spell = self._mark_spell(p1)
-        original = self._original(game, p1, spell, [bear])
-        game.stack.push(copy_spell(game, original, p1))   # inherits bear's stint id
-        move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.EXILE)
-        move_to_zone(game, bear, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
-        resolve_top_of_stack(game)
-        assert getattr(bear, "_marked", False) is False   # rejected by inherited stint
+        game, first, second, adept, aetherize, mountains, islands = _combat_board()
+        t = Table(game)
+        _attacking_adept_bounced_and_recast(t, first, second, adept, aetherize, mountains, islands)
+        t.pass_(1)
+        t.pass_(0, then=[off_stack(BurstLightning)], note="the copy's target left the battlefield: it does nothing")
+        t.pass_(1)
+        t.pass_(0, then=[moves(second, Zone.GRAVEYARD)])
+        t.run()
 
     def test_new_targets_copy_marks_when_target_stays(self):
-        from engine.stack import copy_spell, resolve_top_of_stack
-        game, p1, p2, bear, other = self._board()
-        spell = self._mark_spell(p1)
-        original = self._original(game, p1, spell, [bear])
-        # Copy chooses a NEW target (other) — its current stint is captured.
-        game.stack.push(copy_spell(game, original, p1, new_targets=[other]))
-        resolve_top_of_stack(game)
-        assert getattr(other, "_marked", False) is True
-        assert getattr(bear, "_marked", False) is False   # original target untouched
+        first, second, scourge, lions = card(BurstLightning), card(BurstLightning), card(BrazenScourge), card(SavannahLions)
+        game = create_game(
+            Side(hand=[first, second], battlefield=[ThousandYearStorm], mana={ManaType.RED: 2}),
+            Side(battlefield=[scourge, lions]),
+            start=MAIN,
+        )
+        t = Table(game)
+        _storm_copies_second_bolt(t, first, second, scourge, new_target=lions)
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(BurstLightning), moves(lions, Zone.GRAVEYARD)], note="the copy hits its new target")
+        t.pass_(0)
+        t.pass_(1, then=[moves(second, Zone.GRAVEYARD)], note="Brazen Scourge takes only the original's 2")
+        t.run()
 
     def test_new_targets_copy_rejects_leave_and_return(self):
-        from engine.stack import copy_spell, resolve_top_of_stack
-        from engine.types import Zone
-        from engine.zones import move_to_zone
-        game, p1, p2, bear, other = self._board()
-        spell = self._mark_spell(p1)
-        original = self._original(game, p1, spell, [bear])
-        game.stack.push(copy_spell(game, original, p1, new_targets=[other]))
-        move_to_zone(game, other, Zone.BATTLEFIELD, Zone.EXILE)
-        move_to_zone(game, other, Zone.EXILE, Zone.BATTLEFIELD)  # new stint
-        resolve_top_of_stack(game)
-        assert getattr(other, "_marked", False) is False  # rejected by captured stint
+        scourge = card(BrazenScourge)
+        game, first, second, adept, aetherize, mountains, islands = _combat_board(scourge)
+        t = Table(game)
+        _attacking_adept_bounced_and_recast(
+            t, first, second, adept, aetherize, mountains, islands, target=scourge, new_target=adept
+        )
+        t.pass_(1)
+        t.pass_(0, then=[off_stack(BurstLightning)], note="the copy's new target left the battlefield: it does nothing")
+        t.pass_(1)
+        t.pass_(0, then=[moves(second, Zone.GRAVEYARD)], note="Brazen Scourge takes the original's 2 and survives")
+        t.run()
 
 
 class TestMoveSpellOffStack:
@@ -579,9 +629,10 @@ class TestMoveSpellOffStack:
         return so
 
     def test_countered_ordinary_spell_to_owner_graveyard(self):
+        from test_utils import create_game
+
         from engine.stack import move_spell_off_stack
         from engine.types import Zone
-        from test_utils import create_game
 
         game = create_game()
         p = game.players[0]
@@ -597,9 +648,10 @@ class TestMoveSpellOffStack:
     def test_countered_spell_owned_by_other_player_goes_to_owner(self):
         """Owner/controller split: the countered card goes to its OWNER's
         graveyard even when another player cast (controls) it."""
+        from test_utils import create_game
+
         from engine.stack import move_spell_off_stack
         from engine.types import Zone
-        from test_utils import create_game
 
         game = create_game()
         p1, p2 = game.players
@@ -615,10 +667,11 @@ class TestMoveSpellOffStack:
     def test_countered_flashback_cast_exiled(self):
         """A spell cast via flashback is exiled when countered, not sent to
         the graveyard (rule 702.34a: any time it would leave the stack)."""
+        from test_utils import create_game
+
         from engine.casting import CastMode
         from engine.stack import move_spell_off_stack
         from engine.types import Zone
-        from test_utils import create_game
 
         game = create_game()
         p = game.players[0]
@@ -630,87 +683,60 @@ class TestMoveSpellOffStack:
         assert game.get_exile(p).contains(card)
         assert not game.get_graveyard(p).contains(card)
 
+    def _countered_by_the_second_counterspell(self, t, think, refute, offer):
+        """Player 1 answers Think Twice with Refute, then An Offer You Can't
+        Refuse on top; the Offer counters it first (two Treasures for its
+        controller), leaving Refute aimed at a spell that is gone."""
+        t.act(0, think, then=[moves(think, Zone.STACK)])
+        t.pass_(0)
+        t.act(1, refute, choices=[think], then=[moves(refute, Zone.STACK)])
+        t.act(1, offer, choices=[think], then=[moves(offer, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[moves(offer, Zone.GRAVEYARD), moves(think, Zone.GRAVEYARD), appears(0), appears(0)])
+
     def test_counter_fizzles_after_departure(self):
-        """A StackObject that already left the stack (it resolved) is not
-        processed again: no removal, no card move, returns False."""
-        from engine.stack import move_spell_off_stack, resolve_top_of_stack
-        from engine.types import Zone
-        from test_utils import create_game
-
-        game = create_game()
-        p = game.players[0]
-        card = self._instant(p)
-        game.get_hand(p).add(card)
-        so = self._cast(game, p, card, Zone.HAND)
-        resolve_top_of_stack(game)
-        assert game.get_graveyard(p).contains(card)
-
-        assert move_spell_off_stack(game, so) is False
-        # Exactly one graveyard occupancy, nothing exiled.
-        assert sum(1 for o in game.get_graveyard(p).get_all() if o is card) == 1
-        assert not game.get_exile(p).contains(card)
+        """A counterspell whose spell already left the stack does nothing:
+        the spell is not moved again, and Refute neither draws nor discards."""
+        think, refute, offer = card(ThinkTwice), card(Refute), card(AnOfferYouCantRefuse)
+        game = create_game(
+            Side(hand=[think], library=[Plains], mana={ManaType.BLUE: 2}),
+            Side(hand=[refute, offer], library=[Plains], mana={ManaType.BLUE: 4}),
+            start=MAIN,
+        )
+        t = Table(game)
+        self._countered_by_the_second_counterspell(t, think, refute, offer)
+        t.pass_(0)
+        t.pass_(1, then=[moves(refute, Zone.GRAVEYARD)], note="Refute's target is gone: it does nothing")
+        t.run()
 
     def test_fizzled_counter_never_moves_recast_card(self):
-        """After the targeted occurrence resolved and the same card was re-cast,
-        countering the OLD occurrence moves nothing: the card's stack-zone
-        presence belongs to the new cast."""
-        from engine.stack import move_spell_off_stack, resolve_top_of_stack
-        from engine.types import Zone
-        from test_utils import create_game
+        """The countered card is cast again with flashback while Refute still
+        aims at its first cast: Refute does nothing, and the card goes where
+        its second cast sends it."""
+        think, refute, offer, drawn = card(ThinkTwice), card(Refute), card(AnOfferYouCantRefuse), card(Plains)
+        game = create_game(
+            Side(hand=[think], library=[drawn], mana={ManaType.BLUE: 5}),
+            Side(hand=[refute, offer], mana={ManaType.BLUE: 4}),
+            start=MAIN,
+        )
+        t = Table(game)
+        self._countered_by_the_second_counterspell(t, think, refute, offer)
+        t.act(0, think, then=[moves(think, Zone.STACK)], note="flashback: Think Twice is cast again")
+        t.pass_(0)
+        t.pass_(1, then=[moves(think, Zone.EXILE), moves(drawn, Zone.HAND)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(refute, Zone.GRAVEYARD)], note="Refute does nothing and leaves Think Twice in exile")
+        t.run()
 
-        game = create_game()
-        p = game.players[0]
-        card = self._instant(p)
-        game.get_hand(p).add(card)
-        so_first = self._cast(game, p, card, Zone.HAND)
-        resolve_top_of_stack(game)                       # -> graveyard
-        so_second = self._cast(game, p, card, Zone.GRAVEYARD)  # re-cast
-        assert p.zones[Zone.STACK].contains(card)
-
-        assert move_spell_off_stack(game, so_first) is False
-        # The new occurrence is untouched: still on the stack, card still in
-        # the stack zone.
-        assert any(item is so_second for item in game.stack._items)
-        assert p.zones[Zone.STACK].contains(card)
-        assert not game.get_graveyard(p).contains(card)
-
-        resolve_top_of_stack(game)
-        assert game.get_graveyard(p).contains(card)
-
-    def test_resolution_does_not_move_twice_when_on_resolve_moved(self):
-        """resolving=True duplicate-move guard: an on_resolve that already
-        moved its card out of the stack zone leaves nothing for the departure
-        primitive to move."""
-        from engine.card import Instant
-        from engine.stack import resolve_top_of_stack
-        from engine.types import ManaCost, Zone
-        from test_utils import create_game
-
-        class _SelfBouncer(Instant):
-            def on_resolve(self, game):
-                from engine.zones import move_to_zone
-
-                move_to_zone(game, self, Zone.STACK, Zone.HAND)
-
-        game = create_game()
-        p = game.players[0]
-        card = _SelfBouncer(name="Boomerang Trick", mana_cost=ManaCost.parse("{U}"), owner=p)
-        card.controller = p
-        game.get_hand(p).add(card)
-        self._cast(game, p, card, Zone.HAND)
-
-        resolve_top_of_stack(game)
-        assert sum(1 for o in game.get_hand(p).get_all() if o is card) == 1
-        assert not game.get_graveyard(p).contains(card)
-        assert not game.get_exile(p).contains(card)
 
     def test_countering_copy_departs_without_card_move(self):
         """Countering a spell COPY removes its StackObject; a copy's card
         object occupies no stack zone (copies cease to exist, rule 707.10a),
         so no card moves and the original cast is untouched."""
+        from test_utils import create_game
+
         from engine.stack import copy_spell, move_spell_off_stack
         from engine.types import Zone
-        from test_utils import create_game
 
         game = create_game()
         p = game.players[0]
@@ -729,53 +755,47 @@ class TestMoveSpellOffStack:
         assert not game.get_graveyard(p).contains(copy_obj.source)
 
     def test_copy_of_flashback_cast_is_unaffected(self):
-        """Disposition is per cast occurrence: a COPY of a flashback cast is
-        not itself a flashback cast — it carries no departure_zone, and
-        resolving it never moves (or exiles) the original card."""
-        from engine.casting import CastMode
-        from engine.stack import copy_spell, resolve_top_of_stack
-        from engine.types import Zone
-        from test_utils import create_game
-
-        game = create_game()
-        p = game.players[0]
-        card = self._instant(p, flashback=True)
-        game.get_graveyard(p).add(card)
-        so = self._cast(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
-        copy_obj = copy_spell(game, so, p)
-        game.stack.push(copy_obj)
-        assert copy_obj.departure_zone is None
-
-        resolve_top_of_stack(game)                 # resolves the copy
-        assert p.zones[Zone.STACK].contains(card)  # original still cast
-        assert not game.get_exile(p).contains(card)
-
-        resolve_top_of_stack(game)                 # resolves the original
-        assert game.get_exile(p).contains(card)    # flashback exile intact
+        """A copy of a flashback cast is not cast with flashback: it resolves
+        without exiling the card, which stays on the stack until its own
+        cast resolves and is exiled."""
+        bolt, think, one, two = card(BurstLightning), card(ThinkTwice), card(Plains), card(Plains)
+        game = create_game(
+            Side(
+                hand=[bolt],
+                graveyard=[think],
+                battlefield=[ThousandYearStorm],
+                library=[one, two],
+                mana={ManaType.RED: 1, ManaType.BLUE: 3},
+            ),
+            Side(),
+            start=MAIN,
+        )
+        t = Table(game)
+        t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK), on_stack(ThousandYearStormAbility1, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(ThousandYearStormAbility1)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+        t.act(0, think, then=[moves(think, Zone.STACK), on_stack(ThousandYearStormAbility1, 0)], note="flashback")
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(ThousandYearStormAbility1), copied(ThinkTwice, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(ThinkTwice), moves(one, Zone.HAND)], note="the copy resolves; Think Twice stays on the stack")
+        t.pass_(0)
+        t.pass_(1, then=[moves(think, Zone.EXILE), moves(two, Zone.HAND)])
+        t.run()
 
     def test_disposition_is_per_cast_occurrence(self):
-        """The exile override belongs to the flashback OCCURRENCE, never the
-        card: after a flashback cast is countered into exile, a later NORMAL
-        graveyard cast of the same card keeps the graveyard default."""
-        from engine.casting import CastMode
-        from engine.stack import move_spell_off_stack, resolve_top_of_stack
-        from engine.types import Zone
-        from test_utils import create_game
-
-        game = create_game()
-        p = game.players[0]
-        card = self._instant(p, flashback=True)
-        game.get_graveyard(p).add(card)
-        so_flash = self._cast(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
-        assert move_spell_off_stack(game, so_flash) is True
-        assert game.get_exile(p).contains(card)
-
-        # Test scaffolding: put the card back in the graveyard.
-        game.get_exile(p).remove(card)
-        game.get_graveyard(p).add(card)
-
-        so_normal = self._cast(game, p, card, Zone.GRAVEYARD)
-        assert so_normal.departure_zone is None
-        resolve_top_of_stack(game)
-        assert game.get_graveyard(p).contains(card)
-        assert not game.get_exile(p).contains(card)
+        """Exile belongs to the flashback cast, not the card: cast from hand
+        it goes to the graveyard, and cast from there with flashback the same
+        card is exiled."""
+        think, one, two = card(ThinkTwice), card(Plains), card(Plains)
+        game = create_game(Side(hand=[think], library=[one, two], mana={ManaType.BLUE: 5}), Side(), start=MAIN)
+        t = Table(game)
+        t.act(0, think, then=[moves(think, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(think, Zone.GRAVEYARD), moves(one, Zone.HAND)], note="cast from hand: it goes to the graveyard")
+        t.act(0, think, then=[moves(think, Zone.STACK)], note="flashback")
+        t.pass_(0)
+        t.pass_(1, then=[moves(think, Zone.EXILE), moves(two, Zone.HAND)], note="the flashback cast is exiled")
+        t.run()

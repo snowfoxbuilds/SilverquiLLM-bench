@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from engine.card import Creature, Instant
 from engine.decisions import Decision, DecisionKind, GameRef
-from test_utils import Intent
 from engine.types import CardType, ManaCost, Zone
 from test_utils import (
+    Intent,
     cast_spell,
     create_game,
     put_on_battlefield,
@@ -49,7 +49,7 @@ class TestTargetsConvenience:
         bear = put_on_battlefield(game, game.players[1], _bear())
         set_board_state(game, 0, hand=[Zap()])
 
-        cast_spell(game, 0, "Zap", targets=[bear])
+        cast_spell(game, 0, Zap, targets=[bear])
 
         assert getattr(bear, "zapped", False) is True
 
@@ -64,11 +64,11 @@ class TestExplicitIntent:
         set_board_state(game, 0, hand=[Zap()])
 
         p0.start_intent("zap-bear", Intent(
-            pattern=GameRef(card=frozenset({("name", "Zap")})),
+            pattern=GameRef(card=frozenset({("printed", Zap)})),
             preferences=(Decision.obj(instance=bear.instance_id),),
             postcondition=lambda g: getattr(bear, "zapped", False),
         ))
-        cast_spell(game, 0, "Zap")
+        cast_spell(game, 0, Zap)
         p0.end_intent("zap-bear")  # postcondition checked here
 
         assert getattr(bear, "zapped", False) is True

@@ -1,70 +1,65 @@
-"""Regression test for FDN 219 — Elvish Archdruid.
+"""Audited tests for FDN 219 — Elvish Archdruid.
 
-The crash surface is ``register_triggers``, which builds the lord effect:
-``ContinuousEffect(... sublayer=SubLayer.MODIFICATION ...)`` used a non-member
-sublayer (the valid modify sublayer is ``MODIFY_PT``), passed the callable as
-``apply_fn=`` (the field is ``apply``), and registered via
-``effect_manager.register`` (the method is ``add``). This test drives
-``register_triggers`` and asserts other Elves you control get +1/+1.
+"Other Elf creatures you control get +1/+1. {T}: Add {G} for each Elf you
+control." The lord bonus shows when a 1/1 Elf survives 1 damage while a
+non-Elf 2/2 still dies to 2; the mana ability, which does not use the stack,
+pays for a two-mana spell with the Archdruid and one other Elf.
 """
 
 from __future__ import annotations
 
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_195.card_impl import FanaticalFirebrand, FanaticalFirebrandAbility2
 from cards.fdn.fdn_219.card_impl import ElvishArchdruid
-from engine.card import Creature
-from engine.types import ManaCost, ManaType
-from test_utils import enter_permanent, set_board_state
-from test_utils import scenario_game as create_game
+from cards.fdn.fdn_224.card_impl import GnarlidColony
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_250.card_impl import BurnishedHart
+from cards.fdn.fdn_278.card_impl import Mountain
+from engine.card import printed_class
+from engine.types import ManaCost
+from test_interface import Phase, Side, Zone, card, create_game
+
+from silverquillm.table import Table, moves, off_stack, on_stack, taps
 
 
 class TestElvishArchdruidProperties:
     def test_name_and_cost(self) -> None:
         card = ElvishArchdruid(owner=None)
-        assert card.name == "Elvish Archdruid"
+        assert printed_class(card) is ElvishArchdruid
         assert card.mana_cost == ManaCost.parse("{1}{G}{G}")
         assert card.subtypes == {"Elf", "Druid"}
 
 
 class TestElvishArchdruidLord:
-    """The previously-crashing register_triggers path."""
-
-    def _setup(self):
-        game = create_game()
-        p1 = game.players[0]
-        druid = ElvishArchdruid(owner=p1, controller=p1)
-        elf = Creature(
-            name="Llanowar Elves",
-            subtypes={"Elf"},
-            base_power=1,
-            base_toughness=1,
-            owner=p1,
-            controller=p1,
-        )
-        nonelf = Creature(
-            name="Grizzly Bears",
-            subtypes={"Bear"},
-            base_power=2,
-            base_toughness=2,
-            owner=p1,
-            controller=p1,
-        )
-        set_board_state(game, 0, battlefield=[elf, nonelf])
-        enter_permanent(game, p1, druid)
-        return game, druid, elf, nonelf
-
     def test_other_elves_get_plus_one_plus_one(self) -> None:
-        game, _druid, elf, nonelf = self._setup()
-        game.effect_manager.apply_all(game)
-        assert (elf.power, elf.toughness) == (2, 2)  # +1/+1 lord bonus
-        assert (nonelf.power, nonelf.toughness) == (2, 2)  # non-Elf unaffected
+        druid, elves, hart, brand = card(ElvishArchdruid), card(LlanowarElves), card(BurnishedHart), card(FanaticalFirebrand)
+        bolt, mountain = card(BurstLightning), card(Mountain)
+        game = create_game(
+            Side(battlefield=[druid, elves, hart, brand, mountain], hand=[bolt]),
+            Side(),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(0, FanaticalFirebrandAbility2, choices=[elves],
+              then=[moves(brand, Zone.GRAVEYARD), on_stack(FanaticalFirebrandAbility2, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(FanaticalFirebrandAbility2)], note="the 1/1 Elves is 2/2 and survives")
+        t.act(0, mountain, then=[taps(mountain)])
+        t.act(0, bolt, choices=[hart], then=[moves(bolt, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), moves(hart, Zone.GRAVEYARD)], note="the non-Elf 2/2 is not pumped")
+        t.run()
 
     def test_mana_ability_adds_green_per_elf(self) -> None:
-        from engine.abilities import activate_ability
-
-        game, druid, _elf, _nonelf = self._setup()
-        player = druid.controller
-        druid.summoning_sick = False
-        from test_utils import mana_ability_instance
-
-        activate_ability(game, player, mana_ability_instance(game, player, druid))
-        assert player.mana_pool.get(ManaType.GREEN) == 2 and game.stack.is_empty()
+        druid, colony = card(ElvishArchdruid), card(GnarlidColony)
+        game = create_game(
+            Side(battlefield=[druid, LlanowarElves], hand=[colony]),
+            Side(),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(0, druid, then=[taps(druid)], note="two Elves: {G}{G}")
+        t.act(0, colony, then=[moves(colony, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(colony, Zone.BATTLEFIELD)])
+        t.run()

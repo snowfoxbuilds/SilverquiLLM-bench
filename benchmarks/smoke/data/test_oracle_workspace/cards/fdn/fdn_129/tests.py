@@ -12,7 +12,7 @@ import pytest
 
 from cards.fdn.fdn_129.card_impl import LeylineAxe
 from engine.abilities import AbilityError
-from engine.card import Creature, Equipment
+from engine.card import Creature, Equipment, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.state_based_actions import check_state_based_actions
@@ -28,7 +28,7 @@ def _bear(p, name="Bear"):
 class TestLeylineAxeProperties:
     def test_static_data(self):
         axe = LeylineAxe(owner=None)
-        assert axe.name == "Leyline Axe"
+        assert printed_class(axe) is LeylineAxe
         assert axe.mana_cost == ManaCost.parse("{4}")
         assert axe.equip_cost == ManaCost.parse("{3}")
 
@@ -121,7 +121,7 @@ class TestLeylineAxeEquipAbility:
         game.phase = Phase.PRECOMBAT_MAIN
         inst = game.refs.instance_id(bear, Zone.BATTLEFIELD.value)
         p1.start_intent("equip", Intent(
-            pattern=GameRef(card=frozenset({("name", "Leyline Axe")})),
+            pattern=GameRef(card=frozenset({("printed", LeylineAxe)})),
             preferences=(Decision.obj(instance=inst),),
         ))
         activate_card_ability(game, p1, axe)  # chooses target now, pays {3}

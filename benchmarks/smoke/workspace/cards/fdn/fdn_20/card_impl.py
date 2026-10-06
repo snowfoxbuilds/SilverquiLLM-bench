@@ -11,6 +11,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class LuminousRebukeAbility1:
+    text = 'This spell costs {3} less to cast if it targets a tapped creature.'
+
+
+class LuminousRebukeAbility2:
+    text = 'Destroy target creature.'
+
+
+# endregion Printed abilities
+
+
 def _get_chosen_target(card: Any) -> Any:
     """Return the first chosen target (from cast_spell) or the test backdoor."""
     chosen = getattr(card, "chosen_targets", None)

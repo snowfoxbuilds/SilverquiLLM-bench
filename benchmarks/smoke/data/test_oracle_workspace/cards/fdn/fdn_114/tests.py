@@ -12,7 +12,7 @@ import pytest
 
 from cards.fdn.fdn_114.card_impl import TreetopSnarespinner
 from engine.abilities import AbilityError
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Zone
@@ -28,7 +28,7 @@ def _activate_targeting(game, player, source, target):
     targeting *target* (chosen at activation via an Intent on *player*)."""
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
     player.start_intent("snare", Intent(
-        pattern=GameRef(card=frozenset({("name", source.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(source))})),
         preferences=(Decision.obj(instance=inst),),
     ))
     try:
@@ -40,7 +40,7 @@ def _activate_targeting(game, player, source, target):
 class TestTreetopSnarespinnerProperties:
     def test_static_data(self):
         card = TreetopSnarespinner(owner=None)
-        assert card.name == "Treetop Snarespinner"
+        assert printed_class(card) is TreetopSnarespinner
         assert card.mana_cost == ManaCost.parse("{3}{G}")
         assert (card.base_power, card.base_toughness) == (1, 4)
         assert "Spider" in card.subtypes

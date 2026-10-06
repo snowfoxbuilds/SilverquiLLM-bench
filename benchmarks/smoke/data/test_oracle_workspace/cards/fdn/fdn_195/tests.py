@@ -13,7 +13,7 @@ import pytest
 
 from cards.fdn.fdn_195.card_impl import FanaticalFirebrand
 from engine.abilities import AbilityError
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import Keyword, ManaCost, Zone
@@ -32,7 +32,7 @@ def _on_battlefield(game, obj):
 def _activate_targeting(game, player, source, target, *, target_zone=Zone.BATTLEFIELD.value):
     inst = game.refs.instance_id(target, target_zone)
     player.start_intent("brand", Intent(
-        pattern=GameRef(card=frozenset({("name", source.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(source))})),
         preferences=(Decision.obj(instance=inst),),
     ))
     try:
@@ -44,7 +44,7 @@ def _activate_targeting(game, player, source, target, *, target_zone=Zone.BATTLE
 class TestFanaticalFirebrandProperties:
     def test_static_data(self):
         card = FanaticalFirebrand(owner=None)
-        assert card.name == "Fanatical Firebrand"
+        assert printed_class(card) is FanaticalFirebrand
         assert card.mana_cost == ManaCost.parse("{R}")
         assert (card.base_power, card.base_toughness) == (1, 1)
         assert {"Goblin", "Pirate"} <= card.subtypes

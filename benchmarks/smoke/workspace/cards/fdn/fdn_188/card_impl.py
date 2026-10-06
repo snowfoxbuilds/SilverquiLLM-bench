@@ -12,6 +12,24 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AbradeAbility1:
+    text = 'Choose one —'
+
+
+class AbradeAbility2:
+    text = '• Abrade deals 3 damage to target creature.'
+
+
+class AbradeAbility3:
+    text = '• Destroy target artifact.'
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     return any(game.get_battlefield(p).contains(obj) for p in game.players)
 
@@ -58,14 +76,14 @@ class Abrade(Instant):
 
     def get_modes(self) -> list[Mode]:
         return [
-            Mode(name="Damage", description="Abrade deals 3 damage to target creature."),
-            Mode(name="Destroy Artifact", description="Destroy target artifact."),
+            Mode(name="Damage", description="Abrade deals 3 damage to target creature.", printed=AbradeAbility2),
+            Mode(name="Destroy Artifact", description="Destroy target artifact.", printed=AbradeAbility3),
         ]
 
     def get_targets(self, game: "GameState") -> list[Any]:
         """Choose the mode, then return the matching single-target requirement."""
         controller = self.controller or getattr(self, "owner", None)
-        chosen = choose_mode(game, controller, _MODE_NAMES, "Choose one", source_card=self)
+        chosen = choose_mode(game, controller, _MODE_NAMES, "Choose one", source_card=self, printed=[mode.printed for mode in self.get_modes()])
         self._chosen_mode_index = _MODE_NAMES.index(chosen)
 
         if self._chosen_mode_index == _MODE_DAMAGE:

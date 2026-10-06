@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GoblinNegotiationAbility1:
+    text = 'Goblin Negotiation deals X damage to target creature. Create a number of 1/1 red Goblin creature tokens equal to the amount of excess damage dealt to that creature this way.'
+
+
+# endregion Printed abilities
+
+
 class GoblinNegotiation(Sorcery):
     """Goblin Negotiation — {X}{R}{R} — Sorcery.
 

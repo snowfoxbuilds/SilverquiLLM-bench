@@ -11,6 +11,28 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ApothecaryStomperAbility1:
+    text = "Vigilance (Attacking doesn't cause this creature to tap.)"
+
+
+class ApothecaryStomperAbility2:
+    text = 'When this creature enters, choose one —'
+
+
+class ApothecaryStomperAbility3:
+    text = '• Put two +1/+1 counters on target creature you control.'
+
+
+class ApothecaryStomperAbility4:
+    text = '• You gain 4 life.'
+
+
+# endregion Printed abilities
+
+
 class ApothecaryStomper(Creature):
     """Apothecary Stomper — {4}{G}{G} — 4/4 — Elephant — Vigilance.
 
@@ -48,15 +70,15 @@ class ApothecaryStomper(Creature):
             Mode(
                 name="Counters",
                 description="Put two +1/+1 counters on target creature you control.",
+                printed=ApothecaryStomperAbility3,
             ),
-            Mode(name="Life", description="You gain 4 life."),
+            Mode(name="Life", description="You gain 4 life.", printed=ApothecaryStomperAbility4),
         ]
 
-    def get_targets(self, game: "GameState") -> list[Any]:
-        """Choose the mode; return a target requirement only for mode 0."""
+    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
+        """Choose the mode as the trigger goes on the stack; only the counters mode targets."""
         from engine.card_queries import choose_mode
 
-        controller = self.controller or getattr(self, "owner", None)
         modes = self.get_modes()
         chosen_name = choose_mode(
             game,
@@ -64,6 +86,7 @@ class ApothecaryStomper(Creature):
             [m.name for m in modes],
             "Choose one",
             source_card=self,
+            printed=[m.printed for m in modes],
         )
         self.chosen_mode = next(
             i for i, m in enumerate(modes) if m.name == chosen_name
@@ -72,31 +95,44 @@ class ApothecaryStomper(Creature):
         if self.chosen_mode == 0:
             return [
                 TargetRequirement(
-                    filter_fn=self._is_creature_you_control,
+                    filter_fn=lambda obj, _c=controller: self._is_creature_you_control(obj, _c),
                     description="target creature you control",
                     zone=Zone.BATTLEFIELD,
                 )
             ]
         return []
 
-    def _is_creature_you_control(self, obj: Any) -> bool:
-        """Legal target: a creature currently controlled by the caster."""
-        controller = self.controller or getattr(self, "owner", None)
+    @staticmethod
+    def _is_creature_you_control(obj: Any, controller: Any) -> bool:
+        """Legal target: a creature currently controlled by the ability's controller."""
         return (
             CardType.CREATURE in getattr(obj, "card_types", set())
             and getattr(obj, "controller", None) is controller
         )
 
-    def on_resolve(self, game: "GameState") -> None:
-        mode = self.chosen_mode
-        controller = self.controller or getattr(self, "owner", None)
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        # The mode is chosen with the targets, so each occurrence keeps its own.
+        register_enters_trigger(
+            game,
+            self,
+            ApothecaryStomperAbility2,
+            self._enters,
+            targets=self._enters_targets,
+            remember=lambda game, controller: self.chosen_mode,
+        )
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any, remembered: int | None) -> None:
+        mode = remembered
         if mode is None or controller is None:
             return
 
         if mode == 0:
             from engine.game import add_counter
 
-            chosen = getattr(self, "chosen_targets", None) or []
+            chosen = targets
             target = chosen[0] if chosen else None
             if target is None:
                 return
@@ -105,7 +141,7 @@ class ApothecaryStomper(Creature):
             # merely still present. If it lost creature-ness or changed
             # control, the counters are not placed.
             on_bf = game.get_battlefield(controller).contains(target)
-            if not on_bf or not self._is_creature_you_control(target):
+            if not on_bf or not self._is_creature_you_control(target, controller):
                 return
             add_counter(game, target, "+1/+1", 2)
         elif mode == 1:

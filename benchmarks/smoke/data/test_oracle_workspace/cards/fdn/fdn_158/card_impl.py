@@ -46,9 +46,14 @@ class Micromancer(Creature):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, MicromancerAbility1, self._enters)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
         """ETB: search library for instant/sorcery with MV 1."""
-        controller = self.controller
         if controller is None:
             return
         # Optional — ask if they want to search

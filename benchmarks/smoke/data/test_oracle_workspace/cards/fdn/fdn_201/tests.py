@@ -13,7 +13,7 @@ import pytest
 
 from cards.fdn.fdn_201.card_impl import HeartfireImmolator
 from engine.abilities import AbilityError
-from engine.card import Creature, Planeswalker
+from engine.card import Creature, Planeswalker, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import Keyword, ManaCost, ManaType, Zone
@@ -32,7 +32,7 @@ def _on_battlefield(game, obj):
 def _activate_targeting(game, player, source, target):
     inst = game.refs.instance_id(target, Zone.BATTLEFIELD.value)
     player.start_intent("immo", Intent(
-        pattern=GameRef(card=frozenset({("name", source.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(source))})),
         preferences=(Decision.obj(instance=inst),),
     ))
     try:
@@ -44,7 +44,7 @@ def _activate_targeting(game, player, source, target):
 class TestHeartfireImmolatorProperties:
     def test_static_data(self):
         card = HeartfireImmolator(owner=None)
-        assert card.name == "Heartfire Immolator"
+        assert printed_class(card) is HeartfireImmolator
         assert card.mana_cost == ManaCost.parse("{1}{R}")
         assert (card.base_power, card.base_toughness) == (2, 2)
         assert {"Human", "Wizard"} <= card.subtypes
@@ -94,7 +94,7 @@ class TestHeartfireImmolatorAbility:
         game = create_game()
         p1, p2 = game.players
         immo = HeartfireImmolator(owner=p1, controller=p1)
-        walker = Planeswalker(name="Chandra", owner=p2, controller=p2)
+        walker = Planeswalker(name="Chandra", starting_loyalty=4, owner=p2, controller=p2)
         set_board_state(game, 0, battlefield=[immo], mana={ManaType.RED: 1})
         set_board_state(game, 1, battlefield=[walker])
         _activate_targeting(game, p1, immo, walker)

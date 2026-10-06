@@ -76,6 +76,15 @@ class ContinuousEffect:
             effects, or a positive integer representing the turn number
             on which the effect expires (removed when
             ``game.turn_number > duration``).
+        bound_to: The objects an effect from a resolving spell or ability is
+            locked onto (rule 611.2c), e.g. "target creature gets +3/+3".
+            Each stops being affected when it leaves the battlefield, because
+            it returns as a new object (400.7): :meth:`EffectManager.release`
+            drops it from this list in place, and removes the effect once the
+            list is empty. An effect over several objects should apply only
+            to the objects still in this list. Empty for effects that are not
+            locked onto objects, such as static abilities (611.3), which keep
+            applying to whatever qualifies.
     """
 
     source: Any
@@ -84,6 +93,7 @@ class ContinuousEffect:
     apply: Callable[..., Any] = field(default=lambda _game: None)
     timestamp: int = 0
     duration: int = DURATION_PERMANENT
+    bound_to: list[Any] = field(default_factory=list)
 
     def _sort_key(self) -> tuple[int, int, int]:
         """Return a sort key: (layer, sublayer-ordinal, timestamp).
@@ -102,6 +112,20 @@ _SUBLAYER_ORDER: dict[SubLayer, int] = {
     SubLayer.MODIFY_PT: 3,
     SubLayer.COUNTERS: 4,
 }
+
+
+
+def set_controller(obj: Any, player: Any) -> None:
+    """Apply a control-changing effect (layer 2) to *obj*: *player* controls
+    it while the effect lasts. The controller it had before any such effect is
+    restored each time effects are reapplied, so control reverts once the
+    effect ends."""
+    if _CONTROLLER_BEFORE_EFFECTS not in obj.__dict__:
+        obj.__dict__[_CONTROLLER_BEFORE_EFFECTS] = obj.controller
+    obj.controller = player
+
+
+_CONTROLLER_BEFORE_EFFECTS = "_controller_before_effects"
 
 
 class EffectManager:
@@ -150,6 +174,27 @@ class EffectManager:
                 self._effects.pop(i)
                 return True
         return False
+
+    def release(self, obj: Any) -> bool:
+        """End every bound effect's hold on *obj*, which is leaving the
+        battlefield (rules 400.7, 611.2c).
+
+        *obj* is dropped from each effect's ``bound_to`` in place, so an
+        effect over several objects keeps affecting the others; an effect
+        left with no bound object is removed.
+
+        Returns:
+            ``True`` if any effect changed.
+        """
+        changed = False
+        for effect in list(self._effects):
+            if not any(bound is obj for bound in effect.bound_to):
+                continue
+            effect.bound_to[:] = [bound for bound in effect.bound_to if bound is not obj]
+            if not effect.bound_to:
+                self.remove(effect)
+            changed = True
+        return changed
 
     def remove_expired(self, game: GameState) -> int:
         """Remove effects whose duration has expired.
@@ -211,9 +256,14 @@ class EffectManager:
 
         Iterates over every player's battlefield and calls
         ``_reset_characteristics()`` on any object that supports it
-        (i.e. :class:`~engine.card.CardImpl` and its subclasses).
+        (i.e. :class:`~engine.card.CardImpl` and its subclasses), and clears
+        the player-level permissions effects grant.
         """
         for player in game.players:
+            player.can_cast_as_flash = False
+            for obj in game.get_battlefield(player).get_all():
+                if _CONTROLLER_BEFORE_EFFECTS in obj.__dict__:
+                    obj.controller = obj.__dict__.pop(_CONTROLLER_BEFORE_EFFECTS)
             for obj in game.get_battlefield(player).get_all():
                 reset = getattr(obj, "_reset_characteristics", None)
                 if callable(reset):

@@ -1,102 +1,81 @@
-"""Seeker's Folly selects modes through Intents and changes only opponent state."""
+"""Seeker's Folly's modes are chosen like any other choice, and each changes
+only what its caster's opponent has."""
 
 from __future__ import annotations
 
-from cards.fdn.fdn_69.card_impl import SeekersFolly
-from engine.card import Creature
-from engine.decisions import Decision, GameRef
-from test_utils import Intent
-from engine.types import ManaCost, ManaType, Phase
-from test_utils import cast_spell, create_game, set_board_state
+from cards.fdn.fdn_69.card_impl import SeekersFolly, SeekersFollyAbility2, SeekersFollyAbility3
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from engine.card import printed_class
+from engine.types import ManaCost, ManaType
+from test_interface import Phase, Side, Zone, card, create_game, player
 
+from silverquillm.table import Table, moves
 
-def _bear(name: str = "Bear") -> Creature:
-    return Creature(name=name, base_power=2, base_toughness=2)
-
-
-def _cast_mode(game, player_index, player, card_name, mode_name):
-    """Cast a modal spell selecting *mode_name* (no target) via an Intent."""
-    player.start_intent(
-        "mode",
-        Intent(
-            pattern=GameRef(card=frozenset({("name", card_name)})),
-            preferences=(Decision.mode(mode_name),),
-        ),
-    )
-    try:
-        cast_spell(game, player_index, card_name)
-    finally:
-        player.end_intent("mode")
+_MANA = {ManaType.BLACK: 1, ManaType.COLORLESS: 2}
 
 
 class TestSeekersFollyProperties:
     def test_static_data(self):
         card = SeekersFolly(owner=None)
-        assert card.name == "Seeker's Folly"
+        assert printed_class(card) is SeekersFolly
         assert card.mana_cost == ManaCost.parse("{2}{B}")
 
 
 class TestSeekersFollyModes:
     def test_mode0_targets_an_opponent_who_discards_two(self):
-        game = create_game()
-        p1, p2 = game.players
-        game.active_player_index = 0
-        folly = SeekersFolly(owner=p1, controller=p1)
-        set_board_state(game, 0, hand=[folly], mana={ManaType.BLACK: 1, ManaType.COLORLESS: 2})
-        set_board_state(game, 1, hand=[_bear("H1"), _bear("H2"), _bear("H3")])
-        game.phase = Phase.PRECOMBAT_MAIN
-
-        # cast_spell with a player target defaults the mode to the first offered
-        # (Discard = mode 0) and targets p2.
-        cast_spell(game, 0, "Seeker's Folly", targets=[p2])
-        assert len(game.get_hand(p2).get_all()) == 1  # two discarded
+        folly = card(SeekersFolly)
+        h1, h2, h3 = card(SavannahLions), card(LlanowarElves), card(BrazenScourge)
+        game = create_game(
+            Side(hand=[folly], mana=_MANA),
+            Side(hand=[h1, h2, h3]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(0, folly, choices=[SeekersFollyAbility2, player(1)], then=[moves(folly, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, choices=[h1, h2], then=[
+            moves(folly, Zone.GRAVEYARD), moves(h1, Zone.GRAVEYARD), moves(h2, Zone.GRAVEYARD),
+        ], note="player 1 discards the two cards they choose")
+        t.run()
 
     def test_mode1_shrinks_opponents_creatures(self):
-        game = create_game()
-        p1, _p2 = game.players
-        game.active_player_index = 0
-        folly = SeekersFolly(owner=p1, controller=p1)
-        mine = _bear("My Bear")
-        theirs = _bear("Their Bear")
-        set_board_state(
-            game,
-            0,
-            hand=[folly],
-            battlefield=[mine],
-            mana={ManaType.BLACK: 1, ManaType.COLORLESS: 2},
+        """-1/-1 kills the opponent's 1/1 and leaves its caster's 1/1 alive."""
+        folly, mine, theirs = card(SeekersFolly), card(LlanowarElves), card(LlanowarElves)
+        game = create_game(
+            Side(hand=[folly], battlefield=[mine], mana=_MANA),
+            Side(battlefield=[theirs]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
         )
-        set_board_state(game, 1, battlefield=[theirs])
-        game.phase = Phase.PRECOMBAT_MAIN
-
-        _cast_mode(game, 0, p1, "Seeker's Folly", "Shrink")
-        game.effect_manager.apply_all(game)
-        # Only the opponent's creatures shrink.
-        assert (theirs.power, theirs.toughness) == (1, 1)
-        assert (mine.power, mine.toughness) == (2, 2)
+        t = Table(game)
+        t.act(0, folly, choices=[SeekersFollyAbility3], then=[moves(folly, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(folly, Zone.GRAVEYARD), moves(theirs, Zone.GRAVEYARD)],
+                note="only the opponent's creature gets -1/-1")
+        t.run()
 
     def test_discard_mode_cannot_target_the_caster_or_a_creature(self):
-        game = create_game()
-        p1, p2 = game.players
-        folly = SeekersFolly(owner=p1, controller=p1)
-        mine = [_bear("Mine one"), _bear("Mine two")]
-        theirs = [_bear("Theirs one"), _bear("Theirs two"), _bear("Theirs three")]
-        creature = _bear("Not a player")
-        set_board_state(
-            game, 0, hand=[folly, *mine], mana={ManaType.BLACK: 1, ManaType.COLORLESS: 2}
+        """Player 0 prefers to target themselves, then the opponent's creature,
+        then the opponent: neither of the first two is a legal target, each
+        either not offered or offered and rejected."""
+        folly = card(SeekersFolly)
+        mine = [card(SavannahLions), card(LlanowarElves)]
+        h1, h2, h3 = card(SavannahLions), card(LlanowarElves), card(BrazenScourge)
+        creature = card(BrazenScourge)
+        game = create_game(
+            Side(hand=[folly, *mine], mana=_MANA),
+            Side(hand=[h1, h2, h3], battlefield=[creature]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
         )
-        set_board_state(game, 1, hand=theirs, battlefield=[creature])
-        p1.set_baseline(
-            Intent(
-                pattern=GameRef(),
-                preferences=(
-                    Decision.mode("Discard"),
-                    Decision.player(seat=0),
-                    Decision.player(seat=1),
-                ),
-            )
-        )
-        p2.set_baseline(Intent(pattern=GameRef()))
-        cast_spell(game, 0, folly.name)
-        assert game.get_hand(p1).get_all() == mine
-        assert len(game.get_hand(p2).get_all()) == 1
-        assert game.get_battlefield(p2).contains(creature)
+        t = Table(game)
+        t.act(0, branches=[
+            [folly, SeekersFollyAbility2, player(0), creature, player(1)],
+            [folly, SeekersFollyAbility2, creature, player(1)],
+            [folly, SeekersFollyAbility2, player(1)],
+        ], then=[moves(folly, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, choices=[h1, h2], then=[
+            moves(folly, Zone.GRAVEYARD), moves(h1, Zone.GRAVEYARD), moves(h2, Zone.GRAVEYARD),
+        ], note="the opponent discards; the caster's hand and the creature stay")
+        t.run()

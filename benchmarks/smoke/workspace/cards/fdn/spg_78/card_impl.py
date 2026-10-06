@@ -9,6 +9,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GoblinBushwhackerAbility1:
+    text = 'Kicker {R} (You may pay an additional {R} as you cast this spell.)'
+
+
+class GoblinBushwhackerAbility2:
+    text = 'When this creature enters, if it was kicked, creatures you control get +1/+0 and gain haste until end of turn.'
+
+
+# endregion Printed abilities
+
+
 def _self_etb_condition(source: Any):
     """Return a condition callable that matches only when *source* enters."""
 
@@ -49,10 +64,9 @@ class GoblinBushwhacker(Creature):
         from engine.triggers import TriggerRegistration
         source = self
 
-        def _etb_effect(g: GameState) -> None:
+        def _etb_effect(g: GameState, controller: Any) -> None:
             if not source.kicked:
                 return
-            controller = source.controller or source.owner
             if controller is None:
                 return
             bf = g.get_battlefield(controller)
@@ -70,6 +84,6 @@ class GoblinBushwhacker(Creature):
                     if _is_on_battlefield(game_state, creature):
                         creature.modified_power -= 1
                         creature.keywords = Keyword(creature.keywords & ~Keyword.HASTE)
-            g.effect_manager.add(ContinuousEffect(source=source, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, apply=_apply, duration=DURATION_END_OF_TURN))
-        reg = TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_etb_effect, source=self, controller=self.controller or self.owner)
+            g.effect_manager.add(ContinuousEffect(source=source, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT, bound_to=affected, apply=_apply, duration=DURATION_END_OF_TURN))
+        reg = TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_etb_effect, source=self, controller=self.controller or self.owner, printed=GoblinBushwhackerAbility2)
         game.trigger_manager.register(reg)

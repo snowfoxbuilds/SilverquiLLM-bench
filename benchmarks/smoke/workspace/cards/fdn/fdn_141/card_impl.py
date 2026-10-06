@@ -6,6 +6,29 @@ from engine.types import CardType, Keyword, ManaCost, Zone
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GiadaFontOfHopeAbility1:
+    text = 'Flying'
+
+
+class GiadaFontOfHopeAbility2:
+    text = 'vigilance'
+
+
+class GiadaFontOfHopeAbility3:
+    text = 'Each other Angel you control enters with an additional +1/+1 counter on it for each Angel you already control.'
+
+
+class GiadaFontOfHopeAbility4:
+    text = '{T}: Add {W}. Spend this mana only to cast an Angel spell.'
+
+
+# endregion Printed abilities
+
+
 class GiadaFontOfHope(Creature):
     """Giada, Font of Hope — {1}{W} — 2/2 — Legendary Angel.
 
@@ -75,6 +98,7 @@ class GiadaFontOfHope(Creature):
             condition=_condition,
             replacement=_replacement,
             controller=controller,
+            printed=GiadaFontOfHopeAbility3,
         ))
 
     def get_mana_abilities(self) -> list:
@@ -94,4 +118,4 @@ class GiadaFontOfHope(Creature):
                 return
             from engine.types import ManaType
             ctrl.mana_pool.add(ManaType.WHITE, 1)
-        return [ManaAbility(cost=_cost, mana_produced=_mana_produced, description='{T}: Add {W}. Spend this mana only to cast an Angel spell.')]
+        return [ManaAbility(cost=_cost, mana_produced=_mana_produced, description='{T}: Add {W}. Spend this mana only to cast an Angel spell.', printed=GiadaFontOfHopeAbility4)]

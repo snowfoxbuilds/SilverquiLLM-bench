@@ -9,8 +9,8 @@ is a non-targeted board effect resolved via a continuous effect.
 
 from __future__ import annotations
 
-from cards.fdn.fdn_69.card_impl import SeekersFolly
-from engine.card import Creature
+from cards.fdn.fdn_69.card_impl import SeekersFolly, SeekersFollyAbility2, SeekersFollyAbility3
+from engine.card import Creature, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import ManaCost, ManaType, Phase, Zone
@@ -21,13 +21,13 @@ def _bear(name: str = "Bear") -> Creature:
     return Creature(name=name, base_power=2, base_toughness=2)
 
 
-def _specs_for_mode(game, player, card, mode_name):
+def _specs_for_mode(game, player, card, mode):
     """Drive ``get_targets`` with a MODE Intent selecting *mode_name*."""
     player.start_intent(
         "mode",
         Intent(
-            pattern=GameRef(card=frozenset({("name", card.name)})),
-            preferences=(Decision.mode(mode_name),),
+            pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
+            preferences=(Decision.mode(printed=mode),),
         ),
     )
     try:
@@ -36,17 +36,17 @@ def _specs_for_mode(game, player, card, mode_name):
         player.end_intent("mode")
 
 
-def _cast_mode(game, player_index, player, card_name, mode_name):
+def _cast_mode(game, player_index, player, card, mode):
     """Cast a modal spell selecting *mode_name* (no target) via an Intent."""
     player.start_intent(
         "mode",
         Intent(
-            pattern=GameRef(card=frozenset({("name", card_name)})),
-            preferences=(Decision.mode(mode_name),),
+            pattern=GameRef(card=frozenset({("printed", card)})),
+            preferences=(Decision.mode(printed=mode),),
         ),
     )
     try:
-        cast_spell(game, player_index, card_name)
+        cast_spell(game, player_index, card)
     finally:
         player.end_intent("mode")
 
@@ -54,7 +54,7 @@ def _cast_mode(game, player_index, player, card_name, mode_name):
 class TestSeekersFollyProperties:
     def test_static_data(self):
         card = SeekersFolly(owner=None)
-        assert card.name == "Seeker's Folly"
+        assert printed_class(card) is SeekersFolly
         assert card.mana_cost == ManaCost.parse("{2}{B}")
         names = [m.name for m in card.get_modes()]
         assert names == ["Discard", "Shrink"]
@@ -73,7 +73,7 @@ class TestSeekersFollyModes:
 
         # cast_spell with a player target defaults the mode to the first offered
         # (Discard = mode 0) and targets p2.
-        cast_spell(game, 0, "Seeker's Folly", targets=[p2])
+        cast_spell(game, 0, SeekersFolly, targets=[p2])
         assert folly.chosen_mode == 0
         assert len(game.get_hand(p2).get_all()) == 1  # two discarded
 
@@ -89,7 +89,7 @@ class TestSeekersFollyModes:
         set_board_state(game, 1, battlefield=[theirs])
         game.phase = Phase.PRECOMBAT_MAIN
 
-        _cast_mode(game, 0, p1, "Seeker's Folly", "Shrink")
+        _cast_mode(game, 0, p1, SeekersFolly, SeekersFollyAbility3)
         game.effect_manager.apply_all(game)
         assert folly.chosen_mode == 1
         # Only the opponent's creatures shrink.
@@ -107,7 +107,7 @@ class TestSeekersFollyModes:
         set_board_state(game, 0, battlefield=[folly])
         set_board_state(game, 1, battlefield=[creature])
 
-        mode0 = _specs_for_mode(game, p1, folly, "Discard")
+        mode0 = _specs_for_mode(game, p1, folly, SeekersFollyAbility2)
         assert folly.chosen_mode == 0
         assert len(mode0) == 1
         spec = mode0[0]
@@ -115,6 +115,6 @@ class TestSeekersFollyModes:
         assert spec.filter_fn(p1) is False
         assert spec.filter_fn(creature) is False
 
-        mode1 = _specs_for_mode(game, p1, folly, "Shrink")
+        mode1 = _specs_for_mode(game, p1, folly, SeekersFollyAbility3)
         assert folly.chosen_mode == 1
         assert mode1 == []

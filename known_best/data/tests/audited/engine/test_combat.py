@@ -1,33 +1,55 @@
 """Tests for engine/combat.py — Combat system.
 
 Verifies:
-- CombatState construction and default values.
-- CombatState.clear() resets all fields.
-- declare_attackers_step: valid attack, tapping attackers, vigilance (no tap),
-  summoning sickness rejection, haste bypasses sickness, defender cannot attack,
-  tapped creatures cannot attack.
-- declare_blockers_step: valid block, flying evasion (only blocked by flying/reach),
-  menace requires 2+ blockers (a single blocker is rejected), blocker ordering
-  by attacking player.
+- CombatState construction and default values, and CombatState.clear().
+- The attack and block eligibility helpers, lethal damage, end_combat_step.
+- Declaring attackers: a valid attacker taps, vigilance does not, a creature
+  that came under its controller's control this turn cannot attack unless it
+  has haste, defenders and tapped creatures cannot attack.
+- Declaring blockers: flying evasion (only blocked by flying/reach), menace
+  requires two or more blockers, the attacker's controller divides its damage
+  among several blockers (rule 510.1c).
+- Combat damage: unblocked damage to the player, damage between attacker and
+  blocker, first strike, double strike, trample (with deathtouch, 1 damage is
+  lethal), lifelink, a blocked creature whose blocker is gone deals no damage.
+- Combat damage and attack triggers fire once per creature, after the whole
+  declaration (rule 508.2).
 
-Declarations are Player Queries answered from action scripts (ADR-017): a
-test scripts ``act`` for the declaration it makes and ``act_illegal`` for one
-the rules forbid, which the engine must not let take effect.
-- combat_damage_step: basic damage to blocker and attacker, unblocked damage
-  to player, first strike deals damage first (kills blocker before normal
-  damage), double strike deals damage in both phases, trample excess to
-  defending player, lifelink gains life, deathtouch (1 damage is lethal
-  assignment).
-- end_combat_step: clears combat flags and combat state.
-- Integration: full attack/block/damage cycle, creature dies from combat
-  damage via SBAs, multiple attackers and blockers.
-- Edge cases: 0-power attacker, blocked but blocker removed before damage,
-  creature with multiple keywords.
+Combat is played on the Test Interface: each player's script answers the
+declarations and the damage-division questions (ADR-017), and every result is
+judged by what happens on the board.
 """
 
 from __future__ import annotations
 
 import pytest
+from cards.fdn.fdn_1.card_impl import SireOfSevenDeaths
+from cards.fdn.fdn_3.card_impl import ArmasaurGuide, ArmasaurGuideAbility2
+from cards.fdn.fdn_12.card_impl import FelidarSavior
+from cards.fdn.fdn_21.card_impl import PridefulParent
+from cards.fdn.fdn_49.card_impl import RuneSealedWall
+from cards.fdn.fdn_59.card_impl import CryptFeaster
+from cards.fdn.fdn_60.card_impl import GutlessPlunderer
+from cards.fdn.fdn_68.card_impl import SanguineSyphoner, SanguineSyphonerAbility1
+from cards.fdn.fdn_100.card_impl import BeastKinRanger
+from cards.fdn.fdn_102.card_impl import EagerTrufflesnout, EagerTrufflesnoutAbility2
+from cards.fdn.fdn_103.card_impl import ElfswornGiant
+from cards.fdn.fdn_110.card_impl import QuakestriderCeratops
+from cards.fdn.fdn_115.card_impl import AleshaWhoLaughsAtFate, AleshaWhoLaughsAtFateAbility2
+from cards.fdn.fdn_117.card_impl import AshrootAnimist, AshrootAnimistAbility2
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_150.card_impl import AegisTurtle
+from cards.fdn.fdn_164.card_impl import SpectralSailor
+from cards.fdn.fdn_171.card_impl import DiregrafGhoul
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_195.card_impl import FanaticalFirebrand
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_246.card_impl import SwiftbladeVindicator
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_278.card_impl import Mountain
+from test_interface import Decision, Phase, Side, Step, card, create_game
+from test_utils import DeterministicPlayer
 
 from engine.card import Creature, GameObject
 from engine.combat import (
@@ -36,18 +58,22 @@ from engine.combat import (
     _can_block,
     _deal_damage,
     _get_lethal_damage,
-    combat_damage_step,
-    declare_attackers_step,
-    declare_blockers_step,
-    end_combat_step,
 )
-from engine.decisions import Decision, GameRef
-from engine.events import AttacksTriggeredEvent, DealsDamageTriggeredEvent
+from engine.events import DealsDamageTriggeredEvent
 from engine.game_state import GameState
-from test_utils import DeterministicPlayer, Intent, act, act_illegal
+from engine.player import Player
 from engine.triggers import TriggerRegistration
 from engine.types import Keyword, Zone
-
+from silverquillm.table import (
+    Table,
+    appears,
+    first_strike_damage,
+    life,
+    moves,
+    off_stack,
+    on_stack,
+    taps,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers / Fixtures
@@ -66,8 +92,8 @@ def _make_creature(
     keywords: Keyword | None = None,
     summoning_sick: bool = False,
     is_tapped: bool = False,
-    owner: DeterministicPlayer | None = None,
-    controller: DeterministicPlayer | None = None,
+    owner: Player | None = None,
+    controller: Player | None = None,
 ) -> Creature:
     """Create a creature for combat testing with sane defaults."""
     c = Creature(
@@ -87,43 +113,17 @@ def _make_game(
     p1_life: int = 20,
     p2_life: int = 20,
 ) -> GameState:
-    """Create a 2-player GameState with given life totals.
-
-    Each player gets a Baseline Intent so any system-level Player Query the
-    engine raises (e.g. the multi-block damage-division query, whose source is
-    the attacker) is answered. With empty preferences the baseline gives each
-    blocker asked the first offered share, none; tests that need a specific
-    division map a blocker's ``Decision.obj(instance=...)`` to its share.
-    """
-    p1 = DeterministicPlayer("Alice", life=p1_life)
-    p2 = DeterministicPlayer("Bob", life=p2_life)
-    for p in (p1, p2):
-        p.set_baseline(Intent(pattern=GameRef()))
-    return GameState([p1, p2])
-
-
-def _damage_marked(game: GameState, creature: Creature) -> int:
-    """Damage marked on *creature*, as it last existed on the battlefield if
-    combat damage killed it (rules 400.7, 603.10a)."""
-    if any(game.get_battlefield(p).contains(creature) for p in game.players):
-        return creature.damage_marked
-    from engine.last_known import last_known_info
-
-    return last_known_info(game, creature).damage_marked
+    """Create a 2-player GameState with given life totals."""
+    return GameState([DeterministicPlayer("Alice", life=p1_life), DeterministicPlayer("Bob", life=p2_life)])
 
 
 def _place_on_battlefield(
-    player: DeterministicPlayer,
+    player: Player,
     creature: Creature,
     game: GameState | None = None,
 ) -> None:
-    """Put a creature on a player's battlefield and set its controller.
-
-    When *game* is supplied, the creature is also given its stable engine-minted
-    ``instance_id`` for the battlefield, so a test can reference it in an Intent
-    preference (``Decision.obj(instance=creature.instance_id)``) to answer a
-    damage-division query about it.
-    """
+    """Put a creature on a player's battlefield and set its controller; with
+    *game*, also give it its battlefield ``instance_id``."""
     creature.controller = player
     creature.owner = player
     player.zones[Zone.BATTLEFIELD].add(creature)
@@ -131,27 +131,73 @@ def _place_on_battlefield(
         creature.instance_id = game.refs.instance_id(creature, Zone.BATTLEFIELD.value)
 
 
-def _pref(game: GameState, creature: Creature) -> Decision:
-    return Decision.obj(instance=game.refs.instance_id(creature, Zone.BATTLEFIELD.value))
+def _attacks(p0: Side, p1: Side | None = None) -> Table:
+    """Player 0's turn, from its beginning of combat to the declaration of
+    attackers."""
+    t = Table(create_game(p0, p1 or Side(), start=(Step.BEGIN_COMBAT, 0)))
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    return t
 
 
-def _attack(game: GameState, *attackers: Creature, legal: bool = True) -> None:
-    """Script the active player's attack declaration and run the step."""
-    entry = act if legal else act_illegal
-    game.active_player.set_script([entry(*(_pref(game, a) for a in attackers))])
-    declare_attackers_step(game)
+def _main(p0: Side, p1: Side | None = None) -> Table:
+    """Player 0's first main phase."""
+    return Table(create_game(p0, p1 or Side(), start=(Phase.PRECOMBAT_MAIN, 0)))
 
 
-def _block(game: GameState, blocks: dict[Creature, Creature], legal: bool = True) -> None:
-    """Script the defending player's blocks (blocker → attacker) and run the step."""
-    entry = act if legal else act_illegal
-    game.non_active_player.set_script([
-        entry(
-            *(_pref(game, b) for b in blocks),
-            scoped={_pref(game, b): _pref(game, a) for b, a in blocks.items()},
-        )
-    ])
-    declare_blockers_step(game)
+def _cast(t: Table, land, spell, *, choices=(), then=()) -> None:
+    """Player 0 taps ``land`` and casts ``spell``, and both players pass."""
+    t.act(0, land, then=[taps(land)])
+    t.act(0, spell, choices=list(choices), then=[moves(spell, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=list(then))
+
+
+def _attack(t: Table, *attackers, tapping=None, then=()) -> None:
+    """Player 0 declares ``attackers``, which tap — all of them unless
+    ``tapping`` names the ones that do — and both players pass."""
+    tapped = attackers if tapping is None else tapping
+    t.act(0, *attackers, then=[*(taps(a) for a in tapped), *then])
+
+
+def _to_blockers(t: Table) -> None:
+    """Both players pass in the declare attackers step."""
+    t.pass_(0)
+    t.pass_(1)
+
+
+def _no_blocks(t: Table, *, then=(), first_strike=None) -> None:
+    """Player 1 declares no blockers and both players pass to combat damage,
+    whose results are ``then``; with ``first_strike``, a first-strike combat
+    damage step with those results comes first (rule 510.4)."""
+    t.pass_(1, then=[first_strike_damage()] if first_strike is not None else [])
+    t.pass_(0)
+    if first_strike is not None:
+        t.pass_(1, then=list(first_strike))
+        t.pass_(0)
+    t.pass_(1, then=list(then))
+
+
+def _blocks(t: Table, blocks: dict, *, shares=None, then=(), first_strike=None) -> None:
+    """Player 1 blocks as ``blocks`` says (blocker to attacker), and both
+    players pass to combat damage, whose results are ``then``; ``shares``
+    divides an attacker's damage, blocker to amount; with ``first_strike``,
+    a first-strike combat damage step with those results comes first (rule
+    510.4)."""
+    t.act(1, *blocks, scoped=blocks, then=[first_strike_damage()] if first_strike is not None else [])
+    per_query = {b: [Decision.number(n)] for b, n in (shares or {}).items()}
+    t.pass_(0, per_query=per_query or None)
+    if first_strike is not None:
+        t.pass_(1, then=list(first_strike))
+        t.pass_(0)
+    t.pass_(1, then=list(then))
+
+
+def _no_attack(t: Table) -> None:
+    """Player 0 declares no attackers, so the declare blockers and combat
+    damage steps are skipped (rule 508.8); play stops at end of combat."""
+    t.pass_(0)
+    t.pass_(0)
+    t.pass_(1)
 
 
 # ---------------------------------------------------------------------------
@@ -297,108 +343,77 @@ class TestGetLethalDamage:
 # ---------------------------------------------------------------------------
 
 class TestDeclareAttackers:
-    """Verify declare_attackers_step behavior."""
+    """Declaring attackers."""
 
     def test_valid_attack_taps_creature(self) -> None:
-        """A valid attacker should be tapped and registered in combat state."""
-        bear = _make_creature(name="Bear", summoning_sick=False)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, bear)
-
-        _attack(game, bear)
-
-        assert bear.is_tapped is True
-        assert bear.is_attacking is True
-        assert bear in game.combat_state.attackers
-        assert game.combat_state.in_combat is True
+        lions = card(SavannahLions)
+        t = _attacks(Side(battlefield=[lions]))
+        _attack(t, lions)
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 18)])
+        t.run()
 
     def test_vigilance_does_not_tap(self) -> None:
-        """An attacker with vigilance should NOT be tapped."""
-        vig = _make_creature(name="Vigilant", keywords=Keyword.VIGILANCE, summoning_sick=False)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, vig)
-
-        _attack(game, vig)
-
-        assert vig.is_tapped is False
-        assert vig.is_attacking is True
+        parent = card(PridefulParent)
+        t = _attacks(Side(battlefield=[parent]))
+        _attack(t, parent, tapping=())
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 18)])
+        t.run()
 
     def test_summoning_sick_rejected(self) -> None:
-        """A creature with summoning sickness should not be allowed to attack."""
-        sick = _make_creature(name="Sick", summoning_sick=True)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, sick)
-
-        # Declaring the sick creature is rejected, never trimmed.
-        _attack(game, sick, legal=False)
-
-        assert sick.is_attacking is False
-        assert sick not in game.combat_state.attackers
+        lions, plains = card(SavannahLions), card(Plains)
+        t = _main(Side(hand=[lions], battlefield=[plains]))
+        _cast(t, plains, lions, then=[moves(lions, Zone.BATTLEFIELD)])
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act_illegal(0, lions, note="the Lions came under player 0's control this turn")
+        _no_attack(t)
+        t.run()
 
     def test_haste_bypasses_summoning_sickness(self) -> None:
-        """A creature with haste can attack even with summoning sickness."""
-        haste = _make_creature(name="Hasty", summoning_sick=True, keywords=Keyword.HASTE)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, haste)
-
-        _attack(game, haste)
-
-        assert haste.is_attacking is True
-        assert haste in game.combat_state.attackers
+        firebrand, mountain = card(FanaticalFirebrand), card(Mountain)
+        t = _main(Side(hand=[firebrand], battlefield=[mountain]))
+        _cast(t, mountain, firebrand, then=[moves(firebrand, Zone.BATTLEFIELD)])
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        _attack(t, firebrand)
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 19)])
+        t.run()
 
     def test_no_eligible_attackers_skips(self) -> None:
-        """If no creatures are eligible, the step completes without error."""
-        game = _make_game()
-        declare_attackers_step(game)
-        assert game.combat_state.attackers == {}
+        """With no creatures, the declaration is still asked, and nothing
+        attacks."""
+        t = _attacks(Side(), Side(battlefield=[card(SavannahLions)]))
+        _no_attack(t)
+        t.run()
 
     def test_player_chooses_none_no_attackers(self) -> None:
-        """If the active player declines to attack (a dry script), no attackers."""
-        bear = _make_creature(name="Bear", summoning_sick=False)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, bear)
-
-        declare_attackers_step(game)
-
-        assert bear.is_attacking is False
-        assert len(game.combat_state.attackers) == 0
+        lions = card(SavannahLions)
+        t = _attacks(Side(battlefield=[lions]))
+        _no_attack(t)
+        t.run()
 
     def test_multiple_attackers(self) -> None:
-        """Multiple creatures can be declared as attackers."""
-        bear1 = _make_creature(name="Bear1", summoning_sick=False)
-        bear2 = _make_creature(name="Bear2", summoning_sick=False)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, bear1)
-        _place_on_battlefield(game.active_player, bear2)
-
-        _attack(game, bear1, bear2)
-
-        assert bear1.is_attacking is True
-        assert bear2.is_attacking is True
-        assert len(game.combat_state.attackers) == 2
+        lions, elves = card(SavannahLions), card(LlanowarElves)
+        t = _attacks(Side(battlefield=[lions, elves]))
+        _attack(t, lions, elves)
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 17)])
+        t.run()
 
     def test_defender_not_in_eligible_list(self) -> None:
-        """A creature with defender should not be in the eligible attacker list."""
-        wall = _make_creature(name="Wall", keywords=Keyword.DEFENDER, summoning_sick=False)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, wall)
-
-        # Declaring the wall is rejected: defenders can't attack.
-        _attack(game, wall, legal=False)
-
-        assert wall.is_attacking is False
-        assert wall not in game.combat_state.attackers
+        wall = card(RuneSealedWall)
+        t = _attacks(Side(battlefield=[wall]))
+        t.act_illegal(0, wall, note="a creature with defender can't attack")
+        _no_attack(t)
+        t.run()
 
     def test_tapped_creature_not_in_eligible_list(self) -> None:
-        """A tapped creature should not be eligible to attack."""
-        tapped = _make_creature(name="TappedBear", is_tapped=True, summoning_sick=False)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, tapped)
-
-        # The tapped creature can't be declared as an attacker.
-        _attack(game, tapped, legal=False)
-
-        assert tapped not in game.combat_state.attackers
+        lions = card(SavannahLions, tapped=True)
+        t = _attacks(Side(battlefield=[lions]))
+        t.act_illegal(0, lions, note="a tapped creature can't attack")
+        _no_attack(t)
+        t.run()
 
 
 # ---------------------------------------------------------------------------
@@ -406,145 +421,79 @@ class TestDeclareAttackers:
 # ---------------------------------------------------------------------------
 
 class TestDeclareBlockers:
-    """Verify declare_blockers_step behavior."""
-
-    def _setup_attack(
-        self,
-        attacker: Creature,
-        game: GameState,
-    ) -> None:
-        """Manually register an attacker in combat state (shortcut)."""
-        combat = game.combat_state
-        combat.in_combat = True
-        combat.attackers[attacker] = game.non_active_player
-        combat.attacker_blockers[attacker] = []
-        attacker.is_attacking = True
+    """Declaring blockers."""
 
     def test_valid_block(self) -> None:
-        """A ground blocker can block a ground attacker."""
-        attacker = _make_creature(name="Attacker", summoning_sick=False)
-        blocker = _make_creature(name="Blocker", summoning_sick=False)
-
-        game = _make_game()
-        _place_on_battlefield(game.active_player, attacker)
-        _place_on_battlefield(game.non_active_player, blocker)
-
-        self._setup_attack(attacker, game)
-        _block(game, {blocker: attacker})
-
-        assert blocker in game.combat_state.blockers
-        assert blocker.is_blocking is True
-        assert blocker in game.combat_state.attacker_blockers[attacker]
+        lions, turtle = card(SavannahLions), card(AegisTurtle)
+        t = _attacks(Side(battlefield=[lions]), Side(battlefield=[turtle]))
+        _attack(t, lions)
+        _to_blockers(t)
+        _blocks(t, {turtle: lions})
+        t.run()
 
     def test_flying_cannot_be_blocked_by_ground(self) -> None:
-        """A flying attacker cannot be blocked by a ground creature."""
-        flyer = _make_creature(name="Flyer", keywords=Keyword.FLYING, summoning_sick=False)
-        ground = _make_creature(name="Ground", summoning_sick=False)
-
-        game = _make_game()
-        _place_on_battlefield(game.active_player, flyer)
-        _place_on_battlefield(game.non_active_player, ground)
-
-        self._setup_attack(flyer, game)
-        _block(game, {ground: flyer}, legal=False)
-
-        # Block should be rejected
-        assert ground not in game.combat_state.blockers
-        assert game.combat_state.attacker_blockers[flyer] == []
+        sailor, lions = card(SpectralSailor), card(SavannahLions)
+        t = _attacks(Side(battlefield=[sailor]), Side(battlefield=[lions]))
+        _attack(t, sailor)
+        _to_blockers(t)
+        t.act_illegal(1, lions, scoped={lions: sailor}, note="flying")
+        _no_blocks(t, then=[life(1, 19)])
+        t.run()
 
     def test_flying_blocked_by_reach(self) -> None:
-        """A flying attacker CAN be blocked by a reach creature."""
-        flyer = _make_creature(name="Flyer", keywords=Keyword.FLYING, summoning_sick=False)
-        reacher = _make_creature(name="Reacher", keywords=Keyword.REACH, summoning_sick=False)
-
-        game = _make_game()
-        _place_on_battlefield(game.active_player, flyer)
-        _place_on_battlefield(game.non_active_player, reacher)
-
-        self._setup_attack(flyer, game)
-        _block(game, {reacher: flyer})
-
-        assert reacher in game.combat_state.blockers
-        assert reacher in game.combat_state.attacker_blockers[flyer]
+        sailor, giant = card(SpectralSailor), card(ElfswornGiant)
+        t = _attacks(Side(battlefield=[sailor]), Side(battlefield=[giant]))
+        _attack(t, sailor)
+        _to_blockers(t)
+        _blocks(t, {giant: sailor}, then=[moves(sailor, Zone.GRAVEYARD)])
+        t.run()
 
     def test_menace_requires_two_blockers(self) -> None:
-        """A menace creature can't be blocked by only 1 blocker: the block is rejected."""
-        menace = _make_creature(name="Menace", keywords=Keyword.MENACE, summoning_sick=False)
-        lone_blocker = _make_creature(name="LoneBlocker", summoning_sick=False)
-
-        game = _make_game()
-        _place_on_battlefield(game.active_player, menace)
-        _place_on_battlefield(game.non_active_player, lone_blocker)
-
-        self._setup_attack(menace, game)
-        _block(game, {lone_blocker: menace}, legal=False)
-
-        # The single block is rejected due to menace
-        assert game.combat_state.attacker_blockers[menace] == []
-        assert lone_blocker not in game.combat_state.blockers
+        feaster, turtle = card(CryptFeaster), card(AegisTurtle)
+        t = _attacks(Side(battlefield=[feaster]), Side(battlefield=[turtle]))
+        _attack(t, feaster)
+        _to_blockers(t)
+        t.act_illegal(1, turtle, scoped={turtle: feaster}, note="menace")
+        _no_blocks(t, then=[life(1, 17)])
+        t.run()
 
     def test_menace_with_two_blockers_succeeds(self) -> None:
-        """A menace creature blocked by 2 blockers is legally blocked."""
-        menace = _make_creature(name="Menace", keywords=Keyword.MENACE, summoning_sick=False)
-        b1 = _make_creature(name="Blocker1", summoning_sick=False)
-        b2 = _make_creature(name="Blocker2", summoning_sick=False)
-
-        game = _make_game()
-        _place_on_battlefield(game.active_player, menace)
-        _place_on_battlefield(game.non_active_player, b1)
-        _place_on_battlefield(game.non_active_player, b2)
-
-        self._setup_attack(menace, game)
-        # Defending player assigns both blockers to the menace creature.
-        _block(game, {b1: menace, b2: menace})
-
-        assert len(game.combat_state.attacker_blockers[menace]) == 2
+        feaster, turtle, lions = card(CryptFeaster), card(AegisTurtle), card(SavannahLions)
+        t = _attacks(Side(battlefield=[feaster]), Side(battlefield=[turtle, lions]))
+        _attack(t, feaster)
+        _to_blockers(t)
+        _blocks(
+            t, {turtle: feaster, lions: feaster}, shares={lions: 3, turtle: 0},
+            then=[moves(lions, Zone.GRAVEYARD)],
+        )
+        t.run()
 
     def test_attackers_controller_divides_damage_among_blockers(self) -> None:
-        """When multiple blockers, the attacker's controller divides its damage."""
-        attacker = _make_creature(name="Attacker", summoning_sick=False, power=5, toughness=5)
-        b1 = _make_creature(name="B1", toughness=2, summoning_sick=False)
-        b2 = _make_creature(name="B2", toughness=3, summoning_sick=False)
-
-        game = _make_game()
-        _place_on_battlefield(game.active_player, attacker, game)
-        _place_on_battlefield(game.non_active_player, b1, game)
-        _place_on_battlefield(game.non_active_player, b2, game)
-
-        # The attacker's controller divides its damage among the blockers
-        # through damage-division Player Queries (rule 510.1c): B1 is asked its
-        # share, 1, and B2, the last blocker, takes the other 4.
-        game.active_player.set_baseline(Intent(
-            pattern=GameRef(),
-            per_query={Decision.obj(instance=b1.instance_id): [Decision.number(1)]},
-        ))
-
-        self._setup_attack(attacker, game)
-        _block(game, {b1: attacker, b2: attacker})
-        combat_damage_step(game)
-
-        assert _damage_marked(game, b1) == 1
-        assert _damage_marked(game, b2) == 4
+        """The 12 damage is divided 1 to the Brazen Scourge, which survives,
+        and 11 to the Aegis Turtle, which dies."""
+        ceratops, scourge, turtle = card(QuakestriderCeratops), card(BrazenScourge), card(AegisTurtle)
+        t = _attacks(Side(battlefield=[ceratops]), Side(battlefield=[scourge, turtle]))
+        _attack(t, ceratops)
+        _to_blockers(t)
+        _blocks(
+            t, {scourge: ceratops, turtle: ceratops}, shares={scourge: 1, turtle: 11},
+            then=[moves(turtle, Zone.GRAVEYARD)],
+        )
+        t.run()
 
     def test_no_attackers_blockers_step_skips(self) -> None:
-        """If there are no attackers, declare_blockers_step does nothing."""
-        game = _make_game()
-        declare_blockers_step(game)
-        assert game.combat_state.blockers == {}
+        """Player 1, who could block, is never asked to declare blockers."""
+        t = _attacks(Side(battlefield=[card(SavannahLions)]), Side(battlefield=[card(AegisTurtle)]))
+        _no_attack(t)
+        t.run()
 
     def test_defending_player_chooses_none_no_blockers(self) -> None:
-        """If the defending player declines to block, no blockers are assigned."""
-        attacker = _make_creature(name="Attacker", summoning_sick=False)
-        blocker = _make_creature(name="Blocker", summoning_sick=False)
-
-        game = _make_game()
-        _place_on_battlefield(game.active_player, attacker)
-        _place_on_battlefield(game.non_active_player, blocker)
-
-        self._setup_attack(attacker, game)
-        declare_blockers_step(game)
-
-        assert game.combat_state.blockers == {}
+        lions, turtle = card(SavannahLions), card(AegisTurtle)
+        t = _attacks(Side(battlefield=[lions]), Side(battlefield=[turtle]))
+        _attack(t, lions)
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 18)])
+        t.run()
 
 
 # ---------------------------------------------------------------------------
@@ -552,277 +501,121 @@ class TestDeclareBlockers:
 # ---------------------------------------------------------------------------
 
 class TestCombatDamage:
-    """Verify combat_damage_step behavior."""
-
-    def _setup_combat(
-        self,
-        game: GameState,
-        attacker: Creature,
-        blockers: list[Creature] | None = None,
-    ) -> None:
-        """Set up combat state with attacker and optional blockers."""
-        combat = game.combat_state
-        combat.in_combat = True
-        combat.attackers[attacker] = game.non_active_player
-        combat.attacker_blockers[attacker] = blockers or []
+    """Combat damage."""
 
     def test_unblocked_damage_to_player(self) -> None:
-        """An unblocked attacker deals damage to the defending player."""
-        bear = _make_creature(name="Bear", power=2, toughness=2)
-        game = _make_game(p2_life=20)
-        _place_on_battlefield(game.active_player, bear)
-        bear.controller = game.active_player
-
-        self._setup_combat(game, bear)
-        combat_damage_step(game)
-
-        assert game.non_active_player.life == 18
+        scourge = card(BrazenScourge)
+        t = _attacks(Side(battlefield=[scourge]))
+        _attack(t, scourge)
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 17)])
+        t.run()
 
     def test_blocked_damage_to_blocker(self) -> None:
-        """A blocked attacker deals damage to the blocker, and vice versa."""
-        attacker = _make_creature(name="Attacker", power=3, toughness=3)
-        blocker = _make_creature(name="Blocker", power=2, toughness=4)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, attacker)
-        _place_on_battlefield(game.non_active_player, blocker)
-        attacker.controller = game.active_player
-        blocker.controller = game.non_active_player
-
-        self._setup_combat(game, attacker, [blocker])
-        combat_damage_step(game)
-
-        # Attacker deals 3 to blocker
-        assert blocker.damage_marked == 3
-        # Blocker deals 2 to attacker
-        assert attacker.damage_marked == 2
-        # No damage to either player
-        assert game.active_player.life == 20
-        assert game.non_active_player.life == 20
+        """Two 3/3s trade: each deals its damage to the other."""
+        attacker, blocker = card(BrazenScourge), card(BrazenScourge)
+        t = _attacks(Side(battlefield=[attacker]), Side(battlefield=[blocker]))
+        _attack(t, attacker)
+        _to_blockers(t)
+        _blocks(t, {blocker: attacker}, then=[moves(attacker, Zone.GRAVEYARD), moves(blocker, Zone.GRAVEYARD)])
+        t.run()
 
     def test_zero_power_attacker_unblocked(self) -> None:
-        """A 0-power attacker deals 0 damage to the defending player."""
-        wimp = _make_creature(name="Wimp", power=0, toughness=1)
-        game = _make_game(p2_life=20)
-        _place_on_battlefield(game.active_player, wimp)
-        wimp.controller = game.active_player
-
-        self._setup_combat(game, wimp)
-        combat_damage_step(game)
-
-        assert game.non_active_player.life == 20
+        turtle = card(AegisTurtle)
+        t = _attacks(Side(battlefield=[turtle]))
+        _attack(t, turtle)
+        _to_blockers(t)
+        _no_blocks(t)
+        t.run()
 
     def test_first_strike_deals_damage_first(self) -> None:
-        """A first-strike creature deals damage before a normal creature.
-
-        If the first-strike creature can kill the blocker, the blocker
-        should not deal damage back (because SBAs kill it first).
-        """
-        first_striker = _make_creature(
-            name="FirstStriker", power=3, toughness=1,
-            keywords=Keyword.FIRST_STRIKE,
-        )
-        blocker = _make_creature(name="Blocker", power=3, toughness=3)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, first_striker)
-        _place_on_battlefield(game.non_active_player, blocker)
-        first_striker.controller = game.active_player
-        blocker.controller = game.non_active_player
-
-        self._setup_combat(game, first_striker, [blocker])
-        combat_damage_step(game)
-
-        # First striker deals 3 damage to blocker (lethal for 3 toughness)
-        assert _damage_marked(game, blocker) >= 3
-        # After SBAs, blocker dies — first_striker should not have damage
-        # from normal damage sub-step (blocker was removed by SBAs)
-        # The blocker's damage-back only happens in the normal damage step
-        # for non-first-strike creatures, but blocker is not in the
-        # first-strike group. So blocker deals damage in normal step.
-        # But SBAs may remove blocker from battlefield before normal damage.
-        # Actually, the blocker's damage-dealing happens in the same
-        # _assign_combat_damage call, so let's verify that if the blocker
-        # died from first-strike damage, it might still deal damage
-        # depending on implementation.
-
-        # The key behavior: first_striker's damage came first.
-        # Blocker took 3 damage. blocker has toughness 3 -> dies to SBAs.
-        # After SBAs in first-strike sub-step, blocker should be in GY.
-        gy = game.non_active_player.zones[Zone.GRAVEYARD]
-        bf = game.non_active_player.zones[Zone.BATTLEFIELD]
-        # Blocker should be moved to graveyard by SBAs after first strike damage
-        assert gy.contains(blocker) or blocker.damage_marked >= blocker.toughness
+        """Alesha's first-strike damage kills the blocked Lions before it
+        deals its own."""
+        lions, alesha = card(SavannahLions), card(AleshaWhoLaughsAtFate)
+        t = _attacks(Side(battlefield=[lions]), Side(battlefield=[alesha]))
+        _attack(t, lions)
+        _to_blockers(t)
+        _blocks(t, {alesha: lions}, first_strike=[moves(lions, Zone.GRAVEYARD)])
+        t.run()
 
     def test_double_strike_deals_damage_twice(self) -> None:
-        """A double-strike creature deals damage in both first-strike and normal phases."""
-        double = _make_creature(
-            name="DoubleStriker", power=2, toughness=3,
-            keywords=Keyword.DOUBLE_STRIKE,
-        )
-        game = _make_game(p2_life=20)
-        _place_on_battlefield(game.active_player, double)
-        double.controller = game.active_player
-
-        self._setup_combat(game, double)
-        combat_damage_step(game)
-
-        # Double strike: 2 damage in first-strike + 2 damage in normal = 4 total
-        assert game.non_active_player.life == 16
+        vindicator = card(SwiftbladeVindicator)
+        t = _attacks(Side(battlefield=[vindicator]))
+        _attack(t, vindicator, tapping=())
+        _to_blockers(t)
+        _no_blocks(t, first_strike=[life(1, 19)], then=[life(1, 18)])
+        t.run()
 
     def test_trample_excess_damage_to_player(self) -> None:
-        """Trample: excess damage over blocker toughness goes to defending player."""
-        trampler = _make_creature(
-            name="Trampler", power=5, toughness=5,
-            keywords=Keyword.TRAMPLE,
-        )
-        blocker = _make_creature(name="Blocker", power=1, toughness=2)
-        game = _make_game(p2_life=20)
-        _place_on_battlefield(game.active_player, trampler)
-        _place_on_battlefield(game.non_active_player, blocker)
-        trampler.controller = game.active_player
-        blocker.controller = game.non_active_player
-
-        self._setup_combat(game, trampler, [blocker])
-        combat_damage_step(game)
-
-        # Trampler assigns lethal (2) to blocker, excess (3) to player
-        assert _damage_marked(game, blocker) >= 2
-        assert game.non_active_player.life == 17
+        ranger, elves = card(BeastKinRanger), card(LlanowarElves)
+        t = _attacks(Side(battlefield=[ranger]), Side(battlefield=[elves]))
+        _attack(t, ranger)
+        _to_blockers(t)
+        _blocks(t, {elves: ranger}, shares={elves: 1}, then=[moves(elves, Zone.GRAVEYARD), life(1, 18)])
+        t.run()
 
     def test_trample_with_deathtouch(self) -> None:
-        """Trample + deathtouch: 1 damage is lethal, rest tramples through."""
-        dt_trampler = _make_creature(
-            name="DTTrampler", power=5, toughness=5,
-            keywords=Keyword.TRAMPLE | Keyword.DEATHTOUCH,
-        )
-        blocker = _make_creature(name="Blocker", power=1, toughness=7)
-        game = _make_game(p2_life=20)
-        _place_on_battlefield(game.active_player, dt_trampler)
-        _place_on_battlefield(game.non_active_player, blocker)
-        dt_trampler.controller = game.active_player
-        blocker.controller = game.non_active_player
-
-        self._setup_combat(game, dt_trampler, [blocker])
-        combat_damage_step(game)
-
-        # Deathtouch lethal = 1, so 1 to blocker and 4 to player
-        assert _damage_marked(game, blocker) >= 1
-        assert game.non_active_player.life == 16
+        """Ashroot Animist gives the deathtouch Gutless Plunderer trample and
+        +4/+4; 1 damage is lethal to the Aegis Turtle blocking it, so 5
+        tramples over, beside the Animist's 4."""
+        animist, plunderer, turtle = card(AshrootAnimist), card(GutlessPlunderer), card(AegisTurtle)
+        t = _attacks(Side(battlefield=[animist, plunderer]), Side(battlefield=[turtle]))
+        _attack(t, plunderer, animist, then=[on_stack(AshrootAnimistAbility2, 0)])
+        t.pass_(0, choices=[plunderer])
+        t.pass_(1, then=[off_stack(AshrootAnimistAbility2)])
+        _to_blockers(t)
+        _blocks(t, {turtle: plunderer}, shares={turtle: 1}, then=[moves(turtle, Zone.GRAVEYARD), life(1, 11)])
+        t.run()
 
     def test_lifelink_gains_life(self) -> None:
-        """A lifelink creature's controller gains life equal to damage dealt."""
-        lifelinker = _make_creature(
-            name="Lifelinker", power=3, toughness=3,
-            keywords=Keyword.LIFELINK,
-        )
-        game = _make_game(p1_life=15, p2_life=20)
-        _place_on_battlefield(game.active_player, lifelinker)
-        lifelinker.controller = game.active_player
-
-        self._setup_combat(game, lifelinker)
-        combat_damage_step(game)
-
-        # Deals 3 to defending player, gains 3 life for controller
-        assert game.non_active_player.life == 17
-        assert game.active_player.life == 18
+        savior = card(FelidarSavior)
+        t = _attacks(Side(battlefield=[savior], life=15))
+        _attack(t, savior)
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 18), life(0, 17)])
+        t.run()
 
     def test_lifelink_with_blocker(self) -> None:
-        """Lifelink gains life when dealing damage to a blocker too."""
-        lifelinker = _make_creature(
-            name="Lifelinker", power=2, toughness=2,
-            keywords=Keyword.LIFELINK,
-        )
-        blocker = _make_creature(name="Blocker", power=1, toughness=3)
-        game = _make_game(p1_life=10)
-        _place_on_battlefield(game.active_player, lifelinker)
-        _place_on_battlefield(game.non_active_player, blocker)
-        lifelinker.controller = game.active_player
-        blocker.controller = game.non_active_player
-
-        self._setup_combat(game, lifelinker, [blocker])
-        combat_damage_step(game)
-
-        # Lifelinker deals 2 to blocker -> gains 2 life
-        assert game.active_player.life == 12
+        savior, turtle = card(FelidarSavior), card(AegisTurtle)
+        t = _attacks(Side(battlefield=[savior], life=10), Side(battlefield=[turtle]))
+        _attack(t, savior)
+        _to_blockers(t)
+        _blocks(t, {turtle: savior}, then=[life(0, 12)])
+        t.run()
 
     def test_no_attackers_damage_step_skips(self) -> None:
-        """If no attackers, combat_damage_step does nothing."""
-        game = _make_game(p1_life=20, p2_life=20)
-        combat_damage_step(game)
-        assert game.active_player.life == 20
-        assert game.non_active_player.life == 20
+        t = _attacks(Side(battlefield=[card(FelidarSavior)], life=15))
+        _no_attack(t)
+        t.run()
 
     def test_without_trample_all_damage_to_blocker(self) -> None:
-        """Without trample, all damage goes to the blocker even if it exceeds toughness."""
-        big = _make_creature(name="Big", power=10, toughness=10)
-        small = _make_creature(name="Small", power=1, toughness=1)
-        game = _make_game(p2_life=20)
-        _place_on_battlefield(game.active_player, big)
-        _place_on_battlefield(game.non_active_player, small)
-        big.controller = game.active_player
-        small.controller = game.non_active_player
-
-        self._setup_combat(game, big, [small])
-        combat_damage_step(game)
-
-        # Without trample, all 10 damage goes to blocker
-        assert _damage_marked(game, small) == 10
-        # No damage to defending player
-        assert game.non_active_player.life == 20
+        ceratops, lions = card(QuakestriderCeratops), card(SavannahLions)
+        t = _attacks(Side(battlefield=[ceratops]), Side(battlefield=[lions]))
+        _attack(t, ceratops)
+        _to_blockers(t)
+        _blocks(t, {lions: ceratops}, then=[moves(lions, Zone.GRAVEYARD)])
+        t.run()
 
     def test_multiple_blockers_damage_division(self) -> None:
-        """The attacker's controller divides damage among its blockers (rule 510.1c)."""
-        attacker = _make_creature(name="Attacker", power=5, toughness=5)
-        b1 = _make_creature(name="B1", power=1, toughness=2)
-        b2 = _make_creature(name="B2", power=1, toughness=3)
-        game = _make_game(p2_life=20)
-        _place_on_battlefield(game.active_player, attacker)
-        _place_on_battlefield(game.non_active_player, b1)
-        _place_on_battlefield(game.non_active_player, b2)
-        attacker.controller = game.active_player
-        b1.controller = game.non_active_player
-        b2.controller = game.non_active_player
+        """The 3 damage is divided as lethal damage to both blockers; with no
+        trample none reaches player 1."""
+        scourge, lions, ghoul = card(BrazenScourge), card(SavannahLions), card(DiregrafGhoul)
+        t = _attacks(Side(battlefield=[scourge]), Side(battlefield=[lions, ghoul]))
+        _attack(t, scourge)
+        _to_blockers(t)
+        _blocks(
+            t, {lions: scourge, ghoul: scourge}, shares={lions: 1, ghoul: 2},
+            then=[moves(scourge, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD), moves(ghoul, Zone.GRAVEYARD)],
+        )
+        t.run()
 
-        # b1 is asked its share, 2; b2, the last blocker, takes the rest.
-        game.active_player.set_baseline(Intent(
-            pattern=GameRef(), per_query={_pref(game, b1): [Decision.number(2)]},
-        ))
-        self._setup_combat(game, attacker, [b1, b2])
-        combat_damage_step(game)
-
-        # b1 gets lethal (2), b2 gets remaining (3)
-        assert _damage_marked(game, b1) == 2
-        assert _damage_marked(game, b2) == 3
-        assert game.non_active_player.life == 20  # no trample
 
 
 # ---------------------------------------------------------------------------
 # End Combat Step
 # ---------------------------------------------------------------------------
 
-class TestEndCombat:
-    """Verify end_combat_step clears all combat state."""
 
-    def test_clears_combat_flags(self) -> None:
-        """end_combat_step should clear is_attacking and is_blocking flags."""
-        attacker = _make_creature(name="Attacker")
-        blocker = _make_creature(name="Blocker")
-
-        game = _make_game()
-        combat = game.combat_state
-        combat.in_combat = True
-        combat.attackers[attacker] = game.non_active_player
-        combat.blockers[blocker] = [attacker]
-        combat.attacker_blockers[attacker] = [blocker]
-        attacker.is_attacking = True
-        blocker.is_blocking = True
-
-        end_combat_step(game)
-
-        assert attacker.is_attacking is False
-        assert blocker.is_blocking is False
-        assert combat.in_combat is False
-        assert combat.attackers == {}
-        assert combat.blockers == {}
 
 
 # ---------------------------------------------------------------------------
@@ -830,152 +623,79 @@ class TestEndCombat:
 # ---------------------------------------------------------------------------
 
 class TestCombatIntegration:
-    """Full attack/block/damage cycle integration tests."""
+    """Full attack/block/damage cycles."""
 
     def test_full_combat_cycle_unblocked(self) -> None:
-        """Full cycle: declare attacker → no blockers → damage → end combat."""
-        bear = _make_creature(name="Bear", power=2, toughness=2, summoning_sick=False)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, bear)
-
-        _attack(game, bear)
-        declare_blockers_step(game)  # no blockers
-        combat_damage_step(game)
-        end_combat_step(game)
-
-        assert game.non_active_player.life == 18
-        assert bear.is_attacking is False
-        assert game.combat_state.in_combat is False
+        """Declare an attacker, no blockers, damage, then on to the second main phase."""
+        lions = card(SavannahLions)
+        t = _attacks(Side(battlefield=[lions]))
+        _attack(t, lions)
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 18)])
+        t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+        t.run()
 
     def test_full_combat_cycle_blocked(self) -> None:
-        """Full cycle: declare attacker → blocker → mutual damage → end combat."""
-        attacker = _make_creature(name="Attacker", power=3, toughness=3, summoning_sick=False)
-        blocker = _make_creature(name="Blocker", power=2, toughness=2, summoning_sick=False)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, attacker)
-        _place_on_battlefield(game.non_active_player, blocker)
-
-        _attack(game, attacker)
-        _block(game, {blocker: attacker})
-        combat_damage_step(game)
-
-        # Attacker dealt 3 to blocker, blocker dealt 2 to attacker
-        assert _damage_marked(game, blocker) == 3
-        assert _damage_marked(game, attacker) == 2
-        # Blocker died (3 >= 2 toughness), so SBAs should have moved it
-        gy = game.non_active_player.zones[Zone.GRAVEYARD]
-        assert gy.contains(blocker)
-
-        end_combat_step(game)
-        assert game.combat_state.in_combat is False
+        """The 3/3 kills its 2/2 blocker and survives its 2 damage."""
+        scourge, parent = card(BrazenScourge), card(PridefulParent)
+        t = _attacks(Side(battlefield=[scourge]), Side(battlefield=[parent]))
+        _attack(t, scourge)
+        _to_blockers(t)
+        _blocks(t, {parent: scourge}, then=[moves(parent, Zone.GRAVEYARD)])
+        t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+        t.run()
 
     def test_multiple_attackers_mixed_block(self) -> None:
-        """Two attackers: one blocked, one unblocked."""
-        a1 = _make_creature(name="A1", power=2, toughness=2, summoning_sick=False)
-        a2 = _make_creature(name="A2", power=3, toughness=3, summoning_sick=False)
-        b1 = _make_creature(name="B1", power=1, toughness=4, summoning_sick=False)
-
-        game = _make_game()
-        _place_on_battlefield(game.active_player, a1)
-        _place_on_battlefield(game.active_player, a2)
-        _place_on_battlefield(game.non_active_player, b1)
-
-        _attack(game, a1, a2)
-        _block(game, {b1: a1})  # b1 blocks a1 only
-        combat_damage_step(game)
-
-        # a1 blocked by b1: a1 deals 2 to b1, b1 deals 1 to a1
-        assert b1.damage_marked == 2
-        assert a1.damage_marked == 1
-        # a2 unblocked: deals 3 to defending player
-        assert game.non_active_player.life == 17
-
-        end_combat_step(game)
+        lions, scourge, turtle = card(SavannahLions), card(BrazenScourge), card(AegisTurtle)
+        t = _attacks(Side(battlefield=[lions, scourge]), Side(battlefield=[turtle]))
+        _attack(t, lions, scourge)
+        _to_blockers(t)
+        _blocks(t, {turtle: lions}, then=[life(1, 17)])
+        t.run()
 
     def test_creature_with_multiple_keywords(self) -> None:
-        """A creature with flying + trample + lifelink in combat."""
-        multi = _make_creature(
-            name="Multi", power=5, toughness=5, summoning_sick=False,
-            keywords=Keyword.FLYING | Keyword.TRAMPLE | Keyword.LIFELINK,
+        """Sire of Seven Deaths — first strike, vigilance, menace, trample,
+        reach, lifelink — attacks without tapping, needs two blockers, kills
+        both with first-strike damage before they deal theirs, tramples 5 over
+        and gains its controller 7 life."""
+        sire, lions, elves = card(SireOfSevenDeaths), card(SavannahLions), card(LlanowarElves)
+        t = _attacks(Side(battlefield=[sire]), Side(battlefield=[lions, elves]))
+        _attack(t, sire, tapping=())
+        _to_blockers(t)
+        t.act_illegal(1, lions, scoped={lions: sire}, note="menace")
+        _blocks(
+            t, {lions: sire, elves: sire}, shares={lions: 1, elves: 1},
+            first_strike=[moves(lions, Zone.GRAVEYARD), moves(elves, Zone.GRAVEYARD), life(1, 15), life(0, 27)],
         )
-        flyer_blocker = _make_creature(
-            name="FlyBlocker", power=1, toughness=2, summoning_sick=False,
-            keywords=Keyword.FLYING,
-        )
-        game = _make_game(p1_life=15, p2_life=20)
-        _place_on_battlefield(game.active_player, multi)
-        _place_on_battlefield(game.non_active_player, flyer_blocker)
-
-        _attack(game, multi)
-        _block(game, {flyer_blocker: multi})
-        combat_damage_step(game)
-
-        # Trample: 2 to blocker (lethal), 3 to player
-        assert _damage_marked(game, flyer_blocker) >= 2
-        assert game.non_active_player.life == 17
-        # Lifelink: gains 5 life total (2 to blocker + 3 to player)
-        assert game.active_player.life == 20
+        t.run()
 
     def test_blocked_but_blocker_removed_before_damage(self) -> None:
-        """If a blocker is assigned but then removed before damage,
-        the attacker is still 'blocked' and deals NO damage to the
-        defending player (unless it has trample).  Per MTG rule 509.1h,
-        once a creature is declared as blocked it stays blocked even if
-        all its blockers are removed.
-        """
-        attacker = _make_creature(name="Attacker", power=3, toughness=3, summoning_sick=False)
-        game = _make_game(p2_life=20)
-        _place_on_battlefield(game.active_player, attacker)
-        attacker.controller = game.active_player
-
-        # Simulate: attacker was blocked, but the blocker is gone
-        combat = game.combat_state
-        combat.in_combat = True
-        combat.attackers[attacker] = game.non_active_player
-        # Has a blocker list key (meaning it was blocked) but list is empty
-        combat.attacker_blockers[attacker] = []
-        # Per MTG rule 509.1h, the attacker was declared as blocked
-        combat.was_blocked.add(attacker)
-
-        combat_damage_step(game)
-
-        # Blocked creature with no remaining blockers deals NO damage
-        # to the defending player (no trample → damage goes nowhere).
-        assert game.non_active_player.life == 20
+        """The Lions stays blocked after its blocker dies, so it deals no
+        damage (rule 509.1h)."""
+        lions, mountain, bolt = card(SavannahLions), card(Mountain), card(BurstLightning)
+        elves = card(LlanowarElves)
+        t = _attacks(Side(battlefield=[lions, mountain], hand=[bolt]), Side(battlefield=[elves]))
+        _attack(t, lions)
+        _to_blockers(t)
+        t.act(1, elves, scoped={elves: lions})
+        _cast(t, mountain, bolt, choices=[elves], then=[moves(bolt, Zone.GRAVEYARD), moves(elves, Zone.GRAVEYARD)])
+        t.pass_(0)
+        t.pass_(1)
+        t.run()
 
     def test_first_strike_kills_before_normal_damage(self) -> None:
-        """First-strike creature kills blocker; blocker doesn't deal damage back.
+        """Alesha attacks, gets a +1/+1 counter from her attack trigger, and
+        her 3 first-strike damage kills the 3/3 blocking her before it deals
+        its own."""
+        alesha, scourge = card(AleshaWhoLaughsAtFate), card(BrazenScourge)
+        t = _attacks(Side(battlefield=[alesha]), Side(battlefield=[scourge]))
+        _attack(t, alesha, then=[on_stack(AleshaWhoLaughsAtFateAbility2, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(AleshaWhoLaughsAtFateAbility2)])
+        _to_blockers(t)
+        _blocks(t, {scourge: alesha}, first_strike=[moves(scourge, Zone.GRAVEYARD)])
+        t.run()
 
-        The blocker should die from SBAs between first-strike and normal
-        damage steps, so it doesn't get to deal its normal-damage back.
-        """
-        first_striker = _make_creature(
-            name="FS", power=4, toughness=1,
-            keywords=Keyword.FIRST_STRIKE,
-        )
-        blocker = _make_creature(name="Blocker", power=4, toughness=4)
-        game = _make_game()
-        _place_on_battlefield(game.active_player, first_striker)
-        _place_on_battlefield(game.non_active_player, blocker)
-        first_striker.controller = game.active_player
-        blocker.controller = game.non_active_player
-
-        combat = game.combat_state
-        combat.in_combat = True
-        combat.attackers[first_striker] = game.non_active_player
-        combat.attacker_blockers[first_striker] = [blocker]
-        # Also register blocker in combat.blockers
-        combat.blockers[blocker] = [first_striker]
-
-        combat_damage_step(game)
-
-        # First striker dealt 4 to blocker (lethal), SBAs should kill blocker
-        # Blocker should be in graveyard
-        gy = game.non_active_player.zones[Zone.GRAVEYARD]
-        assert gy.contains(blocker)
-        # First striker should NOT have taken damage from blocker
-        # (blocker died before normal damage step)
-        assert first_striker.damage_marked == 0
 
 
 # ---------------------------------------------------------------------------
@@ -1053,87 +773,64 @@ class TestCombatDamageFiresEvent:
         _deal_damage(attacker, game.players[1], 0, game, game.combat_state)
         assert events == []
 
+
     def test_combat_damage_step_fires_for_unblocked_attacker(self) -> None:
-        """Integration: driving combat_damage_step fires the event once for an
-        unblocked attacker hitting the defending player — the executor path."""
-        game = _make_game()
-        attacker = _make_creature("Raider", 2, 2)
-        _place_on_battlefield(game.players[0], attacker, game)
-        _attack(game, attacker)
-        events = _record_events(game, DealsDamageTriggeredEvent)
-        combat_damage_step(game)
-        combat_hits = [
-            e for e in events
-            if e.is_combat and e.target is game.players[1] and e.source is attacker
-        ]
-        assert len(combat_hits) == 1
-        assert combat_hits[0].amount == 2
+        """Eager Trufflesnout's combat-damage trigger makes a Food when it
+        deals combat damage to player 1."""
+        snout = card(EagerTrufflesnout)
+        t = _attacks(Side(battlefield=[snout]))
+        _attack(t, snout)
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 16), on_stack(EagerTrufflesnoutAbility2, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(EagerTrufflesnoutAbility2), appears(0)])
+        t.run()
 
 
 class TestAttacksFiresEvent:
-    """engine/combat.py::declare_attackers_step fires AttacksTriggeredEvent
-    once per declared attacker, after the full set is registered (Phase I)."""
+    """Attack triggers fire once per declared attacker, after the whole
+    declaration is made (rule 508.2)."""
 
     def test_fires_once_per_attacker_with_both_fields(self) -> None:
-        game = _make_game()
-        a1 = _make_creature("A1", 2, 2)
-        a2 = _make_creature("A2", 2, 2)
-        _place_on_battlefield(game.players[0], a1, game)
-        _place_on_battlefield(game.players[0], a2, game)
-        events = _record_events(game, AttacksTriggeredEvent)
-        _attack(game, a1, a2)
-        assert len(events) == 2
-        assert {e.attacker for e in events} == {a1, a2}
-        # Both fields carry the attacking creature (subscribers read either).
-        for e in events:
-            assert e.creature is e.attacker
+        """Each Sanguine Syphoner's attack trigger drains 1."""
+        s1, s2 = card(SanguineSyphoner), card(SanguineSyphoner)
+        t = _attacks(Side(battlefield=[s1, s2]))
+        _attack(t, s1, s2, then=[on_stack(SanguineSyphonerAbility1, 0), on_stack(SanguineSyphonerAbility1, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(SanguineSyphonerAbility1), life(1, 19), life(0, 21)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(SanguineSyphonerAbility1), life(1, 18), life(0, 22)])
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 16)])
+        t.run()
 
     def test_fires_after_full_declaration(self) -> None:
-        """Every fire sees the COMPLETE attacker set in combat_state — the event
-        fires only after the whole set is registered (rule 508.2), so a
-        "each other attacking creature" trigger (Dauntless Veteran) is correct."""
-        game = _make_game()
-        a1 = _make_creature("A1", 2, 2)
-        a2 = _make_creature("A2", 2, 2)
-        _place_on_battlefield(game.players[0], a1, game)
-        _place_on_battlefield(game.players[0], a2, game)
-        counts: list[int] = []
-
-        def _cond(g: GameState, _event: object) -> bool:
-            counts.append(len(g.combat_state.attackers))
-            return False
-
-        game.trigger_manager.register(
-            TriggerRegistration(
-                event_type=AttacksTriggeredEvent,
-                condition=_cond,
-                effect=lambda _g: None,
-                source=object(),
-                controller=game.active_player,
-            )
-        )
-        _attack(game, a1, a2)
-        assert counts == [2, 2]
+        """Armasaur Guide's trigger needs three attackers, so it fires only
+        when it sees the whole declaration; its +1/+1 counter on the Lions
+        adds 1 to the damage."""
+        guide, lions, elves = card(ArmasaurGuide), card(SavannahLions), card(LlanowarElves)
+        t = _attacks(Side(battlefield=[guide, lions, elves]))
+        _attack(t, lions, guide, elves, tapping=(lions, elves), then=[on_stack(ArmasaurGuideAbility2, 0)])
+        t.pass_(0, choices=[lions])
+        t.pass_(1, then=[off_stack(ArmasaurGuideAbility2)])
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 12)])
+        t.run()
 
     def test_no_attackers_declared_fires_nothing(self) -> None:
-        game = _make_game()
-        a1 = _make_creature("A1", 2, 2)
-        _place_on_battlefield(game.players[0], a1, game)  # eligible, but not declared
-        events = _record_events(game, AttacksTriggeredEvent)
-        _attack(game)
-        assert events == []
+        t = _attacks(Side(battlefield=[card(SanguineSyphoner)]))
+        _no_attack(t)
+        t.run()
 
     def test_ineligible_creature_does_not_fire(self) -> None:
-        """A declaration naming a tapped creature never takes effect, so the
-        creature fires no attacks event; declaring the eligible one alone does."""
-        game = _make_game()
-        a1 = _make_creature("A1", 2, 2)
-        tapped = _make_creature("Tapped", 2, 2, is_tapped=True)
-        _place_on_battlefield(game.players[0], a1, game)
-        _place_on_battlefield(game.players[0], tapped, game)
-        events = _record_events(game, AttacksTriggeredEvent)
-        game.active_player.set_script(
-            [act_illegal(_pref(game, a1), _pref(game, tapped)), act(_pref(game, a1))]
-        )
-        declare_attackers_step(game)
-        assert {e.attacker for e in events} == {a1}
+        """A declaration naming a tapped Syphoner never takes effect, so it
+        drains nothing; declaring the untapped one alone drains 1."""
+        syphoner, tapped = card(SanguineSyphoner), card(SanguineSyphoner, tapped=True)
+        t = _attacks(Side(battlefield=[syphoner, tapped]))
+        t.act_illegal(0, syphoner, tapped, note="a tapped creature can't attack")
+        _attack(t, syphoner, then=[on_stack(SanguineSyphonerAbility1, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(SanguineSyphonerAbility1), life(1, 19), life(0, 21)])
+        _to_blockers(t)
+        _no_blocks(t, then=[life(1, 18)])
+        t.run()

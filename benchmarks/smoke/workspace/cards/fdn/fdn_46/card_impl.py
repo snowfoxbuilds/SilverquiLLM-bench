@@ -11,6 +11,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class LunarInsightAbility1:
+    text = 'Draw a card for each different mana value among nonland permanents you control.'
+
+
+# endregion Printed abilities
+
+
 class LunarInsight(Sorcery):
     """Lunar Insight — {2}{U} — Sorcery.
 

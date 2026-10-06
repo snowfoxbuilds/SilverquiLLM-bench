@@ -106,6 +106,19 @@ def _sba_creature_zero_toughness(game: GameState) -> bool:
     return action_taken
 
 
+def _sba_planeswalker_zero_loyalty(game: GameState) -> bool:
+    """A planeswalker with 0 loyalty is put into its owner's graveyard (rule 704.5i)."""
+    to_remove = [
+        (player, obj)
+        for player in game.players
+        for obj in _battlefield(game, player).get_all()
+        if CardType.PLANESWALKER in getattr(obj, "card_types", ()) and getattr(obj, "loyalty", 1) <= 0
+    ]
+    for player, obj in to_remove:
+        _move_to_graveyard(game, player, obj)
+    return bool(to_remove)
+
+
 def _sba_creature_lethal_damage(game: GameState) -> bool:
     """A creature with lethal damage marked on it is destroyed (moved to graveyard).
 
@@ -347,6 +360,8 @@ def check_state_based_actions(game: GameState) -> bool:
     action_taken = _sba_creature_zero_toughness(game) or action_taken
     # Creature with lethal damage → destroyed
     action_taken = _sba_creature_lethal_damage(game) or action_taken
+    # Planeswalker with 0 loyalty → graveyard
+    action_taken = _sba_planeswalker_zero_loyalty(game) or action_taken
     # Player who drew from empty library loses
     action_taken = _sba_draw_from_empty_library(game) or action_taken
     # Legend rule

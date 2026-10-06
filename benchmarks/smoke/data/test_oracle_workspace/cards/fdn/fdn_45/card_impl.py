@@ -1,11 +1,14 @@
 """Card implementation for Kiora, the Rising Tide."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from cards.fdn.tokens import make_creature_token
 from engine.card import Creature
 from engine.card_queries import choose_object, query_yes_no
-from engine.types import Color, Keyword, ManaCost, Supertype, Zone
 from engine.events import AttacksTriggeredEvent
+from engine.types import Color, ManaCost, Supertype, Zone
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -46,10 +49,9 @@ class KioraTheRisingTide(Creature):
         kwargs.setdefault('rules_text', 'When Kiora enters, draw two cards, then discard two cards.\nThreshold — Whenever Kiora attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.')
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: 'GameState') -> None:
+    def _enters(self, game: 'GameState', controller: Any) -> None:
         """ETB: draw 2, then discard 2."""
         from engine.game import discard, draw_card
-        controller = self.controller
         if controller is None:
             return
         for _ in range(2):
@@ -65,6 +67,10 @@ class KioraTheRisingTide(Creature):
 
     def register_triggers(self, game: 'GameState') -> None:
         """Register attack trigger: threshold → create Scion of the Deep token."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, KioraTheRisingTideAbility1, self._enters)
+
         from engine.game import create_token
         from engine.triggers import TriggerRegistration
         source = self

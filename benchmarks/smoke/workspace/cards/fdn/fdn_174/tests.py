@@ -88,7 +88,7 @@ class TestFakeYourOwnDeathThroughStack:
 
         # Cast and resolve through the stack — must not raise (the NameError
         # used to crash resolution as the spell left the stack).
-        cast_spell(game, 0, "Fake Your Own Death", targets=[target])
+        cast_spell(game, 0, FakeYourOwnDeath, targets=[target])
 
         # The spell resolved off the stack into its owner's graveyard.
         assert game.stack.is_empty()

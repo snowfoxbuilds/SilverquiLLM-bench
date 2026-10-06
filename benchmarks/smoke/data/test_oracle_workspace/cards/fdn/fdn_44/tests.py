@@ -20,7 +20,7 @@ import pytest
 
 from cards.fdn.fdn_44.card_impl import KaitoCunningInfiltrator
 from engine.abilities import AbilityError, clear_loyalty_tracking
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import CardType, ManaCost, Phase, Supertype, Zone
@@ -63,7 +63,7 @@ def _seed_library(game, player, n=1):
 
 def _activate_targeting(game, player, walker, index, target):
     player.start_intent("kaito", Intent(
-        pattern=GameRef(card=frozenset({("name", walker.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(walker))})),
         preferences=(Decision.obj(instance=target.instance_id),),
     ))
     try:
@@ -75,7 +75,7 @@ def _activate_targeting(game, player, walker, index, target):
 class TestKaitoProperties:
     def test_static_data(self):
         kaito = KaitoCunningInfiltrator(owner=None)
-        assert kaito.name == "Kaito, Cunning Infiltrator"
+        assert printed_class(kaito) is KaitoCunningInfiltrator
         assert kaito.mana_cost == ManaCost.parse("{1}{U}{U}")
         assert kaito.starting_loyalty == 3
         assert Supertype.LEGENDARY in kaito.supertypes

@@ -4,12 +4,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.card_queries import choose_object
 from engine.types import CardType, Keyword, ManaCost, Zone
 
 if TYPE_CHECKING:
     from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class AbyssalHarvesterAbility1:
+    text = "{T}: Exile target creature card from a graveyard that was put there this turn. Create a token that's a copy of it, except it's a Nightmare in addition to its other types. Then exile all other Nightmare tokens you control."
+
+
+# endregion Printed abilities
 
 
 class AbyssalHarvester(Creature):
@@ -44,10 +54,9 @@ class AbyssalHarvester(Creature):
 
         source = self
 
-        def _tap_ability_effect(game: "GameState") -> None:
+        def _tap_ability_effect(game: "GameState", controller: Any) -> None:
             from engine.game import create_token, exile
 
-            controller = getattr(source, "controller", None)
             if controller is None:
                 return
 
@@ -91,6 +100,7 @@ class AbyssalHarvester(Creature):
             if hasattr(chosen, "rules_text"):
                 token_kwargs["rules_text"] = chosen.rules_text
             token = Creature(**token_kwargs)
+            token.printed_as = printed_class(chosen)
             # ``colors`` is an explicit instance attribute (see
             # cards/fdn/tokens.py), not a Creature constructor kwarg — copy it
             # after construction.
@@ -113,6 +123,7 @@ class AbyssalHarvester(Creature):
             cost=lambda game, src=self: not getattr(src, "is_tapped", False),
             effect=_tap_ability_effect,
             description="{T}: Exile target creature card from a graveyard that was put there this turn. Create a token that's a copy of it, except it's a Nightmare in addition to its other types. Then exile all other Nightmare tokens you control.",
+            printed=AbyssalHarvesterAbility1,
         )
         ability.tap_cost = True
         return [ability]

@@ -47,26 +47,32 @@ class MeteorGolem(ArtifactCreature):
         )
         super().__init__(**kwargs)
 
-    def _is_opponent_nonland_permanent(self, obj: Any) -> bool:
+    def _is_opponent_nonland_permanent(self, obj: Any, controller: Any) -> bool:
         """Legal target: a nonland permanent controlled by a player other than
-        the caster. Shared by ``get_targets`` and the resolution revalidation."""
-        controller = self.controller or getattr(self, "owner", None)
+        the ability's controller. Shared by the targeting and the resolution revalidation."""
         if CardType.LAND in getattr(obj, "card_types", set()):
             return False
         obj_controller = getattr(obj, "controller", None)
         return obj_controller is not None and obj_controller is not controller
 
-    def get_targets(self, game: "GameState") -> list[Any]:
+    def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Required target: a nonland permanent an opponent controls."""
         return [
             TargetRequirement(
-                filter_fn=self._is_opponent_nonland_permanent,
+                filter_fn=lambda obj, _c=controller: self._is_opponent_nonland_permanent(obj, _c),
                 description="target nonland permanent an opponent controls",
                 zone=Zone.BATTLEFIELD,
             )
         ]
 
-    def on_resolve(self, game: "GameState") -> None:
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability: it targets as it is put
+        on the stack (rule 603.3d)."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, MeteorGolemAbility1, self._enters, targets=self._enters_targets)
+
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
         """Destroy the targeted permanent.
 
         Revalidate the COMPLETE predicate at resolution: still a *nonland*
@@ -76,12 +82,11 @@ class MeteorGolem(ArtifactCreature):
         """
         from engine.game import destroy
 
-        chosen = getattr(self, "chosen_targets", None) or []
-        target = chosen[0] if chosen else None
+        target = targets[0] if targets else None
         if target is None:
             return
         if not _on_battlefield(game, target):
             return
-        if not self._is_opponent_nonland_permanent(target):
+        if not self._is_opponent_nonland_permanent(target, controller):
             return
         destroy(game, target)

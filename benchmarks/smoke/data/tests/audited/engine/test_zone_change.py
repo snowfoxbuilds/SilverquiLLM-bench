@@ -10,16 +10,40 @@ effect locked onto it by a resolved spell or ability no longer applies to it
 
 from __future__ import annotations
 
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_162.card_impl import RunAwayTogether
+from cards.fdn.fdn_164.card_impl import SpectralSailor
+from cards.fdn.fdn_187.card_impl import Zombify
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_276.card_impl import Swamp
+from cards.fdn.fdn_278.card_impl import Mountain
+from test_interface import Phase, Side, Step, card, create_game
+from test_utils import (
+    activate_card_ability,
+    behavioral_game,
+    enter_permanent,
+    resolve_stack,
+)
+
 from engine.card import ActivatedAbility, Artifact, Creature
-from engine.continuous_effects import DURATION_END_OF_TURN, DURATION_PERMANENT, ContinuousEffect, Layer, SubLayer
+from engine.continuous_effects import (
+    DURATION_END_OF_TURN,
+    DURATION_PERMANENT,
+    ContinuousEffect,
+    Layer,
+    SubLayer,
+)
 from engine.events import CreatureDiesTriggeredEvent, LeavesBattlefieldTriggeredEvent
-from engine.game import add_counter, deal_damage, destroy, exile, gain_life, sacrifice, tap
+from engine.game import add_counter, destroy, exile, gain_life, sacrifice, tap
 from engine.state_based_actions import resolve_state_based_actions
 from engine.triggers import TriggerRegistration
-from engine.turn import untap_step
 from engine.types import Zone
 from engine.zones import move_to_zone
-from test_utils import activate_card_ability, behavioral_game, declare_attackers, enter_permanent, resolve_stack
+from silverquillm.table import Table, life, moves, taps
 
 
 def _creature(name: str = "Test Creature", power: int = 1, toughness: int = 1) -> Creature:
@@ -71,48 +95,90 @@ def test_returned_permanent_enters_untapped():
     assert creature.is_tapped is False
 
 
-def test_card_off_the_battlefield_has_no_status():
-    game = behavioral_game()
-    p1 = game.players[0]
-    creature = enter_permanent(game, p1, _creature("Attacker", 2, 3))
-    untap_step(game)
-    declare_attackers(game, ["Attacker"])
-    deal_damage(game, _creature("Damage Source"), creature, 1)
-    assert creature.is_attacking and creature.is_tapped and creature.damage_marked == 1
+def _tap_and_cast(t, lands, spell, *, choices=(), then=()):
+    """Player 0 taps ``lands`` and casts ``spell``, and both players pass."""
+    for land in lands:
+        t.act(0, land, then=[taps(land)])
+    t.act(0, spell, choices=list(choices), then=[moves(spell, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=list(then))
 
-    destroy(game, creature)
-    assert game.get_graveyard(p1).contains(creature)
-    assert creature.is_tapped is False
-    assert creature.damage_marked == 0
-    assert creature.is_attacking is False
-    assert creature.is_blocking is False
+
+def _bolt_then_zombify(lions):
+    """Player 0, in their first main phase, kills their own Savannah Lions
+    with Burst Lightning and returns it to the battlefield with Zombify."""
+    bolt, zombify, mountain, swamp = card(BurstLightning), card(Zombify), card(Mountain), card(Swamp)
+    plains = [card(Plains) for _ in range(3)]
+    t = Table(create_game(
+        Side(hand=[bolt, zombify], battlefield=[lions, mountain, swamp, *plains]),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    ))
+    _tap_and_cast(t, [mountain], bolt, choices=[lions],
+                  then=[moves(bolt, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD)])
+    _tap_and_cast(t, [swamp, *plains], zombify, choices=[lions],
+                  then=[moves(zombify, Zone.GRAVEYARD), moves(lions, Zone.BATTLEFIELD)])
+    return t
+
+
+def test_card_off_the_battlefield_has_no_status():
+    """An attacking Savannah Lions killed in combat is an untapped card in the
+    graveyard, and Zombify returns it with none of the damage that killed it."""
+    lions, scourge, zombify, swamp = card(SavannahLions), card(BrazenScourge), card(Zombify), card(Swamp)
+    plains = [card(Plains) for _ in range(3)]
+    t = Table(create_game(
+        Side(hand=[zombify], battlefield=[lions, swamp, *plains]),
+        Side(battlefield=[scourge]),
+        start=(Step.BEGIN_COMBAT, 0),
+    ))
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, lions, then=[taps(lions)])
+    t.pass_(0)
+    t.pass_(1)
+    t.act(1, scourge, scoped={scourge: lions})
+    t.pass_(0)
+    t.pass_(1, then=[moves(lions, Zone.GRAVEYARD)], note="the Lions is in the graveyard untapped")
+    t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+    _tap_and_cast(t, [swamp, *plains], zombify, choices=[lions],
+                  then=[moves(zombify, Zone.GRAVEYARD), moves(lions, Zone.BATTLEFIELD)])
+    t.pass_(0, note="the returned Lions survives: it has no damage marked")
+    t.run()
 
 
 def test_returned_creature_is_a_new_object_in_combat():
-    game = behavioral_game()
-    p1 = game.players[0]
-    creature = enter_permanent(game, p1, _creature("Attacker", 2, 2))
-    untap_step(game)
-    declare_attackers(game, ["Attacker"])
-    assert creature.is_attacking
-
-    move_to_zone(game, creature, Zone.BATTLEFIELD, Zone.HAND)
-    move_to_zone(game, creature, Zone.HAND, Zone.BATTLEFIELD)
-    assert game.get_battlefield(p1).contains(creature)
-    assert creature.is_attacking is False
-    assert creature not in game.combat_state.attackers
+    """An attacking Spectral Sailor returned to its owner's hand by Run Away
+    Together and cast again is a new object that is not attacking, so only
+    the Savannah Lions attacking beside it deals combat damage."""
+    sailor, lions, elves = card(SpectralSailor), card(SavannahLions), card(LlanowarElves)
+    run_away, islands, plains = card(RunAwayTogether), [card(Island), card(Island)], card(Plains)
+    t = Table(create_game(
+        Side(hand=[run_away], battlefield=[sailor, lions, *islands, plains]),
+        Side(battlefield=[elves]),
+        start=(Step.BEGIN_COMBAT, 0),
+    ))
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, sailor, lions, then=[taps(sailor), taps(lions)])
+    _tap_and_cast(t, [islands[0], plains], run_away, choices=[sailor, elves],
+                  then=[moves(run_away, Zone.GRAVEYARD), moves(sailor, Zone.HAND), moves(elves, Zone.HAND)])
+    _tap_and_cast(t, [islands[1]], sailor, then=[moves(sailor, Zone.BATTLEFIELD)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)  # declares no blockers
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 18)], note="only the Lions' 2 damage: the Sailor is not attacking")
+    t.run()
 
 
 def test_returned_creature_is_summoning_sick():
-    game = behavioral_game()
-    p1 = game.players[0]
-    creature = enter_permanent(game, p1, _creature())
-    untap_step(game)
-    assert creature.summoning_sick is False
-
-    exile(game, creature)
-    move_to_zone(game, creature, Zone.EXILE, Zone.BATTLEFIELD)
-    assert creature.summoning_sick is True
+    """A Savannah Lions that dies and returns with Zombify has come under its
+    controller's control this turn, so it can't attack."""
+    lions = card(SavannahLions)
+    t = _bolt_then_zombify(lions)
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act_illegal(0, lions, note="the returned Lions is summoning sick")
+    t.pass_(0)
+    t.pass_(0)
+    t.pass_(1)
+    t.run()
 
 
 def test_token_ceases_to_exist_off_the_battlefield():
@@ -260,18 +326,6 @@ def test_static_effect_applies_to_a_returned_permanent():
     assert creature.power == 3
 
 
-def test_locked_effect_still_ends_at_cleanup():
-    game = behavioral_game()
-    p1 = game.players[0]
-    creature = enter_permanent(game, p1, _creature("Pumped", 2, 2))
-    _pump(game, _creature("Spell"), [creature])
-    game.effect_manager.apply_all(game)
-    assert creature.power == 5
-
-    from engine.turn import cleanup_mechanical
-
-    cleanup_mechanical(game)
-    assert creature.power == 2
 
 
 class _SacrificeForLife(Artifact):

@@ -8,6 +8,21 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SpinnerOfSoulsAbility1:
+    text = 'Reach'
+
+
+class SpinnerOfSoulsAbility2:
+    text = 'Whenever another nontoken creature you control dies, you may reveal cards from the top of your library until you reveal a creature card. Put that card into your hand and the rest on the bottom of your library in a random order.'
+
+
+# endregion Printed abilities
+
+
 class SpinnerOfSouls(Creature):
     """Spinner of Souls — {2}{G} — 4/3 — Spider Spirit — Reach
 
@@ -45,8 +60,7 @@ class SpinnerOfSouls(Creature):
                 return False
             return True
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             library = controller.zones[Zone.LIBRARY]
@@ -67,4 +81,4 @@ class SpinnerOfSouls(Creature):
             for card in revealed:
                 library.add(card, position='bottom')
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=SpinnerOfSoulsAbility2))

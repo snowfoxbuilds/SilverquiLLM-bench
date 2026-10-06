@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from cards.fdn.fdn_104.card_impl import ElvishRegrower
-from engine.card import Creature, Instant, Land
+from engine.card import Creature, Instant, Land, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
@@ -46,7 +46,7 @@ def _cast_no_resolve(game, player_index, card, targets, zone=Zone.BATTLEFIELD):
         for t in targets
     )
     player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
         preferences=prefs,
     ))
     try:
@@ -72,7 +72,7 @@ def _setup(dead=None):
 class TestElvishRegrowerProperties:
     def test_static_data(self):
         card = ElvishRegrower(owner=None)
-        assert card.name == "Elvish Regrower"
+        assert printed_class(card) is ElvishRegrower
         assert card.mana_cost == ManaCost.parse("{2}{G}{G}")
         assert (card.base_power, card.base_toughness) == (4, 3)
         assert card.subtypes == {"Elf", "Druid"}
@@ -81,7 +81,7 @@ class TestElvishRegrowerProperties:
 class TestElvishRegrowerETB:
     def test_returns_targeted_land_card_to_hand(self):
         game, p1, p2, regrower, dead = _setup(Land(name="Fallen Forest"))
-        cast_spell(game, 0, "Elvish Regrower", targets=[dead])
+        cast_spell(game, 0, ElvishRegrower, targets=[dead])
         assert game.get_hand(p1).contains(dead)
         assert not game.get_graveyard(p1).contains(dead)
         assert game.get_battlefield(p1).contains(regrower)
@@ -132,6 +132,6 @@ class TestElvishRegrowerETB:
                         mana={ManaType.GREEN: 2, ManaType.COLORLESS: 2})
         game.phase = Phase.PRECOMBAT_MAIN
         with pytest.raises(_TestSetupError):
-            cast_spell(game, 0, "Elvish Regrower")
+            cast_spell(game, 0, ElvishRegrower)
         # The cast was rejected — the Regrower never resolved onto the field.
         assert not game.get_battlefield(p1).contains(regrower)

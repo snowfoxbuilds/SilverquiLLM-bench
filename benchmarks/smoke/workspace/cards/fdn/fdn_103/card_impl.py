@@ -8,6 +8,21 @@ from engine.events import EntersBattlefieldTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ElfswornGiantAbility1:
+    text = 'Reach (This creature can block creatures with flying.)'
+
+
+class ElfswornGiantAbility2:
+    text = 'Landfall — Whenever a land you control enters, create a 1/1 green Elf Warrior creature token.'
+
+
+# endregion Printed abilities
+
+
 class ElfswornGiant(Creature):
     """Elfsworn Giant — {3}{G}{G} — 5/3 — Giant — Reach.
 
@@ -49,10 +64,10 @@ class ElfswornGiant(Creature):
                 return bf.contains(permanent)
             return perm_ctrl is ctrl
 
-        def _landfall_effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _landfall_effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             token = make_creature_token('Elf Warrior', {'Elf', 'Warrior'}, [Color.GREEN], 1, 1)
             create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_landfall_condition, effect=_landfall_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_landfall_condition, effect=_landfall_effect, source=self, controller=controller, printed=ElfswornGiantAbility2))

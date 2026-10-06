@@ -13,6 +13,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class FanaticalFirebrandAbility1:
+    text = 'Haste (This creature can attack and {T} as soon as it comes under your control.)'
+
+
+class FanaticalFirebrandAbility2:
+    text = '{T}, Sacrifice this creature: It deals 1 damage to any target.'
+
+
+# endregion Printed abilities
+
+
 def _on_battlefield(game: Any, obj: Any) -> bool:
     """Return ``True`` if *obj* is on any player's battlefield."""
     for player in game.players:
@@ -128,5 +142,6 @@ class FanaticalFirebrand(Creature):
                 can_activate=_can_activate,
                 description="{T}, Sacrifice this creature: It deals 1 damage "
                 "to any target.",
+                printed=FanaticalFirebrandAbility2,
             )
         ]

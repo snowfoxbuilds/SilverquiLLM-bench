@@ -1,16 +1,26 @@
-"""Card implementation for Seismic Rupture."""
-
-from __future__ import annotations
-
-from engine.card import CardImpl
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from engine.game_state import GameState
+from engine.card import Sorcery
+from engine.types import CardType, ManaCost, Supertype
 
 
-class SeismicRupture(CardImpl):
-    """TODO: Implement Seismic Rupture."""
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
 
-    pass
+
+class SeismicRuptureAbility1:
+    text = 'Seismic Rupture deals 2 damage to each creature without flying.'
+
+
+# endregion Printed abilities
+
+
+class SeismicRupture(Sorcery):
+    """Implementation task: see card_spec.json."""
+
+    def __init__(self, **kwargs):
+        defaults = {
+            'name': 'Seismic Rupture',
+            'mana_cost': ManaCost.parse('{2}{R}'),
+            'card_types': {CardType.SORCERY},
+            'rules_text': 'Seismic Rupture deals 2 damage to each creature without flying.',
+        }
+        defaults.update(kwargs)
+        super().__init__(**defaults)

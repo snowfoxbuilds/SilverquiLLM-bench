@@ -8,6 +8,25 @@ from engine.events import AttacksTriggeredEvent, CreatureDiesTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class HighSocietyHunterAbility1:
+    text = 'Flying'
+
+
+class HighSocietyHunterAbility2:
+    text = 'Whenever this creature attacks, you may sacrifice another creature. If you do, put a +1/+1 counter on this creature.'
+
+
+class HighSocietyHunterAbility3:
+    text = 'Whenever another nontoken creature dies, draw a card.'
+
+
+# endregion Printed abilities
+
+
 class HighSocietyHunter(Creature):
     """High-Society Hunter — {3}{B}{B} — 5/3 — Vampire Noble — Flying.
 
@@ -39,9 +58,8 @@ class HighSocietyHunter(Creature):
             """Fire when this creature attacks."""
             return event.creature is source
 
-        def _attack_effect(game: 'GameState') -> None:
+        def _attack_effect(game: 'GameState', controller: Any) -> None:
             """May sacrifice another creature; if so, add +1/+1 counter."""
-            controller = getattr(source, 'controller', None)
             if controller is None:
                 return
             battlefield = game.get_battlefield(controller)
@@ -63,11 +81,10 @@ class HighSocietyHunter(Creature):
                 return False
             return True
 
-        def _dies_effect(game: 'GameState') -> None:
+        def _dies_effect(game: 'GameState', controller: Any) -> None:
             """Draw a card."""
-            controller = getattr(source, 'controller', None) or getattr(source, 'owner', None)
             if controller is not None:
                 draw_card(game, controller)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller))
-        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_dies_condition, effect=_dies_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=HighSocietyHunterAbility2))
+        game.trigger_manager.register(TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=_dies_condition, effect=_dies_effect, source=self, controller=controller, printed=HighSocietyHunterAbility3))

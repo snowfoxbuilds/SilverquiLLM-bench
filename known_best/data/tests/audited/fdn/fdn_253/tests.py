@@ -1,53 +1,67 @@
 """Goldvein Pick grants its equip bonus and creates Treasure through combat."""
 
-from cards.fdn.fdn_253.card_impl import GoldveinPick
-from engine.card import Creature, Equipment
-from engine.combat import combat_damage_step
-from engine.types import ManaCost, ManaType
-from test_utils import (
-    activate_card_ability,
-    behavioral_game,
-    declare_attackers,
-    declare_blockers,
-    enter_permanent,
-    object_preference,
-    prefer,
-    put_on_battlefield,
-    resolve_stack,
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_253.card_impl import GoldveinPick, GoldveinPickAbility2, GoldveinPickAbility3
+from engine.card import Equipment, printed_class
+from engine.types import ManaCost
+from test_interface import (
+    Decision,
+    ManaType,
+    Phase,
+    Side,
+    Step,
+    Zone,
+    card,
+    create_game,
+    player,
+    token,
 )
 
+from silverquillm.table import Table, appears, ceases, life, moves, off_stack, on_stack, taps
 
-def arrange():
-    game = behavioral_game()
-    player = game.players[0]
-    bear = put_on_battlefield(game, player, Creature(name="Bear", base_power=2, base_toughness=2))
-    bear.summoning_sick = False
-    pick = enter_permanent(game, player, GoldveinPick())
-    player.mana_pool.add(ManaType.COLORLESS, 1)
-    prefer(player, object_preference(game, bear))
-    activate_card_ability(game, player, pick)
-    resolve_stack(game)
-    return game, player, bear, pick
+
+def arrange(*, hand=()):
+    """Player 0 equips Goldvein Pick to Savannah Lions, then attacks with it
+    unblocked; its combat damage triggers the Pick."""
+    lions, pick = card(SavannahLions), card(GoldveinPick)
+    game = create_game(
+        Side(hand=list(hand), battlefield=[lions, pick], mana={ManaType.COLORLESS: 1}),
+        Side(),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, GoldveinPickAbility3, choices=[lions], then=[on_stack(GoldveinPickAbility3, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(GoldveinPickAbility3)])
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, lions, then=[taps(lions)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 17), on_stack(GoldveinPickAbility2, 0)], note="the equipped Lions deals 3")
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(GoldveinPickAbility2), appears(0)])
+    return t
 
 
 def test_static_data():
     card = GoldveinPick()
-    assert card.name == "Goldvein Pick" and card.mana_cost == ManaCost.parse("{2}")
+    assert printed_class(card) is GoldveinPick and card.mana_cost == ManaCost.parse("{2}")
     assert isinstance(card, Equipment) and card.equip_cost == ManaCost.parse("{1}")
 
 
 def test_grants_plus_one_plus_one():
-    _game, player, bear, pick = arrange()
-    assert (bear.power, bear.toughness) == (3, 3) and pick.attached_to is bear
-    assert player.mana_pool.total() == 0
+    arrange().run()
 
 
 def test_combat_damage_to_player_makes_treasure():
-    game, player, bear, _pick = arrange()
-    declare_attackers(game, [bear.name])
-    declare_blockers(game, {})
-    combat_damage_step(game)
-    resolve_stack(game)
-    assert game.players[1].life == 17
-    tokens = [c for c in game.get_battlefield(player).get_all() if getattr(c, "is_token", False)]
-    assert len(tokens) == 1 and "Treasure" in tokens[0].subtypes
+    bolt = card(BurstLightning)
+    t = arrange(hand=[bolt])
+    treasure = token(1)
+    t.act(0, treasure, choices=[Decision.color("R")], then=[ceases(treasure)], note="the Treasure makes red mana")
+    t.act(0, bolt, choices=[player(1)], then=[moves(bolt, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 15)])
+    t.run()

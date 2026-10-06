@@ -7,6 +7,25 @@ from engine.events import LosesLifeTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class BloodthirstyConquerorAbility1:
+    text = 'Flying'
+
+
+class BloodthirstyConquerorAbility2:
+    text = 'deathtouch'
+
+
+class BloodthirstyConquerorAbility3:
+    text = 'Whenever an opponent loses life, you gain that much life. (Damage causes loss of life.)'
+
+
+# endregion Printed abilities
+
+
 class BloodthirstyConqueror(Creature):
     """Bloodthirsty Conqueror — {3}{B}{B} — 5/5 — Vampire Knight.
 
@@ -46,11 +65,10 @@ class BloodthirstyConqueror(Creature):
             _last_amount[0] = event.amount
             return _last_amount[0] > 0
 
-        def _eff(game: 'GameState') -> None:
-            controller = getattr(source, 'controller', None)
+        def _eff(game: 'GameState', controller: Any) -> None:
             if controller is None:
                 return
             from engine.game import gain_life
             gain_life(game, controller, _last_amount[0])
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=LosesLifeTriggeredEvent, condition=_cond, effect=_eff, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=LosesLifeTriggeredEvent, condition=_cond, effect=_eff, source=self, controller=controller, printed=BloodthirstyConquerorAbility3))

@@ -15,6 +15,7 @@ from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import ManaCost, ManaType, Phase, Zone
 from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
+from engine.card import printed_class
 
 
 def _put_in_library(game, player, card):
@@ -29,7 +30,7 @@ def _put_in_library(game, player, card):
 class TestBurnishedHartProperties:
     def test_static_data(self):
         h = BurnishedHart(owner=None)
-        assert h.name == "Burnished Hart"
+        assert printed_class(h) is BurnishedHart
         assert h.mana_cost == ManaCost.parse("{3}")
 
 
@@ -44,7 +45,7 @@ class TestBurnishedHartSearch:
         game.phase = Phase.PRECOMBAT_MAIN
 
         p1.start_intent("hart", Intent(
-            pattern=GameRef(card=frozenset({("name", "Burnished Hart")})),
+            pattern=GameRef(card=frozenset({("printed", BurnishedHart)})),
             preferences=(
                 Decision.obj(instance=a.instance_id),
                 Decision.obj(instance=b.instance_id),

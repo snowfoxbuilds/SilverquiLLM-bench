@@ -1,410 +1,207 @@
-"""Tests for cast_spell_free — casting without paying mana costs via the stack.
+"""Casting a spell without paying its mana cost puts it on the stack like any
+other cast (rules 601.2, 118.9): it can be responded to and countered, and on
+resolution a permanent spell enters the battlefield and any other goes to its
+owner's graveyard (608.3, 608.2n).
 
-Verifies:
-- cast_spell_free places the spell on the stack (not directly resolving it)
-- The spell can be countered while on the stack
-- On resolution, permanents go to battlefield, non-permanents to graveyard
-- No mana payment is required
-- The card's source zone (e.g., exile) is handled correctly
-- on_resolve is called only when the spell actually resolves from the stack
+Each free cast comes from Etali, Primal Storm: whenever it attacks, the top
+card of each player's library is exiled and its controller may cast the
+spells among them without paying their mana costs. A land exiled that way is
+not cast.
 """
 
 from __future__ import annotations
 
-import pytest
+from cards.fdn.fdn_48.card_impl import Refute
+from cards.fdn.fdn_79.card_impl import Boltwave
+from cards.fdn.fdn_110.card_impl import QuakestriderCeratops
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_153.card_impl import EssenceScatter
+from cards.fdn.fdn_160.card_impl import AnOfferYouCantRefuse
+from cards.fdn.fdn_191.card_impl import BrazenScourge
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_194.card_impl import EtaliPrimalStorm, EtaliPrimalStormAbility1
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from test_interface import Decision, Side, Step, Zone, card, create_game, player
 
-from engine.card import (
-    Creature,
-    Instant,
-    Sorcery,
-)
-from engine.casting import cast_spell_free
-from engine.game_state import GameState
-from test_utils import DeterministicPlayer
-from engine.stack import StackObject
-from engine.types import CardType, ManaCost, ManaType, Phase, Zone
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _make_game(
-    *,
-    phase: Phase = Phase.PRECOMBAT_MAIN,
-) -> GameState:
-    """Create a minimal 2-player GameState at the specified phase."""
-    p1 = DeterministicPlayer("Alice")
-    p2 = DeterministicPlayer("Bob")
-    game = GameState([p1, p2])
-    game.phase = phase
-    return game
+from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
 
 
-def _put_in_exile(game: GameState, player_idx: int, card) -> None:
-    """Place a card in the player's exile zone."""
-    player = game.players[player_idx]
-    player.zones[Zone.EXILE].add(card)
+def _etali_attacks(p0_top, p1_top, *, choices=(), p1_hand=(), p1_lands=0, p1_library=()):
+    """Turn 1: player 0's Etali attacks, its trigger exiles ``p0_top`` and
+    ``p1_top``, and player 0 casts every spell among them for free, answering
+    the casts' questions with ``choices``.
+
+    Returns the table at player 0's priority with those spells on the stack —
+    ``p1_top`` above ``p0_top`` when both are cast — and player 1's Islands.
+    """
+    etali = card(EtaliPrimalStorm)
+    islands = [card(Island) for _ in range(p1_lands)]
+    game = create_game(
+        Side(battlefield=[etali], library=[p0_top]),
+        Side(hand=list(p1_hand), battlefield=islands, library=[p1_top, *p1_library]),
+        start=(Step.BEGIN_COMBAT, 0),
+    )
+    t = Table(game)
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, etali, then=[taps(etali), on_stack(EtaliPrimalStormAbility1, 0)])
+    t.pass_(0, choices=[Decision.yes(), *choices])
+    exiled = [off_stack(EtaliPrimalStormAbility1)]
+    for top in (p0_top, p1_top):
+        # A spell on the stack is seen on its controller's side.
+        exiled.append(moves(top, Zone.EXILE) if top.cls is Plains else moves(top, Zone.STACK, seat=0))
+    t.pass_(1, then=exiled, note="each spell exiled is cast without paying its mana cost")
+    return t, islands
 
 
-# ---------------------------------------------------------------------------
-# Tests: cast_spell_free puts spell on the stack
-# ---------------------------------------------------------------------------
+def _counter(t, islands, counterspell, target, *, then=()):
+    """Player 0 passes, and player 1 taps ``islands`` and casts
+    ``counterspell`` at ``target``, which both players let resolve."""
+    t.pass_(0)
+    for island in islands:
+        t.act(1, island, then=[taps(island)])
+    t.act(1, counterspell, choices=[target], then=[moves(counterspell, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(counterspell, Zone.GRAVEYARD), *then])
+
 
 class TestCastSpellFreePutsOnStack:
-    """cast_spell_free must place the spell on the stack, not resolve immediately."""
+    """A spell cast for free goes on the stack rather than resolving at once."""
 
     def test_creature_goes_on_stack(self):
-        """A creature cast for free should appear on the stack."""
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(
-            name="Grizzly Bears",
-            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _put_in_exile(game, 0, bear)
-
-        cast_spell_free(game, player, bear, from_zone=Zone.EXILE)
-
-        assert not game.stack.is_empty()
-        top = game.stack.peek()
-        assert top is not None
-        assert top.source is bear
-        assert top.controller is player
+        lions = card(SavannahLions)
+        t, _ = _etali_attacks(lions, card(Plains))
+        final = t.run()
+        assert [s.handle for s in final.stack] == [lions]
 
     def test_sorcery_goes_on_stack(self):
-        """A sorcery cast for free should appear on the stack."""
-        game = _make_game()
-        player = game.players[0]
-        spell = Sorcery(
-            name="Divination",
-            mana_cost=ManaCost(generic=2, pips={ManaType.BLUE: 1}),
-        )
-        _put_in_exile(game, 0, spell)
-
-        cast_spell_free(game, player, spell, from_zone=Zone.EXILE)
-
-        assert not game.stack.is_empty()
-        top = game.stack.peek()
-        assert top.source is spell
+        boltwave = card(Boltwave)
+        t, _ = _etali_attacks(boltwave, card(Plains))
+        final = t.run()
+        assert [s.handle for s in final.stack] == [boltwave]
 
     def test_instant_goes_on_stack(self):
-        """An instant cast for free should appear on the stack."""
-        game = _make_game()
-        player = game.players[0]
-        bolt = Instant(
-            name="Lightning Bolt",
-            mana_cost=ManaCost(pips={ManaType.RED: 1}),
-        )
-        _put_in_exile(game, 0, bolt)
+        bolt = card(BurstLightning)
+        t, _ = _etali_attacks(bolt, card(Plains), choices=[player(1)])
+        final = t.run()
+        assert [s.handle for s in final.stack] == [bolt]
 
-        cast_spell_free(game, player, bolt, from_zone=Zone.EXILE)
-
-        assert not game.stack.is_empty()
-        top = game.stack.peek()
-        assert top.source is bolt
-
-
-# ---------------------------------------------------------------------------
-# Tests: No mana required
-# ---------------------------------------------------------------------------
 
 class TestCastSpellFreeNoManaRequired:
-    """cast_spell_free should not require or consume mana."""
+    """A free cast needs no mana: its controller has none to pay with."""
 
     def test_expensive_creature_cast_with_empty_mana_pool(self):
-        """A 6-mana creature can be cast for free with zero mana available."""
-        game = _make_game()
-        player = game.players[0]
-        # Player has no mana in pool
-        big_creature = Creature(
-            name="Colossal Dreadmaw",
-            mana_cost=ManaCost(generic=4, pips={ManaType.GREEN: 2}),
-            base_power=6, base_toughness=6,
-        )
-        _put_in_exile(game, 0, big_creature)
+        ceratops = card(QuakestriderCeratops)
+        t, _ = _etali_attacks(ceratops, card(Plains))
+        t.pass_(0)
+        t.pass_(1, then=[moves(ceratops, Zone.BATTLEFIELD)], note="the six-mana Dinosaur cost nothing")
+        t.run()
 
-        # Should not raise — no mana needed
-        cast_spell_free(game, player, big_creature, from_zone=Zone.EXILE)
-
-        assert not game.stack.is_empty()
-        assert game.stack.peek().source is big_creature
-
-
-# ---------------------------------------------------------------------------
-# Tests: Resolution behavior
-# ---------------------------------------------------------------------------
 
 class TestCastSpellFreeResolution:
-    """When the stack object resolves, it should behave like a normal spell."""
+    """A spell cast for free resolves like any other spell."""
 
     def test_creature_resolves_to_battlefield(self):
-        """A creature that resolves from cast_spell_free goes to battlefield."""
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(
-            name="Grizzly Bears",
-            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _put_in_exile(game, 0, bear)
-
-        cast_spell_free(game, player, bear, from_zone=Zone.EXILE)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert game.get_battlefield(player).contains(bear)
+        lions = card(SavannahLions)
+        t, _ = _etali_attacks(lions, card(Plains))
+        t.pass_(0)
+        t.pass_(1, then=[moves(lions, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_sorcery_resolves_to_graveyard(self):
-        """A sorcery that resolves from cast_spell_free goes to graveyard."""
-        game = _make_game()
-        player = game.players[0]
-        spell = Sorcery(
-            name="Lava Axe",
-            mana_cost=ManaCost(generic=4, pips={ManaType.RED: 1}),
-        )
-        _put_in_exile(game, 0, spell)
-
-        cast_spell_free(game, player, spell, from_zone=Zone.EXILE)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert game.get_graveyard(player).contains(spell)
+        boltwave = card(Boltwave)
+        t, _ = _etali_attacks(boltwave, card(Plains))
+        t.pass_(0)
+        t.pass_(1, then=[life(1, 17), moves(boltwave, Zone.GRAVEYARD)])
+        t.run()
 
     def test_on_resolve_hook_called(self):
-        """The card's on_resolve method should be called during resolution."""
-        game = _make_game()
-        player = game.players[0]
-        resolved_flag = []
+        """The spell's effect happens when it resolves, not when it is cast."""
+        bolt = card(BurstLightning)
+        t, _ = _etali_attacks(bolt, card(Plains), choices=[player(1)])
+        t.pass_(0, note="player 1 is still at 20 life while Burst Lightning is on the stack")
+        t.pass_(1, then=[life(1, 18), moves(bolt, Zone.GRAVEYARD)])
+        t.run()
 
-        class TrackerSorcery(Sorcery):
-            def on_resolve(self, game):
-                resolved_flag.append(True)
-
-        spell = TrackerSorcery(
-            name="Tracker",
-            mana_cost=ManaCost(pips={ManaType.BLUE: 1}),
-        )
-        _put_in_exile(game, 0, spell)
-
-        cast_spell_free(game, player, spell, from_zone=Zone.EXILE)
-
-        # on_resolve should NOT have been called yet (spell is on stack)
-        assert resolved_flag == []
-
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        # Now on_resolve should have been called
-        assert resolved_flag == [True]
-
-
-# ---------------------------------------------------------------------------
-# Tests: Counterspell interaction (the key requirement)
-# ---------------------------------------------------------------------------
 
 class TestCastSpellFreeCounterable:
-    """A spell cast via cast_spell_free must be counterable on the stack.
-
-    This is the primary requirement from the TODO: the spell goes through
-    the stack so effects like Counterspell can target it.
-    """
+    """A spell cast for free can be responded to while it is on the stack."""
 
     def test_spell_is_on_stack_and_can_be_removed_before_resolving(self):
-        """Simulates countering: pop the spell off the stack without resolving.
-
-        If the spell bypassed the stack (old behavior), it would never be
-        visible on the stack and could not be interacted with.
-        """
-        game = _make_game()
-        player = game.players[0]
-        spell = Sorcery(
-            name="Explosive Vegetation",
-            mana_cost=ManaCost(generic=3, pips={ManaType.GREEN: 1}),
+        boltwave, offer = card(Boltwave), card(AnOfferYouCantRefuse)
+        t, islands = _etali_attacks(
+            boltwave, card(Plains), p1_hand=[offer], p1_lands=1
         )
-        _put_in_exile(game, 0, spell)
-
-        cast_spell_free(game, player, spell, from_zone=Zone.EXILE)
-
-        # The spell is on the stack — an opponent could counter it
-        assert not game.stack.is_empty()
-        stack_obj = game.stack.peek()
-        assert stack_obj.source is spell
-
-        # Simulate counter: remove from stack, move to graveyard
-        countered_obj = game.stack.pop()
-        assert countered_obj.source is spell
-        # After countering, the spell should NOT be on the battlefield
-        assert not game.get_battlefield(player).contains(spell)
+        _counter(t, islands, offer, boltwave, then=[moves(boltwave, Zone.GRAVEYARD), appears(0), appears(0)])
+        final = t.run()
+        assert final.players[1].life == 20
 
     def test_multiple_free_casts_all_go_on_stack(self):
-        """When multiple spells are cast for free, all should be on the stack.
-
-        This allows an opponent to counter any of them individually.
-        """
-        game = _make_game()
-        player = game.players[0]
-        spell_a = Sorcery(name="Spell A", mana_cost=ManaCost(generic=1))
-        spell_b = Creature(
-            name="Spell B",
-            mana_cost=ManaCost(generic=2),
-            base_power=2, base_toughness=2,
-        )
-        _put_in_exile(game, 0, spell_a)
-        _put_in_exile(game, 0, spell_b)
-
-        cast_spell_free(game, player, spell_a, from_zone=Zone.EXILE)
-        cast_spell_free(game, player, spell_b, from_zone=Zone.EXILE)
-
-        assert len(game.stack) == 2
+        """Both players' exiled spells are cast, and each resolves in turn."""
+        lions, scourge = card(SavannahLions), card(BrazenScourge)
+        t, _ = _etali_attacks(lions, scourge)
+        t.pass_(0, note="both spells are on the stack, player 1's on top")
+        t.pass_(1, then=[moves(scourge, Zone.BATTLEFIELD, seat=0)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(lions, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_countered_spell_does_not_resolve(self):
-        """A spell removed from the stack (countered) should not call on_resolve."""
-        game = _make_game()
-        player = game.players[0]
-        resolved_flag = []
+        lions, scatter = card(SavannahLions), card(EssenceScatter)
+        t, islands = _etali_attacks(lions, card(Plains), p1_hand=[scatter], p1_lands=2)
+        _counter(t, islands, scatter, lions, then=[moves(lions, Zone.GRAVEYARD)])
+        t.run()
 
-        class TrackerCreature(Creature):
-            def on_resolve(self, game):
-                resolved_flag.append(True)
-
-        critter = TrackerCreature(
-            name="Tracker Beast",
-            mana_cost=ManaCost(generic=3, pips={ManaType.GREEN: 1}),
-            base_power=4, base_toughness=4,
-        )
-        _put_in_exile(game, 0, critter)
-
-        cast_spell_free(game, player, critter, from_zone=Zone.EXILE)
-
-        # Counter it — just pop without calling on_resolve
-        game.stack.pop()
-
-        assert resolved_flag == []
-        assert not game.get_battlefield(player).contains(critter)
-
-
-# ---------------------------------------------------------------------------
-# Tests: Real counterspell integration
-# ---------------------------------------------------------------------------
 
 class TestCastSpellFreeCounteredByRealCounter:
-    """Integration tests using the engine's _counter_spell mechanic.
-
-    These prove that a Counterspell-style effect can properly target and
-    counter a spell placed on the stack via cast_spell_free.
-    """
+    """Counterspells counter a spell cast for free, which goes to its owner's
+    graveyard without resolving."""
 
     def test_counter_spell_removes_free_cast_from_stack_to_graveyard(self):
-        """_counter_spell targeting a free-cast spell removes it and moves card to graveyard."""
-        from cards.fdn.fdn_160.card_impl import _counter_spell
-
-        game = _make_game()
-        player = game.players[0]
-        spell = Sorcery(
-            name="Explosive Vegetation",
-            mana_cost=ManaCost(generic=3, pips={ManaType.GREEN: 1}),
+        """Player 0 casts player 1's Boltwave; Refute counters it into player
+        1's graveyard, and player 1 then draws and discards."""
+        boltwave, refute, drawn = card(Boltwave), card(Refute), card(Plains)
+        t, islands = _etali_attacks(
+            card(Plains), boltwave, p1_hand=[refute], p1_lands=3,
+            p1_library=[drawn],
         )
-        spell.owner = player
-        _put_in_exile(game, 0, spell)
-
-        cast_spell_free(game, player, spell, from_zone=Zone.EXILE)
-
-        # The spell is on the stack
-        assert not game.stack.is_empty()
-        stack_obj = game.stack.peek()
-        assert stack_obj.source is spell
-
-        # Use the real _counter_spell function to counter it
-        _counter_spell(game, stack_obj)
-
-        # After countering: stack is empty, spell is in owner's graveyard
-        assert game.stack.is_empty()
-        assert game.get_graveyard(player).contains(spell)
-        assert not game.get_battlefield(player).contains(spell)
+        t.pass_(0)
+        for island in islands:
+            t.act(1, island, then=[taps(island)])
+        t.act(1, refute, choices=[boltwave, drawn], then=[moves(refute, Zone.STACK)])
+        t.pass_(1)
+        t.pass_(0, then=[
+            moves(boltwave, Zone.GRAVEYARD, seat=1),
+            moves(drawn, Zone.HAND),
+            moves(drawn, Zone.GRAVEYARD),
+            moves(refute, Zone.GRAVEYARD),
+        ])
+        final = t.run()
+        assert final.where(boltwave) is Zone.GRAVEYARD
+        assert boltwave in [s.handle for s in final.players[1].graveyard]
 
     def test_counter_spell_prevents_on_resolve_from_firing(self):
-        """A countered free-cast spell's on_resolve never executes."""
-        from cards.fdn.fdn_160.card_impl import _counter_spell
-
-        game = _make_game()
-        player = game.players[0]
-        resolved_flag = []
-
-        class TrackerSorcery(Sorcery):
-            def on_resolve(self, game):
-                resolved_flag.append(True)
-
-        spell = TrackerSorcery(
-            name="Tracked Spell",
-            mana_cost=ManaCost(generic=2, pips={ManaType.BLUE: 1}),
-        )
-        spell.owner = player
-        _put_in_exile(game, 0, spell)
-
-        cast_spell_free(game, player, spell, from_zone=Zone.EXILE)
-        stack_obj = game.stack.peek()
-
-        # Counter it using the real counter mechanic
-        _counter_spell(game, stack_obj)
-
-        # on_resolve should never have been called
-        assert resolved_flag == []
+        bolt, offer = card(BurstLightning), card(AnOfferYouCantRefuse)
+        t, islands = _etali_attacks(bolt, card(Plains), choices=[player(1)], p1_hand=[offer], p1_lands=1)
+        _counter(t, islands, offer, bolt, then=[moves(bolt, Zone.GRAVEYARD), appears(0), appears(0)])
+        final = t.run()
+        assert final.players[1].life == 20
 
     def test_counter_creature_free_cast_prevents_battlefield_entry(self):
-        """A creature countered after cast_spell_free never enters the battlefield."""
-        from cards.fdn.fdn_160.card_impl import _counter_spell
-
-        game = _make_game()
-        player = game.players[0]
-        creature = Creature(
-            name="Colossal Dreadmaw",
-            mana_cost=ManaCost(generic=4, pips={ManaType.GREEN: 2}),
-            base_power=6, base_toughness=6,
-        )
-        creature.owner = player
-        _put_in_exile(game, 0, creature)
-
-        cast_spell_free(game, player, creature, from_zone=Zone.EXILE)
-        stack_obj = game.stack.peek()
-
-        _counter_spell(game, stack_obj)
-
-        # Creature should be in graveyard, not battlefield
-        assert game.stack.is_empty()
-        assert game.get_graveyard(player).contains(creature)
-        assert not game.get_battlefield(player).contains(creature)
+        """Player 0 casts player 1's Quakestrider Ceratops, and Essence
+        Scatter counters it into player 1's graveyard."""
+        ceratops, scatter = card(QuakestriderCeratops), card(EssenceScatter)
+        t, islands = _etali_attacks(card(Plains), ceratops, p1_hand=[scatter], p1_lands=2)
+        _counter(t, islands, scatter, ceratops, then=[moves(ceratops, Zone.GRAVEYARD, seat=1)])
+        final = t.run()
+        assert [s.card for s in final.players[0].battlefield] == [EtaliPrimalStorm]
 
     def test_counter_targets_specific_spell_among_multiple_on_stack(self):
-        """When multiple free-cast spells are on the stack, counter targets only one."""
-        from cards.fdn.fdn_160.card_impl import _counter_spell
-
-        game = _make_game()
-        player = game.players[0]
-
-        spell_a = Sorcery(name="Spell A", mana_cost=ManaCost(generic=1))
-        spell_a.owner = player
-        spell_b = Sorcery(name="Spell B", mana_cost=ManaCost(generic=2))
-        spell_b.owner = player
-
-        _put_in_exile(game, 0, spell_a)
-        _put_in_exile(game, 0, spell_b)
-
-        cast_spell_free(game, player, spell_a, from_zone=Zone.EXILE)
-        cast_spell_free(game, player, spell_b, from_zone=Zone.EXILE)
-
-        assert len(game.stack) == 2
-
-        # Counter only spell_a (the bottom spell)
-        # Find its stack object
-        all_objs = game.stack.objects()
-        spell_a_obj = next(obj for obj in all_objs if obj.source is spell_a)
-
-        _counter_spell(game, spell_a_obj)
-
-        # Only spell_a countered; spell_b remains on stack
-        assert len(game.stack) == 1
-        assert game.stack.peek().source is spell_b
-        assert game.get_graveyard(player).contains(spell_a)
-        assert not game.get_graveyard(player).contains(spell_b)
+        """Essence Scatter counters the bottom of two creature spells; the
+        other still resolves."""
+        lions, scourge, scatter = card(SavannahLions), card(BrazenScourge), card(EssenceScatter)
+        t, islands = _etali_attacks(lions, scourge, p1_hand=[scatter], p1_lands=2)
+        _counter(t, islands, scatter, lions, then=[moves(lions, Zone.GRAVEYARD)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(scourge, Zone.BATTLEFIELD, seat=0)])
+        t.run()

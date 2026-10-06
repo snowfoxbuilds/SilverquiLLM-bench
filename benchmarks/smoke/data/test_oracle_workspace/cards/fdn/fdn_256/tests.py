@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from cards.fdn.fdn_256.card_impl import MeteorGolem
 from engine.basic_lands import Forest
-from engine.card import Artifact, Creature
+from engine.card import Artifact, Creature, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, DecisionKind, GameRef
 from test_utils import Intent
@@ -33,7 +33,7 @@ def _cast_no_resolve(game, player_index, card, targets):
         for t in targets
     )
     player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("name", card.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
         preferences=prefs,
     ))
     try:
@@ -45,7 +45,7 @@ def _cast_no_resolve(game, player_index, card, targets):
 class TestMeteorGolemProperties:
     def test_static_data(self):
         golem = MeteorGolem(owner=None)
-        assert golem.name == "Meteor Golem"
+        assert printed_class(golem) is MeteorGolem
         assert golem.mana_cost == ManaCost.parse("{7}")
         assert (golem.base_power, golem.base_toughness) == (3, 3)
         assert "Golem" in golem.subtypes
@@ -63,14 +63,14 @@ class TestMeteorGolemETB:
     def test_destroys_opponents_creature(self):
         bear = Creature(name="Bear", base_power=2, base_toughness=2)
         game, p1, p2, golem = self._setup([bear])
-        cast_spell(game, 0, "Meteor Golem", targets=[bear])
+        cast_spell(game, 0, MeteorGolem, targets=[bear])
         assert p2.zones[Zone.GRAVEYARD].contains(bear)
         assert game.get_battlefield(p1).contains(golem)
 
     def test_destroys_opponents_artifact(self):
         signet = Artifact(name="Signet")
         game, p1, p2, golem = self._setup([signet])
-        cast_spell(game, 0, "Meteor Golem", targets=[signet])
+        cast_spell(game, 0, MeteorGolem, targets=[signet])
         assert p2.zones[Zone.GRAVEYARD].contains(signet)
 
     def test_option_set_excludes_lands_and_own_permanents(self):
@@ -83,7 +83,7 @@ class TestMeteorGolemETB:
         mine = Creature(name="My Creature", base_power=1, base_toughness=1)
         set_board_state(game, 0, hand=[golem], battlefield=[mine], mana={ManaType.COLORLESS: 7})
         set_board_state(game, 1, battlefield=[bear, forest])
-        cast_spell(game, 0, "Meteor Golem", targets=[bear])
+        cast_spell(game, 0, MeteorGolem, targets=[bear])
         obj_queries = [
             r for r in p1.transcript.all()
             if any(o.kind is DecisionKind.OBJECT for o in r.options)

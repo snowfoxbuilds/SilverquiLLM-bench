@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class GenesisWaveAbility1:
+    text = "Reveal the top X cards of your library. You may put any number of permanent cards with mana value X or less from among them onto the battlefield. Then put all cards revealed this way that weren't put onto the battlefield into your graveyard."
+
+
+# endregion Printed abilities
+
+
 # Permanent card types for Genesis Wave
 _PERMANENT_TYPES = {
     CardType.CREATURE, CardType.ENCHANTMENT, CardType.ARTIFACT,

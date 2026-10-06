@@ -12,6 +12,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class MacabreWaltzAbility1:
+    text = 'Return up to two target creature cards from your graveyard to your hand, then discard a card.'
+
+
+# endregion Printed abilities
+
+
 class MacabreWaltz(Sorcery):
     """Macabre Waltz — {1}{B} — Sorcery.
 

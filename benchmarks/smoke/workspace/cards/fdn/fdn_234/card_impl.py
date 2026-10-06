@@ -13,6 +13,24 @@ if TYPE_CHECKING:
     from cards.registry import CardRegistry
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class VivienReidAbility1:
+    text = '+1: Look at the top four cards of your library. You may reveal a creature or land card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.'
+
+
+class VivienReidAbility2:
+    text = '−3: Destroy target artifact, enchantment, or creature with flying.'
+
+
+class VivienReidAbility3:
+    text = '−8: You get an emblem with "Creatures you control get +2/+2 and have vigilance, trample, and indestructible."'
+
+
+# endregion Printed abilities
+
+
 class VivienReid(Planeswalker):
     """Vivien Reid — {3}{G}{G} — 5 loyalty.
 
@@ -45,10 +63,9 @@ class VivienReid(Planeswalker):
     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
         pw = self
 
-        def _plus1(game: Any) -> None:
+        def _plus1(game: Any, controller: Any) -> None:
             """Look at top 4 cards, may reveal a creature or land to hand."""
 
-            controller = pw.controller
             if controller is None:
                 return
 
@@ -137,7 +154,7 @@ class VivienReid(Planeswalker):
             for target in legal:
                 destroy(game, target)
 
-        def _minus8(game: Any) -> None:
+        def _minus8(game: Any, controller: Any) -> None:
             """Emblem — creatures you control get +2/+2, vigilance, trample, indestructible."""
             from engine.continuous_effects import (
                 ContinuousEffect,
@@ -146,7 +163,6 @@ class VivienReid(Planeswalker):
                 SubLayer,
             )
 
-            controller = pw.controller
             if controller is None:
                 return
 
@@ -196,16 +212,19 @@ class VivienReid(Planeswalker):
                 loyalty_cost=+1,
                 effect=_plus1,
                 description="+1: Look at top 4, may reveal creature or land to hand.",
+                printed=VivienReidAbility1,
             ),
             LoyaltyAbility(
                 loyalty_cost=-3,
                 effect=_minus3,
                 targeting=_minus3_targeting,
                 description="−3: Destroy target artifact, enchantment, or creature with flying.",
+                printed=VivienReidAbility2,
             ),
             LoyaltyAbility(
                 loyalty_cost=-8,
                 effect=_minus8,
                 description="−8: Emblem — creatures get +2/+2, vigilance, trample, indestructible.",
+                printed=VivienReidAbility3,
             ),
         ]

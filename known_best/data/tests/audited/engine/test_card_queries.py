@@ -109,13 +109,23 @@ class TestChooseYesNo:
         assert query_yes_no(game, p0, "?") is False
 
 
+class Flicker:
+    """A printed mode."""
+
+
+class Token:
+    """A printed mode."""
+
+
 class TestChooseMode:
     def test_returns_chosen_mode_name(self):
         game = _game()
         p0 = game.players[0]
         p0.set_baseline(Intent(pattern=GameRef(),
-                               preferences=(Decision.mode("token"),)))
-        chosen = choose_mode(game, p0, ["flicker", "token"], "choose mode")
+                               preferences=(Decision.mode(printed=Token),)))
+        chosen = choose_mode(
+            game, p0, ["flicker", "token"], "choose mode", printed=[Flicker, Token]
+        )
         assert chosen == "token"
 
 

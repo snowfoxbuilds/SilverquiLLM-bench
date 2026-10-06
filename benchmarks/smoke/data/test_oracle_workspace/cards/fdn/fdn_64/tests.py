@@ -14,6 +14,7 @@ from cards.fdn.fdn_64.card_impl import InfestationSage
 from engine.protection import get_colors
 from engine.types import Color, Keyword, ManaCost
 from test_utils import create_game, resolve_stack, set_board_state
+from engine.card import printed_class
 
 
 def _insects(game, player):
@@ -28,7 +29,7 @@ def _insects(game, player):
 class TestInfestationSageProperties:
     def test_static_data(self) -> None:
         c = InfestationSage(owner=None)
-        assert c.name == "Infestation Sage"
+        assert printed_class(c) is InfestationSage
         assert c.mana_cost == ManaCost.parse("{B}")
 
 

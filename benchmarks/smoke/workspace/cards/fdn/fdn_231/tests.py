@@ -10,7 +10,7 @@ test backdoors — targeting flows through real engine channels.
 from __future__ import annotations
 
 from cards.fdn.fdn_231.card_impl import ReclamationSage
-from engine.card import Artifact, Creature, Enchantment
+from engine.card import Artifact, Creature, Enchantment, printed_class
 from engine.decisions import Decision, DecisionKind, GameRef
 from test_utils import Intent
 from engine.types import CardType, ManaCost, ManaType, Zone
@@ -20,7 +20,7 @@ from test_utils import cast_spell, create_game, set_board_state
 class TestReclamationSageProperties:
     def test_static_data(self):
         sage = ReclamationSage(owner=None)
-        assert sage.name == "Reclamation Sage"
+        assert printed_class(sage) is ReclamationSage
         assert sage.mana_cost == ManaCost.parse("{2}{G}")
         assert (sage.base_power, sage.base_toughness) == (2, 1)
         assert {"Elf", "Shaman"} <= sage.subtypes
@@ -38,14 +38,14 @@ class TestReclamationSageETB:
     def test_destroys_target_artifact(self):
         art = Artifact(name="Signet")
         game, p1, p2, sage, art = self._setup(art)
-        cast_spell(game, 0, "Reclamation Sage", targets=[art])
+        cast_spell(game, 0, ReclamationSage, targets=[art])
         assert not game.get_battlefield(p2).contains(art)
         assert p2.zones[Zone.GRAVEYARD].contains(art)
 
     def test_destroys_target_enchantment(self):
         ench = Enchantment(name="Pacifism")
         game, p1, p2, sage, ench = self._setup(ench)
-        cast_spell(game, 0, "Reclamation Sage", targets=[ench])
+        cast_spell(game, 0, ReclamationSage, targets=[ench])
         assert p2.zones[Zone.GRAVEYARD].contains(ench)
 
     def test_option_set_only_artifacts_and_enchantments(self):
@@ -57,7 +57,7 @@ class TestReclamationSageETB:
         bear = Creature(name="Bear", base_power=2, base_toughness=2)
         set_board_state(game, 0, hand=[sage], mana={ManaType.GREEN: 3})
         set_board_state(game, 1, battlefield=[art, bear])
-        cast_spell(game, 0, "Reclamation Sage", targets=[art])
+        cast_spell(game, 0, ReclamationSage, targets=[art])
         obj_queries = [
             r for r in p1.transcript.all()
             if any(o.kind is DecisionKind.OBJECT for o in r.options)
@@ -76,7 +76,7 @@ class TestReclamationSageETB:
         bear = Creature(name="Bear", base_power=2, base_toughness=2)
         set_board_state(game, 0, hand=[sage], mana={ManaType.GREEN: 3})
         set_board_state(game, 1, battlefield=[bear])  # no artifact/enchantment
-        cast_spell(game, 0, "Reclamation Sage")  # optional → no query, castable
+        cast_spell(game, 0, ReclamationSage)  # optional → no query, castable
         assert game.get_battlefield(p1).contains(sage)
         assert game.get_battlefield(p2).contains(bear)  # nothing destroyed
 
@@ -84,9 +84,9 @@ class TestReclamationSageETB:
         art = Artifact(name="Signet")
         game, p1, p2, sage, art = self._setup(art)
         p1.start_intent("decline", Intent(
-            pattern=GameRef(card=frozenset({("name", "Reclamation Sage")})),
+            pattern=GameRef(card=frozenset({("printed", ReclamationSage)})),
             preferences=(),
         ))
-        cast_spell(game, 0, "Reclamation Sage")
+        cast_spell(game, 0, ReclamationSage)
         p1.end_intent("decline")
         assert game.get_battlefield(p2).contains(art)  # not destroyed

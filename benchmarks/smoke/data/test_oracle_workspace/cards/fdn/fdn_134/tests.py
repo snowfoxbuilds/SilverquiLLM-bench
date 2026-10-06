@@ -23,7 +23,7 @@ import pytest
 
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride
 from engine.abilities import AbilityError, clear_loyalty_tracking
-from engine.card import Creature
+from engine.card import Creature, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import CardType, Keyword, ManaCost, Phase, Supertype, Zone
@@ -51,7 +51,7 @@ def _activate_targeting(game, player, walker, index, target):
     """Drive a loyalty ability through the real activate → stack path, choosing
     *target* at activation via an Intent on *player* (pattern = walker name)."""
     player.start_intent("ajani", Intent(
-        pattern=GameRef(card=frozenset({("name", walker.name)})),
+        pattern=GameRef(card=frozenset({("printed", printed_class(walker))})),
         preferences=(Decision.obj(instance=target.instance_id),),
     ))
     try:
@@ -63,7 +63,7 @@ def _activate_targeting(game, player, walker, index, target):
 class TestAjaniProperties:
     def test_static_data(self):
         ajani = AjaniCallerOfThePride(owner=None)
-        assert ajani.name == "Ajani, Caller of the Pride"
+        assert printed_class(ajani) is AjaniCallerOfThePride
         assert ajani.mana_cost == ManaCost.parse("{1}{W}{W}")
         assert ajani.starting_loyalty == 4
         assert ajani.loyalty == 4

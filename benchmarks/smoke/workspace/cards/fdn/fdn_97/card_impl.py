@@ -17,6 +17,20 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class TwinflameTyrantAbility1:
+    text = 'Flying'
+
+
+class TwinflameTyrantAbility2:
+    text = 'If a source you control would deal damage to an opponent or a permanent an opponent controls, it deals double that damage instead.'
+
+
+# endregion Printed abilities
+
+
 class TwinflameTyrant(Creature):
     """Twinflame Tyrant — {3}{R}{R} — 3/5 — Dragon — Flying.
 

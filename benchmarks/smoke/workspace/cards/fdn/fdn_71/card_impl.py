@@ -17,6 +17,16 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
 
 
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class StabAbility1:
+    text = 'Target creature gets -2/-2 until end of turn.'
+
+
+# endregion Printed abilities
+
+
 class Stab(Instant):
     """Stab — {B} — Instant.
 
@@ -72,6 +82,7 @@ class Stab(Instant):
             source=self,
             layer=Layer.POWER_TOUGHNESS,
             sublayer=SubLayer.MODIFY_PT,
+            bound_to=[target],
             apply=_apply,
             duration=DURATION_END_OF_TURN,
         ))

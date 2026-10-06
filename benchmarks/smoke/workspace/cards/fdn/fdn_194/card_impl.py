@@ -8,6 +8,17 @@ from engine.events import AttacksTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class EtaliPrimalStormAbility1:
+    text = "Whenever Etali attacks, exile the top card of each player's library, then you may cast any number of spells from among those cards without paying their mana costs."
+
+
+# endregion Printed abilities
+
+
 class EtaliPrimalStorm(Creature):
     """Etali, Primal Storm — {4}{R}{R} — 6/6 — Legendary Elder Dinosaur.
 
@@ -39,8 +50,8 @@ class EtaliPrimalStorm(Creature):
         def _condition(game: Any, event: dict) -> bool:
             return event.creature is source
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             exiled_cards: list = []
@@ -58,4 +69,4 @@ class EtaliPrimalStorm(Creature):
                     # Use the proper cast pipeline — spell goes on the
                     # stack and can be responded to (e.g. countered).
                     cast_spell_free(game, ctrl, card, Zone.EXILE)
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=EtaliPrimalStormAbility1))

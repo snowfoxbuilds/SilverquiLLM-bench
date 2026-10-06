@@ -1,9 +1,12 @@
 """Card implementation for Tinybones, Bauble Burglar."""
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any
+
 from engine.card import ActivatedAbility, Creature
 from engine.card_queries import choose_object
-from engine.types import Keyword, ManaCost, Zone
+from engine.types import ManaCost
+
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
@@ -54,17 +57,38 @@ class TinybonesBaubleBurglar(Creature):
         Whenever an opponent discards a card, exile it from their graveyard
         with a stash counter on it.
         """
+        from engine.events import DiscardsCardTriggeredEvent
+        from engine.game import add_counter, exile
+        from engine.stack import object_stint_id, same_stint
         from engine.triggers import TriggerRegistration
-        from engine.game import exile, add_counter
         source = self
         controller = getattr(self, 'controller', None) or game.active_player
+
+        def _opponent_discards(game: 'GameState', event: Any) -> bool:
+            ctrl = getattr(source, 'controller', None)
+            return event.player is not None and event.player is not ctrl
+
+        def _discarded(game: 'GameState', event: Any, controller: Any) -> tuple[Any, Any]:
+            # "It" is the discarded card as it is now, in its owner's graveyard.
+            return event.card, object_stint_id(game, event.card)
+
+        def _stash(game: 'GameState', controller: Any, discarded: tuple[Any, Any]) -> None:
+            card, stint = discarded
+            if not same_stint(game, card, stint):
+                return
+            exile(game, card)
+            add_counter(game, card, 'stash', 1)
+
+        game.trigger_manager.register(TriggerRegistration(
+            event_type=DiscardsCardTriggeredEvent, condition=_opponent_discards, effect=_stash,
+            source=self, controller=controller, capture=_discarded, printed=TinybonesBaubleBurglarAbility1))
 
     def get_activated_abilities(self, game: 'GameState') -> list:
         """Tap ability: each opponent discards a card. Activate only as a sorcery."""
         source = self
 
         def _discard_effect(game: 'GameState', controller: Any) -> None:
-            from engine.game import discard, exile, add_counter
+            from engine.game import discard
             if controller is None:
                 return
             for player in game.players:
@@ -76,10 +100,6 @@ class TinybonesBaubleBurglar(Creature):
                     chosen = choose_object(game, player, hand_cards, 'discard a card', source_card=source)
                     if chosen is not None:
                         discard(game, player, chosen)
-                        gy = player.zones[Zone.GRAVEYARD]
-                        if gy.contains(chosen):
-                            exile(game, chosen)
-                            add_counter(game, chosen, 'stash', 1)
 
         def _cost(game: 'GameState', src=source) -> bool:
             """Pay {3}{B}, tap. Only at sorcery speed."""

@@ -1,49 +1,40 @@
 """Reference test for FDN 145 — Resolute Reinforcements (Phase H token minter).
 
 "When this creature enters, create a 1/1 white Soldier creature token." The
-mint fires from a self-ETB trigger (registered before the enters event fires),
-so casting the creature drives it directly. After the Phase H rework the token
-routes through ``make_creature_token`` with the oracle-correct subtype set
-{"Soldier"} (the pre-rework impl wrongly minted a {"Human","Soldier"} token).
-This test proves the entered creature keeps its Human Soldier types while the
-minted token is a plain 1/1 white Soldier.
+mint fires from a self-ETB trigger, so casting the creature drives it
+directly. The token shows what it is in play: on player 1's turn it blocks a
+1/1 Llanowar Elves, and both die.
 """
 from __future__ import annotations
 
-from cards.fdn.fdn_145.card_impl import ResoluteReinforcements
-from engine.protection import get_colors
-from engine.types import Color, ManaType, Zone
-from test_utils import cast_spell, create_game, set_board_state
+from cards.fdn.fdn_145.card_impl import ResoluteReinforcements, ResoluteReinforcementsAbility2
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_272.card_impl import Plains
+from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, token
 
-
-def _soldier_tokens(game, player_index):
-    bf = game.players[player_index].zones[Zone.BATTLEFIELD]
-    return [
-        o
-        for o in bf.get_all()
-        if getattr(o, "is_token", False)
-        and "Soldier" in getattr(o, "subtypes", set())
-    ]
+from silverquillm.table import Table, appears, ceases, moves, off_stack, on_stack, taps
 
 
 class TestResoluteReinforcementsMint:
     def test_etb_mints_11_white_soldier_token(self) -> None:
-        creature = ResoluteReinforcements()
-        game = create_game()
-        set_board_state(
-            game,
-            0,
-            hand=[creature],
-            mana={ManaType.WHITE: 1, ManaType.COLORLESS: 1},
+        reinforcements, elves = card(ResoluteReinforcements), card(LlanowarElves)
+        game = create_game(
+            Side(hand=[reinforcements], mana={ManaType.WHITE: 1, ManaType.COLORLESS: 1}),
+            Side(battlefield=[elves], library=[card(Plains)]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
         )
-        cast_spell(game, 0, "Resolute Reinforcements")
-
-        tokens = _soldier_tokens(game, 0)
-        assert len(tokens) == 1
-        token = tokens[0]
-        # Oracle-correct: a 1/1 white *Soldier*, not a Human Soldier.
-        assert token.subtypes == {"Soldier"}
-        assert get_colors(token) == {Color.WHITE}
-        assert token.base_power == 1
-        assert token.base_toughness == 1
-        assert token.is_token is True
+        t = Table(game)
+        t.act(0, reinforcements, then=[moves(reinforcements, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(reinforcements, Zone.BATTLEFIELD), on_stack(ResoluteReinforcementsAbility2, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(ResoluteReinforcementsAbility2), appears(0)])
+        t.pass_to(Step.DECLARE_ATTACKERS, 1)
+        t.act(1, elves, then=[taps(elves)])
+        t.pass_(1)
+        t.pass_(0)
+        soldier = token(1)
+        t.act(0, soldier, scoped={soldier: elves})
+        t.pass_(1)
+        t.pass_(0, then=[ceases(soldier), moves(elves, Zone.GRAVEYARD)], note="a 1/1 creature trades with the 1/1")
+        t.run()

@@ -10,6 +10,25 @@ if TYPE_CHECKING:
     from engine.game_state import GameState
     from cards.registry import CardRegistry
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class ArbiterOfWoeAbility1:
+    text = 'As an additional cost to cast this spell, sacrifice a creature.'
+
+
+class ArbiterOfWoeAbility2:
+    text = 'Flying'
+
+
+class ArbiterOfWoeAbility3:
+    text = 'When this creature enters, each opponent discards a card and loses 2 life. You draw a card and gain 2 life.'
+
+
+# endregion Printed abilities
+
+
 def _self_etb_condition(source: Any):
     """Return a condition callable that matches only when *source* enters."""
 
@@ -43,8 +62,7 @@ class ArbiterOfWoe(Creature):
         from engine.game import draw_card, discard
         source = self
 
-        def _effect(game: GameState) -> None:
-            controller = getattr(source, 'controller', None)
+        def _effect(game: GameState, controller: Any) -> None:
             if controller is None:
                 return
             for player in game.players:
@@ -61,4 +79,4 @@ class ArbiterOfWoe(Creature):
             from engine.game import gain_life
             gain_life(game, controller, 2)
         controller = getattr(self, 'controller', None) or game.active_player
-        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=_self_etb_condition(self), effect=_effect, source=self, controller=controller, printed=ArbiterOfWoeAbility3))

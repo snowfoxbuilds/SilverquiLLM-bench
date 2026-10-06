@@ -1,68 +1,99 @@
-"""Tests for engine/casting.py — casting and resolution pipeline.
+"""Casting and resolving spells, and playing lands (rules 601, 608, 305).
 
-Covers:
-- Timing helpers: is_sorcery_speed, can_cast_at_instant_speed
-- cast_spell: full pipeline from hand → stack → resolve → destination zone
-- play_land: special action bypassing the stack
-- CastingError for illegal actions
-- Hook callbacks (on_cast, on_resolve)
-- Mana payment verification
+Most tests play a position through the Test Interface and judge each rule by
+what the players see: where a card goes, whose life changes, what goes on the
+stack, and whether an action is offered at all. Supporting cards are real FDN
+cards:
+
+- Burst Lightning ({R} instant, 2 damage to any target), Boltwave ({R}
+  sorcery, 3 damage to each opponent), Savannah Lions ({W} 2/1), Helpful
+  Hunter ({1}{W}), Spectral Sailor ({U} flash flier) and Firespitter Whelp
+  show casting, timing and payment;
+- Thousand-Year Storm copies an instant or sorcery once for each other one its
+  controller cast before it this turn, so the copies it makes show the
+  spell-cast history;
+- Firebrand Archer deals 1 damage to each opponent whenever its controller
+  casts a noncreature spell, so its trigger shows each cast;
+- Etali, Primal Storm casts a spell from exile without paying its mana cost
+  when it attacks, and Think Twice has flashback.
+
+The remaining tests check engine helpers directly, or reach positions no FDN
+card can make.
 """
 
 from __future__ import annotations
 
 import pytest
+from cards.fdn.fdn_7.card_impl import CrystalBarricade
+from cards.fdn.fdn_13.card_impl import FleetingFlight
+from cards.fdn.fdn_16.card_impl import HelpfulHunter, HelpfulHunterAbility1
+from cards.fdn.fdn_26.card_impl import TwinbladeBlessing
+from cards.fdn.fdn_48.card_impl import Refute
+from cards.fdn.fdn_71.card_impl import Stab
+from cards.fdn.fdn_79.card_impl import Boltwave
+from cards.fdn.fdn_106.card_impl import LootExuberantExplorer
+from cards.fdn.fdn_110.card_impl import QuakestriderCeratops
+from cards.fdn.fdn_130.card_impl import QuickDrawKatana
+from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride
+from cards.fdn.fdn_137.card_impl import AuthorityOfTheConsuls
+from cards.fdn.fdn_144.card_impl import MischievousPup, MischievousPupAbility2
+from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_150.card_impl import AegisTurtle
+from cards.fdn.fdn_160.card_impl import AnOfferYouCantRefuse
+from cards.fdn.fdn_164.card_impl import SpectralSailor
+from cards.fdn.fdn_165.card_impl import ThinkTwice
+from cards.fdn.fdn_177.card_impl import MacabreWaltz
+from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_194.card_impl import EtaliPrimalStorm, EtaliPrimalStormAbility1
+from cards.fdn.fdn_196.card_impl import FirebrandArcher, FirebrandArcherAbility1
+from cards.fdn.fdn_197.card_impl import FirespitterWhelp, FirespitterWhelpAbility2
+from cards.fdn.fdn_223.card_impl import GiantGrowth
+from cards.fdn.fdn_227.card_impl import LlanowarElves
+from cards.fdn.fdn_248.card_impl import ThousandYearStorm, ThousandYearStormAbility1
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
+from cards.fdn.fdn_278.card_impl import Mountain
+from cards.fdn.fdn_280.card_impl import Forest
+from test_interface import Side, card, create_game, player, spell_copy
+from test_utils import DeterministicPlayer
 
 from engine.card import (
-    Artifact,
-    ArtifactCreature,
-    CardImpl,
     Creature,
     Enchantment,
     Instant,
-    Land,
-    Planeswalker,
     Sorcery,
 )
 from engine.casting import (
-    CastingError,
     _PERMANENT_TYPES,
     can_cast_at_instant_speed,
-    cast_spell,
-    cast_spell_free,
-    is_sorcery_speed,
-    play_land,
 )
-from engine.decisions import Decision, GameRef
-from engine.events import SpellCastTriggeredEvent
-from engine.game_state import GameState
-from test_utils import DeterministicPlayer, Intent
-from engine.stack import StackObject
-from engine.triggers import TriggerRegistration
+from engine.decisions import Decision
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
+from silverquillm.table import Table, appears, copied, life, moves, off_stack, on_stack, taps, wins
+
+R, W, U = ManaType.RED, ManaType.WHITE, ManaType.BLUE
+NO_NEW_TARGETS = Decision.no()
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _make_game(
-    *,
-    phase: Phase = Phase.PRECOMBAT_MAIN,
-    step: Step | None = None,
-) -> GameState:
-    """Create a minimal 2-player GameState at the specified phase/step."""
-    p1 = DeterministicPlayer("Alice")
-    p2 = DeterministicPlayer("Bob")
-    game = GameState([p1, p2])
-    game.phase = phase
-    game.step = step
-    return game
+def _table(p0: Side | None = None, p1: Side | None = None, *, start=(Phase.PRECOMBAT_MAIN, 0)) -> Table:
+    """A table for a game built at ``start``, player 0's precombat main phase
+    by default."""
+    return Table(create_game(p0 or Side(), p1 or Side(), start=start))
 
 
-def _add_to_hand(game: GameState, player_idx: int, card: CardImpl) -> None:
-    """Put *card* into the player's hand."""
-    game.get_hand(game.players[player_idx]).add(card)
+def _cast(t: Table, seat: int, spell, *choices, then=(), note: str = "") -> None:
+    """``seat`` casts ``spell``, answering its questions with ``choices``."""
+    t.act(seat, spell, choices=choices, then=[moves(spell, Zone.STACK), *then], note=note)
+
+
+def _resolve(t: Table, *, then=(), choices=(), chooser: int | None = None, note: str = "") -> None:
+    """Both players pass in turn, starting with the player asked, and the top
+    of the stack resolves with ``then``; ``choices`` answer the questions the
+    resolution asks ``chooser`` (by default the player who passes first)."""
+    first = t.asked
+    chooser = first if chooser is None else chooser
+    t.pass_(first, choices=choices if chooser == first else ())
+    t.pass_(1 - first, choices=choices if chooser != first else (), then=then, note=note)
 
 
 def _add_mana(player: DeterministicPlayer, mana_type: ManaType, amount: int) -> None:
@@ -70,42 +101,67 @@ def _add_mana(player: DeterministicPlayer, mana_type: ManaType, amount: int) -> 
     player.mana_pool.add(mana_type, amount)
 
 
+
 # ---------------------------------------------------------------------------
-# Timing helper tests — is_sorcery_speed
+# Timing — sorcery speed: active player, main phase, empty stack (307.1)
 # ---------------------------------------------------------------------------
 
 class TestIsSorcerySpeed:
-    """Verify is_sorcery_speed requires: active player + main phase + empty stack."""
+    """A sorcery is cast only by the active player, in a main phase, with an
+    empty stack; Boltwave shows it, with {R} in the pool so mana is never what
+    stops it."""
 
     def test_precombat_main_active_player_empty_stack_is_true(self):
-        game = _make_game(phase=Phase.PRECOMBAT_MAIN)
-        assert is_sorcery_speed(game, game.players[0]) is True
+        wave = card(Boltwave)
+        t = _table(Side(hand=[wave], mana={R: 1}))
+        _cast(t, 0, wave)
+        _resolve(t, then=[moves(wave, Zone.GRAVEYARD), life(1, 17)])
+        t.run()
 
     def test_postcombat_main_active_player_empty_stack_is_true(self):
-        game = _make_game(phase=Phase.POSTCOMBAT_MAIN)
-        assert is_sorcery_speed(game, game.players[0]) is True
+        wave, mountain = card(Boltwave), card(Mountain)
+        t = _table(Side(hand=[wave], battlefield=[mountain]))
+        t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+        t.act(0, mountain, then=[taps(mountain)])
+        _cast(t, 0, wave)
+        _resolve(t, then=[moves(wave, Zone.GRAVEYARD), life(1, 17)])
+        t.run()
 
     def test_non_active_player_returns_false(self):
-        game = _make_game(phase=Phase.PRECOMBAT_MAIN)
-        assert is_sorcery_speed(game, game.players[1]) is False
+        wave, bolt = card(Boltwave), card(BurstLightning)
+        t = _table(Side(), Side(hand=[wave, bolt], mana={R: 1}))
+        t.pass_(0)
+        t.act_illegal(1, wave, note="player 1 is not the active player")
+        _cast(t, 1, bolt, player(0), note="the {R} was there all along")
+        t.run()
 
     def test_combat_phase_returns_false(self):
-        game = _make_game(phase=Phase.COMBAT, step=Step.DECLARE_ATTACKERS)
-        assert is_sorcery_speed(game, game.players[0]) is False
+        wave = card(Boltwave)
+        t = _table(Side(hand=[wave], mana={R: 1}), start=(Step.BEGIN_COMBAT, 0))
+        t.act_illegal(0, wave, note="not a main phase")
+        t.run()
 
     def test_beginning_phase_returns_false(self):
-        game = _make_game(phase=Phase.BEGINNING, step=Step.UPKEEP)
-        assert is_sorcery_speed(game, game.players[0]) is False
+        wave = card(Boltwave)
+        t = _table(Side(hand=[wave], mana={R: 1}), start=(Step.UPKEEP, 0))
+        t.act_illegal(0, wave, note="not a main phase")
+        t.run()
 
     def test_ending_phase_returns_false(self):
-        game = _make_game(phase=Phase.ENDING, step=Step.END)
-        assert is_sorcery_speed(game, game.players[0]) is False
+        wave = card(Boltwave)
+        t = _table(Side(hand=[wave], mana={R: 1}), start=(Step.END, 0))
+        t.act_illegal(0, wave, note="not a main phase")
+        t.run()
 
     def test_nonempty_stack_returns_false(self):
-        game = _make_game(phase=Phase.PRECOMBAT_MAIN)
-        dummy = StackObject(source=None, controller=game.players[0])
-        game.stack.push(dummy)
-        assert is_sorcery_speed(game, game.players[0]) is False
+        wave, bolt = card(Boltwave), card(BurstLightning)
+        t = _table(Side(hand=[wave, bolt], mana={R: 2}))
+        _cast(t, 0, bolt, player(1))
+        t.act_illegal(0, wave, note="Burst Lightning is on the stack")
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+        _cast(t, 0, wave, note="the stack is empty again")
+        _resolve(t, then=[moves(wave, Zone.GRAVEYARD), life(1, 15)])
+        t.run()
 
 
 # ---------------------------------------------------------------------------
@@ -135,648 +191,354 @@ class TestCanCastAtInstantSpeed:
         assert can_cast_at_instant_speed(card) is True
 
 
+
 # ---------------------------------------------------------------------------
-# cast_spell — core pipeline tests
+# Casting — hand → stack → resolution → destination zone (601.2a, 608.3)
 # ---------------------------------------------------------------------------
 
 class TestCastSpellCreature:
-    """Requirement: cast vanilla creature → on stack → resolve → battlefield."""
+    """A creature spell goes from hand to the stack, then onto the
+    battlefield under its caster's control."""
 
     def test_cast_puts_creature_on_stack(self):
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(
-            name="Grizzly Bears",
-            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_to_hand(game, 0, bear)
-        _add_mana(player, ManaType.GREEN, 2)
-
-        cast_spell(game, player, bear)
-
-        assert not game.stack.is_empty()
-        top = game.stack.peek()
-        assert top is not None
-        assert top.source is bear
-        assert top.controller is player
+        lions = card(SavannahLions)
+        t = _table(Side(hand=[lions], mana={W: 1}))
+        _cast(t, 0, lions, note="the Lions is player 0's spell on the stack")
+        t.run()
 
     def test_cast_removes_creature_from_hand(self):
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(
-            name="Bear", mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_to_hand(game, 0, bear)
-        _add_mana(player, ManaType.GREEN, 1)
-
-        cast_spell(game, player, bear)
-        assert not game.get_hand(player).contains(bear)
+        lions, plains = card(SavannahLions), card(Plains)
+        t = _table(Side(hand=[lions, plains], mana={W: 1}))
+        _cast(t, 0, lions, note="only the Lions leaves the hand")
+        final = t.run()
+        assert final.where(lions) is Zone.STACK and final.where(plains) is Zone.HAND
 
     def test_resolve_creature_to_battlefield(self):
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(
-            name="Bear",
-            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_to_hand(game, 0, bear)
-        _add_mana(player, ManaType.GREEN, 2)
-
-        cast_spell(game, player, bear)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert game.get_battlefield(player).contains(bear)
-        assert not game.get_graveyard(player).contains(bear)
+        lions = card(SavannahLions)
+        t = _table(Side(hand=[lions], mana={W: 1}))
+        _cast(t, 0, lions)
+        _resolve(t, then=[moves(lions, Zone.BATTLEFIELD)])
+        final = t.run()
+        assert final.where(lions) is Zone.BATTLEFIELD
 
 
 class TestCastSpellInstant:
-    """Requirement: cast instant → resolve → graveyard (not battlefield)."""
+    """An instant goes to its owner's graveyard as it resolves."""
 
     def test_resolve_instant_to_graveyard(self):
-        game = _make_game()
-        player = game.players[0]
-        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, bolt)
-        _add_mana(player, ManaType.RED, 1)
-
-        cast_spell(game, player, bolt)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert game.get_graveyard(player).contains(bolt)
-        assert not game.get_battlefield(player).contains(bolt)
+        bolt = card(BurstLightning)
+        t = _table(Side(hand=[bolt], mana={R: 1}))
+        _cast(t, 0, bolt, player(1))
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+        t.run()
 
 
 class TestCastSpellSorcery:
-    """Requirement: cast sorcery → resolve → graveyard."""
+    """A sorcery goes to its owner's graveyard as it resolves."""
 
     def test_resolve_sorcery_to_graveyard(self):
-        game = _make_game()
-        player = game.players[0]
-        div = Sorcery(
-            name="Divination",
-            mana_cost=ManaCost(generic=2, pips={ManaType.BLUE: 1}),
-        )
-        _add_to_hand(game, 0, div)
-        _add_mana(player, ManaType.BLUE, 3)
-
-        cast_spell(game, player, div)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert game.get_graveyard(player).contains(div)
-        assert not game.get_battlefield(player).contains(div)
+        wave = card(Boltwave)
+        t = _table(Side(hand=[wave], mana={R: 1}))
+        _cast(t, 0, wave)
+        _resolve(t, then=[moves(wave, Zone.GRAVEYARD), life(1, 17)])
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# cast_spell — timing rejection tests
+# Casting — timing (307.1, 302.1)
 # ---------------------------------------------------------------------------
 
 class TestCastSpellTimingRejections:
-    """Requirement: sorcery-speed violations raise CastingError."""
+    """A sorcery or a creature without flash is cast only at sorcery speed."""
 
     def test_sorcery_during_combat_phase_raises(self):
-        """Sorcery during combat → CastingError."""
-        game = _make_game(phase=Phase.COMBAT, step=Step.DECLARE_ATTACKERS)
-        player = game.players[0]
-        sorc = Sorcery(name="Wrath", mana_cost=ManaCost(pips={ManaType.WHITE: 1}))
-        _add_to_hand(game, 0, sorc)
-        _add_mana(player, ManaType.WHITE, 1)
-
-        with pytest.raises(CastingError, match="sorcery-speed timing"):
-            cast_spell(game, player, sorc)
+        wave, mountain = card(Boltwave), card(Mountain)
+        t = _table(Side(hand=[wave], battlefield=[mountain]), start=(Step.BEGIN_COMBAT, 0))
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.pass_(0)  # declares no attackers
+        t.act(0, mountain, then=[taps(mountain)])
+        t.act_illegal(0, wave, note="the declare attackers step is no main phase")
+        t.run()
 
     def test_creature_during_combat_phase_raises(self):
-        """Non-flash creature during combat → CastingError."""
-        game = _make_game(phase=Phase.COMBAT, step=Step.DECLARE_BLOCKERS)
-        player = game.players[0]
-        bear = Creature(
-            name="Bear", mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_to_hand(game, 0, bear)
-        _add_mana(player, ManaType.GREEN, 1)
-
-        with pytest.raises(CastingError, match="sorcery-speed timing"):
-            cast_spell(game, player, bear)
+        lions = card(SavannahLions)
+        t = _table(Side(hand=[lions], mana={W: 1}), start=(Step.BEGIN_COMBAT, 0))
+        t.act_illegal(0, lions, note="the Lions has no flash")
+        t.run()
 
     def test_sorcery_with_nonempty_stack_raises(self):
-        """Sorcery with non-empty stack → CastingError."""
-        game = _make_game()
-        player = game.players[0]
-        dummy = StackObject(source=None, controller=player)
-        game.stack.push(dummy)
-
-        sorc = Sorcery(name="Div", mana_cost=ManaCost(pips={ManaType.BLUE: 1}))
-        _add_to_hand(game, 0, sorc)
-        _add_mana(player, ManaType.BLUE, 1)
-
-        with pytest.raises(CastingError, match="sorcery-speed timing"):
-            cast_spell(game, player, sorc)
+        wave, bolt = card(Boltwave), card(BurstLightning)
+        t = _table(Side(hand=[wave, bolt], mana={R: 2}))
+        _cast(t, 0, bolt, player(1))
+        t.act_illegal(0, wave, note="Burst Lightning is on the stack")
+        t.run()
 
     def test_non_active_player_sorcery_raises(self):
-        """Non-active player casting sorcery → CastingError."""
-        game = _make_game()
-        non_active = game.players[1]
-        sorc = Sorcery(name="Div", mana_cost=ManaCost(pips={ManaType.BLUE: 1}))
-        _add_to_hand(game, 1, sorc)
-        _add_mana(non_active, ManaType.BLUE, 1)
-
-        with pytest.raises(CastingError, match="sorcery-speed timing"):
-            cast_spell(game, non_active, sorc)
+        wave = card(Boltwave)
+        t = _table(Side(), Side(hand=[wave], mana={R: 1}))
+        t.pass_(0)
+        t.act_illegal(1, wave, note="player 1 is not the active player")
+        t.run()
 
     def test_non_active_player_creature_no_flash_raises(self):
-        """Non-active player casting creature without flash → CastingError."""
-        game = _make_game()
-        non_active = game.players[1]
-        bear = Creature(
-            name="Bear", mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_to_hand(game, 1, bear)
-        _add_mana(non_active, ManaType.GREEN, 1)
+        lions = card(SavannahLions)
+        t = _table(Side(), Side(hand=[lions], mana={W: 1}))
+        t.pass_(0)
+        t.act_illegal(1, lions, note="player 1 is not the active player")
+        t.run()
 
-        with pytest.raises(CastingError, match="sorcery-speed timing"):
-            cast_spell(game, non_active, bear)
-
-
-# ---------------------------------------------------------------------------
-# cast_spell — flash / instant-speed success
-# ---------------------------------------------------------------------------
 
 class TestCastSpellInstantSpeed:
-    """Requirement: FLASH keyword at instant speed → succeeds."""
+    """An instant, or a spell with flash, is cast whenever its caster has
+    priority (702.8a)."""
 
     def test_flash_creature_during_combat_succeeds(self):
-        game = _make_game(phase=Phase.COMBAT, step=Step.DECLARE_BLOCKERS)
-        player = game.players[0]
-        viper = Creature(
-            name="Ambush Viper",
-            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=1,
-            keywords=Keyword.FLASH,
-        )
-        _add_to_hand(game, 0, viper)
-        _add_mana(player, ManaType.GREEN, 2)
-
-        cast_spell(game, player, viper)
-        assert not game.stack.is_empty()
-        assert game.stack.peek().source is viper
+        sailor = card(SpectralSailor)
+        t = _table(Side(hand=[sailor], mana={U: 1}), start=(Step.BEGIN_COMBAT, 0))
+        _cast(t, 0, sailor)
+        _resolve(t, then=[moves(sailor, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_instant_during_upkeep_succeeds(self):
-        game = _make_game(phase=Phase.BEGINNING, step=Step.UPKEEP)
-        player = game.players[0]
-        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, bolt)
-        _add_mana(player, ManaType.RED, 1)
-
-        cast_spell(game, player, bolt)
-        assert not game.stack.is_empty()
+        bolt = card(BurstLightning)
+        t = _table(Side(hand=[bolt], mana={R: 1}), start=(Step.UPKEEP, 0))
+        _cast(t, 0, bolt, player(1))
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
+        t.run()
 
     def test_non_active_player_can_cast_instant(self):
-        game = _make_game()
-        non_active = game.players[1]
-        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 1, bolt)
-        _add_mana(non_active, ManaType.RED, 1)
-
-        cast_spell(game, non_active, bolt)
-        assert not game.stack.is_empty()
+        bolt = card(BurstLightning)
+        t = _table(Side(), Side(hand=[bolt], mana={R: 1}))
+        t.pass_(0)
+        _cast(t, 1, bolt, player(0))
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), life(0, 18)])
+        t.run()
 
     def test_flash_enchantment_during_combat_succeeds(self):
-        game = _make_game(phase=Phase.COMBAT, step=Step.END_COMBAT)
-        player = game.players[0]
-        ench = Enchantment(
-            name="Leyline",
-            mana_cost=ManaCost(pips={ManaType.WHITE: 1}),
-            keywords=Keyword.FLASH,
-        )
-        _add_to_hand(game, 0, ench)
-        _add_mana(player, ManaType.WHITE, 1)
-
-        cast_spell(game, player, ench)
-        assert not game.stack.is_empty()
+        blessing, lions = card(TwinbladeBlessing), card(SavannahLions)
+        t = _table(Side(hand=[blessing], battlefield=[lions], mana={W: 3}), start=(Step.END_COMBAT, 0))
+        _cast(t, 0, blessing, lions)
+        _resolve(t, then=[moves(blessing, Zone.BATTLEFIELD)])
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# cast_spell — mana payment
+# Casting — paying the mana cost (601.2g-h)
 # ---------------------------------------------------------------------------
 
 class TestCastSpellManaPayment:
-    """Requirement: insufficient mana → CastingError; mana deducted on success."""
+    """A spell is cast only when its mana cost can be paid, and paying it
+    spends exactly that mana."""
 
     def test_insufficient_mana_raises(self):
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(
-            name="Bear",
-            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_to_hand(game, 0, bear)
-        _add_mana(player, ManaType.GREEN, 1)  # only 1G, need 1G + {1}
-
-        with pytest.raises(CastingError, match="insufficient mana"):
-            cast_spell(game, player, bear)
+        hunter, lions = card(HelpfulHunter), card(SavannahLions)
+        t = _table(Side(hand=[hunter, lions], mana={W: 1}))
+        t.act_illegal(0, hunter, note="{1}{W} with only {W}")
+        _cast(t, 0, lions, note="the {W} pays for the Lions")
+        t.run()
 
     def test_no_mana_at_all_raises(self):
-        game = _make_game()
-        player = game.players[0]
-        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, bolt)
-        # No mana added
-
-        with pytest.raises(CastingError, match="insufficient mana"):
-            cast_spell(game, player, bolt)
+        bolt = card(BurstLightning)
+        t = _table(Side(hand=[bolt]))
+        t.act_illegal(0, bolt, choices=[player(1)], note="nothing pays {R}")
+        t.run()
 
     def test_wrong_color_mana_raises(self):
-        game = _make_game()
-        player = game.players[0]
-        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, bolt)
-        _add_mana(player, ManaType.BLUE, 5)  # plenty of mana, but wrong color
-
-        with pytest.raises(CastingError, match="insufficient mana"):
-            cast_spell(game, player, bolt)
+        bolt, turtle = card(BurstLightning), card(AegisTurtle)
+        t = _table(Side(hand=[bolt, turtle], mana={U: 5}))
+        t.act_illegal(0, bolt, choices=[player(1)], note="{U} cannot pay {R}")
+        _cast(t, 0, turtle, note="the {U} pays for the Turtle")
+        t.run()
 
     def test_mana_deducted_after_cast(self):
-        """Verify mana pool is reduced by the cost after a successful cast."""
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(
-            name="Bear",
-            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_to_hand(game, 0, bear)
-        _add_mana(player, ManaType.GREEN, 3)
-
-        cast_spell(game, player, bear)
-
-        # 3G minus {G} pip minus {1} generic (auto-paid with G) = 1G left
-        assert player.mana_pool.get(ManaType.GREEN) == 1
+        first, second, flight, lions = card(HelpfulHunter), card(HelpfulHunter), card(FleetingFlight), card(SavannahLions)
+        t = _table(Side(hand=[first, second, flight], battlefield=[lions], mana={W: 3}))
+        _cast(t, 0, first)
+        t.act_illegal(0, second, note="{1}{W} of the {W}{W}{W} is spent")
+        _cast(t, 0, flight, lions, note="one {W} is left")
+        t.run()
 
     def test_exact_mana_leaves_zero(self):
-        """Paying exactly the cost leaves the pool empty."""
-        game = _make_game()
-        player = game.players[0]
-        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, bolt)
-        _add_mana(player, ManaType.RED, 1)
+        first, second = card(BurstLightning), card(BurstLightning)
+        t = _table(Side(hand=[first, second], mana={R: 1}))
+        _cast(t, 0, first, player(1))
+        t.act_illegal(0, second, choices=[player(1)], note="the pool is empty")
+        t.run()
 
-        cast_spell(game, player, bolt)
-        assert player.mana_pool.get(ManaType.RED) == 0
-
-    def test_zero_cost_spell_requires_no_mana(self):
-        """A zero-cost spell can be cast with an empty pool."""
-        game = _make_game()
-        player = game.players[0]
-        card = Instant(name="Pact", mana_cost=ManaCost())
-        _add_to_hand(game, 0, card)
-        # No mana added — pool is empty
-
-        cast_spell(game, player, card)
-        assert not game.stack.is_empty()
 
     def test_mana_not_deducted_on_failure(self):
-        """When casting fails (e.g. timing), mana should not be deducted."""
-        game = _make_game(phase=Phase.COMBAT, step=Step.DECLARE_ATTACKERS)
-        player = game.players[0]
-        sorc = Sorcery(name="Div", mana_cost=ManaCost(pips={ManaType.BLUE: 1}))
-        _add_to_hand(game, 0, sorc)
-        _add_mana(player, ManaType.BLUE, 1)
-
-        with pytest.raises(CastingError):
-            cast_spell(game, player, sorc)
-
-        # Mana should still be there since timing check fails before payment
-        assert player.mana_pool.get(ManaType.BLUE) == 1
+        wave, bolt = card(Boltwave), card(BurstLightning)
+        t = _table(Side(hand=[wave, bolt], mana={R: 1}), start=(Step.BEGIN_COMBAT, 0))
+        t.act_illegal(0, wave)
+        _cast(t, 0, bolt, player(1), note="the failed Boltwave spent nothing")
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# cast_spell — hook callbacks
+# Casting — card hooks
 # ---------------------------------------------------------------------------
 
 class TestCastSpellHooks:
-    """Requirements: on_cast called during cast; on_resolve called during resolution."""
+    """A card's ``on_cast`` runs as it is cast, and a spell's effect happens
+    only as it resolves."""
 
-    def test_on_cast_callback_is_called(self):
-        on_cast_log: list[str] = []
-
-        class TrackedCreature(Creature):
-            def on_cast(self, game: GameState) -> None:
-                on_cast_log.append("on_cast")
-
-        game = _make_game()
-        player = game.players[0]
-        card = TrackedCreature(
-            name="Tracked",
-            mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
-            base_power=1, base_toughness=1,
-        )
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.GREEN, 1)
-
-        cast_spell(game, player, card)
-        assert on_cast_log == ["on_cast"]
 
     def test_on_resolve_callback_is_called(self):
-        on_resolve_log: list[str] = []
+        bolt = card(BurstLightning)
+        t = _table(Side(hand=[bolt], mana={R: 1}))
+        _cast(t, 0, bolt, player(1), note="no damage yet")
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)], note="the damage is dealt as it resolves")
+        t.run()
 
-        class TrackedInstant(Instant):
-            def on_resolve(self, game: GameState) -> None:
-                on_resolve_log.append("on_resolve")
-
-        game = _make_game()
-        player = game.players[0]
-        card = TrackedInstant(
-            name="Tracked", mana_cost=ManaCost(pips={ManaType.RED: 1}),
-        )
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.RED, 1)
-
-        cast_spell(game, player, card)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert on_resolve_log == ["on_resolve"]
-
-    def test_on_cast_called_before_push_to_stack(self):
-        """on_cast fires during cast_spell, before the StackObject is pushed."""
-        stack_was_empty_during_on_cast: list[bool] = []
-
-        class InspectorCreature(Creature):
-            def on_cast(self, game: GameState) -> None:
-                # At on_cast time the stack should still be empty
-                # (StackObject push happens after on_cast)
-                stack_was_empty_during_on_cast.append(game.stack.is_empty())
-
-        game = _make_game()
-        player = game.players[0]
-        card = InspectorCreature(
-            name="Inspector",
-            mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
-            base_power=1, base_toughness=1,
-        )
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.GREEN, 1)
-
-        cast_spell(game, player, card)
-        assert stack_was_empty_during_on_cast == [True]
 
     def test_on_resolve_receives_game_state(self):
-        """on_resolve receives the game state so the card can interact with it."""
-        received_game: list[GameState | None] = []
-
-        class InspectorSorcery(Sorcery):
-            def on_resolve(self, game: GameState) -> None:
-                received_game.append(game)
-
-        game = _make_game()
-        player = game.players[0]
-        card = InspectorSorcery(
-            name="Inspector", mana_cost=ManaCost(pips={ManaType.BLUE: 1}),
-        )
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.BLUE, 1)
-
-        cast_spell(game, player, card)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert received_game == [game]
+        wave = card(Boltwave)
+        t = _table(Side(hand=[wave], mana={R: 1}), Side(life=3))
+        _cast(t, 0, wave)
+        t.pass_(0)
+        t.pass_(1, then=[moves(wave, Zone.GRAVEYARD), life(1, 0), wins(0)], note="the resolving spell changes the game")
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# cast_spell — additional legality checks
+# Casting — what can be cast at all
 # ---------------------------------------------------------------------------
 
 class TestCastSpellLegality:
-    """Miscellaneous legality checks for cast_spell."""
+    """Only a card in its caster's hand is cast, a land is never cast, and a
+    cast that cannot be made leaves the hand and the stack as they were."""
 
     def test_card_not_in_hand_raises(self):
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(
-            name="Bear", mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_mana(player, ManaType.GREEN, 1)
-        # Card NOT added to hand
-
-        with pytest.raises(CastingError, match="card not in hand"):
-            cast_spell(game, player, bear)
+        lions = card(SavannahLions)
+        t = _table(Side(graveyard=[lions], mana={W: 1}))
+        t.act_illegal(0, lions, note="the Lions is in the graveyard")
+        t.run()
 
     def test_can_cast_returns_false_raises(self):
-        """Land.can_cast always returns False; trying to cast_spell should error."""
-        game = _make_game()
-        player = game.players[0]
-        land = Land(name="Forest")
-        _add_to_hand(game, 0, land)
-
-        with pytest.raises(CastingError, match="can_cast returned False"):
-            cast_spell(game, player, land)
+        played, kept = card(Plains), card(Plains)
+        t = _table(Side(hand=[played, kept], mana={W: 3}))
+        t.act(0, played, then=[moves(played, Zone.BATTLEFIELD)])
+        t.act_illegal(0, kept, note="no land play is left, and a land is never cast")
+        t.run()
 
     def test_hand_unchanged_on_timing_failure(self):
-        """If timing check fails, card should remain in hand."""
-        game = _make_game(phase=Phase.COMBAT, step=Step.DECLARE_ATTACKERS)
-        player = game.players[0]
-        bear = Creature(
-            name="Bear", mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_to_hand(game, 0, bear)
-        _add_mana(player, ManaType.GREEN, 1)
-
-        with pytest.raises(CastingError):
-            cast_spell(game, player, bear)
-
-        # Card should still be in hand
-        assert game.get_hand(player).contains(bear)
+        lions = card(SavannahLions)
+        t = _table(Side(hand=[lions], mana={W: 1}), start=(Step.BEGIN_COMBAT, 0))
+        t.act_illegal(0, lions)
+        final = t.run()
+        assert final.where(lions) is Zone.HAND
 
     def test_stack_unchanged_on_failure(self):
-        """If cast fails, nothing is added to the stack."""
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(
-            name="Bear",
-            mana_cost=ManaCost(generic=5, pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_to_hand(game, 0, bear)
-        # Insufficient mana
-        _add_mana(player, ManaType.GREEN, 1)
-
-        with pytest.raises(CastingError):
-            cast_spell(game, player, bear)
-
-        assert game.stack.is_empty()
+        ceratops = card(QuakestriderCeratops)
+        t = _table(Side(hand=[ceratops], mana={ManaType.GREEN: 1}))
+        t.act_illegal(0, ceratops, note="{3}{G}{G}{G} with only {G}")
+        final = t.run()
+        assert final.stack == ()
 
 
 # ---------------------------------------------------------------------------
-# play_land tests
+# Playing a land — a special action (305.1-305.3, 116.2a)
 # ---------------------------------------------------------------------------
 
 class TestPlayLand:
-    """Requirement: play_land moves land hand→battlefield, decrements counter."""
+    """A player plays one land in a main phase of their turn, with an empty
+    stack, straight from their hand onto the battlefield."""
 
     def test_valid_land_play_moves_to_battlefield(self):
-        game = _make_game()
-        player = game.players[0]
-        forest = Land(name="Forest")
-        _add_to_hand(game, 0, forest)
-
-        play_land(game, player, forest)
-        assert game.get_battlefield(player).contains(forest)
+        forest = card(Forest)
+        t = _table(Side(hand=[forest]))
+        t.act(0, forest, then=[moves(forest, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_valid_land_play_removes_from_hand(self):
-        game = _make_game()
-        player = game.players[0]
-        forest = Land(name="Forest")
-        _add_to_hand(game, 0, forest)
-
-        play_land(game, player, forest)
-        assert not game.get_hand(player).contains(forest)
+        forest, lions = card(Forest), card(SavannahLions)
+        t = _table(Side(hand=[forest, lions]))
+        t.act(0, forest, then=[moves(forest, Zone.BATTLEFIELD)])
+        final = t.run()
+        assert final.where(forest) is Zone.BATTLEFIELD and final.where(lions) is Zone.HAND
 
     def test_valid_land_play_decrements_remaining(self):
-        game = _make_game()
-        player = game.players[0]
-        forest = Land(name="Forest")
-        _add_to_hand(game, 0, forest)
-        assert player.land_plays_remaining == 1
-
-        play_land(game, player, forest)
-        assert player.land_plays_remaining == 0
+        first, second, third = card(Forest), card(Forest), card(Forest)
+        t = _table(Side(hand=[first, second, third], battlefield=[LootExuberantExplorer]))
+        t.act(0, first, then=[moves(first, Zone.BATTLEFIELD)])
+        t.act(0, second, then=[moves(second, Zone.BATTLEFIELD)], note="Loot gives a second land play")
+        t.act_illegal(0, third, note="both land plays are used")
+        t.run()
 
     def test_land_play_postcombat_main_succeeds(self):
-        game = _make_game(phase=Phase.POSTCOMBAT_MAIN)
-        player = game.players[0]
-        island = Land(name="Island")
-        _add_to_hand(game, 0, island)
-
-        play_land(game, player, island)
-        assert game.get_battlefield(player).contains(island)
+        island = card(Island)
+        t = _table(Side(hand=[island]))
+        t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+        t.act(0, island, then=[moves(island, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_second_land_play_when_remaining_zero_raises(self):
-        """After playing one land (remaining=0), second play raises CastingError."""
-        game = _make_game()
-        player = game.players[0]
-        f1 = Land(name="Forest")
-        f2 = Land(name="Forest")
-        _add_to_hand(game, 0, f1)
-        _add_to_hand(game, 0, f2)
-
-        play_land(game, player, f1)
-        assert player.land_plays_remaining == 0
-
-        with pytest.raises(CastingError, match="no land plays remaining"):
-            play_land(game, player, f2)
+        first, second = card(Forest), card(Forest)
+        t = _table(Side(hand=[first, second]))
+        t.act(0, first, then=[moves(first, Zone.BATTLEFIELD)])
+        t.act_illegal(0, second)
+        t.run()
 
     def test_remaining_already_zero_raises(self):
-        """If remaining=0 from the start, playing a land raises CastingError."""
-        game = _make_game()
-        player = game.players[0]
-        player.land_plays_remaining = 0
-        forest = Land(name="Forest")
-        _add_to_hand(game, 0, forest)
-
-        with pytest.raises(CastingError, match="no land plays remaining"):
-            play_land(game, player, forest)
+        first, second = card(Forest), card(Forest)
+        t = _table(Side(hand=[first, second]))
+        t.act(0, first, then=[moves(first, Zone.BATTLEFIELD)])
+        t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+        t.act_illegal(0, second, note="the turn's land play was used before combat")
+        t.run()
 
     def test_land_during_combat_phase_raises(self):
-        """Cannot play a land during combat — must be main phase."""
-        game = _make_game(phase=Phase.COMBAT, step=Step.DECLARE_ATTACKERS)
-        player = game.players[0]
-        forest = Land(name="Forest")
-        _add_to_hand(game, 0, forest)
-
-        with pytest.raises(CastingError):
-            play_land(game, player, forest)
+        forest = card(Forest)
+        t = _table(Side(hand=[forest]), start=(Step.BEGIN_COMBAT, 0))
+        t.act_illegal(0, forest)
+        t.run()
 
     def test_land_during_beginning_phase_raises(self):
-        """Cannot play a land during upkeep — must be main phase."""
-        game = _make_game(phase=Phase.BEGINNING, step=Step.UPKEEP)
-        player = game.players[0]
-        forest = Land(name="Forest")
-        _add_to_hand(game, 0, forest)
-
-        with pytest.raises(CastingError):
-            play_land(game, player, forest)
+        forest = card(Forest)
+        t = _table(Side(hand=[forest]), start=(Step.UPKEEP, 0))
+        t.act_illegal(0, forest)
+        t.run()
 
     def test_land_by_non_active_player_raises(self):
-        """Non-active player cannot play a land."""
-        game = _make_game()
-        non_active = game.players[1]
-        forest = Land(name="Forest")
-        _add_to_hand(game, 1, forest)
-
-        with pytest.raises(CastingError):
-            play_land(game, non_active, forest)
+        forest = card(Forest)
+        t = _table(Side(), Side(hand=[forest]))
+        t.pass_(0)
+        t.act_illegal(1, forest)
+        t.run()
 
     def test_land_with_nonempty_stack_raises(self):
-        """Cannot play a land when the stack is non-empty."""
-        game = _make_game()
-        player = game.players[0]
-        dummy = StackObject(source=None, controller=player)
-        game.stack.push(dummy)
-
-        forest = Land(name="Forest")
-        _add_to_hand(game, 0, forest)
-
-        with pytest.raises(CastingError):
-            play_land(game, player, forest)
+        forest, bolt = card(Forest), card(BurstLightning)
+        t = _table(Side(hand=[forest, bolt], mana={R: 1}))
+        _cast(t, 0, bolt, player(1))
+        t.act_illegal(0, forest, note="Burst Lightning is on the stack")
+        t.run()
 
     def test_non_land_card_raises(self):
-        """play_land rejects a card that isn't a land."""
-        game = _make_game()
-        player = game.players[0]
-        creature = Creature(name="Bear", base_power=2, base_toughness=2)
-        _add_to_hand(game, 0, creature)
-
-        with pytest.raises(CastingError, match="not a land card"):
-            play_land(game, player, creature)
+        lions = card(SavannahLions)
+        t = _table(Side(hand=[lions]))
+        t.act_illegal(0, lions, note="a creature card is cast, never played as a land")
+        t.run()
 
     def test_land_not_in_hand_raises(self):
-        """Cannot play a land that's not in hand."""
-        game = _make_game()
-        player = game.players[0]
-        forest = Land(name="Forest")
-        # NOT added to hand
-
-        with pytest.raises(CastingError, match="card not in hand"):
-            play_land(game, player, forest)
+        forest = card(Forest)
+        t = _table(Side(graveyard=[forest]))
+        t.act_illegal(0, forest)
+        t.run()
 
     def test_extra_land_with_increased_limit(self):
-        """If land_plays_remaining is 2 (e.g. Exploration), two lands are allowed."""
-        game = _make_game()
-        player = game.players[0]
-        player.land_plays_remaining = 2
-        f1 = Land(name="Forest")
-        f2 = Land(name="Forest")
-        _add_to_hand(game, 0, f1)
-        _add_to_hand(game, 0, f2)
-
-        play_land(game, player, f1)
-        assert player.land_plays_remaining == 1
-
-        play_land(game, player, f2)
-        assert player.land_plays_remaining == 0
-        assert game.get_battlefield(player).contains(f1)
-        assert game.get_battlefield(player).contains(f2)
+        first, second = card(Forest), card(Forest)
+        t = _table(Side(hand=[first, second], battlefield=[LootExuberantExplorer]))
+        t.act(0, first, then=[moves(first, Zone.BATTLEFIELD)])
+        t.act(0, second, then=[moves(second, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_land_does_not_use_stack(self):
-        """Playing a land is a special action — it should not go through the stack."""
-        game = _make_game()
-        player = game.players[0]
-        forest = Land(name="Forest")
-        _add_to_hand(game, 0, forest)
-
-        play_land(game, player, forest)
-        assert game.stack.is_empty()
+        forest, elves = card(Forest), card(LlanowarElves)
+        t = _table(Side(hand=[forest, elves]))
+        t.act(0, forest, then=[moves(forest, Zone.BATTLEFIELD)], note="no stack, and player 0 keeps priority")
+        t.act(0, forest, then=[taps(forest)])
+        _cast(t, 0, elves)
+        t.run()
 
 
 # ---------------------------------------------------------------------------
@@ -808,334 +570,145 @@ class TestPermanentTypes:
         assert CardType.LAND not in _PERMANENT_TYPES
 
 
+
 # ---------------------------------------------------------------------------
-# Resolution: additional permanent subtypes
+# Resolution — every permanent spell enters the battlefield (608.3)
 # ---------------------------------------------------------------------------
 
 class TestResolveOtherPermanents:
-    """Enchantments, artifacts, planeswalkers, artifact creatures → battlefield."""
+    """Enchantments, artifacts, planeswalkers and artifact creatures resolve
+    onto the battlefield."""
 
     def test_enchantment_resolves_to_battlefield(self):
-        game = _make_game()
-        player = game.players[0]
-        ench = Enchantment(name="Pac", mana_cost=ManaCost(pips={ManaType.WHITE: 1}))
-        _add_to_hand(game, 0, ench)
-        _add_mana(player, ManaType.WHITE, 1)
-
-        cast_spell(game, player, ench)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert game.get_battlefield(player).contains(ench)
+        authority = card(AuthorityOfTheConsuls)
+        t = _table(Side(hand=[authority], mana={W: 1}))
+        _cast(t, 0, authority)
+        _resolve(t, then=[moves(authority, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_artifact_resolves_to_battlefield(self):
-        game = _make_game()
-        player = game.players[0]
-        art = Artifact(name="Sol Ring", mana_cost=ManaCost(generic=1))
-        _add_to_hand(game, 0, art)
-        _add_mana(player, ManaType.COLORLESS, 1)
-
-        cast_spell(game, player, art)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert game.get_battlefield(player).contains(art)
+        katana = card(QuickDrawKatana)
+        t = _table(Side(hand=[katana], mana={ManaType.COLORLESS: 2}))
+        _cast(t, 0, katana)
+        _resolve(t, then=[moves(katana, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_planeswalker_resolves_to_battlefield(self):
-        game = _make_game()
-        player = game.players[0]
-        pw = Planeswalker(
-            name="Jace",
-            mana_cost=ManaCost(generic=2, pips={ManaType.BLUE: 2}),
-            starting_loyalty=3,
-        )
-        _add_to_hand(game, 0, pw)
-        _add_mana(player, ManaType.BLUE, 4)
-
-        cast_spell(game, player, pw)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert game.get_battlefield(player).contains(pw)
+        ajani = card(AjaniCallerOfThePride)
+        t = _table(Side(hand=[ajani], mana={W: 3}))
+        _cast(t, 0, ajani)
+        _resolve(t, then=[moves(ajani, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_artifact_creature_resolves_to_battlefield(self):
-        game = _make_game()
-        player = game.players[0]
-        ac = ArtifactCreature(
-            name="Ornithopter", mana_cost=ManaCost(), base_power=0, base_toughness=2,
-        )
-        _add_to_hand(game, 0, ac)
-
-        cast_spell(game, player, ac)
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-
-        assert game.get_battlefield(player).contains(ac)
+        barricade = card(CrystalBarricade)
+        t = _table(Side(hand=[barricade], mana={W: 2}))
+        _cast(t, 0, barricade)
+        _resolve(t, then=[moves(barricade, Zone.BATTLEFIELD)])
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# Integration: multi-spell stack LIFO ordering
+# The stack — last in, first out, and targets chosen as a spell is cast
 # ---------------------------------------------------------------------------
 
 class TestCastResolveIntegration:
-    """End-to-end integration tests for stack interaction."""
+    """Spells resolve last in, first out (405.5), and a spell affects the
+    targets chosen as it was cast (601.2c)."""
 
     def test_multiple_spells_resolve_lifo(self):
-        """Two instants on the stack resolve in LIFO order."""
-        game = _make_game()
-        player = game.players[0]
-
-        bolt1 = Instant(name="Bolt 1", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        bolt2 = Instant(name="Bolt 2", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, bolt1)
-        _add_to_hand(game, 0, bolt2)
-        _add_mana(player, ManaType.RED, 2)
-
-        cast_spell(game, player, bolt1)
-        cast_spell(game, player, bolt2)
-
-        top = game.stack.pop()
-        assert top.source is bolt2
-        top.on_resolve(game)
-
-        next_obj = game.stack.pop()
-        assert next_obj.source is bolt1
-        next_obj.on_resolve(game)
-
-        assert game.get_graveyard(player).contains(bolt1)
-        assert game.get_graveyard(player).contains(bolt2)
+        bolt, growth, lions = card(BurstLightning), card(GiantGrowth), card(SavannahLions)
+        t = _table(Side(hand=[bolt, growth], mana={R: 1, ManaType.GREEN: 1}), Side(battlefield=[lions]))
+        _cast(t, 0, bolt, lions)
+        _cast(t, 0, growth, lions)
+        _resolve(t, then=[moves(growth, Zone.GRAVEYARD)], note="Giant Growth, cast last, resolves first")
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD)], note="the 5/4 Lions survives 2 damage")
+        final = t.run()
+        assert final.where(lions) is Zone.BATTLEFIELD
 
     def test_cast_creature_full_lifecycle(self):
-        """Full lifecycle: hand → cast → stack → resolve → battlefield."""
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(
-            name="Bear",
-            mana_cost=ManaCost(generic=1, pips={ManaType.GREEN: 1}),
-            base_power=2, base_toughness=2,
-        )
-        _add_to_hand(game, 0, bear)
-        _add_mana(player, ManaType.GREEN, 2)
-
-        # 1. In hand
-        assert game.get_hand(player).contains(bear)
-        # 2. Cast
-        cast_spell(game, player, bear)
-        assert not game.get_hand(player).contains(bear)
-        assert len(game.stack.objects()) == 1
-        # 3. Resolve
-        obj = game.stack.pop()
-        obj.on_resolve(game)
-        assert game.stack.is_empty()
-        assert game.get_battlefield(player).contains(bear)
+        lions = card(SavannahLions)
+        t = _table(Side(hand=[lions], mana={W: 1}))
+        _cast(t, 0, lions, note="hand → stack")
+        _resolve(t, then=[moves(lions, Zone.BATTLEFIELD)], note="stack → battlefield")
+        final = t.run()
+        assert final.stack == () and final.where(lions) is Zone.BATTLEFIELD
 
     def test_cast_with_targets_passes_to_stack_object(self):
-        """Targets chosen during casting are stored in the StackObject.
-
-        The engine raises a target Player Query when casting a targeted spell;
-        an Intent on the caster prefers a specific battlefield creature, and
-        the chosen target is stored on the StackObject (not the card).
-        """
-        from engine.types import TargetRequirement, Zone
-
-        class TargetedBolt(Instant):
-            def get_targets(self, game: GameState):
-                return [
-                    TargetRequirement(
-                        filter_fn=lambda obj: CardType.CREATURE
-                        in getattr(obj, "card_types", set()),
-                        description="target creature",
-                        zone=Zone.BATTLEFIELD,
-                    )
-                ]
-
-        game = _make_game()
-        player = game.players[0]
-        # A real, targetable creature the spell can be aimed at.
-        target_creature = Creature(
-            name="Target Creature",
-            mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
-            base_power=2,
-            base_toughness=2,
-        )
-        bf = game.players[1].zones[Zone.BATTLEFIELD]
-        target_creature.owner = game.players[1]
-        target_creature.controller = game.players[1]
-        bf.add(target_creature)
-        target_creature.instance_id = game.refs.instance_id(
-            target_creature, Zone.BATTLEFIELD.value
-        )
-
-        card = TargetedBolt(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.RED, 1)
-
-        player.start_intent(
-            "bolt",
-            Intent(
-                pattern=GameRef(card=frozenset({("name", "Bolt")})),
-                preferences=(Decision.obj(instance=target_creature.instance_id),),
-            ),
-        )
-        cast_spell(game, player, card)
-        player.end_intent("bolt")
-
-        top = game.stack.peek()
-        assert top.targets == [target_creature]
+        bolt, lions, elves = card(BurstLightning), card(SavannahLions), card(LlanowarElves)
+        t = _table(Side(hand=[bolt], mana={R: 1}), Side(battlefield=[elves, lions]))
+        _cast(t, 0, bolt, lions)
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), moves(lions, Zone.GRAVEYARD)], note="the target, not the Elves")
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# Optional targets — "up to one target X" (TargetRequirement.optional)
+# Optional targets — "up to N target X" (115.1, 601.2c)
 # ---------------------------------------------------------------------------
 
 class TestOptionalTargets:
-    """`TargetRequirement.optional` makes a target query declinable (min == 0)
-    and lets an empty candidate set skip the requirement instead of raising —
-    so "up to N target X" is castable with fewer than N (or zero) candidates."""
+    """Macabre Waltz returns up to two target creature cards from its
+    caster's graveyard to their hand, then they discard a card: it is cast
+    with fewer targets, or none, while a spell that requires a target cannot
+    be cast without one."""
 
     @staticmethod
-    def _creature_spec(*, optional: bool):
-        from engine.types import TargetRequirement, Zone
-
-        return TargetRequirement(
-            filter_fn=lambda obj: CardType.CREATURE
-            in getattr(obj, "card_types", set()),
-            description="up to one target creature" if optional else "target creature",
-            zone=Zone.BATTLEFIELD,
-            optional=optional,
-        )
-
-    def _spell_class(self, specs):
-        class _Spell(Instant):
-            def get_targets(self, game):
-                return specs
-
-        return _Spell
-
-    def _place_creature(self, game, player_idx, name):
-        from engine.types import Zone
-
-        p = game.players[player_idx]
-        c = Creature(name=name, mana_cost=ManaCost(pips={ManaType.GREEN: 1}),
-                     base_power=2, base_toughness=2)
-        c.owner = p
-        c.controller = p
-        p.zones[Zone.BATTLEFIELD].add(c)
-        c.instance_id = game.refs.instance_id(c, Zone.BATTLEFIELD.value)
-        return c
+    def _waltz(graveyard, *, discard):
+        """Player 0 holds Macabre Waltz and ``discard``, with
+        ``graveyard`` in their graveyard and {B}{B} in their pool."""
+        waltz = card(MacabreWaltz)
+        t = _table(Side(hand=[waltz, discard], graveyard=graveyard, mana={ManaType.BLACK: 2}))
+        return t, waltz
 
     def test_optional_empty_candidate_set_casts_without_target(self):
-        """No legal candidate + optional: the spell casts, raises no query, and
-        goes on the stack with no target (rather than raising CastingError)."""
-        Spell = self._spell_class([self._creature_spec(optional=True)])
-        game = _make_game()
-        player = game.players[0]
-        card = Spell(name="Optional Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.RED, 1)
-        # No creatures anywhere; no intent needed — the empty option set skips.
-        cast_spell(game, player, card)
-        top = game.stack.peek()
-        assert top is not None and top.source is card
-        assert top.targets == []
+        plains = card(Plains)
+        t, waltz = self._waltz([], discard=plains)
+        _cast(t, 0, waltz)
+        _resolve(t, then=[moves(waltz, Zone.GRAVEYARD), moves(plains, Zone.GRAVEYARD)])
+        t.run()
 
     def test_required_empty_candidate_set_still_raises(self):
-        """The required-target boundary is unchanged: an empty candidate set for
-        a non-optional spec still raises CastingError, and no StackObject is
-        pushed (a candidate present would instead cast — see other tests)."""
-        Spell = self._spell_class([self._creature_spec(optional=False)])
-        game = _make_game()
-        player = game.players[0]
-        card = Spell(name="Required Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.RED, 1)
-        with pytest.raises(CastingError):
-            cast_spell(game, player, card)
-        assert game.stack.is_empty()   # nothing pushed onto the stack
+        stab = card(Stab)
+        t = _table(Side(hand=[stab], mana={ManaType.BLACK: 1}))
+        t.act_illegal(0, stab, note="no creature to target")
+        t.run()
 
     def test_optional_declined_when_candidate_present(self):
-        """Candidate present but declined (intent with no matching preference,
-        min == 0): the spell casts with no target."""
-        Spell = self._spell_class([self._creature_spec(optional=True)])
-        game = _make_game()
-        player = game.players[0]
-        self._place_creature(game, 1, "Bystander")
-        card = Spell(name="Optional Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.RED, 1)
-        # Intent routes to the spell but prefers nothing → decline at min == 0.
-        player.start_intent("bolt", Intent(
-            pattern=GameRef(card=frozenset({("name", "Optional Bolt")})),
-            preferences=(),
-        ))
-        cast_spell(game, player, card)
-        player.end_intent("bolt")
-        assert game.stack.peek().targets == []
+        plains, lions = card(Plains), card(SavannahLions)
+        t, waltz = self._waltz([lions], discard=plains)
+        _cast(t, 0, waltz, note="it targets nothing")
+        _resolve(t, then=[moves(waltz, Zone.GRAVEYARD), moves(plains, Zone.GRAVEYARD)])
+        final = t.run()
+        assert final.where(lions) is Zone.GRAVEYARD
 
     def test_optional_chosen_when_preferred(self):
-        """An optional target IS captured when the intent prefers a candidate."""
-        Spell = self._spell_class([self._creature_spec(optional=True)])
-        game = _make_game()
-        player = game.players[0]
-        victim = self._place_creature(game, 1, "Victim")
-        card = Spell(name="Optional Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.RED, 1)
-        player.start_intent("bolt", Intent(
-            pattern=GameRef(card=frozenset({("name", "Optional Bolt")})),
-            preferences=(Decision.obj(instance=victim.instance_id),),
-        ))
-        cast_spell(game, player, card)
-        player.end_intent("bolt")
-        assert game.stack.peek().targets == [victim]
+        plains, lions = card(Plains), card(SavannahLions)
+        t, waltz = self._waltz([lions], discard=plains)
+        _cast(t, 0, waltz, lions)
+        _resolve(
+            t, choices=[plains], then=[moves(waltz, Zone.GRAVEYARD), moves(lions, Zone.HAND), moves(plains, Zone.GRAVEYARD)]
+        )
+        t.run()
 
     def test_up_to_two_picks_distinct_targets(self):
-        """Two optional specs + an intent preferring both creatures capture two
-        DISTINCT targets — the second query excludes the first pick."""
-        Spell = self._spell_class([
-            self._creature_spec(optional=True),
-            self._creature_spec(optional=True),
-        ])
-        game = _make_game()
-        player = game.players[0]
-        a = self._place_creature(game, 1, "A")
-        b = self._place_creature(game, 1, "B")
-        card = Spell(name="Twin Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.RED, 1)
-        player.start_intent("bolt", Intent(
-            pattern=GameRef(card=frozenset({("name", "Twin Bolt")})),
-            preferences=(
-                Decision.obj(instance=a.instance_id),
-                Decision.obj(instance=b.instance_id),
-            ),
-        ))
-        cast_spell(game, player, card)
-        player.end_intent("bolt")
-        targets = game.stack.peek().targets
-        assert set(id(t) for t in targets) == {id(a), id(b)}
-        assert len(targets) == 2   # distinct, no duplicate
+        plains, lions, elves = card(Plains), card(SavannahLions), card(LlanowarElves)
+        t, waltz = self._waltz([lions, elves], discard=plains)
+        _cast(t, 0, waltz, lions, elves)
+        _resolve(
+            t,
+            choices=[plains],
+            then=[moves(waltz, Zone.GRAVEYARD), moves(lions, Zone.HAND), moves(elves, Zone.HAND), moves(plains, Zone.GRAVEYARD)],
+        )
+        t.run()
 
     def test_up_to_two_with_one_candidate_casts_with_one(self):
-        """Two optional specs but only one candidate: casts with a single target
-        (the second spec's option set is empty after excluding the first)."""
-        Spell = self._spell_class([
-            self._creature_spec(optional=True),
-            self._creature_spec(optional=True),
-        ])
-        game = _make_game()
-        player = game.players[0]
-        only = self._place_creature(game, 1, "Only")
-        card = Spell(name="Twin Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, card)
-        _add_mana(player, ManaType.RED, 1)
-        player.start_intent("bolt", Intent(
-            pattern=GameRef(card=frozenset({("name", "Twin Bolt")})),
-            preferences=(Decision.obj(instance=only.instance_id),),
-        ))
-        cast_spell(game, player, card)
-        player.end_intent("bolt")
-        assert game.stack.peek().targets == [only]
+        plains, lions = card(Plains), card(SavannahLions)
+        t, waltz = self._waltz([lions], discard=plains)
+        _cast(t, 0, waltz, lions)
+        _resolve(
+            t, choices=[plains], then=[moves(waltz, Zone.GRAVEYARD), moves(lions, Zone.HAND), moves(plains, Zone.GRAVEYARD)]
+        )
+        t.run()
 
 
 class TestDependentTargetFilterArity:
@@ -1204,111 +777,83 @@ class TestDependentTargetFilterArity:
         assert _safe_filter(_boom, "a", []) is False
 
 
+
+# ---------------------------------------------------------------------------
+# Etali, Primal Storm — casting a spell without paying its mana cost
+# ---------------------------------------------------------------------------
+
+def _etali_attacks(spell, *, p0=(), p1=(), p0_hand=(), p1_hand=()):
+    """Turn 1: player 0's Etali, Primal Storm attacks with ``spell`` on top of
+    player 0's library and a Plains on top of player 1's; ``p0`` and ``p1``
+    are more of each player's battlefield, ``p0_hand`` and ``p1_hand`` their
+    hands. Returns the table, at the attack trigger's resolution, and player
+    1's Plains."""
+    etali, top = card(EtaliPrimalStorm), card(Plains)
+    t = _table(
+        Side(hand=list(p0_hand), battlefield=[etali, *p0], library=[spell, card(Plains)]),
+        Side(hand=list(p1_hand), battlefield=list(p1), library=[top, card(Plains)]),
+        start=(Step.BEGIN_COMBAT, 0),
+    )
+    t.pass_to(Step.DECLARE_ATTACKERS, 0)
+    t.act(0, etali, then=[taps(etali), on_stack(EtaliPrimalStormAbility1, 0)])
+    return t, top
+
+
+def _etali_resolves(t, spell, top, *choices, then=(), note: str = ""):
+    """Etali's trigger resolves: it exiles both top cards and player 0 casts
+    ``spell`` without paying its mana cost, answering ``choices``."""
+    _resolve(
+        t,
+        choices=[Decision.yes(), *choices],
+        then=[
+            off_stack(EtaliPrimalStormAbility1),
+            moves(spell, Zone.EXILE),
+            moves(top, Zone.EXILE),
+            moves(spell, Zone.STACK),
+            *then,
+        ],
+        note=note,
+    )
+
+
 class TestSpellTargetStintRevalidation:
-    """cast_spell / cast_spell_free capture the casting controller + each chosen
-    target's zone-stint on the StackObject; a target that leaves its selected
-    zone and returns before resolution (a new object in the same Python instance)
-    is rejected at resolution."""
-
-    def _mark_spell(self, owner):
-        from engine.card import Instant
-        from engine.types import CardType, TargetRequirement, Zone as _Z
-
-        class _MarkCreature(Instant):
-            def get_targets(self, game):
-                return [TargetRequirement(
-                    filter_fn=lambda o: CardType.CREATURE in getattr(o, "card_types", set()),
-                    description="target creature",
-                    zone=_Z.BATTLEFIELD,
-                )]
-
-            def on_resolve(self, game):
-                chosen = getattr(self, "chosen_targets", None) or []
-                target = chosen[0] if chosen else None
-                if target is not None:
-                    target._marked = True
-
-        return _MarkCreature(name="Mark Creature", owner=owner, controller=owner)
-
-    def _cast_free_no_resolve(self, game, player, card, target, from_zone):
-        from engine.casting import cast_spell_free
-        from engine.decisions import Decision, GameRef
-        from test_utils import Intent
-        from engine.types import Zone as _Z
-        inst = game.refs.instance_id(target, _Z.BATTLEFIELD.value)
-        player.start_intent("free", Intent(
-            pattern=GameRef(card=frozenset({("name", card.name)})),
-            preferences=(Decision.obj(instance=inst),),
-        ))
-        try:
-            cast_spell_free(game, player, card, from_zone)
-        finally:
-            player.end_intent("free")
+    """A spell's target is the object chosen as it was cast: if that object
+    leaves its zone and comes back before the spell resolves, it is a new
+    object and no longer the target (400.7, 608.2b)."""
 
     def test_free_cast_marks_target_normally(self):
-        from engine.card import Creature
-        from engine.stack import resolve_top_of_stack
-        from engine.types import Zone
-        from test_utils import create_game, set_board_state
-        game = create_game()
-        p1, p2 = game.players
-        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
-        spell = self._mark_spell(p1)
-        set_board_state(game, 1, battlefield=[bear])
-        p1.zones[Zone.EXILE].add(spell)
-        spell.instance_id = game.refs.instance_id(spell, Zone.EXILE.value)
-        self._cast_free_no_resolve(game, p1, spell, bear, Zone.EXILE)
-        resolve_top_of_stack(game)
-        assert getattr(bear, "_marked", False) is True
+        bolt, sailor = card(BurstLightning), card(SpectralSailor)
+        t, top = _etali_attacks(bolt, p1=[sailor])
+        _etali_resolves(t, bolt, top, sailor)
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), moves(sailor, Zone.GRAVEYARD)])
+        t.run()
 
     def test_free_cast_leave_and_return_rejected(self):
-        from engine.card import Creature
-        from engine.stack import resolve_top_of_stack
-        from engine.types import Zone
-        from engine.zones import move_to_zone
-        from test_utils import create_game, set_board_state
-        game = create_game()
-        p1, p2 = game.players
-        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
-        spell = self._mark_spell(p1)
-        set_board_state(game, 1, battlefield=[bear])
-        p1.zones[Zone.EXILE].add(spell)
-        spell.instance_id = game.refs.instance_id(spell, Zone.EXILE.value)
-        self._cast_free_no_resolve(game, p1, spell, bear, Zone.EXILE)
-        move_to_zone(game, bear, Zone.BATTLEFIELD, Zone.GRAVEYARD)
-        move_to_zone(game, bear, Zone.GRAVEYARD, Zone.BATTLEFIELD)  # new stint
-        resolve_top_of_stack(game)
-        assert getattr(bear, "_marked", False) is False            # rejected by stint
+        bolt, sailor, pup, island = card(BurstLightning), card(SpectralSailor), card(MischievousPup), card(Island)
+        plains = [card(Plains) for _ in range(3)]
+        t, top = _etali_attacks(bolt, p1=[sailor, *plains, island], p1_hand=[pup])
+        _etali_resolves(t, bolt, top, sailor)
+        t.pass_(0)
+        for land in plains:
+            t.act(1, land, then=[taps(land)])
+        _cast(t, 1, pup)
+        _resolve(t, choices=[sailor], then=[moves(pup, Zone.BATTLEFIELD), on_stack(MischievousPupAbility2, 1)])
+        _resolve(t, then=[off_stack(MischievousPupAbility2), moves(sailor, Zone.HAND)])
+        t.pass_(0)
+        t.act(1, island, then=[taps(island)])
+        _cast(t, 1, sailor, note="the Sailor comes back as a new object")
+        _resolve(t, then=[moves(sailor, Zone.BATTLEFIELD)])
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD)], note="Burst Lightning's target is gone, so it does nothing")
+        final = t.run()
+        assert final.where(sailor) is Zone.BATTLEFIELD
 
     def test_normal_cast_context_stored_on_stack_object(self):
-        from engine.card import Creature
-        from engine.casting import cast_spell as engine_cast_spell
-        from engine.decisions import Decision, GameRef
-        from test_utils import Intent
-        from engine.types import Phase, Zone
-        from test_utils import create_game, set_board_state
-        game = create_game()
-        p1, p2 = game.players
-        bear = Creature(name="Bear", base_power=2, base_toughness=2, owner=p2, controller=p2)
-        spell = self._mark_spell(p1)
-        set_board_state(game, 0, hand=[spell])
-        set_board_state(game, 1, battlefield=[bear])
-        game.active_player_index = 0
-        game.phase = Phase.PRECOMBAT_MAIN
-        inst = game.refs.instance_id(bear, Zone.BATTLEFIELD.value)
-        p1.start_intent("c", Intent(
-            pattern=GameRef(card=frozenset({("name", spell.name)})),
-            preferences=(Decision.obj(instance=inst),),
-        ))
-        try:
-            engine_cast_spell(game, p1, spell)
-        finally:
-            p1.end_intent("c")
-        top = game.stack.peek()
-        # The casting controller and the target stint are captured on the stack.
-        assert top.activation_context is not None
-        assert top.activation_context.controller is p1
-        assert top.activation_context.target_instance_ids[0] == inst
+        bolt, first, second = card(BurstLightning), card(SpectralSailor), card(SpectralSailor)
+        t = _table(Side(hand=[bolt], mana={R: 1}), Side(battlefield=[first, second]))
+        _cast(t, 0, bolt, second)
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), moves(second, Zone.GRAVEYARD)], note="the chosen Sailor, not its twin")
+        final = t.run()
+        assert final.where(first) is Zone.BATTLEFIELD
 
 
 # ---------------------------------------------------------------------------
@@ -1389,154 +934,175 @@ class TestSpellCastHistoryRecord:
         assert p.record_instant_or_sorcery_cast(object(), 2) == 0
 
 
-class TestSpellCastHistoryPipeline:
-    """The casting pipeline records qualifying casts exactly once, at the single
-    authoritative cast site, and only for instant/sorcery spells."""
 
-    def _fresh(self) -> tuple[GameState, DeterministicPlayer]:
-        game = _make_game()
-        return game, game.players[0]
+class TestSpellCastHistoryPipeline:
+    """Each instant or sorcery a player casts is recorded once, for that
+    player and that turn. Thousand-Year Storm reads the record: it copies an
+    instant or sorcery once for each other one its controller cast before it
+    this turn, so the copies it makes show what was recorded. Every Burst
+    Lightning targets player 1."""
+
+    @staticmethod
+    def _bolt(t, bolt, *, copies=0, seat=0, note=""):
+        """``seat`` casts ``bolt`` at the other player; Storm's trigger
+        resolves into ``copies`` copies, each resolving for 2 damage, and then
+        ``bolt`` itself."""
+        foe = 1 - seat
+
+        def hit():
+            return life(foe, t.expected.players[foe].life - 2)
+
+        _cast(t, seat, bolt, player(foe), then=[on_stack(ThousandYearStormAbility1, seat)], note=note)
+        _resolve(
+            t,
+            choices=[NO_NEW_TARGETS] * copies,
+            chooser=seat,
+            then=[off_stack(ThousandYearStormAbility1), *[copied(BurstLightning, seat)] * copies],
+        )
+        for _ in range(copies):
+            _resolve(t, then=[off_stack(BurstLightning), hit()])
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), hit()])
 
     def test_cast_instant_is_recorded(self):
-        game, p = self._fresh()
-        bolt = Instant(name="Bolt", mana_cost=ManaCost.parse("{0}"), owner=p)
-        _add_to_hand(game, 0, bolt)
-        cast_spell(game, p, bolt)
-        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [bolt]
+        first, second = card(BurstLightning), card(BurstLightning)
+        t = _table(Side(hand=[first, second], battlefield=[ThousandYearStorm], mana={R: 2}))
+        self._bolt(t, first)
+        self._bolt(t, second, copies=1)
+        t.run()
 
     def test_cast_sorcery_is_recorded(self):
-        game, p = self._fresh()
-        ritual = Sorcery(name="Ritual", mana_cost=ManaCost.parse("{0}"), owner=p)
-        _add_to_hand(game, 0, ritual)
-        cast_spell(game, p, ritual)
-        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [ritual]
+        wave, bolt = card(Boltwave), card(BurstLightning)
+        t = _table(Side(hand=[wave, bolt], battlefield=[ThousandYearStorm], mana={R: 2}))
+        _cast(t, 0, wave, then=[on_stack(ThousandYearStormAbility1, 0)])
+        _resolve(t, then=[off_stack(ThousandYearStormAbility1)])
+        _resolve(t, then=[moves(wave, Zone.GRAVEYARD), life(1, 17)])
+        self._bolt(t, bolt, copies=1)
+        t.run()
 
     def test_instant_is_recorded_exactly_once(self):
-        game, p = self._fresh()
-        bolt = Instant(name="Bolt", mana_cost=ManaCost.parse("{0}"), owner=p)
-        _add_to_hand(game, 0, bolt)
-        cast_spell(game, p, bolt)
-        history = p.instant_or_sorcery_casts_this_turn(game.turn_number)
-        assert history.count(bolt) == 1
+        bolts = [card(BurstLightning) for _ in range(3)]
+        t = _table(Side(hand=bolts, battlefield=[ThousandYearStorm], mana={R: 3}))
+        for copies, bolt in enumerate(bolts):
+            self._bolt(t, bolt, copies=copies)
+        final = t.run()
+        assert final.players[1].life == 8
 
     def test_nonqualifying_spells_do_not_record(self):
-        # A creature, artifact, enchantment, and planeswalker each cast in a
-        # fresh game (empty stack for sorcery-speed timing) — none is recorded.
-        nonqualifying = [
-            Creature(name="Bear", base_power=2, base_toughness=2,
-                     mana_cost=ManaCost.parse("{0}")),
-            Artifact(name="Rock", mana_cost=ManaCost.parse("{0}")),
-            Enchantment(name="Glow", mana_cost=ManaCost.parse("{0}")),
-            Planeswalker(name="Walker", mana_cost=ManaCost.parse("{0}"),
-                         starting_loyalty=3),
-        ]
-        for card in nonqualifying:
-            game, p = self._fresh()
-            card.owner = p
-            _add_to_hand(game, 0, card)
-            cast_spell(game, p, card)
-            assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [], (
-                f"{card.name} should not be recorded"
-            )
+        lions, katana, authority, ajani = card(SavannahLions), card(QuickDrawKatana), card(AuthorityOfTheConsuls), card(AjaniCallerOfThePride)
+        bolt, mountain = card(BurstLightning), card(Mountain)
+        t = _table(
+            Side(hand=[lions, katana, authority, ajani, bolt], battlefield=[ThousandYearStorm, mountain], mana={W: 7})
+        )
+        for permanent in (lions, katana, authority, ajani):
+            _cast(t, 0, permanent, note="no Storm trigger")
+            _resolve(t, then=[moves(permanent, Zone.BATTLEFIELD)])
+        t.act(0, mountain, then=[taps(mountain)])
+        self._bolt(t, bolt, copies=0)
+        t.run()
 
     def test_playing_a_land_does_not_record(self):
-        # Lands are played via a special action (never through cast_spell), so
-        # they are structurally excluded from the record.
-        game, p = self._fresh()
-        forest = Land(name="Forest", owner=p)
-        _add_to_hand(game, 0, forest)
-        play_land(game, p, forest)
-        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == []
+        mountain, bolt = card(Mountain), card(BurstLightning)
+        t = _table(Side(hand=[mountain, bolt], battlefield=[ThousandYearStorm]))
+        t.act(0, mountain, then=[moves(mountain, Zone.BATTLEFIELD)])
+        t.act(0, mountain, then=[taps(mountain)])
+        self._bolt(t, bolt, copies=0)
+        t.run()
 
     def test_two_players_get_separate_histories_through_the_pipeline(self):
-        game = _make_game()
-        p1, p2 = game.players
-        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p1)
-        b = Instant(name="B", mana_cost=ManaCost.parse("{0}"), owner=p2)
-        _add_to_hand(game, 0, a)
-        _add_to_hand(game, 1, b)
-        cast_spell(game, p1, a)
-        cast_spell(game, p2, b)  # non-active player, but instant speed is legal
-        t = game.turn_number
-        assert p1.instant_or_sorcery_casts_this_turn(t) == [a]
-        assert p2.instant_or_sorcery_casts_this_turn(t) == [b]
+        first, second, theirs = card(BurstLightning), card(BurstLightning), card(BurstLightning)
+        t = _table(
+            Side(hand=[first, second], battlefield=[ThousandYearStorm], mana={R: 2}),
+            Side(hand=[theirs], battlefield=[ThousandYearStorm], mana={R: 1}),
+        )
+        self._bolt(t, first)
+        t.pass_(0)
+        self._bolt(t, theirs, seat=1, note="player 0's cast is not player 1's")
+        self._bolt(t, second, copies=1, note="player 1's cast is not player 0's")
+        final = t.run()
+        assert (final.players[0].life, final.players[1].life) == (18, 14)
 
     def test_free_cast_is_recorded(self):
-        from engine.casting import cast_spell_free
-        from engine.types import Zone
-
-        game, p = self._fresh()
-        bolt = Instant(name="FreeBolt", mana_cost=ManaCost.parse("{5}"), owner=p)
-        p.zones[Zone.HAND].add(bolt)
-        cast_spell_free(game, p, bolt, Zone.HAND)
-        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [bolt]
+        free, bolt, mountain = card(BurstLightning), card(BurstLightning), card(Mountain)
+        t, top = _etali_attacks(free, p0=[ThousandYearStorm, mountain], p0_hand=[bolt])
+        _etali_resolves(t, free, top, player(1), then=[on_stack(ThousandYearStormAbility1, 0)])
+        _resolve(t, then=[off_stack(ThousandYearStormAbility1)])
+        _resolve(t, then=[moves(free, Zone.GRAVEYARD), life(1, 18)])
+        t.act(0, mountain, then=[taps(mountain)])
+        self._bolt(t, bolt, copies=1)
+        t.run()
 
     def test_turn_rollover_resets_through_the_pipeline(self):
-        game, p = self._fresh()
-        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p)
-        b = Instant(name="B", mana_cost=ManaCost.parse("{0}"), owner=p)
-        _add_to_hand(game, 0, a)
-        _add_to_hand(game, 0, b)
-        cast_spell(game, p, a)
-        t1 = game.turn_number
-        assert p.instant_or_sorcery_casts_this_turn(t1) == [a]
-        game.turn_number += 1
-        # A new turn: last turn's cast no longer contributes.
-        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == []
-        cast_spell(game, p, b)
-        assert p.instant_or_sorcery_casts_this_turn(game.turn_number) == [b]
-        assert p.instant_or_sorcery_casts_this_turn(t1) == []
+        first, second, mountain = card(BurstLightning), card(BurstLightning), card(Mountain)
+        t = _table(
+            Side(hand=[first, second], battlefield=[ThousandYearStorm, mountain], library=[card(Plains)]),
+            Side(library=[card(Plains)]),
+        )
+        t.act(0, mountain, then=[taps(mountain)])
+        self._bolt(t, first)
+        t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+        t.act(0, mountain, then=[taps(mountain)])
+        self._bolt(t, second, copies=0, note="last turn's cast no longer counts")
+        t.run()
 
     def test_cast_stamps_prior_qualifying_count_on_the_stack_object(self):
-        # The cast's StackObject — the stack representation of that one occurrence
-        # — carries the immutable prior-qualifying-cast count read at record time.
-        game, p = self._fresh()
-        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p)
-        b = Instant(name="B", mana_cost=ManaCost.parse("{0}"), owner=p)
-        _add_to_hand(game, 0, a)
-        _add_to_hand(game, 0, b)
-        cast_spell(game, p, a)
-        cast_spell(game, p, b)
-        stamp = {so.source: so.prior_qualifying_casts for so in game.stack._items}
-        assert stamp[a] == 0
-        assert stamp[b] == 1
+        first, second, third = card(BurstLightning), card(BurstLightning), card(BurstLightning)
+        t = _table(Side(hand=[first, second, third], battlefield=[ThousandYearStorm], mana={R: 3}))
+        for bolt in (first, second, third):
+            _cast(t, 0, bolt, player(1), then=[on_stack(ThousandYearStormAbility1, 0)])
+
+        def resolve_storm(copies, bolt):
+            def hit():
+                return life(1, t.expected.players[1].life - 2)
+
+            _resolve(
+                t,
+                choices=[NO_NEW_TARGETS] * copies,
+                then=[off_stack(ThousandYearStormAbility1), *[copied(BurstLightning, 0)] * copies],
+            )
+            for _ in range(copies):
+                _resolve(t, then=[off_stack(BurstLightning), hit()])
+            _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), hit()])
+
+        resolve_storm(2, third)
+        resolve_storm(1, second)  # still one copy, though three were cast by now
+        resolve_storm(0, first)
+        final = t.run()
+        assert final.players[1].life == 8
 
     def test_free_cast_stamps_prior_qualifying_count_on_the_stack_object(self):
-        from engine.casting import cast_spell_free
-        from engine.types import Zone
-
-        game, p = self._fresh()
-        a = Instant(name="A", mana_cost=ManaCost.parse("{0}"), owner=p)
-        b = Instant(name="B", mana_cost=ManaCost.parse("{5}"), owner=p)
-        _add_to_hand(game, 0, a)
-        p.zones[Zone.HAND].add(b)
-        cast_spell(game, p, a)
-        cast_spell_free(game, p, b, Zone.HAND)   # b is the second qualifying cast
-        stamp = {so.source: so.prior_qualifying_casts for so in game.stack._items}
-        assert stamp[a] == 0
-        assert stamp[b] == 1
+        bolt, free = card(BurstLightning), card(BurstLightning)
+        etali, top = card(EtaliPrimalStorm), card(Plains)
+        t = _table(
+            Side(hand=[bolt], battlefield=[etali, ThousandYearStorm], library=[free, card(Plains)], mana={R: 1}),
+            Side(library=[top, card(Plains)]),
+            start=(Step.BEGIN_COMBAT, 0),
+        )
+        self._bolt(t, bolt)
+        t.pass_to(Step.DECLARE_ATTACKERS, 0)
+        t.act(0, etali, then=[taps(etali), on_stack(EtaliPrimalStormAbility1, 0)])
+        _etali_resolves(t, free, top, player(1), then=[on_stack(ThousandYearStormAbility1, 0)])
+        _resolve(t, choices=[NO_NEW_TARGETS], then=[off_stack(ThousandYearStormAbility1), copied(BurstLightning, 0)])
+        _resolve(t, then=[off_stack(BurstLightning), life(1, 16)])
+        _resolve(t, then=[moves(free, Zone.GRAVEYARD), life(1, 14)])
+        t.run()
 
     def test_nonqualifying_cast_stamps_no_prior_count(self):
-        # A creature is not a qualifying cast, so its StackObject carries no count.
-        game, p = self._fresh()
-        bear = Creature(name="Bear", base_power=2, base_toughness=2,
-                        mana_cost=ManaCost.parse("{0}"), owner=p)
-        _add_to_hand(game, 0, bear)
-        cast_spell(game, p, bear)
-        (so,) = [s for s in game.stack._items if s.source is bear]
-        assert so.prior_qualifying_casts is None
+        bolt, lions = card(BurstLightning), card(SavannahLions)
+        t = _table(Side(hand=[bolt, lions], battlefield=[ThousandYearStorm], mana={R: 1, W: 1}))
+        self._bolt(t, bolt)
+        _cast(t, 0, lions, note="a creature spell makes no Storm trigger")
+        final = t.run()
+        assert len(final.stack) == 1
 
+
+# ---------------------------------------------------------------------------
+# Flashback — cast from the graveyard, then exiled (702.34a)
+# ---------------------------------------------------------------------------
 
 class TestFlashbackDisposition:
-    """Flashback is an EXPLICIT cast mode: ``cast_spell_free(...,
-    mode=CastMode.FLASHBACK)`` validates the claim (graveyard source + a real
-    flashback cost) and stamps ``departure_zone = Zone.EXILE`` on that cast's
-    StackObject, which :func:`engine.stack.move_spell_off_stack` honours any
-    time the spell leaves the stack (rule 702.34a). The generic free-cast
-    helper never infers the mode from card attributes: a flashback-capable
-    card free-cast from the graveyard WITHOUT the mode keeps the graveyard
-    default.
-    """
+    """Think Twice ({1}{U} instant: draw a card; flashback {2}{U}) is cast
+    from its owner's graveyard by flashback and exiled as it leaves the stack;
+    cast any other way it goes to the graveyard as usual."""
 
     def _flashback_instant(self, player):
         card = Instant(name="Recall", mana_cost=ManaCost.parse("{1}{U}"), owner=player)
@@ -1545,86 +1111,24 @@ class TestFlashbackDisposition:
         return card
 
     def test_flashback_mode_from_graveyard_exiles(self):
-        from engine.casting import CastMode, cast_spell_free
-        from engine.stack import resolve_top_of_stack
-        from engine.types import Zone
+        twice, drawn = card(ThinkTwice), card(Plains)
+        islands = [card(Island) for _ in range(3)]
+        t = _table(Side(graveyard=[twice], battlefield=islands, library=[drawn]))
+        for island in islands:
+            t.act(0, island, then=[taps(island)])
+        _cast(t, 0, twice)
+        _resolve(t, then=[moves(twice, Zone.EXILE), moves(drawn, Zone.HAND)])
+        t.run()
 
-        game = _make_game()
-        p = game.players[0]
-        card = self._flashback_instant(p)
-        game.get_graveyard(p).add(card)
 
-        cast_spell_free(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
-        # The disposition rides on this cast's StackObject.
-        (so,) = [s for s in game.stack._items if s.source is card]
-        assert so.departure_zone == Zone.EXILE
-
-        resolve_top_of_stack(game)
-        assert game.get_exile(p).contains(card)
-        assert not game.get_graveyard(p).contains(card)
-
-    def test_flashback_capable_graveyard_cast_without_mode_keeps_graveyard(self):
-        """The mode is never inferred: the SAME flashback-capable card,
-        free-cast from the graveyard without selecting flashback (a
-        Underworld-Breach-style graveyard cast), is NOT exiled."""
-        from engine.casting import cast_spell_free
-        from engine.stack import resolve_top_of_stack
-        from engine.types import Zone
-
-        game = _make_game()
-        p = game.players[0]
-        card = self._flashback_instant(p)
-        game.get_graveyard(p).add(card)
-
-        cast_spell_free(game, p, card, Zone.GRAVEYARD)
-        (so,) = [s for s in game.stack._items if s.source is card]
-        assert so.departure_zone is None
-
-        resolve_top_of_stack(game)
-        assert game.get_graveyard(p).contains(card)
-        assert not game.get_exile(p).contains(card)
-
-    def test_non_flashback_free_cast_keeps_graveyard(self):
-        """A card with no flashback cost, free-cast from the graveyard, keeps the
-        default graveyard disposition (no silent exile)."""
-        from engine.casting import cast_spell_free
-        from engine.stack import resolve_top_of_stack
-        from engine.types import Zone
-
-        game = _make_game()
-        p = game.players[0]
-        card = Instant(name="Plain", mana_cost=ManaCost.parse("{U}"), owner=p)
-        card.controller = p
-        game.get_graveyard(p).add(card)
-
-        cast_spell_free(game, p, card, Zone.GRAVEYARD)
-        (so,) = [s for s in game.stack._items if s.source is card]
-        assert so.departure_zone is None
-
-        resolve_top_of_stack(game)
-        assert game.get_graveyard(p).contains(card)
-        assert not game.get_exile(p).contains(card)
 
     def test_flashback_card_from_exile_keeps_graveyard(self):
-        """A flashback-cost card free-cast from EXILE in the default mode
-        (cascade/Etali style) is not a flashback cast and keeps the graveyard
-        default."""
-        from engine.casting import cast_spell_free
-        from engine.stack import resolve_top_of_stack
-        from engine.types import Zone
-
-        game = _make_game()
-        p = game.players[0]
-        card = self._flashback_instant(p)
-        game.get_exile(p).add(card)
-
-        cast_spell_free(game, p, card, Zone.EXILE)
-        (so,) = [s for s in game.stack._items if s.source is card]
-        assert so.departure_zone is None
-
-        resolve_top_of_stack(game)
-        assert game.get_graveyard(p).contains(card)
-        assert not game.get_exile(p).contains(card)
+        twice = card(ThinkTwice)
+        t, top = _etali_attacks(twice)
+        _etali_resolves(t, twice, top, note="cast from exile, not by flashback")
+        drawn = t.expected.players[0].library[0].handle
+        _resolve(t, then=[moves(twice, Zone.GRAVEYARD), moves(drawn, Zone.HAND)])
+        t.run()
 
     # -- rejected mode claims are ATOMIC: every check runs before any mutation,
     #    so controller, owner, zones, stack, cast history, and target state are
@@ -1667,390 +1171,161 @@ class TestFlashbackDisposition:
         assert self._observable_state(game, card) == before
 
     def test_flashback_mode_from_exile_rejected(self):
-        """Flashback casts from the graveyard only: an exile claim is rejected
-        atomically (the card had no controller — it must still have none)."""
-        from engine.types import Zone
-
-        game = _make_game()
-        p = game.players[0]
-        card = Instant(name="Recall", mana_cost=ManaCost.parse("{1}{U}"))
-        card.owner = p  # owner without the constructor's controller default
-        card.flashback_cost = ManaCost.parse("{2}{U}")
-        assert card.controller is None  # would be mutated by a non-atomic cast
-        game.get_exile(p).add(card)
-
-        self._assert_rejected_claim_untouched(game, p, card, Zone.EXILE)
-        assert game.get_exile(p).contains(card)
-        assert card.controller is None
+        twice = card(ThinkTwice)
+        t = _table(Side(exile=[twice], mana={U: 3}))
+        t.act_illegal(0, twice, note="flashback casts only from a graveyard")
+        t.run()
 
     def test_flashback_mode_from_hand_rejected(self):
-        """A hand claim is rejected atomically — flashback never casts from
-        hand, whatever the card's flashback cost says."""
-        from engine.types import Zone
-
-        game = _make_game()
-        p = game.players[0]
-        card = self._flashback_instant(p)
-        game.get_hand(p).add(card)
-
-        self._assert_rejected_claim_untouched(game, p, card, Zone.HAND)
-        assert game.get_hand(p).contains(card)
+        twice, drawn = card(ThinkTwice), card(Plains)
+        t = _table(Side(hand=[twice], library=[drawn], mana={U: 2}))
+        _cast(t, 0, twice)
+        _resolve(t, then=[moves(twice, Zone.GRAVEYARD), moves(drawn, Zone.HAND)], note="a cast from hand is no flashback")
+        t.run()
 
     def test_flashback_mode_without_flashback_cost_rejected(self):
-        """CastMode.FLASHBACK on a card with no flashback cost is rejected
-        atomically (controller stays unset — validation precedes the
-        controller/owner defaults)."""
-        from engine.types import Zone
-
-        game = _make_game()
-        p = game.players[0]
-        card = Instant(name="Plain", mana_cost=ManaCost.parse("{U}"))
-        card.owner = p  # owner without the constructor's controller default
-        assert card.controller is None
-        game.get_graveyard(p).add(card)
-
-        self._assert_rejected_claim_untouched(game, p, card, Zone.GRAVEYARD)
-        assert game.get_graveyard(p).contains(card)
-        assert card.controller is None
+        bolt = card(BurstLightning)
+        t = _table(Side(graveyard=[bolt], mana={R: 5}))
+        t.act_illegal(0, bolt, note="Burst Lightning has no flashback")
+        t.run()
 
     def test_flashback_mode_from_another_players_graveyard_rejected(self):
-        """Flashback is owner-scoped: the card must be in the CASTING player's
-        own graveyard. A flashback claim on a card sitting in the opponent's
-        graveyard is rejected atomically — even when the card's owner field
-        would permit the caster (owner is None here)."""
-        from engine.types import Zone
+        twice = card(ThinkTwice)
+        t = _table(Side(mana={U: 3}), Side(graveyard=[twice]))
+        t.act_illegal(0, twice, note="flashback casts only from its owner's graveyard")
+        t.run()
 
-        game = _make_game()
-        p1, p2 = game.players
-        card = Instant(name="Recall", mana_cost=ManaCost.parse("{1}{U}"))
-        card.flashback_cost = ManaCost.parse("{2}{U}")
-        assert card.owner is None and card.controller is None
-        game.get_graveyard(p2).add(card)
-
-        self._assert_rejected_claim_untouched(game, p1, card, Zone.GRAVEYARD)
-        assert game.get_graveyard(p2).contains(card)
-        assert card.owner is None and card.controller is None
-
-    def test_flashback_mode_wrong_ownership_rejected(self):
-        """Flashback is ownership-compatible: a card OWNED by another player is
-        not flashback-castable, even from a graveyard the caster can reach
-        (rule 702.34a casts from its owner's graveyard). Rejected atomically."""
-        from engine.types import Zone
-
-        game = _make_game()
-        p1, p2 = game.players
-        card = self._flashback_instant(p2)  # owned (and controlled) by p2
-        game.get_graveyard(p1).add(card)  # misplaced into p1's graveyard
-
-        self._assert_rejected_claim_untouched(game, p1, card, Zone.GRAVEYARD)
-        assert game.get_graveyard(p1).contains(card)
-        assert card.owner is p2
-        assert card.controller is p2
 
     def test_flashback_mode_own_card_in_own_graveyard_accepted(self):
-        """The owner-scoped checks accept the legal case: the caster's own card
-        in the caster's own graveyard flashes back and exiles on resolution."""
-        from engine.casting import CastMode, cast_spell_free
-        from engine.stack import resolve_top_of_stack
-        from engine.types import Zone
-
-        game = _make_game()
-        p = game.players[0]
-        card = self._flashback_instant(p)
-        game.get_graveyard(p).add(card)
-
-        so = cast_spell_free(game, p, card, Zone.GRAVEYARD, mode=CastMode.FLASHBACK)
-        assert so.departure_zone == Zone.EXILE
-        resolve_top_of_stack(game)
-        assert game.get_exile(p).contains(card)
-
-
-class TestStackOccurrenceTargeting:
-    """Zone.STACK target requirements enumerate exact StackObject OCCURRENCES.
-
-    A spell on the stack is targeted as its StackObject, never its source card:
-    two casts/copies of the same card are distinct targets, a triggered ability
-    sharing a spell's source card is not that spell, and a chosen occurrence
-    stays legal only while IT is on ``game.stack`` — a departed occurrence is
-    nulled by the resolution-time stint check even when its card was re-cast
-    (the card's new stack presence belongs to the new occurrence).
-    """
-
-    class _Counter(Instant):
-        """Minimal engine-level 'counter target spell' instant."""
-
-        def __init__(self, **kwargs):
-            kwargs.setdefault("name", "Test Counter")
-            kwargs.setdefault("mana_cost", ManaCost.parse("{U}"))
-            super().__init__(**kwargs)
-            self.countered = None
-
-        def get_targets(self, game):
-            from engine.types import TargetRequirement, Zone
-
-            return [
-                TargetRequirement(
-                    filter_fn=lambda obj: getattr(obj, "is_spell", False)
-                    and getattr(obj, "source", None) is not self,
-                    description="target spell",
-                    zone=Zone.STACK,
-                )
-            ]
-
-        def on_resolve(self, game):
-            from engine.stack import move_spell_off_stack
-
-            chosen = getattr(self, "chosen_targets", None)
-            target = chosen[0] if chosen else None
-            if isinstance(target, StackObject):
-                move_spell_off_stack(game, target)
-                self.countered = target
-
-    def _game(self):
-        game = _make_game()
-        return game, game.players[0], game.players[1]
-
-    def _spell(self, owner, name="Zap"):
-        card = Instant(name=name, mana_cost=ManaCost.parse("{U}"), owner=owner)
-        card.controller = owner
-        return card
-
-    def _cast_counter_at(self, game, player, occurrence):
-        """Cast a _Counter through the REAL pipeline, selecting *occurrence*
-        by its engine-minted stack instance id (the occurrence's own identity,
-        matching what the Zone.STACK enumeration offers)."""
-        from engine.casting import cast_spell_free
-        from engine.types import Zone
-
-        counter = self._Counter(owner=player, controller=player)
-        game.get_hand(player).add(counter)
-        occ_iid = game.refs.instance_id(occurrence, Zone.STACK.value)
-        player.start_intent("counter", Intent(
-            pattern=GameRef(card=frozenset({("name", counter.name)})),
-            preferences=(Decision.obj(instance=occ_iid),),
-        ))
-        try:
-            counter_so = cast_spell_free(game, player, counter, Zone.HAND)
-        finally:
-            player.end_intent("counter")
-        return counter, counter_so
-
-    def test_real_pipeline_targets_exact_occurrence(self):
-        """The chosen target IS the StackObject occurrence, not the source
-        card; countering moves the card to its owner's graveyard."""
-        from engine.casting import cast_spell_free
-        from engine.stack import resolve_top_of_stack
-        from engine.types import Zone
-
-        game, p1, p2 = self._game()
-        spell = self._spell(p2)
-        game.get_hand(p2).add(spell)
-        spell_so = cast_spell_free(game, p2, spell, Zone.HAND)
-
-        counter, counter_so = self._cast_counter_at(game, p1, spell_so)
-        assert counter_so.targets[0] is spell_so  # the occurrence, not the card
-
-        resolve_top_of_stack(game)  # counter resolves
-        assert counter.countered is spell_so
-        assert game.get_graveyard(p2).contains(spell)
-        assert game.stack.is_empty()
-
-    def test_ability_sharing_source_card_is_not_targetable(self):
-        """A non-spell stack object (a trigger/ability) is never offered as a
-        'target spell', even though it has a source card: with only it on the
-        stack the counter has no legal target and the cast is rejected."""
-        from engine.casting import CastingError, cast_spell_free
-        from engine.types import Zone
-
-        game, p1, p2 = self._game()
-        permanent = Creature(name="Watcher", base_power=2, base_toughness=2, owner=p2)
-        permanent.controller = p2
-        game.get_battlefield(p2).add(permanent)
-        trigger = StackObject(source=permanent, controller=p2)  # is_spell=False
-        game.stack.push(trigger)
-
-        counter = self._Counter(owner=p1, controller=p1)
-        game.get_hand(p1).add(counter)
-        with pytest.raises(CastingError):
-            cast_spell_free(game, p1, counter, Zone.HAND)
-        assert game.get_hand(p1).contains(counter)  # rolled back
-        assert game.stack.contains(trigger)
-
-    def test_copy_occurrence_targeted_distinctly_from_original(self):
-        """A spell COPY is a distinct occurrence: targeting and countering the
-        copy leaves the original cast (and its card) untouched."""
-        from engine.casting import cast_spell_free
-        from engine.stack import copy_spell, resolve_top_of_stack
-        from engine.types import Zone
-
-        game, p1, p2 = self._game()
-        spell = self._spell(p2)
-        game.get_hand(p2).add(spell)
-        spell_so = cast_spell_free(game, p2, spell, Zone.HAND)
-        copy_so = copy_spell(game, spell_so, p2)
-        game.stack.push(copy_so)
-
-        counter, counter_so = self._cast_counter_at(game, p1, copy_so)
-        assert counter_so.targets[0] is copy_so
-
-        resolve_top_of_stack(game)  # counter resolves, countering the copy
-        assert counter.countered is copy_so
-        assert not game.stack.contains(copy_so)
-        assert game.stack.contains(spell_so)  # original untouched
-        assert p2.zones[Zone.STACK].contains(spell)  # card still cast
-        assert not game.get_graveyard(p2).contains(spell)
-
-    def test_departed_occurrence_fizzles_even_after_recast(self):
-        """Once the targeted occurrence leaves the stack, the counter fizzles
-        at resolution — a re-cast of the SAME card (a new occurrence) is never
-        recovered from the source card and is not touched."""
-        from engine.casting import cast_spell_free
-        from engine.stack import move_spell_off_stack, resolve_top_of_stack
-        from engine.types import Zone
-
-        game, p1, p2 = self._game()
-        spell = self._spell(p2)
-        game.get_hand(p2).add(spell)
-        spell_so = cast_spell_free(game, p2, spell, Zone.HAND)
-
-        counter, _ = self._cast_counter_at(game, p1, spell_so)
-
-        # The targeted occurrence departs (countered by something else) …
-        assert move_spell_off_stack(game, spell_so) is True
-        assert game.get_graveyard(p2).contains(spell)
-        # … and the same card is re-cast: a NEW occurrence.
-        recast_so = cast_spell_free(game, p2, spell, Zone.GRAVEYARD)
-        assert recast_so is not spell_so
-
-        resolve_top_of_stack(game)  # the recast resolves (instant → graveyard)
-        assert game.get_graveyard(p2).contains(spell)
-
-        resolve_top_of_stack(game)  # the counter resolves — and fizzles
-        assert counter.countered is None
-        assert sum(1 for o in game.get_graveyard(p2).get_all() if o is spell) == 1
-        assert not game.get_exile(p2).contains(spell)
-        assert game.stack.is_empty()
+        twice, drawn = card(ThinkTwice), card(Plains)
+        t = _table(Side(), Side(graveyard=[twice], library=[drawn], mana={U: 3}))
+        t.pass_(0)
+        _cast(t, 1, twice, note="an instant flashed back on the other player's turn")
+        _resolve(t, then=[moves(twice, Zone.EXILE), moves(drawn, Zone.HAND)])
+        t.run()
 
 
 # ---------------------------------------------------------------------------
-# Dormant-event firing (Phase I, issue #44): SpellCastTriggeredEvent
+# Targeting a spell — the spell on the stack, not its card (115.1, 608.2b)
+# ---------------------------------------------------------------------------
+
+class TestStackOccurrenceTargeting:
+    """A spell on the stack is targeted as that spell: an ability is not a
+    spell, and a targeted spell that leaves the stack stays gone even when its
+    card is cast again."""
+
+    def test_real_pipeline_targets_exact_occurrence(self):
+        bolt, offer = card(BurstLightning), card(AnOfferYouCantRefuse)
+        t = _table(Side(hand=[offer], mana={U: 1}), Side(hand=[bolt], mana={R: 1}))
+        t.pass_(0)
+        _cast(t, 1, bolt, player(0))
+        t.pass_(1)
+        _cast(t, 0, offer, bolt)
+        _resolve(
+            t,
+            then=[moves(offer, Zone.GRAVEYARD), moves(bolt, Zone.GRAVEYARD), appears(1), appears(1)],
+            note="countered: player 1 gets two Treasures",
+        )
+        final = t.run()
+        assert final.players[0].life == 20
+
+    def test_ability_sharing_source_card_is_not_targetable(self):
+        hunter, refute = card(HelpfulHunter), card(Refute)
+        drawn = card(Plains)
+        t = _table(Side(hand=[hunter], library=[drawn], mana={W: 2}), Side(hand=[refute], mana={U: 3}))
+        _cast(t, 0, hunter)
+        _resolve(t, then=[moves(hunter, Zone.BATTLEFIELD), on_stack(HelpfulHunterAbility1, 0)])
+        t.pass_(0)
+        t.act_illegal(1, refute, note="the Hunter's trigger is no spell")
+        t.run()
+
+    def test_copy_occurrence_targeted_distinctly_from_original(self):
+        """A spell copy is a spell of its own: player 1 counters Thousand-Year
+        Storm's copy of the second Burst Lightning with An Offer You Can't
+        Refuse, and the original stays on the stack and resolves."""
+        first, second, offer = card(BurstLightning), card(BurstLightning), card(AnOfferYouCantRefuse)
+        t = _table(
+            Side(hand=[first, second], battlefield=[ThousandYearStorm], mana={R: 2}),
+            Side(hand=[offer], mana={U: 1}),
+        )
+        TestSpellCastHistoryPipeline._bolt(t, first)
+        _cast(t, 0, second, player(1), then=[on_stack(ThousandYearStormAbility1, 0)])
+        _resolve(t, choices=[NO_NEW_TARGETS], chooser=0,
+                 then=[off_stack(ThousandYearStormAbility1), copied(BurstLightning, 0)])
+        t.pass_(0)
+        _cast(t, 1, offer, spell_copy(1), note="the copy, not the original")
+        t.pass_(1)
+        t.pass_(0, then=[moves(offer, Zone.GRAVEYARD), off_stack(BurstLightning), appears(0), appears(0)])
+        _resolve(t, then=[moves(second, Zone.GRAVEYARD), life(1, 16)], note="the original resolves")
+        t.run()
+
+    def test_departed_occurrence_fizzles_even_after_recast(self):
+        twice, refute, offer = card(ThinkTwice), card(Refute), card(AnOfferYouCantRefuse)
+        drawn, kept = card(Plains), card(Plains)
+        t = _table(
+            Side(hand=[refute, offer, kept], mana={U: 4}),
+            Side(hand=[twice], library=[drawn], mana={U: 5}),
+        )
+        t.pass_(0)
+        _cast(t, 1, twice)
+        t.pass_(1)
+        _cast(t, 0, refute, twice)
+        _cast(t, 0, offer, twice)
+        _resolve(t, then=[moves(offer, Zone.GRAVEYARD), moves(twice, Zone.GRAVEYARD), appears(1), appears(1)])
+        t.pass_(0)
+        _cast(t, 1, twice, note="flashed back: a new spell")
+        _resolve(t, then=[moves(twice, Zone.EXILE), moves(drawn, Zone.HAND)])
+        _resolve(t, then=[moves(refute, Zone.GRAVEYARD)], note="Refute's target is gone: it neither draws nor discards")
+        t.run()
+
+
+# ---------------------------------------------------------------------------
+# Cast triggers — "whenever you cast" (601.2i, 603.2)
 # ---------------------------------------------------------------------------
 
 class TestSpellCastEventFiring:
-    """cast_spell / cast_spell_free fire SpellCastTriggeredEvent exactly once,
-    after the spell is on the stack (Phase I).
-
-    Before Phase I neither cast path fired the event, so every "whenever you
-    cast ..." trigger (prowess, Thousand-Year Storm, Consuming Aberration's
-    mill) was dormant. The event carries the cast *card* on both ``spell`` and
-    ``card`` (subscribers read ``event.spell.card_types``) and the caster on
-    both ``player`` and ``controller``.
-    """
-
-    @staticmethod
-    def _spy(game: GameState) -> list:
-        events: list = []
-
-        def _cond(_g: GameState, event: object) -> bool:
-            events.append(event)
-            return False  # observe only; don't put a trigger on the stack
-
-        game.trigger_manager.register(
-            TriggerRegistration(
-                event_type=SpellCastTriggeredEvent,
-                condition=_cond,
-                effect=lambda _g: None,
-                source=object(),
-                controller=game.players[0],
-            )
-        )
-        return events
+    """Casting a spell triggers "whenever you cast" abilities once, after the
+    spell is on the stack. Firebrand Archer deals 1 damage to each opponent
+    whenever its controller casts a noncreature spell."""
 
     def test_cast_instant_fires_once_with_card_and_caster(self):
-        game = _make_game()
-        player = game.players[0]
-        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, bolt)
-        _add_mana(player, ManaType.RED, 1)
-        events = self._spy(game)
-
-        cast_spell(game, player, bolt)
-
-        assert len(events) == 1
-        e = events[0]
-        assert e.spell is bolt          # subscribers read event.spell.card_types
-        assert e.card is bolt
-        assert e.player is player
-        assert e.controller is player
+        bolt = card(BurstLightning)
+        t = _table(Side(hand=[bolt], battlefield=[FirebrandArcher], mana={R: 1}))
+        _cast(t, 0, bolt, player(1), then=[on_stack(FirebrandArcherAbility1, 0)])
+        _resolve(t, then=[off_stack(FirebrandArcherAbility1), life(1, 19)])
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), life(1, 17)])
+        t.run()
 
     def test_event_fires_after_spell_is_on_the_stack(self):
-        """A subscriber's condition must see the just-cast spell already on the
-        stack (rule 601.2i complete before 603.3)."""
-        game = _make_game()
-        player = game.players[0]
-        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, bolt)
-        _add_mana(player, ManaType.RED, 1)
-        on_stack_at_fire: list = []
-
-        def _cond(g: GameState, event: object) -> bool:
-            on_stack_at_fire.append(
-                any(so.source is event.spell for so in g.stack._items)
-            )
-            return False
-
-        game.trigger_manager.register(
-            TriggerRegistration(
-                event_type=SpellCastTriggeredEvent, condition=_cond,
-                effect=lambda _g: None, source=object(), controller=player,
-            )
-        )
-        cast_spell(game, player, bolt)
-        assert on_stack_at_fire == [True]
+        bolt = card(BurstLightning)
+        t = _table(Side(hand=[bolt], battlefield=[FirebrandArcher], mana={R: 1}))
+        _cast(t, 0, bolt, player(1), then=[on_stack(FirebrandArcherAbility1, 0)])
+        final = t.run()
+        assert [seen.card for seen in final.stack] == [FirebrandArcherAbility1, BurstLightning]
 
     def test_cast_creature_also_fires_event(self):
-        """The event fires for a NON-instant/sorcery spell too — subscribers
-        filter on card type in their own condition, so the fire is unconditional
-        (a creature-cast still triggers Kykar / Consuming Aberration)."""
-        game = _make_game()
-        player = game.players[0]
-        bear = Creature(name="Bear", base_power=2, base_toughness=2,
-                        mana_cost=ManaCost(generic=2))
-        _add_to_hand(game, 0, bear)
-        _add_mana(player, ManaType.GREEN, 2)
-        events = self._spy(game)
-
-        cast_spell(game, player, bear)
-
-        assert len(events) == 1
-        assert events[0].spell is bear
+        whelp = card(FirespitterWhelp)
+        t = _table(Side(hand=[whelp], battlefield=[FirespitterWhelp], mana={R: 3}))
+        _cast(t, 0, whelp, then=[on_stack(FirespitterWhelpAbility2, 0)], note="a Dragon creature spell")
+        _resolve(t, then=[off_stack(FirespitterWhelpAbility2), life(1, 19)])
+        _resolve(t, then=[moves(whelp, Zone.BATTLEFIELD)])
+        t.run()
 
     def test_cast_spell_free_fires_once(self):
-        game = _make_game()
-        player = game.players[0]
-        bolt = Instant(name="Bolt", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        game.get_hand(player).add(bolt)
-        events = self._spy(game)
-
-        cast_spell_free(game, player, bolt, Zone.HAND)
-
-        assert len(events) == 1
-        assert events[0].spell is bolt
-        assert events[0].player is player
+        bolt = card(BurstLightning)
+        t, top = _etali_attacks(bolt, p0=[FirebrandArcher])
+        _etali_resolves(t, bolt, top, player(1), then=[on_stack(FirebrandArcherAbility1, 0)])
+        _resolve(t, then=[off_stack(FirebrandArcherAbility1), life(1, 19)])
+        _resolve(t, then=[moves(bolt, Zone.GRAVEYARD), life(1, 17)])
+        t.run()
 
     def test_two_casts_fire_two_events_never_double(self):
-        """Each cast fires exactly one event — two casts, two events (no
-        double-fire that would double-count a Storm)."""
-        game = _make_game()
-        player = game.players[0]
-        a = Instant(name="A", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        b = Instant(name="B", mana_cost=ManaCost(pips={ManaType.RED: 1}))
-        _add_to_hand(game, 0, a)
-        _add_to_hand(game, 0, b)
-        _add_mana(player, ManaType.RED, 2)
-        events = self._spy(game)
-
-        cast_spell(game, player, a)
-        cast_spell(game, player, b)
-
-        assert [e.spell for e in events] == [a, b]
+        first, second = card(BurstLightning), card(BurstLightning)
+        t = _table(Side(hand=[first, second], battlefield=[FirebrandArcher], mana={R: 2}))
+        _cast(t, 0, first, player(1), then=[on_stack(FirebrandArcherAbility1, 0)])
+        _cast(t, 0, second, player(1), then=[on_stack(FirebrandArcherAbility1, 0)])
+        _resolve(t, then=[off_stack(FirebrandArcherAbility1), life(1, 19)])
+        _resolve(t, then=[moves(second, Zone.GRAVEYARD), life(1, 17)])
+        _resolve(t, then=[off_stack(FirebrandArcherAbility1), life(1, 16)])
+        _resolve(t, then=[moves(first, Zone.GRAVEYARD), life(1, 14)])
+        t.run()

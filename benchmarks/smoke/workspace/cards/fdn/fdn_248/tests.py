@@ -25,7 +25,7 @@ from typing import Any
 
 from cards.fdn.fdn_248.card_impl import ThousandYearStorm
 from cards.fdn.fdn_86.card_impl import FieryAnnihilation
-from engine.card import Creature, Equipment, Instant
+from engine.card import Creature, Equipment, Instant, printed_class
 from engine.casting import cast_spell as engine_cast_spell, cast_spell_free
 from engine.decisions import Decision, DecisionKind, GameRef
 from test_utils import Intent
@@ -101,6 +101,14 @@ class _Bolt(Instant):
 # ---------------------------------------------------------------------------
 
 
+
+class _BoltA(_Bolt):
+    """Bolt A — its own printed identity, so its copies route apart from Bolt B's."""
+
+
+class _BoltB(_Bolt):
+    """Bolt B — its own printed identity."""
+
 def _creature(p, name, toughness=12):
     # High toughness so double damage does not trip a lethal-damage SBA and
     # complicate the assertions.
@@ -120,7 +128,7 @@ def _cast(game, p1, spell, target_prefs=None):
     query (when it targets) with *target_prefs*, routed by the spell's own name."""
     if target_prefs is not None:
         p1.start_intent("cast", Intent(
-            pattern=GameRef(card=frozenset({("name", spell.name)})),
+            pattern=GameRef(card=frozenset({("printed", printed_class(spell))})),
             preferences=tuple(target_prefs),
         ))
         try:
@@ -164,7 +172,7 @@ def _storm_triggers(game, storm):
 class TestThousandYearStormProperties:
     def test_static_data(self):
         storm = ThousandYearStorm(owner=None)
-        assert storm.name == "Thousand-Year Storm"
+        assert printed_class(storm) is ThousandYearStorm
         assert storm.mana_cost == ManaCost.parse("{4}{U}{R}")
 
 
@@ -297,7 +305,7 @@ class TestStormPerTriggerState:
         storm = ThousandYearStorm(owner=p1, controller=p1)
         c1, c2, c3 = (_creature(p2, n) for n in ("Creature One", "Creature Two", "Creature Three"))
         filler = _Signal("Filler")
-        bolt_a, bolt_b = _Bolt("Bolt A"), _Bolt("Bolt B")
+        bolt_a, bolt_b = _BoltA("Bolt A"), _BoltB("Bolt B")
         set_board_state(game, 0, hand=[filler, bolt_a, bolt_b], battlefield=[storm])
         set_board_state(game, 1, battlefield=[c1, c2, c3])
         game.active_player_index = 0
@@ -309,31 +317,31 @@ class TestStormPerTriggerState:
 
         # Retarget every copy: yes to Storm, Bolt A's copies → c3, Bolt B's → c2.
         p1.start_intent("storm", Intent(
-            pattern=GameRef(card=frozenset({("name", "Thousand-Year Storm")})),
+            pattern=GameRef(card=frozenset({("printed", ThousandYearStorm)})),
             preferences=(Decision.yes(),),
         ))
         p1.start_intent("a", Intent(
-            pattern=GameRef(card=frozenset({("name", "Bolt A")})),
+            pattern=GameRef(card=frozenset({("printed", _BoltA)})),
             preferences=(_pref(game, c3),),
         ))
         p1.start_intent("b", Intent(
-            pattern=GameRef(card=frozenset({("name", "Bolt B")})),
+            pattern=GameRef(card=frozenset({("printed", _BoltB)})),
             preferences=(_pref(game, c2),),
         ))
 
         # Bolt B's trigger is on top: two copies, both retargeted to c2.
         new_b = _resolve_top_collect_new(game)
         assert len(new_b) == 2
-        assert all(so.source.name == "Bolt B" for so in new_b)
+        assert all(printed_class(so.source) is _BoltB for so in new_b)
         assert all(so.targets == [c2] for so in new_b)
 
         # Drain B's copies + the original B to reach Bolt A's trigger.
-        while any(so.source.name == "Bolt B" for so in game.stack._items):
+        while any(printed_class(so.source) is _BoltB for so in game.stack._items):
             resolve_top_of_stack(game)
 
         new_a = _resolve_top_collect_new(game)
         assert len(new_a) == 1
-        assert new_a[0].source.name == "Bolt A"
+        assert printed_class(new_a[0].source) is _BoltA
         assert new_a[0].targets == [c3]    # A's own choice, not B's c2
 
         for name in ("storm", "a", "b"):
@@ -382,11 +390,11 @@ class TestStormCopyRetargeting:
         Storm intent and the copy's target queries to a Fiery Annihilation intent
         (the copy's provenance is the copied spell, not the enchantment)."""
         p1.start_intent("storm", Intent(
-            pattern=GameRef(card=frozenset({("name", "Thousand-Year Storm")})),
+            pattern=GameRef(card=frozenset({("printed", ThousandYearStorm)})),
             preferences=(Decision.yes(),) if retarget else (Decision.no(),),
         ))
         p1.start_intent("copytarget", Intent(
-            pattern=GameRef(card=frozenset({("name", "Fiery Annihilation")})),
+            pattern=GameRef(card=frozenset({("printed", FieryAnnihilation)})),
             preferences=tuple(copy_target_prefs),
         ))
         _fire(game, p1, fiery)
@@ -458,14 +466,16 @@ class TestStormCopyRetargeting:
         # Option-set invariant on the copy's creature-selection query (the most
         # recent one — the cast-time query, unprotected against, came first): it
         # offered the unprotected creature but never the protected one.
+        c2_id = game.refs.instance_id(c2, Zone.BATTLEFIELD.value)
+        protected_id = game.refs.instance_id(protected, Zone.BATTLEFIELD.value)
         creature_queries = [
             r for r in p1.transcript.queries(kind=DecisionKind.OBJECT)
-            if any(("name", "Creature Two") in o.attrs for o in r.options)
+            if any(("instance", c2_id) in o.attrs for o in r.options)
         ]
         assert len(creature_queries) >= 2, "expected cast-time and copy queries"
         offered = creature_queries[-1].options
-        assert not any(("name", "Protected One") in o.attrs for o in offered)
-        assert any(("name", "Creature Two") in o.attrs for o in offered)
+        assert not any(("instance", protected_id) in o.attrs for o in offered)
+        assert any(("instance", c2_id) in o.attrs for o in offered)
 
         assert protected.damage_marked == 0   # copy never targeted the protected one
         assert c2.damage_marked == 5           # copy hit the unprotected creature

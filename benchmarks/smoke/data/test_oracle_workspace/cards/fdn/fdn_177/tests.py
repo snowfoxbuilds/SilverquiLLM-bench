@@ -8,7 +8,7 @@ engine returns distinct cards.
 from __future__ import annotations
 
 from cards.fdn.fdn_177.card_impl import MacabreWaltz
-from engine.card import Creature, Instant
+from engine.card import Creature, Instant, printed_class
 from engine.decisions import GameRef
 from test_utils import Intent
 from engine.types import ManaCost, ManaType, Zone
@@ -28,7 +28,7 @@ def _permissive_baseline(player):
 class TestMacabreWaltzProperties:
     def test_static_data(self):
         mw = MacabreWaltz(owner=None)
-        assert mw.name == "Macabre Waltz"
+        assert printed_class(mw) is MacabreWaltz
         assert mw.mana_cost == ManaCost.parse("{1}{B}")
 
     def test_two_optional_graveyard_specs(self):
@@ -49,7 +49,7 @@ class TestMacabreWaltz:
                         owner=p1, controller=p1)
         set_board_state(game, 0, hand=[mw, spare], mana={ManaType.BLACK: 2})
         _permissive_baseline(p1)
-        cast_spell(game, 0, "Macabre Waltz")   # no target given → castable
+        cast_spell(game, 0, MacabreWaltz)   # no target given → castable
         assert game.get_graveyard(p1).contains(mw)   # resolved to graveyard
 
     def test_returns_one_creature_card(self):
@@ -62,5 +62,5 @@ class TestMacabreWaltz:
         set_board_state(game, 0, hand=[mw, spare], graveyard=[corpse],
                         mana={ManaType.BLACK: 2})
         _permissive_baseline(p1)   # answers the reflexive discard (picks spare)
-        cast_spell(game, 0, "Macabre Waltz", targets=[corpse])
+        cast_spell(game, 0, MacabreWaltz, targets=[corpse])
         assert game.get_hand(p1).contains(corpse)   # returned to hand, not discarded

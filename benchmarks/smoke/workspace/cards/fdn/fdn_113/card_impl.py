@@ -9,6 +9,25 @@ from engine.events import EndStepTriggeredEvent
 if TYPE_CHECKING:
     from engine.game_state import GameState
 
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SylvanScavengingAbility1:
+    text = 'At the beginning of your end step, choose one —'
+
+
+class SylvanScavengingAbility2:
+    text = '• Put a +1/+1 counter on target creature you control.'
+
+
+class SylvanScavengingAbility3:
+    text = '• Create a 3/3 green Raccoon creature token if you control a creature with power 4 or greater.'
+
+
+# endregion Printed abilities
+
+
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
     for player in game.players:
         if game.get_battlefield(player).contains(obj):
@@ -41,8 +60,8 @@ class SylvanScavenging(Enchantment):
         def _condition(game: Any, event: dict) -> bool:
             return game.active_player is controller
 
-        def _effect(game: 'GameState') -> None:
-            ctrl = getattr(source, 'controller', None)
+        def _effect(game: 'GameState', controller: Any) -> None:
+            ctrl = controller
             if ctrl is None:
                 return
             if not _is_on_battlefield(game, source):
@@ -61,7 +80,7 @@ class SylvanScavenging(Enchantment):
             if len(modes) == 1:
                 chosen_mode = modes[0]
             else:
-                chosen_mode = choose_mode(game, ctrl, modes, 'choose mode: counter or token', source_card=source)
+                chosen_mode = choose_mode(game, ctrl, modes, 'choose mode: counter or token', source_card=source, printed=[{'counter': SylvanScavengingAbility2, 'token': SylvanScavengingAbility3}[m] for m in modes])
             if chosen_mode == 'counter' and creatures:
                 target = choose_object(game, ctrl, creatures, 'creature to put +1/+1 counter on', source_card=source)
                 if target is not None and _is_on_battlefield(game, target):
@@ -69,4 +88,4 @@ class SylvanScavenging(Enchantment):
             elif chosen_mode == 'token' and has_power_4:
                 token = make_creature_token('Raccoon', {'Raccoon'}, [Color.GREEN], 3, 3)
                 create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller))
+        game.trigger_manager.register(TriggerRegistration(event_type=EndStepTriggeredEvent, condition=_condition, effect=_effect, source=self, controller=controller, printed=SylvanScavengingAbility1))
