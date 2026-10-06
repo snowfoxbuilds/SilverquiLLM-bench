@@ -21,9 +21,6 @@ from .known_defect_checks import oracle_problems, workspace_problems
 REPO = Path(__file__).resolve().parents[1]
 KNOWN_BEST = REPO / "known_best"
 PORTED = ("smoke", "fra-hard", "fra-hard-v2")
-# fra-hard-v2's oracle covers only its FRA targets so far; tests/test_fra_hard_v2.py
-# grades those until its HOB targets are ported (#157).
-ORACLE_COMPLETE = ("smoke", "fra-hard")
 _CACHES = ["__pycache__", ".pytest_cache"]
 
 
@@ -43,7 +40,7 @@ def test_unmodified_workspace_fails_exactly_the_manifest(name: str, dimension: s
     assert problems == [], "\n".join(problems)
 
 
-@pytest.mark.parametrize("name", ORACLE_COMPLETE)
+@pytest.mark.parametrize("name", PORTED)
 def test_oracle_passes_every_target_audited_test(name: str) -> None:
     problems = oracle_problems(load_benchmark(REPO, name), "card_correctness")
     assert problems == [], "\n".join(problems)

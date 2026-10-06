@@ -2,14 +2,13 @@
 
 import ast
 import json
+import shutil
 from pathlib import Path
 
 import pytest
 
 from scripts.oracle_support import check_v2_api, load_layout, readiness_errors
 from silverquillm.karn.benchmark import Benchmark, load_benchmark
-
-from .known_defect_checks import oracle_problems
 
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "benchmarks/fra-hard-v2"
@@ -18,8 +17,6 @@ POOL = (
     ("hob", "33"), ("hob", "76"), ("hob", "86"), ("hob", "174"),
     ("war", "143"), ("fut", "78"),
 )
-# The HOB targets' oracle implementations and suites are not ported yet (#157).
-PORTED_TARGETS = tuple((code, number) for code, number in POOL if code != "hob")
 
 
 def test_pool_keeps_each_targets_set():
@@ -69,8 +66,8 @@ def test_fra_tokens_are_predefined_identically_for_candidate_and_oracle():
     assert all(body in ([], ["__init__"]) for body in _methods(ast.parse(candidate.read_text())).values())
 
 
-@pytest.mark.parametrize("code,number", PORTED_TARGETS)
-def test_ported_oracle_and_hidden_suite_are_ready_and_use_the_public_api(code, number):
+@pytest.mark.parametrize("code,number", POOL)
+def test_oracle_and_hidden_suite_are_ready_and_use_the_public_api(code, number):
     layout = load_layout(ROOT, "fra-hard-v2", require_cards=True)
     card_id = f"{code}_{number}"
     assert not readiness_errors(layout, card_id)
@@ -95,15 +92,32 @@ def test_candidate_engine_excludes_oracle_extensions():
     assert {"copying.py", "mana_grants.py", "planeswalker.py", "preparation.py", "ward.py"} <= oracle - workspace
 
 
-def test_oracle_passes_every_ported_target_audited_test():
-    benchmark = load_benchmark(ROOT, "fra-hard-v2")
-    ported = {f"{code}:{number}" for code, number in PORTED_TARGETS}
-    config = {**benchmark.config, "cards": [card for card in benchmark.cards if card in ported]}
-    problems = oracle_problems(Benchmark(benchmark.id, benchmark.root, config), "card_correctness")
-    assert problems == [], "\n".join(problems)
+@pytest.mark.parametrize("relative", ("data/tests/audited", "data/test_oracle_workspace/tests/audited"))
+def test_hidden_suites_cover_exactly_the_selected_pool(relative):
+    root = BENCH / relative
+    actual = {
+        str(path.relative_to(root))
+        for code in sorted({code for code, _number in POOL})
+        for path in (root / code).rglob("tests.py")
+    }
+    assert actual == {f"{code}/{code}_{number}/tests.py" for code, number in POOL}
 
 
-@pytest.mark.parametrize("code,number", PORTED_TARGETS)
+def test_validation_fails_on_a_missing_implementation_or_suite(tmp_path):
+    bench = tmp_path / "benchmarks/fra-hard-v2"
+    bench.mkdir(parents=True)
+    shutil.copy2(BENCH / "config.json", bench / "config.json")
+    layout = load_layout(tmp_path, "fra-hard-v2", require_cards=True)
+    stub = BENCH / "workspace/cards/hob/hob_174/card_impl.py"
+    layout.implementation("hob_174").parent.mkdir(parents=True)
+    shutil.copy2(stub, layout.implementation("hob_174"))
+    errors = readiness_errors(layout, "hob_174") + readiness_errors(layout, "fra_1")
+    assert any("stub or invalid oracle implementation" in error for error in errors)
+    assert any("missing oracle implementation" in error for error in errors)
+    assert sum("missing audited suite" in error for error in errors) == 2
+
+
+@pytest.mark.parametrize("code,number", POOL)
 def test_unimplemented_target_fails_its_hidden_suite(code, number):
     """The stubbed Workspace passes none of a target's behavior."""
     benchmark = load_benchmark(ROOT, "fra-hard-v2")
