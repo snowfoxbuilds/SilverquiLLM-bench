@@ -179,6 +179,7 @@ class Table:
         # anything attacks this combat.
         self._declaring: str | None = None
         self._attacking = False
+        self._declared_attack = False
         self._over = False
         self._winner: int | None = None
         self.scripts: list[list[Any]] = [[] for _ in start.players]
@@ -196,12 +197,27 @@ class Table:
         """The view expected at the next action question."""
         return self._view()
 
-    def act(self, seat: int, *preferences: Any, then: Iterable[Change] = (), note: str = "", **options: Any) -> Any:
+    def act(
+        self,
+        seat: int,
+        *preferences: Any,
+        then: Iterable[Change] = (),
+        note: str = "",
+        attacks: bool | None = None,
+        **options: Any,
+    ) -> Any:
         """``seat`` takes an action; ``options`` are those of
         ``test_interface.act`` (``choices``, ``per_query``, ``distinct``,
-        ``branches``)."""
+        ``branches``). At a declare-attackers question, ``attacks`` says
+        whether the declaration makes anything attack; by default it does
+        when the entry names a creature in its preferences, ``per_query`` or
+        ``scoped`` answers."""
+        if attacks is not None and self._declaring != "attackers":
+            raise ScriptError("attacks= applies only to a declare-attackers question")
         entry = _ti().act(*preferences, **options)
         if self._declaring:
+            if self._declaring == "attackers":
+                self._declared_attack = _declares_something(entry) if attacks is None else attacks
             return self._write(seat, entry, then, note, f"declares {self._declaring}: " + _wants(entry))
         return self._write(seat, entry, then, note, "acts: " + _wants(entry))
 
@@ -260,7 +276,7 @@ class Table:
                 # The declaration is made — or declines — and the step's
                 # priority window opens with the active player (CR 508.2, 509.2).
                 if self._declaring == "attackers":
-                    self._attacking = entry.kind is ti.Kind.ACT and any(b.preferences for b in entry.branches)
+                    self._attacking = entry.kind is ti.Kind.ACT and self._declared_attack
                 self._declaring = None
                 self._asked = self._active
                 self._passes = 0
@@ -421,6 +437,15 @@ def _name(item: Any) -> str:
     if isinstance(item, type):
         return item.__name__
     return repr(item)
+
+
+def _declares_something(entry: Any) -> bool:
+    """Whether a declaration entry names a creature to declare in any branch:
+    in its preferences, a non-empty ``per_query`` answer or a ``scoped`` one."""
+    return any(
+        b.preferences or b.scoped or any(prefs for _, prefs in b.per_query)
+        for b in entry.branches
+    )
 
 
 def _wants(entry: Any) -> str:

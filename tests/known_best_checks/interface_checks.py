@@ -1218,6 +1218,31 @@ def test_the_attacker_divides_its_damage_among_two_blockers():
     t.run()
 
 
+def test_an_attack_declared_only_through_per_query_still_reaches_blockers():
+    bear = card(Bear)
+    t = _to_attacks(bear)
+    t.act(0, per_query={(lambda query: True): [bear]}, then=[taps(bear)])
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)  # declares no blockers
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 18)])
+    final = t.run()
+    assert (final.step, final.players[1].life) == (Step.COMBAT_DAMAGE, 18)
+
+
+def test_a_test_may_state_whether_its_declaration_attacks():
+    bear = card(Bear)
+    t = _to_attacks(bear)
+    t.act(0, per_query={(lambda query: True): [bear]}, attacks=True, then=[taps(bear)])
+    assert t.expected.step is Step.DECLARE_ATTACKERS
+    t.pass_(0)
+    t.pass_(1)
+    assert t.expected.step is Step.DECLARE_BLOCKERS
+    with pytest.raises(ScriptError, match="declare-attackers"):
+        t.act(1, attacks=False)
+
+
 def test_without_attackers_the_blockers_and_damage_steps_are_skipped():
     bear = card(Bear)
     t = _to_attacks(bear)
