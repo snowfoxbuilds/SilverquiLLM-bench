@@ -91,4 +91,4 @@ class KioraTheRisingTide(Creature):
                     supertypes={Supertype.LEGENDARY},
                 )
                 create_token(game, ctrl, token)
-        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=KioraTheRisingTideAbility1))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, printed=KioraTheRisingTideAbility2))

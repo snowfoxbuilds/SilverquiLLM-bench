@@ -281,6 +281,28 @@ def test_a_trigger_on_the_stack_carries_its_printed_ability():
     (trigger,) = game.stack.objects()
     assert trigger.printed is printed
 
+@pytest.mark.parametrize("graveyard", [7, 6])
+def test_kioras_attack_trigger_shows_its_threshold_ability(graveyard):
+    from engine.events import AttacksTriggeredEvent
+    from test_interface import view
+
+    Kiora = _card("fdn_45", "KioraTheRisingTide")
+    threshold = _card("fdn_45", "KioraTheRisingTideAbility2")
+    game = behavioral_game()
+    me = game.players[0]
+    kiora = Kiora(owner=me, controller=me)
+    game.get_battlefield(me).add(kiora)
+    kiora.register_triggers(game)
+    for _ in range(graveyard):
+        game.get_graveyard(me).add(Creature(name="Bear", owner=me, controller=me))
+    game.trigger_manager.fire_event(game, AttacksTriggeredEvent(attacker=kiora, creature=kiora))
+    stack = view(game).stack
+    if graveyard >= 7:
+        assert [seen.card for seen in stack] == [threshold]
+    else:
+        assert stack == ()
+
+
 def test_basic_land_mana_abilities_carry_their_printed_ability():
     from engine import basic_lands
 
