@@ -39,7 +39,7 @@ The Test Interface relies only on a small engine surface, which the workspace do
 | The one stepping entry | `run` |
 | `PlayerQuery`, `PlayerDecision`, the Player hooks, `InvalidPlayerChoiceError` | Answering queries and hearing rejections |
 | `shuffle(cards)`, `choose_at_random(options, n)`, `flip_coin()` | Every random event, so the test decides its result |
-| Zone containers, life totals, each object's `printed` class, whether it is a token, the tapped flag, the current step, the active player, the player being asked, game over and winner | The Player View |
+| Zone containers, life totals, each object's `printed` class, whether it is a token, each permanent's controller and owner, the tapped flag, the current step, the active player, the player being asked, game over and winner | The Player View |
 | Each object's and each offered option's physical card — a token is its own | Following a handle's card across zones, or a token, and choosing it |
 | The tokens the game has made, in creation order, which a rollback undoes with the rest of the attempt | Numbering tokens |
 
@@ -100,8 +100,8 @@ Because they never ask the engine, such a helper works out whether a declaration
   A scoped answer is never filled in or trimmed: when its choices are not all offered, or the declaration that would take effect gives a declared creature something else, that branch is withdrawn with nothing committed and the entry tries its next branch.
   Every declare-attackers step raises its declaration, even with nothing to declare; a declare-blockers step raises none when nothing attacks.
 - **Expected views**: the constructed position is the first expected view, and each entry states the changes its answers cause — Bolt in the graveyard, player 1 at 17 life; a host-side helper applies them to the previous expected view (grilling 2026-10-05).
-  A change says only what the view can show: a card, by handle or class, moves between zones; a token appears on a player's side, taking the next token number, or leaves the game; an ability of a class goes on the stack or leaves it; a permanent becomes tapped or untapped; a player's life becomes a number; the game ends with a winner or in a draw.
-  The helper works out the step, the active player and the player being asked from the rules and the script — priority order (CR 117), the turn structure, and each turn's draw from the known library — so a test states only changes to the board and life.
+  A change says only what the view can show: a card, by handle or class, moves between zones; a token appears on a player's side, taking the next token number, or leaves the game; an ability of a class, or a copy of a spell, goes on the stack, or an object leaves it; a permanent becomes tapped or untapped, or moves to the side of a player who gains control of it; a player's life becomes a number; the game ends with a winner or in a draw.
+  The helper works out the step, the active player and the player being asked from the rules and the script — priority order (CR 117), the turn structure, and each turn's draw from the known library — so a test states only changes to the board and life, plus the few facts about the turn's shape the rules take from what the view leaves out: that a player will take an extra turn, that combat has a first-strike combat damage step (CR 510.4), or that an ability triggers during cleanup (CR 514.3a) (grilling 2026-10-05).
   There is one expected outcome per test, never alternatives: how an engine presents its questions may vary, and the test's branches absorb that, but every presentation must reach the same view (grilling 2026-10-05).
   At every action question and when `run` stops, the whole Player View must equal the expected view, so an unexpected side effect fails as surely as a missing one.
   Questions inside an action or a resolution are answered without a check, since what the view shows mid-action — whether a spell is already on the stack while its targets are chosen — depends on how an engine presents the action.
@@ -119,8 +119,8 @@ It shows:
 - the current step, the active player, and the player being asked;
 - whether the game is over, and who won.
 
-Each object in it shows only what it is (its predefined card, face or ability class; a token shows none), where it is (its zone; on the battlefield whose side it is on, elsewhere whose card it is), and whether it is tapped.
-A snapshot `v` has `v.players[i]` with `.life`, `.library`, `.hand`, `.battlefield`, `.graveyard` and `.exile`, plus `v.stack`, `v.step`, `v.active`, `v.asked`, `v.game_over` and `v.winner`; each entry has `.card`, `.tapped`, `.owner`, and `.handle` for a constructed card or a token, and `v.where(handle)` gives its zone (grilling 2026-10-05).
+Each object in it shows only what it is (its predefined card, face or ability class; a token shows none), where it is (its zone; on the battlefield the side of the player who controls it, elsewhere whose card it is), who owns it, and whether it is tapped.
+A snapshot `v` has `v.players[i]` with `.life`, `.library`, `.hand`, `.battlefield`, `.graveyard` and `.exile`, plus `v.stack`, `v.step`, `v.active`, `v.asked`, `v.game_over` and `v.winner`; each entry has `.card`, `.tapped`, `.owner`, and `.handle` for a constructed card, a token or a spell copy, and `v.where(handle)` gives its zone (grilling 2026-10-05).
 Power and toughness, counters, damage, keywords, summoning sickness, continuous effects and the mana pool are not in the view.
 Neither are a stack object's targets or modes, nor what attacks or blocks what: those show in what happens, and leaving them out keeps engines free to model them — a creature that blocks several attackers — without a view to keep in step (grilling 2026-10-05).
 
@@ -149,6 +149,7 @@ A token is followed by number instead: the game's tokens are numbered in the ord
 A token keeps its number after it leaves the battlefield, so a later token never takes it; a token an attempt made that the engine rejects and undoes was never made, so the retry's token takes its number.
 Tokens one effect creates are numbered seat 0's before seat 1's, each seat's in the order its text names them; tokens it makes alike are interchangeable, so every engine reaches the same view.
 A token has no class in the view: what it is — a 1/1 Soldier or a Food — shows in what it does, so engines need no predefined token classes.
+A copy of a spell on the stack is followed the same way: copies are numbered in the order they are put on the stack, and `spell_copy(n)` names the n-th, so a test can target a copy apart from its original, which shows the same class (grilling 2026-10-05).
 
 ## Relevant ADRs
 

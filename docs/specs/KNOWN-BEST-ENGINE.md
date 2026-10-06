@@ -34,6 +34,7 @@ It holds:
 It is seeded from hob-medium's Workspace without any oracle extensions, then has the already-identified Known Defects fixed: the zone-change reset that preserves last-known information (CR 400.7, 110.5, 111.7, 603.10a) and the engine or FDN-implementation defects behind the eight FDN cases hob-medium cut from its graded suite as baseline gaps.
 Those eight cases and dedicated zone-change Audited Engine Tests join its suites; seeding is complete when every regression Audited Test passes on it.
 A Platform Test grades a throwaway copy of it through the benchmark grading code and requires every regression Audited Test to pass.
+Checks of the engine's internals, and of positions no FDN card reaches through play, are Platform Tests beside it rather than Audited Engine Tests, and a Platform Test requires that no Audited Engine Test writes the turn's lifecycle or calls the engine's stepping (grilling 2026-10-05).
 
 #### Layout
 
@@ -75,6 +76,12 @@ A benchmark is built by porting a copy of the Known-Best Workspace into it (gril
 - **Workspace**: the ported engine and FDN implementations plus the benchmark's Known Defects, and Reference Tests (FDN Reference Tests and Engine Reference Tests).
 
 Copies are hard copies, so each benchmark stays self-contained after the Known-Best Workspace moves on.
+
+`scripts/port_from_known_best.py <benchmark>` performs the port and can be re-run whenever the Known-Best Workspace changes; `--check` reports what a port would change, and a Platform Test runs it for every benchmark ported this way.
+It owns only the copied paths in the table above, the Test Oracle Workspace's mirrors of the Workspace's `AGENTS.md`, `skills/` and Audited Test suites, and the target cards' Workspace stubs, which it generates from their Card Specs; every other path, such as the agent-facing documents, target Test Oracle Impls and target Audited Tests, is the benchmark's own.
+Each Known Defect is recorded as a patch against the Known-Best Workspace, `data/known_defects/<id>.patch`, which the port applies to the Workspace in manifest order; oracle engine extensions may likewise be recorded as patches in `data/oracle_patches/`.
+A patch that no longer applies fails the port, and the defect is re-recorded against the new Known-Best code.
+A malformed patch, a deletion that would leave content behind, or a path outside the patched tree fails it too, and a failing patch changes nothing; the paths the port owns are synchronized with the Known-Best Workspace, deletions included.
 
 ### Known Defects
 
