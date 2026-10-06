@@ -101,7 +101,9 @@ class KykarZephyrAwakener(Creature):
                 return
             if targets:
                 (chosen,) = stint_checked_targets(game, context, targets)
-                if chosen is not None:
+                still_legal = chosen is not None and CardType.CREATURE in getattr(chosen, 'card_types', set()) \
+                    and getattr(chosen, 'controller', None) is ctrl
+                if still_legal:
                     move_to_zone(game, chosen, Zone.BATTLEFIELD, Zone.EXILE)
                     _exiled_card = chosen
                     _owner = getattr(chosen, 'owner', ctrl)

@@ -25,8 +25,10 @@ from silverquillm.table import Table, life, moves, off_stack, on_stack
 _MANA = {ManaType.GREEN: 2, ManaType.COLORLESS: 4}
 
 
-def _cast_stomper(choices, *, mine=(), theirs=()):
-    """Player 0 casts Apothecary Stomper; player 1 holds Burst Lightning."""
+def _cast_stomper(choices, *, mine=(), theirs=(), branches=None):
+    """Player 0 casts Apothecary Stomper, answering its mode and target from
+    ``choices`` — or from ``branches``, tried in turn as the engine rejects a
+    choice; player 1 holds Burst Lightning."""
     stomper, bolt = card(ApothecaryStomper), card(BurstLightning)
     game = create_game(
         Side(hand=[stomper], battlefield=list(mine), mana=_MANA),
@@ -35,7 +37,10 @@ def _cast_stomper(choices, *, mine=(), theirs=()):
     )
     t = Table(game)
     t.act(0, stomper, then=[moves(stomper, Zone.STACK)])
-    t.pass_(0, choices=choices)
+    if branches:
+        t.pass_(0, branches=branches)
+    else:
+        t.pass_(0, choices=choices)
     t.pass_(1, then=[moves(stomper, Zone.BATTLEFIELD), on_stack(ApothecaryStomperAbility2, 0)], note="its mode and target are chosen now")
     t.pass_(0)
     return t, stomper, bolt
@@ -75,10 +80,14 @@ class TestApothecaryStomperModes:
 
     def test_option_set_mode0_targets_only_creatures_you_control(self):
         """Player 0 prefers the opponent's creature, then their own artifact,
-        then their own creature: only the last is offered."""
+        then their own creature: only the last is a legal target, the others
+        either not offered or offered and rejected."""
         mine, theirs, gear = card(DiregrafGhoul), card(DiregrafGhoul), card(AdventuringGear)
         t, _stomper, bolt = _cast_stomper(
-            [ApothecaryStomperAbility3, theirs, gear, mine], mine=[mine, gear], theirs=[theirs]
+            None, mine=[mine, gear], theirs=[theirs],
+            branches=[[ApothecaryStomperAbility3, theirs, gear, mine],
+                      [ApothecaryStomperAbility3, gear, mine],
+                      [ApothecaryStomperAbility3, mine]],
         )
         t.pass_(1, then=[off_stack(ApothecaryStomperAbility2)])
         _bolt_survives(t, bolt, mine)

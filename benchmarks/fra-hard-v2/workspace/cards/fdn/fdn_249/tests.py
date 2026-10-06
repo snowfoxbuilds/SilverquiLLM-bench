@@ -10,7 +10,7 @@ from cards.fdn.fdn_249.card_impl import AdventuringGear
 from engine.card import Creature, Equipment, Land, printed_class
 from engine.stack import priority_loop
 from engine.turn import cleanup_mechanical
-from engine.types import ManaCost, Zone
+from engine.types import ManaCost, Phase, Zone
 from engine.zones import move_to_zone
 from test_utils import create_game, set_board_state
 
@@ -53,6 +53,7 @@ class TestAdventuringGearBehaviour:
         # Resolving the landfall trigger through the real stack applies the
         # +2/+2 immediately — the engine re-derives continuous effects after a
         # stack object resolves, so no manual apply_all is needed here.
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         priority_loop(game)
         assert (bear.power, bear.toughness) == (4, 4)
 

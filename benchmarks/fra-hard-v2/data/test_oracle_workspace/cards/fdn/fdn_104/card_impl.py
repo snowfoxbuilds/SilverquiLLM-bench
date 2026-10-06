@@ -71,7 +71,6 @@ class ElvishRegrower(Creature):
 
     def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Target a permanent card in your graveyard."""
-        controller = self.controller or getattr(self, "owner", None)
 
         def _filter(obj: Any) -> bool:
             if controller is None:
@@ -98,7 +97,6 @@ class ElvishRegrower(Creature):
         """Return the chosen permanent card from your graveyard to your hand."""
         from engine.zones import move_to_zone
 
-        controller = self.controller or getattr(self, "owner", None)
         if controller is None:
             return
         chosen = targets

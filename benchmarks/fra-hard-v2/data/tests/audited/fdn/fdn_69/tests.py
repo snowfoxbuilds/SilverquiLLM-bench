@@ -57,7 +57,8 @@ class TestSeekersFollyModes:
 
     def test_discard_mode_cannot_target_the_caster_or_a_creature(self):
         """Player 0 prefers to target themselves, then the opponent's creature,
-        then the opponent: neither of the first two is offered."""
+        then the opponent: neither of the first two is a legal target, each
+        either not offered or offered and rejected."""
         folly = card(SeekersFolly)
         mine = [card(SavannahLions), card(LlanowarElves)]
         h1, h2, h3 = card(SavannahLions), card(LlanowarElves), card(BrazenScourge)
@@ -68,8 +69,11 @@ class TestSeekersFollyModes:
             start=(Phase.PRECOMBAT_MAIN, 0),
         )
         t = Table(game)
-        t.act(0, folly, choices=[SeekersFollyAbility2, player(0), creature, player(1)],
-              then=[moves(folly, Zone.STACK)])
+        t.act(0, branches=[
+            [folly, SeekersFollyAbility2, player(0), creature, player(1)],
+            [folly, SeekersFollyAbility2, creature, player(1)],
+            [folly, SeekersFollyAbility2, player(1)],
+        ], then=[moves(folly, Zone.STACK)])
         t.pass_(0)
         t.pass_(1, choices=[h1, h2], then=[
             moves(folly, Zone.GRAVEYARD), moves(h1, Zone.GRAVEYARD), moves(h2, Zone.GRAVEYARD),

@@ -37,8 +37,11 @@ class TestGrapplingKrakenLandfall:
             start=(Phase.PRECOMBAT_MAIN, 0),
         )
         t = Table(game)
+        # The landfall trigger targets the Lions; an engine that offers the
+        # Island just played and rejects it is answered with the Lions first.
         t.act(
-            0, island, then=[moves(island, Zone.BATTLEFIELD), on_stack(GrapplingKrakenAbility1, 0)]
+            0, branches=[[island, lions], [lions, island]],
+            then=[moves(island, Zone.BATTLEFIELD), on_stack(GrapplingKrakenAbility1, 0)],
         )
         t.pass_(0)
         t.pass_(1, then=[off_stack(GrapplingKrakenAbility1), taps(lions)])

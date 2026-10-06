@@ -49,10 +49,12 @@ class BanishingLight(Enchantment):
     def _enters_targets(self, game: GameState, controller: Any) -> list[Any]:
         return [TargetRequirement(filter_fn=lambda obj, _c=controller: CardType.LAND not in getattr(obj, 'card_types', set()) and getattr(obj, 'controller', None) is not _c, description='nonland permanent an opponent controls', zone=Zone.BATTLEFIELD)]
 
-    def _enters(self, game: GameState, targets: list[Any], controller: Any) -> None:
+    def _enters(self, game: GameState, targets: list[Any], controller: Any, source_remains: bool) -> None:
+        # Once this enchantment has left, the exile's duration has already
+        # ended, so nothing is exiled.
         chosen = targets
         target = chosen[0] if chosen else None
-        if target is None:
+        if target is None or not source_remains:
             return
         if not _is_on_battlefield(game, target):
             return
@@ -64,7 +66,9 @@ class BanishingLight(Enchantment):
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import register_enters_trigger
 
-        register_enters_trigger(game, self, BanishingLightAbility1, self._enters, targets=self._enters_targets)
+        register_enters_trigger(
+            game, self, BanishingLightAbility1, self._enters, targets=self._enters_targets, source_aware=True
+        )
 
         from engine.triggers import TriggerRegistration
         source = self

@@ -43,16 +43,16 @@ class TestKaitoProperties:
         assert "Kaito" in kaito.subtypes
 
 
-def _plus_one(t, *, choices, drawn):
+def _plus_one(t, *, choices, drawn, fallback=None):
     """Player 0 activates Kaito's +1 with an empty hand, so it draws
-    ``drawn`` and must discard it. (Known-Best discards the last card in hand
-    rather than asking which, so the tests leave no choice to make.)"""
-    t.act(
-        0,
-        KaitoCunningInfiltratorAbility2,
-        choices=choices,
-        then=[on_stack(KaitoCunningInfiltratorAbility2, 0)],
-    )
+    ``drawn`` and must discard it; ``fallback`` answers instead once the
+    engine has rejected a choice from ``choices``. (Known-Best discards the
+    last card in hand rather than asking which, so the tests leave no choice
+    to make.)"""
+    branches = [[KaitoCunningInfiltratorAbility2, *choices]]
+    if fallback is not None:
+        branches.append([KaitoCunningInfiltratorAbility2, *fallback])
+    t.act(0, branches=branches, then=[on_stack(KaitoCunningInfiltratorAbility2, 0)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(KaitoCunningInfiltratorAbility2), moves(drawn, Zone.GRAVEYARD)])
 
@@ -91,11 +91,11 @@ class TestKaitoPlusOne:
 
     def test_targets_only_own_creatures(self):
         """ "Target creature you control": the opponent's creature, preferred
-        first, is not a legal choice, so the +1 targets player 0's Lions, which
-        then can't be blocked."""
+        first, is not a legal choice — not offered, or offered and rejected —
+        so the +1 targets player 0's Lions, which then can't be blocked."""
         theirs = card(LlanowarElves)
         t, mine, drawn = self._setup([theirs])
-        _plus_one(t, choices=[theirs, mine], drawn=drawn)
+        _plus_one(t, choices=[theirs, mine], drawn=drawn, fallback=[mine])
         _unblockable_attack(t, mine, theirs)
         t.run()
 

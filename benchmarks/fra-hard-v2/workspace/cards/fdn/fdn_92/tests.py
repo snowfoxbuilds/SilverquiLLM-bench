@@ -14,7 +14,7 @@ from cards.fdn.fdn_92.card_impl import RiteOfTheDragoncaller
 from engine.card import Instant, printed_class
 from engine.events import SpellCastTriggeredEvent
 from engine.protection import get_colors
-from engine.types import Color, Keyword, ManaCost
+from engine.types import Color, Keyword, ManaCost, Phase
 from test_utils import create_game, set_board_state
 
 
@@ -35,6 +35,7 @@ def _cast_instant(game, p1) -> None:
     game.trigger_manager.fire_event(
         game, SpellCastTriggeredEvent(spell=spell, player=p1)
     )
+    game.phase, game.step = Phase.PRECOMBAT_MAIN, None
     priority_loop(game)
 
 

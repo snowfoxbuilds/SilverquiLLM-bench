@@ -12,7 +12,7 @@ from engine.card import printed_class
 from engine.types import ManaCost, ManaType
 from test_interface import Phase, Side, Zone, card, create_game
 
-from silverquillm.table import Table, moves, on_stack, taps
+from silverquillm.table import Table, moves, off_stack, on_stack, taps
 
 
 def _setup(tapped=False):
@@ -34,10 +34,13 @@ class TestLootProperties:
 
 class TestLootAbilityCost:
     def test_cost_taps_source_and_pays_mana(self):
-        """Loot taps and the six green are spent: Llanowar Elves ({G}) can't
-        be cast while the ability waits on the stack."""
+        """Loot taps and the six green are spent: once the ability has
+        resolved, still in the main phase, Llanowar Elves ({G}) can't be
+        cast."""
         t, loot, elves = _setup()
         t.act(0, LootExuberantExplorerAbility2, then=[taps(loot), on_stack(LootExuberantExplorerAbility2, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(LootExuberantExplorerAbility2)])
         t.act_illegal(0, elves, note="no mana is left")
         t.run()
 

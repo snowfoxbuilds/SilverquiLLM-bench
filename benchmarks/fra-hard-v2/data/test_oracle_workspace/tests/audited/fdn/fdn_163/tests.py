@@ -117,7 +117,7 @@ class TestSelfReflectionCopyToken:
             start=(Step.END, 1),
         )
         t.pass_(1)
-        t.act(0, ghoul, choices=[elves], then=[moves(elves, Zone.GRAVEYARD), on_stack(HungryGhoulAbility1, 0)])
+        t.act(0, HungryGhoulAbility1, choices=[elves], then=[moves(elves, Zone.GRAVEYARD), on_stack(HungryGhoulAbility1, 0)])
         t.pass_(0)
         t.pass_(1, then=[off_stack(HungryGhoulAbility1)])
         t.pass_to(Phase.PRECOMBAT_MAIN, 0)

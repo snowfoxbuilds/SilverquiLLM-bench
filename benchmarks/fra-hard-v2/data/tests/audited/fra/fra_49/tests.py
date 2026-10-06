@@ -386,7 +386,7 @@ def test_two_recollectors_prepare_independently():
     t = Table(game)
     _kill(t, 0, bolts, lions)
     t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
-    t.pass_(0)
+    t.pass_(0, choices=[PREPARE, PREPARE], note="player 0 orders both Recollectors' triggers")
     t.pass_(1, then=[on_stack(PREPARE, 0), on_stack(PREPARE, 0)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(PREPARE)])

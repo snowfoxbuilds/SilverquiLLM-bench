@@ -130,10 +130,13 @@ class Embercleave(Equipment):
 
             return [TargetRequirement(filter_fn=_legal, description="target creature you control", zone=Zone.BATTLEFIELD)]
 
-        register_enters_trigger(game, self, EmbercleaveAbility3, self._enters, targets=_creature_you_control)
+        register_enters_trigger(
+            game, self, EmbercleaveAbility3, self._enters, targets=_creature_you_control, source_aware=True
+        )
 
-    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
-        """Attach to the target creature, if it is still a creature you control."""
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any, source_remains: bool) -> None:
+        """Attach to the target creature, if it is still a creature you control
+        and this Equipment is still on the battlefield."""
         target = targets[0] if targets else None
-        if target is not None and getattr(target, "controller", None) is controller:
+        if target is not None and source_remains:
             self.equip(target, game)

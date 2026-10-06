@@ -17,9 +17,10 @@ from test_interface import ManaType, Phase, Side, Zone, card, create_game, playe
 from silverquillm.table import Table, moves, off_stack, on_stack
 
 
-def _angel_exiles(targets, exiled, *, mine=None, theirs=None):
+def _angel_exiles(targets, exiled, *, mine=None, theirs=None, branches=None):
     """Player 0 casts Angel of Finality; its trigger targets one of
-    ``targets`` and exiles ``exiled``."""
+    ``targets`` — or answers from ``branches``, tried in turn as the engine
+    rejects a choice — and exiles ``exiled``."""
     angel = card(AngelOfFinality)
     mine = mine or Side()
     game = create_game(
@@ -29,7 +30,10 @@ def _angel_exiles(targets, exiled, *, mine=None, theirs=None):
     )
     t = Table(game)
     t.act(0, angel, then=[moves(angel, Zone.STACK)])
-    t.pass_(0, choices=list(targets))
+    if branches:
+        t.pass_(0, branches=branches)
+    else:
+        t.pass_(0, choices=list(targets))
     t.pass_(1, then=[moves(angel, Zone.BATTLEFIELD), on_stack(AngelOfFinalityAbility2, 0)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(AngelOfFinalityAbility2), *[moves(c, Zone.EXILE) for c in exiled]])
@@ -57,6 +61,8 @@ class TestAngelOfFinalityETB:
 
     def test_target_query_offers_only_players(self):
         """Player 0 would rather target the opponent's Savannah Lions, or a card
-        in their graveyard, but only a player is offered."""
+        in their graveyard, but only a player is a legal target: each is either
+        not offered or offered and rejected, and the trigger targets player 1."""
         lions, dead = card(SavannahLions), card(Forest)
-        _angel_exiles([lions, dead, player(1)], [dead], theirs=Side(battlefield=[lions], graveyard=[dead]))
+        _angel_exiles(None, [dead], theirs=Side(battlefield=[lions], graveyard=[dead]),
+                      branches=[[lions, dead, player(1)], [dead, player(1)], [player(1)]])

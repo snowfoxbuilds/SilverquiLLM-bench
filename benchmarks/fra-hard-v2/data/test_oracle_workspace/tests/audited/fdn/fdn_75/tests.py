@@ -30,11 +30,15 @@ def _soulcaller_game(graveyard=(), opponent_graveyard=()):
     return Table(game), soulcaller
 
 
-def _cast(t, soulcaller, targets):
+def _cast(t, soulcaller, targets, *, branches=None):
     """Player 0 casts the Soulcaller; as it enters, its trigger goes on the
-    stack with its target chosen from ``targets`` (rule 603.3d)."""
+    stack with its target chosen from ``targets`` (rule 603.3d) — or from
+    ``branches``, tried in turn as the engine rejects a choice."""
     t.act(0, soulcaller, then=[moves(soulcaller, Zone.STACK)])
-    t.pass_(0, choices=targets)
+    if branches:
+        t.pass_(0, branches=branches)
+    else:
+        t.pass_(0, choices=targets)
     t.pass_(1, then=[moves(soulcaller, Zone.BATTLEFIELD), on_stack(VampireSoulcallerAbility3, 0)])
 
 
@@ -63,10 +67,11 @@ class TestVampireSoulcallerETB:
 
     def test_option_set_only_your_creature_cards(self):
         """Player 0 prefers the opponent's creature card, then their own
-        instant, then their own creature card: only the last is offered."""
+        instant, then their own creature card: only the last is a legal
+        target, the others either not offered or offered and rejected."""
         dead, instant, other = card(SavannahLions), card(BurstLightning), card(LlanowarElves)
         t, soulcaller = _soulcaller_game([dead, instant], [other])
-        _cast(t, soulcaller, [other, instant, dead])
+        _cast(t, soulcaller, None, branches=[[other, instant, dead], [instant, dead], [dead]])
         _resolve(t, moves(dead, Zone.HAND))
         t.run()
 

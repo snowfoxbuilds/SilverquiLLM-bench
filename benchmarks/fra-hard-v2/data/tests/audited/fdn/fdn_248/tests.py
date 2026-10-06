@@ -41,10 +41,15 @@ def _table(p0: Side, p1: Side | None = None, *, start=MAIN) -> Table:
     return Table(create_game(p0, p1 or Side(), start=start))
 
 
-def _resolve(t: Table, *then, choices=(), first: int = 0, note: str = "") -> None:
+def _resolve(t: Table, *then, choices=(), first: int = 0, note: str = "", fallback=None) -> None:
     """Both players pass, ``first`` first, and the top of the stack resolves;
-    ``choices`` answer the questions its resolution asks player 0."""
-    if first == 0:
+    ``choices`` answer the questions its resolution asks player 0 — or
+    ``fallback`` does, once the engine has rejected a choice from them."""
+    if fallback is not None:
+        assert first == 0
+        t.pass_(0, branches=[list(choices), list(fallback)])
+        t.pass_(1, then=list(then), note=note)
+    elif first == 0:
         t.pass_(0, choices=list(choices))
         t.pass_(1, then=list(then), note=note)
     else:
@@ -57,11 +62,13 @@ def _hit(t: Table, seat: int, amount: int = 2):
 
 
 def _cast_at_table(t: Table, seat: int, spell, *choices, storms: int = 1, then=(), note: str = "") -> None:
-    """``seat`` casts ``spell``; each of their Storms triggers."""
+    """``seat`` casts ``spell``; each of their Storms triggers, ordered by
+    the caster when there are several (rule 603.3b)."""
+    order = [STORM] * storms if storms > 1 else []
     t.act(
         seat,
         spell,
-        choices=list(choices),
+        choices=[*choices, *order],
         then=[moves(spell, Zone.STACK), *[on_stack(STORM, seat)] * storms, *then],
         note=note,
     )
@@ -234,7 +241,8 @@ class TestStormCopyRetargeting:
     def test_copy_dependent_retarget_offers_only_matching_equipment(self):
         """Retargeted to the second Ceratops, Fiery Annihilation's copy may
         exile only the Equipment attached to it: player 0 would rather exile
-        the first Ceratops's Adventuring Gear, which is not offered."""
+        the first Ceratops's Adventuring Gear, which is not a legal target —
+        not offered, or offered and rejected."""
         c1, c2 = card(QuakestriderCeratops), card(QuakestriderCeratops)
         eq1, eq2 = card(AdventuringGear), card(AdventuringGear)
         prior, fiery = card(BurstLightning), card(FieryAnnihilation)
@@ -254,7 +262,8 @@ class TestStormCopyRetargeting:
         for mountain in mountains[1:]:
             t.act(0, mountain, then=[taps(mountain)])
         _cast_at_table(t, 0, fiery, c1)
-        _resolve(t, off_stack(STORM), copied(FieryAnnihilation, 0), choices=[NEW_TARGETS, c2, eq1, eq2])
+        _resolve(t, off_stack(STORM), copied(FieryAnnihilation, 0), choices=[NEW_TARGETS, c2, eq1, eq2],
+                 fallback=[NEW_TARGETS, c2, eq2])
         _resolve(t, off_stack(FieryAnnihilation), moves(eq2, Zone.EXILE), note="each Ceratops survives 5")
         _resolve(t, moves(fiery, Zone.GRAVEYARD))
         t.run()
@@ -284,12 +293,13 @@ class TestStormCopyRetargeting:
 
     def test_copy_cannot_target_protected_permanent(self):
         """Player 0 would rather the copy hit Progenitus, but a permanent with
-        protection from the copied spell is never offered, so the copy hits
-        the Lions."""
+        protection from the copied spell is not a legal target — not offered,
+        or offered and rejected — so the copy hits the Lions."""
         c1, c2, progenitus, bolt = card(SavannahLions), card(SavannahLions), card(Progenitus), card(BurstLightning)
         t = _second_spell(Side(battlefield=[c1, c2, progenitus]), bolt)
         _cast_at_table(t, 0, bolt, c1)
-        _resolve(t, off_stack(STORM), copied(BurstLightning, 0), choices=[NEW_TARGETS, progenitus, c2])
+        _resolve(t, off_stack(STORM), copied(BurstLightning, 0), choices=[NEW_TARGETS, progenitus, c2],
+                 fallback=[NEW_TARGETS, c2])
         _resolve(t, off_stack(BurstLightning), moves(c2, Zone.GRAVEYARD))
         _resolve(t, moves(bolt, Zone.GRAVEYARD), moves(c1, Zone.GRAVEYARD))
         t.run()

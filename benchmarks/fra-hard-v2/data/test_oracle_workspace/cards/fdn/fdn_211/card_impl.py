@@ -54,15 +54,18 @@ class AffectionateIndrik(Creature):
 
             return [TargetRequirement(filter_fn=_legal, description="target creature you don't control", zone=Zone.BATTLEFIELD)]
 
-        register_enters_trigger(game, self, AffectionateIndrikAbility1, self._enters, targets=_creature_you_dont_control)
+        register_enters_trigger(
+            game, self, AffectionateIndrikAbility1, self._enters, targets=_creature_you_dont_control, source_aware=True
+        )
 
-    def _enters(self, game: "GameState", targets: list[Any], controller: Any) -> None:
+    def _enters(self, game: "GameState", targets: list[Any], controller: Any, source_remains: bool) -> None:
         """This creature fights the target, if it is still legal: each deals
-        damage equal to its power to the other."""
+        damage equal to its power to the other. Both must still be creatures
+        on the battlefield (rule 701.14b)."""
         from engine.game import deal_damage
 
         target = targets[0] if targets else None
-        if target is None or getattr(target, "controller", None) is controller:
+        if target is None or not source_remains or CardType.CREATURE not in getattr(self, "card_types", set()):
             return
         my_power = self.power
         their_power = getattr(target, "power", getattr(target, "base_power", 0))

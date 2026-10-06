@@ -47,10 +47,9 @@ class MeteorGolem(ArtifactCreature):
         )
         super().__init__(**kwargs)
 
-    def _is_opponent_nonland_permanent(self, obj: Any) -> bool:
+    def _is_opponent_nonland_permanent(self, obj: Any, controller: Any) -> bool:
         """Legal target: a nonland permanent controlled by a player other than
         the ability's controller. Shared by the targeting and the resolution revalidation."""
-        controller = self.controller or getattr(self, "owner", None)
         if CardType.LAND in getattr(obj, "card_types", set()):
             return False
         obj_controller = getattr(obj, "controller", None)
@@ -60,7 +59,7 @@ class MeteorGolem(ArtifactCreature):
         """Required target: a nonland permanent an opponent controls."""
         return [
             TargetRequirement(
-                filter_fn=self._is_opponent_nonland_permanent,
+                filter_fn=lambda obj, _c=controller: self._is_opponent_nonland_permanent(obj, _c),
                 description="target nonland permanent an opponent controls",
                 zone=Zone.BATTLEFIELD,
             )
@@ -88,6 +87,6 @@ class MeteorGolem(ArtifactCreature):
             return
         if not _on_battlefield(game, target):
             return
-        if not self._is_opponent_nonland_permanent(target):
+        if not self._is_opponent_nonland_permanent(target, controller):
             return
         destroy(game, target)

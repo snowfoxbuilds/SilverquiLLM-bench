@@ -74,7 +74,8 @@ class ZulAshurLichLord(Creature):
                 return
             chosen = choose_object(game, controller, zombies, 'Zombie creature to cast from graveyard', source_card=source)
             if chosen is not None:
-                chosen._castable_from_graveyard = True
+                from engine.priority import grant_graveyard_cast
+                grant_graveyard_cast(game, controller, chosen)
                 source._granted_castable.append(chosen)
         ability = ActivatedAbility(cost=lambda game, src=self: not getattr(src, 'is_tapped', False), effect=_tap_effect, description='{T}: You may cast target Zombie creature card from your graveyard this turn.', printed=ZulAshurLichLordAbility2)
         ability.tap_cost = True

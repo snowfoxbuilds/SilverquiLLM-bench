@@ -601,17 +601,20 @@ def resolve_top_of_stack(game: GameState) -> None:
 
 def priority_loop(game: GameState) -> None:
     """Play out the current step's priority window through the step lifecycle
-    (:func:`engine.turn.advance`), opening it first if it is not open.
+    (:func:`engine.turn.advance`).
 
-    The player holding priority acts or passes; a player who acts receives
-    priority again, a pass moves it on, and once both players pass in
-    succession the top of the stack resolves — the active player then holding
-    priority — or, on an empty stack, the window closes (rule 117.4).
+    A step whose turn-based actions are still pending is entered first, through
+    the same lifecycle, so its actions happen before anyone receives priority; a
+    step already complete has no window left to play. In the window, the player
+    holding priority acts or passes; a player who acts receives priority again,
+    a pass moves it on, and once both players pass in succession the top of the
+    stack resolves — the active player then holding priority — or, on an empty
+    stack, the window closes (rule 117.4).
     """
     from engine.game_state import StepState
     from engine.turn import advance
 
-    if game.step_state is not StepState.WINDOW:
-        game.open_window()
-    while game.step_state is StepState.WINDOW:
+    if game.step_state is StepState.PENDING:
+        advance(game)
+    while game.step_state is StepState.WINDOW and not game.is_game_over:
         advance(game)

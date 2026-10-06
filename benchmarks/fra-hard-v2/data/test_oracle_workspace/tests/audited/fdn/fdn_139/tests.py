@@ -50,7 +50,7 @@ def _activate(t, cathar, plains, target):
     """Player 0 taps the Plains and activates Cathar Commando at ``target``;
     the sacrifice is paid as it is activated."""
     t.act(0, plains, then=[taps(plains)])
-    t.act(0, cathar, choices=[target], then=[moves(cathar, Zone.GRAVEYARD), on_stack(CatharCommandoAbility2, 0)])
+    t.act(0, CatharCommandoAbility2, choices=[target], then=[moves(cathar, Zone.GRAVEYARD), on_stack(CatharCommandoAbility2, 0)])
 
 
 class TestCatharCommandoAbility:
@@ -64,14 +64,15 @@ class TestCatharCommandoAbility:
 
     def test_source_is_sacrificed_as_cost(self):
         """Cathar Commando is in the graveyard while its ability waits on the
-        stack, and the Plains' mana went to the {1}: nothing is left for
-        Healer's Hawk."""
+        stack, and the Plains' mana went to the {1}: once the ability has
+        resolved, still in the main phase, nothing is left for Healer's
+        Hawk."""
         amulet, hawk = card(RavenousAmulet), card(HealersHawk)
         t, cathar, plains = _table(amulet, hand=[hawk])
         _activate(t, cathar, plains, amulet)
-        t.act_illegal(0, hawk, note="the {1} was paid, so no mana is left")
         t.pass_(0)
         t.pass_(1, then=[off_stack(CatharCommandoAbility2), moves(amulet, Zone.GRAVEYARD)])
+        t.act_illegal(0, hawk, note="the {1} was paid, so no mana is left")
         t.run()
 
     def test_target_captured_on_stack(self):

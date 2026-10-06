@@ -21,9 +21,10 @@ from test_interface import Decision, ManaType, Phase, Side, Zone, card, create_g
 from silverquillm.table import Table, moves, off_stack, on_stack
 
 
-def _sage_enters(theirs, target_choices, resolve_choices):
+def _sage_enters(theirs, target_choices, resolve_choices, *, fallback=()):
     """Player 0 casts the Sage with ``theirs`` on player 1's battlefield; its
-    trigger takes its target from ``target_choices`` and resolves with
+    trigger takes its target from ``target_choices`` — or ``fallback`` once
+    the engine has rejected one of them — and resolves with
     ``resolve_choices``."""
     sage = card(ReclamationSage)
     game = create_game(
@@ -33,7 +34,10 @@ def _sage_enters(theirs, target_choices, resolve_choices):
     )
     t = Table(game)
     t.act(0, sage, then=[moves(sage, Zone.STACK)])
-    t.pass_(0, choices=target_choices)
+    if fallback:
+        t.pass_(0, branches=[list(target_choices), list(fallback)])
+    else:
+        t.pass_(0, choices=target_choices)
     t.pass_(1, then=[moves(sage, Zone.BATTLEFIELD), on_stack(ReclamationSageAbility1, 0)])
     t.pass_(0, choices=resolve_choices)
     return t
@@ -63,9 +67,10 @@ class TestReclamationSageETB:
 
     def test_option_set_only_artifacts_and_enchantments(self):
         """Player 0 would rather target Savannah Lions, but a creature is not
-        an artifact or enchantment, so the Gear is destroyed."""
+        an artifact or enchantment — not offered, or offered and rejected — so
+        the Gear is destroyed."""
         lions, gear = card(SavannahLions), card(AdventuringGear)
-        t = _sage_enters([lions, gear], [lions, gear], [Decision.yes()])
+        t = _sage_enters([lions, gear], [lions, gear], [Decision.yes()], fallback=[gear])
         t.pass_(1, then=[off_stack(ReclamationSageAbility1), moves(gear, Zone.GRAVEYARD)])
         t.run()
 

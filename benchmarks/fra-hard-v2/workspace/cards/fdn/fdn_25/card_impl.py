@@ -67,8 +67,8 @@ class SunBlessedHealer(Creature):
 
         def _filter(obj: Any) -> bool:
             # Must be in controller's graveyard (checked via owner/controller)
-            if getattr(obj, "owner", None) is not self.controller and \
-               getattr(obj, "controller", None) is not self.controller:
+            if getattr(obj, "owner", None) is not controller and \
+               getattr(obj, "controller", None) is not controller:
                 return False
             card_types = getattr(obj, "card_types", set())
             if CardType.LAND in card_types:

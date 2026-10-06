@@ -50,13 +50,23 @@ def _attack_unblocked(t, *attackers, then=()):
     t.pass_(1, then=list(then))
 
 
-def _cast_with_kykar(t, land, spell, *choices, mode, then=()):
+def _asked_by(printed):
+    """A ``per_query`` key: a question whose source is ``printed``'s object, so
+    Kykar's questions are answered apart from the spell's own, whichever
+    targets an engine offers for them."""
+    return lambda query: any(dict(source.attrs).get("printed") is printed for source in query.source)
+
+
+def _cast_with_kykar(t, land, spell, *choices, mode, kykar_target=None, then=()):
     """Like :func:`_cast`, with Kykar's cast trigger resolving first in
-    ``mode``. Kykar's mode and target are answered both as the trigger is
-    put on the stack and as it resolves, whenever the engine asks."""
+    ``mode``, flickering ``kykar_target`` if given. Kykar's mode and target
+    are answered both as the trigger is put on the stack and as it resolves,
+    whenever the engine asks."""
+    kykar = [mode] + ([kykar_target] if kykar_target is not None else [])
     t.act(0, land, then=[taps(land)])
-    t.act(0, spell, choices=[*choices, mode], then=[moves(spell, Zone.STACK), on_stack(KykarZephyrAwakenerAbility2, 0)])
-    t.pass_(0, choices=[mode, *choices])
+    t.act(0, spell, choices=list(choices), per_query={_asked_by(KykarZephyrAwakener): kykar},
+          then=[moves(spell, Zone.STACK), on_stack(KykarZephyrAwakenerAbility2, 0)])
+    t.pass_(0, choices=kykar)
     t.pass_(1, then=[off_stack(KykarZephyrAwakenerAbility2), *then])
     t.pass_(0)
 
@@ -90,7 +100,7 @@ class TestGiantGrowth:
         t = Table(game)
         _cast_with_kykar(t, forest, growth, hart, mode=SPIRIT, then=[appears(0)])
         t.pass_(1, then=[moves(growth, Zone.GRAVEYARD)])
-        _cast_with_kykar(t, mountain, bolt, player(1), hart, mode=FLICKER, then=[moves(hart, Zone.EXILE)])
+        _cast_with_kykar(t, mountain, bolt, player(1), mode=FLICKER, kykar_target=hart, then=[moves(hart, Zone.EXILE)])
         t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), life(1, 18)])
         t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
         t.pass_(0)

@@ -20,9 +20,10 @@ from test_interface import ManaType, Phase, Side, Zone, card, create_game
 from silverquillm.table import Table, appears, gains_control, moves, off_stack, on_stack, taps
 
 
-def _bouncer_enters(*, hand=(), mine=(), theirs=(), targets=()):
+def _bouncer_enters(*, hand=(), mine=(), theirs=(), targets=(), fallback=()):
     """Player 0 casts Bigfin Bouncer from four blue mana; its trigger, if it
-    has a legal target, goes on the stack targeting one of ``targets``."""
+    has a legal target, goes on the stack targeting one of ``targets`` — or
+    of ``fallback`` once the engine has rejected a choice from ``targets``."""
     bouncer = card(BigfinBouncer)
     game = create_game(
         Side(hand=[bouncer, *hand], battlefield=list(mine), mana={ManaType.BLUE: 4}),
@@ -31,7 +32,10 @@ def _bouncer_enters(*, hand=(), mine=(), theirs=(), targets=()):
     )
     t = Table(game)
     t.act(0, bouncer, then=[moves(bouncer, Zone.STACK)])
-    t.pass_(0, choices=list(targets))
+    if fallback:
+        t.pass_(0, branches=[list(targets), list(fallback)])
+    else:
+        t.pass_(0, choices=list(targets))
     t.pass_(1, then=[moves(bouncer, Zone.BATTLEFIELD), *([on_stack(BigfinBouncerAbility1, 0)] if targets else [])])
     return t
 
@@ -66,9 +70,11 @@ class TestBigfinBouncerBounce:
         t.run()
 
     def test_filter_targets_only_opponent_creatures(self):
-        """Player 0 would rather bounce their own Lions, which is not offered."""
+        """Player 0 would rather bounce their own Lions, which is not a legal
+        target: not offered, or offered and rejected, the trigger then
+        targeting the opponent's Lions."""
         mine, theirs = card(SavannahLions), card(SavannahLions)
-        t = _bouncer_enters(mine=[mine], theirs=[theirs], targets=[mine, theirs])
+        t = _bouncer_enters(mine=[mine], theirs=[theirs], targets=[mine, theirs], fallback=[theirs])
         _resolve(t, moves(theirs, Zone.HAND))
         t.run()
 

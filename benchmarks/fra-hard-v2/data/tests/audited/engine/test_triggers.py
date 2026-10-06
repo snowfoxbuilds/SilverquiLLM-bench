@@ -739,7 +739,7 @@ class TestFireTimeControllerPipeline:
         _steal(t, employment, theirs)
         t.act(0, plains, then=[taps(plains)])
         t.act(0, lions, then=[moves(lions, Zone.STACK)])
-        t.pass_(0, choices=[DazzlingAngelAbility2])
+        t.pass_(0, choices=[DazzlingAngelAbility2, DazzlingAngelAbility2])
         t.pass_(1, then=[moves(lions, Zone.BATTLEFIELD), on_stack(DazzlingAngelAbility2, 0), on_stack(DazzlingAngelAbility2, 0)],
                 note="both Angels are player 0's: player 0 orders both triggers")
         t.pass_(0)
@@ -830,7 +830,10 @@ class TestTriggerCaptureChannel:
         t = Table(game)
         _employ(t, 1, theirs, ashroot, then=[moves(theirs, Zone.GRAVEYARD), gains_control(ashroot, 1), appears(1)])
         t.pass_to(Step.DECLARE_ATTACKERS, 1)
-        t.act(1, ashroot, lions, then=[taps(ashroot), taps(lions), on_stack(AshrootAnimistAbility2, 1)])
+        # The declared creatures also answer the trigger's target: an engine
+        # that offers the Animist itself and rejects it gets the Lions first.
+        t.act(1, branches=[[ashroot, lions], [lions, ashroot]],
+              then=[taps(ashroot), taps(lions), on_stack(AshrootAnimistAbility2, 1)])
         t.pass_(1)
         for mountain in mountains:
             t.act(0, mountain, then=[taps(mountain)])

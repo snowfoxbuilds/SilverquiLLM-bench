@@ -136,12 +136,15 @@ class TestChandraFlameshaperMinus4Split:
         t.run()
 
     def test_each_queried_target_must_get_at_least_one(self) -> None:
-        """A zero share is never offered (rule 601.2d): preferring 0, then 1,
-        gives each 1/1 one damage and the 5/6 the remaining 6, so all die."""
+        """A zero share is illegal (rule 601.2d) — not offered, or offered and
+        rejected: preferring 0, then 1, gives each 1/1 one damage and the 5/6
+        the remaining 6, so all die."""
         a, b, c = card(LlanowarElves), card(LlanowarElves), card(GrapplingKraken)
         t, _chandra = _minus_four([a, b, c])
-        t.act(0, ChandraFlameshaperAbility3, choices=[a, b, c, Decision.number(0), Decision.number(1)],
-              then=[on_stack(ChandraFlameshaperAbility3, 0)])
+        t.act(0, branches=[
+            [ChandraFlameshaperAbility3, a, b, c, Decision.number(0), Decision.number(1)],
+            [ChandraFlameshaperAbility3, a, b, c, Decision.number(1)],
+        ], then=[on_stack(ChandraFlameshaperAbility3, 0)])
         t.pass_(0)
         t.pass_(1, then=[
             off_stack(ChandraFlameshaperAbility3),

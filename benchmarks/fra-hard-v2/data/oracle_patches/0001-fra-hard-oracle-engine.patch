@@ -435,10 +435,10 @@ index 9a5ae3e..9cc7cc2 100644
      # Decrement land plays
      player.land_plays_remaining -= 1
 diff --git a/engine/combat.py b/engine/combat.py
-index acb6372..55165db 100644
+index 5c31d5b..32f7260 100644
 --- a/engine/combat.py
 +++ b/engine/combat.py
-@@ -117,6 +117,9 @@ def _can_attack(creature: Any) -> bool:
+@@ -121,6 +121,9 @@ def _can_attack(creature: Any) -> bool:
      - It has summoning sickness (``summoning_sick``) and does not have ``HASTE``.
      - A continuous effect has set ``_cant_attack`` (e.g. Pacifism).
      """
@@ -448,7 +448,7 @@ index acb6372..55165db 100644
      if getattr(creature, "is_tapped", False):
          return False
  
-@@ -145,6 +148,9 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
+@@ -149,6 +152,9 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
        (e.g. Rogue's Passage).
      - If the attacker has flying, the blocker must have flying or reach.
      """
@@ -817,10 +817,10 @@ index 0000000..c48f54b
 +        source.prepared = False
 +        source.prepared_copy = None
 diff --git a/engine/priority.py b/engine/priority.py
-index 2e70583..171029f 100644
+index f293880..cacc685 100644
 --- a/engine/priority.py
 +++ b/engine/priority.py
-@@ -42,7 +42,13 @@ from engine.abilities import (
+@@ -43,7 +43,13 @@ from engine.abilities import (
      activate_ability,
  )
  from engine.card import LoyaltyAbility, ManaAbility
@@ -835,7 +835,7 @@ index 2e70583..171029f 100644
  from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, PlayerDecision
  from engine import attempts
  from engine.attempts import AttemptContext
-@@ -128,10 +134,19 @@ def priority_query(
+@@ -129,10 +135,19 @@ def priority_query(
          actions[game.refs.object_decision(obj, zone=zone.value, controller_seat=seat)] = action
      for source in _controlled_permanents(game, player):
          for index, ability in enumerate(activatable_abilities(source, game)):
@@ -856,13 +856,13 @@ index 2e70583..171029f 100644
      source = Decision.player(
          ref=GameRef(player=frozenset({("seat", seat)}), ability=frozenset({PRIORITY_WINDOW})),
          seat=seat,
-@@ -180,11 +195,23 @@ def _cast_and_play_offers(game: GameState, player: Player):
+@@ -181,11 +196,23 @@ def _cast_and_play_offers(game: GameState, player: Player):
          else:
              for obj, action in card.cast_offers(game, player, Zone.HAND, CastMode.NORMAL):
                  yield obj, Zone.HAND, action
 +    offered = []
      for card in game.get_graveyard(player).get_all():
-         mode = _graveyard_cast_mode(player, card)
+         mode = _graveyard_cast_mode(game, player, card)
          if mode is not None:
 +            offered.append(card)
              for obj, action in card.cast_offers(game, player, Zone.GRAVEYARD, mode):
@@ -879,8 +879,8 @@ index 2e70583..171029f 100644
 +                yield obj, zone, action
  
  
- def _graveyard_cast_mode(player: Player, card: Any) -> CastMode | None:
-@@ -219,10 +246,15 @@ def _may_begin_activating(game: GameState, player: Player, source: Any, ability:
+ @dataclass(frozen=True)
+@@ -246,10 +273,15 @@ def _may_begin_activating(game: GameState, player: Player, source: Any, ability:
      return can_activate is None or bool(can_activate(game, source, player))
  
  
@@ -899,7 +899,7 @@ index 2e70583..171029f 100644
      attrs: dict[str, Any] = {"source": instance, "index": index}
      printed = getattr(ability, "printed", None)
 diff --git a/engine/stack.py b/engine/stack.py
-index 7f801f3..5003907 100644
+index 322c9c3..048d74e 100644
 --- a/engine/stack.py
 +++ b/engine/stack.py
 @@ -112,6 +112,7 @@ class StackObject:
@@ -965,7 +965,7 @@ index 7f801f3..5003907 100644
      copy_obj.on_resolve = _copy_resolve
      return copy_obj
 diff --git a/engine/state_based_actions.py b/engine/state_based_actions.py
-index d62e816..17bd57d 100644
+index ae9a94e..08fe9cb 100644
 --- a/engine/state_based_actions.py
 +++ b/engine/state_based_actions.py
 @@ -98,7 +98,7 @@ def _sba_creature_zero_toughness(game: GameState) -> bool:
@@ -1017,21 +1017,21 @@ index d62e816..17bd57d 100644
          for obj in bf.get_all():
              if (
 diff --git a/engine/triggers.py b/engine/triggers.py
-index 4915b88..323d7ec 100644
+index 8c46057..53fdae8 100644
 --- a/engine/triggers.py
 +++ b/engine/triggers.py
-@@ -245,6 +245,8 @@ class TriggerManager:
+@@ -288,6 +288,8 @@ class TriggerManager:
+                         )
                      )
-                 )
                  game.stack.push(stack_obj)
 +                from engine.ward import trigger_ward
 +                trigger_ward(game, stack_obj)
              elif trigger.capture is not None:
                  # Untargeted trigger that captures per-fire event state (rule
                  # 603.3): capture NOW (fire time) and store it on this trigger's
-@@ -401,6 +403,8 @@ def put_reflexive_trigger(
+@@ -491,6 +493,8 @@ def put_reflexive_trigger(
+         g, still_legal_targets(g, source, requirements, stint_checked_targets(g, context, chosen)), controller
      )
-     stack_obj.on_resolve = lambda g: effect(g, stint_checked_targets(g, context, chosen), controller)
      game.stack.push(stack_obj)
 +    from engine.ward import trigger_ward
 +    trigger_ward(game, stack_obj)

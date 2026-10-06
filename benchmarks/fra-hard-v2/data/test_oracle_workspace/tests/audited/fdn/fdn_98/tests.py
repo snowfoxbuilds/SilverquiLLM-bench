@@ -20,7 +20,9 @@ from silverquillm.table import Table, moves, off_stack, on_stack
 _MANA = {ManaType.GREEN: 1, ManaType.COLORLESS: 2}
 
 
-def _cast_wolf(choices, *, mine=(), theirs=()):
+def _cast_wolf(choices, *, mine=(), theirs=(), fallback=None):
+    """Player 0 casts Ambush Wolf; its enters trigger takes its target from
+    ``choices`` — or ``fallback``, once the engine has rejected one."""
     wolf = card(AmbushWolf)
     game = create_game(
         Side(hand=[wolf], battlefield=list(mine), mana=_MANA),
@@ -29,7 +31,10 @@ def _cast_wolf(choices, *, mine=(), theirs=()):
     )
     t = Table(game)
     t.act(0, wolf, then=[moves(wolf, Zone.STACK)])
-    t.pass_(0, choices=choices)
+    if fallback is None:
+        t.pass_(0, choices=choices)
+    else:
+        t.pass_(0, branches=[list(choices), list(fallback)])
     t.pass_(1, then=[moves(wolf, Zone.BATTLEFIELD), on_stack(AmbushWolfAbility2, 0)])
     t.pass_(0)
     return t, wolf
@@ -62,8 +67,9 @@ class TestAmbushWolfETB:
 
     def test_only_graveyard_cards_can_be_exiled(self):
         """Player 0 prefers their own creature on the battlefield, which is not
-        offered, then the card in the opponent's graveyard."""
+        a legal target — not offered, or offered and rejected — then the card
+        in the opponent's graveyard."""
         on_bf, in_gy = card(LlanowarElves), card(SavannahLions)
-        t, _wolf = _cast_wolf([on_bf, in_gy], mine=[on_bf], theirs=[in_gy])
+        t, _wolf = _cast_wolf([on_bf, in_gy], mine=[on_bf], theirs=[in_gy], fallback=[in_gy])
         t.pass_(1, then=[off_stack(AmbushWolfAbility2), moves(in_gy, Zone.EXILE)])
         t.run()

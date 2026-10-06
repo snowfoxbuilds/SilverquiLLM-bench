@@ -13,7 +13,7 @@ from engine.card import Land
 from engine.events import EntersBattlefieldTriggeredEvent
 from engine.protection import get_colors
 from engine.stack import priority_loop
-from engine.types import Color
+from engine.types import Color, Phase
 from test_utils import create_game, set_board_state
 
 
@@ -40,6 +40,7 @@ class TestElfswornGiantToken:
             game,
             EntersBattlefieldTriggeredEvent(permanent=land, controller=p1),
         )
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         priority_loop(game)
 
         tokens = _elf_warrior_tokens(game, p1)

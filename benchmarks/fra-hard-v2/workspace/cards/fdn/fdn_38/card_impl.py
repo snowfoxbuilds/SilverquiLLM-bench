@@ -41,12 +41,14 @@ class FaebloomTrick(Instant):
         )
         super().__init__(**kwargs)
 
-    def _is_opponent_creature(self, obj: Any) -> bool:
-        """Legal target: a creature controlled by a player other than me."""
+    @staticmethod
+    def _is_opponent_creature(obj: Any, controller: Any) -> bool:
+        """Legal target: a creature controlled by a player other than the
+        ability's controller."""
         if CardType.CREATURE not in getattr(obj, "card_types", set()):
             return False
         obj_controller = getattr(obj, "controller", None)
-        return obj_controller is not None and obj_controller is not self.controller
+        return obj_controller is not None and obj_controller is not controller
 
     def on_resolve(self, game: "GameState") -> None:
         """Create two Faerie tokens, then tap the chosen opponent creature."""
@@ -74,7 +76,7 @@ class FaebloomTrick(Instant):
         put_reflexive_trigger(
             game, self, controller, FaebloomTrickAbility1, self._tap_target,
             targets=[TargetRequirement(
-                filter_fn=self._is_opponent_creature,
+                filter_fn=lambda obj, _c=controller: self._is_opponent_creature(obj, _c),
                 description="target creature an opponent controls",
                 zone=Zone.BATTLEFIELD,
             )],
@@ -85,5 +87,5 @@ class FaebloomTrick(Instant):
         from engine.game import tap
 
         target = targets[0] if targets else None
-        if target is not None and self._is_opponent_creature(target):
+        if target is not None and self._is_opponent_creature(target, controller):
             tap(game, target)

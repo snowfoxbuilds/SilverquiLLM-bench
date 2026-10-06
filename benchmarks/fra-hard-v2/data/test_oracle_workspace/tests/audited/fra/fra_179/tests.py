@@ -219,7 +219,7 @@ def test_the_copy_has_the_copied_dies_trigger():
     t = Table(game)
     _copy(t, hall, witch, VengefulBloodwitch)
     t.act(0, bolt, choices=[hall], then=[moves(bolt, Zone.STACK)])
-    t.pass_(0, choices=[player(1)])
+    t.pass_(0, choices=[player(1), VengefulBloodwitchAbility1, VengefulBloodwitchAbility1])
     t.pass_(1, then=[moves(bolt, Zone.GRAVEYARD), becomes(hall, HallOfEchoes), moves(hall, Zone.GRAVEYARD),
                      on_stack(VengefulBloodwitchAbility1, 0), on_stack(VengefulBloodwitchAbility1, 0)],
             note="both the dying Hall-Bloodwitch and the real one see it die")

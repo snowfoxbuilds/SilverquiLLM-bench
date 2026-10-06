@@ -21,9 +21,11 @@ from test_interface import Side, card, create_game
 from silverquillm.table import Table, moves
 
 
-def _abrade(choices, *opposing, then):
+def _abrade(choices, *opposing, then, fallback=None):
     """Player 0 casts Abrade from {R}{R} answering ``choices`` — its mode,
-    then its target — at player 1's ``opposing`` permanents."""
+    then its target — at player 1's ``opposing`` permanents; ``fallback``
+    answers the recast when the engine offers ``choices``' target and
+    rejects it."""
     abrade = card(Abrade)
     game = create_game(
         Side(hand=[abrade], mana={ManaType.RED: 2}),
@@ -31,7 +33,8 @@ def _abrade(choices, *opposing, then):
         start=(Phase.PRECOMBAT_MAIN, 0),
     )
     t = Table(game)
-    t.act(0, abrade, choices=choices, then=[moves(abrade, Zone.STACK)])
+    branches = [[abrade, *choices]] + ([[abrade, *fallback]] if fallback else [])
+    t.act(0, branches=branches, then=[moves(abrade, Zone.STACK)])
     t.pass_(0)
     t.pass_(1, then=[moves(abrade, Zone.GRAVEYARD), *then])
     t.run()
@@ -55,10 +58,12 @@ class TestAbradeDamageMode:
         _abrade([AbradeAbility2, spider], spider, then=[])
 
     def test_damage_mode_offers_only_creatures(self):
-        """Option-set invariant: mode 0 targets creatures, never the artifact —
-        preferring the artifact, the target is still the creature."""
+        """Mode 0 targets creatures only: preferring the artifact, the target is
+        still the creature, whether the engine never offers the artifact or
+        offers it and rejects it, the cast then retried at the creature."""
         lions, amulet = card(SavannahLions), card(RavenousAmulet)
-        _abrade([AbradeAbility2, amulet, lions], lions, amulet, then=[moves(lions, Zone.GRAVEYARD)])
+        _abrade([AbradeAbility2, amulet, lions], lions, amulet, then=[moves(lions, Zone.GRAVEYARD)],
+                fallback=[AbradeAbility2, lions])
 
 
 class TestAbradeDestroyArtifactMode:
@@ -67,7 +72,9 @@ class TestAbradeDestroyArtifactMode:
         _abrade([AbradeAbility3, amulet], amulet, then=[moves(amulet, Zone.GRAVEYARD)])
 
     def test_destroy_mode_offers_only_artifacts(self):
-        """Option-set invariant: mode 1 targets artifacts, never the plain
-        creature — preferring the creature, the target is still the artifact."""
+        """Mode 1 targets artifacts only: preferring the plain creature, the
+        target is still the artifact, whether the engine never offers the
+        creature or offers it and rejects it."""
         lions, amulet = card(SavannahLions), card(RavenousAmulet)
-        _abrade([AbradeAbility3, lions, amulet], lions, amulet, then=[moves(amulet, Zone.GRAVEYARD)])
+        _abrade([AbradeAbility3, lions, amulet], lions, amulet, then=[moves(amulet, Zone.GRAVEYARD)],
+                fallback=[AbradeAbility3, amulet])

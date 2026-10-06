@@ -58,7 +58,6 @@ class FelidarSavior(Creature):
 
     def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Return targeting requirement: up to two other creatures you control."""
-        controller = self.controller or getattr(self, "owner", None)
         source = self
 
         def _filter(obj: Any) -> bool:

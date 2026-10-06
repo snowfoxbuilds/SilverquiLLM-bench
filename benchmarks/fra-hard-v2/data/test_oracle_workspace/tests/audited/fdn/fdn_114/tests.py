@@ -71,13 +71,15 @@ class TestTreetopSnarespinnerAbility:
         t.run()
 
     def test_cost_is_paid(self):
-        """{2}{G} empties a pool of three green: a second activation cannot be paid."""
+        """{2}{G} empties a pool of three green: once the first activation has
+        resolved, still in the main phase with the stack empty, a second
+        activation cannot be paid."""
         lions = card(SavannahLions)
         t = _table(creatures=[lions])
         t.act(0, SNARE, choices=[lions], then=[on_stack(SNARE, 0)])
-        t.act_illegal(0, SNARE, choices=[lions], note="no mana is left")
         t.pass_(0)
         t.pass_(1, then=[off_stack(SNARE)])
+        t.act_illegal(0, SNARE, choices=[lions], note="no mana is left")
         t.run()
 
     def test_target_captured_on_stack(self):

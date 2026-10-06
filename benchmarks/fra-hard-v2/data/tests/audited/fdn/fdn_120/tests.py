@@ -20,10 +20,11 @@ from test_interface import ManaType, Phase, Side, card, create_game
 from silverquillm.table import Table, moves, off_stack, on_stack
 
 
-def _cast(t, spell, *, choices, then=()):
-    """Player 0 casts ``spell``, and both players pass, so it resolves."""
+def _cast(t, spell, *, choices, then=(), returning=()):
+    """Player 0 casts ``spell``, and both players pass, so it resolves; the
+    Panda's dies trigger, if it goes on the stack, targets ``returning``."""
     t.act(0, spell, choices=choices, then=[moves(spell, Zone.STACK)])
-    t.pass_(0)
+    t.pass_(0, choices=list(returning))
     t.pass_(1, then=[moves(spell, Zone.GRAVEYARD), *then])
 
 
@@ -44,7 +45,8 @@ class TestFiendishPandaDies:
             start=(Phase.PRECOMBAT_MAIN, 0),
         )
         t = Table(game)
-        _cast(t, bolt, choices=[panda], then=[moves(panda, Zone.GRAVEYARD), on_stack(FiendishPandaAbility2, 0)])
+        _cast(t, bolt, choices=[panda], then=[moves(panda, Zone.GRAVEYARD), on_stack(FiendishPandaAbility2, 0)],
+              returning=[paladin])
         _panda_returns(t, panda, paladin)
         t.run()
 
@@ -61,6 +63,7 @@ class TestFiendishPandaDies:
         )
         t = Table(game)
         _cast(t, growth, choices=[panda])
-        _cast(t, downfall, choices=[panda], then=[moves(panda, Zone.GRAVEYARD), on_stack(FiendishPandaAbility2, 0)])
+        _cast(t, downfall, choices=[panda], then=[moves(panda, Zone.GRAVEYARD), on_stack(FiendishPandaAbility2, 0)],
+              returning=[guide])
         _panda_returns(t, panda, guide)
         t.run()

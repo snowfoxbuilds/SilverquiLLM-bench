@@ -40,7 +40,10 @@ def _attacking(*, p0_hand=(), p0_lands=(), p1_hand=(), p1_lands=()):
     )
     t = Table(game)
     t.pass_to(Step.DECLARE_ATTACKERS, 0)
-    t.act(0, animist, lions, choices=[lions], then=[taps(animist), taps(lions), on_stack(ANIMIST, 0)])
+    # The declared creatures also answer the trigger's target: an engine that
+    # offers the Animist itself and rejects it is answered with the Lions first.
+    t.act(0, branches=[[animist, lions], [lions, animist]], choices=[lions],
+          then=[taps(animist), taps(lions), on_stack(ANIMIST, 0)])
     return t, animist, lions, elves
 
 

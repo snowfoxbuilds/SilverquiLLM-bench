@@ -35,8 +35,13 @@ def _attack(*, attackers, others=(), hand=()):
     return t, condemn
 
 
-def _condemn(t: Table, condemn, targets, *, then) -> None:
-    t.act(0, condemn, choices=targets, then=[moves(condemn, Zone.STACK)])
+def _condemn(t: Table, condemn, targets, *, then, fallback=None) -> None:
+    """Player 0 casts Condemn at one of ``targets`` — or of ``fallback``,
+    once the engine has rejected a choice from ``targets``."""
+    if fallback is None:
+        t.act(0, condemn, choices=targets, then=[moves(condemn, Zone.STACK)])
+    else:
+        t.act(0, branches=[[condemn, *targets], [condemn, *fallback]], then=[moves(condemn, Zone.STACK)])
     t.pass_(0)
     t.pass_(1, then=[moves(condemn, Zone.GRAVEYARD), *then])
 
@@ -49,10 +54,12 @@ class TestCondemnProperties:
 
     def test_get_targets_requirement_filters_attackers(self):
         """Player 0 would rather condemn the creature that stayed home, but only
-        the attacker can be targeted."""
+        the attacker can be targeted: the other is not offered, or offered and
+        rejected."""
         attacker, idle = card(SavannahLions), card(SavannahLions)
         t, condemn = _attack(attackers=[attacker], others=[idle])
-        _condemn(t, condemn, [idle, attacker], then=[moves(attacker, Zone.LIBRARY, bottom=True), life(1, 21)])
+        _condemn(t, condemn, [idle, attacker], then=[moves(attacker, Zone.LIBRARY, bottom=True), life(1, 21)],
+                 fallback=[attacker])
         t.run()
 
 

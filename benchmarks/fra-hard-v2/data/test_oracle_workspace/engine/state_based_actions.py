@@ -410,9 +410,12 @@ def resolve_state_based_actions(game: GameState) -> bool:
 
         # Inner loop: run SBA checks until no more actions are taken.
         sba_this_round = False
-        while check_state_based_actions(game):
-            sba_this_round = True
-            any_performed = True
+        # The abilities a round of state-based actions triggers are put on the
+        # stack together (rule 704.3, 603.3b).
+        with game.trigger_manager.batch(game):
+            while check_state_based_actions(game):
+                sba_this_round = True
+                any_performed = True
 
         # Detect whether any triggers were queued during this round.
         triggers_queued = len(game.stack) > stack_size_before

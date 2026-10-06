@@ -33,11 +33,15 @@ def _golem_game(mine=(), theirs=(), their_hand=(), their_mana=None, mine_hand=()
     return Table(game), golem
 
 
-def _cast(t: Table, golem, targets) -> None:
+def _cast(t: Table, golem, targets, *, branches=None) -> None:
     """Player 0 casts Meteor Golem; as it enters, its trigger goes on the
-    stack with its target chosen from ``targets`` (rule 603.3d)."""
+    stack with its target chosen from ``targets`` (rule 603.3d) — or from
+    ``branches``, tried in turn as the engine rejects a choice."""
     t.act(0, golem, then=[moves(golem, Zone.STACK)])
-    t.pass_(0, choices=targets)
+    if branches:
+        t.pass_(0, branches=branches)
+    else:
+        t.pass_(0, choices=targets)
     t.pass_(1, then=[moves(golem, Zone.BATTLEFIELD), on_stack(MeteorGolemAbility1, 0)])
 
 
@@ -72,10 +76,11 @@ class TestMeteorGolemETB:
 
     def test_option_set_excludes_lands_and_own_permanents(self):
         """Player 0 would rather destroy the opponent's Forest, or their own
-        Elves, but only the opponent's nonland permanent can be targeted."""
+        Elves, but only the opponent's nonland permanent can be targeted: each
+        is either not offered or offered and rejected."""
         elves, lions, forest = card(LlanowarElves), card(SavannahLions), card(Forest)
         t, golem = _golem_game(mine=[elves], theirs=[lions, forest])
-        _cast(t, golem, [forest, elves, lions])
+        _cast(t, golem, None, branches=[[forest, elves, lions], [elves, lions], [lions]])
         _resolve(t, moves(lions, Zone.GRAVEYARD))
         t.run()
 

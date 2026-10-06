@@ -32,6 +32,7 @@ the same query is asked again (CR 733.2).
 from __future__ import annotations
 
 import inspect
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
 from engine.abilities import (
@@ -197,7 +198,7 @@ def _cast_and_play_offers(game: GameState, player: Player):
                 yield obj, Zone.HAND, action
     offered = []
     for card in game.get_graveyard(player).get_all():
-        mode = _graveyard_cast_mode(player, card)
+        mode = _graveyard_cast_mode(game, player, card)
         if mode is not None:
             offered.append(card)
             for obj, action in card.cast_offers(game, player, Zone.GRAVEYARD, mode):
@@ -214,10 +215,36 @@ def _cast_and_play_offers(game: GameState, player: Player):
                 yield obj, zone, action
 
 
-def _graveyard_cast_mode(player: Player, card: Any) -> CastMode | None:
+@dataclass(frozen=True)
+class GraveyardCastPermission:
+    """"You may cast it from your graveyard this turn", held by one card.
+
+    It lasts for the turn it was granted, belongs to the player it was granted
+    to, and ends when the card leaves the graveyard: a card that returns is a
+    new object (CR 400.7) the permission never named.
+    """
+
+    player: Any
+    turn: int
+    stint: int
+
+
+def grant_graveyard_cast(game: GameState, player: Player, card: Any) -> None:
+    """Let *player* cast *card* from their graveyard this turn."""
+    card._castable_from_graveyard = GraveyardCastPermission(
+        player, game.turn_number, game.refs.instance_id(card, Zone.GRAVEYARD.value)
+    )
+
+
+def _graveyard_cast_mode(game: GameState, player: Player, card: Any) -> CastMode | None:
     """How *card* may be cast from *player*'s graveyard, if at all."""
-    # Set by an effect that grants "you may cast it from your graveyard" (Zul Ashur).
-    if getattr(card, "_castable_from_graveyard", False):
+    permission = getattr(card, "_castable_from_graveyard", None)
+    if (
+        isinstance(permission, GraveyardCastPermission)
+        and permission.player is player
+        and permission.turn == game.turn_number
+        and permission.stint == game.refs.instance_id(card, Zone.GRAVEYARD.value)
+    ):
         return CastMode.NORMAL
     owner = getattr(card, "owner", None)
     if getattr(card, "flashback_cost", None) is not None and owner in (None, player):

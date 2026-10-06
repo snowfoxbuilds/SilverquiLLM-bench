@@ -143,7 +143,7 @@ def _do_cleanup_step(game: GameState) -> None:
     if (game.phase, game.step) != (Phase.ENDING, Step.CLEANUP):
         game.phase, game.step = Phase.ENDING, Step.CLEANUP
         game.close_window(StepState.PENDING)
-    while game.step_state is not StepState.DONE:
+    while game.step_state is not StepState.DONE and not game.is_game_over:
         advance(game)
 
 
@@ -278,7 +278,7 @@ def start_step(game: GameState) -> None:
 
 def _play_priority(game: GameState, all_pass: bool) -> None:
     from engine.priority import take_priority
-    from engine.stack import resolve_top_of_stack
+    from engine.stack import resolve_top_of_stack, settle_after_resolution
 
     window = game.window
     seats = len(game.players)
@@ -288,7 +288,13 @@ def _play_priority(game: GameState, all_pass: bool) -> None:
         else:
             in_cleanup = (game.phase, game.step) == (Phase.ENDING, Step.CLEANUP)
             game.close_window(StepState.PENDING if in_cleanup else StepState.DONE)
-    elif all_pass or take_priority(game, game.players[window.holder]):
+        return
+    if all_pass:
+        # CR 117.5: the game settles before a player receives priority, even
+        # when that player's answer is a pass the caller already knows.
+        settle_after_resolution(game)
+        window.passed(seats)
+    elif take_priority(game, game.players[window.holder]):
         window.passed(seats)
     else:
         window.acted()

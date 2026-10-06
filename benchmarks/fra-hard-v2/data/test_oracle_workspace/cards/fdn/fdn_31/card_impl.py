@@ -43,18 +43,20 @@ class BigfinBouncer(Creature):
         )
         super().__init__(**kwargs)
 
-    def _is_opponent_creature(self, obj: Any) -> bool:
-        """Legal target: a creature controlled by a player other than me."""
+    @staticmethod
+    def _is_opponent_creature(obj: Any, controller: Any) -> bool:
+        """Legal target: a creature controlled by a player other than the
+        ability's controller."""
         if CardType.CREATURE not in getattr(obj, "card_types", set()):
             return False
         obj_controller = getattr(obj, "controller", None)
-        return obj_controller is not None and obj_controller is not self.controller
+        return obj_controller is not None and obj_controller is not controller
 
     def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Target creature an opponent controls, chosen as the trigger goes on the stack."""
         return [
             TargetRequirement(
-                filter_fn=self._is_opponent_creature,
+                filter_fn=lambda obj, _c=controller: self._is_opponent_creature(obj, _c),
                 description="target creature an opponent controls",
                 zone=Zone.BATTLEFIELD,
             )
@@ -82,6 +84,6 @@ class BigfinBouncer(Creature):
         if target is None:
             return
         on_bf = any(game.get_battlefield(p).contains(target) for p in game.players)
-        if not on_bf or not self._is_opponent_creature(target):
+        if not on_bf or not self._is_opponent_creature(target, controller):
             return
         move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)

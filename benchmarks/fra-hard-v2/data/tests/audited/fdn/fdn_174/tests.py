@@ -91,8 +91,8 @@ def test_death_returns_tapped_and_creates_treasure():
 def test_departed_target_fizzles_without_buff_or_treasure():
     """The Lions is sacrificed in response, so Fake Your Own Death does
     nothing: the Lions stays in the graveyard and no Treasure is made."""
-    t, spell, lions, ghoul = arrange(extra_mana=1)
-    t.act(0, ghoul, choices=[lions], then=[moves(lions, Zone.GRAVEYARD), on_stack(HungryGhoulAbility1, 0)])
+    t, spell, lions, _ghoul = arrange(extra_mana=1)
+    t.act(0, HungryGhoulAbility1, choices=[lions], then=[moves(lions, Zone.GRAVEYARD), on_stack(HungryGhoulAbility1, 0)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(HungryGhoulAbility1)])
     _resolve(t, spell)

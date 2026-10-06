@@ -22,8 +22,8 @@ from engine.decisions import Decision, GameRef, UnmatchedQueryError
 from engine.events import EndStepTriggeredEvent, SpellCastTriggeredEvent
 from test_utils import Intent
 from engine.protection import get_colors
-from engine.types import Color, Keyword, ManaCost, Zone
-from test_utils import create_game, set_board_state
+from engine.types import Color, Keyword, ManaCost, Phase, Zone
+from test_utils import create_game, set_board_state, start_step
 
 
 def _flicker_setup():
@@ -45,6 +45,7 @@ def _cast_noncreature(game, p1):
     game.trigger_manager.fire_event(
         game, SpellCastTriggeredEvent(spell=spell, player=p1)
     )
+    game.phase, game.step = Phase.PRECOMBAT_MAIN, None
     priority_loop(game)  # resolve the pushed trigger (auto-pass)
 
 
@@ -85,6 +86,7 @@ class TestKykarFlicker:
         from engine.stack import priority_loop
 
         game.trigger_manager.fire_event(game, EndStepTriggeredEvent(player=p1))
+        start_step(game)
         priority_loop(game)
         assert p1.zones[Zone.BATTLEFIELD].contains(bear)
 
@@ -107,6 +109,7 @@ class TestKykarFlicker:
             game, SpellCastTriggeredEvent(spell=spell, player=p1)
         )
         with pytest.raises(UnmatchedQueryError):
+            game.phase, game.step = Phase.PRECOMBAT_MAIN, None
             priority_loop(game)
         bf = p1.zones[Zone.BATTLEFIELD].get_all()
         assert not any(getattr(c, "name", "") == "Spirit" for c in bf)

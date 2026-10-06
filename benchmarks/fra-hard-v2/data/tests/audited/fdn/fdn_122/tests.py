@@ -54,11 +54,20 @@ def _table(lions, *, p1_battlefield=()):
     return Table(game), bolt
 
 
+def _asked_by(printed):
+    """A ``per_query`` key: a question whose source is ``printed``'s object, so
+    Kykar's questions are answered apart from the spell's own, whichever
+    targets an engine offers for them."""
+    return lambda query: any(dict(source.attrs).get("printed") is printed for source in query.source)
+
+
 def _cast_and_trigger(t, bolt, choices, *, then):
     """Player 0 casts Burst Lightning at player 1; Kykar's trigger, answered
     with ``choices`` whenever its mode and target are asked, resolves with
     ``then``, and then the Burst Lightning resolves."""
-    t.act(0, bolt, choices=[player(1), *choices], then=[moves(bolt, Zone.STACK), on_stack(KykarZephyrAwakenerAbility2, 0)])
+    kykar = {_asked_by(KykarZephyrAwakener): list(choices)} if choices else None
+    t.act(0, bolt, choices=[player(1)], per_query=kykar,
+          then=[moves(bolt, Zone.STACK), on_stack(KykarZephyrAwakenerAbility2, 0)])
     t.pass_(0, choices=choices)
     t.pass_(1, then=[off_stack(KykarZephyrAwakenerAbility2), *then])
     t.pass_(0)

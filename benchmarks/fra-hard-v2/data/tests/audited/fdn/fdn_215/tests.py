@@ -40,12 +40,19 @@ def _table(mine=(), theirs=(), library=()):
     return Table(game), bushwhack
 
 
-def _cast(t, bushwhack, *choices, found=(), then=()):
+def _cast(t, bushwhack, *choices, found=(), then=(), fallback=None, found_fallback=None):
     """Player 0 casts Bushwhack answering its mode and targets from
     ``choices``, and both players pass, resolving it; player 0's pass answers
-    the search from ``found``."""
-    t.act(0, bushwhack, choices=list(choices), then=[moves(bushwhack, TableZone.STACK)])
-    t.pass_(0, choices=list(found))
+    the search from ``found``. ``fallback`` and ``found_fallback`` answer
+    instead once the engine has rejected a choice the first answers made."""
+    if fallback is None:
+        t.act(0, bushwhack, choices=list(choices), then=[moves(bushwhack, TableZone.STACK)])
+    else:
+        t.act(0, branches=[[bushwhack, *choices], [bushwhack, *fallback]], then=[moves(bushwhack, TableZone.STACK)])
+    if found_fallback is None:
+        t.pass_(0, choices=list(found))
+    else:
+        t.pass_(0, branches=[list(found), list(found_fallback)])
     t.pass_(1, then=[moves(bushwhack, TableZone.GRAVEYARD), *then])
 
 
@@ -73,11 +80,13 @@ class TestBushwhackFight:
 
     def test_fight_targets_split_by_control(self):
         """The caster prefers the opponent's creature for every target; the
-        first target can only be the caster's creature, so the 3/3 fights the
-        1/1. Choosing the 1/1 first would fight it with nothing of ours."""
+        first target can only be the caster's creature — the 1/1 is not
+        offered for it, or offered and rejected — so the 3/3 fights the 1/1.
+        Choosing the 1/1 first would fight it with nothing of ours."""
         ours, theirs = card(BrazenScourge), card(LlanowarElves)
         t, bushwhack = _table([ours], [theirs])
-        _cast(t, bushwhack, BushwhackAbility3, theirs, ours, then=[moves(theirs, TableZone.GRAVEYARD)])
+        _cast(t, bushwhack, BushwhackAbility3, theirs, ours, then=[moves(theirs, TableZone.GRAVEYARD)],
+              fallback=[BushwhackAbility3, ours, theirs])
         t.run()
 
 
@@ -90,10 +99,12 @@ class TestBushwhackSearch:
 
     def test_search_offers_only_basics(self):
         """The caster prefers the nonbasic Rogue's Passage, but only the basic
-        Forest is found."""
+        Forest can be found: the Passage is not offered, or offered and
+        rejected."""
         forest, passage = card(FdnForest), card(RoguesPassage)
         t, bushwhack = _table(library=[passage, forest])
-        _cast(t, bushwhack, BushwhackAbility2, found=[passage, forest], then=[moves(forest, TableZone.HAND)])
+        _cast(t, bushwhack, BushwhackAbility2, found=[passage, forest], then=[moves(forest, TableZone.HAND)],
+              found_fallback=[forest])
         t.run(chance=[shuffled(passage)])
 
 

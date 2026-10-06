@@ -53,7 +53,6 @@ class TragicBanshee(Creature):
 
     def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Requires target creature an opponent controls."""
-        controller = self.controller
         return [TargetRequirement(
             filter_fn=lambda obj, g=game, ctrl=controller: (
                 CardType.CREATURE in getattr(obj, "card_types", set())

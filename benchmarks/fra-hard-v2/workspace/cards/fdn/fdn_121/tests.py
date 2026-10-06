@@ -13,7 +13,7 @@ from cards.fdn.fdn_121.card_impl import KomaWorldEater
 from engine.events import DealsDamageTriggeredEvent
 from engine.protection import get_colors
 from engine.stack import priority_loop
-from engine.types import Color
+from engine.types import Color, Phase
 from test_utils import create_game, set_board_state
 
 
@@ -41,6 +41,7 @@ class TestKomaToken:
                 source=koma, target=p2, amount=8, is_combat=True
             ),
         )
+        game.phase, game.step = Phase.PRECOMBAT_MAIN, None
         priority_loop(game)
 
         tokens = _coil_tokens(game, p1)

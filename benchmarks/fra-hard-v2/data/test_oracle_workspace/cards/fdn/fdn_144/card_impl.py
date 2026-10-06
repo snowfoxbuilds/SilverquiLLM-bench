@@ -53,17 +53,16 @@ class MischievousPup(Creature):
         )
         super().__init__(**kwargs)
 
-    def _is_other_permanent_you_control(self, obj: Any) -> bool:
+    def _is_other_permanent_you_control(self, obj: Any, controller: Any) -> bool:
         """Legal target: another permanent controlled by this card's controller
         (the ability's controller). Shared by the targeting and the resolution revalidation."""
-        controller = self.controller or getattr(self, "owner", None)
         return obj is not self and getattr(obj, "controller", None) is controller
 
     def _enters_targets(self, game: "GameState", controller: Any) -> list[Any]:
         """Up to one OTHER target permanent you control (optional/declinable)."""
         return [
             TargetRequirement(
-                filter_fn=self._is_other_permanent_you_control,
+                filter_fn=lambda obj, _c=controller: self._is_other_permanent_you_control(obj, _c),
                 description="up to one other target permanent you control",
                 zone=Zone.BATTLEFIELD,
                 optional=True,
@@ -92,6 +91,6 @@ class MischievousPup(Creature):
             return
         if not _on_battlefield(game, target):
             return
-        if not self._is_other_permanent_you_control(target):
+        if not self._is_other_permanent_you_control(target, controller):
             return
         move_to_zone(game, target, Zone.BATTLEFIELD, Zone.HAND)
