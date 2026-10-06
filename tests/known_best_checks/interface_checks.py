@@ -525,6 +525,13 @@ def test_a_question_whose_answer_is_an_order_is_never_filled():
     assert final.players[0].life == 21
 
 
+def test_an_empty_per_query_answer_never_fills_an_order():
+    game = _main(Side(hand=[PickBoth], battlefield=[Mountain, Plains]))
+    script = [act(PickBoth), pass_priority(per_query={(lambda query: True): []})]
+    with pytest.raises(PlayDiverged, match="nothing in player 0's script answers"):
+        run(game, script, [pass_priority()], check_views=False)
+
+
 # ---------------------------------------------------------------------------
 # Chance
 # ---------------------------------------------------------------------------
