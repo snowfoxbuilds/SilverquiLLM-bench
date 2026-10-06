@@ -24,7 +24,7 @@ from cards.fdn.fdn_687.card_impl import (
     DemolitionFieldAbility1,
     DemolitionFieldAbility2,
 )
-from test_interface import Decision, Phase, Side, Zone, card, create_game, shuffled
+from test_interface import Decision, Phase, Side, Zone, ability, card, create_game, shuffled
 
 from silverquillm.table import Table, moves, off_stack, on_stack, shuffles, taps
 
@@ -47,7 +47,7 @@ def _field(theirs, *, my_library=(), their_library=(), fields=1, plains=2):
 
 
 def _activate(t, field, target):
-    t.act(0, DemolitionFieldAbility2, choices=[target],
+    t.act(0, ability(field, DemolitionFieldAbility2), choices=[target],
           then=[moves(field, Zone.GRAVEYARD), on_stack(DemolitionFieldAbility2, 0)])
 
 
@@ -134,8 +134,8 @@ class TestDemolitionFieldAbility:
         legal target: it is not offered, or offered and rejected, and the
         Field stays."""
         mountain = card(Mountain)
-        t, _, _ = _field([mountain])
-        t.act_illegal(0, DemolitionFieldAbility2, choices=[mountain])
+        t, (field,), _ = _field([mountain])
+        t.act_illegal(0, ability(field, DemolitionFieldAbility2), choices=[mountain])
         t.run()
 
 
@@ -147,7 +147,7 @@ class TestDemolitionFieldCosts:
         t = Table(create_game(Side(battlefield=[field, plains]), Side(battlefield=[passage]),
                               start=(Phase.PRECOMBAT_MAIN, 0)))
         t.act(0, plains, then=[taps(plains)])
-        t.act_illegal(0, DemolitionFieldAbility2, choices=[passage])
+        t.act_illegal(0, ability(field, DemolitionFieldAbility2), choices=[passage])
         t.run()
 
     def test_it_taps_for_colorless_mana(self):
@@ -155,7 +155,7 @@ class TestDemolitionFieldCosts:
         field, collar = card(DemolitionField), card(BasiliskCollar)
         t = Table(create_game(Side(battlefield=[field], hand=[collar]), Side(),
                               start=(Phase.PRECOMBAT_MAIN, 0)))
-        t.act(0, DemolitionFieldAbility1, then=[taps(field)])
+        t.act(0, ability(field, DemolitionFieldAbility1), then=[taps(field)])
         t.act(0, collar, then=[moves(collar, Zone.STACK)])
         t.pass_(0)
         t.pass_(1, then=[moves(collar, Zone.BATTLEFIELD)])
