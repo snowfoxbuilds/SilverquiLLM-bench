@@ -1,14 +1,13 @@
 """Reference test for FDN 104 — Elvish Regrower.
 
-Exemplar for a **targeted ETB creature** (Phase D, Pattern 1) that returns a
-*permanent* card (creature / artifact / enchantment / land / planeswalker) from
-your graveyard to your hand. The target is chosen at cast (``get_targets``) and
-the return applied in ``on_resolve``.
+Exemplar for a **targeted enters trigger** that returns a *permanent* card
+(creature / artifact / enchantment / land / planeswalker) from your graveyard
+to your hand: the Regrower enters, then its enters ability goes on the stack
+choosing the card (rule 603.3d) and returns it as it resolves, checking the
+target again (rule 608.2b).
 """
 
 from __future__ import annotations
-
-import pytest
 
 from cards.fdn.fdn_104.card_impl import ElvishRegrower
 from engine.card import Creature, Instant, Land, printed_class
@@ -17,40 +16,32 @@ from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.stack import resolve_top_of_stack
 from engine.types import CardType, ManaCost, ManaType, Phase, Zone
-from test_utils import (
-    TestSetupError as _TestSetupError,
-    cast_spell,
-    create_game,
-    set_board_state,
-)
+from test_utils import cast_spell, create_game, set_board_state
 
 
 def _bear(name: str = "Bear") -> Creature:
     return Creature(name=name, base_power=2, base_toughness=2)
 
 
-def _cast_no_resolve(game, player_index, card, targets, zone=Zone.BATTLEFIELD):
-    """Cast *card* choosing *targets* (in *zone*) but leave it on the stack.
+def _cast_and_place_trigger(game, player_index, card, targets, zone=Zone.BATTLEFIELD):
+    """Cast *card*, resolve the creature spell, and let its enters trigger go
+    on the stack choosing *targets* (rule 603.3d) — stopping there, so a test
+    can change the board before the trigger resolves."""
+    from engine.state_based_actions import resolve_state_based_actions
 
-    Mirrors ``test_utils.cast_spell`` but stops before resolution so a test can
-    mutate the chosen target and then resolve manually to exercise
-    resolution-time target revalidation.
-    """
     player = game.players[player_index]
     game.active_player_index = player_index
     game.priority_player_index = player_index
     game.phase = Phase.PRECOMBAT_MAIN
     game.step = None
     prefs = tuple(
-        Decision.obj(instance=game.refs.instance_id(t, zone.value))
-        for t in targets
+        Decision.obj(instance=game.refs.instance_id(t, zone.value)) for t in targets
     )
-    player.start_intent("cast", Intent(
-        pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
-        preferences=prefs,
-    ))
+    player.start_intent("cast", Intent(pattern=GameRef(), preferences=prefs))
     try:
         engine_cast_spell(game, player, card)
+        resolve_top_of_stack(game)
+        resolve_state_based_actions(game)
     finally:
         player.end_intent("cast")
 
@@ -102,7 +93,7 @@ class TestElvishRegrowerETB:
                         graveyard=[my_creature, my_land, my_instant])
         set_board_state(game, 1, graveyard=[opp_land])
 
-        spec = regrower.get_targets(game)[0]
+        spec = regrower._enters_targets(game, p1)[0]
         assert spec.filter_fn(my_creature) is True
         assert spec.filter_fn(my_land) is True
         assert spec.filter_fn(my_instant) is False
@@ -114,15 +105,19 @@ class TestElvishRegrowerETB:
         ceases to be a *permanent* card before resolution, it is not returned —
         the Regrower still enters, but the graveyard card stays put."""
         game, p1, p2, regrower, dead = _setup(Land(name="Fallen Forest"))
-        _cast_no_resolve(game, 0, regrower, [dead], zone=Zone.GRAVEYARD)
-        # The chosen card stops being a permanent card while the spell resolves.
+        _cast_and_place_trigger(game, 0, regrower, [dead], zone=Zone.GRAVEYARD)
+        (trigger,) = game.stack.objects()
+        assert trigger.targets == [dead]
+        # The chosen card stops being a permanent card before the trigger resolves.
         dead.card_types = {CardType.INSTANT}
         resolve_top_of_stack(game)
         assert game.get_graveyard(p1).contains(dead)          # not returned
         assert not game.get_hand(p1).contains(dead)
         assert game.get_battlefield(p1).contains(regrower)    # creature entered
 
-    def test_no_legal_target_makes_cast_illegal(self):
+    def test_no_legal_target_removes_the_trigger(self):
+        """No permanent card in your graveyard: the Regrower still enters, and
+        its trigger is removed from the stack (rule 603.3c)."""
         game = create_game()
         p1, p2 = game.players
         game.active_player_index = 0
@@ -131,7 +126,6 @@ class TestElvishRegrowerETB:
                         graveyard=[Instant(name="Only Instant")],
                         mana={ManaType.GREEN: 2, ManaType.COLORLESS: 2})
         game.phase = Phase.PRECOMBAT_MAIN
-        with pytest.raises(_TestSetupError):
-            cast_spell(game, 0, ElvishRegrower)
-        # The cast was rejected — the Regrower never resolved onto the field.
-        assert not game.get_battlefield(p1).contains(regrower)
+        cast_spell(game, 0, ElvishRegrower)
+        assert game.get_battlefield(p1).contains(regrower)
+        assert game.stack.is_empty()

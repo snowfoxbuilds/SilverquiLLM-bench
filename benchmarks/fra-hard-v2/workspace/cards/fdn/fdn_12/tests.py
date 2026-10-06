@@ -1,8 +1,9 @@
 """Reference test for FDN 12 — Felidar Savior.
 
 "put a +1/+1 counter on each of UP TO TWO other target creatures you control"
-→ two optional requirements. The ETB stays castable with fewer than two (or
-zero) other creatures, and the engine picks two *distinct* creatures.
+→ two optional requirements, chosen as the enters trigger goes on the stack
+(rule 603.3d). The trigger may target fewer than two (or zero) other
+creatures, and the engine picks two *distinct* creatures.
 """
 
 from __future__ import annotations
@@ -24,8 +25,10 @@ class TestFelidarSaviorProperties:
         assert fs.mana_cost == ManaCost.parse("{3}{W}")
 
     def test_both_target_specs_optional(self):
-        fs = FelidarSavior(owner=None)
-        specs = fs.get_targets(create_game())
+        game = create_game()
+        fs = FelidarSavior(owner=game.players[0], controller=game.players[0])
+        assert fs.get_targets(game) == []  # the spell targets nothing
+        specs = fs._enters_targets(game, game.players[0])
         assert len(specs) == 2
         assert all(s.optional for s in specs)
 

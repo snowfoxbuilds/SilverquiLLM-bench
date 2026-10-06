@@ -159,6 +159,8 @@ class GameState:
         # Every token put onto the battlefield, in creation order, departed
         # ones included; a rollback undoes the tokens a rejected attempt made.
         self.created_tokens: list[Any] = []
+        # Every copy of a spell made, in creation order, likewise.
+        self.created_copies: list[Any] = []
 
     # ------------------------------------------------------------------
     # Player properties

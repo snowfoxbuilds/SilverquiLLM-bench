@@ -35,6 +35,8 @@ def prepare(game, card, factory):
 
 
 def consume_preparation(game, spell):
+    # The copy is created as it is cast (rule 707.12), so it is numbered then.
+    game.created_copies.append(spell)
     source = getattr(spell, "prepared_source", None)
     if source is not None:
         source.prepared = False

@@ -1,9 +1,10 @@
 """Reference test for FDN 98 — Ambush Wolf.
 
-Exemplar for an **"up to one target" ETB** (Phase D, Pattern 1 with
-``optional=True``): the enters ability exiles up to one target card from a
-graveyard. The single optional requirement is declinable — an empty graveyard
-set casts the creature with zero targets rather than making it uncastable.
+Exemplar for an **"up to one target" enters trigger**: the Wolf enters, then
+its enters ability goes on the stack choosing up to one target card in a
+graveyard (rule 603.3d) and exiles it as it resolves. The single optional
+requirement is declinable — with no graveyard card the trigger targets nothing
+and the Wolf is unaffected.
 """
 
 from __future__ import annotations
@@ -31,7 +32,8 @@ class TestAmbushWolfProperties:
         game = create_game()
         wolf = AmbushWolf(owner=game.players[0], controller=game.players[0])
         set_board_state(game, 0, battlefield=[wolf])
-        specs = wolf.get_targets(game)
+        assert wolf.get_targets(game) == []  # the spell targets nothing
+        specs = wolf._enters_targets(game, game.players[0])
         assert len(specs) == 1
         assert specs[0].optional is True
 
@@ -80,7 +82,7 @@ class TestAmbushWolfETB:
         set_board_state(game, 0, battlefield=[wolf, on_bf])
         set_board_state(game, 1, graveyard=[in_gy])
 
-        spec = wolf.get_targets(game)[0]
+        spec = wolf._enters_targets(game, p1)[0]
         assert spec.filter_fn(in_gy) is True
         assert spec.filter_fn(on_bf) is False
         assert spec.filter_fn(p1) is False

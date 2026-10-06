@@ -1,8 +1,6 @@
-diff --git a/engine/abilities.py b/engine/abilities.py
-index 72f2ad9..2dd4429 100644
 --- a/engine/abilities.py
 +++ b/engine/abilities.py
-@@ -149,6 +149,42 @@ class LoyaltyAbilityInstance:
+@@ -149,6 +149,42 @@
  _loyalty_activated_this_turn: set[tuple[int, int]] = set()
  
  
@@ -45,7 +43,7 @@ index 72f2ad9..2dd4429 100644
  def clear_loyalty_tracking() -> None:
      """Clear the loyalty-activated-this-turn tracker.
  
-@@ -364,6 +400,8 @@ def _activate_regular_ability(
+@@ -364,6 +400,8 @@
          else:
              stack_obj.on_resolve = ability.effect
          game.stack.push(stack_obj)
@@ -54,17 +52,15 @@ index 72f2ad9..2dd4429 100644
  
  
  def _activate_loyalty_ability(
-@@ -465,3 +503,5 @@ def _activate_loyalty_ability(
+@@ -465,3 +503,5 @@
      else:
          stack_obj.on_resolve = ability.effect
      game.stack.push(stack_obj)
 +    from engine.ward import trigger_ward
 +    trigger_ward(game, stack_obj)
-diff --git a/engine/card.py b/engine/card.py
-index 8bbb00b..2e6c311 100644
 --- a/engine/card.py
 +++ b/engine/card.py
-@@ -126,6 +126,9 @@ class ActivatedAbility:
+@@ -126,6 +126,9 @@
              the ability is not currently applicable. Must not mutate game state.
          description: Human-readable description of the ability.
          printed: The predefined class of the printed ability (see ADR-017).
@@ -74,7 +70,7 @@ index 8bbb00b..2e6c311 100644
      """
  
      cost: Callable[..., Any]
-@@ -135,6 +138,7 @@ class ActivatedAbility:
+@@ -135,6 +138,7 @@
      can_activate: Callable[..., Any] | None = None
      predicted_outcome: Callable[..., Any] | None = None
      printed: type | None = None
@@ -82,11 +78,9 @@ index 8bbb00b..2e6c311 100644
  
  
  @dataclass
-diff --git a/engine/casting.py b/engine/casting.py
-index 834d59a..34e0aed 100644
 --- a/engine/casting.py
 +++ b/engine/casting.py
-@@ -549,17 +549,20 @@ def _fire_spell_cast_event(
+@@ -554,17 +554,20 @@
  # Cast spell
  # ------------------------------------------------------------------
  
@@ -110,7 +104,7 @@ index 834d59a..34e0aed 100644
          card.x_value = choose_number(  # type: ignore[attr-defined]
              game, player, 0, maximum, "Choose X", source_card=card
          )
-@@ -577,13 +580,137 @@ def _with_x(cost: ManaCost, x_value: int) -> ManaCost:
+@@ -582,13 +585,137 @@
      )
  
  
@@ -249,7 +243,7 @@ index 834d59a..34e0aed 100644
  ) -> StackObject:
      """Cast *card* from *player*'s hand, or from *from_zone* when a cast
      permission allows it.
-@@ -620,8 +747,10 @@ def cast_spell(
+@@ -625,8 +752,10 @@
      Raises:
          CastingError: If any legality check fails.
      """
@@ -261,7 +255,7 @@ index 834d59a..34e0aed 100644
          raise CastingError(
              f"Cannot cast {card.name!r} — sorcery-speed timing not met"
          )
-@@ -646,11 +775,28 @@ def cast_spell(
+@@ -651,11 +780,28 @@
                  f"Cannot flashback {card.name!r} — owned by another player"
              )
      hand = player.zones[from_zone]
@@ -290,7 +284,7 @@ index 834d59a..34e0aed 100644
      # 4. Move card from its zone to the stack zone
      stack_zone = player.zones[Zone.STACK]
      hand.remove(card)
-@@ -660,7 +806,11 @@ def cast_spell(
+@@ -665,7 +811,11 @@
      if hasattr(card, "colors_spent"):
          del card.colors_spent
  
@@ -303,7 +297,7 @@ index 834d59a..34e0aed 100644
  
      # 4b. Announce how each additional cost will be paid (rule 601.2b). An
      #     alternative is offered only if its extra mana fits on top of some base
-@@ -668,18 +818,33 @@ def cast_spell(
+@@ -673,18 +823,33 @@
      #     known yet, so a cost they alone make affordable is rejected at payment.
      from engine import additional_costs
  
@@ -321,7 +315,7 @@ index 834d59a..34e0aed 100644
 +            else [card.mana_cost, *card.alternative_costs(game)]
 +        )
      untargeted_reduction = _raw_cost_reduction(game, card, player, targets=[])
- 
++
 +    # Mana abilities may still be activated while paying (rule 601.2g), so an
 +    # alternative counts as affordable when the pool plus one mana from each
 +    # untapped mana source could cover it; an exact shortfall is rejected at
@@ -331,7 +325,7 @@ index 834d59a..34e0aed 100644
 +        if not getattr(c, 'is_tapped', False)
 +        and callable(getattr(c, 'get_mana_abilities', None)) and c.get_mana_abilities()
 +    )
-+
+ 
      def _affordable(extra: ManaCost | None) -> bool:
          for base in announced_bases:
              total = additional_costs.plus(_with_x(base, card.x_value), extra)  # type: ignore[attr-defined]
@@ -343,7 +337,7 @@ index 834d59a..34e0aed 100644
                  return True
          return False
  
-@@ -762,27 +927,36 @@ def cast_spell(
+@@ -767,27 +932,36 @@
          if mode is CastMode.FLASHBACK
          else [card.mana_cost, *card.alternative_costs(game)]
      )
@@ -382,7 +376,7 @@ index 834d59a..34e0aed 100644
  
      # Store colors of mana spent on the card for mechanics like Converge
      # that care about the colors used to cast the spell.
-@@ -792,6 +966,7 @@ def cast_spell(
+@@ -797,6 +971,7 @@
      additional_costs.pay_nonmana(game, player, card, chosen_additional)
  
      # 7. Call on_cast hook
@@ -390,7 +384,7 @@ index 834d59a..34e0aed 100644
      card.on_cast(game)
  
      # 7b. The spell has now become cast (rule 601.2i). Record it in the caster's
-@@ -816,6 +991,7 @@ def cast_spell(
+@@ -821,6 +996,7 @@
          prior_qualifying_casts=prior_qualifying_casts,
          departure_zone=Zone.EXILE if mode is CastMode.FLASHBACK else None,
          is_spell=True,
@@ -398,7 +392,7 @@ index 834d59a..34e0aed 100644
      )
  
      def _on_resolve(g: GameState) -> None:
-@@ -823,6 +999,8 @@ def cast_spell(
+@@ -828,6 +1004,8 @@
  
      stack_obj.on_resolve = _on_resolve
      game.stack.push(stack_obj)
@@ -407,7 +401,7 @@ index 834d59a..34e0aed 100644
  
      # 9. The spell is now on the stack (rule 601.2i complete). Fire the
      #    cast-triggered event so "whenever you cast …" abilities queue on top of
-@@ -830,6 +1008,7 @@ def cast_spell(
+@@ -835,6 +1013,7 @@
      #    can correlate to this exact occurrence, and after the cast history is
      #    recorded so a cast-count reader sees this spell counted.
      _fire_spell_cast_event(game, player, card)
@@ -415,7 +409,7 @@ index 834d59a..34e0aed 100644
      return stack_obj
  
  
-@@ -845,6 +1024,7 @@ def cast_spell_free(
+@@ -850,6 +1029,7 @@
      from_zone: Zone,
      *,
      mode: CastMode = CastMode.NORMAL,
@@ -423,7 +417,7 @@ index 834d59a..34e0aed 100644
  ) -> StackObject:
      """Cast *card* without paying its mana cost, using the stack.
  
-@@ -934,6 +1114,12 @@ def cast_spell_free(
+@@ -939,6 +1119,12 @@
                  f"{player.name!r}'s graveyard"
              )
  
@@ -436,7 +430,7 @@ index 834d59a..34e0aed 100644
      # Ensure controller is set
      card.controller = player
      if card.owner is None:
-@@ -1033,6 +1219,7 @@ def cast_spell_free(
+@@ -1038,6 +1224,7 @@
      additional_costs.pay_nonmana(game, player, card, chosen_additional)
  
      # 4. Call on_cast hook
@@ -444,7 +438,7 @@ index 834d59a..34e0aed 100644
      card.on_cast(game)
  
      # 4b. The free-cast spell has become cast (rule 601.2i); record it in the
-@@ -1075,6 +1262,8 @@ def cast_spell_free(
+@@ -1080,6 +1267,8 @@
  
      stack_obj.on_resolve = _on_resolve
      game.stack.push(stack_obj)
@@ -453,7 +447,7 @@ index 834d59a..34e0aed 100644
  
      # 6. The free-cast spell is on the stack (rule 601.2i complete). Fire the
      #    cast-triggered event, exactly as on the normal path — a spell cast
-@@ -1180,6 +1369,12 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
+@@ -1185,6 +1374,12 @@
  
      # Card must be in hand
      hand = game.get_hand(player)
@@ -466,7 +460,7 @@ index 834d59a..34e0aed 100644
      if not hand.contains(land_card):
          raise CastingError(
              f"Cannot play land {land_card.name!r} — card not in hand"
-@@ -1198,7 +1393,7 @@ def play_land(game: GameState, player: Player, land_card: CardImpl) -> None:
+@@ -1203,7 +1398,7 @@
      # Move from hand to battlefield via move_to_zone, which fires
      # ENTERS_BATTLEFIELD and registers triggers/replacement effects.
      from engine.zones import move_to_zone
@@ -475,11 +469,9 @@ index 834d59a..34e0aed 100644
  
      # Decrement land plays
      player.land_plays_remaining -= 1
-diff --git a/engine/combat.py b/engine/combat.py
-index 5c31d5b..32f7260 100644
 --- a/engine/combat.py
 +++ b/engine/combat.py
-@@ -121,6 +121,9 @@ def _can_attack(creature: Any) -> bool:
+@@ -121,6 +121,9 @@
      - It has summoning sickness (``summoning_sick``) and does not have ``HASTE``.
      - A continuous effect has set ``_cant_attack`` (e.g. Pacifism).
      """
@@ -489,7 +481,7 @@ index 5c31d5b..32f7260 100644
      if getattr(creature, "is_tapped", False):
          return False
  
-@@ -149,6 +152,9 @@ def _can_block(blocker: Any, attacker: Any) -> bool:
+@@ -149,6 +152,9 @@
        (e.g. Rogue's Passage).
      - If the attacker has flying, the blocker must have flying or reach.
      """
@@ -499,11 +491,9 @@ index 5c31d5b..32f7260 100644
      if getattr(blocker, "is_tapped", False):
          return False
  
-diff --git a/engine/continuous_effects.py b/engine/continuous_effects.py
-index a7baa3c..f0487af 100644
 --- a/engine/continuous_effects.py
 +++ b/engine/continuous_effects.py
-@@ -243,6 +243,8 @@ class EffectManager:
+@@ -243,6 +243,8 @@
              The number of effects removed.
          """
          before = len(self._effects)
@@ -512,7 +502,7 @@ index a7baa3c..f0487af 100644
          remaining: list[ContinuousEffect] = []
          for eff in self._effects:
              if eff.duration == DURATION_PERMANENT:
-@@ -288,6 +290,10 @@ class EffectManager:
+@@ -288,6 +290,10 @@
              sorted_effects[first:first + len(control)] = _in_dependency_order(control)
          for effect in sorted_effects:
              effect.apply(game)
@@ -523,9 +513,6 @@ index a7baa3c..f0487af 100644
  
          # A permanent that came under a new controller is summoning sick for
          # them (rule 302.6); recalculating to the same controller is no change.
-diff --git a/engine/copying.py b/engine/copying.py
-new file mode 100644
-index 0000000..332e12d
 --- /dev/null
 +++ b/engine/copying.py
 @@ -0,0 +1,101 @@
@@ -630,11 +617,9 @@ index 0000000..332e12d
 +        player.legend_rule_suppressed = False
 +        for card in game.get_battlefield(player).get_all():
 +            end_copy(card, game)
-diff --git a/engine/game_state.py b/engine/game_state.py
-index d4d70fd..03f9dee 100644
 --- a/engine/game_state.py
 +++ b/engine/game_state.py
-@@ -127,6 +127,8 @@ class GameState:
+@@ -127,6 +127,8 @@
          self.phase: Phase = Phase.BEGINNING
          self.step: Step | None = Step.UNTAP
          self.turn_number: int = 1
@@ -643,9 +628,6 @@ index d4d70fd..03f9dee 100644
          self.stack: Stack = Stack()
          self.trigger_manager: TriggerManager = TriggerManager()
          self.replacement_manager: ReplacementManager = ReplacementManager()
-diff --git a/engine/mana_grants.py b/engine/mana_grants.py
-new file mode 100644
-index 0000000..0e69c01
 --- /dev/null
 +++ b/engine/mana_grants.py
 @@ -0,0 +1,64 @@
@@ -713,9 +695,6 @@ index 0000000..0e69c01
 +    for grant in getattr(game, "linked_mana_grants", []):
 +        if grant["source"] is source and grant["exile_epoch"] == game.refs.zone_epoch(source):
 +            grant["active"] = False
-diff --git a/engine/planeswalker.py b/engine/planeswalker.py
-new file mode 100644
-index 0000000..ab6190c
 --- /dev/null
 +++ b/engine/planeswalker.py
 @@ -0,0 +1,91 @@
@@ -810,12 +789,9 @@ index 0000000..ab6190c
 +            if not hasattr(card, "_printed_loyalty_method"):
 +                card._printed_loyalty_method = getattr(card, "get_loyalty_abilities", lambda: [])
 +                card.get_loyalty_abilities = _with_granted_abilities(card, game)
-diff --git a/engine/preparation.py b/engine/preparation.py
-new file mode 100644
-index 0000000..c48f54b
 --- /dev/null
 +++ b/engine/preparation.py
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,43 @@
 +"""Prepared designations and the spell copies they let their controller cast.
 +
 +A prepared permanent's spell copy is held in its controller's command zone, out
@@ -853,15 +829,15 @@ index 0000000..c48f54b
 +
 +
 +def consume_preparation(game, spell):
++    # The copy is created as it is cast (rule 707.12), so it is numbered then.
++    game.created_copies.append(spell)
 +    source = getattr(spell, "prepared_source", None)
 +    if source is not None:
 +        source.prepared = False
 +        source.prepared_copy = None
-diff --git a/engine/priority.py b/engine/priority.py
-index a0953ba..d26453b 100644
 --- a/engine/priority.py
 +++ b/engine/priority.py
-@@ -43,7 +43,13 @@ from engine.abilities import (
+@@ -43,7 +43,13 @@
      activate_ability,
  )
  from engine.card import LoyaltyAbility, ManaAbility
@@ -876,7 +852,7 @@ index a0953ba..d26453b 100644
  from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, PlayerDecision
  from engine import attempts
  from engine.attempts import AttemptContext
-@@ -129,10 +135,19 @@ def priority_query(
+@@ -129,10 +135,19 @@
          actions[game.refs.object_decision(obj, zone=zone.value, controller_seat=seat)] = action
      for source in _controlled_permanents(game, player):
          for index, ability in enumerate(activatable_abilities(source, game)):
@@ -897,7 +873,7 @@ index a0953ba..d26453b 100644
      source = Decision.player(
          ref=GameRef(player=frozenset({("seat", seat)}), ability=frozenset({PRIORITY_WINDOW})),
          seat=seat,
-@@ -181,11 +196,23 @@ def _cast_and_play_offers(game: GameState, player: Player):
+@@ -181,11 +196,23 @@
          else:
              for obj, action in card.cast_offers(game, player, Zone.HAND, CastMode.NORMAL):
                  yield obj, Zone.HAND, action
@@ -921,7 +897,7 @@ index a0953ba..d26453b 100644
  
  
  @dataclass(frozen=True)
-@@ -257,10 +284,15 @@ def _may_begin_activating(game: GameState, player: Player, source: Any, ability:
+@@ -257,10 +284,15 @@
      return can_activate is None or bool(can_activate(game, source, player))
  
  
@@ -939,11 +915,9 @@ index a0953ba..d26453b 100644
      instance = game.refs.instance_id(source, zone)
      attrs: dict[str, Any] = {"source": instance, "index": index}
      printed = getattr(ability, "printed", None)
-diff --git a/engine/stack.py b/engine/stack.py
-index 322c9c3..2c5c4ec 100644
 --- a/engine/stack.py
 +++ b/engine/stack.py
-@@ -112,6 +112,7 @@ class StackObject:
+@@ -112,6 +112,7 @@
      event_state: Any = None
      prior_qualifying_casts: int | None = None
      departure_zone: Zone | None = None
@@ -951,7 +925,7 @@ index 322c9c3..2c5c4ec 100644
      is_spell: bool = False
      printed: type | None = None
  
-@@ -408,10 +409,35 @@ def move_spell_off_stack(
+@@ -408,10 +409,35 @@
          # Countering fizzle: this occurrence already left the stack.
          return False
  
@@ -987,16 +961,16 @@ index 322c9c3..2c5c4ec 100644
      return True
  
  
-@@ -454,6 +480,8 @@ def copy_spell(
-     copied_card = copy.copy(original.source)
+@@ -455,6 +481,8 @@
      copied_card.controller = controller
      copied_card.owner = getattr(original.source, "owner", controller)
+     game.created_copies.append(copied_card)
 +    copied_card.was_cast = False
 +    copied_card.is_card_copy = True
  
      if new_targets is not None:
          # New targets chosen for the copy — capture their current stints.
-@@ -496,6 +524,11 @@ def copy_spell(
+@@ -497,6 +525,11 @@
              g, copy_obj.activation_context, copy_obj.targets
          )
          copied_card.on_resolve(g)
@@ -1008,11 +982,9 @@ index 322c9c3..2c5c4ec 100644
  
      copy_obj.on_resolve = _copy_resolve
      return copy_obj
-diff --git a/engine/state_based_actions.py b/engine/state_based_actions.py
-index 5bef426..f7ca617 100644
 --- a/engine/state_based_actions.py
 +++ b/engine/state_based_actions.py
-@@ -98,7 +98,7 @@ def _sba_creature_zero_toughness(game: GameState) -> bool:
+@@ -98,7 +98,7 @@
      to_remove: list[tuple[Player, Any]] = []
      for player in game.players:
          for obj in _battlefield(game, player).get_all():
@@ -1021,7 +993,7 @@ index 5bef426..f7ca617 100644
                  to_remove.append((player, obj))
      for player, obj in to_remove:
          _move_to_graveyard(game, player, obj)
-@@ -108,11 +108,20 @@ def _sba_creature_zero_toughness(game: GameState) -> bool:
+@@ -108,11 +108,20 @@
  
  def _sba_planeswalker_zero_loyalty(game: GameState) -> bool:
      """A planeswalker with 0 loyalty is put into its owner's graveyard (rule 704.5i)."""
@@ -1042,7 +1014,7 @@ index 5bef426..f7ca617 100644
      ]
      for player, obj in to_remove:
          _move_to_graveyard(game, player, obj)
-@@ -131,7 +140,7 @@ def _sba_creature_lethal_damage(game: GameState) -> bool:
+@@ -131,7 +140,7 @@
      to_remove: list[tuple[Player, Any]] = []
      for player in game.players:
          for obj in _battlefield(game, player).get_all():
@@ -1051,7 +1023,7 @@ index 5bef426..f7ca617 100644
                  continue
  
              # Skip indestructible creatures
-@@ -180,6 +189,8 @@ def _sba_legend_rule(game: GameState) -> bool:
+@@ -180,6 +189,8 @@
      action_taken = False
      for player in game.players:
          bf = _battlefield(game, player)
@@ -1060,20 +1032,18 @@ index 5bef426..f7ca617 100644
          legendaries: dict[str, list[Any]] = defaultdict(list)
          for obj in bf.get_all():
              if (
-diff --git a/engine/triggers.py b/engine/triggers.py
-index 8264b2f..1c1fd7c 100644
 --- a/engine/triggers.py
 +++ b/engine/triggers.py
-@@ -318,6 +318,8 @@ class TriggerManager:
-                         )
-                     )
+@@ -326,6 +326,8 @@
+                     _resolve_targeted(g, _obj, _trigger, _req)
+                 )
                  game.stack.push(stack_obj)
 +                from engine.ward import trigger_ward
 +                trigger_ward(game, stack_obj)
              elif trigger.capture is not None:
                  # Untargeted trigger that captured per-fire event state when it
                  # triggered (rule 603.3), stored on this trigger's own
-@@ -529,6 +531,8 @@ def put_reflexive_trigger(
+@@ -585,6 +587,8 @@
          g, still_legal_targets(g, source, requirements, stint_checked_targets(g, context, chosen)), controller
      )
      game.stack.push(stack_obj)
@@ -1082,9 +1052,6 @@ index 8264b2f..1c1fd7c 100644
  
  
  def register_enters_trigger(
-diff --git a/engine/ward.py b/engine/ward.py
-new file mode 100644
-index 0000000..f4fa7dd
 --- /dev/null
 +++ b/engine/ward.py
 @@ -0,0 +1,29 @@
@@ -1117,11 +1084,9 @@ index 0000000..f4fa7dd
 +
 +        game.stack.push(StackObject(source=target, controller=target.controller, on_resolve=resolve,
 +                                     printed=getattr(target, "ward_printed", None)))
-diff --git a/engine/zones.py b/engine/zones.py
-index eb8404c..7379ff4 100644
 --- a/engine/zones.py
 +++ b/engine/zones.py
-@@ -290,6 +290,11 @@ def move_to_zone(
+@@ -290,6 +290,11 @@
          # new one, so pending abilities of this stint can still find it.
          game.last_known_by_stint[game.refs.instance_id(card, Zone.BATTLEFIELD.value)] = lki
  
@@ -1133,7 +1098,7 @@ index eb8404c..7379ff4 100644
      # --- Perform the zone move ---
      source_container.remove(card)
  
-@@ -336,6 +341,12 @@ def move_to_zone(
+@@ -336,6 +341,12 @@
      # (e.g. a flicker's exile leg). Minting stays lazy — the registry
      # re-mints on the next observation.
      game.refs.note_zone_change(card)
@@ -1146,7 +1111,7 @@ index eb8404c..7379ff4 100644
  
      # --- Leaving battlefield hooks ---
      removed_source_effects = False
-@@ -401,6 +412,11 @@ def move_to_zone(
+@@ -401,6 +412,11 @@
          # Now unregister triggers and replacement effects.
          game.trigger_manager.unregister(card)
          game.replacement_manager.unregister(card)
@@ -1158,7 +1123,7 @@ index eb8404c..7379ff4 100644
  
      # --- Entering battlefield hooks ---
      if entering_battlefield:
-@@ -446,10 +462,13 @@ def move_to_zone(
+@@ -446,10 +462,13 @@
      # manager still needs one reset pass to strip the departed buff.
      if leaving_battlefield or entering_battlefield:
          effect_manager = getattr(game, "effect_manager", None)
@@ -1175,7 +1140,7 @@ index eb8404c..7379ff4 100644
  
  
  def _remove_from_combat(game: GameState, card: Any) -> None:
-@@ -488,3 +507,8 @@ _DESTINATION_ZONE_MAP: dict[str, Zone] = {
+@@ -488,3 +507,8 @@
      "hand": Zone.HAND,
      "library": Zone.LIBRARY,
  }

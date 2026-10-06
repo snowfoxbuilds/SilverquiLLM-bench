@@ -77,6 +77,8 @@ class UldarosTheorix(Creature):
                                           source_card=self, optional=True)
                 if chosen[0] is None:
                     return None
+                # A copy is numbered as it is cast (rule 707.12).
+                state.created_copies.append(chosen[0])
                 cast_spell_free(state, player, chosen[0], Zone.EXILE, mana_value_limit=budget[0])
                 return chosen[0]
 

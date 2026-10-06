@@ -43,10 +43,10 @@ class ApothecaryStomper(Creature):
 
     FDN collector number 99.
 
-    Modal ETB (Pattern 5 + Pattern 1): the mode is chosen at cast in
-    ``get_targets``; mode 0 returns a "target creature you control" requirement
-    and mode 1 (gain life) is non-targeted. The effect resolves in
-    ``on_resolve`` before the Stomper arrives.
+    Modal enters trigger: the mode is chosen as the trigger goes on the stack
+    (``_enters_targets``, rule 603.3d) and kept for that occurrence; mode 0
+    then chooses a "target creature you control", mode 1 (gain life) is
+    non-targeted. The effect resolves once the Stomper is on the battlefield.
     """
 
     def __init__(self, **kwargs: Any) -> None:

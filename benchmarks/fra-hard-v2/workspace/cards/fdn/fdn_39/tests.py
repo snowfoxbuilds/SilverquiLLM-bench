@@ -41,6 +41,11 @@ def _trigger_landfall(game, controller):
     controller.zones[Zone.HAND].add(land)
     land.instance_id = game.refs.instance_id(land, "hand")
     move_to_zone(game, land, Zone.HAND, Zone.BATTLEFIELD)
+    # The landfall ability waits until the game next settles, before a player
+    # would receive priority, and goes on the stack choosing its target then.
+    from engine.state_based_actions import resolve_state_based_actions
+
+    resolve_state_based_actions(game)
 
 
 def _setup():

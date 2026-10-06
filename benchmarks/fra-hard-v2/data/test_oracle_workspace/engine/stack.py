@@ -480,6 +480,7 @@ def copy_spell(
     copied_card = copy.copy(original.source)
     copied_card.controller = controller
     copied_card.owner = getattr(original.source, "owner", controller)
+    game.created_copies.append(copied_card)
     copied_card.was_cast = False
     copied_card.is_card_copy = True
 

@@ -1,10 +1,11 @@
 """Reference test for FDN 99 — Apothecary Stomper.
 
-Exemplar for a **modal ETB creature** (Phase D, Pattern 5 + Pattern 1). The mode
-is chosen at cast in ``get_targets`` (answered by a MODE Intent) and stored on
-``chosen_mode``; mode 0 ("Put two +1/+1 counters on target creature you control")
-returns a creature-target requirement, mode 1 ("You gain 4 life") is
-non-targeted. The effect resolves in ``on_resolve`` before the Stomper arrives.
+Exemplar for a **modal enters trigger**. The Stomper enters, then its enters
+ability goes on the stack (rule 603.3d): the mode is chosen as it does
+(answered by a MODE Intent) and kept for that occurrence; mode 0 ("Put two
++1/+1 counters on target creature you control") then chooses a creature-target,
+mode 1 ("You gain 4 life") is non-targeted. The trigger resolves afterwards,
+checking its target again (rule 608.2b).
 """
 
 from __future__ import annotations
@@ -27,8 +28,11 @@ def _bear(name: str = "Bear") -> Creature:
     return Creature(name=name, base_power=2, base_toughness=2)
 
 
-def _cast_no_resolve_mode(game, player_index, card, mode, targets):
-    """Cast a modal *card* choosing *mode_name*, leaving it on the stack."""
+def _cast_and_place_trigger(game, player_index, card, mode, targets):
+    """Cast a modal *card*, resolve the creature spell, and let its enters
+    trigger go on the stack choosing *mode* and *targets* — stopping there."""
+    from engine.state_based_actions import resolve_state_based_actions
+
     player = game.players[player_index]
     game.active_player_index = player_index
     game.priority_player_index = player_index
@@ -38,15 +42,11 @@ def _cast_no_resolve_mode(game, player_index, card, mode, targets):
         Decision.obj(instance=game.refs.instance_id(t, Zone.BATTLEFIELD.value))
         for t in targets
     )
-    player.start_intent(
-        "cast",
-        Intent(
-            pattern=GameRef(card=frozenset({("printed", printed_class(card))})),
-            preferences=prefs,
-        ),
-    )
+    player.start_intent("cast", Intent(pattern=GameRef(), preferences=prefs))
     try:
         engine_cast_spell(game, player, card)
+        resolve_top_of_stack(game)
+        resolve_state_based_actions(game)
     finally:
         player.end_intent("cast")
 
@@ -60,7 +60,7 @@ def _specs_for_mode(game, player, card, mode):
         ),
     )
     try:
-        return card.get_targets(game)
+        return card._enters_targets(game, player)
     finally:
         player.end_intent("mode")
 
@@ -160,11 +160,12 @@ class TestApothecaryStomperRevalidation:
                         mana={ManaType.GREEN: 2, ManaType.COLORLESS: 4})
         game.phase = Phase.PRECOMBAT_MAIN
 
-        _cast_no_resolve_mode(game, 0, stomper, ApothecaryStomperAbility3, [mine])
-        # Before resolution the chosen target loses creature-ness.
+        _cast_and_place_trigger(game, 0, stomper, ApothecaryStomperAbility3, [mine])
+        (trigger,) = game.stack.objects()
+        assert trigger.targets == [mine]
+        # Before the trigger resolves the chosen target loses creature-ness.
         mine.card_types = set(mine.card_types) - {CardType.CREATURE}
-        while not game.stack.is_empty():
-            resolve_top_of_stack(game)
+        resolve_top_of_stack(game)
 
         assert stomper.chosen_mode == 0
         # No counters were placed.
