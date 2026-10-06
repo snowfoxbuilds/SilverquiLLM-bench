@@ -297,6 +297,7 @@ def test_kioras_attack_trigger_shows_its_threshold_ability(graveyard):
     for _ in range(graveyard):
         game.get_graveyard(me).add(Creature(name="Bear", owner=me, controller=me))
     game.trigger_manager.fire_event(game, AttacksTriggeredEvent(attacker=kiora, creature=kiora))
+    game.trigger_manager.put_pending_on_stack(game)
     stack = view(game).stack
     if graveyard >= 7:
         assert [seen.card for seen in stack] == [threshold]
