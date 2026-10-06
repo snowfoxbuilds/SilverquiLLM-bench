@@ -174,6 +174,7 @@ class TestMoveToZoneDeath:
         trigger = TriggerRegistration(event_type=CreatureDiesTriggeredEvent, condition=death_condition, effect=death_effect, source=creature, controller=player)
         game.trigger_manager.register(trigger)
         move_to_zone(game, creature, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+        game.trigger_manager.put_pending_on_stack(game)
         assert not game.stack.is_empty() or len(death_trigger_fired) > 0
         assert len(game.trigger_manager.get_triggers_for_source(creature)) == 0
 

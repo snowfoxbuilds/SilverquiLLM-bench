@@ -1,5 +1,5 @@
 diff --git a/engine/abilities.py b/engine/abilities.py
-index 72f2ad9..2dd4429 100644
+index 72f2ad97..2dd4429a 100644
 --- a/engine/abilities.py
 +++ b/engine/abilities.py
 @@ -149,6 +149,42 @@ class LoyaltyAbilityInstance:
@@ -61,7 +61,7 @@ index 72f2ad9..2dd4429 100644
 +    from engine.ward import trigger_ward
 +    trigger_ward(game, stack_obj)
 diff --git a/engine/card.py b/engine/card.py
-index 8bbb00b..2e6c311 100644
+index 8bbb00bd..2e6c3112 100644
 --- a/engine/card.py
 +++ b/engine/card.py
 @@ -126,6 +126,9 @@ class ActivatedAbility:
@@ -83,7 +83,7 @@ index 8bbb00b..2e6c311 100644
  
  @dataclass
 diff --git a/engine/casting.py b/engine/casting.py
-index 834d59a..34e0aed 100644
+index 834d59a3..34e0aed1 100644
 --- a/engine/casting.py
 +++ b/engine/casting.py
 @@ -549,17 +549,20 @@ def _fire_spell_cast_event(
@@ -476,7 +476,7 @@ index 834d59a..34e0aed 100644
      # Decrement land plays
      player.land_plays_remaining -= 1
 diff --git a/engine/combat.py b/engine/combat.py
-index 5c31d5b..32f7260 100644
+index 5c31d5b0..32f72605 100644
 --- a/engine/combat.py
 +++ b/engine/combat.py
 @@ -121,6 +121,9 @@ def _can_attack(creature: Any) -> bool:
@@ -500,7 +500,7 @@ index 5c31d5b..32f7260 100644
          return False
  
 diff --git a/engine/continuous_effects.py b/engine/continuous_effects.py
-index 9d42ac3..f922b8c 100644
+index 9d42ac36..f922b8c4 100644
 --- a/engine/continuous_effects.py
 +++ b/engine/continuous_effects.py
 @@ -211,6 +211,8 @@ class EffectManager:
@@ -523,9 +523,9 @@ index 9d42ac3..f922b8c 100644
  
      # ------------------------------------------------------------------
      # Internal helpers
-diff --git b/engine/copying.py b/engine/copying.py
+diff --git a/engine/copying.py b/engine/copying.py
 new file mode 100644
-index 0000000..332e12d
+index 00000000..332e12df
 --- /dev/null
 +++ b/engine/copying.py
 @@ -0,0 +1,101 @@
@@ -631,7 +631,7 @@ index 0000000..332e12d
 +        for card in game.get_battlefield(player).get_all():
 +            end_copy(card, game)
 diff --git a/engine/game_state.py b/engine/game_state.py
-index ef9a5cb..72fecc4 100644
+index 5c54504f..69d06b06 100644
 --- a/engine/game_state.py
 +++ b/engine/game_state.py
 @@ -127,6 +127,8 @@ class GameState:
@@ -643,9 +643,9 @@ index ef9a5cb..72fecc4 100644
          self.stack: Stack = Stack()
          self.trigger_manager: TriggerManager = TriggerManager()
          self.replacement_manager: ReplacementManager = ReplacementManager()
-diff --git b/engine/mana_grants.py b/engine/mana_grants.py
+diff --git a/engine/mana_grants.py b/engine/mana_grants.py
 new file mode 100644
-index 0000000..0e69c01
+index 00000000..0e69c016
 --- /dev/null
 +++ b/engine/mana_grants.py
 @@ -0,0 +1,64 @@
@@ -713,9 +713,9 @@ index 0000000..0e69c01
 +    for grant in getattr(game, "linked_mana_grants", []):
 +        if grant["source"] is source and grant["exile_epoch"] == game.refs.zone_epoch(source):
 +            grant["active"] = False
-diff --git b/engine/planeswalker.py b/engine/planeswalker.py
+diff --git a/engine/planeswalker.py b/engine/planeswalker.py
 new file mode 100644
-index 0000000..ab6190c
+index 00000000..ab6190c1
 --- /dev/null
 +++ b/engine/planeswalker.py
 @@ -0,0 +1,91 @@
@@ -810,9 +810,9 @@ index 0000000..ab6190c
 +            if not hasattr(card, "_printed_loyalty_method"):
 +                card._printed_loyalty_method = getattr(card, "get_loyalty_abilities", lambda: [])
 +                card.get_loyalty_abilities = _with_granted_abilities(card, game)
-diff --git b/engine/preparation.py b/engine/preparation.py
+diff --git a/engine/preparation.py b/engine/preparation.py
 new file mode 100644
-index 0000000..c48f54b
+index 00000000..c48f54b9
 --- /dev/null
 +++ b/engine/preparation.py
 @@ -0,0 +1,41 @@
@@ -858,7 +858,7 @@ index 0000000..c48f54b
 +        source.prepared = False
 +        source.prepared_copy = None
 diff --git a/engine/priority.py b/engine/priority.py
-index f293880..cacc685 100644
+index a0953ba8..d26453be 100644
 --- a/engine/priority.py
 +++ b/engine/priority.py
 @@ -43,7 +43,13 @@ from engine.abilities import (
@@ -921,7 +921,7 @@ index f293880..cacc685 100644
  
  
  @dataclass(frozen=True)
-@@ -246,10 +273,15 @@ def _may_begin_activating(game: GameState, player: Player, source: Any, ability:
+@@ -257,10 +284,15 @@ def _may_begin_activating(game: GameState, player: Player, source: Any, ability:
      return can_activate is None or bool(can_activate(game, source, player))
  
  
@@ -940,7 +940,7 @@ index f293880..cacc685 100644
      attrs: dict[str, Any] = {"source": instance, "index": index}
      printed = getattr(ability, "printed", None)
 diff --git a/engine/stack.py b/engine/stack.py
-index 322c9c3..048d74e 100644
+index 322c9c31..048d74ec 100644
 --- a/engine/stack.py
 +++ b/engine/stack.py
 @@ -112,6 +112,7 @@ class StackObject:
@@ -1006,7 +1006,7 @@ index 322c9c3..048d74e 100644
      copy_obj.on_resolve = _copy_resolve
      return copy_obj
 diff --git a/engine/state_based_actions.py b/engine/state_based_actions.py
-index ae9a94e..08fe9cb 100644
+index 5bef4266..f7ca617d 100644
 --- a/engine/state_based_actions.py
 +++ b/engine/state_based_actions.py
 @@ -98,7 +98,7 @@ def _sba_creature_zero_toughness(game: GameState) -> bool:
@@ -1058,19 +1058,19 @@ index ae9a94e..08fe9cb 100644
          for obj in bf.get_all():
              if (
 diff --git a/engine/triggers.py b/engine/triggers.py
-index 8c46057..53fdae8 100644
+index 8264b2fe..1c1fd7ca 100644
 --- a/engine/triggers.py
 +++ b/engine/triggers.py
-@@ -288,6 +288,8 @@ class TriggerManager:
+@@ -318,6 +318,8 @@ class TriggerManager:
                          )
                      )
                  game.stack.push(stack_obj)
 +                from engine.ward import trigger_ward
 +                trigger_ward(game, stack_obj)
              elif trigger.capture is not None:
-                 # Untargeted trigger that captures per-fire event state (rule
-                 # 603.3): capture NOW (fire time) and store it on this trigger's
-@@ -491,6 +493,8 @@ def put_reflexive_trigger(
+                 # Untargeted trigger that captured per-fire event state when it
+                 # triggered (rule 603.3), stored on this trigger's own
+@@ -529,6 +531,8 @@ def put_reflexive_trigger(
          g, still_legal_targets(g, source, requirements, stint_checked_targets(g, context, chosen)), controller
      )
      game.stack.push(stack_obj)
@@ -1079,9 +1079,9 @@ index 8c46057..53fdae8 100644
  
  
  def register_enters_trigger(
-diff --git b/engine/ward.py b/engine/ward.py
+diff --git a/engine/ward.py b/engine/ward.py
 new file mode 100644
-index 0000000..f4fa7dd
+index 00000000..f4fa7dd0
 --- /dev/null
 +++ b/engine/ward.py
 @@ -0,0 +1,29 @@
@@ -1115,7 +1115,7 @@ index 0000000..f4fa7dd
 +        game.stack.push(StackObject(source=target, controller=target.controller, on_resolve=resolve,
 +                                     printed=getattr(target, "ward_printed", None)))
 diff --git a/engine/zones.py b/engine/zones.py
-index eb8404c..7379ff4 100644
+index eb8404c8..7379ff4f 100644
 --- a/engine/zones.py
 +++ b/engine/zones.py
 @@ -290,6 +290,11 @@ def move_to_zone(

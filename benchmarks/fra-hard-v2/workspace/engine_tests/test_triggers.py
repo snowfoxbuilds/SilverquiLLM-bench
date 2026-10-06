@@ -4,7 +4,8 @@ Verifies:
 - EventType enum members and values.
 - TriggerRegistration dataclass construction and fields.
 - TriggerManager register/unregister/get_triggers/get_triggers_for_source/clear.
-- TriggerManager.fire_event pushes StackObjects for matching triggers.
+- TriggerManager.fire_event queues matching triggers, and settling
+  (put_pending_on_stack) pushes their StackObjects (rule 117.5, 603.3).
 - fire_event with non-matching event type → nothing pushed.
 - Condition filtering: triggers only fire when condition returns True.
 - Condition filtering: triggers do NOT fire when condition returns False.
@@ -82,6 +83,12 @@ def players() -> list[DeterministicPlayer]:
 def game(players: list[DeterministicPlayer]) -> GameState:
     """Create a GameState with two players."""
     return GameState(players)
+
+def _fire(game: GameState, event: object) -> None:
+    """Fire *event* and settle, putting what it triggered on the stack, as the
+    game does before a player would receive priority (rule 117.5)."""
+    game.trigger_manager.fire_event(game, event)
+    game.trigger_manager.put_pending_on_stack(game)
 
 def _make_trigger(event_type: type, source: object, controller: DeterministicPlayer, *, condition=None, effect=None) -> TriggerRegistration:
     """Convenience to build a TriggerRegistration with sensible defaults."""
@@ -249,7 +256,7 @@ class TestFireEvent:
         """A registered ETB trigger fires when ENTERS_BATTLEFIELD is fired."""
         source = Creature(name='Bear', owner=players[0], controller=players[0])
         game.trigger_manager.register(_make_trigger(EntersBattlefieldTriggeredEvent, source, players[0]))
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         assert not game.stack.is_empty()
         stack_obj = game.stack.peek()
         assert isinstance(stack_obj, StackObject)
@@ -261,7 +268,7 @@ class TestFireEvent:
         calls: list[str] = []
         source = Creature(name='Bear', owner=players[0], controller=players[0])
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=None, effect=lambda g: calls.append('resolved'), source=source, controller=players[0]))
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         stack_obj = game.stack.pop()
         stack_obj.on_resolve(game)
         assert calls == ['resolved']
@@ -270,33 +277,33 @@ class TestFireEvent:
         """Firing a different event type should not push any StackObject."""
         source = Creature(name='Bear', owner=players[0], controller=players[0])
         game.trigger_manager.register(_make_trigger(EntersBattlefieldTriggeredEvent, source, players[0]))
-        game.trigger_manager.fire_event(game, CreatureDiesTriggeredEvent())
+        _fire(game, CreatureDiesTriggeredEvent())
         assert game.stack.is_empty()
 
     def test_no_registered_triggers_pushes_nothing(self, game: GameState) -> None:
         """Firing an event with no registered triggers should leave the stack empty."""
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         assert game.stack.is_empty()
 
     def test_condition_true_fires_trigger(self, game: GameState, players: list[DeterministicPlayer]) -> None:
         """When condition returns True, the trigger should fire."""
         source = Creature(name='Bear', owner=players[0], controller=players[0])
         game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=lambda g, event: True, effect=lambda g: None, source=source, controller=players[0]))
-        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(amount=3))
+        _fire(game, DealsDamageTriggeredEvent(amount=3))
         assert not game.stack.is_empty()
 
     def test_condition_false_does_not_fire_trigger(self, game: GameState, players: list[DeterministicPlayer]) -> None:
         """When condition returns False, the trigger should NOT fire."""
         source = Creature(name='Bear', owner=players[0], controller=players[0])
         game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=lambda g, event: False, effect=lambda g: None, source=source, controller=players[0]))
-        game.trigger_manager.fire_event(game, DealsDamageTriggeredEvent(amount=3))
+        _fire(game, DealsDamageTriggeredEvent(amount=3))
         assert game.stack.is_empty()
 
     def test_condition_none_always_fires(self, game: GameState, players: list[DeterministicPlayer]) -> None:
         """A trigger with condition=None should always fire for matching event."""
         source = Creature(name='Bear', owner=players[0], controller=players[0])
         game.trigger_manager.register(_make_trigger(GainsLifeTriggeredEvent, source, players[0], condition=None))
-        game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent())
+        _fire(game, GainsLifeTriggeredEvent())
         assert not game.stack.is_empty()
 
     def test_condition_receives_data_dict(self, game: GameState, players: list[DeterministicPlayer]) -> None:
@@ -309,7 +316,7 @@ class TestFireEvent:
         source = Creature(name='Bear', owner=players[0], controller=players[0])
         game.trigger_manager.register(TriggerRegistration(event_type=DealsDamageTriggeredEvent, condition=cond, effect=lambda g: None, source=source, controller=players[0]))
         event = DealsDamageTriggeredEvent(amount=5)
-        game.trigger_manager.fire_event(game, event)
+        _fire(game, event)
         assert len(received_args) == 1
         assert received_args[0][0] is game
         assert received_args[0][1] is event
@@ -323,7 +330,7 @@ class TestFireEvent:
             return True
         source = Creature(name='Bear', owner=players[0], controller=players[0])
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=cond, effect=lambda g: None, source=source, controller=players[0]))
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         assert len(received_data) == 1
         assert isinstance(received_data[0], EntersBattlefieldTriggeredEvent)
 
@@ -334,7 +341,7 @@ class TestFireEvent:
             src = Creature(name=f'Bear{i}', owner=players[0], controller=players[0])
             sources.append(src)
             game.trigger_manager.register(_make_trigger(EntersBattlefieldTriggeredEvent, src, players[0]))
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         assert len(game.stack.objects()) == 3
 
     def test_mixed_matching_and_nonmatching_only_matching_pushed(self, game: GameState, players: list[DeterministicPlayer]) -> None:
@@ -343,7 +350,7 @@ class TestFireEvent:
         src_die = Creature(name='DIE', owner=players[0], controller=players[0])
         game.trigger_manager.register(_make_trigger(EntersBattlefieldTriggeredEvent, src_etb, players[0]))
         game.trigger_manager.register(_make_trigger(CreatureDiesTriggeredEvent, src_die, players[0]))
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         assert len(game.stack.objects()) == 1
         assert game.stack.peek().source is src_etb
 
@@ -351,9 +358,9 @@ class TestFireEvent:
         """Condition can inspect data dict to decide whether to fire."""
         source = Creature(name='Lifelinker', owner=players[0], controller=players[0])
         game.trigger_manager.register(TriggerRegistration(event_type=GainsLifeTriggeredEvent, condition=lambda g, event: event.amount >= 5, effect=lambda g: None, source=source, controller=players[0]))
-        game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent(amount=3))
+        _fire(game, GainsLifeTriggeredEvent(amount=3))
         assert game.stack.is_empty()
-        game.trigger_manager.fire_event(game, GainsLifeTriggeredEvent(amount=5))
+        _fire(game, GainsLifeTriggeredEvent(amount=5))
         assert not game.stack.is_empty()
 
 class TestAPNAPOrdering:
@@ -368,7 +375,7 @@ class TestAPNAPOrdering:
         nap_src = Creature(name='N', owner=non_active, controller=non_active)
         game.trigger_manager.register(_make_trigger(BeginningOfUpkeepTriggeredEvent, active_src, active))
         game.trigger_manager.register(_make_trigger(BeginningOfUpkeepTriggeredEvent, nap_src, non_active))
-        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        _fire(game, BeginningOfUpkeepTriggeredEvent())
         stack_objs = game.stack.objects()
         assert len(stack_objs) == 2
         assert stack_objs[0].controller is non_active
@@ -382,7 +389,7 @@ class TestAPNAPOrdering:
         nap_src = Creature(name='N', owner=non_active, controller=non_active)
         game.trigger_manager.register(_make_trigger(EndOfTurnTriggeredEvent, nap_src, non_active))
         game.trigger_manager.register(_make_trigger(EndOfTurnTriggeredEvent, active_src, active))
-        game.trigger_manager.fire_event(game, EndOfTurnTriggeredEvent())
+        _fire(game, EndOfTurnTriggeredEvent())
         stack_objs = game.stack.objects()
         assert len(stack_objs) == 2
         assert stack_objs[0].controller is non_active
@@ -395,7 +402,7 @@ class TestAPNAPOrdering:
         src2 = Creature(name='Second', owner=active, controller=active)
         game.trigger_manager.register(_make_trigger(BeginningOfUpkeepTriggeredEvent, src1, active))
         game.trigger_manager.register(_make_trigger(BeginningOfUpkeepTriggeredEvent, src2, active))
-        game.trigger_manager.fire_event(game, BeginningOfUpkeepTriggeredEvent())
+        _fire(game, BeginningOfUpkeepTriggeredEvent())
         stack_objs = game.stack.objects()
         assert len(stack_objs) == 2
         assert stack_objs[0].source is src2
@@ -413,7 +420,7 @@ class TestAPNAPOrdering:
         game.trigger_manager.register(_make_trigger(EndOfTurnTriggeredEvent, n1, non_active))
         game.trigger_manager.register(_make_trigger(EndOfTurnTriggeredEvent, a2, active))
         game.trigger_manager.register(_make_trigger(EndOfTurnTriggeredEvent, n2, non_active))
-        game.trigger_manager.fire_event(game, EndOfTurnTriggeredEvent())
+        _fire(game, EndOfTurnTriggeredEvent())
         stack_objs = game.stack.objects()
         assert len(stack_objs) == 4
         assert stack_objs[0].controller is non_active
@@ -437,7 +444,7 @@ class TestGameStateIntegration:
         """Triggers registered via game.trigger_manager should fire via game.trigger_manager."""
         source = Creature(name='Bear', owner=players[0], controller=players[0])
         game.trigger_manager.register(_make_trigger(EntersBattlefieldTriggeredEvent, source, players[0]))
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         assert not game.stack.is_empty()
 
 class TestETBIntegration:
@@ -456,7 +463,7 @@ class TestETBIntegration:
         card = ETBCreature(name='Ravenous Chupacabra', owner=p, controller=p)
         game.get_battlefield(p).add(card)
         card.register_triggers(game)
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         assert not game.stack.is_empty()
         stack_obj = game.stack.pop()
         assert stack_obj.source is card
@@ -482,7 +489,7 @@ class TestETBIntegration:
         card = ETBCreature(name='Chup', owner=p, controller=p)
         game.get_battlefield(p).add(card)
         card.register_triggers(game)
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         assert on_battlefield_during_fire == [True]
 
     def test_unregister_on_leave_battlefield(self, game: GameState, players: list[DeterministicPlayer]) -> None:
@@ -500,7 +507,7 @@ class TestETBIntegration:
         game.get_battlefield(p).remove(card)
         game.trigger_manager.unregister(card)
         assert len(game.trigger_manager.get_triggers()) == 0
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         assert game.stack.is_empty()
 
     def test_etb_with_data_parameter(self, game: GameState, players: list[DeterministicPlayer]) -> None:
@@ -510,9 +517,9 @@ class TestETBIntegration:
         bear = Creature(name='Bear', owner=p, controller=p)
         game.trigger_manager.register(TriggerRegistration(event_type=EntersBattlefieldTriggeredEvent, condition=lambda g, event: event.creature is bear, effect=lambda g: fired.append('bear_entered'), source=bear, controller=p))
         other = Creature(name='Elf', owner=p, controller=p)
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(creature=other))
+        _fire(game, EntersBattlefieldTriggeredEvent(creature=other))
         assert game.stack.is_empty()
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent(creature=bear))
+        _fire(game, EntersBattlefieldTriggeredEvent(creature=bear))
         assert not game.stack.is_empty()
 
 class TestAutoTriggerRegistrationViaResolve:
@@ -614,7 +621,7 @@ def _steal(t, employment, creature):
         check_state_based_actions(game)
         assert not game.get_battlefield(p).contains(card)
         assert len(game.trigger_manager.get_triggers_for_source(card)) == 0
-        game.trigger_manager.fire_event(game, EntersBattlefieldTriggeredEvent())
+        _fire(game, EntersBattlefieldTriggeredEvent())
         assert game.stack.is_empty()
 
 

@@ -64,6 +64,7 @@ from engine.queries import (
     priority_pattern,
 )
 from engine.stack import resolve_top_of_stack
+from engine.state_based_actions import resolve_state_based_actions
 from engine.turn import advance, start_step
 from engine.types import ManaType, Phase, Step, Zone
 from test_interface import Branch, ScriptedPlayer
@@ -1418,7 +1419,10 @@ def resolve_stack(game: GameState) -> None:
 def _drain_stack(game: GameState) -> None:
     """Resolve the stack with every player passing (the open window's
     all-pass policy), or object by object when a test left objects on the
-    stack outside any window."""
+    stack outside any window. The game settles first, as it does before a
+    player would receive priority, so abilities that triggered since are on
+    the stack (rule 117.5)."""
+    resolve_state_based_actions(game)
     while not game.stack.is_empty() and not game.is_game_over:
         if game.step_state is StepState.WINDOW:
             advance(game, all_pass=True)
@@ -1604,9 +1608,9 @@ def declare_blockers(
 
     The blocks are declared as a one-entry :func:`act` script: the engine asks
     the defending player which creatures block and then what each blocks, and
-    registers them. When an attacker is multi-blocked the engine raises a
-    damage-order Player Query to the attacker's controller — set a Baseline
-    Intent on that player if so.
+    registers them. When an attacker is multi-blocked the engine asks the
+    attacker's controller how its combat damage is divided — set an Intent
+    on that player that answers the division if so.
 
     With ``illegal=True`` the blocks are ones the rules forbid, scripted as
     :func:`act_illegal`: the engine may decline to offer them or reject them,
@@ -1726,8 +1730,10 @@ def advance_game_to_phase(game, phase, step=None):
     Consumes no script entries: play goes through the engine's step lifecycle
     with every player passing and the forced fast-forward
     (:func:`~engine.turn.advance`). Arriving at the target step performs its
-    turn-based actions and returns with its window open — except cleanup,
-    which as the target is completed (:func:`finish_cleanup`).
+    turn-based actions and returns with its window open and the game settled
+    as it is before a player receives priority, so what the step's start
+    triggered is on the stack (rule 117.5) — except cleanup, which as the
+    target is completed (:func:`finish_cleanup`).
     """
     first = True
     start_turn = game.turn_number
@@ -1739,6 +1745,8 @@ def advance_game_to_phase(game, phase, step=None):
             _finish_cleanup(game)
             return
         if at_target and (first or game.step_state is not StepState.PENDING):
+            if game.step_state is StepState.WINDOW:
+                resolve_state_based_actions(game)
             return
         first = False
         advance(game, all_pass=True, forced=True)

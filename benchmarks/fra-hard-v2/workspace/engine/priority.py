@@ -192,9 +192,11 @@ def _cast_and_play_offers(game: GameState, player: Player):
 class GraveyardCastPermission:
     """"You may cast it from your graveyard this turn", held by one card.
 
-    It lasts for the turn it was granted, belongs to the player it was granted
-    to, and ends when the card leaves the graveyard: a card that returns is a
-    new object (CR 400.7) the permission never named.
+    It belongs to the player it was granted to and ends at the next cleanup
+    step, when "this turn" effects end (CR 514.2) — a grant made in a priority
+    window opened during cleanup lasts until the next cleanup iteration — or
+    when the card leaves the graveyard: a card that returns is a new object
+    (CR 400.7) the permission never named.
     """
 
     player: Any
@@ -207,6 +209,15 @@ def grant_graveyard_cast(game: GameState, player: Player, card: Any) -> None:
     card._castable_from_graveyard = GraveyardCastPermission(
         player, game.turn_number, game.refs.instance_id(card, Zone.GRAVEYARD.value)
     )
+    game.graveyard_cast_grants.append(card)
+
+
+def expire_graveyard_cast_grants(game: GameState) -> None:
+    """End every "cast it from your graveyard this turn" grant (CR 514.2)."""
+    for card in game.graveyard_cast_grants:
+        if isinstance(getattr(card, "_castable_from_graveyard", None), GraveyardCastPermission):
+            del card._castable_from_graveyard
+    game.graveyard_cast_grants.clear()
 
 
 def _graveyard_cast_mode(game: GameState, player: Player, card: Any) -> CastMode | None:

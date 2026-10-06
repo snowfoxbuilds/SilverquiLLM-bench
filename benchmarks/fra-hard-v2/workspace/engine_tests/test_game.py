@@ -829,7 +829,7 @@ class TestRunGame:
         # The trigger's targets are chosen as it goes on the stack, so the
         # declaration's entry answers them; players are its only preferences
         # for a question that offers players.
-        t.act(0, drakuseth, per_query={_offers_players: [player(1), player(0)]},
+        t.act(0, drakuseth, per_query={_offers_players: [player(1), player(0)]}, attacks=True,
               then=[taps(drakuseth), on_stack(DrakusethMawOfFlamesAbility2, 0)])
         t.pass_(0)
         t.pass_(1, then=[off_stack(DrakusethMawOfFlamesAbility2), life(1, 0), life(0, 0), draw_game()])

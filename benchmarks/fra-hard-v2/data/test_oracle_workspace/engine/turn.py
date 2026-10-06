@@ -51,7 +51,7 @@ def cleanup_mechanical(game: GameState) -> None:
     """The deterministic core of the cleanup step (rule 514 steps 2-5).
 
     Expires "until end of turn" continuous effects (and reapplies the
-    rest), clears marked damage, deathtouch/combat flags, and per-turn
+    rest) and "cast it from your graveyard this turn" grants, clears marked damage, deathtouch/combat flags, and per-turn
     trackers (``cards_drawn_this_turn``, ``creature_died_this_turn``),
     resets the combat state, and empties mana pools.
 
@@ -60,6 +60,9 @@ def cleanup_mechanical(game: GameState) -> None:
     mechanical core at GRE turn boundaries (discards there are explicit
     GRE zone moves, and deaths are GRE-observed events).
     """
+    from engine.priority import expire_graveyard_cast_grants
+
+    expire_graveyard_cast_grants(game)
     if hasattr(game, "effect_manager"):
         game.effect_manager.remove_expired(game)
         # Reapply remaining effects so the game state is consistent.
