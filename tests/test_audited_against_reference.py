@@ -185,7 +185,7 @@ _cases += [pytest.param("fra-hard", card, id=f"fra-hard/{card}") for card in _fr
 _cases += [
     pytest.param("fra-hard-v2", card, id=f"fra-hard-v2/{card}")
     for card in load_layout(_REPO_ROOT, "fra-hard-v2", require_cards=True).cards
-    if card.startswith("fra_")
+    if not card.startswith("hob_")
 ]
 
 

@@ -1000,10 +1000,56 @@ class Planeswalker(CardImpl):
         super().__init__(**kwargs)
         self.starting_loyalty: int = starting_loyalty
         self.loyalty: int = starting_loyalty
+        # Whether it has been under its controller's control continuously since
+        # their most recent turn began, should an effect make it a creature (rule 302.6).
+        self.summoning_sick: bool = True
 
     def reset_for_zone_change(self) -> None:
         self.loyalty = self.starting_loyalty
+        self.summoning_sick = True
+        for name in ("damage_marked", "dealt_deathtouch_damage", "plus_one_counters", "minus_one_counters",
+                     "is_attacking", "is_blocking"):
+            self.__dict__.pop(name, None)
         super().reset_for_zone_change()
+
+    def _reset_characteristics(self) -> None:
+        """A planeswalker an effect made a creature (Sarkhan the Masterless) is
+        one only while that effect reapplies: its power and toughness go away
+        with the effect, its creature types and colors return to the printed
+        ones."""
+        super()._reset_characteristics()
+        for name in ("base_power", "base_toughness", "modified_power", "modified_toughness"):
+            self.__dict__.pop(name, None)
+        if "_subtypes_before_effects" in self.__dict__:
+            self.subtypes = self.__dict__.pop("_subtypes_before_effects")
+        if "_colors_before_effects" in self.__dict__:
+            self.colors = self.__dict__.pop("_colors_before_effects")
+
+    def become_creature(self, *creature_types: str) -> None:
+        """Layer 4: it is also a creature of ``creature_types``, with the 0/0
+        base a type change gives a permanent that has no printed power and
+        toughness, until effects in layer 7 set them."""
+        self.__dict__.setdefault("_subtypes_before_effects", set(self.subtypes))
+        self.card_types = self.card_types | {CardType.CREATURE}
+        self.subtypes = set(self.subtypes) | set(creature_types)
+        self.base_power = self.base_toughness = 0
+        self.modified_power = self.modified_toughness = 0
+        for name in ("plus_one_counters", "minus_one_counters", "damage_marked"):
+            self.__dict__.setdefault(name, 0)
+        self.__dict__.setdefault("dealt_deathtouch_damage", False)
+
+    def set_colors(self, colors: set[Any]) -> None:
+        """Layer 5: its colors become ``colors``."""
+        self.__dict__.setdefault("_colors_before_effects", getattr(self, "colors", None))
+        self.colors = set(colors)
+
+    @property
+    def power(self) -> int:
+        return self.modified_power + self.plus_one_counters - self.minus_one_counters
+
+    @property
+    def toughness(self) -> int:
+        return self.modified_toughness + self.plus_one_counters - self.minus_one_counters
 
     def get_loyalty_abilities(self) -> list[LoyaltyAbility]:
         """Return the planeswalker's loyalty abilities."""

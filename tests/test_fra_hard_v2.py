@@ -19,7 +19,7 @@ POOL = (
     ("war", "143"), ("fut", "78"),
 )
 # The HOB targets' oracle implementations and suites are not ported yet (#157).
-PORTED_TARGETS = tuple((code, number) for code, number in POOL if code == "fra")
+PORTED_TARGETS = tuple((code, number) for code, number in POOL if code != "hob")
 
 
 def test_pool_keeps_each_targets_set():

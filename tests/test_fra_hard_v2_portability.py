@@ -4,7 +4,7 @@ ADR-017 lets an engine present a multi-face or prepared card as one option or
 as its card and then a face question, and lets it offer an action the rules
 forbid as long as choosing it is rejected. Each variant below rewraps the Test
 Oracle Workspace's Priority Query that way — card behavior unchanged — and the
-FRA suites must still pass; a faulty variant that lets an illegal action take
+suites must still pass; a faulty variant that lets an illegal action take
 effect must make them fail.
 """
 
@@ -264,6 +264,11 @@ def consume_preparation(game, spell):
         _preparation.prepare(game, source, type(spell))
 '''
 
+# Faulty: Slaughter Pact may target and destroy a black creature.
+PACT_TARGETS_ANY_CREATURE = '''
+_nonblack_creature = lambda obj: CardType.CREATURE in getattr(obj, "card_types", ())
+'''
+
 # Faulty: a planeswalker's loyalty abilities may be activated any number of times a turn.
 LOYALTY_EVERY_TIME = '''
 import engine.abilities as _abilities
@@ -296,10 +301,10 @@ def run_suite(card: str, suffix: str) -> tuple[int, int, str]:
     return int(passed.group(1)) if passed else 0, int(failed.group(1)) if failed else 0, output
 
 
-FRA_TARGETS = ("fra_1", "fra_49", "fra_64", "fra_159", "fra_179")
+TARGETS = ("fra_1", "fra_49", "fra_64", "fra_159", "fra_179", "war_143", "fut_78")
 
 
-@pytest.mark.parametrize("card", FRA_TARGETS)
+@pytest.mark.parametrize("card", TARGETS)
 @pytest.mark.parametrize("variant", ["offer_then_reject", "card_then_face", "card_then_face_all_sources",
                                      "exiled_source_first",
                                      "consumed_face_first"])
@@ -321,6 +326,8 @@ def test_hall_suite_accepts_a_copied_halls_removed_ability_rejected() -> None:
     ("fra_1", OFFER_THEN_REJECT + CASTS_ANYTHING_IN_EXILE),
     ("fra_49", PREPARED_AFTER_CASTING),
     ("fra_64", LOYALTY_EVERY_TIME),
+    ("war_143", LOYALTY_EVERY_TIME),
+    ("fut_78", OFFER_THEN_REJECT + PACT_TARGETS_ANY_CREATURE),
 ])
 def test_suite_catches_an_illegal_action_taking_effect(card: str, suffix: str) -> None:
     _passed, failed, output = run_suite(card, suffix)
