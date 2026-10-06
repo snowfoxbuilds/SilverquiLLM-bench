@@ -1,5 +1,5 @@
 diff --git a/engine/card.py b/engine/card.py
-index 3a01f65..e734d1c 100644
+index 2e6c311..de67c83 100644
 --- a/engine/card.py
 +++ b/engine/card.py
 @@ -380,13 +380,27 @@ class CardImpl(GameObject):
@@ -36,7 +36,7 @@ index 3a01f65..e734d1c 100644
      def cost_reduction(self, game: GameState, targets: list[Any] | None = None) -> int:
          """Return this card's *self* generic-mana reduction for casting it.
 diff --git a/engine/casting.py b/engine/casting.py
-index 9cc7cc2..d68d747 100644
+index 34e0aed..bebfdf9 100644
 --- a/engine/casting.py
 +++ b/engine/casting.py
 @@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
@@ -129,7 +129,7 @@ index 9cc7cc2..d68d747 100644
      stack_zone.add(card)
  
      # Clear any stale colors_spent from a prior cast before new payment.
-@@ -829,7 +834,7 @@ def _cast_spell(
+@@ -872,7 +877,7 @@ def _cast_spell(
                  filter_fn, target, chosen_targets
              ):
                  stack_zone.remove(card)
@@ -138,7 +138,7 @@ index 9cc7cc2..d68d747 100644
                  raise CastingError(
                      f"Cannot cast {card.name!r} — chosen target does not "
                      f"satisfy filter: {getattr(spec, 'description', '')}"
-@@ -844,7 +849,7 @@ def _cast_spell(
+@@ -887,7 +892,7 @@ def _cast_spell(
          if has_protection_from(target, card):
              # Rollback: move card from stack zone back to hand
              stack_zone.remove(card)
@@ -147,7 +147,7 @@ index 9cc7cc2..d68d747 100644
              raise CastingError(
                  f"Cannot cast {card.name!r} — target has protection from this spell"
              )
-@@ -902,7 +907,7 @@ def _cast_spell(
+@@ -945,7 +950,7 @@ def _cast_spell(
      if not payable or player.life < life_amount:
          # Rollback: move card from stack zone back to hand
          stack_zone.remove(card)
@@ -156,7 +156,7 @@ index 9cc7cc2..d68d747 100644
          for trigger in deferred:
              game.stack.push(trigger)
          raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
-@@ -1069,8 +1074,7 @@ def cast_spell_free(
+@@ -1116,8 +1121,7 @@ def cast_spell_free(
  
      card.cast_from_zone = from_zone
      card.x_value = 0
@@ -166,7 +166,7 @@ index 9cc7cc2..d68d747 100644
      if mana_value_limit is not None and card.mana_cost.cmc > mana_value_limit:
          raise CastingError('Spell exceeds the remaining mana-value allowance')
      # Ensure controller is set
-@@ -1084,23 +1088,23 @@ def cast_spell_free(
+@@ -1131,23 +1135,23 @@ def cast_spell_free(
  
      # 2. Locate card in source zone
      source_zone_container = player.zones[from_zone]
@@ -194,7 +194,7 @@ index 9cc7cc2..d68d747 100644
      stack_zone.add(card)
      _announce_x(game, player, card, free=True)
  
-@@ -1138,7 +1142,7 @@ def cast_spell_free(
+@@ -1200,7 +1204,7 @@ def cast_spell_free(
      except Exception as exc:
          # Rollback: move card from stack zone back to source zone
          stack_zone.remove(card)
@@ -203,7 +203,7 @@ index 9cc7cc2..d68d747 100644
          raise CastingError(str(exc)) from exc
  
      # 3b. Capture the casting controller + chosen target zone-stints NOW —
-diff --git b/engine/faces.py b/engine/faces.py
+diff --git a/engine/faces.py b/engine/faces.py
 new file mode 100644
 index 0000000..eb3e317
 --- /dev/null
@@ -303,7 +303,7 @@ index eb07b67..b764d59 100644
      def ref_for(
          self,
 diff --git a/engine/stack.py b/engine/stack.py
-index 5003907..361c61d 100644
+index 2c5c4ec..f9aa5b4 100644
 --- a/engine/stack.py
 +++ b/engine/stack.py
 @@ -414,8 +414,11 @@ def move_spell_off_stack(
@@ -336,5 +336,5 @@ index 5003907..361c61d 100644
 +            card.whole_card = None
 +            card = whole
          move_to_zone(game, card, Zone.STACK, destination)
-         if adventure and destination == Zone.EXILE:
-             from engine.casting import grant_cast_permission
+         if getattr(card, 'is_card_copy', False) and destination == Zone.BATTLEFIELD:
+             # A copy of a permanent spell becomes a token as it resolves (rule 608.3f).
