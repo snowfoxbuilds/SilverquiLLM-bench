@@ -16,6 +16,8 @@ that call ``_do_cleanup_step``.
 from __future__ import annotations
 
 from cards.fdn.fdn_10.card_impl import DivineResilience
+from cards.fdn.fdn_29.card_impl import ArcaneEpiphany
+from cards.fdn.fdn_40.card_impl import HighFaeTrickster
 from cards.fdn.fdn_60.card_impl import GutlessPlunderer
 from cards.fdn.fdn_71.card_impl import Stab
 from cards.fdn.fdn_72.card_impl import TinybonesBaubleBurglar, TinybonesBaubleBurglarAbility1
@@ -28,16 +30,18 @@ from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_223.card_impl import GiantGrowth
 from cards.fdn.fdn_227.card_impl import LlanowarElves
 from cards.fdn.fdn_272.card_impl import Plains
+from cards.fdn.fdn_274.card_impl import Island
 from cards.fdn.fdn_278.card_impl import Mountain
 from cards.fdn.fdn_280.card_impl import Forest
 from cards.fdn.spg_74.card_impl import Condemn
+from cards.fdn.spg_82.card_impl import TemporalManipulation
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, player
 from test_utils import DeterministicPlayer
 
 from engine.card import CardImpl, Creature
 from engine.game_state import GameState
 from engine.turn import MAX_HAND_SIZE
-from silverquillm.table import Table, cleanup_trigger, life, moves, off_stack, taps
+from silverquillm.table import Table, cleanup_trigger, extra_turn, life, moves, off_stack, taps
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -659,6 +663,73 @@ class TestReCleanupLoop:
         t.pass_(1)
         t.pass_(0, then=[moves(second, Zone.GRAVEYARD)], note="the Scourge survives: its damage was removed")
         t.run()
+
+    def test_a_trigger_in_the_second_cleanup_step_opens_a_third(self) -> None:
+        """In the first cleanup step's window player 0 shocks player 1 and
+        draws three with Arcane Epiphany, so the second cleanup step discards
+        again and Tinybones triggers: players receive priority in that second
+        cleanup step, and only the third, with nothing to do, ends the turn."""
+        hand = [card(Plains) for _ in range(6)]
+        burst, epiphany = card(BurstLightning), card(ArcaneEpiphany)
+        mountain, islands = card(Mountain), [card(Island) for _ in range(5)]
+        drawn = [card(Plains) for _ in range(3)]
+        game = create_game(
+            Side(hand=[*hand, burst, epiphany], battlefield=[mountain, *islands], library=drawn),
+            Side(battlefield=[card(TinybonesBaubleBurglar)], library=[card(Plains)]),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_(0, choices=[hand[0]])
+        t.pass_(1, then=[moves(hand[0], Zone.GRAVEYARD), cleanup_trigger(TinybonesBaubleBurglarAbility1, 1)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(TinybonesBaubleBurglarAbility1), moves(hand[0], Zone.EXILE)])
+        _cast(t, 0, mountain, burst, player(1))
+        t.pass_(0)
+        t.pass_(1, then=[moves(burst, Zone.GRAVEYARD), life(1, 18)])
+        for island in islands:
+            t.act(0, island, then=[taps(island)])
+        t.act(0, epiphany, then=[moves(epiphany, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(epiphany, Zone.GRAVEYARD), *[moves(c, Zone.HAND) for c in drawn]])
+        t.pass_(0, choices=[hand[1]])
+        t.pass_(
+            1,
+            then=[moves(hand[1], Zone.GRAVEYARD), cleanup_trigger(TinybonesBaubleBurglarAbility1, 1)],
+            note="eight cards: another cleanup step discards one, and Tinybones triggers",
+        )
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(TinybonesBaubleBurglarAbility1), moves(hand[1], Zone.EXILE)])
+        t.pass_(0)
+        t.pass_(1, note="a third cleanup step has nothing to do: player 1's turn")
+        final = t.run()
+        assert final.step is Step.UPKEEP and final.active == 1
+
+    def test_an_extra_turn_taken_in_a_cleanup_window_follows_once(self) -> None:
+        """Player 0 casts Temporal Manipulation in the cleanup step's window,
+        through High Fae Trickster: the next cleanup step ends the turn, and
+        player 0's extra turn follows, with its Islands untapped."""
+        hand = [card(Plains) for _ in range(7)]
+        manipulation = card(TemporalManipulation)
+        islands = [card(Island) for _ in range(5)]
+        game = create_game(
+            Side(hand=[*hand, manipulation], battlefield=[card(HighFaeTrickster), *islands], library=[card(Plains)]),
+            Side(battlefield=[card(TinybonesBaubleBurglar)], library=[card(Plains)]),
+            start=(Step.END, 0),
+        )
+        t = Table(game)
+        t.pass_(0, choices=[hand[0]])
+        t.pass_(1, then=[moves(hand[0], Zone.GRAVEYARD), cleanup_trigger(TinybonesBaubleBurglarAbility1, 1)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(TinybonesBaubleBurglarAbility1), moves(hand[0], Zone.EXILE)])
+        for island in islands:
+            t.act(0, island, then=[taps(island)])
+        t.act(0, manipulation, then=[moves(manipulation, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(manipulation, Zone.GRAVEYARD), extra_turn(0)])
+        t.pass_(0)
+        t.pass_(1, note="another cleanup step has nothing to do: player 0's extra turn")
+        final = t.run()
+        assert final.step is Step.UPKEEP and final.active == 0
 
     def test_no_recleanup_when_no_sba_and_empty_stack(self) -> None:
         """When cleanup performs no state-based action and nothing triggers,

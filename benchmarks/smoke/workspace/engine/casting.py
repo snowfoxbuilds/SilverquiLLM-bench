@@ -161,15 +161,21 @@ def _candidate_decision(game: GameState, candidate: Any, zone: Any) -> Any:
 
 def _source_decision(game: GameState, card: Any) -> Any:
     """The OBJECT decision for the spell/ability raising a query (routing
-    source): a permanent whose ability asks is named as it is on the
-    battlefield, so naming it never starts a new stint for it; anything else
-    is named as a spell on the stack."""
-    from engine.stack import battlefield_stint_id
+    source), named in the zone the source actually occupies.
+
+    Naming an object in any other zone mints it a fresh stint (see
+    ``GameRefsRegistry.instance_id``), so a departed permanent whose waiting
+    trigger asks — already in a graveyard, exile or a hand — must be named
+    there, or every target captured on it beforehand stops matching. Only a
+    source in no player's zone (a spell or copy on the stack) is named on the
+    stack.
+    """
+    from engine.stack import object_current_zone
 
     controller = getattr(card, "controller", None)
     return game.refs.object_decision(
         card,
-        zone="battlefield" if battlefield_stint_id(game, card) is not None else "stack",
+        zone=object_current_zone(game, card) or Zone.STACK.value,
         controller_seat=_seat_of(game, controller) if controller is not None else None,
     )
 

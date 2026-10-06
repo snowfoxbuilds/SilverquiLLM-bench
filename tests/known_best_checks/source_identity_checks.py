@@ -4,7 +4,8 @@ source that has left the battlefield and returned since is a new object
 (rule 400.7), so it counts as another object to an occurrence from before,
 while an occurrence of the returned card still excludes it. And a chosen mode
 whose target cannot be chosen is rejected rather than replaced by another
-mode (rule 700.2a, ADR-017).
+mode (rule 700.2a, ADR-017). Asking a departed source's question names the
+source where it is, so it never gains a stint it did not earn.
 
 Run inside ``known_best/workspace`` by
 ``tests/test_known_best_gameplay_regressions.py``.
@@ -23,6 +24,8 @@ from cards.fdn.fdn_122.card_impl import (
     KykarZephyrAwakenerAbility4,
 )
 from cards.fdn.fdn_218.card_impl import DwynensElite
+from cards.fdn.fdn_75.card_impl import VampireSoulcaller, VampireSoulcallerAbility3
+from cards.fdn.fdn_98.card_impl import AmbushWolf, AmbushWolfAbility2
 from cards.fdn.fdn_99.card_impl import (
     ApothecaryStomper,
     ApothecaryStomperAbility2,
@@ -30,6 +33,7 @@ from cards.fdn.fdn_99.card_impl import (
     ApothecaryStomperAbility4,
 )
 from engine.card import Creature, Instant
+from engine.casting import _source_decision
 from engine.decisions import Decision, GameRef, InvalidPlayerChoiceError, PostconditionError
 from engine.events import SpellCastTriggeredEvent
 from engine.protection import ProtectionAbility
@@ -357,3 +361,125 @@ def test_two_occurrences_of_one_stomper_keep_their_own_modes():
     assert [o.printed for o in game.stack.objects()] == [ApothecaryStomperAbility2] * 2
     _resolve_all(game)
     assert _counters(bear) == 2 and _life(game) == 24
+
+
+# ---- A departed source's question names it where it is ----------------------
+#
+# A waiting enters trigger asks its target question with its source as the
+# query's source. A source already in a graveyard, exile or a hand is named
+# there, so asking never gives it a new stint, and a target captured on it by
+# another trigger still matches.
+
+SOULCALLER_FIRST = Decision.ability(printed=VampireSoulcallerAbility3)
+
+
+def _asked_by(name):
+    return lambda query: any(("name", name) in d.attrs for d in query.source or ())
+
+
+def _in_graveyard(game, card):
+    return Decision.obj(instance=game.refs.instance_id(card, Zone.GRAVEYARD.value))
+
+
+def _stint(game, card, zone):
+    return game.refs.instance_id(card, zone.value)
+
+
+def _zone_of(game, card):
+    owner = game.players[0]
+    return next(z for z in (Zone.HAND, Zone.GRAVEYARD, Zone.EXILE, Zone.BATTLEFIELD)
+                if owner.zones[z].contains(card))
+
+
+def _both_die_before_their_triggers(game, soulcaller, wolf):
+    for card in (soulcaller, wolf):
+        _enter(game, card)
+    for card in (soulcaller, wolf):
+        move_to_zone(game, card, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+
+
+def test_a_second_triggers_question_does_not_restint_the_first_triggers_target():
+    soulcaller, wolf = VampireSoulcaller(), AmbushWolf()
+    game = _table(hand=[soulcaller, wolf])
+    _both_die_before_their_triggers(game, soulcaller, wolf)
+    wolf_stint = _stint(game, wolf, Zone.GRAVEYARD)
+    game.players[0].set_baseline(Intent(pattern=GameRef(), branches=(branch(
+        SOULCALLER_FIRST,
+        per_query={
+            _asked_by("Vampire Soulcaller"): [_in_graveyard(game, wolf)],
+            _asked_by("Ambush Wolf"): [_in_graveyard(game, soulcaller)],
+        },
+    ),)))
+    _settle(game)
+    assert _stint(game, wolf, Zone.GRAVEYARD) == wolf_stint
+    _resolve_all(game)
+    # Wolf's trigger, placed last, exiles Soulcaller; Soulcaller's still
+    # returns Wolf, which never left the graveyard.
+    assert _zone_of(game, soulcaller) is Zone.EXILE
+    assert _zone_of(game, wolf) is Zone.HAND
+
+
+@pytest.mark.parametrize("zone", [Zone.GRAVEYARD, Zone.EXILE, Zone.HAND, Zone.BATTLEFIELD])
+def test_a_source_asking_its_question_keeps_its_stint(zone):
+    wolf, bear = AmbushWolf(), _bear()
+    game = _table(hand=[wolf], graveyard=[bear])
+    _enter(game, wolf)
+    if zone is not Zone.BATTLEFIELD:
+        move_to_zone(game, wolf, Zone.BATTLEFIELD, zone)
+    before = _stint(game, wolf, zone)
+    game.players[0].set_baseline(
+        Intent(pattern=GameRef(), branches=(branch(_in_graveyard(game, bear)),))
+    )
+    _settle(game)
+    (obj,) = game.stack.objects()
+    assert obj.targets == [bear]
+    assert _stint(game, wolf, zone) == before
+
+
+def test_a_spell_in_no_zone_is_named_on_the_stack():
+    spell = Instant(name="Shock")
+    game = _table()
+    assert ("zone", "stack") in _source_decision(game, spell).attrs
+
+
+def test_a_target_that_really_left_and_returned_is_no_longer_the_target():
+    soulcaller, wolf = VampireSoulcaller(), AmbushWolf()
+    game = _table(hand=[soulcaller], graveyard=[wolf])
+    _enter(game, soulcaller)
+    game.players[0].set_baseline(
+        Intent(pattern=GameRef(), branches=(branch(_in_graveyard(game, wolf)),))
+    )
+    _settle(game)
+    move_to_zone(game, wolf, Zone.GRAVEYARD, Zone.EXILE)
+    move_to_zone(game, wolf, Zone.EXILE, Zone.GRAVEYARD)
+    _resolve_all(game)
+    assert _zone_of(game, wolf) is Zone.GRAVEYARD
+
+
+def test_a_rejected_placement_and_its_retry_leave_a_captured_target_matching():
+    # Soulcaller (protected from green, so Stomper's counters mode has no
+    # target) targets the departed Wolf's card; Wolf then asks its own question
+    # from the graveyard, and Stomper's placement is rejected once and asked
+    # again.
+    soulcaller, wolf, stomper, bear = VampireSoulcaller(), AmbushWolf(), ApothecaryStomper(), _bear()
+    soulcaller.protections = [ProtectionAbility(quality=Color.GREEN)]
+    game = _table(hand=[soulcaller, wolf, stomper], graveyard=[bear])
+    for card in (soulcaller, wolf, stomper):
+        _enter(game, card)
+    for card in (wolf, stomper):
+        move_to_zone(game, card, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+    order = [SOULCALLER_FIRST, Decision.ability(printed=AmbushWolfAbility2),
+             Decision.ability(printed=ApothecaryStomperAbility2)]
+    targets = {
+        _asked_by("Vampire Soulcaller"): [_in_graveyard(game, wolf)],
+        _asked_by("Ambush Wolf"): [_in_graveyard(game, bear)],
+    }
+    game.players[0].set_baseline(Intent(pattern=GameRef(), branches=(
+        branch(*order, COUNTERS, per_query=targets),
+        branch(*order, LIFE, per_query=targets),
+    )))
+    _settle(game)
+    _resolve_all(game)
+    assert _life(game) == 24
+    assert _zone_of(game, bear) is Zone.EXILE
+    assert _zone_of(game, wolf) is Zone.HAND

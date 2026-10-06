@@ -390,9 +390,16 @@ class Table:
     def _end_step(self) -> None:
         """The step ends: the game moves through the steps that follow, doing
         their turn-based actions, to the next one in which players receive
-        priority (CR 500.2, 508.8)."""
+        priority (CR 500.2, 508.8).
+
+        A cleanup step in which players received priority is followed by
+        another cleanup step of the same turn (CR 514.3a): it takes that
+        iteration's queued cleanup triggers, and the turn ends only after a
+        cleanup step in which nothing triggered."""
+        repeat_cleanup = self._step == "CLEANUP"
         while True:
-            index = _TURN.index(self._step) + 1
+            index = _TURN.index(self._step) + (0 if repeat_cleanup else 1)
+            repeat_cleanup = False
             if index == len(_TURN):
                 self._turn += 1
                 if self._extra_turns:
