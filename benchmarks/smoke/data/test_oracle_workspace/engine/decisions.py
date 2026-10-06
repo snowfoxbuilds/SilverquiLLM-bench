@@ -61,8 +61,10 @@ class InvalidPlayerChoiceError(Exception):
 
     Offering an illegal option is allowed; letting it take effect is not. An
     engine that accepts an illegal choice raises this and rolls the game back to
-    the beginning of the Priority Query in which the rejected action began (see
-    ADR-017).
+    the boundary of the rejected attempt: the beginning of the Priority Query in
+    which an ordinary priority action began, the beginning of a combat
+    declaration, or, for a cast or choice made while an object resolves, the
+    point just before it (see ADR-017).
     """
 
 
