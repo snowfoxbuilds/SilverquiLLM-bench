@@ -329,3 +329,43 @@ def test_without_bilbo_the_same_mana_does_not_cast_it():
     t = _gleam_then_glamdring(False, {ManaType.BLUE: 1, ManaType.COLORLESS: 4})
     t.act_illegal(0, GlamdringFoehammer, t.glamdring, note="{2} is not paid from {1}")
     t.run()
+
+
+def test_the_adventure_is_not_cast_again_from_its_own_exile_even_with_the_discount():
+    """With Bilbo's discount, {2}{U} would pay Gleam of Death from exile, but
+    only the Equipment may be cast from the exile its Adventure left it in."""
+    t = _gleam_then_glamdring(True, {ManaType.BLUE: 2, ManaType.COLORLESS: 5})
+    t.act_illegal(0, GleamOfDeath, note="only the Equipment may be cast from this exile")
+    t.act(0, GlamdringFoehammer, t.glamdring, then=[moves(t.glamdring, Zone.STACK)])
+    _resolve(t, then=[moves(t.glamdring, Zone.BATTLEFIELD)])
+    t.run()
+
+
+def test_a_countered_adventure_cast_this_way_is_exiled_without_a_permission():
+    """Bilbo casts Glamdring from the graveyard as Gleam of Death; countered, it
+    is exiled by Bilbo, not by its Adventure resolving, so Glamdring may not be
+    cast from there (CR 715.4)."""
+    glamdring, offer = card(GlamdringFoehammer), card(AnOfferYouCantRefuse)
+    lands, island, spare = [card(Island), card(Plains), card(Plains)], card(Island), [card(Plains), card(Plains)]
+    game, bilbo = _game(graveyard=[glamdring], lands=[*lands, *spare],
+                        seat1=Side(battlefield=[island], hand=[offer], library=_plains()))
+    t = _table(game, bilbo)
+    _attack(t, bilbo)
+    _tap(t, lands)
+    _resolve(t, choices=[GleamOfDeath, glamdring],
+             then=[off_stack(TRIGGER), moves(glamdring, Zone.STACK, face=GleamOfDeath)])
+    t.pass_(0)
+    t.act(1, island, then=[taps(island)])
+    t.act(1, offer, choices=[GleamOfDeath], then=[moves(offer, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(offer, Zone.GRAVEYARD), moves(glamdring, Zone.EXILE), appears(0), appears(0)],
+            note="countered, Gleam of Death is exiled by Bilbo; nothing is milled")
+    t.pass_(0)
+    t.pass_(1)
+    t.pass_(1)
+    t.pass_(0)
+    t.pass_(1, then=[life(1, 18)])
+    t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
+    _tap(t, spare)
+    t.act_illegal(0, GlamdringFoehammer, note="the card was not exiled by its Adventure resolving")
+    t.run()
