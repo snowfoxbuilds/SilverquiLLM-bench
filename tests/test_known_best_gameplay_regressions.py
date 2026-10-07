@@ -39,6 +39,7 @@ CHECKS = Path(__file__).resolve().parent / "known_best_checks"
         "additional_cost_portability_checks.py",
         "reversed_option_checks.py",
         "optional_choice_presentation_checks.py",
+        "mana_payment_presentation_checks.py",
         "made_object_label_checks.py",
         "control_effect_checks.py",
     ],

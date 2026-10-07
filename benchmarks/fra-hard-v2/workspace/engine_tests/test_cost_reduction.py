@@ -52,16 +52,19 @@ class ReducedCostCreature(Creature):
 
 
 def _short_by_one_then_paid(spell, battlefield, green: int, *, note: str) -> None:
-    """With ``green`` mana in the pool the spell cannot be cast; one more
-    green, from a Forest, pays for it, and it resolves."""
+    """With ``green`` mana in the pool and no other source the spell cannot be
+    cast; one more green, from a Forest played from hand, pays for it, and it
+    resolves. The Forest starts in hand so it cannot pay during the illegal
+    attempt (CR 601.2g)."""
     forest = card(Forest)
     game = create_game(
-        Side(hand=[spell], battlefield=[forest, *battlefield], mana={ManaType.GREEN: green}),
+        Side(hand=[spell, forest], battlefield=list(battlefield), mana={ManaType.GREEN: green}),
         Side(),
         start=MAIN,
     )
     t = Table(game)
     t.act_illegal(0, spell, note=f"{green} mana is one short: {note}")
+    t.act(0, forest, then=[moves(forest, Zone.BATTLEFIELD)])
     t.act(0, forest, then=[taps(forest)])
     t.act(0, spell, then=[moves(spell, Zone.STACK)])
     t.pass_(0)
@@ -82,12 +85,13 @@ class TestCostReductionDefault:
     def test_instant_default_cost_reduction_is_zero(self):
         think, island, drawn = card(ThinkTwice), card(Island), card(Plains)
         game = create_game(
-            Side(hand=[think], battlefield=[island], library=[drawn], mana={ManaType.BLUE: 1}),
+            Side(hand=[think, island], library=[drawn], mana={ManaType.BLUE: 1}),
             Side(),
             start=MAIN,
         )
         t = Table(game)
         t.act_illegal(0, think, note="Think Twice costs its full {1}{U}")
+        t.act(0, island, then=[moves(island, Zone.BATTLEFIELD)])
         t.act(0, island, then=[taps(island)])
         t.act(0, think, then=[moves(think, Zone.STACK)])
         t.pass_(0)

@@ -327,6 +327,13 @@ _planeswalker.query_yes_no = lambda game, player, prompt, *, source_card=None: (
 # as an engine may that makes Uldaros's copies of several cards at once in its
 # own order, or numbers copies it never casts. Tests label what is made, so
 # the order an engine numbers it in never shows.
+# Before a mana cost is paid the engine asks whether to activate a mana
+# ability (CR 601.2g); GREEDY instead taps every source on offer, so an action a
+# suite calls illegal for want of mana must still be rejected.
+_MANA_DURING_PAYMENT_PLUGIN = (ROOT / "tests/known_best_checks/mana_during_payment.py").read_text()
+MANA_DURING_PAYMENT = _MANA_DURING_PAYMENT_PLUGIN + "\ninstall()\n"
+MANA_TAPPED_GREEDILY = _MANA_DURING_PAYMENT_PLUGIN + "\nGREEDY = True\ninstall()\n"
+
 RENUMBERED_MADE = '''
 import engine.game_state as _game_state
 
@@ -871,7 +878,7 @@ TARGETS = (
                                      "exiled_abilities_first", "costs_all_offered", "costs_reversed",
                                      "costs_all_offered_reversed", "every_question_reversed",
                                      "rejects_casts_directly", "surveil_as_card_choice",
-                                     "renumbered_made"])
+                                     "renumbered_made", "mana_during_payment"])
 def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None:
     suffix = {"offer_then_reject": OFFER_THEN_REJECT, "card_then_face": CARD_THEN_FACE,
               "card_then_face_all_sources": CARD_THEN_FACE_ALL_SOURCES,
@@ -883,7 +890,8 @@ def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None
               "every_question_reversed": EVERY_QUESTION_REVERSED,
               "rejects_casts_directly": REJECTS_CASTS_DIRECTLY,
               "surveil_as_card_choice": SURVEIL_AS_CARD_CHOICE,
-              "renumbered_made": RENUMBERED_MADE}[variant]
+              "renumbered_made": RENUMBERED_MADE,
+              "mana_during_payment": MANA_DURING_PAYMENT}[variant]
     passed, failed, output = run_suite(card, suffix)
     assert passed and not failed, output[-4000:]
 
@@ -891,6 +899,15 @@ def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None
 def test_emrakul_suite_accepts_an_unpayable_ward_rejected() -> None:
     passed, failed, output = run_suite("fra_1", WARD_REJECTED)
     assert passed and not failed, output[-4000:]
+
+
+@pytest.mark.parametrize("card", TARGETS)
+def test_no_action_a_suite_calls_illegal_could_be_paid_by_tapping_a_source(card: str) -> None:
+    """With every mana source on offer tapped while a cost is paid, an action
+    a suite calls illegal is still rejected: no position leaves a source that
+    could pay for it."""
+    _, _, output = run_suite(card, MANA_TAPPED_GREEDILY)
+    assert "took effect" not in output, output[-4000:]
 
 
 def test_hall_suite_accepts_a_copied_halls_removed_ability_rejected() -> None:

@@ -933,12 +933,14 @@ class TestCostSystem:
     def test_alternative_cost_with_multiple_reducers_clamps_generic_only(self):
         """Archmage of Runes and Mocking Sprite take {2} off, but the
         alternative {B} has no generic to reduce: the Edict cannot be cast
-        without black mana, and is cast once a Swamp is tapped."""
+        without black mana, and is cast once a Swamp, played from hand, is
+        tapped."""
         edict, swamp, drawn = card(BlasphemousEdict), card(Swamp), card(Plains)
         mine = [card(ArchmageOfRunes), card(MockingSprite), *_creatures(5)]
         theirs = _creatures(6)
-        t = _table(Side(hand=[edict], battlefield=[*mine, swamp], library=[drawn]), Side(battlefield=theirs))
+        t = _table(Side(hand=[edict, swamp], battlefield=mine, library=[drawn]), Side(battlefield=theirs))
         t.act_illegal(0, edict, note="the reduction never pays the {B}")
+        t.act(0, swamp, then=[moves(swamp, Zone.BATTLEFIELD)])
         t.act(0, swamp, then=[taps(swamp)])
         t.act(0, edict, then=[moves(edict, Zone.STACK), on_stack(ArchmageOfRunesAbility2, 0)])
         _resolve(t, off_stack(ArchmageOfRunesAbility2), moves(drawn, Zone.HAND))
@@ -947,17 +949,20 @@ class TestCostSystem:
 
     def test_reduction_applies_to_selected_normal_cost_pip_intact(self):
         """Archmage of Runes makes the Edict's normal cost {2}{B}{B}: one black
-        and three white mana cannot pay it, two black and two white can."""
+        and three white mana cannot pay it, and a second black, from a Swamp
+        played from hand, can."""
         edict, drawn = card(BlasphemousEdict), card(Plains)
-        swamps, plains = [card(Swamp) for _ in range(3)], [card(Plains) for _ in range(5)]
+        swamps, plains = [card(Swamp) for _ in range(2)], [card(Plains) for _ in range(3)]
         mine, theirs = [card(ArchmageOfRunes), *_creatures(5)], _creatures(6)
-        t = _table(Side(hand=[edict], battlefield=[*mine, *swamps, *plains], library=[drawn]), Side(battlefield=theirs))
-        for land in (swamps[0], *plains[:3]):
+        t = _table(
+            Side(hand=[edict, swamps[1]], battlefield=[*mine, swamps[0], *plains], library=[drawn]),
+            Side(battlefield=theirs),
+        )
+        for land in (swamps[0], *plains):
             t.act(0, land, then=[taps(land)])
         t.act_illegal(0, edict, note="the reduction leaves both {B} pips")
-        t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
-        for land in (*swamps[1:], *plains[3:]):
-            t.act(0, land, then=[taps(land)])
+        t.act(0, swamps[1], then=[moves(swamps[1], Zone.BATTLEFIELD)])
+        t.act(0, swamps[1], then=[taps(swamps[1])])
         t.act(0, edict, then=[moves(edict, Zone.STACK), on_stack(ArchmageOfRunesAbility2, 0)])
         _resolve(t, off_stack(ArchmageOfRunesAbility2), moves(drawn, Zone.HAND))
         _edict_resolves(t, edict, mine, theirs)

@@ -167,7 +167,8 @@ def test_tapped_status_is_not_copied():
 
 
 def test_needs_five_mana():
-    hall, lions = card(HallOfEchoes), card(SavannahLions)
+    # The Hall starts tapped: untapped, its own {C} could pay the fifth mana (CR 601.2g).
+    hall, lions = card(HallOfEchoes, tapped=True), card(SavannahLions)
     game = _game([hall, lions], mana=4)
     t = Table(game)
     t.act_illegal(0, COPY, choices=[lions])
