@@ -117,6 +117,7 @@ def codex_reading(document: Any) -> tuple[dict[str, Any] | None, str | None]:
         return None, None if isinstance(document, dict) else "malformed_reading_dropped"
     if not isinstance(limits, dict):
         return None, "malformed_reading_dropped"
+    malformed = False
     for window in (limits.get("primary"), limits.get("secondary")):
         if not isinstance(window, dict):
             continue
@@ -130,8 +131,10 @@ def codex_reading(document: Any) -> tuple[dict[str, Any] | None, str | None]:
             _instant(window.get("resets_at")),
             _timestamp(document.get("timestamp")),
         )
-        return reading, None if reading else "malformed_reading_dropped"
-    return None, "codex_weekly_window_absent"
+        if reading:
+            return reading, None
+        malformed = True
+    return None, "malformed_reading_dropped" if malformed else "codex_weekly_window_absent"
 
 
 def _documents(content: bytes, marker: bytes):

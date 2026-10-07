@@ -239,6 +239,63 @@ def test_codex_takes_the_weekly_window_by_its_length(tmp_path):
     ]
 
 
+def test_codex_reads_the_pinned_cli_rollout_shape(tmp_path):
+    """Qualification: the rate_limits line of the preserved real rollout of run 582878e5."""
+    real = {
+        "timestamp": "2026-09-27T15:35:37.665Z",
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "info": {"total_token_usage": {"input_tokens": 1}},
+            "rate_limits": {
+                "limit_id": "codex",
+                "limit_name": None,
+                "primary": {"used_percent": 2.0, "window_minutes": 10080, "resets_at": 1791046725},
+                "secondary": None,
+                "credits": {"has_credits": False, "unlimited": False, "balance": "0"},
+                "individual_limit": None,
+                "spend_control_reached": None,
+                "plan_type": "pro",
+                "rate_limit_reached_type": None,
+            },
+        },
+    }
+    write_lines(tmp_path / "work/sessions/rollout-x.jsonl", [real])
+    assert codex_usage(tmp_path / "work")["value"] == {
+        "provider": "codex",
+        "utilization_percent": 2.0,
+        "window_minutes": 10080,
+        "resets_at": "2026-10-03T16:58:45Z",
+        "observed_at": "2026-09-27T15:35:37Z",
+    }
+
+
+@pytest.mark.parametrize(
+    ("primary", "secondary", "expected"),
+    [
+        ({"used_percent": 70.0, "window_minutes": 15, "resets_at": 1790888400}, "weekly", 12.0),
+        ("weekly", None, 12.0),
+        ({"used_percent": 1.0, "window_minutes": "10080", "resets_at": 1}, "weekly", 12.0),
+        ({"used_percent": "x", "window_minutes": WEEK, "resets_at": 1791046725}, "weekly", 12.0),
+        ({"used_percent": 1.0, "window_minutes": 60, "resets_at": 1}, None, None),
+    ],
+)
+def test_codex_chooses_the_window_lasting_a_week_whatever_its_name(
+    tmp_path, primary, secondary, expected
+):
+    weekly = {"used_percent": 12.0, "window_minutes": WEEK, "resets_at": 1791046725}
+    primary = weekly if primary == "weekly" else primary
+    secondary = weekly if secondary == "weekly" else secondary
+    line = codex_line(0)
+    line["payload"]["rate_limits"].update(primary=primary, secondary=secondary)
+    write_lines(tmp_path / "work/sessions/rollout-x.jsonl", [line])
+    result = codex_usage(tmp_path / "work")
+    if expected is None:
+        assert result["completeness"] == "missing"
+    else:
+        assert result["value"]["utilization_percent"] == expected
+
+
 def test_codex_keeps_only_the_allowlisted_fields(tmp_path):
     write_lines(tmp_path / "work/sessions/rollout-x.jsonl", [codex_line(3.0)])
     result = codex_usage(tmp_path / "work")
