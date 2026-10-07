@@ -84,3 +84,82 @@ def test_a_missing_benchmark_test_interface_fails_visibly(tmp_path):
         "fdn_129", probe, _overlay(tmp_path, "none"), 120, test_utils=None, test_interface=missing,
     )
     assert result.skipped and any("test_interface" in error for error in result.errors)
+
+
+def _support(tmp_path: Path, table: str) -> Path:
+    """The benchmark's Test Interface in a support directory whose ``table.py``
+    is ``"present"``, ``"missing"`` or a ``"directory"``."""
+    support = tmp_path / "support"
+    support.mkdir()
+    shutil.copy2(PATHS.test_interface, support / "test_interface.py")
+    if table == "present":
+        shutil.copy2(PATHS.table, support / "table.py")
+    elif table == "directory":
+        (support / "table.py").mkdir()
+    return support / "test_interface.py"
+
+
+@pytest.mark.parametrize("candidate", ["usable", "rewrite"])
+@pytest.mark.parametrize("table", ["missing", "directory"])
+def test_a_card_suite_never_grades_with_the_candidates_table_in_place_of_the_benchmarks(
+    tmp_path, table, candidate
+):
+    probe = tmp_path / "suite" / "tests.py"
+    probe.parent.mkdir()
+    probe.write_text("import table\n\ndef test_ran():\n    assert True\n")
+    test_interface = _support(tmp_path, table)
+    result = _grade_audited_card(
+        "fdn_129", probe, _overlay(tmp_path, candidate, "table.py"), 120,
+        test_utils=PATHS.test_utils, test_interface=test_interface,
+    )
+    assert result.skipped and result.tests_total == 0
+    assert result.errors == [f"authoritative table.py not found at {test_interface.parent / 'table.py'}"]
+
+
+@pytest.mark.parametrize("candidate", ["usable", "rewrite"])
+@pytest.mark.parametrize("table", ["missing", "directory"])
+def test_the_engine_suite_never_grades_with_the_candidates_table_in_place_of_the_benchmarks(
+    tmp_path, table, candidate
+):
+    suite = tmp_path / "engine_suite"
+    suite.mkdir()
+    (suite / "test_probe.py").write_text("import table\n\ndef test_ran():\n    assert True\n")
+    overlay = _overlay(tmp_path, candidate, "table.py")
+    test_interface = _support(tmp_path, table)
+    result = _eval_engine(
+        overlay / "engine", suite, 120, support_dir=PATHS.engine_support,
+        test_utils=PATHS.test_utils, test_interface=test_interface,
+    )
+    assert result.tests_total == 0
+    assert result.errors == [f"authoritative table.py not found at {test_interface.parent / 'table.py'}"]
+
+
+def test_grading_resumes_once_the_benchmarks_table_is_restored(tmp_path):
+    test_interface = _support(tmp_path, "missing")
+    shutil.copy2(PATHS.table, test_interface.parent / "table.py")
+    probe = tmp_path / "suite" / "tests.py"
+    probe.parent.mkdir()
+    probe.write_text(PROBE)
+    overlay = _overlay(tmp_path, "rewrite", "table.py")
+    card = _grade_audited_card(
+        "fdn_129", probe, overlay, 120, test_utils=PATHS.test_utils, test_interface=test_interface,
+    )
+    assert (card.tests_passed, card.tests_failed) == (1, 0), card.errors
+    suite = tmp_path / "engine_suite"
+    suite.mkdir()
+    (suite / "test_probe.py").write_text(PROBE)
+    engine = _eval_engine(
+        overlay / "engine", suite, 120, support_dir=PATHS.engine_support,
+        test_utils=PATHS.test_utils, test_interface=test_interface,
+    )
+    assert (engine.tests_passed, engine.tests_failed) == (1, 0), engine.errors
+
+
+def test_the_benchmarks_table_is_always_resolved_beside_its_test_interface(tmp_path):
+    root = tmp_path / "bench"
+    shutil.copytree(SMOKE / "data" / "test_oracle_workspace", root / "data" / "test_oracle_workspace",
+                    ignore=shutil.ignore_patterns("cards", "engine", "engine_tests", "__pycache__"))
+    (root / "data" / "test_oracle_workspace" / "table.py").unlink()
+    paths = resolve_eval_paths(root, "fdn")
+    assert paths.table == root / "data" / "test_oracle_workspace" / "table.py"
+    assert not paths.table.exists()

@@ -893,3 +893,60 @@ def test_a_grader_interruption_still_writes_the_interrupted_record(tmp_path, sta
         assert score["missing_reasons"] == ["interrupted_before_grading"]
     assert docker.removed == docker.names
     assert (opts["results_dir"] / record.run_id / "run-record.json").is_file()
+
+
+def _interface_suite_options(tmp_path, *, table: str):
+    """The toy benchmark with a Test Interface whose authoritative ``table.py``
+    is ``"present"``, ``"missing"`` or a ``"directory"``; the candidate's staged
+    copy is poisoned, so a suite that grades with it fails."""
+    docker = LocalDocker()
+    opts = options(tmp_path, grader=local_grader(docker=docker))
+    root = opts["bench_root"] / "benchmarks/example"
+    oracle = root / "data/test_oracle_workspace"
+    oracle.mkdir(parents=True)
+    (oracle / "test_interface.py").write_text("")
+    if table == "present":
+        (oracle / "table.py").write_text("")
+    elif table == "directory":
+        (oracle / "table.py").mkdir()
+    (root / "workspace/test_interface.py").write_text("")
+    (root / "workspace/table.py").write_text("TAMPERED = True\n")
+    suite = "import table\ndef test_value(): assert not hasattr(table, 'TAMPERED')\n"
+    for card_id in ("fdn_1", "fdn_2"):
+        (root / f"data/tests/audited/fdn/{card_id}/tests.py").write_text(suite)
+    (root / "workspace/engine_tests/test_engine.py").write_text(suite)
+    return docker, opts
+
+
+def test_grading_mounts_the_benchmarks_table_and_never_the_candidates(tmp_path):
+    docker, opts = _interface_suite_options(tmp_path, table="present")
+    record = run_benchmark(**opts)
+    assert "data/test_oracle_workspace/table.py" in _benchmark_mount_targets(docker)
+    assert "workspace/table.py" not in _benchmark_mount_targets(docker)
+    for score in record.scores.values():
+        assert score["tests_passed"] == score["tests_total"] == 1, score
+    inputs = record.run_metadata["grading_inputs"]
+    assert any(row["kind"] == "table" and row["sha256"] for row in inputs["files"])
+    assert inputs["problems"] == [
+        problem for problem in inputs["problems"] if problem["kind"] != "table"
+    ]
+
+
+@pytest.mark.parametrize("table", ["missing", "directory"])
+def test_a_missing_benchmark_table_fails_grading_visibly_and_is_a_grading_input_problem(
+    tmp_path, table
+):
+    docker, opts = _interface_suite_options(tmp_path, table=table)
+    record = run_benchmark(**opts)
+    for score in record.scores.values():
+        assert not score["evaluated"] and score["tests_passed"] is None, score
+        assert any(
+            reason.startswith("authoritative table.py not found at ")
+            for reason in score["missing_reasons"]
+        ), score
+    inputs = record.run_metadata["grading_inputs"]
+    assert {"kind": "table", "path": "benchmarks/example/data/test_oracle_workspace/table.py",
+            "reason": "grading_input_unavailable"} in inputs["problems"]
+    assert ("data/test_oracle_workspace/table.py" in _benchmark_mount_targets(docker)) == (
+        table == "directory"
+    )

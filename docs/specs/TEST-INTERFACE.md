@@ -29,6 +29,7 @@ Both are staged into the Workspace, so a candidate can run the real interface ag
 The scripted player that answers queries is part of `test_interface`, not of the engine, so a candidate cannot change how graded tests answer; the engine keeps only the base `Player` protocol, and the rejection hook's `context` carries everything the player needs to tell which answer was refused (grilling 2026-10-05).
 `test_utils` stays in the Workspace as the Reference Tests' helper module, keeping its signatures but built on `test_interface`'s scripted player, since the engine no longer answers through Intents; it is the candidate's like the rest of the Workspace, and grading never swaps it in (grilling 2026-10-05).
 Audited Tests are written with `table`, helpers built only on the Test Interface; like `test_interface` it belongs to the benchmark, is staged fixed in the Workspace, and grading puts the benchmark's copy beside the Audited Tests, so the Engine Reference Tests a Workspace ships, which are copies of the Audited Engine Tests, run there unchanged (grilling 2026-10-07).
+Grading requires both of the benchmark's files and never falls back to the candidate's: a benchmark missing either grades no suite and records the missing file as unavailable.
 The interface is minimal yet complete — every helper a test needs, none duplicating another.
 
 The Test Interface relies only on a small engine surface, which the workspace documents name and require to keep working beside the Player Query protocol (grilling 2026-10-05):

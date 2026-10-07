@@ -38,8 +38,7 @@ def grading_inputs(benchmark) -> dict:
         sources.append(("engine", paths.engine_tests))
     if paths.test_interface is not None:
         sources.append(("test_interface", paths.test_interface))
-        if paths.table is not None:
-            sources.append(("table", paths.table))
+        sources.append(("table", paths.table))
     else:
         sources.append(("test_utils", paths.test_utils))
     for name in ("conftest.py", "pytest.ini"):
