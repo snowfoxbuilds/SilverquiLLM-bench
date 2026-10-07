@@ -1,8 +1,7 @@
 """Run Records and Exclusions read straight from the Results Repo clone, cached by file state.
 
-The derived ``runs.jsonl`` index is never maintained, so it is never read; each record is
-parsed once and kept as a small summary until its files change (RUN-MONITORING.md,
-What the monitor reads).
+The Results Repo has no index, so each record is parsed once and kept as a small summary
+until its files change (RUN-MONITORING.md, What the monitor reads).
 """
 
 from __future__ import annotations

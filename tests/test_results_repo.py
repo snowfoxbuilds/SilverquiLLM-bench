@@ -13,7 +13,6 @@ import dataclasses
 import hashlib
 import json
 import pathlib
-import re
 from pathlib import Path
 from typing import Any
 
@@ -24,13 +23,6 @@ from silverquillm import results_repo as rr
 from silverquillm.cli import main as cli_main
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SOS_CONFIG = json.loads((REPO_ROOT / "benchmarks" / "sos" / "config.json").read_text())
-SMOKE_CONFIG = json.loads((REPO_ROOT / "benchmarks" / "smoke" / "config.json").read_text())
-
-# The real legacy shapes: manifests store unpadded numbers, eval_result keys
-# carry the set prefix, config.json zero-pads.
-LEGACY_FILTER = ["1", "4", "13", "57", "97", "120", "201", "226", "245", "257"]
-SCORED_SOS = [f"sos_{n}" for n in LEGACY_FILTER]
 
 # Every image dir in the real Validated Results corpus.  All are already safe
 # path segments; their candidate directory keys must never change.
@@ -145,8 +137,13 @@ class TestCandidateIdentity:
         ident = rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "claude")
         assert rr.legacy_image_dir(ident) is None
         canonical = json.dumps(
-            {"adapter": "claude", "base_digest": "sha256:" + "a" * 64, "instruction_hash": "b" * 64},
-            sort_keys=True, separators=(",", ":"),
+            {
+                "adapter": "claude",
+                "base_digest": "sha256:" + "a" * 64,
+                "instruction_hash": "b" * 64,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
         )
         expected = hashlib.sha256(canonical.encode()).hexdigest()
         assert rr.candidate_hash(ident) == expected
@@ -155,7 +152,10 @@ class TestCandidateIdentity:
         # Adapter-injective: same base + instruction hash, different adapter, different key.
         twin = rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "pi")
         assert rr.candidate_hash(twin) != expected
-        assert rr.candidate_copy_dir(Path("/repo"), ident) == Path("/repo/results") / expected / "candidate"
+        assert (
+            rr.candidate_copy_dir(Path("/repo"), ident)
+            == Path("/repo/results") / expected / "candidate"
+        )
 
     def test_candidate_dirname_rejects_unsafe_slugs(self) -> None:
         ident = rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "claude")
@@ -279,7 +279,10 @@ class TestCandidateIdentity:
         with pytest.raises(rr.InvalidRunRecordError, match="adapter_identity"):
             rr.CandidateIdentity.from_dict({**data, "adapter_identity": "a b"})
         # Any adapter TOKEN is admissible — the bench keeps no adapter allowlist.
-        assert rr.CandidateIdentity.from_dict({**data, "adapter_identity": "pi"}).adapter_identity == "pi"
+        assert (
+            rr.CandidateIdentity.from_dict({**data, "adapter_identity": "pi"}).adapter_identity
+            == "pi"
+        )
 
     def test_verified_ozolith_identity_round_trips_through_a_record(self, tmp_path: Path) -> None:
         ident = rr.CandidateIdentity.recomputed("sha256:" + "a" * 64, "b" * 64, "codex")
@@ -519,21 +522,13 @@ class TestReadConsistency:
         with pytest.raises(rr.InvalidRunRecordError, match="never verified"):
             rr.read_run_record(run_dir)
 
-    def test_iteration_and_the_index_fail_loudly_and_keep_the_old_index(
-        self, tmp_path: Path
-    ) -> None:
+    def test_iteration_fails_loudly_on_a_tampered_record(self, tmp_path: Path) -> None:
         rr.write_run_record(tmp_path, _record(run_id="run-b"))
         rr.write_run_record(tmp_path, _record())  # iterates after run-b
-        rr.rebuild_index(tmp_path)
-        before = (tmp_path / "runs.jsonl").read_bytes()
-        assert before.count(b"\n") == 2
         tampered = tmp_path / "results" / "img-a" / _record().run_id
         self._edit_manifest(tampered, lambda m: m.update(candidate_hash="img-evil"))
         with pytest.raises(rr.InvalidRunRecordError):
             list(rr.iter_run_records(tmp_path))
-        with pytest.raises(rr.InvalidRunRecordError):
-            rr.rebuild_index(tmp_path)
-        assert (tmp_path / "runs.jsonl").read_bytes() == before  # not truncated or replaced
 
 
 # ---------------------------------------------------------------------------
@@ -664,9 +659,7 @@ class TestLegacyTreePointerBinding:
         with pytest.raises(rr.InvalidRunRecordError, match="canonical"):
             record.validate()
 
-    def test_swapping_the_pointer_to_another_run_is_rejected_on_read(
-        self, tmp_path: Path
-    ) -> None:
+    def test_swapping_the_pointer_to_another_run_is_rejected_on_read(self, tmp_path: Path) -> None:
         a = _record()
         b = _record(run_id="sos-img-a-2026-06-02T00-00")
         rr.write_run_record(tmp_path, b)
@@ -703,76 +696,6 @@ class TestLegacyTreePointerBinding:
 
 
 # ---------------------------------------------------------------------------
-# leaderboard_valid
-# ---------------------------------------------------------------------------
-
-
-class TestDeriveLeaderboardValid:
-    def test_unpadded_legacy_filter_equals_the_padded_config_set(self) -> None:
-        assert rr.derive_leaderboard_valid(SOS_CONFIG, LEGACY_FILTER, None, SCORED_SOS) is True
-
-    def test_padded_filter_and_bare_scored_numbers_are_the_same_cards(self) -> None:
-        assert (
-            rr.derive_leaderboard_valid(SOS_CONFIG, SOS_CONFIG["cards"], None, LEGACY_FILTER)
-            is True
-        )
-
-    def test_no_filter_with_the_full_scored_set_is_valid(self) -> None:
-        assert rr.derive_leaderboard_valid(SOS_CONFIG, None, None, SCORED_SOS) is True
-
-    def test_narrower_filter_is_invalid(self) -> None:
-        reasons = rr.leaderboard_validity_reasons(
-            SOS_CONFIG, LEGACY_FILTER[:3], None, SCORED_SOS[:3]
-        )
-        assert any("card filter" in r for r in reasons)
-        assert (
-            rr.derive_leaderboard_valid(SOS_CONFIG, LEGACY_FILTER[:3], None, SCORED_SOS[:3])
-            is False
-        )
-
-    def test_resume_leg_is_invalid(self) -> None:
-        reasons = rr.leaderboard_validity_reasons(
-            SOS_CONFIG, LEGACY_FILTER, "prior-leg", SCORED_SOS
-        )
-        assert reasons == ["Resume Leg (resumed_from=prior-leg)"]
-
-    def test_ineligible_benchmark_is_invalid_even_when_sets_match(self) -> None:
-        assert SMOKE_CONFIG["leaderboard"]["eligible"] is False
-        scored = [f"fdn_{n}" for n in SMOKE_CONFIG["cards"]]
-        reasons = rr.leaderboard_validity_reasons(SMOKE_CONFIG, SMOKE_CONFIG["cards"], None, scored)
-        assert reasons == ["benchmark is not leaderboard-eligible (leaderboard.eligible: false)"]
-
-    def test_eligible_defaults_to_true_when_absent(self) -> None:
-        assert "eligible" not in SOS_CONFIG["leaderboard"]
-        assert rr.derive_leaderboard_valid(SOS_CONFIG, None, None, SCORED_SOS) is True
-
-    def test_pre_audited_set_271_card_run_is_invalid(self) -> None:
-        scored = [f"sos_{n}" for n in range(1, 272)]
-        reasons = rr.leaderboard_validity_reasons(SOS_CONFIG, None, None, scored)
-        assert reasons == ["scored card set (271 cards) differs from the benchmark's 10-card set"]
-
-    def test_empty_pool_never_validates(self) -> None:
-        config = {"cards": [], "leaderboard": {}}
-        assert rr.derive_leaderboard_valid(config, None, None, ["sos_1"]) is False
-
-    @pytest.mark.parametrize(
-        ("raw", "expected"),
-        [
-            ("001", "1"),
-            ("1", "1"),
-            ("sos_001", "1"),
-            ("sos_1", "1"),
-            (7, "7"),
-            ("fdn_129", "129"),
-            ("12a", "12a"),
-            (" 004 ", "4"),
-        ],
-    )
-    def test_normalize_collector_number(self, raw: str | int, expected: str) -> None:
-        assert rr.normalize_collector_number(raw) == expected
-
-
-# ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
@@ -800,84 +723,23 @@ class TestResolveResultsRepo:
         assert rr.resolve_results_repo(None) is None
 
 
-class TestLoadBenchmarkConfig:
-    def test_loads_the_real_sos_config(self) -> None:
-        assert rr.load_benchmark_config(REPO_ROOT, "sos")["id"] == "sos"
-
-    def test_missing_benchmark_is_an_error(self, tmp_path: Path) -> None:
-        with pytest.raises(rr.ResultsRepoError, match="no benchmark config"):
-            rr.load_benchmark_config(tmp_path, "nope")
-
-    def test_unsafe_id_is_rejected(self) -> None:
-        with pytest.raises(rr.ResultsRepoError, match="invalid benchmark id"):
-            rr.load_benchmark_config(REPO_ROOT, "../sos")
-
-
 # ---------------------------------------------------------------------------
-# Derived index
+# Iteration
 # ---------------------------------------------------------------------------
 
 
-class TestRebuildIndex:
-    def _populate(self, repo: Path) -> None:
-        # Written out of order on purpose: the index must not depend on it.
-        rr.write_run_record(
-            repo, _record(run_id="run-b", candidate=rr.CandidateIdentity.legacy("img-z"))
-        )
-        rr.write_run_record(repo, _record(run_id="run-c"))
-        rr.write_run_record(
-            repo,
-            _record(
-                run_id="run-a",
-                leaderboard_valid=False,
-                run_metadata={"run_date": "2026-05-01T00:00:00Z"},
-            ),
-        )
-
-    def test_rows_are_sorted_and_carry_the_documented_fields(self, tmp_path: Path) -> None:
-        self._populate(tmp_path)
-        rows = rr.rebuild_index(tmp_path)
-        assert [(r["candidate_hash"], r["run_id"]) for r in rows] == [
-            ("img-a", "run-a"),
-            ("img-a", "run-c"),
-            ("img-z", "run-b"),
-        ]
-        assert set(rows[0]) == {
-            "candidate_hash",
-            "run_id",
-            "benchmark",
-            "mode",
-            "leaderboard_valid",
-            "run_date",
-        }
-        assert rows[0]["leaderboard_valid"] is False
-        assert rows[0]["run_date"] == "2026-05-01T00:00:00Z"
-
-    def test_two_rebuilds_are_byte_identical(self, tmp_path: Path) -> None:
-        self._populate(tmp_path)
-        rr.rebuild_index(tmp_path)
-        first = (tmp_path / "runs.jsonl").read_bytes()
-        rr.rebuild_index(tmp_path)
-        assert (tmp_path / "runs.jsonl").read_bytes() == first
-        assert first.count(b"\n") == 3
-
-    def test_hand_edits_are_overwritten_from_the_tree(self, tmp_path: Path) -> None:
-        self._populate(tmp_path)
-        (tmp_path / "runs.jsonl").write_text('{"run_id": "hand-edited"}\n')
-        rr.rebuild_index(tmp_path)
-        assert "hand-edited" not in (tmp_path / "runs.jsonl").read_text()
-
+class TestIterRunDirs:
     def test_in_flight_temp_dirs_and_manifestless_dirs_are_ignored(self, tmp_path: Path) -> None:
-        self._populate(tmp_path)
+        rr.write_run_record(
+            tmp_path, _record(run_id="run-b", candidate=rr.CandidateIdentity.legacy("img-z"))
+        )
+        rr.write_run_record(tmp_path, _record(run_id="run-c"))
+        rr.write_run_record(tmp_path, _record(run_id="run-a"))
         stray = tmp_path / "results" / "img-a" / ".tmp-run-d-xyz"
         stray.mkdir()
         (stray / "manifest.json").write_text("{}")
         (tmp_path / "results" / "img-a" / "no-manifest-here").mkdir()
         assert [p.name for p in rr.iter_run_dirs(tmp_path)] == ["run-a", "run-c", "run-b"]
-
-    def test_empty_repo_yields_an_empty_index(self, tmp_path: Path) -> None:
-        assert rr.rebuild_index(tmp_path) == []
-        assert (tmp_path / "runs.jsonl").read_bytes() == b""
 
 
 # ---------------------------------------------------------------------------
@@ -892,8 +754,8 @@ class TestResultsInit:
         assert result.exit_code == 0, result.output
         assert (target / "AGENTS.md").is_file()
         assert (target / "results" / ".gitkeep").is_file()
-        assert (target / "runs.jsonl").read_bytes() == b""
-        assert result.output.count("wrote ") == 3
+        assert not (target / "runs.jsonl").exists()
+        assert result.output.count("wrote ") == 2
 
     def test_cli_refuses_a_non_empty_repo(self, tmp_path: Path) -> None:
         rr.init_results_repo(tmp_path)
@@ -908,7 +770,6 @@ class TestResultsInit:
             "results/<candidate-hash>/<run-id>/manifest.json",
             "scores.json",
             "Records are immutable",
-            "Index is derived",
             "leaderboard_valid",
             "`benchmark`, never `workload`",
             "self-contained",
@@ -929,14 +790,7 @@ class TestResultsInit:
             rr.init_results_repo(tmp_path)
         assert [p.name for p in tmp_path.iterdir()] == ["README.md"]  # nothing written
 
-    def test_never_overwrites_an_existing_index_or_results_tree(self, tmp_path: Path) -> None:
-        index_only = tmp_path / "index-only"
-        index_only.mkdir()
-        (index_only / "runs.jsonl").write_text('{"run_id": "precious"}\n')
-        with pytest.raises(rr.ResultsRepoError, match=re.escape("runs.jsonl")):
-            rr.init_results_repo(index_only)
-        assert (index_only / "runs.jsonl").read_text() == '{"run_id": "precious"}\n'
-
+    def test_never_overwrites_an_existing_results_tree(self, tmp_path: Path) -> None:
         results_only = tmp_path / "results-only"
         (results_only / "results" / "img-a").mkdir(parents=True)
         with pytest.raises(rr.ResultsRepoError, match="results"):
@@ -948,7 +802,7 @@ class TestResultsInit:
         (clone / ".git").mkdir(parents=True)
         (clone / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
         written = rr.init_results_repo(clone)
-        assert len(written) == 3
+        assert len(written) == 2
         assert (clone / "AGENTS.md").is_file()
         assert (clone / ".git" / "HEAD").read_text() == "ref: refs/heads/main\n"
 
@@ -959,7 +813,7 @@ class TestResultsInit:
         real_write_text = pathlib.Path.write_text
 
         def flaky(self: Path, *args: Any, **kwargs: Any) -> int:
-            if self.name == "runs.jsonl":
+            if self.name == ".gitkeep":
                 raise OSError("disk full")
             return real_write_text(self, *args, **kwargs)
 
@@ -971,7 +825,7 @@ class TestResultsInit:
         monkeypatch.undo()
         rr.init_results_repo(target)
         assert (target / "AGENTS.md").is_file()
-        assert (target / "runs.jsonl").read_bytes() == b""
+        assert (target / "results" / ".gitkeep").is_file()
 
     def test_a_failed_init_leaves_a_preexisting_clone_as_it_was(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

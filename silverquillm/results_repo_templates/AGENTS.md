@@ -10,7 +10,6 @@ repo to read, filter, and aggregate runs. The bench repo
 
 ```
 AGENTS.md                                   this file — the schema
-runs.jsonl                                  derived index (see "Index is derived")
 results/<candidate-hash>/candidate/         the vendored Candidate Bundle (ozolith-v1 only)
 results/<candidate-hash>/<run-id>/manifest.json
 results/<candidate-hash>/<run-id>/scores.json
@@ -49,10 +48,9 @@ karn/                                       the Karn recipes that build the cand
 1. **Records are immutable.** A `<run-id>` directory is written once, atomically,
    and never edited. Corrections are new runs, not edits. The writer refuses to
    overwrite.
-2. **Index is derived.** `runs.jsonl` is regenerated from the tree
-   (`python scripts/rebuild_results_index.py --results-repo <path>` in the bench
-   repo). It is never hand-edited and never authoritative: if the index and the
-   tree disagree, the tree wins — rebuild the index.
+2. **There is no index.** Read the records under `results/` directly; the
+   tree is the only source. A `runs.jsonl` left from an older layout is stale
+   and is never read.
 3. **Heavy artifacts never enter git, except graded workspaces as diffs.**
    Transcripts, logs, workspace snapshots and per-card trees live elsewhere;
    `manifest.json` carries *pointers* only. Each record's graded workspace is
@@ -238,12 +236,6 @@ holding the bench's `run_summary.json` block for that dimension unchanged:
 `card_correctness` is the target-set dimension (SOS card correctness for `sos`,
 HOB card correctness for the HOB benchmarks). A migrated SOS record, a smoke
 record and a HOB record all have this shape.
-
-## `runs.jsonl`
-
-One JSON object per line, sorted by `(candidate_hash, run_id)`, keys sorted:
-`candidate_hash`, `run_id`, `benchmark`, `mode`, `leaderboard_valid`, `run_date`.
-Rebuild it after any change to `results/`.
 
 ## Publishing
 

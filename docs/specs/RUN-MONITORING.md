@@ -60,7 +60,7 @@ A provider is named by its login plugin: `karn-codex-login` is `codex`, `karn-cl
 | A live Codex rollout under a busy Login Profile's `plugin/work/sessions/` | Codex subscription usage readings, the `rate_limits` field only |
 | Results Repo `results/` and `exclusions/` | History, Exclusions, past durations, recorded subscription usage readings, and whether a retained record is published |
 
-The monitor reads Results Repo files directly and caches each record by modification time, never through `runs.jsonl` (grilling 2026-10-07).
+The Results Repo has no index, so the monitor reads its records directly and caches each one by modification time (grilling 2026-10-07).
 A Login Profile's `plugin/work` directory sits beside its live credentials, so the monitor reads nothing there except the `rate_limits` field of Codex rollout lines.
 
 ### Run stages
