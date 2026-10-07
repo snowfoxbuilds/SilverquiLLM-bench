@@ -804,7 +804,7 @@ def _etali_resolves(t, spell, top, *choices, then=(), note: str = ""):
     ``spell`` without paying its mana cost, answering ``choices``."""
     _resolve(
         t,
-        choices=[Decision.yes(), *choices],
+        choices=[Decision.yes(), *choices, spell],
         then=[
             off_stack(EtaliPrimalStormAbility1),
             moves(spell, Zone.EXILE),
