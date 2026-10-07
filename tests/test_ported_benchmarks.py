@@ -68,6 +68,16 @@ def _assert_same_tree(left: Path, right: Path) -> None:
         _assert_same_tree(left / sub, right / sub)
 
 
+@pytest.mark.parametrize("name", ("smoke", "fra-hard-v2"))
+def test_workspaces_carry_no_directory_summaries(name: str) -> None:
+    """Per-directory summaries went stale and misled candidates (#182); the
+    frozen fra-hard v1 keeps its own."""
+    benchmark = REPO / "benchmarks" / name
+    roots = (KNOWN_BEST / "workspace", benchmark / "workspace", benchmark / "data/test_oracle_workspace")
+    found = [path for root in roots for path in root.rglob("DIRECTORY_SUMMARY.md")]
+    assert not found, found
+
+
 def test_smoke_oracle_is_the_known_best_workspace() -> None:
     """With identical grading inputs, `test_known_best_workspace.py` already shows
     smoke's oracle passes both regression dimensions (CI check 1)."""
