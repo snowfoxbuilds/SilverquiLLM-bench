@@ -48,6 +48,7 @@ known_best/
 │   │                                with their FDN Reference Tests)
 │   ├── conftest.py
 │   ├── pytest.ini
+│   ├── RULEBOOK.txt                 the newest Comprehensive Rules
 │   ├── test_interface.py            Test Interface (benchmark-owned)
 │   ├── test_interface.md            its documentation (benchmark-owned)
 │   ├── test_test_interface.py       tests that demonstrate it (not graded)
@@ -61,11 +62,14 @@ known_best/
 | --- | --- |
 | `workspace/engine/`, `workspace/cards/fdn/` | `workspace/` and the Test Oracle Workspace |
 | `workspace/test_interface.py`, `workspace/test_interface.md`, `workspace/test_test_interface.py`, `workspace/test_utils.py` | `workspace/` and the Test Oracle Workspace |
+| `workspace/RULEBOOK.txt` | `workspace/` and the Test Oracle Workspace |
 | `data/tests/audited/fdn/`, `data/tests/audited/engine/` | `data/tests/audited/` |
 | `data/tests/audited/engine/` | `workspace/engine_tests/`, seeding the Engine Reference Tests |
 
-It deliberately holds no `config.json` (it is not a benchmark), no target-set cards or stubs, no agent-facing documents beyond the Test Interface's own, no Test Oracle Workspace or oracle extension, and no Engine Reference Tests.
+It deliberately holds no `config.json` (it is not a benchmark), no target-set cards or stubs, no agent-facing documents beyond the Test Interface's own and the rulebook, no Test Oracle Workspace or oracle extension, and no Engine Reference Tests.
 Engine Regression grades a benchmark's `data/tests/audited/engine/` whenever that directory exists and otherwise the host copy of `workspace/engine_tests/`, so `known_best/` is graded by exactly the code that grades benchmarks.
+
+`RULEBOOK.txt` is the newest Comprehensive Rules Wizards of the Coast publishes, as plain text unchanged from their download; it is replaced when a new edition takes effect and re-ported, so every ported benchmark judges its targets by the same, current rules (grilling 2026-10-06).
 
 ### Building a benchmark from it
 
