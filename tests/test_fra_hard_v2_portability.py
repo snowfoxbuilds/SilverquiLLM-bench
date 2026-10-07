@@ -652,6 +652,11 @@ def _keeping_food(self, game):
                         cost = ability.cost
                         ability.cost = (lambda g, s, cost=cost, card=card, stint=stint:
                                         g.refs.zone_epoch(card) == stint and cost(g, s))
+                    elif ability.printed is SupperForSpidersAbility1 and SICKNESS_GUARDED:
+                        cost = ability.cost
+                        ability.cost = (lambda g, s, cost=cost, card=card:
+                                        not (CardType.CREATURE in card.card_types and card.summoning_sick)
+                                        and cost(g, s))
                 return abilities
 
             card.get_activated_abilities = kept
@@ -671,10 +676,14 @@ SupperForSpiders.on_resolve = _keeping_food
 # A Food keeps its granted ability after it leaves the battlefield; the
 # ability's cost checks the Food is still the object Supper made, so
 # activating it later is rejected.
-FOOD_KEEPS_GRANT = "GUARDED = True\n" + _FOOD_KEPT
+FOOD_KEEPS_GRANT = "GUARDED, SICKNESS_GUARDED = True, False\n" + _FOOD_KEPT
 
 # Faulty: the kept ability stays activatable on the card's next object.
-FOOD_GRANT_OUTLIVES_FOOD = "GUARDED = False\n" + _FOOD_KEPT
+FOOD_GRANT_OUTLIVES_FOOD = "GUARDED, SICKNESS_GUARDED = False, False\n" + _FOOD_KEPT
+
+# Faulty: as above, but the kept ability's {T} waits out summoning sickness, so
+# only a probe on a later turn can see it.
+FOOD_GRANT_OUTLIVES_FOOD_PAST_SICKNESS = "GUARDED, SICKNESS_GUARDED = False, True\n" + _FOOD_KEPT
 
 # Rejects every illegal cast with a bare InvalidPlayerChoiceError, the documented
 # rejection, instead of the oracle's CastingError — legality and rollback unchanged.
@@ -714,6 +723,30 @@ def choose_object(g, controller, options, prompt, **kwargs):
 # Faulty: Bilbo's trigger casts any card from its controller's graveyard.
 BILBO_CASTS_ANY_CARD = "_castable_by_trigger = lambda face: True\n"
 
+# Faulty: Bilbo's trigger also casts a card from an opponent's graveyard.
+BILBO_CASTS_FROM_OPPONENTS_GRAVEYARD = '''
+_offered_by_bilbo = choose_object
+
+
+def choose_object(g, controller, options, prompt, **kwargs):
+    theirs = [c for p in g.players if p is not controller for c in p.zones[Zone.GRAVEYARD].get_all()
+              if any(_castable_by_trigger(face) for face in faces_of(c))]
+    return _offered_by_bilbo(g, controller, list(options) + presented(theirs, _castable_by_trigger), prompt,
+                             **kwargs)
+'''
+
+# Faulty: the equipped creature's power discounts every spell its controller
+# casts, creature spells too.
+GLAMDRING_DISCOUNTS_CREATURE_SPELLS = '''
+def _discounting_everything(self, game, spell, caster):
+    if caster is self.controller and self.is_equip_active(game):
+        return max(0, self.attached_to.power)
+    return 0
+
+
+GlamdringFoehammer.spell_cost_reduction = _discounting_everything
+'''
+
 # Faulty: spells cost nothing.
 CASTS_UNPAID = '''
 from engine.mana import ManaPool as _ManaPool
@@ -738,15 +771,19 @@ _casting.cast_permission = _no_life
 '''
 
 
-def run_suite(card: str, suffix: str) -> tuple[int, int, str]:
+def run_suite(card: str, suffix: str, tests: str | None = None) -> tuple[int, int, str]:
     """Run ``card``'s hidden suite on the oracle with ``suffix`` appended to its
-    implementation; return (passed, failed, output)."""
+    implementation; return (passed, failed, output). ``tests`` replaces the
+    hidden suite with a probe of its own."""
     code = card.split("_")[0]
     with tempfile.TemporaryDirectory(prefix=f"portability_{card}_") as tmp_dir:
         tmp = Path(tmp_dir)
         impl = (ORACLE / "cards" / code / card / "card_impl.py").read_text()
         (tmp / "card_impl.py").write_text(impl + "\n" + suffix)
-        shutil.copy2(BENCH / "data/tests/audited" / code / card / "tests.py", tmp / "tests.py")
+        if tests is None:
+            shutil.copy2(BENCH / "data/tests/audited" / code / card / "tests.py", tmp / "tests.py")
+        else:
+            (tmp / "tests.py").write_text(tests)
         env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp), str(ORACLE), str(ROOT)]),
                "PYTHONDONTWRITEBYTECODE": "1"}
         result = subprocess.run(
@@ -833,6 +870,23 @@ def test_suite_catches_an_illegal_action_taking_effect(card: str, suffix: str) -
     assert failed, output[-4000:]
 
 
+def failed_tests(output: str) -> set[str]:
+    return set(re.findall(r"^FAILED \S*::(\w+)", output, re.MULTILINE))
+
+
+@pytest.mark.parametrize("card,suffix,restrictions", [
+    ("hob_174", GLAMDRING_DISCOUNTS_CREATURE_SPELLS, {"test_the_discount_does_not_apply_to_creature_spells"}),
+    ("hob_86", FOOD_GRANT_OUTLIVES_FOOD_PAST_SICKNESS, {"test_a_sacrificed_food_is_a_creature_card_again"}),
+    ("hob_33", BILBO_CASTS_FROM_OPPONENTS_GRAVEYARD, {"test_the_opponents_graveyard_is_not_offered"}),
+], ids=["glamdring_discounts_creature_spells", "food_grant_outlives_food_past_sickness",
+        "bilbo_casts_from_opponents_graveyard"])
+def test_each_restriction_is_caught_by_its_own_test(card: str, suffix: str, restrictions: set[str]) -> None:
+    """A faulty variant that breaks one restriction fails exactly the tests
+    that probe it, so an unrelated failure cannot stand in for them."""
+    _passed, _failed, output = run_suite(card, suffix)
+    assert failed_tests(output) == restrictions, output[-4000:]
+
+
 @pytest.mark.parametrize("card,suffix", [
     ("hob_86", FOOD_KEEPS_GRANT),
     ("fra_159", GLEAM_TARGET_REJECTED),
@@ -891,3 +945,58 @@ def test_card_then_face_really_offers_the_card_alone(suffix: str, offered: list[
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == repr(offered)
+
+
+_ULDAROS_CASTS_GLEAM = """
+from card_impl import UldarosTheorix, UldarosTheorixAbility2
+from cards.fdn.fdn_160.card_impl import AnOfferYouCantRefuse
+from cards.fdn.fdn_272.card_impl import Plains
+from cards.hob.hob_174.card_impl import GlamdringFoehammer, GleamOfDeath
+from test_interface import ManaType, Phase, Side, Zone, card, create_game, spell_copy
+
+from silverquillm.table import Table, appears, copied, moves, off_stack, on_stack
+
+
+def _copy_cast_as_gleam():
+    glamdring, uldaros, offer = card(GlamdringFoehammer), card(UldarosTheorix), card(AnOfferYouCantRefuse)
+    library = [card(Plains) for _ in range(6)]
+    game = create_game(
+        Side(hand=[uldaros], graveyard=[glamdring], library=library,
+             mana={ManaType.BLUE: 1, ManaType.BLACK: 2, ManaType.COLORLESS: 3}),
+        Side(hand=[offer], library=[card(Plains) for _ in range(3)], mana={ManaType.BLUE: 1}),
+        start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, uldaros, then=[moves(uldaros, Zone.STACK)])
+    t.pass_(0, choices=[glamdring])
+    t.pass_(1, then=[moves(uldaros, Zone.BATTLEFIELD), on_stack(UldarosTheorixAbility2, 0)])
+    t.pass_(0, choices=[GleamOfDeath, GlamdringFoehammer])
+    t.pass_(1, then=[off_stack(UldarosTheorixAbility2), moves(glamdring, Zone.EXILE), copied(GleamOfDeath, 0)])
+    return t, library, offer
+
+
+def test_the_copy_resolves_as_its_own_spell():
+    t, library, _ = _copy_cast_as_gleam()
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(GleamOfDeath), *(moves(c, Zone.GRAVEYARD) for c in library)])
+    t.run()
+
+
+def test_the_copy_is_chosen_by_its_number():
+    t, _, offer = _copy_cast_as_gleam()
+    t.pass_(0)
+    t.act(1, offer, choices=[spell_copy(1)], then=[moves(offer, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(offer, Zone.GRAVEYARD), off_stack(GleamOfDeath), appears(0), appears(0)])
+    t.run()
+"""
+
+
+@pytest.mark.parametrize("suffix", ["", CARD_THEN_FACE], ids=["each_face", "card_then_face"])
+def test_uldaros_casting_a_copied_card_as_gleam_of_death_numbers_the_copy(suffix: str) -> None:
+    """Casting a copy of a card as its Adventure, unlike copying a spell
+    already cast, registers the copy as a whole card of its own; it stays
+    numbered and selectable through its lifecycle."""
+    passed, failed, output = run_suite("fra_159", suffix, tests=_ULDAROS_CASTS_GLEAM)
+    assert passed == 2 and not failed, output[-4000:]
+
