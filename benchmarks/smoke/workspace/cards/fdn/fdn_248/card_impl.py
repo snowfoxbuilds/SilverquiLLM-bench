@@ -34,7 +34,9 @@ class _StormTriggerState:
         stack_object: That spell's :class:`~engine.stack.StackObject` at fire
             time. The copies are made from it even if the spell has since left
             the stack — a countered spell is copied as it last existed on the
-            stack (rule 707.10), with its targets and choices.
+            stack (rule 707.10), with its targets and choices, read from the
+            occurrence's last-known snapshot rather than the card, which may
+            since have been cast again.
         copies: How many copies this trigger must create — the number of instant
             and sorcery spells the fire-time controller had cast *before* this one
             this turn (rule: "for each *other* instant and sorcery spell you've
@@ -136,7 +138,7 @@ class ThousandYearStorm(Enchantment):
             return _StormTriggerState(spell=spell, stack_object=original_so, copies=copies)
 
         def _effect(game: 'GameState', controller: Any, state: _StormTriggerState) -> None:
-            from engine.stack import copy_spell
+            from engine.stack import copy_spell, copyable_occurrence
             from engine.casting import CastingError, query_spell_target
 
             if state is None or controller is None:
@@ -145,18 +147,20 @@ class ThousandYearStorm(Enchantment):
             if copies_to_make <= 0:
                 return
             # Copy the captured occurrence, never whatever is pending now: if the
-            # spell was countered, its last known stack object still carries its
-            # targets and choices, so the copies are made all the same.
-            original_so = state.stack_object
-            if original_so is None:
+            # spell was countered, the occurrence stands for its last-known
+            # snapshot — its own targets, X and mode, even if the card has since
+            # been cast again — so the copies are made all the same.
+            if state.stack_object is None:
                 return
+            original_so = copyable_occurrence(state.stack_object)
+            spell = original_so.source
             for _ in range(copies_to_make):
                 new_targets: list[Any] | None = None
                 if original_so.targets:
                     if query_yes_no(
                         game,
                         controller,
-                        f"Choose new targets for copy of {original_so.source.name}?",
+                        f"Choose new targets for copy of {spell.name}?",
                         source_card=source,
                     ):
                         # Re-choose each target through the shared spell-retargeting
@@ -166,15 +170,19 @@ class ThousandYearStorm(Enchantment):
                         # and protection from the copied spell — a protected
                         # permanent is never offered. A required spec with no legal
                         # target, or a declined optional one, keeps the original
-                        # target at that position.
-                        specs = original_so.source.get_targets(game)
+                        # target at that position. The requirements are the
+                        # ones the spell was cast with: a copy keeps the
+                        # original's mode, so the card is not asked again.
+                        specs = original_so.target_requirements
+                        if specs is None:
+                            specs = spell.get_targets(game)
                         new_targets = []
                         for i, spec in enumerate(specs):
                             try:
                                 chosen = query_spell_target(
                                     game,
                                     controller,
-                                    original_so.source,
+                                    spell,
                                     spec,
                                     exclude=new_targets,
                                 )

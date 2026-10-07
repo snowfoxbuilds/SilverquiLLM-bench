@@ -1004,6 +1004,7 @@ def _cast_spell(
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
         activation_context=activation_context,
+        target_requirements=tuple(target_specs or ()),
         prior_qualifying_casts=prior_qualifying_casts,
         departure_zone=Zone.EXILE if mode is CastMode.FLASHBACK else None,
         is_spell=True,
@@ -1279,6 +1280,7 @@ def cast_spell_free(
         targets=chosen_targets,
         on_resolve=lambda g: None,  # replaced below
         activation_context=activation_context,
+        target_requirements=tuple(target_specs or ()),
         prior_qualifying_casts=prior_qualifying_casts,
         departure_zone=departure_zone,
         is_spell=True,

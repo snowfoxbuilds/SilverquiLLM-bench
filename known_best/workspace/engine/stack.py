@@ -101,6 +101,20 @@ class StackObject:
         printed: For an activated, loyalty or triggered ability, the predefined
             class of the printed ability it comes from (see ADR-017); ``None``
             otherwise.
+        target_requirements: For a cast spell, the target requirements its
+            caster chose targets for — fixed by the choices made while casting
+            (a modal spell's mode decides them). A copy keeps those choices
+            (rule 707.10), so choosing new targets for a copy reads these rather
+            than asking the card again. ``None`` when not captured.
+        last_known_source: Set once, as this spell occurrence leaves the stack
+            (:func:`move_spell_off_stack`): a detached snapshot of its card as it
+            last existed on the stack — characteristics and cast choices (X,
+            mode, chosen targets). Invariant: after departure, anything that
+            still needs *this occurrence's* spell — copying a countered spell
+            (Thousand-Year Storm) — reads the snapshot via
+            :func:`copyable_occurrence`, never the physical card, which a later
+            zone change or recast may already have overwritten. ``None`` while
+            the spell is still on the stack, where the card itself is current.
     """
 
     source: Any
@@ -109,11 +123,37 @@ class StackObject:
     on_resolve: Callable[[GameState], None] = field(default=lambda _game: None)
     is_mana_ability: bool = False
     activation_context: ActivationContext | None = None
+    target_requirements: tuple[Any, ...] | None = None
+    last_known_source: Any = None
     event_state: Any = None
     prior_qualifying_casts: int | None = None
     departure_zone: Zone | None = None
     is_spell: bool = False
     printed: type | None = None
+
+
+def _detached_copy(card: Any) -> Any:
+    """A copy of *card* whose own containers (lists, dicts, sets) are copied too,
+    so later in-place changes to the card's choices do not reach it. Objects the
+    card refers to — targets, players — stay shared."""
+    snapshot = copy.copy(card)
+    for name, value in vars(snapshot).items():
+        if isinstance(value, (list, dict, set)):
+            setattr(snapshot, name, copy.copy(value))
+    return snapshot
+
+
+def copyable_occurrence(stack_obj: StackObject) -> StackObject:
+    """*stack_obj* as a copy effect must see it: itself while the occurrence is
+    on the stack; once it has left, the same occurrence standing for its
+    last-known snapshot instead of the card (see
+    :attr:`StackObject.last_known_source`). Pass the result to
+    :func:`copy_spell`."""
+    if stack_obj.last_known_source is None:
+        return stack_obj
+    import dataclasses
+
+    return dataclasses.replace(stack_obj, source=stack_obj.last_known_source)
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +448,11 @@ def move_spell_off_stack(
     """
     from engine.zones import move_to_zone
 
+    departing = resolving or any(so is stack_obj for so in game.stack.objects())
+    if departing and stack_obj.last_known_source is None:
+        # Taken before the card moves: from here on the card may change zones
+        # or be cast again, and its fields then describe that new object.
+        stack_obj.last_known_source = _detached_copy(stack_obj.source)
     if not game.stack.remove_object(stack_obj) and not resolving:
         # Countering fizzle: this occurrence already left the stack.
         return False
@@ -492,6 +537,7 @@ def copy_spell(
         # targeted/countered like the original. Its departure_zone stays None —
         # a copy is not a flashback cast even when the original was.
         is_spell=True,
+        target_requirements=original.target_requirements,
     )
 
     def _copy_resolve(g: GameState) -> None:
