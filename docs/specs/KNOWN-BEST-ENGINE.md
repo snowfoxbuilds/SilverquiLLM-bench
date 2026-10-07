@@ -81,6 +81,7 @@ A benchmark is built by porting a copy of the Known-Best Workspace into it (gril
 - **Workspace**: the ported engine and FDN implementations plus the benchmark's Known Defects, and Reference Tests (FDN Reference Tests and Engine Reference Tests).
 
 Copies are hard copies, so each benchmark stays self-contained after the Known-Best Workspace moves on.
+Every test a Workspace ships must at least collect where a candidate runs it: a Platform Test stages each ported benchmark, and the Known-Best Workspace assembled the same way with no stubs and no Known Defects, through the staging a run uses, and runs its tests with nothing importable beyond the Workspace, the standard library and installed tools; the Known-Best one must pass them all (grilling 2026-10-07).
 
 `scripts/port_from_known_best.py <benchmark>` performs the port and can be re-run whenever the Known-Best Workspace changes; `--check` reports what a port would change, and a Platform Test runs it for every benchmark ported this way.
 It owns only the copied paths in the table above, the Test Oracle Workspace's mirrors of the Workspace's `AGENTS.md`, `skills/` and Audited Test suites, and the target cards' Workspace stubs, which it generates from their Card Specs; every other path, such as the agent-facing documents, target Test Oracle Impls and target Audited Tests, is the benchmark's own.
