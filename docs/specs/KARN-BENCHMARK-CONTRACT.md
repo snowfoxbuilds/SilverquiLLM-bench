@@ -159,7 +159,18 @@ A request the two streams report differently, in shared token counts or model, k
 The transcript's format is internal to Claude Code, so each pinned Claude Code version is qualified before its measurements count as complete.
 
 Each record also keeps the newest subscription usage reading the run observed for its Login Profile: the provider's weekly-window utilization percentage, the window length, its reset time, and when the reading was observed (grilling 2026-10-07).
-Claude reports it in `rate_limit_event` stdout lines (the `seven_day` window) and Codex in its rollout `rate_limits` (whichever of its `primary` and `secondary` windows lasts 10080 minutes); only those fields are kept, and a run that observed none records the reading as missing.
+Claude reports it in `rate_limit_event` stdout lines (the `seven_day` window).
+Codex reports it in its rollout `rate_limits`, whose window names do not fix their lengths: a `primary` window may be short, so the weekly reading is whichever of the reported windows has a `window_minutes` of exactly 10080.
+The reading is qualified against the pinned Codex CLI's rollout format, with a preserved real rollout as the fixture, before capture counts.
+Only those fields are kept, and a run that observed no valid weekly window records the reading as missing; the operator's estimate then falls back as [Run Monitoring](RUN-MONITORING.md#estimated-weekly-usage) describes.
+
+| Codex rollout windows | Recorded reading |
+| --- | --- |
+| A short `primary` and a 10080-minute `secondary` | The `secondary` window |
+| A 10080-minute `primary` | The `primary` window |
+| No windows, or only windows of other lengths | Missing |
+| A malformed window (a non-integer length, an out-of-range percentage, or an unreadable reset time) | That window is ignored, and the reading is missing unless another window qualifies |
+
 Claude's stdout carries no time of its own, so a Claude reading's observation time is recorded as unknown; the run's container stop bounds it.
 The reading feeds the operator's Estimated Weekly Usage in [Run Monitoring](RUN-MONITORING.md) and is not an efficiency measurement.
 
