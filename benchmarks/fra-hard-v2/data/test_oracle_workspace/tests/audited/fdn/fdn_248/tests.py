@@ -161,16 +161,19 @@ class TestStormPerTriggerState:
         _bolt(t, second, copies=0)
         t.run()
 
-    def test_countered_triggering_spell_makes_no_copies_and_copies_no_other(self):
-        """Player 1 counters the second Burst Lightning: its trigger makes no
-        copies, and never falls back to copying the first one."""
-        first, second, offer = card(BurstLightning), card(BurstLightning), card(AnOfferYouCantRefuse)
+    def test_countered_triggering_spell_is_still_copied_and_copies_no_other(self):
+        """Player 1 counters the second Burst Lightning, aimed at their Savannah
+        Lions: its trigger still copies it once, as it last existed on the
+        stack, so the copy kills the Lions. It never copies the first Burst
+        Lightning, aimed at player 1, instead."""
+        first, second = card(BurstLightning), card(BurstLightning)
+        offer, lions = card(AnOfferYouCantRefuse), card(SavannahLions)
         t = _table(
             Side(hand=[first, second], battlefield=[ThousandYearStorm], mana={ManaType.RED: 2}),
-            Side(hand=[offer], mana={ManaType.BLUE: 1}),
+            Side(hand=[offer], battlefield=[lions], mana={ManaType.BLUE: 1}),
         )
         _cast_at_table(t, 0, first, player(1))
-        _cast_at_table(t, 0, second, player(1))
+        _cast_at_table(t, 0, second, lions)
         t.pass_(0)
         t.act(1, offer, choices=[second], then=[moves(offer, Zone.STACK)])
         _resolve(
@@ -178,7 +181,8 @@ class TestStormPerTriggerState:
             moves(offer, Zone.GRAVEYARD), moves(second, Zone.GRAVEYARD), appears(0), appears(0),
             first=1,
         )
-        _copies(t, BurstLightning, 0)
+        _copies(t, BurstLightning, 1)
+        _resolve(t, off_stack(BurstLightning), moves(lions, Zone.GRAVEYARD))
         _copies(t, BurstLightning, 0)
         _resolve(t, moves(first, Zone.GRAVEYARD), life(1, 18))
         t.run()
