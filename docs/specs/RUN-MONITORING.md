@@ -80,13 +80,13 @@ The first matching row decides the stage:
 
 | Stage | Rule | Shown as |
 | --- | --- | --- |
-| Unknown | The kernel's lock table cannot be read | `?` |
+| Finished | No owner holds the run, or ownership is unknown, a final record exists, every retained record of the run is published (or no Results Repo is resolved), and no pending login journal names the run | not shown; the run belongs to history |
+| Unknown | The kernel's lock table cannot be read | `?`, with the Needs recover reasons that would apply |
 | Starting | An owner holds the run, no record is retained, its container has not started, and no `host/host-result.json` exists | ◌ |
 | Running | An owner holds the run, no record is retained, and its container is running | ▶ |
 | Grading | An owner holds the run, no record is retained, and its container has stopped or been removed | ⚖ |
 | Recording | An owner holds the run and a record is retained: the runner or a recovery is publishing, settling its login, or reconciling an unconfirmed stop | ✎ |
-| Finished | No owner, a final record exists, every retained record of the run is published (or no Results Repo is resolved), and no pending login journal names the run | not shown; the run belongs to history |
-| Needs recover | No owner, and anything else | red, top of the running pane |
+| Needs recover | No owner holds the run | red, top of the running pane |
 
 A Needs recover row names every reason that applies, and whether the run's container is still running:
 
