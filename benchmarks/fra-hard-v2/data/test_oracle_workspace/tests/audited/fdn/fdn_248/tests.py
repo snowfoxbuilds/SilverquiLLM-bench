@@ -242,11 +242,10 @@ class TestStormCopyRetargeting:
         _resolve(t, moves(bolt, Zone.GRAVEYARD), moves(c1, Zone.GRAVEYARD))
         t.run()
 
-    def test_copy_dependent_retarget_offers_only_matching_equipment(self):
-        """Retargeted to the second Ceratops, Fiery Annihilation's copy may
-        exile only the Equipment attached to it: player 0 would rather exile
-        the first Ceratops's Adventuring Gear, which is not a legal target —
-        not offered, or offered and rejected."""
+    def _equipped_ceratops(self):
+        """Player 1's two Ceratops, each wearing its own Adventuring Gear, and
+        player 0 in their next main phase with one spell already cast this turn
+        and three Mountains left for Fiery Annihilation."""
         c1, c2 = card(QuakestriderCeratops), card(QuakestriderCeratops)
         eq1, eq2 = card(AdventuringGear), card(AdventuringGear)
         prior, fiery = card(BurstLightning), card(FieryAnnihilation)
@@ -265,10 +264,30 @@ class TestStormCopyRetargeting:
         _bolt(t, prior, copies=0)
         for mountain in mountains[1:]:
             t.act(0, mountain, then=[taps(mountain)])
-        _cast_at_table(t, 0, fiery, c1)
+        return t, fiery, c1, c2, eq1, eq2
+
+    def test_copy_dependent_retarget_offers_only_matching_equipment(self):
+        """Fiery Annihilation targets the first Ceratops and its Adventuring
+        Gear. Retargeted to the second Ceratops, the copy may exile only the
+        Equipment attached to it: player 0 would rather keep the first Gear,
+        which is not a legal target — not offered, or offered and rejected."""
+        t, fiery, c1, c2, eq1, eq2 = self._equipped_ceratops()
+        _cast_at_table(t, 0, fiery, c1, eq1)
         _resolve(t, off_stack(STORM), copied(FieryAnnihilation, 0), choices=[NEW_TARGETS, c2, eq1, eq2],
                  fallback=[NEW_TARGETS, c2, eq2])
         _resolve(t, off_stack(FieryAnnihilation), moves(eq2, Zone.EXILE), note="each Ceratops survives 5")
+        _resolve(t, moves(fiery, Zone.GRAVEYARD), moves(eq1, Zone.EXILE))
+        t.run()
+
+    def test_copy_cannot_gain_a_target_its_original_left_unchosen(self):
+        """Fiery Annihilation targets only the first Ceratops, choosing no
+        Equipment. A copy keeps its original's number of targets (rule 707.10),
+        so the copy retargeted to the second Ceratops cannot add that Ceratops's
+        Gear, however much player 0 would like to."""
+        t, fiery, c1, c2, eq1, eq2 = self._equipped_ceratops()
+        _cast_at_table(t, 0, fiery, c1)
+        _resolve(t, off_stack(STORM), copied(FieryAnnihilation, 0), choices=[NEW_TARGETS, c2, eq2])
+        _resolve(t, off_stack(FieryAnnihilation), note="each Ceratops survives 5")
         _resolve(t, moves(fiery, Zone.GRAVEYARD))
         t.run()
 

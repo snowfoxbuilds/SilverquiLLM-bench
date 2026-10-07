@@ -1,0 +1,27 @@
+--- a/cards/fdn/fdn_248/card_impl.py
++++ b/cards/fdn/fdn_248/card_impl.py
+@@ -173,14 +173,11 @@
+                         # target at that position. The requirements are the
+                         # ones the spell was cast with: a copy keeps the
+                         # original's mode, so the card is not asked again.
+-                        # A copy keeps the original's number of targets too
+-                        # (rule 707.10): an "up to one" target the original
+-                        # left unchosen stays unchosen (rule 115.7).
+                         specs = original_so.target_requirements
+                         if specs is None:
+                             specs = spell.get_targets(game)
+                         new_targets = []
+-                        for i, spec in enumerate(list(specs)[:len(original_so.targets)]):
++                        for i, spec in enumerate(specs):
+                             try:
+                                 chosen = query_spell_target(
+                                     game,
+@@ -191,7 +188,7 @@
+                                 )
+                             except CastingError:
+                                 chosen = None
+-                            if chosen is None:
++                            if chosen is None and i < len(original_so.targets):
+                                 chosen = original_so.targets[i]
+                             new_targets.append(chosen)
+                 copy_obj = copy_spell(game, original_so, controller, new_targets)

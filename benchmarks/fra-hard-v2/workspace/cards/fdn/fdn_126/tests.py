@@ -73,6 +73,7 @@ class TestZimoneDoubleAbility:
         b = _creature(p1, "Ally B")
         set_board_state(game, 0, battlefield=[z, a, b],
                         mana={ManaType.GREEN: 1, ManaType.BLUE: 1})
+        z.summoning_sick = False  # under p1's control since their turn began (rule 302.6)
         add_counter(game, a, "+1/+1", 2)
         add_counter(game, b, "+1/+1", 3)
         return game, p1, p2, z, a, b

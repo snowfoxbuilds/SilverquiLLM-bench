@@ -419,18 +419,19 @@ class TestStormCopyRetargeting:
         assert c1.damage_marked == 10      # original + copy both hit c1
 
     def test_copy_dependent_retarget_offers_only_matching_equipment(self):
-        """Retarget the copy to a new creature c2 and — via the shared dependent
-        machinery — an Equipment attached to *that* creature (eq2). eq1 (on the
-        other creature) is not a legal option; eq2 is."""
+        """The original targets c1 and its Equipment eq1. Retarget the copy to a
+        new creature c2 and — via the shared dependent machinery — an Equipment
+        attached to *that* creature (eq2). eq1 (on the other creature) is not a
+        legal option; eq2 is."""
         game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = self._setup()
-        self._cast_fiery(game, p1, fiery, [c1])
+        self._cast_fiery(game, p1, fiery, [c1, eq1])
         self._fire_storm(game, p1, fiery, retarget=True,
                          copy_target_prefs=(_pref(game, c2), _pref(game, eq2)))
         resolve_stack(game)
         self._end_storm(p1)
         assert c2.damage_marked == 5       # copy hit the new creature
         assert game.get_exile(p2).contains(eq2)      # dependent Equipment exiled
-        assert not game.get_exile(p2).contains(eq1)  # other creature's, never targeted
+        assert game.get_exile(p2).contains(eq1)      # the original's own Equipment
         assert c1.damage_marked == 5       # original still hit c1
 
     def test_copy_new_target_leave_and_return_rejected(self):
@@ -440,7 +441,7 @@ class TestStormCopyRetargeting:
         game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = self._setup()
         self._cast_fiery(game, p1, fiery, [c1])
         self._fire_storm(game, p1, fiery, retarget=True,
-                         copy_target_prefs=(_pref(game, c2),))  # decline Equipment
+                         copy_target_prefs=(_pref(game, c2),))  # the original has no Equipment target
         resolve_top_of_stack(game)         # resolve ONLY Storm's trigger → makes the copy
         self._end_storm(p1)
         move_to_zone(game, c2, Zone.BATTLEFIELD, Zone.EXILE)
