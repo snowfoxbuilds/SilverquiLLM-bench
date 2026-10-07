@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
+import functools
+import types
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -113,8 +116,11 @@ class StackObject:
             still needs *this occurrence's* spell — copying a countered spell
             (Thousand-Year Storm) — reads the snapshot via
             :func:`copyable_occurrence`, never the physical card, which a later
-            zone change or recast may already have overwritten. ``None`` while
-            the spell is still on the stack, where the card itself is current.
+            zone change or recast may already have overwritten. That includes
+            the target requirements: their filters may read the card (a bound
+            method, a closure, a default argument), so the departed view
+            rebinds them to the snapshot. ``None`` while the spell is still on
+            the stack, where the card itself is current.
     """
 
     source: Any
@@ -147,13 +153,109 @@ def copyable_occurrence(stack_obj: StackObject) -> StackObject:
     """*stack_obj* as a copy effect must see it: itself while the occurrence is
     on the stack; once it has left, the same occurrence standing for its
     last-known snapshot instead of the card (see
-    :attr:`StackObject.last_known_source`). Pass the result to
-    :func:`copy_spell`."""
-    if stack_obj.last_known_source is None:
+    :attr:`StackObject.last_known_source`). Its target requirements are rebound
+    to the snapshot too, so choosing new targets for a copy judges legality by
+    this occurrence's choices (its X, mode, controller), not by whatever the
+    card has become since. Pass the result to :func:`copy_spell`."""
+    snapshot = stack_obj.last_known_source
+    if snapshot is None:
         return stack_obj
-    import dataclasses
+    requirements = stack_obj.target_requirements
+    if requirements is not None:
+        requirements = tuple(
+            _requirement_rebound(req, stack_obj.source, snapshot) for req in requirements
+        )
+    return dataclasses.replace(
+        stack_obj, source=snapshot, target_requirements=requirements
+    )
 
-    return dataclasses.replace(stack_obj, source=stack_obj.last_known_source)
+
+def _requirement_rebound(requirement: Any, card: Any, snapshot: Any) -> Any:
+    """*requirement* with its ``filter_fn`` reading *snapshot* wherever it read
+    *card*; the requirement itself is returned when its filter never refers to
+    the card. Shared callbacks are never mutated."""
+    filter_fn = getattr(requirement, "filter_fn", None)
+    rebound = _rebound(filter_fn, card, snapshot)
+    if rebound is filter_fn:
+        return requirement
+    if dataclasses.is_dataclass(requirement):
+        return dataclasses.replace(requirement, filter_fn=rebound)
+    clone = copy.copy(requirement)
+    clone.filter_fn = rebound
+    return clone
+
+
+_REBIND_DEPTH = 4
+
+
+def _rebound(value: Any, card: Any, snapshot: Any, depth: int = 0) -> Any:
+    """*value* with references to *card* replaced by *snapshot*: the card
+    itself, a method bound to it, and — recursively, a few levels deep — a
+    function whose closure cells or default arguments hold either, or a
+    ``functools.partial`` over them. Anything that never refers to the card is
+    returned unchanged (the same object), so callers can tell nothing moved."""
+    if value is card:
+        return snapshot
+    if depth >= _REBIND_DEPTH:
+        return value
+    if isinstance(value, types.MethodType):
+        if value.__self__ is card:
+            return types.MethodType(value.__func__, snapshot)
+        func = _rebound(value.__func__, card, snapshot, depth + 1)
+        return value if func is value.__func__ else types.MethodType(func, value.__self__)
+    if isinstance(value, functools.partial):
+        func = _rebound(value.func, card, snapshot, depth + 1)
+        args = tuple(_rebound(a, card, snapshot, depth + 1) for a in value.args)
+        keywords = {k: _rebound(v, card, snapshot, depth + 1) for k, v in value.keywords.items()}
+        unchanged = (
+            func is value.func
+            and all(a is b for a, b in zip(args, value.args))
+            and all(keywords[k] is value.keywords[k] for k in keywords)
+        )
+        return value if unchanged else functools.partial(func, *args, **keywords)
+    if isinstance(value, types.FunctionType):
+        return _function_rebound(value, card, snapshot, depth)
+    return value
+
+
+def _function_rebound(fn: types.FunctionType, card: Any, snapshot: Any, depth: int) -> Any:
+    changed = False
+    closure = None
+    if fn.__closure__ is not None:
+        cells = []
+        for cell in fn.__closure__:
+            try:
+                contents = cell.cell_contents
+            except ValueError:  # an empty cell: nothing to rebind
+                cells.append(cell)
+                continue
+            new = _rebound(contents, card, snapshot, depth + 1)
+            if new is contents:
+                cells.append(cell)
+            else:
+                cells.append(types.CellType(new))
+                changed = True
+        closure = tuple(cells)
+    defaults = fn.__defaults__
+    if defaults is not None:
+        new_defaults = tuple(_rebound(d, card, snapshot, depth + 1) for d in defaults)
+        if any(a is not b for a, b in zip(new_defaults, defaults)):
+            defaults, changed = new_defaults, True
+    kwdefaults = fn.__kwdefaults__
+    if kwdefaults is not None:
+        new_kw = {k: _rebound(v, card, snapshot, depth + 1) for k, v in kwdefaults.items()}
+        if any(new_kw[k] is not kwdefaults[k] for k in kwdefaults):
+            kwdefaults, changed = new_kw, True
+    if not changed:
+        return fn
+    clone = types.FunctionType(fn.__code__, fn.__globals__, fn.__name__, defaults, closure)
+    clone.__kwdefaults__ = kwdefaults
+    clone.__qualname__ = fn.__qualname__
+    clone.__module__ = fn.__module__
+    clone.__doc__ = fn.__doc__
+    clone.__annotations__ = dict(fn.__annotations__)
+    clone.__dict__.update(fn.__dict__)
+    return clone
 
 
 # ---------------------------------------------------------------------------

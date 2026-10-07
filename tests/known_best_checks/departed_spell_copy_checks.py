@@ -12,13 +12,14 @@ from __future__ import annotations
 from typing import Any
 
 from cards.fdn.fdn_188.card_impl import Abrade, AbradeAbility3
+from cards.fdn.fdn_215.card_impl import Bushwhack, BushwhackAbility3
 from cards.fdn.fdn_248.card_impl import ThousandYearStorm
 from engine.card import Creature, Equipment, Instant, printed_class
 from engine.casting import cast_spell as engine_cast_spell
 from engine.decisions import Decision, GameRef
-from engine.stack import copy_spell, move_spell_off_stack, resolve_top_of_stack
+from engine.stack import copy_spell, copyable_occurrence, move_spell_off_stack, resolve_top_of_stack
 from engine.state_based_actions import resolve_state_based_actions
-from engine.types import CardType, ManaCost, ManaType, TargetRequirement, Zone
+from engine.types import CardType, ManaCost, ManaType, Phase, TargetRequirement, Zone
 from engine.zones import move_to_zone
 from test_utils import Intent, create_game, set_board_state
 
@@ -80,8 +81,48 @@ class _Bolt(Instant):
             deal_damage(game, self, chosen[0], 5)
 
 
+class _XUpTo(Instant):
+    """{X}: deals X damage to target creature with power X or less. The target
+    filter closes over the card, as a filter written in ``get_targets`` does."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "X Up To")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{X}"))
+        super().__init__(**kwargs)
+
+    def get_targets(self, game: Any) -> list:
+        return [TargetRequirement(
+            filter_fn=lambda obj: _is_creature(obj) and obj.base_power <= self.x_value,
+            description="target creature with power X or less",
+            zone=Zone.BATTLEFIELD,
+        )]
+
+    def on_resolve(self, game: Any) -> None:
+        from engine.game import deal_damage
+
+        chosen = getattr(self, "chosen_targets", None) or []
+        if chosen and chosen[0] is not None and _is_creature(chosen[0]):
+            deal_damage(game, self, chosen[0], self.x_value)
+
+
+class _XUpToByDefault(_XUpTo):
+    """The same spell with the card captured as a default argument."""
+
+    def get_targets(self, game: Any) -> list:
+        def small_enough(obj: Any, card: Any = self) -> bool:
+            return _is_creature(obj) and obj.base_power <= card.x_value
+
+        return [TargetRequirement(
+            filter_fn=small_enough, description="target creature with power X or less", zone=Zone.BATTLEFIELD,
+        )]
+
+
 def _creature(p, name):
     return Creature(name=name, base_power=1, base_toughness=50, owner=p, controller=p)
+
+
+def _big_creature(p, name):
+    return Creature(name=name, base_power=4, base_toughness=50, owner=p, controller=p)
 
 
 def _equipment(p, name):
@@ -310,3 +351,98 @@ class TestLiveSpellIsCopiedFromTheCard:
         assert copy_obj.last_known_source is not None
         assert copy_obj.last_known_source is not copy_obj.source
         assert any(so.source is signal for so in game.stack._items)
+
+
+class TestRetargetingJudgesTheOccurrenceNotTheCard:
+    """Choosing new targets for a copy of a countered spell judges legality by
+    that occurrence's choices: its target filters read the snapshot, not the
+    card, which a later cast may have changed."""
+
+    def _recast_x_up_to(self, spell_cls):
+        signal, spell = _Signal(), spell_cls()
+        game, p1 = _setup([signal, spell], [], mana={ManaType.COLORLESS: 8})
+        p2 = game.players[1]
+        big, small = _big_creature(p2, "Big"), _creature(p2, "Small")
+        set_board_state(game, 1, battlefield=[big, small])
+        _cast(game, p1, signal)
+        _cast(game, p1, spell, [Decision.number(3), _pref(game, small)])
+        _counter(game, spell, Zone.HAND)
+        _cast(game, p1, spell, [Decision.number(5), _pref(game, small)])
+
+        # Each copy retargets to Big when Big is legal for it, otherwise Small.
+        done = _storm_answers(
+            p1, retarget=True, spell_cls=spell_cls, target_prefs=(_pref(game, big), _pref(game, small)),
+        )
+        made = _resolve_all_collect_copies(game)
+        done()
+        return made, big, small
+
+    def test_a_filter_closing_over_the_card_reads_the_occurrences_x(self):
+        """X=3 was countered and the card recast with X=5. The two X=5 copies
+        may take Big (power 4); the X=3 copy may not, so it takes Small."""
+        made, big, small = self._recast_x_up_to(_XUpTo)
+
+        assert [so.source.x_value for so in made] == [5, 5, 3]
+        assert [so.targets for so in made] == [[big], [big], [small]]
+        assert (big.damage_marked, small.damage_marked) == (10, 8)
+
+    def test_a_filter_with_the_card_as_a_default_argument_reads_the_occurrences_x(self):
+        made, big, small = self._recast_x_up_to(_XUpToByDefault)
+
+        assert [so.targets for so in made] == [[big], [big], [small]]
+        assert (big.damage_marked, small.damage_marked) == (10, 8)
+
+    def test_a_bound_method_filter_reads_the_occurrences_controller(self):
+        """Player 0 casts player 1's Bushwhack to fight; it is countered, and
+        the card goes back to its owner. The copy's "you control" is still
+        player 0's, as it was for that occurrence."""
+        signal = _Signal()
+        game, p1 = _setup([signal], [], mana={ManaType.GREEN: 1})
+        p2 = game.players[1]
+        bushwhack = Bushwhack(owner=p2, controller=p1)
+        p1.zones[Zone.HAND].add(bushwhack)
+        mine, other_mine = _creature(p1, "Mine"), _creature(p1, "Other Mine")
+        theirs, other_theirs = _creature(p2, "Theirs"), _creature(p2, "Other Theirs")
+        p1.zones[Zone.BATTLEFIELD].add(mine)
+        p1.zones[Zone.BATTLEFIELD].add(other_mine)
+        p2.zones[Zone.BATTLEFIELD].add(theirs)
+        p2.zones[Zone.BATTLEFIELD].add(other_theirs)
+        _cast(game, p1, signal)
+        _resolve_all_collect_copies(game)  # a sorcery needs an empty stack
+        game.phase = Phase.PRECOMBAT_MAIN  # ... and a main phase
+        _cast(game, p1, bushwhack, [
+            Decision.mode(printed=BushwhackAbility3), _pref(game, mine), _pref(game, theirs),
+        ])
+        occurrence = _occurrence(game, bushwhack)
+        _counter(game, bushwhack)
+        bushwhack.controller = p2  # the card is its owner's again
+
+        departed = copyable_occurrence(occurrence)
+        yours, not_yours = departed.target_requirements
+        assert yours.filter_fn(other_mine) and not yours.filter_fn(other_theirs)
+        assert not_yours.filter_fn(other_theirs) and not not_yours.filter_fn(other_mine)
+
+        done = _storm_answers(
+            p1, retarget=True, spell_cls=Bushwhack, target_prefs=(_pref(game, other_mine), _pref(game, other_theirs)),
+        )
+        made = _resolve_all_collect_copies(game)
+        done()
+
+        assert [so.targets for so in made] == [[other_mine, other_theirs]]
+        assert (other_mine.damage_marked, other_theirs.damage_marked) == (1, 1)
+        assert (mine.damage_marked, theirs.damage_marked) == (0, 0)
+
+    def test_requirements_that_never_read_the_card_are_kept_as_they_are(self):
+        signal, bolt = _Signal(), _Bolt()
+        game, p1 = _setup([signal, bolt], [])
+        aimed = _creature(game.players[1], "Aimed")
+        set_board_state(game, 1, battlefield=[aimed])
+        _cast(game, p1, signal)
+        _cast(game, p1, bolt, [_pref(game, aimed)])
+        occurrence = _occurrence(game, bolt)
+        _counter(game, bolt)
+
+        departed = copyable_occurrence(occurrence)
+        assert departed.source is occurrence.last_known_source
+        assert departed.target_requirements[0] is occurrence.target_requirements[0]
+        assert occurrence.target_requirements[0].filter_fn is _is_creature
