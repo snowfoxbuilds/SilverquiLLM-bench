@@ -46,7 +46,7 @@ The current batch (2026-09-28) runs every model at effort `medium` with subagent
 
 Claude recipes bake a managed-settings file that denies `Agent` and `Workflow`.
 Codex recipes bake `/etc/codex/config.toml` with `[agents] enabled = false` (and `multi_agent = false`). The `[agents]` switch is needed on Codex 0.157.1, where the GPT-6 model catalog keeps the collaboration tools whatever the `multi_agent` feature says.
-The Codex recipes also request the Flex tier (`service_tier = "flex"`) as a cost-saving trial, which is why `bare-codex` moved to Codex 0.157.1: 0.153.4 sends only the tiers a model's catalog lists, and astra's lists only Fast. Whether the ChatGPT backend honors Flex shows only in usage, since costs are reported at standard rates.
+The Codex recipes request no service tier: the ChatGPT subscription backend refuses the Flex tier, so every Codex request records `requested_service_tier` as none.
 Each record's `subagent_threads` measurement counts the agent threads beyond the main one (Claude sidechain transcripts, Codex threads other than the task's), so a batch meant to run without subagents should show `0`.
 The count is an observation, not an incompleteness reason.
 The Codex recipes pin their CLI with their own `[image.native_cli]`; 0.157.1 needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
@@ -137,7 +137,7 @@ Each run retains its workspace, snapshots, stopped final workspace, grading-sour
 The immutable schema 2 record lives under `private-results/results/<candidate-hash>/<run-id>/`.
 Estimated cost is API-equivalent USD, not the subscription bill.
 `cost_breakdown` beside it tallies tokens and USD by type: uncached input, cache reads, cache writes, 1-hour cache writes (Anthropic prices them above the 5-minute ones), and output.
-Every cost is a standard-tier equivalent, whatever tier served the request: each priced request carries `rate_basis: "standard"`, Claude requests keep their transcript `speed` and `service_tier`, and Codex requests keep `requested_service_tier`, the tier Codex put in its request (`mixed` when a thread used several). Codex never reports the tier the server applied, so a flex trial shows up in token usage and the cost breakdown, not in the price.
+Every cost is a standard-tier equivalent, whatever tier served the request: each priced request carries `rate_basis: "standard"`, Claude requests keep their transcript `speed` and `service_tier`, and Codex requests keep `requested_service_tier`, the tier Codex put in its request (`mixed` when a thread used several). Codex never reports the tier the server applied.
 Agent turns count model responses plus tool calls; missing measurements remain null with an explanation.
 Turns, usage, and cost are complete only for a Codex version whose journal and telemetry were qualified against scripted ground truth (0.153.4, 0.157.1 and 0.159.0); qualify another offline, without credentials, with `scripts/qualify_codex_telemetry.py --image IMAGE --native-version VERSION --output DIR`.
 Claude Code runs are read from its session transcripts, subagents included, with the OTel stream as a cross-check; a compaction's own request appears only in OTel.
