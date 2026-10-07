@@ -153,9 +153,7 @@ class MonitorApp(App):
     def _start(self, work: Callable[[], Message | None], group: str) -> None:
         with self._state:
             self._inflight += 1
-        self.run_worker(
-            lambda: self._guarded(work), group=group, thread=True, exit_on_error=False
-        )
+        self.run_worker(lambda: self._guarded(work), group=group, thread=True, exit_on_error=False)
 
     def _guarded(self, work: Callable[[], Message | None]) -> None:
         try:

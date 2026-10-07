@@ -50,7 +50,9 @@ SOL_REBUILT = _candidate("bare-codex-sol61", "gpt-6.1-sol", "xhigh", "c3" * 32)
 HAIKU = _candidate("bare-claude-haiku", "claude-haiku-4-5", "", "d4" * 32)
 
 
-def _live(run_id, stage, benchmark, candidate, login, provider, minutes, *, running=True):
+def _live(
+    run_id, stage, benchmark, candidate, login, provider, minutes, *, running=True, reasons=()
+):
     started = NOW - timedelta(minutes=minutes)
     container = RunContainer(
         run_id,
@@ -72,7 +74,8 @@ def _live(run_id, stage, benchmark, candidate, login, provider, minutes, *, runn
         provider=provider,
         budget_seconds=14400,
         host_started_at=started,
-        container=container if stage is not Stage.NEEDS_RECOVER else None,
+        container=container,
+        reasons=reasons,
         native_telemetry=True,
         telemetry_adapter=provider,
     )
@@ -127,11 +130,28 @@ def running_views():
                 "karn-claude-login/bare-claude-haiku",
                 "claude",
                 300,
+                reasons=("no_record", "login_settlement_pending"),
             ),
             None,
             None,
             0,
             (),
+        ),
+        RunView(
+            _live(
+                "dddd4444" * 4,
+                Stage.RECORDING,
+                "hob-medium",
+                SOL_REBUILT,
+                "karn-codex-login/slot-2",
+                "codex",
+                31,
+                running=False,
+            ),
+            None,
+            Decimal("3.05"),
+            0,
+            _costs(31, 40, "0.03"),
         ),
     ]
 
@@ -171,6 +191,10 @@ def queued():
 
 def _reading(provider, percent, resets_in, read_ago):
     return UsageReading(provider, percent, 10080, NOW + resets_in, NOW - read_ago)
+
+
+# The killed smoke run still owns its Claude login's settlement.
+PENDING = {"bare-claude-haiku": "cccc3333" * 4}
 
 
 def profiles():
@@ -214,7 +238,7 @@ def profiles():
     ]
     return [
         ProfileView(
-            ProfileStatus(plugin, slot, provider, busy, False),
+            ProfileStatus(plugin, slot, provider, busy, slot in PENDING, PENDING.get(slot)),
             WeeklyUsage(f"{plugin}/{slot}", w.percent, w.estimated, w.reading) if w else None,
             None,
         )
@@ -511,7 +535,7 @@ class FakeMonitor:
             running=self.running,
             queued=queued(),
             profiles=profiles(),
-            counts=Counts(queued=5, live=2, finished_recent=6, finished_total=354),
+            counts=Counts(queued=5, live=len(self.running), finished_recent=6, finished_total=354),
             repo=RepoFreshness(NOW - timedelta(hours=2), 3),
             exclusion_error=None,
         )

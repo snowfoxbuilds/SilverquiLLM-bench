@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from rich.text import Text
 
-from silverquillm.monitor import Score, Stage, WeeklyUsage
+from silverquillm.monitor import LiveRun, Score, Stage, WeeklyUsage
 
 from .theme import Theme
 
@@ -152,9 +152,30 @@ STAGE_ROLES = {
     Stage.RUNNING: "running",
     Stage.GRADING: "grading",
     Stage.STARTING: "starting",
+    Stage.RECORDING: "recording",
     Stage.NEEDS_RECOVER: "needs_recover",
     Stage.UNKNOWN: "unknown",
 }
+
+
+REASONS = {
+    "no_record": "no record",
+    "unconfirmed_stop": "stop unconfirmed",
+    "unpublished": "not published",
+    "login_settlement_pending": "login unsettled",
+    "unreadable_record": "record unreadable",
+    "ambiguous_linked_recovery": "recoveries disagree",
+}
+
+
+def reasons(run: LiveRun, theme: Theme) -> Text:
+    """Whether its container runs, then why a run needs recovery: ``container up · no record``."""
+    # Whether the container still runs comes first: a live workload is the urgent case.
+    words = []
+    if run.container is not None:
+        words.append(f"container {'up' if run.container.running else 'stopped'}")
+    words += [REASONS.get(code, code.replace("_", " ")) for code in run.reasons]
+    return Text(theme.glyph("sep").join(words), style=theme.style("needs_recover"))
 
 
 def stage(value: Stage, theme: Theme) -> Text:

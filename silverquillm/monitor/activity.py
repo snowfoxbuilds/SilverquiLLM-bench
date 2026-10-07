@@ -192,7 +192,10 @@ def _codex_item(phase: str, item: dict) -> list[ActivityItem]:
         entries = item.get("items")
         checklist = (
             [
-                (entry.get("completed") is True, shorten(_text(entry.get("text")), lines=1, chars=120))
+                (
+                    entry.get("completed") is True,
+                    shorten(_text(entry.get("text")), lines=1, chars=120),
+                )
                 for entry in entries
                 if isinstance(entry, dict)
             ]

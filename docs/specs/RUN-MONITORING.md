@@ -126,14 +126,17 @@ Secondary labels, shown dimmed, are the first eight characters of the Candidate 
 
 The dashboard has three panes: a narrow status pane across the top, the running pane filling most of the bottom left, and a narrow queued pane on the bottom right.
 Live panes refresh every two seconds by default (`--interval`).
+Reads run off the interface thread, one at a time: a refresh asked for while one is reading runs once after it, however many ticks or `r` presses arrived, so a slow Docker daemon delays the view rather than piling up reads.
+Quitting stops new reads at once and never waits on one in flight; the monitor's followers are closed when the last read finishes.
 
 The status pane shows (grilling 2026-10-07):
 
 - the resolved locations and their sources, and the Results Repo clone's last fetch time and how many commits it is behind its remote-tracking branch, both from local refs;
 - counts of queued runs, live runs (every stage but Finished), and runs finished in the last seven days, with the all-time total dimmed;
-- for each Login Pool, every Login Profile with a free or busy marker and its Estimated Weekly Usage.
+- for each Login Pool, every Login Profile with a free or busy marker and its Estimated Weekly Usage, and for a profile with a pending login journal the run that owns its settlement.
 
 Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, elapsed container time, an elapsed-versus-budget bar, Estimated %, provisional Estimated Cost, and a cost sparkline.
+A Needs recover or Unknown row shows whether its container is up or stopped, then its reasons, in place of the budget bar.
 Selecting a row opens its run details.
 
 **Estimated %** is the elapsed container time divided by the median container duration (`stopped_at` minus `started_at`) of completed, non-excluded runs of the same benchmark (grilling 2026-10-07).
@@ -194,7 +197,12 @@ The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the
 | Workspace | The agent's commits, read from the workspace's reflog as a file since no git command runs in a candidate-controlled repository, and the snapshot timeline with files changed per snapshot |
 | Raw | Unrendered stdout |
 
+A Needs recover or Unknown run's header also names its reasons and whether its container is up.
+
 A live run's tabs follow `docker logs -f` and the events file; a historical run's tabs read the retained files.
+A run that leaves the live view reads its retained logs once, even when this host has none, and keeps asking for its Run Record's detail on every refresh until the detail reads: its summary can reach the history after the run finishes, and a manifest can be briefly unreadable.
+Each stream keeps its own newest 4000 lines in its tabs, so a flood of stderr never evicts stdout from Activity and Raw.
+Everything taken from a run, its records or its workspace is drawn as literal text, never as markup, and an out-of-range or non-finite number in candidate output is shown as unknown.
 Live Docker logs are unredacted, so the monitor applies the login plugin's redactions to every line before showing it.
 Those redactions are the Login Profile's stored login when the follow starts, so a token the candidate refreshes mid-run is redacted only from the retained logs, which the host redacts with the refreshed values at capture.
 A followed run keeps its newest 2000 lines, each cut at 16 KiB.

@@ -99,6 +99,9 @@ def header(shown: Shown, now: datetime, theme: Theme) -> Table:
         if live.estimated_percent is not None:
             left.append(f"  est {live.estimated_percent:.0f}%", style=theme.style("accent"))
         left.append(f"\nstarted {fmt.when(run.started_at)}", style=theme.style("muted"))
+        if run.stage in (Stage.NEEDS_RECOVER, Stage.UNKNOWN):
+            left.append("\n")
+            left.append_text(fmt.reasons(run, theme))
     elif summary is not None:
         left.append_text(fmt.status(summary.status, theme))
         duration = fmt.duration(summary.duration_seconds)

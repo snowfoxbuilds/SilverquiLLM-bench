@@ -25,6 +25,7 @@ STAGE_ORDER = {
     Stage.RUNNING: 2,
     Stage.STARTING: 3,
     Stage.GRADING: 4,
+    Stage.RECORDING: 5,
 }
 LOCATION_LABELS = {
     "results_repo": "results",
@@ -37,6 +38,7 @@ NARROW = 150
 BAR_WIDTH = 12
 SPARK_WIDTH = 16
 CANDIDATE_WIDTH = 36
+REASONS_WIDTH = 44
 WEEKLY_BAR = 10
 
 
@@ -155,6 +157,12 @@ class StatusPane(Horizontal):
             mark = Text(theme.glyph("untapped"), style=theme.style("muted"))
         name = Text(f"{mark.plain} ", style=mark.style)
         name.append(status.slot, style=theme.style("text" if status.busy else "muted"))
+        if status.pending_run:
+            # The run that still owns this login's settlement; recovering it frees the profile.
+            name.append(
+                f"{theme.glyph('sep')}{theme.glyph('pending')} {status.pending_run[:8]}",
+                style=theme.style("bad"),
+            )
         percent = view.weekly.percent / 100 if view.weekly else None
         return name, fmt.bar(percent, WEEKLY_BAR, theme), fmt.weekly(view.weekly, now, theme)
 
@@ -188,8 +196,7 @@ class RunningPane(Vertical):
         )
         self.query_one("#running-empty").display = not runs
         table.display = bool(runs)
-        live = sum(1 for view in runs if view.run.stage is not Stage.NEEDS_RECOVER)
-        self.border_subtitle = f"{live} live on this host"
+        self.border_subtitle = f"{len(runs)} unfinished on this host"
         selected = (
             self._order[table.cursor_row] if 0 <= table.cursor_row < len(self._order) else None
         )
@@ -220,7 +227,12 @@ class RunningPane(Vertical):
         if run.stage is Stage.NEEDS_RECOVER:
             candidate.stylize(theme.style("needs_recover"))
         candidate.append("\n" + "  ".join((*run.candidate.secondary, run.run_id[:8])), style=muted)
-        progress = fmt.bar(view.budget_fraction(now), BAR_WIDTH, theme)
+        if run.stage in (Stage.NEEDS_RECOVER, Stage.UNKNOWN):
+            # Its budget no longer matters; why it is stuck, and whether it still runs, does.
+            progress = fmt.reasons(run, theme)
+            progress.truncate(REASONS_WIDTH, overflow="ellipsis")
+        else:
+            progress = fmt.bar(view.budget_fraction(now), BAR_WIDTH, theme)
         if view.estimated_percent is not None:
             progress.append(
                 f" {theme.glyph('estimated')}{view.estimated_percent:.0f}%",
