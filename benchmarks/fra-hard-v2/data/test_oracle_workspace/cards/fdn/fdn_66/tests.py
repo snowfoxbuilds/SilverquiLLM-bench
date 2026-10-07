@@ -3,13 +3,14 @@
 "This creature enters with eight revival counters on it if you cast it." Under
 the enters-with-counters primitive the eight revival counters land as the
 creature enters *from the stack* (a resolved cast). A return via the
-dies-trigger enters from the graveyard and gets no fresh counters — it keeps the
-one-fewer count it left with. The dies-and-return mechanic is preserved.
+dies-trigger enters from the graveyard at the beginning of the next end step and
+gets no fresh counters — it keeps the one-fewer count it left with.
 """
 
 from __future__ import annotations
 
 from cards.fdn.fdn_66.card_impl import NineLivesFamiliar
+from engine.events import EndStepTriggeredEvent
 from engine.types import ManaCost, Zone
 from engine.zones import move_to_zone
 from test_utils import create_game, resolve_stack, set_board_state
@@ -60,10 +61,13 @@ class TestNineLivesDiesReturn:
         move_to_zone(game, card, Zone.STACK, Zone.BATTLEFIELD)
         assert card.counters.get("revival", 0) == 8
 
-        # Killing it (battlefield -> graveyard) fires the dies-trigger, which
-        # goes on the stack; resolving it removes one revival counter and
-        # returns it to the battlefield.
+        # Killing it (battlefield -> graveyard) fires the dies-trigger; it
+        # resolves into a delayed trigger that returns it at the beginning of
+        # the next end step with one fewer revival counter.
         move_to_zone(game, card, Zone.BATTLEFIELD, Zone.GRAVEYARD)
+        resolve_stack(game)
+        assert game.get_graveyard(p1).contains(card)
+        game.trigger_manager.fire_event(game, EndStepTriggeredEvent())
         resolve_stack(game)
         assert game.get_battlefield(p1).contains(card)
         assert card.counters.get("revival", 0) == 7
