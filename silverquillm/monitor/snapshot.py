@@ -17,11 +17,13 @@ from decimal import Decimal
 from pathlib import Path
 
 from silverquillm.host_config import (
+    LOCATIONS,
     HostConfig,
     HostConfigError,
     ResolvedLocation,
     config_path,
     load_host_config,
+    resolve_location,
     resolve_locations,
 )
 
@@ -38,6 +40,14 @@ from .queue import QueuedBatch, queued_batches
 CODEX_READING_SECONDS = 30.0
 HISTORY_SECONDS = 10.0
 FINISHED_WINDOW = timedelta(days=7)
+# A deeply nested file recurses; an unknown ``~user`` path fails to expand.
+CONFIG_ERRORS = (HostConfigError, RecursionError, RuntimeError, ValueError, OSError)
+
+
+def _config_message(error: Exception) -> str:
+    if isinstance(error, HostConfigError):
+        return str(error)
+    return f"host configuration unreadable: {type(error).__name__}"
 
 
 @dataclass(frozen=True)
@@ -118,16 +128,32 @@ class Monitor:
         self._config_error: str | None = None
         try:
             self.config: HostConfig = load_host_config(environ=self.environ)
-        except HostConfigError as error:
-            self._config_error = str(error)
+        except CONFIG_ERRORS as error:
+            # A broken file is reported in every snapshot, never fatal to the monitor.
+            self._config_error = _config_message(error)
             self.config = HostConfig(path=config_path(self.environ), loaded=False)
-        self.locations = resolve_locations(self.given, environ=self.environ, config=self.config)
+        self.locations = self._resolve()
         self.history_store = HistoryStore(self.locations["results_repo"].path)
         self._history: list[RunSummary] = []
         self._history_at = float("-inf")
         self._live: dict[str, _Live] = {}
         self._codex_readings: dict[str, tuple[float, UsageReading | None]] = {}
         self._repo = RepoFreshness(None, None)
+
+    def _resolve(self) -> dict[str, ResolvedLocation]:
+        try:
+            return resolve_locations(self.given, environ=self.environ, config=self.config)
+        except CONFIG_ERRORS as error:
+            self._config_error = self._config_error or _config_message(error)
+        locations = {}
+        for key in LOCATIONS:
+            try:
+                locations[key] = resolve_location(
+                    key, self.given.get(key), environ=self.environ, config=self.config
+                )
+            except CONFIG_ERRORS:
+                locations[key] = ResolvedLocation(key, None, "unset")
+        return locations
 
     def path(self, key: str) -> Path | None:
         return self.locations[key].path

@@ -153,6 +153,8 @@ The header carries `● LIVE` or `◼ HISTORICAL`, the stage for a live run, the
 
 A live run's tabs follow `docker logs -f` and the events file; a historical run's tabs read the retained files.
 Live Docker logs are unredacted, so the monitor applies the login plugin's redactions to every line before showing it.
+Those redactions are the Login Profile's stored login when the follow starts, so a token the candidate refreshes mid-run is redacted only from the retained logs, which the host redacts with the refreshed values at capture.
+A followed run keeps its newest 2000 lines, each cut at 16 KiB.
 The native transcript is not shown: for Claude it largely duplicates stdout, and it sits beside the Login Profile's credentials.
 
 ### Navigation

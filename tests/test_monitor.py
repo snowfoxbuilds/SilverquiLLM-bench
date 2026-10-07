@@ -1009,3 +1009,43 @@ def test_a_snapshot_reads_everything_and_writes_nothing(tmp_path):
     assert snapshot.locations["state_root"].path == state
     assert monitor.output("done") == []
     monitor.close()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "x = " + "[" * 5000 + "]" * 5000 + "\n",
+        'runs_dir = "~no-such-user-xyz/runs"\n',
+        "{{{",
+    ],
+)
+def test_a_broken_host_config_is_reported_not_fatal(tmp_path, text):
+    config = tmp_path / "config/silverquillm/config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text(text)
+    monitor = Monitor(
+        environ={"XDG_CONFIG_HOME": str(tmp_path / "config")},
+        docker=lambda: ([], None),
+        proc_locks=tmp_path / "none",
+        follow_output=False,
+    )
+    snapshot = monitor.snapshot()
+    assert snapshot.config_error
+    assert snapshot.locations["state_root"].source == "default"
+    monitor.close()
+
+
+def test_a_follower_keeps_a_bounded_buffer():
+    from silverquillm.monitor import output
+
+    lines = b"".join(b"2026-10-07T11:59:00Z line %d\n" % n for n in range(2500))
+    long = b"2026-10-07T11:59:01Z " + b"x" * (64 * 1024) + b"\n"
+    follower = LogFollower(
+        "sq-run-abc", (), popen=lambda *args, **kwargs: FakeProcess(lines + long, b"")
+    )
+    follower.start()
+    follower.stop()
+    kept = follower.lines_since(0)
+    assert len(kept) == output.DEFAULT_KEEP == 2000
+    assert kept[-1].truncated and len(kept[-1].text) <= output.MAX_LINE + 64
+    assert kept[0].text == "line 501"

@@ -28,11 +28,12 @@ from ._read import instant
 from .history import UsageReading
 
 REDACTED = b"[REDACTED]"
-MAX_LINE = 64 * 1024
+# A displayed line keeps its first 16 KiB; with DEFAULT_KEEP lines a followed run holds ~32 MiB.
+MAX_LINE = 16 * 1024
 TRUNCATED = b" [truncated]"
 READ_CHUNK = 65536
 DEFAULT_TAIL = 2000
-DEFAULT_KEEP = 5000
+DEFAULT_KEEP = 2000
 MAX_RETAINED_READ = 8 * 1024 * 1024
 STREAMS = ("stdout", "stderr")
 # ``docker logs --timestamps`` stamps every message in Go's RFC3339NanoFixed, and Docker
