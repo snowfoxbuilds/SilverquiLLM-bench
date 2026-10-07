@@ -18,6 +18,8 @@ from typing import Any
 from silverquillm.karn.observations import _OTLP_TOKENS
 from silverquillm.karn.pricing import price_requests
 
+from ._read import MAX_USD
+
 EVENTS_FILE = "observations.events.jsonl"
 # Read at most this much per update; a backlog is consumed over successive polls.
 MAX_READ = 16 * 1024 * 1024
@@ -39,7 +41,8 @@ class RequestCost:
 
 
 def _count(value: Any) -> int | None:
-    if isinstance(value, str) and value.isdigit() and len(value) <= 20:
+    # ``isdigit`` alone admits digits ``int`` refuses, such as superscripts.
+    if isinstance(value, str) and value.isascii() and value.isdigit() and len(value) <= 20:
         return int(value)
     return value if type(value) is int and value >= 0 else None
 
@@ -51,7 +54,7 @@ def _usd(value: Any) -> Decimal | None:
         number = Decimal(str(value))
     except InvalidOperation:
         return None
-    return number if number.is_finite() and number >= 0 else None
+    return number if number.is_finite() and 0 <= number <= MAX_USD else None
 
 
 def _stamp(event: dict) -> int:
@@ -76,7 +79,7 @@ class ProvisionalCost:
     def update(self) -> None:
         path = self.run_dir / EVENTS_FILE
         try:
-            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         except OSError:
             return
         try:
@@ -139,11 +142,13 @@ class ProvisionalCost:
             and "input_token_count" in attributes
         ):
             self._seen.add(identity)
+            thread, model = event.get("thread_id"), attributes.get("model")
+            # The price table keys on both, so neither may be an unhashable JSON value.
             self._codex.append(
                 {
                     "response_id": identity,
-                    "thread_id": event.get("thread_id") or "",
-                    "model": attributes.get("model"),
+                    "thread_id": thread if isinstance(thread, str) else "",
+                    "model": model if isinstance(model, str) else None,
                     "timestamp_ms": _stamp(event),
                     "usage": {
                         key: _count(attributes.get(source)) for key, source in _OTLP_TOKENS.items()
@@ -160,7 +165,7 @@ class ProvisionalCost:
         return [
             RequestCost(
                 request["timestamp_ms"],
-                request["model"] if isinstance(request["model"], str) else None,
+                request["model"],
                 request["usage"],
                 _usd(price["usd"]),
             )

@@ -186,21 +186,23 @@ def _rollouts(descriptor: int) -> tuple[list[tuple[int, tuple[str, ...]]], bool]
     """Every rollout below ``sessions`` by modification time, and whether any entry was skipped.
 
     One unreadable or linked entry is skipped rather than ending the walk, so it cannot hide
-    the readings in files after it.
+    the readings in files after it. Codex names its session directories and rollouts by date,
+    so names are walked in reverse: the entry cap then drops the oldest.
     """
-    found, skipped = [], False
+    found, skipped, examined = [], False, 0
 
     def walk(directory: int, parts: tuple[str, ...]) -> None:
-        nonlocal skipped
+        nonlocal skipped, examined
         try:
-            names = sorted(os.listdir(directory))
+            names = sorted(os.listdir(directory), reverse=True)
         except OSError:
             skipped = True
             return
         for name in names:
-            if len(found) >= MAX_WALK_ENTRIES:
+            if examined >= MAX_WALK_ENTRIES:
                 skipped = True
                 return
+            examined += 1
             try:
                 info = os.stat(name, dir_fd=directory, follow_symlinks=False)
             except OSError:

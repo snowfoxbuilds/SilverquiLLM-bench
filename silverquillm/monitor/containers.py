@@ -45,7 +45,8 @@ def _container(row: dict) -> RunContainer | None:
         return None  # The run's proxy carries the same label.
     state = mapping(row.get("State"))
     run_dir = None
-    for mount in row.get("Mounts") or []:
+    mounts = row.get("Mounts")
+    for mount in mounts if isinstance(mounts, list) else []:
         mount = mapping(mount)
         if mount.get("Destination") == "/workspace" and isinstance(mount.get("Source"), str):
             source = Path(mount["Source"])

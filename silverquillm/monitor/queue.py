@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import stat
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +13,8 @@ from silverquillm.karn.definition import KarnError
 
 from ._read import read_json
 from .candidates import CandidateDisplay, candidate_display
+
+MAX_BATCH_FILE = 16 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,15 @@ def _candidate(build_output: str, construct: str) -> CandidateDisplay:
     return candidate_display(definition if definition is not None else {"name": construct})
 
 
+def _unparseable(path: Path) -> bool:
+    """A FIFO would block the poll and a huge file exhaust memory; neither is a batch file."""
+    try:
+        info = os.stat(path)
+    except OSError:
+        return False  # missing or a dangling link: the batch reader reports it
+    return not stat.S_ISREG(info.st_mode) or info.st_size > MAX_BATCH_FILE
+
+
 def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
     """Batches in name order, each with the run specs its state has not started yet."""
     if batches_dir is None:
@@ -59,14 +72,25 @@ def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
     found = []
     for path in paths:
         batch_id = path.stem
+        state_path = directory / "state" / (batch_id + ".json")
         try:
+            if _unparseable(path):
+                raise KarnError("batch_unreadable:" + path.name)
             batch = load_batch(path)
             if batch is None:
                 found.append(QueuedBatch(batch_id, "legacy", None, 0, 0, ()))
                 continue
-            state = read_state(directory / "state" / (batch_id + ".json"), batch_id)
+            if _unparseable(state_path):
+                raise KarnError("batch_state_invalid:" + batch_id)
+            state = read_state(state_path, batch_id)
         except KarnError as error:
             found.append(QueuedBatch(batch_id, "error", None, 0, 0, (), str(error)))
+            continue
+        except (AttributeError, RecursionError):
+            # The batch readers let a deeply nested file or a non-object state through.
+            found.append(
+                QueuedBatch(batch_id, "error", None, 0, 0, (), "batch_unreadable:" + path.name)
+            )
             continue
         specs = batch["runs"]
         started = len(state["runs"]) if state else 0

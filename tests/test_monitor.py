@@ -6,6 +6,7 @@ import fcntl
 import io
 import json
 import os
+import threading
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -31,6 +32,7 @@ from silverquillm.monitor.locks import held_locks, lock_held
 from silverquillm.monitor.output import (
     LineSplitter,
     LogFollower,
+    join_partials,
     live_codex_reading,
     profile_redactions,
     redacted_head,
@@ -55,6 +57,25 @@ DEFINITION = {
     "name": "bare-claude-opus",
     "runtime": {"environment": {"CONSTRUCT_MODEL": "claude-opus-5-5", "CONSTRUCT_EFFORT": "max"}},
 }
+
+
+def finishes(call, timeout=10.0):
+    """The call's result; a call that blocks, on a FIFO say, fails the test instead of hanging it."""
+    outcome = {}
+
+    def target():
+        try:
+            outcome["value"] = call()
+        except BaseException as error:  # noqa: BLE001 -- re-raised in the test's thread.
+            outcome["error"] = error
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    assert not thread.is_alive(), "the call blocked"
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
 
 
 def proc_locks(tmp_path: Path) -> Path:
@@ -178,6 +199,28 @@ def test_run_containers_skip_the_proxy_and_name_the_run_directory():
     assert run_containers(lambda arguments: Done(b"", 1)) == ([], "docker_unavailable")
 
 
+def test_a_garbled_inspect_row_never_fails_the_listing():
+    row = {
+        "Name": "/sq-run-abc",
+        "Config": {"Labels": {"org.silverquillm.run": "abc"}},
+        "State": {"Running": True, "StartedAt": "9999-12-31T23:59:59-23:59"},
+        "Mounts": 5,
+    }
+
+    class Done:
+        returncode = 0
+
+        def __init__(self, out):
+            self.stdout = out
+
+    def docker(arguments):
+        return Done(b"id1" if arguments[0] == "ps" else json.dumps([row]).encode())
+
+    found, error = run_containers(docker)
+    assert error is None
+    assert [(c.run_id, c.run_dir, c.started_at) for c in found] == [("abc", None, None)]
+
+
 # Live runs and stages
 
 
@@ -296,6 +339,24 @@ def enroll_slot(state_root: Path, plugin: str, slot: str, secret: str = '"opaque
     (directory / "pool.json").write_text(json.dumps({"plugin_id": plugin}))
     (directory / "secret.json").write_text(secret)
     return directory
+
+
+def test_a_hostile_batch_or_state_file_is_an_error_not_a_crash_or_a_hang(tmp_path):
+    batches = tmp_path / "batches"
+    spec = 'format = "karn-v5"\n' + RUN_SPEC.format(build=tmp_path / "nobuild", benchmark="smoke")
+    for name in ("list-state", "deep-state", "fifo-state"):
+        write_batch(batches, name, spec)
+    write_batch(batches, "deep-toml", 'format = "karn-v5"\nx = ' + "[" * 100000)
+    os.mkfifo(batches / "fifo-toml.toml")
+    (batches / "state").mkdir()
+    (batches / "state/list-state.json").write_text("[]")
+    (batches / "state/deep-state.json").write_text("[" * 100000)
+    os.mkfifo(batches / "state/fifo-state.json")
+    found = finishes(lambda: queued_batches(batches))
+    assert {batch.batch: batch.status for batch in found} == {
+        name: "error"
+        for name in ("deep-state", "deep-toml", "fifo-state", "fifo-toml", "list-state")
+    }
 
 
 def test_login_profiles_report_busy_and_pending_without_locking(tmp_path):
@@ -441,6 +502,42 @@ def test_history_rereads_only_changed_records(tmp_path, monkeypatch):
     runs = {run.run_id: run for run in store.runs()}
     assert {path.parent.name for path in reads} == {"run-a"}
     assert runs["run-a"].estimated_cost == Decimal("2.50")
+
+
+def test_hostile_record_values_are_dropped_not_fatal(tmp_path):
+    repo = tmp_path / "repo"
+    hostile = {
+        "not-lists": {"request_prices": 5, "requests": True},
+        "unhashable": {
+            "request_prices": [{"response_id": ["m1"], "usd": "1"}],
+            "requests": [{"response_id": {"m": 1}, "timestamp_ms": 1}],
+        },
+        # Summing this with any other amount overflows Decimal's exponent range.
+        "huge": {
+            "request_prices": [{"response_id": "m1", "usd": "1e1000000"}],
+            "subscription_usage": {
+                "value": {
+                    "provider": "codex",
+                    "utilization_percent": 10**400,
+                    "resets_at": "2026-10-09T00:00:00Z",
+                }
+            },
+        },
+    }
+    for run_id, measurements in hostile.items():
+        directory = write_record(repo, run_id)
+        manifest = json.loads((directory / "manifest.json").read_text())
+        manifest["run_metadata"]["measurements"].update(measurements)
+        manifest["run_metadata"]["execution"]["stopped_at"] = "9999-12-31T23:59:59-23:59"
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        (directory / "scores.json").write_text(
+            json.dumps({"card_correctness": {"pass_rate": 10**400}})
+        )
+    runs = HistoryStore(repo).runs()
+    assert sorted(run.run_id for run in runs) == sorted(hostile)
+    for run in runs:
+        assert (run.request_costs, run.usage_reading, run.stopped_at) == ((), None, None)
+        assert run.target.pass_rate is None
 
 
 def test_a_malformed_record_is_skipped(tmp_path):
@@ -614,6 +711,30 @@ def test_codex_provisional_cost_prices_completed_responses(tmp_path):
     assert cost.unpriced == 1
 
 
+def test_hostile_events_never_break_a_provisional_cost(tmp_path):
+    claude, codex, fifo = (tmp_path / name for name in ("claude", "codex", "fifo"))
+    for directory in (claude, codex, fifo):
+        directory.mkdir()
+    rows = [
+        event("e1", "claude_code.api_request", {"input_tokens": "\u00b2", "cost_usd": "1e1000000"}),
+        event("e2", "claude_code.api_request", {"cost_usd": "2"}),
+    ]
+    (claude / "observations.events.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    cost = ProvisionalCost(claude, "claude")
+    cost.update()
+    assert (cost.total, cost.unpriced) == (Decimal(2), 1)
+    completed = {"event.kind": "response.completed", "input_token_count": "1", "model": ["m"]}
+    row = {**event("c1", "codex.sse_event", completed), "thread_id": {"t": 1}}
+    (codex / "observations.events.jsonl").write_text(json.dumps(row) + "\n")
+    cost = ProvisionalCost(codex, "codex")
+    cost.update()
+    assert (cost.total, cost.unpriced) == (Decimal(0), 1)
+    os.mkfifo(fifo / "observations.events.jsonl")
+    cost = ProvisionalCost(fifo, "codex")
+    finishes(cost.update)
+    assert cost.total is None
+
+
 # Output and redaction
 
 
@@ -681,6 +802,53 @@ def test_a_followed_container_is_redacted_line_by_line_and_yields_claude_reading
     assert follower.lines_since(last) == []
 
 
+def stamp(second: int) -> bytes:
+    """``docker logs --timestamps``'s prefix of one message."""
+    return b"2026-10-07T11:59:%02d.000000000Z " % second
+
+
+def test_a_secret_across_dockers_partial_messages_is_redacted():
+    secret = b"SECRETTOKEN123"
+    # Docker logs a line longer than 16 KiB as partial messages and stamps each one.
+    stdout = stamp(0) + b"A" * 16380 + secret[:4] + stamp(0) + secret[4:] + b"B" * 10 + b"\n"
+    follower = LogFollower(
+        "sq-run-abc", [secret], popen=lambda arguments, **kwargs: FakeProcess(stdout, b"")
+    )
+    follower.start()
+    follower.stop()
+    [line] = follower.lines_since(0)
+    assert line.text == "A" * 16380 + "[REDACTED]" + "B" * 10
+    assert line.at == datetime(2026, 10, 7, 11, 59, tzinfo=UTC)
+
+
+def test_an_overlong_line_is_cut_before_a_secret_split_by_a_partial_stamp():
+    secret = b"SECRETTOKEN123"
+    head = stamp(0) + b"y" * 5
+    data = head + secret[:3] + stamp(1) + secret[3:] + b"z" * 200 + b"\nnext\n"
+    splitter = LineSplitter([secret], limit=len(head) + 4, join=join_partials)
+    rows = []
+    for index in range(0, len(data), 7):  # chunks that end inside a stamp
+        rows += splitter.feed(data[index : index + 7])
+    assert [(redacted, truncated) for _, redacted, truncated in rows] == [
+        (head, True),
+        (b"next", False),
+    ]
+
+
+def test_a_line_of_stamps_alone_keeps_the_buffer_bounded():
+    splitter = LineSplitter([b"SECRETTOKEN123"], limit=100, join=join_partials)
+    for _ in range(10000):
+        assert splitter.feed(stamp(0) * 10) == []
+    assert len(splitter.buffer) < 1000
+
+
+def test_retained_lines_skip_a_fifo_or_a_directory(tmp_path):
+    (tmp_path / "host/stdout.log").mkdir(parents=True)
+    os.mkfifo(tmp_path / "host/stderr.log")
+    assert finishes(lambda: retained_lines(tmp_path, "stdout")) == []
+    assert finishes(lambda: retained_lines(tmp_path, "stderr")) == []
+
+
 def test_retained_lines_read_the_tail_of_a_stopped_runs_log(tmp_path):
     (tmp_path / "host").mkdir()
     (tmp_path / "host/stdout.log").write_bytes(b"".join(b"line %d\n" % n for n in range(1000)))
@@ -724,6 +892,23 @@ def test_capped_rollouts_keep_the_newest_files(tmp_path, monkeypatch):
     )
     os.utime(old, (1, 1))
     monkeypatch.setattr(subscription_usage_module, "MAX_SESSION_FILES", 1)
+    result = codex_usage(tmp_path / "work")
+    assert result["value"]["utilization_percent"] == 9.0
+    assert result["reasons"] == ["codex_sessions_partially_read"]
+
+
+def test_a_capped_walk_keeps_the_newest_session_directories(tmp_path, monkeypatch):
+    sessions = tmp_path / "work/sessions"
+    for name in "abcd":
+        write_lines(
+            sessions / f"2026/10/01/rollout-{name}.jsonl",
+            [codex_line(1.0, timestamp="2026-10-01T00:00:00Z")],
+        )
+    write_lines(
+        sessions / "2026/10/07/rollout-e.jsonl", [codex_line(9.0, timestamp="2026-10-07T00:00:00Z")]
+    )
+    # 2026, 10, 07 and its rollout: the cap ends the walk before the older day.
+    monkeypatch.setattr(subscription_usage_module, "MAX_WALK_ENTRIES", 4)
     result = codex_usage(tmp_path / "work")
     assert result["value"]["utilization_percent"] == 9.0
     assert result["reasons"] == ["codex_sessions_partially_read"]

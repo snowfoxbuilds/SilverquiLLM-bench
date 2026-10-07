@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import stat
 import subprocess
 import threading
 from collections import deque
@@ -33,6 +35,11 @@ DEFAULT_TAIL = 2000
 DEFAULT_KEEP = 5000
 MAX_RETAINED_READ = 8 * 1024 * 1024
 STREAMS = ("stdout", "stderr")
+# ``docker logs --timestamps`` stamps every message in Go's RFC3339NanoFixed, and Docker
+# splits a line longer than its log buffer (16 KiB for json-file) into partial messages,
+# each stamped anew: a secret across a split would never match its redaction.
+DOCKER_STAMP = re.compile(rb"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{9}(?:Z|[+-]\d\d:\d\d) ")
+DOCKER_STAMP_MAX = 36
 
 
 def profile_redactions(state_root: Path | None, login: str | None) -> frozenset[bytes]:
@@ -97,6 +104,13 @@ def split_timestamp(line: bytes) -> tuple[datetime | None, bytes]:
     return None, line
 
 
+def join_partials(line: bytes) -> bytes:
+    """A followed line as the container wrote it, behind its own leading stamp only."""
+    first = DOCKER_STAMP.match(line)
+    start = first.end() if first else 0
+    return line[:start] + DOCKER_STAMP.sub(b"", line[start:])
+
+
 def claude_line_reading(line: bytes, at: datetime | None) -> UsageReading | None:
     """A ``rate_limit_event`` line's weekly window, observed when Docker logged the line."""
     if b'"rate_limit_event"' not in line or len(line) > MAX_LINE:
@@ -119,10 +133,20 @@ def claude_line_reading(line: bytes, at: datetime | None) -> UsageReading | None
 class LineSplitter:
     """Bytes in, redacted bounded lines out; an overlong line keeps only its redacted head."""
 
-    def __init__(self, redactions: Iterable[bytes], limit: int = MAX_LINE):
+    def __init__(
+        self,
+        redactions: Iterable[bytes],
+        limit: int = MAX_LINE,
+        *,
+        join: Callable[[bytes], bytes] | None = None,
+    ):
         self.redactions = tuple(redactions)
         self.margin = max((len(secret) for secret in self.redactions), default=0)
         self.limit = limit
+        self.join = join
+        # An unfinished stamp at the buffer's end is not joined yet; it must lie past any
+        # secret that crosses the cut.
+        self.slack = DOCKER_STAMP_MAX if join else 0
         self.buffer = b""
         self.discarding = False
 
@@ -133,7 +157,10 @@ class LineSplitter:
         while True:
             end = self.buffer.find(b"\n")
             if end == -1:
-                if len(self.buffer) > self.limit + self.margin:
+                if self.join:
+                    # Joined as it grows, so a line of stamps alone cannot grow it unbounded.
+                    self.buffer = self.join(self.buffer)
+                if len(self.buffer) > self.limit + self.margin + self.slack:
                     if not self.discarding:
                         out.append(
                             (b"", redacted_head(self.buffer, self.limit, self.redactions), True)
@@ -143,6 +170,8 @@ class LineSplitter:
                     self.buffer = self.buffer[-self.margin :] if self.margin else b""
                 return out
             line, self.buffer = self.buffer[:end].rstrip(b"\r"), self.buffer[end + 1 :]
+            if self.join:
+                line = self.join(line)
             if self.discarding:
                 self.discarding = False
                 continue
@@ -212,7 +241,7 @@ class LogFollower:
             self._threads.append(thread)
 
     def _pump(self, name: str, stream) -> None:
-        splitter = LineSplitter(self.redactions, MAX_LINE + 64)
+        splitter = LineSplitter(self.redactions, MAX_LINE + 64, join=join_partials)
         try:
             while chunk := stream.read1(READ_CHUNK):
                 self._accept(name, splitter.feed(chunk))
@@ -266,14 +295,18 @@ def retained_lines(
         raise ValueError(stream)
     path = Path(run_dir) / "host" / (stream + ".log")
     try:
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
         return []
     try:
-        size = os.fstat(descriptor).st_size
-        start = max(0, size - max_bytes)
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            return []  # a FIFO would block the view, a directory fail its read
+        start = max(0, info.st_size - max_bytes)
         os.lseek(descriptor, start, os.SEEK_SET)
         data = os.read(descriptor, max_bytes)
+    except OSError:
+        return []
     finally:
         os.close(descriptor)
     if start:

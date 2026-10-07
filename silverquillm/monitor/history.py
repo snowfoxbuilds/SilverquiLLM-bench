@@ -17,7 +17,7 @@ from typing import Any
 
 from silverquillm.karn.exclusions import ExclusionError, load_exclusions
 
-from ._read import instant, mapping, read_json
+from ._read import MAX_USD, instant, mapping, number, read_json
 from .candidates import CandidateDisplay, candidate_display
 
 DIMENSIONS = ("card_correctness", "fdn_regression", "engine_regression")
@@ -101,20 +101,24 @@ def _decimal(value: Any) -> Decimal | None:
         number = Decimal(value)
     except InvalidOperation:
         return None
-    return number if number.is_finite() and number >= 0 else None
+    return number if number.is_finite() and 0 <= number <= MAX_USD else None
+
+
+def _rows(value: Any) -> list[dict]:
+    return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
 
 
 def _request_costs(measurements: dict) -> tuple[tuple[int, Decimal], ...]:
     prices = {
-        row.get("response_id"): _decimal(row.get("usd"))
-        for row in measurements.get("request_prices") or []
-        if isinstance(row, dict)
+        row["response_id"]: _decimal(row.get("usd"))
+        for row in _rows(measurements.get("request_prices"))
+        if isinstance(row.get("response_id"), str)
     }
     costs = []
-    for request in measurements.get("requests") or []:
-        if not isinstance(request, dict):
-            continue
-        usd, stamp = prices.get(request.get("response_id")), _int(request.get("timestamp_ms"))
+    for request in _rows(measurements.get("requests")):
+        response_id = request.get("response_id")
+        usd = prices.get(response_id) if isinstance(response_id, str) else None
+        stamp = _int(request.get("timestamp_ms"))
         if usd is not None and stamp:
             costs.append((stamp, usd))
     return tuple(sorted(costs))
@@ -124,17 +128,12 @@ def _reading(measurements: dict, stopped_at: datetime | None) -> UsageReading | 
     value = _value(measurements.get("subscription_usage"))
     if not isinstance(value, dict):
         return None
-    percent, resets_at = value.get("utilization_percent"), instant(value.get("resets_at"))
-    if (
-        not isinstance(percent, int | float)
-        or isinstance(percent, bool)
-        or resets_at is None
-        or value.get("provider") not in ("claude", "codex")
-    ):
+    percent, resets_at = number(value.get("utilization_percent")), instant(value.get("resets_at"))
+    if percent is None or resets_at is None or value.get("provider") not in ("claude", "codex"):
         return None
     return UsageReading(
         value["provider"],
-        float(percent),
+        percent,
         _int(value.get("window_minutes")) or 0,
         resets_at,
         instant(value.get("observed_at")),
@@ -144,10 +143,9 @@ def _reading(measurements: dict, stopped_at: datetime | None) -> UsageReading | 
 
 def _score(value: Any) -> Score:
     value = mapping(value)
-    rate = value.get("pass_rate")
     return Score(
         value.get("evaluated") is True,
-        float(rate) if isinstance(rate, int | float) and not isinstance(rate, bool) else None,
+        number(value.get("pass_rate")),
         _int(value.get("tests_passed")),
         _int(value.get("tests_total")),
     )
@@ -294,7 +292,13 @@ class RepoFreshness:
 
 
 def _git(repo: Path, *arguments: str) -> str | None:
-    environment = {**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0"}
+    # Local refs only: never take optional locks, prompt, or lazily fetch missing objects.
+    environment = {
+        **os.environ,
+        "GIT_OPTIONAL_LOCKS": "0",
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_NO_LAZY_FETCH": "1",
+    }
     try:
         result = subprocess.run(
             ["git", "-C", str(repo), *arguments],
