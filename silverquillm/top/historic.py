@@ -11,6 +11,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
+from textual.markup import escape
 from textual.widgets import DataTable, Static, Tree
 
 from silverquillm.monitor import RunSummary
@@ -62,8 +63,11 @@ COLUMNS = (
 COLUMN_KEYS = [column.key for column in COLUMNS]
 
 
-def run_cells(run: RunSummary, theme: Theme) -> tuple:
-    """One historic run as one dense line; an excluded run is dimmed."""
+def run_cells(run: RunSummary, theme: Theme) -> tuple[Text, ...]:
+    """One historic run as one dense line; an excluded run is dimmed.
+
+    Every cell is ``Text``: a table reads a plain string as markup, and these come from records.
+    """
     duration = fmt.short_duration(run.duration_seconds)
     if run.budget_seconds:
         duration += f"/{fmt.short_duration(run.budget_seconds)}"
@@ -92,14 +96,11 @@ def run_cells(run: RunSummary, theme: Theme) -> tuple:
         Text(run.run_id[:8], style=theme.style("muted")),
         excluded,
     )
-    if not run.excluded:
-        return cells
-    dimmed = []
-    for cell in cells:
-        text = cell.copy() if isinstance(cell, Text) else Text(str(cell))
-        text.stylize(theme.style("muted"))
-        dimmed.append(text)
-    return tuple(dimmed)
+    cells = tuple(cell if isinstance(cell, Text) else Text(str(cell)) for cell in cells)
+    if run.excluded:
+        for cell in cells:
+            cell.stylize(theme.style("muted"))
+    return cells
 
 
 # Usable width of the browse tree's labels: the pane's 40 columns less border, padding and a
@@ -274,7 +275,7 @@ class HistoryView(Horizontal):
         empty.display = not shown
         if not shown:
             empty.update("no runs" if self._loaded else "reading the Results Repo…")
-        arrow = "▼" if self.sort_reverse else "▲"
+        arrow = theme.glyph("sort_desc" if self.sort_reverse else "sort_asc")
         kind, value = self.selection
         scope = {
             "all": "all runs",
@@ -283,7 +284,8 @@ class HistoryView(Horizontal):
             "hash": f"hash {str(value)[:8]}",
         }.get(kind, "all runs")
         runs_pane = self.query_one("#runs")
-        runs_pane.border_title = f"RUNS · {scope}"
+        # A border title is markup; the scope names candidate data and must stay literal.
+        runs_pane.border_title = f"RUNS · {escape(scope)}"
         excluded = sum(1 for run in shown if run.excluded)
         hidden = "hidden" if self.hide_excluded else f"{excluded} dimmed"
         runs_pane.border_subtitle = (

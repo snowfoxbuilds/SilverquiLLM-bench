@@ -95,7 +95,7 @@ class StatusPane(Horizontal):
         table.add_row("fetch", fetched)
         for problem in (snapshot.config_error, snapshot.docker_error, snapshot.exclusion_error):
             if problem:
-                table.add_row("⚠", Text(problem, style=theme.style("bad")))
+                table.add_row(Text(theme.glyph("problem")), Text(problem, style=theme.style("bad")))
         return table
 
     @staticmethod
@@ -223,7 +223,8 @@ class RunningPane(Vertical):
         progress = fmt.bar(view.budget_fraction(now), BAR_WIDTH, theme)
         if view.estimated_percent is not None:
             progress.append(
-                f" ≈{view.estimated_percent:.0f}%", style=theme.style("accent", bold=True)
+                f" {theme.glyph('estimated')}{view.estimated_percent:.0f}%",
+                style=theme.style("accent", bold=True),
             )
         budget = fmt.short_duration(run.budget_seconds) if run.budget_seconds else fmt.DASH
         fraction = view.budget_fraction(now)

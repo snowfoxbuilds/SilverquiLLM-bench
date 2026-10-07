@@ -45,9 +45,15 @@ def launch(
     from .theme import theme_named
 
     monitor = Monitor(given={key: value for key, value in given.items() if value is not None})
+    app = None
     try:
         look, notice = theme_named(monitor.config.theme, no_flair=no_flair)
-        build_app(monitor, look, interval=interval, notice=notice).run()
+        app = build_app(monitor, look, interval=interval, notice=notice)
+        app.run()
     finally:
-        monitor.close()
+        # The app closes the monitor once its last worker is done, never under one.
+        if app is None:
+            monitor.close()
+        else:
+            app.release_monitor()
     return 0

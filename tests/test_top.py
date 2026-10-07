@@ -366,7 +366,7 @@ async def test_a_historic_run_opens_from_the_history_list():
         details = app.query_one(DetailsView)
         first = app.query_one(HistoryView).shown[0]
         assert details.shown.run_id == first.run_id
-        assert details.shown.live is None and details.shown.loaded_retained
+        assert details.shown.live is None and details.shown.retained_loaded
         assert details.shown.detail is not None
 
 
@@ -448,7 +448,7 @@ async def test_a_run_that_finishes_switches_to_its_retained_output():
         app.poll()
         await _settle(app, pilot)
         assert details.shown.live is None
-        assert details.shown.loaded_retained
+        assert details.shown.retained_loaded
         assert monitor.output_calls[-1] == (run_id, 0)
 
 

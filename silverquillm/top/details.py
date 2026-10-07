@@ -46,7 +46,10 @@ class Shown:
     detail: RecordDetail | None = None
     seq: int = 0
     lines: int = 0
-    loaded_retained: bool = False
+    retained_loaded: bool = False
+    """The retained logs are shown; they are read once, whether or not this host has them."""
+    detail_ready: bool = False
+    """The Run Record's detail is shown; until then every poll asks for it again."""
     requests: list[RequestCost] = field(default_factory=list)
     workspace: WorkspaceView | None = None
 
@@ -136,7 +139,7 @@ def header(shown: Shown, now: datetime, theme: Theme) -> Table:
     if detail is not None and detail.breakdown:
         for name, (tokens, usd) in detail.breakdown.items():
             right.add_row(
-                COST_LABELS.get(name, name),
+                Text(COST_LABELS.get(name, name)),
                 Text.assemble(fmt.count(tokens), " tok  ", fmt.money(usd, theme)),
             )
     table.add_row(left, right)
@@ -149,6 +152,11 @@ def activity_rows(line: LogLine, theme: Theme) -> list[Table]:
     stamp = fmt.when(line.at, with_day=False) if line.at else ""
     for item in render_line(line.text):
         role = "error" if item.failed else item.kind
+        body = Text(style=theme.style(role))
+        for done, entry in item.checklist:
+            body.append(f"{theme.glyph('todo_done' if done else 'todo_open')} {entry}\n")
+        body.append(item.text)
+        body.rstrip()
         row = Table.grid(expand=True)
         row.add_column(width=6, no_wrap=True)
         row.add_column(width=2, no_wrap=True)
@@ -156,7 +164,7 @@ def activity_rows(line: LogLine, theme: Theme) -> list[Table]:
         row.add_row(
             Text(stamp, style=theme.style("muted")),
             Text(theme.glyph(item.kind), style=theme.style(role, bold=True)),
-            Text(item.text, style=theme.style(role)),
+            body,
         )
         rows.append(row)
     return rows
@@ -167,6 +175,8 @@ class DetailsView(Vertical):
         super().__init__(id="details")
         self.theme_ = theme
         self.shown: Shown | None = None
+        self.generation = 0
+        """Bumped whenever the shown output restarts, so a fetch made before it is dropped."""
 
     def compose(self) -> ComposeResult:
         head = Static(id="detail-head", classes="pane")
@@ -209,6 +219,7 @@ class DetailsView(Vertical):
     def open(self, run_id: str) -> Shown:
         for log in self.query(RichLog):
             log.clear()
+        self.generation += 1
         self.shown = Shown(run_id)
         self._show_empty(False)
         return self.shown
@@ -219,9 +230,10 @@ class DetailsView(Vertical):
             return
         for log in self.query(RichLog):
             log.clear()
+        self.generation += 1
         self.shown.seq = 0
         self.shown.lines = 0
-        self.shown.loaded_retained = False
+        self.shown.retained_loaded = False
 
     def show_header(self, now: datetime) -> None:
         if self.shown is None:
@@ -237,19 +249,18 @@ class DetailsView(Vertical):
     def append_output(self, lines: list[LogLine]) -> None:
         if self.shown is None or not lines:
             return
-        self.shown.seq = max(self.shown.seq, lines[-1].seq)
-        # A retained log can hold far more than a log keeps; render only what stays.
-        lines = lines[-MAX_LOG_LINES:]
+        self.shown.seq = max(self.shown.seq, max(line.seq for line in lines))
+        self.shown.lines += len(lines)
         theme = self.theme_
-        activity = self.query_one("#log-activity", RichLog)
+        # Each stream keeps its own tail, so a flood of stderr never evicts stdout's evidence;
+        # a retained log can hold far more than a tab keeps, so only what stays is rendered.
+        stdout = [line for line in lines if line.stream != "stderr"][-MAX_LOG_LINES:]
         stderr = self.query_one("#log-stderr", RichLog)
+        for line in [line for line in lines if line.stream == "stderr"][-MAX_LOG_LINES:]:
+            stderr.write(Text(line.text, style=theme.style("text")), expand=True)
+        activity = self.query_one("#log-activity", RichLog)
         raw = self.query_one("#log-raw", RichLog)
-        for line in lines:
-            self.shown.seq = max(self.shown.seq, line.seq)
-            self.shown.lines += 1
-            if line.stream == "stderr":
-                stderr.write(Text(line.text, style=theme.style("text")), expand=True)
-                continue
+        for line in stdout:
             for row in activity_rows(line, theme):
                 activity.write(row, expand=True)
             raw.write(Text(line.text, style=theme.style("muted")))
@@ -296,7 +307,7 @@ class DetailsView(Vertical):
             delta = "" if entry.files_delta in (None, 0) else f"{entry.files_delta:+d}"
             snapshots.add_row(
                 Text(f"{theme.glyph('snapshot')} {fmt.when(entry.captured_at, with_day=False)}"),
-                entry.kind,
+                Text(entry.kind or ""),
                 fmt.count(entry.files),
                 delta,
                 Text("changed", style=theme.style("accent")) if entry.changed else "",
@@ -307,7 +318,7 @@ class DetailsView(Vertical):
             commits.add_row(
                 fmt.when(entry.at, with_day=False),
                 Text(f"{theme.glyph('commit')} {entry.action}", style=theme.style("tool")),
-                entry.message[:120],
+                Text(entry.message[:120]),
                 Text(entry.commit, style=theme.style("muted")),
             )
 

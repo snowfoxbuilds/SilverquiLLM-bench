@@ -7,6 +7,7 @@ more items a view can colour by kind. A line that is not one of those events is 
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -31,6 +32,25 @@ class ActivityItem:
     ``system``, ``done`` or ``raw``."""
     text: str
     failed: bool = False
+    checklist: tuple[tuple[bool, str], ...] = ()
+    """A task list's entries as (completed, text); a view draws the boxes, ``text`` follows."""
+
+
+def _number(value: Any, limit: float) -> float | None:
+    """A finite JSON number within ``±limit``; anything else in candidate output is unknown."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    return number if math.isfinite(number) and abs(number) <= limit else None
+
+
+def _integer(value: Any, limit: int = 10**12) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or abs(value) > limit:
+        return None
+    return value
 
 
 def shorten(text: str, *, lines: int = MAX_LINES, chars: int = MAX_TEXT) -> str:
@@ -70,10 +90,8 @@ def _tool_result(content: Any) -> str:
 def _percent(window: Any) -> str | None:
     if not isinstance(window, dict):
         return None
-    value = window.get("utilization")
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    return f"{100 * value:.0f}%"
+    value = _number(window.get("utilization"), 100)
+    return None if value is None else f"{100 * value:.0f}%"
 
 
 def _claude(event: dict) -> list[ActivityItem] | None:
@@ -130,11 +148,11 @@ def _claude(event: dict) -> list[ActivityItem] | None:
         return [ActivityItem("limit", "usage " + " · ".join(parts))] if parts else []
     if kind == "result":
         parts = [_text(event.get("subtype")) or "finished"]
-        turns = event.get("num_turns")
-        if isinstance(turns, int) and not isinstance(turns, bool):
+        turns = _integer(event.get("num_turns"))
+        if turns is not None:
             parts.append(f"{turns} turns")
-        cost = event.get("total_cost_usd")
-        if isinstance(cost, int | float) and not isinstance(cost, bool):
+        cost = _number(event.get("total_cost_usd"), 1e9)
+        if cost is not None:
             parts.append(f"${cost:,.2f} reported")
         return [ActivityItem("done", " · ".join(parts), event.get("is_error") is True)]
     return None
@@ -153,10 +171,10 @@ def _codex_item(phase: str, item: dict) -> list[ActivityItem]:
             return [ActivityItem("tool", "$ " + shorten(_text(item.get("command")), lines=3))]
         if phase != "completed":
             return []
-        code = item.get("exit_code")
-        failed = isinstance(code, int) and code != 0
+        code = _integer(item.get("exit_code"))
+        failed = code is not None and code != 0
         output = shorten(_text(item.get("aggregated_output")), lines=4, chars=400)
-        head = f"exit {code}" if isinstance(code, int) else "done"
+        head = f"exit {code}" if code is not None else "done"
         return [ActivityItem("result", f"{head}\n{output}".rstrip(), failed)]
     if item_type == "file_change" and phase == "completed":
         changes = item.get("changes")
@@ -172,16 +190,19 @@ def _codex_item(phase: str, item: dict) -> list[ActivityItem]:
         return [ActivityItem("tool", "edit " + shorten(", ".join(paths), lines=2, chars=300))]
     if item_type == "todo_list" and phase in ("started", "updated", "completed"):
         entries = item.get("items")
-        lines = (
+        checklist = (
             [
-                ("☑ " if entry.get("completed") else "☐ ") + _text(entry.get("text"))
+                (entry.get("completed") is True, shorten(_text(entry.get("text")), lines=1, chars=120))
                 for entry in entries
                 if isinstance(entry, dict)
             ]
             if isinstance(entries, list)
             else []
         )
-        return [ActivityItem("task", shorten("\n".join(lines)))] if lines else []
+        if not checklist:
+            return []
+        more = " …" if len(checklist) > MAX_LINES else ""
+        return [ActivityItem("task", more, checklist=tuple(checklist[:MAX_LINES]))]
     if item_type == "web_search" and phase == "completed":
         return [ActivityItem("tool", "search " + _text(item.get("query")))]
     if item_type == "mcp_tool_call" and phase == "started":
@@ -204,11 +225,7 @@ def _codex(event: dict) -> list[ActivityItem] | None:
         total = 0
         if isinstance(usage, dict):
             total = sum(
-                value
-                for key, value in usage.items()
-                if key in ("input_tokens", "output_tokens")
-                and isinstance(value, int)
-                and not isinstance(value, bool)
+                _integer(usage.get(key), 10**15) or 0 for key in ("input_tokens", "output_tokens")
             )
         return [ActivityItem("done", f"turn completed · {total:,} tokens")]
     if kind in ("turn.failed", "error"):
