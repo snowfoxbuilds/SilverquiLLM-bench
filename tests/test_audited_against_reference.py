@@ -181,11 +181,9 @@ _cases = [pytest.param("sos", card, id=f"sos/{card}") for card in _oracle_cards]
 _cases += [pytest.param("hob-medium", card, id=f"hob-medium/{card}") for card in _hob_layout.cards]
 _fra_layout = load_layout(_REPO_ROOT, "fra-hard", require_cards=True)
 _cases += [pytest.param("fra-hard", card, id=f"fra-hard/{card}") for card in _fra_layout.cards]
-# fra-hard-v2's HOB targets are not ported yet (#157).
 _cases += [
     pytest.param("fra-hard-v2", card, id=f"fra-hard-v2/{card}")
     for card in load_layout(_REPO_ROOT, "fra-hard-v2", require_cards=True).cards
-    if not card.startswith("hob_")
 ]
 
 

@@ -380,13 +380,27 @@ class CardImpl(GameObject):
         check costs, targets or :meth:`can_cast`: casting does, and a rejected
         cast is rolled back.
         """
-        from engine.casting import can_cast_at_instant_speed, cast_spell, is_sorcery_speed
+        from engine import faces as card_faces
+        from engine.casting import (
+            can_cast_at_instant_speed,
+            cast_permission,
+            cast_spell,
+            is_sorcery_speed,
+        )
 
-        if not (can_cast_at_instant_speed(self, player) or is_sorcery_speed(game, player)):
-            return []
-        return [
-            (self, lambda: cast_spell(game, player, self, from_zone=from_zone, mode=mode))
+        permission = cast_permission(game, player, self)
+        faces = (
+            [self] if permission is not None and permission["normal_face_only"]
+            else card_faces.faces_of(self)
+        )
+        faces = [
+            face for face in faces
+            if can_cast_at_instant_speed(face, player) or is_sorcery_speed(game, player)
         ]
+        return card_faces.cast_offers(
+            game, player, self, faces,
+            lambda face: cast_spell(game, player, face, from_zone=from_zone, mode=mode),
+        )
 
     def cost_reduction(self, game: GameState, targets: list[Any] | None = None) -> int:
         """Return this card's *self* generic-mana reduction for casting it.

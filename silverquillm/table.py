@@ -47,6 +47,7 @@ class Change:
     seat: int | None = None
     from_zone: Any = None
     value: Any = None
+    face: type | None = None
 
     def describe(self) -> str:
         name = _name(self.item)
@@ -54,7 +55,8 @@ class Change:
             where = f"player {self.seat}'s " if self.seat is not None and self.zone.value != "stack" else ""
             place = "the stack" if self.zone.value == "stack" else f"{where}{self.zone.value}"
             position = " (bottom)" if self.value == "bottom" else ""
-            return f"{name} moves to {place}{position}"
+            as_face = f" as {_name(self.face)}" if self.face is not None else ""
+            return f"{name} moves to {place}{as_face}{position}"
         if self.kind == "gains_control":
             return f"player {self.seat} gains control of {name}"
         if self.kind == "becomes":
@@ -89,15 +91,22 @@ class Change:
         return self.kind
 
 
-def moves(item: Any, to: Any, *, seat: int | None = None, from_zone: Any = None, bottom: bool = False) -> Change:
+def moves(
+    item: Any, to: Any, *, seat: int | None = None, from_zone: Any = None, bottom: bool = False,
+    face: type | None = None,
+) -> Change:
     """``item`` — a handle, or a class when only one such card could move —
     moves to zone ``to``; ``seat`` is the side it lands on — on the stack its
     controller, on the battlefield its controller, elsewhere its owner — by
     default the player who cast it for a spell resolving onto the
     battlefield and its owner otherwise; ``from_zone`` narrows where a class
     is looked for, and ``bottom`` puts it at the bottom of a library. A
-    permanent keeps showing its owner whichever side it is on."""
-    return Change("moves", item, to, seat, from_zone, "bottom" if bottom else "top")
+    permanent keeps showing its owner whichever side it is on.
+
+    ``face`` is the predefined face class a multi-face card is cast as: on the
+    stack it shows as that face, and leaving the stack it shows as its card
+    again (CR 715.3b, 715.4)."""
+    return Change("moves", item, to, seat, from_zone, "bottom" if bottom else "top", face)
 
 
 def gains_control(item: Any, seat: int) -> Change:
@@ -246,6 +255,8 @@ class Table:
         self._stack: list[Any] = list(start.stack)
         # The owner of each card on the stack, which shows its controller.
         self._stack_owners: dict[int, int] = {}
+        # The card class of each face on the stack, shown again once it leaves.
+        self._stack_cards: dict[int, Any] = {}
         self._step = start.step.name
         self._active = start.active
         self._asked = start.asked
@@ -545,10 +556,13 @@ class Table:
             else:
                 seat = owner
             shown = owner if change.zone is ti.Zone.BATTLEFIELD else seat
-            arrived = ti.Seen(seen.card, shown, False, seen.handle)
+            cls = self._stack_cards.pop(id(seen), seen.card) if from_stack else seen.card
+            arrived = ti.Seen(change.face or cls, shown, False, seen.handle)
             if change.zone is ti.Zone.STACK:
                 self._stack.insert(0, arrived)
                 self._stack_owners[id(arrived)] = owner
+                if change.face is not None:
+                    self._stack_cards[id(arrived)] = cls
             elif change.zone is ti.Zone.LIBRARY and change.value == "bottom":
                 self._sides[seat]["library"].append(arrived)
             elif change.zone is ti.Zone.LIBRARY:

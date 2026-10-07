@@ -4,8 +4,8 @@ ADR-017 lets an engine present a multi-face or prepared card as one option or
 as its card and then a face question, and lets it offer an action the rules
 forbid as long as choosing it is rejected. Each variant below rewraps the Test
 Oracle Workspace's Priority Query that way — card behavior unchanged — and the
-suites must still pass; a faulty variant that lets an illegal action take
-effect must make them fail.
+target suites must still pass; a faulty variant that lets an illegal action
+take effect must make them fail.
 """
 
 from __future__ import annotations
@@ -60,8 +60,10 @@ _priority.priority_query = _offering_everything
 '''
 
 # Presents a prepared spell as the permanent it was prepared from, then asks
-# which of the two to cast.
+# which of the two to cast; and presents an Adventure card as the card, then
+# asks which face to cast.
 CARD_THEN_FACE = '''
+import engine.faces as _faces
 import engine.priority as _priority
 from engine.decisions import InvalidPlayerChoiceError as _Invalid
 from engine.queries import PlayerQuery as _Query, ask as _ask
@@ -97,6 +99,7 @@ def _card_then_face(game, player):
 
 
 _priority.priority_query = _card_then_face
+_faces.PRESENT_EACH_FACE = False
 '''
 
 # Presents a prepared spell through its card as above, and also keeps offering
@@ -465,6 +468,128 @@ _priority._has_activated_loyalty_this_turn = lambda source, turn: False
 '''
 
 
+# Faulty: an Adventure may be cast again from the exile its own resolution put it in.
+ADVENTURE_FROM_ADVENTURE_EXILE = '''
+import engine.casting as _casting
+
+_original_permission = _casting.cast_permission
+
+
+def _any_face(game, player, card):
+    permission = _original_permission(game, player, card)
+    return permission and {**permission, "normal_face_only": False}
+
+
+_casting.cast_permission = _any_face
+'''
+
+_FOOD_KEPT = '''
+_original_resolve = SupperForSpiders.on_resolve
+
+
+def _keeping_food(self, game):
+    before = {id(card) for player in game.players for card in player.zones[Zone.BATTLEFIELD].get_all()}
+    _original_resolve(self, game)
+    for player in game.players:
+        for card in player.zones[Zone.BATTLEFIELD].get_all():
+            if id(card) in before or "get_activated_abilities" not in card.__dict__:
+                continue
+            stint = game.refs.zone_epoch(card)
+            granted = card.get_activated_abilities
+
+            def kept(*args, granted=granted, card=card, stint=stint):
+                abilities = granted(*args)
+                for ability in abilities:
+                    if ability.printed is SupperForSpidersAbility1 and GUARDED:
+                        cost = ability.cost
+                        ability.cost = (lambda g, s, cost=cost, card=card, stint=stint:
+                                        g.refs.zone_epoch(card) == stint and cost(g, s))
+                return abilities
+
+            card.get_activated_abilities = kept
+            restores = list(card.zone_departure_callbacks)
+
+            def restore_types_only(restores=restores, card=card, kept=kept):
+                for restore in restores:
+                    restore()
+                card.get_activated_abilities = kept
+
+            card.zone_departure_callbacks = [restore_types_only]
+
+
+SupperForSpiders.on_resolve = _keeping_food
+'''
+
+# A Food keeps its granted ability after it leaves the battlefield; the
+# ability's cost checks the Food is still the object Supper made, so
+# activating it later is rejected.
+FOOD_KEEPS_GRANT = "GUARDED = True\n" + _FOOD_KEPT
+
+# Faulty: the kept ability stays activatable on the card's next object.
+FOOD_GRANT_OUTLIVES_FOOD = "GUARDED = False\n" + _FOOD_KEPT
+
+# Rejects every illegal cast with a bare InvalidPlayerChoiceError, the documented
+# rejection, instead of the oracle's CastingError — legality and rollback unchanged.
+REJECTS_CASTS_DIRECTLY = '''
+import engine.casting as _casting
+from engine.decisions import InvalidPlayerChoiceError as _Invalid
+
+_original_cast = _casting._cast_spell
+
+
+def _rejecting(*args, **kwargs):
+    try:
+        return _original_cast(*args, **kwargs)
+    except _casting.CastingError as error:
+        raise _Invalid(str(error)) from None
+
+
+_casting._cast_spell = _rejecting
+'''
+
+# Bilbo's trigger offers every graveyard card, the opponent's too, and rejects
+# the ones it may not cast.
+BILBO_OFFERS_EVERY_GRAVEYARD_CARD = '''
+from engine.decisions import InvalidPlayerChoiceError as _Invalid
+
+_offered_by_bilbo = choose_object
+
+
+def choose_object(g, controller, options, prompt, **kwargs):
+    extra = [c for p in g.players for c in p.zones[Zone.GRAVEYARD].get_all() if c not in options]
+    chosen = _offered_by_bilbo(g, controller, list(options) + extra, prompt, **kwargs)
+    if chosen in extra:
+        raise _Invalid("Bilbo cannot cast that card")
+    return chosen
+'''
+
+# Faulty: Bilbo's trigger casts any card from its controller's graveyard.
+BILBO_CASTS_ANY_CARD = "_castable_by_trigger = lambda face: True\n"
+
+# Faulty: spells cost nothing.
+CASTS_UNPAID = '''
+from engine.mana import ManaPool as _ManaPool
+
+_ManaPool.can_pay = lambda self, cost: True
+_ManaPool.pay = lambda self, cost, choices=None: True
+'''
+
+# Faulty: cards cast through Inside Information are paid for with mana, not life.
+PAYS_MANA_INSTEAD_OF_LIFE = '''
+import engine.casting as _casting
+
+_original_permission = _casting.cast_permission
+
+
+def _no_life(game, player, card):
+    permission = _original_permission(game, player, card)
+    return permission and {**permission, "life_cost": False}
+
+
+_casting.cast_permission = _no_life
+'''
+
+
 def run_suite(card: str, suffix: str) -> tuple[int, int, str]:
     """Run ``card``'s hidden suite on the oracle with ``suffix`` appended to its
     implementation; return (passed, failed, output)."""
@@ -487,14 +612,18 @@ def run_suite(card: str, suffix: str) -> tuple[int, int, str]:
     return int(passed.group(1)) if passed else 0, int(failed.group(1)) if failed else 0, output
 
 
-TARGETS = ("fra_1", "fra_49", "fra_64", "fra_159", "fra_179", "war_143", "fut_78")
+TARGETS = (
+    "fra_1", "fra_49", "fra_64", "fra_159", "fra_179", "war_143", "fut_78",
+    "hob_33", "hob_76", "hob_86", "hob_174",
+)
 
 
 @pytest.mark.parametrize("card", TARGETS)
 @pytest.mark.parametrize("variant", ["offer_then_reject", "card_then_face", "card_then_face_all_sources",
                                      "exiled_source_first", "consumed_face_first", "reversed",
                                      "exiled_abilities_first", "costs_all_offered", "costs_reversed",
-                                     "costs_all_offered_reversed", "every_question_reversed"])
+                                     "costs_all_offered_reversed", "every_question_reversed",
+                                     "rejects_casts_directly"])
 def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None:
     suffix = {"offer_then_reject": OFFER_THEN_REJECT, "card_then_face": CARD_THEN_FACE,
               "card_then_face_all_sources": CARD_THEN_FACE_ALL_SOURCES,
@@ -503,7 +632,8 @@ def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None
               "exiled_abilities_first": OFFER_THEN_REJECT + EXILED_ABILITIES_FIRST,
               "costs_all_offered": COSTS_ALL_OFFERED, "costs_reversed": COSTS_REVERSED,
               "costs_all_offered_reversed": COSTS_ALL_OFFERED + COSTS_REVERSED,
-              "every_question_reversed": EVERY_QUESTION_REVERSED}[variant]
+              "every_question_reversed": EVERY_QUESTION_REVERSED,
+              "rejects_casts_directly": REJECTS_CASTS_DIRECTLY}[variant]
     passed, failed, output = run_suite(card, suffix)
     assert passed and not failed, output[-4000:]
 
@@ -537,7 +667,53 @@ def test_uldaros_suite_accepts_forbidden_choices_offered_then_rejected(suffix: s
     ("fra_159", ULDAROS_EXILES_OPPONENTS_CARDS),
     ("fra_159", COSTS_WAIVED),
     ("fra_1", WARD_UNPAID_ACCEPTED),
+    ("hob_33", CASTS_UNPAID),
+    ("hob_33", BILBO_CASTS_ANY_CARD),
+    ("hob_76", PAYS_MANA_INSTEAD_OF_LIFE),
+    ("hob_86", FOOD_GRANT_OUTLIVES_FOOD),
+    ("hob_174", OFFER_THEN_REJECT + CASTS_ANYTHING_IN_EXILE),
+    ("hob_174", ADVENTURE_FROM_ADVENTURE_EXILE),
+    ("hob_174", CARD_THEN_FACE + ADVENTURE_FROM_ADVENTURE_EXILE),
+    ("hob_174", CASTS_UNPAID),
 ])
 def test_suite_catches_an_illegal_action_taking_effect(card: str, suffix: str) -> None:
     _passed, failed, output = run_suite(card, suffix)
     assert failed, output[-4000:]
+
+
+@pytest.mark.parametrize("card,suffix", [
+    ("hob_86", FOOD_KEEPS_GRANT),
+])
+def test_suite_accepts_kept_abilities_rejected_on_activation(card: str, suffix: str) -> None:
+    passed, failed, output = run_suite(card, suffix)
+    assert passed and not failed, output[-4000:]
+
+
+def test_bilbo_suite_accepts_uncastable_graveyard_cards_rejected() -> None:
+    passed, failed, output = run_suite("hob_33", BILBO_OFFERS_EVERY_GRAVEYARD_CARD)
+    assert passed and not failed, output[-4000:]
+
+
+_OFFERED_PROBE = """
+from cards.hob.hob_174.card_impl import GlamdringFoehammer
+from engine.priority import priority_query
+from test_interface import Phase, Side, create_game
+
+game = create_game(Side(hand=[GlamdringFoehammer]), Side(), start=(Phase.PRECOMBAT_MAIN, 0))
+query, _ = priority_query(game, game.players[0])
+print(sorted(dict(option.attrs)["printed"].__name__ for option in query.options))
+"""
+
+
+@pytest.mark.parametrize("suffix,offered", [
+    ("", ["GlamdringFoehammer", "GleamOfDeath"]),
+    (CARD_THEN_FACE, ["GlamdringFoehammer"]),
+])
+def test_card_then_face_really_offers_the_card_alone(suffix: str, offered: list[str]) -> None:
+    env = {**os.environ, "PYTHONPATH": str(ORACLE), "PYTHONDONTWRITEBYTECODE": "1"}
+    result = subprocess.run(
+        [sys.executable, "-c", suffix + _OFFERED_PROBE], cwd=ORACLE, env=env,
+        capture_output=True, text=True, timeout=120, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == repr(offered)

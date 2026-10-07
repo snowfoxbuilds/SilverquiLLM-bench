@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 
 from engine.card import CardImpl
 from engine.events import SpellCastTriggeredEvent
+from engine.faces import whole_card
 from engine.stack import (
     StackObject,
     capture_activation_context,
@@ -693,22 +694,24 @@ def _holding_zone(game, card, zone):
 
 
 def cast_spell(game: GameState, player: Player, card: CardImpl, **kwargs) -> StackObject:
-    """Cast *card*, restoring where it was if casting fails part-way."""
+    """Cast *card*, restoring where it was if casting fails part-way.
+
+    *card* may be a face of a multi-face card (:mod:`engine.faces`): the card
+    leaves its zone and the face goes on the stack.
+    """
+    whole = whole_card(card)
     origin = next((owner.zones[zone] for owner in game.players for zone in Zone
-                   if zone in owner.zones and owner.zones[zone].contains(card)), None)
+                   if zone in owner.zones and owner.zones[zone].contains(whole)), None)
     controller = card.controller
     try:
         return _cast_spell(game, player, card, **kwargs)
     except Exception:
-        if origin is not None and not origin.contains(card):
+        if origin is not None and not origin.contains(whole):
             for owner in game.players:
                 if owner.zones[Zone.STACK].contains(card):
                     owner.zones[Zone.STACK].remove(card)
-                    origin.add(card)
+                    origin.add(whole)
                     break
-        restore = getattr(card, 'restore_front_face', None)
-        if restore is not None:
-            restore()
         card.controller = controller
         raise
 
@@ -758,8 +761,8 @@ def _cast_spell(
     Raises:
         CastingError: If any legality check fails.
     """
-    if hasattr(card, 'choose_cast_face'):
-        card.choose_cast_face(game, player)
+    # A face is cast from where its card is (CR 715.3a; see engine.faces).
+    whole = whole_card(card)
     # 1. Timing
     if not ignore_timing and not can_cast_at_instant_speed(card, player) and not is_sorcery_speed(game, player):
         raise CastingError(
@@ -788,29 +791,31 @@ def _cast_spell(
     hand = player.zones[from_zone]
     permission = None
     if mode is CastMode.NORMAL and (
-        not hand.contains(card) or from_zone != Zone.HAND
-    ) and not getattr(card, "_castable_from_graveyard", False):
-        permission = cast_permission(game, player, card)
+        not hand.contains(whole) or from_zone != Zone.HAND
+    ) and not getattr(whole, "_castable_from_graveyard", False):
+        permission = cast_permission(game, player, whole)
         if permission is not None:
-            hand = _holding_zone(game, card, permission['zone']) or hand
+            hand = _holding_zone(game, whole, permission['zone']) or hand
         elif from_zone != Zone.HAND:
             raise CastingError(
                 f"Cannot cast {card.name!r} — no permission to cast it from {from_zone.value}"
             )
-    if not hand.contains(card):
+    if not hand.contains(whole):
         raise CastingError(
             f"Cannot cast {card.name!r} — card not in {from_zone.value}"
         )
+    if permission is not None and permission['normal_face_only'] and whole is not card:
+        raise CastingError(f"Cannot cast {card.name!r} — only the card's main face may be cast")
 
     from engine.stack import object_current_zone
-    card.cast_from_zone = Zone(object_current_zone(game, card))
+    card.cast_from_zone = Zone(object_current_zone(game, whole))
     card.controller = player
     if card.owner is None:
         card.owner = player
 
     # 4. Move card from its zone to the stack zone
     stack_zone = player.zones[Zone.STACK]
-    hand.remove(card)
+    hand.remove(whole)
     stack_zone.add(card)
 
     # Clear any stale colors_spent from a prior cast before new payment.
@@ -883,7 +888,7 @@ def _cast_spell(
                 filter_fn, target, chosen_targets
             ):
                 stack_zone.remove(card)
-                hand.add(card)
+                hand.add(whole)
                 raise CastingError(
                     f"Cannot cast {card.name!r} — chosen target does not "
                     f"satisfy filter: {getattr(spec, 'description', '')}"
@@ -898,7 +903,7 @@ def _cast_spell(
         if has_protection_from(target, card):
             # Rollback: move card from stack zone back to hand
             stack_zone.remove(card)
-            hand.add(card)
+            hand.add(whole)
             raise CastingError(
                 f"Cannot cast {card.name!r} — target has protection from this spell"
             )
@@ -956,7 +961,7 @@ def _cast_spell(
     if not payable or player.life < life_amount:
         # Rollback: move card from stack zone back to hand
         stack_zone.remove(card)
-        hand.add(card)
+        hand.add(whole)
         for trigger in deferred:
             game.stack.push(trigger)
         raise CastingError(f"Cannot cast {card.name!r} — insufficient mana")
@@ -1127,8 +1132,7 @@ def cast_spell_free(
 
     card.cast_from_zone = from_zone
     card.x_value = 0
-    if hasattr(card, 'choose_cast_face'):
-        card.choose_cast_face(game, player, mana_value_limit=mana_value_limit)
+    whole = whole_card(card)
     if mana_value_limit is not None and card.mana_cost.cmc > mana_value_limit:
         raise CastingError('Spell exceeds the remaining mana-value allowance')
     # Ensure controller is set
@@ -1142,23 +1146,23 @@ def cast_spell_free(
 
     # 2. Locate card in source zone
     source_zone_container = player.zones[from_zone]
-    if not source_zone_container.contains(card):
+    if not source_zone_container.contains(whole):
         # Try to find the card in any player's zone
         source_zone_container = None
         for p in game.players:
             z = p.zones[from_zone]
-            if z.contains(card):
+            if z.contains(whole):
                 source_zone_container = z
                 break
 
-    if source_zone_container is None or not source_zone_container.contains(card):
+    if source_zone_container is None or not source_zone_container.contains(whole):
         raise CastingError(
             f"Cannot cast {card.name!r} — card not found in {from_zone.name}"
         )
 
     # Move card from source zone to stack zone
     stack_zone = player.zones[Zone.STACK]
-    source_zone_container.remove(card)
+    source_zone_container.remove(whole)
     stack_zone.add(card)
     _announce_x(game, player, card, free=True)
 
@@ -1218,7 +1222,7 @@ def cast_spell_free(
     except Exception as exc:
         # Rollback: move card from stack zone back to source zone
         stack_zone.remove(card)
-        source_zone_container.add(card)
+        source_zone_container.add(whole)
         raise CastingError(str(exc)) from exc
 
     # 3b. Capture the casting controller + chosen target zone-stints NOW —

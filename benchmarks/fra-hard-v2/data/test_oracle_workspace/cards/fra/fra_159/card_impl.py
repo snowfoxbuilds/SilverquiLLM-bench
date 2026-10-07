@@ -4,6 +4,7 @@ from engine.card_queries import choose_object
 from engine.casting import CastingError, cast_spell_free
 from engine.copying import copy_card
 from engine.events import EntersBattlefieldTriggeredEvent
+from engine.faces import choose_face, presented, whole_card
 from engine.stack import surviving_targets
 from engine.triggers import TriggerRegistration
 from engine.types import CardType, Keyword, ManaCost, Supertype, Zone
@@ -70,17 +71,19 @@ class UldarosTheorix(Creature):
             budget = [6]
             chosen = [None]
 
+            def affordable(face):
+                return face.mana_cost.cmc <= budget[0] and face.can_cast(state)
+
             def cast_one():
-                options = [card for card in copies
-                           if card.mana_cost.cmc <= budget[0] and card.can_cast(state)]
-                chosen[0] = choose_object(state, player, options, "Cast a copied spell",
-                                          source_card=self, optional=True)
+                chosen[0] = choose_object(state, player, presented(copies, affordable),
+                                          "Cast a copied spell", source_card=self, optional=True)
                 if chosen[0] is None:
                     return None
+                face = choose_face(state, player, chosen[0], affordable)
                 # A copy is numbered as it is cast (rule 707.12).
-                state.created_copies.append(chosen[0])
-                cast_spell_free(state, player, chosen[0], Zone.EXILE, mana_value_limit=budget[0])
-                return chosen[0]
+                state.created_copies.append(whole_card(chosen[0]))
+                cast_spell_free(state, player, face, Zone.EXILE, mana_value_limit=budget[0])
+                return face
 
             while copies:
                 # Each cast is its own attempt: a rejected one is undone and asked
@@ -89,7 +92,7 @@ class UldarosTheorix(Creature):
                     spell = attempts.attempt(state, cast_one)
                 except CastingError:
                     # No player could have chosen differently: that copy cannot be cast.
-                    failed = chosen[0]
+                    failed = whole_card(chosen[0])
                     copies.remove(failed)
                     for zone in (player.zones[value] for value in Zone):
                         if zone.contains(failed):
@@ -97,7 +100,7 @@ class UldarosTheorix(Creature):
                     continue
                 if spell is None:
                     break
-                copies.remove(spell)
+                copies.remove(whole_card(spell))
                 budget[0] -= spell.mana_cost.cmc
             for spell in copies:
                 if player.zones[Zone.EXILE].contains(spell):
