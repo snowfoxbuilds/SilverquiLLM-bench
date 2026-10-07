@@ -33,6 +33,8 @@ from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, logins_root
 from .provenance import collect as collect_provenance
 from .records import KarnIdentity, KarnRunRecord, missing_scores, write_record
 from .snapshots import WorkspaceSnapshots, retain_git_history
+from .subscription_usage import codex_usage, subscription_usage
+from .subscription_usage import provider_for as usage_provider
 from .toolchain import prepare_toolchain
 from .workspace_archive import ArchiveRefused, archive_run
 
@@ -426,6 +428,7 @@ def _collect(
         budget_seconds,
     )
     observation_problems = []
+    provider, usage = usage_provider(login, telemetry.get("adapter")), {}
     stage = "staging"
     try:
         prompt, metadata["benchmark_input"] = stage_benchmark(benchmark, workspace)
@@ -449,6 +452,10 @@ def _collect(
                 stage = "execution"
 
                 def after_stop(result, native_state):
+                    # The login harvest after this hook clears the rollouts that hold it; read
+                    # first so a failing journal harvest cannot lose it.
+                    if provider == "codex" and native_state is not None:
+                        usage["codex"] = codex_usage(native_state)
                     if native_state is not None:
                         collector.harvest_native(native_state)
                     else:
@@ -578,6 +585,9 @@ def _collect(
             collection_reasons=["measurement_collection_unavailable"],
             adapter=telemetry["adapter"],
         )
+    metadata["measurements"]["subscription_usage"] = subscription_usage(
+        provider, codex=usage.get("codex"), stdout=run_dir / "host" / "stdout.log"
+    )
     record = KarnRunRecord(
         {
             "schema_version": 2,

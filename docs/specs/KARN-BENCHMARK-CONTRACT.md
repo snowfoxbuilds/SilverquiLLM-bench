@@ -159,7 +159,8 @@ A request the two streams report differently, in shared token counts or model, k
 The transcript's format is internal to Claude Code, so each pinned Claude Code version is qualified before its measurements count as complete.
 
 Each record also keeps the newest subscription usage reading the run observed for its Login Profile: the provider's weekly-window utilization percentage, the window length, its reset time, and when the reading was observed (grilling 2026-10-07).
-Claude reports it in `rate_limit_event` stdout lines (the `seven_day` window) and Codex in its rollout `rate_limits` (the `primary` window); only those fields are kept, and a run that observed none records the reading as missing.
+Claude reports it in `rate_limit_event` stdout lines (the `seven_day` window) and Codex in its rollout `rate_limits` (whichever of its `primary` and `secondary` windows lasts 10080 minutes); only those fields are kept, and a run that observed none records the reading as missing.
+Claude's stdout carries no time of its own, so a Claude reading's observation time is recorded as unknown; the run's container stop bounds it.
 The reading feeds the operator's Estimated Weekly Usage in [Run Monitoring](RUN-MONITORING.md) and is not an efficiency measurement.
 
 ### Outcomes and retained evidence

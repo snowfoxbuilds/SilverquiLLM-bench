@@ -51,6 +51,8 @@ from .records import (
     write_record,
 )
 from .snapshots import WorkspaceSnapshots, retain_git_history
+from .subscription_usage import codex_usage, subscription_usage
+from .subscription_usage import provider_for as usage_provider
 
 
 class RunNeverLaunchedError(KarnError):
@@ -490,6 +492,12 @@ def _recover(
     if observation_problems:
         observed.observation_errors.extend(observation_problems)
         mark_observation_problems(measurements, observation_problems)
+    preserved = run_dir / "host" / NATIVE_PRESERVED
+    measurements["subscription_usage"] = subscription_usage(
+        usage_provider(inputs.get("login"), telemetry.get("adapter", "codex")),
+        codex=codex_usage(preserved) if preserved.is_dir() else None,
+        stdout=run_dir / "host" / "stdout.log",
+    )
     snapshots = WorkspaceSnapshots(
         run_dir / "workspace", run_dir, import_probe=grader.engine_health
     )
