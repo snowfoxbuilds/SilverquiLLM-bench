@@ -284,12 +284,16 @@ class Stack:
     of the stack (most recently pushed).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, game: GameState | None = None) -> None:
         self._items: list[StackObject] = []
+        self._game = game
 
     def push(self, obj: StackObject) -> None:
-        """Push *obj* onto the top of the stack."""
+        """Push *obj* onto the top of the stack; a spell copy the game made is
+        recorded (see GameState.record_made)."""
         self._items.append(obj)
+        if self._game is not None and getattr(obj, "is_spell", False):
+            self._game.record_made(self._game.refs.physical_card(obj), Zone.STACK)
 
     def pop(self) -> StackObject:
         """Remove and return the top object from the stack.

@@ -330,6 +330,8 @@ def move_to_zone(
         dest_player.zones[dest_zone].shuffle(game)
     else:
         dest_player.zones[dest_zone].add(card, position=position)
+    if dest_zone == Zone.BATTLEFIELD:
+        game.record_made(game.refs.physical_card(card), Zone.BATTLEFIELD)
 
     # A zone change yields a new object: break instance-id continuity in the
     # refs registry even when the new stint is never observed by a query

@@ -199,7 +199,12 @@ class _Numbered:
             valid += 1
         del self.objects[valid:]
         numbered = {id(obj) for obj in self.objects}
-        fresh = [obj for obj in made if id(obj) not in numbered]
+        fresh = []
+        for obj in made:
+            # An engine may record the same object twice; it takes one number.
+            if id(obj) not in numbered:
+                numbered.add(id(obj))
+                fresh.append(obj)
         if self.kind is Token:
             fresh.sort(key=lambda obj: _seat_of(game, obj))
         self.objects.extend(fresh)

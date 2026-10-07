@@ -14,6 +14,7 @@ from cards.fdn.fdn_134.card_impl import (
     AjaniCallerOfThePrideAbility3,
 )
 from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_222.card_impl import GhaltaPrimalHunger
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_278.card_impl import Mountain, MountainAbility1
 
@@ -31,8 +32,13 @@ from test_interface import (
     pass_priority,
     player,
     run,
+    spell_copy,
+    token,
     view,
 )
+
+from engine.casting import cast_spell_free, resolve_top
+from engine.game import create_token, mint_token_copy
 
 
 def test_a_constructed_position_is_what_the_view_shows():
@@ -89,3 +95,39 @@ def test_play_that_leaves_the_script_fails():
     game = create_game(Side(hand=[Plains]), start=(Phase.PRECOMBAT_MAIN, 0))
     with pytest.raises(PlayDiverged):
         run(game, [act(BurstLightning)], [])
+
+
+def _copy_into_exile(game, original, seat=0):
+    """A copy of ``original`` made in seat's exile, as a card copy is made
+    before it is cast (CR 707.12)."""
+    controller = game.players[seat]
+    copied = mint_token_copy(original)
+    copied.is_token = False
+    copied.owner = copied.controller = controller
+    controller.zones[Zone.EXILE].add(copied)
+    return copied
+
+
+def test_a_token_the_engine_makes_is_numbered():
+    ghalta = card(GhaltaPrimalHunger)
+    game = create_game(Side(battlefield=[ghalta]), start=(Phase.PRECOMBAT_MAIN, 0))
+    create_token(game, game.players[0], mint_token_copy(ghalta.card))
+    assert view(game).where(token(1)) is Zone.BATTLEFIELD
+
+
+def test_a_cast_copy_of_a_card_is_numbered_and_becomes_a_numbered_token():
+    ghalta = card(GhaltaPrimalHunger)
+    game = create_game(Side(graveyard=[ghalta]), start=(Phase.PRECOMBAT_MAIN, 0))
+    copied = _copy_into_exile(game, ghalta.card)
+    cast_spell_free(game, game.players[0], copied, Zone.EXILE)
+    assert view(game).where(spell_copy(1)) is Zone.STACK
+    resolve_top(game)
+    assert view(game).where(token(1)) is Zone.BATTLEFIELD
+
+
+def test_a_copy_left_in_exile_is_numbered_before_a_player_gets_priority():
+    ghalta = card(GhaltaPrimalHunger)
+    game = create_game(Side(graveyard=[ghalta]), start=(Phase.PRECOMBAT_MAIN, 0))
+    _copy_into_exile(game, ghalta.card)
+    run(game, [], [], check_views=False)
+    assert view(game).where(spell_copy(1)) is Zone.EXILE

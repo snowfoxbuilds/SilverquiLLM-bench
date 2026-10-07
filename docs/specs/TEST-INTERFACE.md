@@ -42,7 +42,7 @@ The Test Interface relies only on a small engine surface, which the workspace do
 | Zone containers, life totals, each object's `printed` class, whether it is a token, each permanent's controller and owner, the tapped flag, the current step, the active player, the player being asked, game over and winner | The Player View |
 | Each object's and each offered option's physical card — a token is its own | Following a handle's card across zones, or a token, and choosing it |
 | The tokens the game has made, in creation order, which a rollback undoes with the rest of the attempt | Numbering tokens |
-| The copies of spells the game has made, in creation order — a prepare spell's copy as it is made in exile (CR 722.3c) — which a rollback undoes likewise | Numbering spell copies |
+| The copies of spells the game has made, in creation order, which a rollback undoes likewise | Numbering spell copies |
 
 ### Construction
 

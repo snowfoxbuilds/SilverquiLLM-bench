@@ -129,7 +129,7 @@ class GameState:
         self.turn_number: int = 1
         self.cast_permissions: list[dict] = []
         self.battlefield_deaths: list[tuple] = []
-        self.stack: Stack = Stack()
+        self.stack: Stack = Stack(self)
         self.trigger_manager: TriggerManager = TriggerManager()
         self.replacement_manager: ReplacementManager = ReplacementManager()
         self.effect_manager: EffectManager = EffectManager()
@@ -161,6 +161,9 @@ class GameState:
         self.created_tokens: list[Any] = []
         # Every copy of a spell made, in creation order, likewise.
         self.created_copies: list[Any] = []
+        # The cards a constructed position started with, by identity (set by
+        # engine.game._construct); None in a game played from its first turn.
+        self.setup_cards: dict[int, Any] | None = None
 
     # ------------------------------------------------------------------
     # Player properties
@@ -213,6 +216,38 @@ class GameState:
     def flip_coin(self) -> bool:
         """Flip a coin; ``True`` is heads."""
         return random.random() < 0.5
+
+    # ------------------------------------------------------------------
+    # What the game made
+    # ------------------------------------------------------------------
+    # In a constructed position, anything that is not one of its starting
+    # cards is a token or a copy the game made. The stack, a move onto the
+    # battlefield and the start of every Priority Query record each such
+    # object, so a new way of making one needs no bookkeeping of its own.
+
+    def record_made(self, obj: Any, zone: Zone) -> None:
+        """Record ``obj``, found in ``zone``, if the game made it: on the
+        battlefield as a token, anywhere else as a spell copy."""
+        if self.setup_cards is None or obj is None or id(obj) in self.setup_cards:
+            return
+        if zone == Zone.BATTLEFIELD:
+            if not any(made is obj for made in self.created_tokens):
+                self.created_tokens.append(obj)
+        elif not any(made is obj for made in (*self.created_tokens, *self.created_copies)):
+            self.created_copies.append(obj)
+
+    def record_made_objects(self) -> None:
+        """Record every object the game made that is on the stack or in a
+        player's zone, the stack bottom first, then seat 0's zones."""
+        if self.setup_cards is None:
+            return
+        for obj in reversed(self.stack.objects()):
+            if getattr(obj, "is_spell", False):
+                self.record_made(self.refs.physical_card(obj), Zone.STACK)
+        for player in self.players:
+            for zone in (Zone.BATTLEFIELD, Zone.EXILE, Zone.GRAVEYARD, Zone.HAND, Zone.LIBRARY):
+                for obj in player.zones[zone].get_all():
+                    self.record_made(self.refs.physical_card(obj), zone)
 
     # ------------------------------------------------------------------
     # Zone accessors

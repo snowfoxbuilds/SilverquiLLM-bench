@@ -90,6 +90,7 @@ def _attempt_action(game: GameState, player: Player, context: AttemptContext) ->
         if game.is_game_over:
             # CR 104.1: nobody receives priority in a game that has ended.
             return True
+        game.record_made_objects()
         context.begin_try()
         query, actions = priority_query(game, player)
         answer = ask(player, query)

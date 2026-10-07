@@ -625,7 +625,7 @@
          self.turn_number: int = 1
 +        self.cast_permissions: list[dict] = []
 +        self.battlefield_deaths: list[tuple] = []
-         self.stack: Stack = Stack()
+         self.stack: Stack = Stack(self)
          self.trigger_manager: TriggerManager = TriggerManager()
          self.replacement_manager: ReplacementManager = ReplacementManager()
 --- /dev/null
