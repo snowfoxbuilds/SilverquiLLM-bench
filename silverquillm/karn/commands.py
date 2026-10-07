@@ -12,7 +12,7 @@ from pathlib import Path
 
 import click
 
-from silverquillm.host_config import location_option
+from silverquillm.host_config import LOCATIONS, location_option
 
 from .definition import KarnError, load_candidate
 from .exclusions import REASONS as REASON_CODES
@@ -369,16 +369,31 @@ def queue_ls(batches_dir, as_json):
         click.echo(line)
 
 
-@click.command()
-@BATCHES_DIR_OPTION
-@click.option(
-    "--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds"
-)
-def top(batches_dir, interval):
-    """Live, read-only view of the batch queue. q quits."""
-    from .queue_view import run_top
+def _monitor_location(key: str, help: str):
+    """A location flag that, unlike the run commands', may stay unset: the monitor shows it."""
+    return click.option(
+        LOCATIONS[key].flag,
+        key,
+        type=click.Path(file_okay=False, path_type=Path),
+        default=None,
+        help=help + " Defaults to the environment, then the host configuration file.",
+    )
 
-    run_top(batches_dir, interval=interval)
+
+@click.command()
+@click.option(
+    "--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds."
+)
+@click.option("--no-flair", is_flag=True, help="Monochrome theme with plain glyphs.")
+@_monitor_location("results_repo", "The results repo clone.")
+@_monitor_location("batches_dir", "The batch queue directory.")
+@_monitor_location("runs_dir", "The run directory.")
+@_monitor_location("state_root", "The state root holding the Login Pools.")
+def top(interval, no_flair, **locations):
+    """Read-only monitor: live runs, queue, Login Profiles, history and run details. q quits."""
+    from silverquillm.top import launch
+
+    raise SystemExit(launch(locations, interval=interval, no_flair=no_flair))
 
 
 @click.group()

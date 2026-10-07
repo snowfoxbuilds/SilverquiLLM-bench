@@ -191,7 +191,7 @@ budget_seconds = 86400
 ```bash
 silverquillm scheduler --once --replay-without-state hob-learning
 silverquillm queue ls
-silverquillm top
+silverquillm top   # needs the monitor extra: pip install -e '.[monitor]'
 ```
 
 The first invocation acknowledges the missing state for that one new batch.

@@ -68,7 +68,7 @@ jobs:
       # test measures with; the runtime needs no Ozolith package (ADR-014).
       - name: Install
         run: |
-          uv pip install --python .venv/bin/python -e ".[dev]"
+          uv pip install --python .venv/bin/python -e ".[dev,monitor]"
 
       # A job-private basetemp: the host's own pytest sessions share
       # /tmp/pytest-of-<user> and prune each other's numbered directories.
@@ -104,7 +104,7 @@ jobs:
 
       - name: Install
         run: |
-          uv pip install --python .venv/bin/python -e ".[dev]"
+          uv pip install --python .venv/bin/python -e ".[dev,monitor]"
 
       - name: Test
         run: |

@@ -17,7 +17,7 @@ This page replaces the historical image-run artifact and telemetry spec; that la
 ### Command and scope
 
 `silverquillm top` opens the monitor; `silverquillm queue ls` stays the scriptable one-shot queue listing (grilling 2026-10-07).
-The monitor is a Textual application shipped as the optional `monitor` extra (`silverquillm[monitor]`), so grader and candidate environments never install it; without the extra, `top` prints a one-line install hint.
+The monitor is a Textual application shipped as the optional `monitor` extra (`silverquillm-bench[monitor]`), so grader and candidate environments never install it; without the extra, `top` prints a one-line install hint.
 Without a terminal, `top` draws nothing and points to `queue ls`.
 
 The monitor is read-only (grilling 2026-10-07).
@@ -141,14 +141,14 @@ Selecting a run opens its run details.
 
 ### Run details view
 
-The header carries `● LIVE` or `◼ HISTORICAL`, the stage for a live run, the Candidate display and secondary labels, Login Profile, timings, scores, Estimated Cost with its breakdown, Agent Turns, and token usage, each as available (grilling 2026-10-07).
+The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the Candidate display and secondary labels, Login Profile, timings, scores, Estimated Cost with its breakdown, Agent Turns, and token usage, each as available (grilling 2026-10-07).
 
 | Tab | Content |
 | --- | --- |
 | Activity | The candidate's stdout event stream rendered for reading: assistant text, tool calls with their commands, shortened tool results |
 | Stderr | The candidate's stderr |
 | Requests | One row per model request with model, token types, and cost, and a cost sparkline |
-| Workspace | The agent's git commits and the snapshot timeline with files changed per snapshot |
+| Workspace | The agent's commits, read from the workspace's reflog as a file since no git command runs in a candidate-controlled repository, and the snapshot timeline with files changed per snapshot |
 | Raw | Unrendered stdout |
 
 A live run's tabs follow `docker logs -f` and the events file; a historical run's tabs read the retained files.
@@ -159,13 +159,16 @@ The native transcript is not shown: for Claude it largely duplicates stdout, and
 
 ### Navigation
 
-Number keys and clicks on the view tabs switch between the dashboard, historic view, and run details; Enter or a click opens a row; Escape goes back; `q` quits.
+Number keys and clicks on the view tabs switch between the dashboard, historic view, and run details; Enter or a click opens a row; Escape goes back; `r` refreshes now; `q` quits.
+In the historic view a click on a column header, or `s`, changes the sort column, `S` reverses it, and `x` hides or shows excluded runs, which otherwise sit dimmed beneath the included ones.
 
 ### Look and feel
 
 The monitor is a dense operations console with Magic: The Gathering flavour (grilling 2026-10-07): tapped and untapped glyphs for busy and free Login Profiles, a mana colour per provider, set-symbol-style benchmark badges, and sparklines.
 Every colour, glyph, and border lives in one theme definition, so the look changes without touching the views.
 The default theme reads on a 256-colour terminal, and `--no-flair` selects a monochrome, plain-glyph theme.
+Glyphs are single-cell characters, so columns stay aligned in any terminal font.
+Pass rates take a rarity colour: mythic from 90%, rare from 70%, uncommon from 40%, common below.
 
 ## Relevant ADRs
 

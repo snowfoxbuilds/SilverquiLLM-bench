@@ -36,7 +36,7 @@ The file is reread before every not-yet-started entry, so appending entries to a
 - A run left `running` by a crashed or killed scheduler is recovered before anything else runs; one that never wrote its run input is recorded as failed with `interrupted_before_launch`.
 - A record that could not be written in time is marked `record_write_pending` and written on the scheduler's next start or by `silverquillm recover`.
 
-`silverquillm queue ls` and `silverquillm top` show the queue without touching it.
+`silverquillm queue ls` lists the queue without touching it; `silverquillm top` is the read-only monitor over the queue, live runs, Login Profiles and history (see `docs/specs/RUN-MONITORING.md`).
 
 ## Historical batches
 

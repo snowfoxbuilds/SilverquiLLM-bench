@@ -103,7 +103,7 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | `silverquillm recover RUN_ID [--stop]` | Settle an interrupted or killed run from its retained evidence and write its record, without rerunning work. |
 | `silverquillm regrade --benchmark … --out DIR [--run ID] [--candidate HASH]` | Re-grade retained runs on the current Audited Tests and grading inputs, writing new scores to DIR; records are never changed. |
 | `silverquillm queue ls [--json]` | One-shot, read-only view of the batch queue, including interrupted, partially observed, and unsupported batches. |
-| `silverquillm top` | Live, read-only view of the batch queue (`q` quits). |
+| `silverquillm top` | Read-only monitor: live runs, the queue, Login Profiles with Estimated Weekly Usage, history, and run details with live output (`q` quits; needs the `monitor` extra). |
 | `silverquillm login --build-output … --construct …` | Enroll the construct's own subscription login through its login plugin. |
 | `silverquillm grader build [--python X.Y]` | Build the pinned, network-less grader images, one per graded Python version; each run is graded on its candidate's version. |
 | `silverquillm results-init PATH` | Lay out an empty private results repository. |

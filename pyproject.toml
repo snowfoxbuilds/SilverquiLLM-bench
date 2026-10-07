@@ -22,6 +22,10 @@ silverquillm = "silverquillm.cli:main"
 benchmark = "silverquillm.cli:main"
 
 [project.optional-dependencies]
+# `silverquillm top`; kept out of the core install so grader and candidate images skip it.
+monitor = [
+    "textual>=8.2",
+]
 dev = [
     "pytest",
     "pytest-cov",

@@ -29,6 +29,7 @@ from silverquillm.host_config import (
 
 from .containers import RUN_CONTAINER_PREFIX, RunContainer, run_containers
 from .costs import ProvisionalCost
+from .details import RecordDetail, WorkspaceView, record_detail, workspace_view
 from .estimates import WeeklyUsage, estimated_percent, weekly_usage
 from .history import HistoryStore, RepoFreshness, RunSummary, UsageReading, repo_freshness
 from .live import LiveRun, Stage, live_runs
@@ -308,15 +309,32 @@ class Monitor:
         entry = self._live.get(run_id)
         if entry is not None and entry.follower is not None:
             return entry.follower.lines_since(since, stream)
-        runs_dir = self.path("runs_dir")
-        if runs_dir is None or "/" in run_id or run_id.startswith("."):
+        run_dir = self.run_dir(run_id)
+        if run_dir is None:
             return []
-        run_dir = entry.run.run_dir if entry is not None else Path(runs_dir) / run_id
         streams = (stream,) if stream else ("stdout", "stderr")
         lines = [line for name in streams for line in retained_lines(run_dir, name)]
         # Retained streams number their lines separately; together they are renumbered.
         lines = [replace(line, seq=index) for index, line in enumerate(lines, 1)]
         return [line for line in lines if line.seq > since]
+
+    def run_dir(self, run_id: str) -> Path | None:
+        """The run's directory on this host: the live one, else under the run directory."""
+        entry = self._live.get(run_id)
+        if entry is not None:
+            return entry.run.run_dir
+        runs_dir = self.path("runs_dir")
+        if runs_dir is None or "/" in run_id or run_id.startswith(".") or not run_id:
+            return None
+        return Path(runs_dir) / run_id
+
+    def workspace(self, run_id: str) -> WorkspaceView:
+        """The run's snapshot timeline and the agent's commits, when this host has them."""
+        return workspace_view(self.run_dir(run_id))
+
+    def record_detail(self, summary: RunSummary) -> RecordDetail | None:
+        """Requests, cost breakdown and failure facts from a recorded run's Run Record."""
+        return record_detail(summary.path)
 
     def provisional_requests(self, run_id: str):
         entry = self._live.get(run_id)
