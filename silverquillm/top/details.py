@@ -17,6 +17,7 @@ from silverquillm.monitor import (
     RequestCost,
     RunSummary,
     RunView,
+    Stage,
     WorkspaceView,
     render_line,
 )
@@ -56,7 +57,12 @@ def header(shown: Shown, now: datetime, theme: Theme) -> Table:
     table.add_column(ratio=3)
     table.add_column(ratio=2)
     badge = Text()
-    if live is not None:
+    if live is not None and live.run.stage is Stage.NEEDS_RECOVER:
+        badge.append(
+            f" {theme.glyph('needs_recover_badge')} ",
+            style=f"{theme.style('needs_recover', bold=True)} reverse",
+        )
+    elif live is not None:
         badge.append(f" {theme.glyph('live')} ", style=f"{theme.style('live', bold=True)} reverse")
     else:
         badge.append(
@@ -222,7 +228,11 @@ class DetailsView(Vertical):
             return
         head = self.query_one("#detail-head", Static)
         head.update(header(self.shown, now, self.theme_))
-        head.border_title = "LIVE RUN" if self.shown.live else "RECORDED RUN"
+        live = self.shown.live
+        if live is not None and live.run.stage is Stage.NEEDS_RECOVER:
+            head.border_title = "UNRECORDED RUN"
+        else:
+            head.border_title = "LIVE RUN" if live else "RECORDED RUN"
 
     def append_output(self, lines: list[LogLine]) -> None:
         if self.shown is None or not lines:
@@ -260,7 +270,9 @@ class DetailsView(Vertical):
                 fmt.count(tokens.get("cached_input_tokens")),
                 fmt.count(tokens.get("cache_write_input_tokens")),
                 fmt.count(tokens.get("output_tokens")),
-                fmt.money(request.usd, theme),
+                fmt.money(request.usd, theme)
+                if request.usd is not None
+                else Text("unpriced", style=theme.style("muted")),
             )
         points = [
             (row.timestamp_ms, row.usd)

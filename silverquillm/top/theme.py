@@ -93,12 +93,16 @@ Screen {{ background: {c("background")}; color: {c("text")}; overflow: hidden; }
 }}
 .pane:focus-within {{ border: {self.border} {c("border_focus")}; }}
 #status {{ height: auto; max-height: 16; }}
-#where {{ width: auto; max-width: 60; margin-right: 3; }}
-#counts {{ width: 22; margin-right: 3; }}
-#pools {{ width: 1fr; }}
+#where {{ width: 1fr; max-width: 64; margin-right: 2; }}
+#counts {{ width: 22; margin-right: 3; padding-left: 2; border-left: solid {c("border")}; }}
+#pools {{ width: 1fr; min-width: 44; }}
 #lower {{ height: 1fr; }}
 #running {{ width: 3fr; }}
 #queued {{ width: 1fr; min-width: 34; max-width: 56; }}
+.narrow #lower {{ layout: vertical; }}
+.narrow #where {{ max-width: 44; }}
+.narrow #running {{ width: 1fr; height: 2fr; }}
+.narrow #queued {{ width: 1fr; max-width: 100%; height: 1fr; }}
 #nav {{ width: 40; }}
 #runs {{ width: 1fr; }}
 #detail-head {{ height: auto; max-height: 12; }}
@@ -180,6 +184,7 @@ MTG = Theme(
         "host_failed": "⚠",
         "status_unknown": "·",
         "live": "◉ LIVE",
+        "needs_recover_badge": "⚠ NEEDS RECOVER",
         "historical": "◼ HISTORICAL",
         "queued": "◷",
         "finished": "✔",
@@ -237,6 +242,7 @@ PLAIN = Theme(
         "host_failed": "HOST",
         "status_unknown": "-",
         "live": "[LIVE]",
+        "needs_recover_badge": "[NEEDS RECOVER]",
         "historical": "[HISTORICAL]",
         "queued": "o",
         "finished": "v",

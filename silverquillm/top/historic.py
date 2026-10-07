@@ -102,6 +102,24 @@ def run_cells(run: RunSummary, theme: Theme) -> tuple:
     return tuple(dimmed)
 
 
+# Usable width of the browse tree's labels: the pane's 40 columns less border, padding and a
+# scrollbar; each level's guides take their share of it.
+NAV_LABEL = 34
+
+
+def _entry(label: Text, total: int, width: int, theme: Theme) -> Text:
+    """A tree label cut to fit, its count right-aligned in a column of its own."""
+    count = f"{total:>5}"
+    room = width - len(count) - 1
+    label = label.copy()
+    if label.cell_len > room:
+        label.truncate(room - 1)
+        label.append("…")
+    label.pad_right(room - label.cell_len + 1)
+    label.append(count, style=theme.style("muted"))
+    return label
+
+
 def _walk(node):
     for child in node.children:
         yield child
@@ -163,9 +181,11 @@ class HistoryView(Horizontal):
         expanded = {node.data for node in _walk(tree.root) if node.is_expanded and node.data}
         tree.clear()
         everything = tree.root.add_leaf(
-            Text.assemble(
-                ("All runs ", theme.style("title", bold=True)),
-                (str(len(self.runs)), theme.style("muted")),
+            _entry(
+                Text("All runs", style=theme.style("title", bold=True)),
+                len(self.runs),
+                NAV_LABEL,
+                theme,
             ),
             data=("all", None),
         )
@@ -174,8 +194,7 @@ class HistoryView(Horizontal):
             Text("Benchmarks", style=theme.style("title", bold=True)), data=("group", "benchmarks")
         )
         for benchmark, total in sorted(benchmarks.items()):
-            label = fmt.badge(benchmark, theme)
-            label.append(f" {total}", style=theme.style("muted"))
+            label = _entry(fmt.badge(benchmark, theme), total, NAV_LABEL - 2, theme)
             branch.add_leaf(label, data=("benchmark", benchmark))
         hashes: dict[tuple, Counter] = defaultdict(Counter)
         for run in self.runs:
@@ -189,24 +208,24 @@ class HistoryView(Horizontal):
         for name in sorted(names):
             total = sum(sum(hashes[key].values()) for key in names[name])
             name_node = branch.add(
-                Text.assemble(
-                    (name, theme.style("text", bold=True)), (f" {total}", theme.style("muted"))
+                _entry(
+                    Text(name, style=theme.style("text", bold=True)), total, NAV_LABEL - 4, theme
                 ),
                 data=("group", name),
             )
             for key in sorted(names[name]):
                 settings = f"{key[1]} · {key[2]}"
                 node = name_node.add(
-                    Text.assemble(
-                        settings, (f" {sum(hashes[key].values())}", theme.style("muted"))
-                    ),
+                    _entry(Text(settings), sum(hashes[key].values()), NAV_LABEL - 6, theme),
                     data=("candidate", key),
                 )
                 for candidate_hash, count in hashes[key].most_common():
                     node.add_leaf(
-                        Text.assemble(
-                            (candidate_hash[:8], theme.style("accent")),
-                            (f" {count}", theme.style("muted")),
+                        _entry(
+                            Text(candidate_hash[:8], style=theme.style("accent")),
+                            count,
+                            NAV_LABEL - 6,
+                            theme,
                         ),
                         data=("hash", candidate_hash),
                     )

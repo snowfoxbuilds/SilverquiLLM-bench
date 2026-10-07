@@ -6,7 +6,7 @@ import threading
 from datetime import UTC, datetime
 from typing import ClassVar
 
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.markup import escape
@@ -14,7 +14,7 @@ from textual.widgets import ContentSwitcher, Static
 
 from silverquillm.monitor import Monitor, MonitorSnapshot, RunSummary
 
-from .dashboard import DashboardView, RunChosen
+from .dashboard import NARROW, DashboardView, RunChosen
 from .details import DetailsView
 from .historic import HistoryView
 from .theme import Theme
@@ -73,6 +73,10 @@ class MonitorApp(App):
         self._draw_bars()
         self.poll()
         self.set_interval(self.interval, self.poll)
+
+    def on_resize(self, event: events.Resize) -> None:
+        # Below this width the queue moves under the running runs so their rows fit.
+        self.query_one(DashboardView).set_class(event.size.width < NARROW, "narrow")
 
     def on_unmount(self) -> None:
         with self._lock:

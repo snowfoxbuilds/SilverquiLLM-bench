@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from rich.text import Text
 
 from silverquillm.monitor import LogLine, Score, UsageReading, WeeklyUsage, render_line
 from silverquillm.monitor.details import record_detail, workspace_view
@@ -490,3 +491,61 @@ async def test_the_view_tabs_in_the_top_bar_are_clickable():
         await pilot.click("#topbar", offset=(column + 1, 0))
         await pilot.pause()
         assert app.query_one("#switcher").current == "history"
+
+
+def test_tree_counts_sit_in_their_own_right_aligned_column():
+    from silverquillm.top.historic import _entry
+
+    short = _entry(Text("smoke"), 8, 30, MTG).plain
+    long = _entry(Text("bare-claude-sonnet-xhigh-extra-long-name"), 346, 30, MTG).plain
+    assert len(short) == len(long) == 30
+    assert short.endswith("    8") and long.endswith("  346")
+    assert "…" in long and long[long.index("…") + 1] == " "
+
+
+def test_each_location_source_sits_beside_its_path():
+    from silverquillm.top.dashboard import StatusPane
+
+    lines = _plain(StatusPane._where(FakeMonitor().snapshot(), MTG)).splitlines()
+    assert any("bench-results (config)" in line for line in lines), lines
+    assert any("silverquillm (default)" in line for line in lines), lines
+
+
+def test_a_run_needing_recovery_has_its_own_badge():
+    from silverquillm.top.details import Shown, header
+
+    views = FakeMonitor().running
+    stuck = next(view for view in views if view.run.stage.value == "needs_recover")
+    running = next(view for view in views if view.run.stage.value == "running")
+    stuck_head = _plain(header(Shown(stuck.run.run_id, live=stuck), NOW, MTG))
+    assert "NEEDS RECOVER" in stuck_head and "LIVE" not in stuck_head
+    assert "LIVE" in _plain(header(Shown(running.run.run_id, live=running), NOW, MTG))
+
+
+@synchronous
+async def test_unpriced_recorded_requests_say_so():
+    from silverquillm.monitor import RecordDetail, RequestCost
+
+    class Unpriced(FakeMonitor):
+        def record_detail(self, summary):
+            return RecordDetail(
+                [RequestCost(1_791_000_000_000, "m", {}, None)], {}, None, None, None, None
+            )
+
+    app = _app(Unpriced())
+    async with app.run_test(size=(160, 44)) as pilot:
+        await _settle(app, pilot)
+        await pilot.press("2")
+        app.query_one("#runs-table").focus()
+        await pilot.press("enter")
+        await _settle(app, pilot)
+        table = app.query_one("#requests-table")
+        assert str(table.get_row_at(0)[-1]) == "unpriced"
+
+
+def _plain(renderable) -> str:
+    from rich.console import Console
+
+    console = Console(width=160, record=True, color_system=None)
+    console.print(renderable)
+    return console.export_text()
