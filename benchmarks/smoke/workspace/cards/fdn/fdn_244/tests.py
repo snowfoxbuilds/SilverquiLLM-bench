@@ -14,12 +14,12 @@ from __future__ import annotations
 from cards.fdn.fdn_244.card_impl import Progenitus
 from engine.card import Creature, printed_class
 from engine.events import (
-    CreatureDiesReplacementEvent,
     MoveToGraveyardReplacementEvent,
 )
+from engine.game import destroy, sacrifice
 from engine.replacement_effects import ReplacementEffect
 from engine.types import ManaCost, Supertype, Zone
-from test_utils import create_game
+from test_utils import create_game, set_board_state
 
 
 class TestProgenitusProperties:
@@ -71,25 +71,25 @@ class TestProgenitusGraveyardReplacement:
     """The replacement callback shuffles the card into its owner's
     library and prevents the move to graveyard."""
 
-    def test_replacement_redirects_to_library_and_prevents(self) -> None:
+    def test_dying_shuffles_it_into_its_owners_library(self) -> None:
         game = create_game()
         p1 = game.players[0]
         card = Progenitus(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[card])
         card.register_replacement_effects(game)
-        # Use the creature-dies subclass so the event's ``card`` property
-        # resolves to this Progenitus instance (the base class's ``card``
-        # property returns None).
-        event = CreatureDiesReplacementEvent(
-            creature=card,
-            destination="graveyard",
-            controller=p1,
-            owner=p1,
-        )
-        result = game.replacement_manager.apply(game, event)
-        # Replacement callback should return the event with prevented=True
-        # and shuffle the card into the library.
-        assert result.prevented is True
-        library = p1.zones[Zone.LIBRARY]
-        assert library.contains(card)
+        destroy(game, card)
+        assert not game.get_battlefield(p1).contains(card)
+        assert not game.get_graveyard(p1).contains(card)
+        assert p1.zones[Zone.LIBRARY].contains(card)
+
+    def test_sacrificing_it_shuffles_it_into_its_owners_library(self) -> None:
+        game = create_game()
+        p1 = game.players[0]
+        card = Progenitus(owner=p1, controller=p1)
+        set_board_state(game, 0, battlefield=[card])
+        card.register_replacement_effects(game)
+        sacrifice(game, p1, card)
+        assert not game.get_graveyard(p1).contains(card)
+        assert p1.zones[Zone.LIBRARY].contains(card)
 
 

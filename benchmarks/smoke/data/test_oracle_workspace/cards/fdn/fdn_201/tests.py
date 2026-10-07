@@ -17,6 +17,7 @@ from engine.card import Creature, Planeswalker, printed_class
 from engine.decisions import Decision, GameRef
 from test_utils import Intent
 from engine.types import Keyword, ManaCost, ManaType, Zone
+from engine.continuous_effects import DURATION_END_OF_TURN, ContinuousEffect, Layer, SubLayer
 from engine.zones import move_to_zone
 from test_utils import activate_card_ability, create_game, resolve_stack, set_board_state
 
@@ -75,10 +76,21 @@ class TestHeartfireImmolatorAbility:
         assert p1.mana_pool.total() == 0                 # {R} paid
 
     def test_damage_uses_power_snapshot_at_activation(self):
-        """The snapshot captures power before the sacrifice, so a pumped power
-        is reflected even though the source is gone at resolution."""
-        game, p1, p2, immo, target = self._setup()
-        immo.modified_power = 5                           # e.g. prowess pump
+        """The damage uses its power as it last existed on the battlefield
+        (rule 608.2h), so a pump is reflected though the source is gone."""
+        game, p1, p2, immo, _ = self._setup()
+        target = Creature(name="Wall", base_power=0, base_toughness=8, owner=p2, controller=p2)
+        set_board_state(game, 1, battlefield=[target])
+        def _pump(game):                                  # +3/+0 until end of turn
+            if _on_battlefield(game, immo):
+                immo.modified_power += 3
+
+        game.effect_manager.add(ContinuousEffect(
+            source=immo, layer=Layer.POWER_TOUGHNESS, sublayer=SubLayer.MODIFY_PT,
+            apply=_pump, duration=DURATION_END_OF_TURN,
+        ))
+        game.effect_manager.apply_all(game)
+        assert immo.power == 5
         _activate_targeting(game, p1, immo, target)
         resolve_stack(game)
         assert target.damage_marked == 5

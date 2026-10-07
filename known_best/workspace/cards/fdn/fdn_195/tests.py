@@ -80,12 +80,21 @@ class TestFanaticalFirebrandAbility:
         resolve_stack(game)
         assert p2.life == 19
 
-    def test_cost_taps_and_sacrifices(self):
+    def test_cost_sacrifices(self):
+        # Tapped is a permanent's status; the sacrificed card is not tapped in
+        # the graveyard (rule 110.5).
         game, p1, p2, brand, target = self._setup()
         _activate_targeting(game, p1, brand, target)
-        assert brand.is_tapped is True
         assert not _on_battlefield(game, brand)
         assert game.get_graveyard(p1).contains(brand)
+
+    def test_a_tapped_firebrand_cannot_pay_the_cost(self):
+        game, p1, p2, brand, target = self._setup()
+        brand.is_tapped = True
+        with pytest.raises(AbilityError):
+            _activate_targeting(game, p1, brand, target)
+        assert _on_battlefield(game, brand)
+        assert target.damage_marked == 0
 
     def test_target_captured_on_stack(self):
         game, p1, p2, brand, target = self._setup()

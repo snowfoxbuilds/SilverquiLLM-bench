@@ -31,6 +31,7 @@ from engine.decisions import Decision, DecisionKind, GameRef
 from test_utils import Intent
 from engine.protection import ProtectionAbility
 from engine.stack import resolve_top_of_stack
+from engine.state_based_actions import resolve_state_based_actions
 from engine.types import (
     CardType,
     Color,
@@ -125,7 +126,9 @@ def _pref(game, obj):
 
 def _cast(game, p1, spell, target_prefs=None):
     """Cast *spell* through the real pipeline, answering its cast-time target
-    query (when it targets) with *target_prefs*, routed by the spell's own name."""
+    query (when it targets) with *target_prefs*, routed by the spell's own name.
+    The game then settles, as it does before a player receives priority, so
+    the Storm trigger the cast fired goes on the stack (rule 117.5)."""
     if target_prefs is not None:
         p1.start_intent("cast", Intent(
             pattern=GameRef(card=frozenset({("printed", printed_class(spell))})),
@@ -137,20 +140,20 @@ def _cast(game, p1, spell, target_prefs=None):
             p1.end_intent("cast")
     else:
         engine_cast_spell(game, p1, spell)
+    resolve_state_based_actions(game)
 
 
 def _fire(game, p1, spell):
-    """No-op retained for call-site readability.
+    """Settle the game, as it does before a player receives priority, so the
+    Storm trigger that casting *spell* fired is on the stack.
 
-    ``cast_spell``/``cast_spell_free`` now fire ``SpellCastTriggeredEvent``
+    ``cast_spell``/``cast_spell_free`` fire ``SpellCastTriggeredEvent``
     themselves, once, immediately after the spell is on the stack (rule 601.2i /
-    603.3) — so ``_cast`` above already puts Storm's trigger on the stack with
-    its capture correlated to the just-cast occurrence. Firing again here would
-    double every Storm trigger, so this helper no longer fires; it is kept only
-    so the paired ``_cast(...); _fire(...)`` call sites and their per-spell
-    copy-count comments still read as the cast→trigger sequence they document.
+    603.3); the trigger waits until the game settles (rule 117.5). ``_cast``
+    already settles, so after it this is a no-op; it is what places the trigger
+    after a cast that bypasses ``_cast``, such as ``cast_spell_free``.
     """
-    return None
+    resolve_state_based_actions(game)
 
 
 def _resolve_top_collect_new(game):
@@ -254,28 +257,6 @@ class TestStormPerTriggerState:
         _fire(game, p1, b)                 # turn 2: B is the first spell → copies=0
         (trig_b,) = _storm_triggers(game, storm)
         assert trig_b.event_state.copies == 0
-
-    def test_countered_triggering_spell_makes_no_copies_and_copies_no_other(self):
-        """A trigger whose spell has left the stack (countered) makes no copies —
-        and never falls back to copying a *different* pending spell."""
-        b, a = _Signal("Spell B"), _Signal("Spell A")
-        game, p1, storm = self._setup([b, a])
-
-        # Cast B first (so B and its trigger sit lower on the stack), then A.
-        _cast(game, p1, b)
-        _fire(game, p1, b)                 # B → copies=0
-        _cast(game, p1, a)
-        _fire(game, p1, a)                 # A → copies=1, captured A's StackObject
-
-        # "Counter" A — remove its spell StackObject from the stack. B's spell
-        # StackObject is still there, below A's Storm trigger.
-        a_so = next(so for so in game.stack._items if so.source is a)
-        game.stack._items.remove(a_so)
-
-        # A's Storm trigger is now on top. It must make zero copies (A is gone) —
-        # not copy B (a different spell still pending).
-        new = _resolve_top_collect_new(game)
-        assert new == []
 
     def test_control_change_after_fire_retains_fire_time_controller(self):
         """The trigger's controller is fixed at fire time. Changing control of

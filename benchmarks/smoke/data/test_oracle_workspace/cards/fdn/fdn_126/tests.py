@@ -17,6 +17,7 @@ from engine.card import Artifact, Creature
 from engine.decisions import Decision, GameRef
 from engine.events import BeginningOfCombatTriggeredEvent
 from engine.game import add_counter
+from engine.state_based_actions import resolve_state_based_actions
 from test_utils import Intent
 from engine.types import CardType, ManaCost, ManaType, Zone
 from engine.zones import move_to_zone
@@ -125,15 +126,17 @@ class TestZimoneDoubleAbility:
 
     def test_leave_and_return_target_rejected(self):
         """A target that leaves and returns is a new object (new stint) and is
-        rejected by stint validation — its counters are not doubled."""
+        rejected by stint validation; the ability does nothing to it."""
         game, p1, p2, z, a, b = self._setup()  # a starts with 2 counters
         _activate_double(game, p1, z, [a])
         move_to_zone(game, a, Zone.BATTLEFIELD, Zone.EXILE)
         move_to_zone(game, a, Zone.EXILE, Zone.BATTLEFIELD)
+        # Its counters stayed behind as it left (rule 122.2); the returned
+        # object gets none from the ability that targeted the old one.
+        assert a.plus_one_counters == 0
+        add_counter(game, a, "+1/+1", 1)
         resolve_stack(game)
-        # The returned object is p1-controlled and a creature, so only stint
-        # validation can reject it: its counters are left undoubled (2, not 4).
-        assert a.plus_one_counters == 2
+        assert a.plus_one_counters == 1
 
 
 class TestZimoneCombatTrigger:
@@ -162,6 +165,9 @@ class TestZimoneCombatTrigger:
         ))
         try:
             game.trigger_manager.fire_event(game, BeginningOfCombatTriggeredEvent())
+            # The trigger waits until the game next settles, and its targets
+            # are chosen as it goes on the stack then (rule 603.3d).
+            resolve_state_based_actions(game)
         finally:
             player.end_intent("zt")
 
