@@ -21,11 +21,12 @@ from cards.fdn.fdn_165.card_impl import ThinkTwice
 from cards.fdn.fdn_184.card_impl import RuneScarredDemon
 from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_223.card_impl import GiantGrowth
+from cards.fdn.fdn_248.card_impl import ThousandYearStorm, ThousandYearStormAbility1
 from cards.fdn.fdn_250.card_impl import BurnishedHart
 from cards.fdn.fdn_272.card_impl import Plains
-from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game, player
+from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game, player, spell_copy
 
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
+from silverquillm.table import Table, appears, copied, life, moves, off_stack, on_stack, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 GLEAM_MANA = {ManaType.BLUE: 1, ManaType.COLORLESS: 3}
@@ -382,3 +383,65 @@ def test_equip_has_sorcery_timing():
     t = Table(game)
     t.act_illegal(0, GlamdringFoehammerAbility2, choices=[lions])
     t.run()
+
+
+def _stormed_gleam(*, seat1: Side | None = None):
+    """Player 0, with Thousand-Year Storm, casts Boltwave and then Gleam of
+    Death, so Storm copies Gleam of Death once. The copy is a spell of its own
+    on top of the original: it has its own number, not Glamdring's handle."""
+    library = _plains(12)
+    wave = card(Boltwave)
+    game, glamdring = _game(hand=[wave], library=library, battlefield=[card(ThousandYearStorm)],
+                            mana={ManaType.BLUE: 1, ManaType.COLORLESS: 5, ManaType.RED: 1},
+                            seat1=seat1)
+    t = Table(game)
+    t.act(0, wave, then=[moves(wave, Zone.STACK), on_stack(ThousandYearStormAbility1, 0)])
+    _resolve(t, then=[off_stack(ThousandYearStormAbility1)], note="no spell was cast before Boltwave")
+    _resolve(t, then=[moves(wave, Zone.GRAVEYARD), life(1, 17)])
+    _cast_gleam(t, glamdring, then=[on_stack(ThousandYearStormAbility1, 0)])
+    _resolve(t, then=[off_stack(ThousandYearStormAbility1), copied(GleamOfDeath, 0)])
+    return t, glamdring, library
+
+
+def _offer() -> tuple:
+    offer = card(AnOfferYouCantRefuse)
+    return offer, Side(hand=[offer], library=_plains(), mana={ManaType.BLUE: 1})
+
+
+def test_a_copy_of_gleam_of_death_resolves_without_moving_the_card():
+    """The copy mills six and ceases to exist; Glamdring stays on the stack
+    until its own Gleam of Death resolves and exiles it."""
+    t, glamdring, library = _stormed_gleam()
+    _resolve(t, then=[off_stack(GleamOfDeath), *(moves(c, Zone.GRAVEYARD) for c in library[:6])],
+             note="the copy resolves: six milled, the card stays on the stack")
+    _resolve(t, then=[*(moves(c, Zone.GRAVEYARD) for c in library[6:]), moves(glamdring, Zone.EXILE)])
+    t.act(0, GlamdringFoehammer, glamdring, note="the Equipment may be cast from the Adventure's exile",
+          then=[moves(glamdring, Zone.STACK)])
+    t.run()
+
+
+def test_countering_only_the_copy_leaves_the_original_gleam_of_death():
+    offer, seat1 = _offer()
+    t, glamdring, library = _stormed_gleam(seat1=seat1)
+    t.pass_(0)
+    t.act(1, offer, choices=[spell_copy(1)], then=[moves(offer, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(offer, Zone.GRAVEYARD), off_stack(GleamOfDeath), appears(0), appears(0)],
+            note="the copy is countered and ceases to exist; Glamdring is still on the stack")
+    _gleam_resolves(t, glamdring, library)
+    t.run()
+
+
+def test_countering_only_the_original_leaves_the_copy():
+    offer, seat1 = _offer()
+    t, glamdring, library = _stormed_gleam(seat1=seat1)
+    t.pass_(0)
+    t.act(1, offer, choices=[glamdring], then=[moves(offer, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(offer, Zone.GRAVEYARD), moves(glamdring, Zone.GRAVEYARD), appears(0), appears(0)],
+            note="the original is countered: Glamdring goes to the graveyard, not on an adventure")
+    _resolve(t, then=[off_stack(GleamOfDeath), *(moves(c, Zone.GRAVEYARD) for c in library[:6])],
+             note="the copy still resolves")
+    t.act_illegal(0, GlamdringFoehammer, note="the card is in the graveyard, not on an adventure")
+    t.run()
+

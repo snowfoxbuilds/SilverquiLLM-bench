@@ -338,3 +338,14 @@ index 2c5c4ec..f9aa5b4 100644
          move_to_zone(game, card, Zone.STACK, destination)
          if getattr(card, 'is_card_copy', False) and destination == Zone.BATTLEFIELD:
              # A copy of a permanent spell becomes a token as it resolves (rule 608.3f).
+@@ -478,6 +487,10 @@ def copy_spell(
+         A new StackObject representing the copy ready to be pushed.
+     """
+     copied_card = copy.copy(original.source)
++    if getattr(copied_card, "whole_card", None) is not None:
++        # A copy of a face is a spell of its own, not a face standing for a card
++        # (CR 707.10); only the original keeps its link to the card.
++        copied_card.whole_card = None
+     copied_card.controller = controller
+     copied_card.owner = getattr(original.source, "owner", controller)
+     game.created_copies.append(copied_card)

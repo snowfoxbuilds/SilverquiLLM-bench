@@ -487,6 +487,10 @@ def copy_spell(
         A new StackObject representing the copy ready to be pushed.
     """
     copied_card = copy.copy(original.source)
+    if getattr(copied_card, "whole_card", None) is not None:
+        # A copy of a face is a spell of its own, not a face standing for a card
+        # (CR 707.10); only the original keeps its link to the card.
+        copied_card.whole_card = None
     copied_card.controller = controller
     copied_card.owner = getattr(original.source, "owner", controller)
     game.created_copies.append(copied_card)
