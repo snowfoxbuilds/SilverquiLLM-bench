@@ -1,0 +1,17 @@
+{
+  "name": "Essence Scatter",
+  "mana_cost": "{1}{U}",
+  "type_line": "Instant",
+  "oracle_text": "Counter target creature spell.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "153",
+  "complexity_tier": "simple"
+}

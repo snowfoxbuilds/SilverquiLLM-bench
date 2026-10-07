@@ -1,0 +1,17 @@
+{
+  "name": "Aegis Turtle",
+  "mana_cost": "{U}",
+  "type_line": "Creature — Turtle",
+  "oracle_text": "",
+  "power": "0",
+  "toughness": "5",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "150",
+  "complexity_tier": "simple"
+}

@@ -1,0 +1,88 @@
+"""Card implementation for Sphinx of Forgotten Lore."""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from engine.card import Creature
+from engine.events import AttacksTriggeredEvent, EndOfTurnTriggeredEvent
+from engine.types import CardType, Keyword, ManaCost, TargetRequirement, Zone
+
+if TYPE_CHECKING:
+    from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class SphinxOfForgottenLoreAbility1:
+    text = 'Flash (You may cast this spell any time you could cast an instant.)'
+
+
+class SphinxOfForgottenLoreAbility2:
+    text = 'Flying'
+
+
+class SphinxOfForgottenLoreAbility3:
+    text = "Whenever this creature attacks, target instant or sorcery card in your graveyard gains flashback until end of turn. The flashback cost is equal to that card's mana cost. (You may cast that card from your graveyard for its flashback cost. Then exile it.)"
+
+
+# endregion Printed abilities
+
+
+class SphinxOfForgottenLore(Creature):
+    """Sphinx of Forgotten Lore — {2}{U}{U} — 3/3 — Sphinx — Flash, Flying.
+
+    Whenever this creature attacks, target instant or sorcery card in your
+    graveyard gains flashback until end of turn. The flashback cost is equal
+    to that card's mana cost.
+
+    FDN collector number 51.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault('name', 'Sphinx of Forgotten Lore')
+        kwargs.setdefault('mana_cost', ManaCost.parse('{2}{U}{U}'))
+        kwargs.setdefault('subtypes', {'Sphinx'})
+        kwargs.setdefault('keywords', Keyword.FLASH | Keyword.FLYING)
+        kwargs.setdefault('base_power', 3)
+        kwargs.setdefault('base_toughness', 3)
+        kwargs.setdefault('rules_text', "Flash\nFlying\nWhenever this creature attacks, target instant or sorcery card in your graveyard gains flashback until end of turn. The flashback cost is equal to that card's mana cost.")
+        super().__init__(**kwargs)
+
+    def register_triggers(self, game: 'GameState') -> None:
+        """Register attack trigger: grant flashback to instant/sorcery in graveyard."""
+        from engine.stack import stint_checked_targets
+        from engine.triggers import TriggerRegistration, choose_trigger_targets
+        source = self
+        controller = getattr(self, 'controller', None) or game.active_player
+
+        def _attack_condition(game: Any, event: dict) -> bool:
+            attacker = event.attacker or event.creature
+            return attacker is source
+
+        def _targeting(game: 'GameState', event: Any, ctrl: Any) -> list[Any] | None:
+            def _instant_or_sorcery_in_your_graveyard(obj: Any) -> bool:
+                types = getattr(obj, 'card_types', set())
+                return (CardType.INSTANT in types or CardType.SORCERY in types) and ctrl.zones[Zone.GRAVEYARD].contains(obj)
+
+            return choose_trigger_targets(game, ctrl, source, [TargetRequirement(
+                filter_fn=_instant_or_sorcery_in_your_graveyard,
+                description='Choose an instant or sorcery card to gain flashback', zone=Zone.GRAVEYARD)])
+
+        def _attack_effect(game: 'GameState', targets: list[Any], context: Any) -> None:
+            ctrl = context.controller
+            (chosen,) = stint_checked_targets(game, context, targets)
+            if chosen is not None:
+                chosen.has_flashback = True
+                chosen.flashback_cost = getattr(chosen, 'mana_cost', None)
+
+                def _cleanup_flashback(game: Any, event: dict) -> bool:
+                    return True
+
+                def _remove_flashback(game: 'GameState') -> None:
+                    if hasattr(chosen, 'has_flashback'):
+                        chosen.has_flashback = False
+                    if hasattr(chosen, 'flashback_cost'):
+                        del chosen.flashback_cost
+                game.trigger_manager.register(TriggerRegistration(event_type=EndOfTurnTriggeredEvent, condition=_cleanup_flashback, effect=_remove_flashback, source=source, controller=ctrl, printed=SphinxOfForgottenLoreAbility3))
+        game.trigger_manager.register(TriggerRegistration(event_type=AttacksTriggeredEvent, condition=_attack_condition, effect=_attack_effect, source=self, controller=controller, targeting=_targeting, printed=SphinxOfForgottenLoreAbility3))

@@ -1,0 +1,20 @@
+{
+  "name": "Vanguard Seraph",
+  "mana_cost": "{3}{W}",
+  "type_line": "Creature — Angel Warrior",
+  "oracle_text": "Flying\nWhenever you gain life for the first time each turn, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Flying",
+    "Surveil"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "28",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,232 @@
+[
+  {
+    "name": "Emrakul, the Exigent Doom",
+    "mana_cost": "{10}",
+    "type_line": "Legendary Creature — Eldrazi",
+    "oracle_text": "When you cast this spell, untap all lands you control.\nFlying, trample\nWard—Sacrifice three permanents.\n{3}, Exile this card from your hand: Target land gains \"{T}: Add {C}{C}\" until this card is cast from exile. You may cast this card for as long as it remains exiled.",
+    "colors": [],
+    "keywords": [
+      "Flying",
+      "Trample",
+      "Ward"
+    ],
+    "rarity": "mythic",
+    "set": "fra",
+    "collector_number": "1",
+    "power": "12",
+    "toughness": "12",
+    "layout": "normal",
+    "mana_cost_str": "{10}"
+  },
+  {
+    "name": "Bloodline Recollector // Ancestral Craving",
+    "mana_cost": "{1}{B} // {B}",
+    "type_line": "Creature — Vampire Warlock // Instant",
+    "colors": [
+      "B"
+    ],
+    "keywords": [
+      "Prepared"
+    ],
+    "rarity": "mythic",
+    "set": "fra",
+    "collector_number": "49",
+    "power": "2",
+    "toughness": "2",
+    "layout": "prepare",
+    "card_faces": [
+      {
+        "object": "card_face",
+        "name": "Bloodline Recollector",
+        "mana_cost": "{1}{B}",
+        "type_line": "Creature — Vampire Warlock",
+        "oracle_text": "At the beginning of each end step, if three or more creatures died this turn, this creature becomes prepared. (While it's prepared, you may cast a copy of its spell. Doing so unprepares it.)",
+        "power": "2",
+        "toughness": "2",
+        "artist": "Cynthia Sheppard",
+        "artist_id": "9dfbdd58-65e6-40cf-951a-80e141061939",
+        "illustration_id": "8588ee7b-b874-485e-af97-3a1b4229b2c1"
+      },
+      {
+        "object": "card_face",
+        "name": "Ancestral Craving",
+        "mana_cost": "{B}",
+        "type_line": "Instant",
+        "oracle_text": "Target player draws three cards and loses 3 life.",
+        "artist": "Cynthia Sheppard",
+        "artist_id": "9dfbdd58-65e6-40cf-951a-80e141061939"
+      }
+    ],
+    "mana_cost_str": "{1}{B} // {B}"
+  },
+  {
+    "name": "Sanctum Lurker",
+    "mana_cost": "{2}{B}",
+    "type_line": "Creature — Horror",
+    "oracle_text": "When this creature enters, empower Jace 1.\nPlaneswalkers you control aren't put into their owners' graveyards for having 0 loyalty.\nPlaneswalkers you control have \"[+2]: This planeswalker deals 1 damage to each opponent and you gain 1 life.\"",
+    "colors": [
+      "B"
+    ],
+    "keywords": [
+      "Empower Jace"
+    ],
+    "rarity": "rare",
+    "set": "fra",
+    "collector_number": "64",
+    "power": "3",
+    "toughness": "2",
+    "layout": "normal",
+    "mana_cost_str": "{2}{B}"
+  },
+  {
+    "name": "Uldaros Theorix",
+    "mana_cost": "{3}{U}{B}{B}",
+    "type_line": "Legendary Creature — Elder Sphinx",
+    "oracle_text": "Flying\nWhen Uldaros Theorix enters, if you cast him, exile up to one target nonland card of each card type from your graveyard. Copy those cards. You may cast any number of spells with total mana value 6 or less from among the copies without paying their mana costs. (Permanent spells cast this way become tokens.)",
+    "colors": [
+      "B",
+      "U"
+    ],
+    "keywords": [
+      "Flying"
+    ],
+    "rarity": "mythic",
+    "set": "fra",
+    "collector_number": "159",
+    "power": "5",
+    "toughness": "5",
+    "layout": "normal",
+    "mana_cost_str": "{3}{U}{B}{B}"
+  },
+  {
+    "name": "Hall of Echoes",
+    "mana_cost": "",
+    "type_line": "Land",
+    "oracle_text": "{T}: Add {C}.\n{5}: This land becomes a copy of target creature you control until end of turn. The \"legend rule\" doesn't apply to permanents you control this turn.",
+    "colors": [],
+    "keywords": [],
+    "rarity": "rare",
+    "set": "fra",
+    "collector_number": "179",
+    "layout": "normal",
+    "mana_cost_str": ""
+  },
+  {
+    "name": "Bilbo, Thief in the Night",
+    "mana_cost": "{1}{U}",
+    "type_line": "Legendary Creature — Halfling Rogue",
+    "oracle_text": "Spells you cast from anywhere other than your hand cost {1} less to cast.\nWhenever Bilbo attacks, you may cast an artifact, instant, or sorcery spell from your graveyard. If an instant or sorcery spell cast this way would be put into your graveyard, exile it instead.",
+    "colors": [
+      "U"
+    ],
+    "keywords": [],
+    "rarity": "mythic",
+    "set": "hob",
+    "collector_number": "33",
+    "power": "2",
+    "toughness": "2",
+    "layout": "normal",
+    "mana_cost_str": "{1}{U}"
+  },
+  {
+    "name": "Inside Information",
+    "mana_cost": "{X}{B}{B}",
+    "type_line": "Sorcery",
+    "oracle_text": "Exile the top X cards of target opponent's library. You may play those cards this turn. If you cast a spell this way, pay life equal to its mana value rather than pay its mana cost.",
+    "colors": [
+      "B"
+    ],
+    "keywords": [],
+    "rarity": "mythic",
+    "set": "hob",
+    "collector_number": "76",
+    "layout": "normal",
+    "mana_cost_str": "{X}{B}{B}"
+  },
+  {
+    "name": "Supper for Spiders",
+    "mana_cost": "{1}{B}",
+    "type_line": "Instant",
+    "oracle_text": "Put onto the battlefield under your control all creature cards in your opponents' graveyards that were put there from the battlefield this turn. They are Food artifacts with \"{2}, {T}, Sacrifice this artifact: You gain 3 life.\" (They lose all other types and subtypes.)",
+    "colors": [
+      "B"
+    ],
+    "keywords": [],
+    "rarity": "rare",
+    "set": "hob",
+    "collector_number": "86",
+    "layout": "normal",
+    "mana_cost_str": "{1}{B}"
+  },
+  {
+    "name": "Glamdring, Foe-hammer // Gleam of Death",
+    "mana_cost": "{2} // {3}{U}",
+    "type_line": "Legendary Artifact — Equipment // Sorcery — Adventure",
+    "colors": [],
+    "keywords": [
+      "Equip",
+      "Mill"
+    ],
+    "rarity": "rare",
+    "set": "hob",
+    "collector_number": "174",
+    "layout": "adventure",
+    "card_faces": [
+      {
+        "object": "card_face",
+        "name": "Glamdring, Foe-hammer",
+        "mana_cost": "{2}",
+        "type_line": "Legendary Artifact — Equipment",
+        "oracle_text": "Instant and sorcery spells you cast cost {X} less to cast, where X is equipped creature's power.\nEquip {2}",
+        "flavor_text": "Suddenly a sword flashed in its own light.",
+        "artist": "Chris Cold",
+        "artist_id": "2622d22b-3fd8-4831-9b2b-adc5fac01b85",
+        "illustration_id": "407d54a9-c52a-41d2-b7f1-7f589d092b61"
+      },
+      {
+        "object": "card_face",
+        "name": "Gleam of Death",
+        "mana_cost": "{3}{U}",
+        "type_line": "Sorcery — Adventure",
+        "oracle_text": "Mill six cards, then put all instant and sorcery cards from among them into your hand. (Then exile this card. You may cast the artifact later from exile.)",
+        "artist": "Chris Cold",
+        "artist_id": "2622d22b-3fd8-4831-9b2b-adc5fac01b85"
+      }
+    ],
+    "mana_cost_str": "{2} // {3}{U}"
+  },
+  {
+    "name": "Sarkhan the Masterless",
+    "mana_cost": "{3}{R}{R}",
+    "type_line": "Legendary Planeswalker — Sarkhan",
+    "oracle_text": "Whenever a creature attacks you or a planeswalker you control, each Dragon you control deals 1 damage to that creature.\n+1: Until end of turn, each planeswalker you control becomes a 4/4 red Dragon creature and gains flying.\n−3: Create a 4/4 red Dragon creature token with flying.",
+    "colors": [
+      "R"
+    ],
+    "keywords": [],
+    "rarity": "rare",
+    "set": "war",
+    "collector_number": "143",
+    "loyalty": "5",
+    "layout": "normal",
+    "mana_cost_str": "{3}{R}{R}"
+  },
+  {
+    "name": "Slaughter Pact",
+    "mana_cost": "{0}",
+    "type_line": "Instant",
+    "oracle_text": "Destroy target nonblack creature.\nAt the beginning of your next upkeep, pay {2}{B}. If you don't, you lose the game.",
+    "colors": [
+      "B"
+    ],
+    "keywords": [],
+    "rarity": "rare",
+    "set": "fut",
+    "collector_number": "78",
+    "color_indicator": [
+      "B"
+    ],
+    "layout": "normal",
+    "mana_cost_str": "{0}"
+  }
+]

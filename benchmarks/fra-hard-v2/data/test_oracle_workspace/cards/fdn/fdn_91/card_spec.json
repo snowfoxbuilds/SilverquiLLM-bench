@@ -1,0 +1,17 @@
+{
+  "name": "Kellan, Planar Trailblazer",
+  "mana_cost": "{R}",
+  "type_line": "Legendary Creature — Human Faerie Scout",
+  "oracle_text": "{1}{R}: If Kellan is a Scout, it becomes a Human Faerie Detective and gains \"Whenever Kellan deals combat damage to a player, exile the top card of your library. You may play that card this turn.\"\n{2}{R}: If Kellan is a Detective, it becomes a 3/2 Human Faerie Rogue and gains double strike.",
+  "power": "2",
+  "toughness": "1",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set_code": "fdn",
+  "collector_number": "91",
+  "complexity_tier": "complex"
+}

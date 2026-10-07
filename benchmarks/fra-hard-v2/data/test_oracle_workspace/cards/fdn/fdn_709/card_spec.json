@@ -1,0 +1,19 @@
+{
+  "name": "Confiscate",
+  "mana_cost": "{4}{U}{U}",
+  "type_line": "Enchantment \u2014 Aura",
+  "oracle_text": "Enchant permanent\nYou control enchanted permanent.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Enchant"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "709",
+  "complexity_tier": "simple"
+}

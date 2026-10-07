@@ -1,0 +1,18 @@
+{
+  "name": "Slaughter Pact",
+  "mana_cost": "{0}",
+  "type_line": "Instant",
+  "oracle_text": "Destroy target nonblack creature.\nAt the beginning of your next upkeep, pay {2}{B}. If you don't, you lose the game.",
+  "colors": [
+    "B"
+  ],
+  "keywords": [],
+  "rarity": "rare",
+  "set": "fut",
+  "collector_number": "78",
+  "color_indicator": [
+    "B"
+  ],
+  "layout": "normal",
+  "mana_cost_str": "{0}"
+}

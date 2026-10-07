@@ -1,0 +1,10 @@
+--- a/engine/combat.py
++++ b/engine/combat.py
+@@ -423,7 +423,2 @@
+ 
+-    # Raid and similar abilities ask whether a player attacked this turn: a
+-    # player has attacked once they declare at least one attacker (rule 508.1).
+-    if declared:
+-        game.active_player.attacked_this_turn = True
+-
+     # All attackers are declared simultaneously (rule 508.1); only after the

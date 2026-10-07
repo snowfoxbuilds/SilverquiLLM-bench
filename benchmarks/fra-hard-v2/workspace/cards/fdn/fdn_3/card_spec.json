@@ -1,0 +1,19 @@
+{
+  "name": "Armasaur Guide",
+  "mana_cost": "{4}{W}",
+  "type_line": "Creature — Dinosaur",
+  "oracle_text": "Vigilance (Attacking doesn't cause this creature to tap.)\nWhenever you attack with three or more creatures, put a +1/+1 counter on target creature you control.",
+  "power": "4",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [
+    "Vigilance"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "3",
+  "complexity_tier": "medium"
+}

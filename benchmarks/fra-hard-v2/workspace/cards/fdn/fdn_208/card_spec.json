@@ -1,0 +1,19 @@
+{
+  "name": "Spitfire Lagac",
+  "mana_cost": "{3}{R}",
+  "type_line": "Creature — Lizard",
+  "oracle_text": "Landfall — Whenever a land you control enters, this creature deals 1 damage to each opponent.",
+  "power": "3",
+  "toughness": "4",
+  "loyalty": null,
+  "colors": [
+    "R"
+  ],
+  "keywords": [
+    "Landfall"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "208",
+  "complexity_tier": "medium"
+}

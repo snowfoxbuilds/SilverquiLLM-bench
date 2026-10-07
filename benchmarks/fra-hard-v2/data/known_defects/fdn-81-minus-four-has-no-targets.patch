@@ -1,0 +1,6 @@
+--- a/cards/fdn/fdn_81/card_impl.py
++++ b/cards/fdn/fdn_81/card_impl.py
+@@ -157,2 +157,2 @@
+                     deal_damage(game, pw, target, dmg)
+-        return [LoyaltyAbility(loyalty_cost=+2, effect=_plus2, description='+2: Add {R}{R}{R}. Exile top 3, choose one to play this turn.', printed=ChandraFlameshaperAbility1), LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description='+1: Create a hasty token copy of target creature (sacrifice at end step).', printed=ChandraFlameshaperAbility2), LoyaltyAbility(loyalty_cost=-4, effect=_minus4, targeting=_minus4_targeting, description='−4: Deal 8 damage divided among target creatures and/or planeswalkers.', printed=ChandraFlameshaperAbility3)]
++        return [LoyaltyAbility(loyalty_cost=+2, effect=_plus2, description='+2: Add {R}{R}{R}. Exile top 3, choose one to play this turn.', printed=ChandraFlameshaperAbility1), LoyaltyAbility(loyalty_cost=+1, effect=_plus1, description='+1: Create a hasty token copy of target creature (sacrifice at end step).', printed=ChandraFlameshaperAbility2), LoyaltyAbility(loyalty_cost=-4, effect=_minus4, description='−4: Deal 8 damage divided among target creatures and/or planeswalkers.', printed=ChandraFlameshaperAbility3)]

@@ -1,0 +1,17 @@
+{
+  "name": "Fleeting Flight",
+  "mana_cost": "{W}",
+  "type_line": "Instant",
+  "oracle_text": "Put a +1/+1 counter on target creature. It gains flying until end of turn. Prevent all combat damage that would be dealt to it this turn.",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "W"
+  ],
+  "keywords": [],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "13",
+  "complexity_tier": "medium"
+}

@@ -1,0 +1,20 @@
+{
+  "name": "Sphinx of Forgotten Lore",
+  "mana_cost": "{2}{U}{U}",
+  "type_line": "Creature — Sphinx",
+  "oracle_text": "Flash (You may cast this spell any time you could cast an instant.)\nFlying\nWhenever this creature attacks, target instant or sorcery card in your graveyard gains flashback until end of turn. The flashback cost is equal to that card's mana cost. (You may cast that card from your graveyard for its flashback cost. Then exile it.)",
+  "power": "3",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "U"
+  ],
+  "keywords": [
+    "Flying",
+    "Flash"
+  ],
+  "rarity": "mythic",
+  "set_code": "fdn",
+  "collector_number": "51",
+  "complexity_tier": "complex"
+}

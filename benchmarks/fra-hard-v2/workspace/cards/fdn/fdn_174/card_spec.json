@@ -1,0 +1,19 @@
+{
+  "name": "Fake Your Own Death",
+  "mana_cost": "{1}{B}",
+  "type_line": "Instant",
+  "oracle_text": "Until end of turn, target creature gets +2/+0 and gains \"When this creature dies, return it to the battlefield tapped under its owner's control and you create a Treasure token.\" (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+  "power": null,
+  "toughness": null,
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Treasure"
+  ],
+  "rarity": "common",
+  "set_code": "fdn",
+  "collector_number": "174",
+  "complexity_tier": "medium"
+}

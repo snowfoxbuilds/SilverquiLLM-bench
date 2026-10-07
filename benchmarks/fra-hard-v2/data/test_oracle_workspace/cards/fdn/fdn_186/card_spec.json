@@ -1,0 +1,21 @@
+{
+  "name": "Vampire Nighthawk",
+  "mana_cost": "{1}{B}{B}",
+  "type_line": "Creature — Vampire Shaman",
+  "oracle_text": "Flying\nDeathtouch (Any amount of damage this deals to a creature is enough to destroy it.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)",
+  "power": "2",
+  "toughness": "3",
+  "loyalty": null,
+  "colors": [
+    "B"
+  ],
+  "keywords": [
+    "Deathtouch",
+    "Flying",
+    "Lifelink"
+  ],
+  "rarity": "uncommon",
+  "set_code": "fdn",
+  "collector_number": "186",
+  "complexity_tier": "medium"
+}

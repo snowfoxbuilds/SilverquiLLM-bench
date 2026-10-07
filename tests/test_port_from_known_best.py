@@ -85,11 +85,12 @@ def test_a_patch_must_belong_to_a_listed_defect(tmp_path: Path) -> None:
         defect_patches(_benchmark(tmp_path, ["a-defect"], ["a-defect", "stray"]))
 
 
-def test_smoke_is_ported_from_the_known_best_workspace() -> None:
-    """Re-porting smoke changes nothing: its Workspace is the Known-Best Workspace
-    plus its target stubs and Known Defect patches, and its oracle and Audited
-    Tests are the Known-Best copies."""
-    assert check(REPO / "benchmarks/smoke") == []
+@pytest.mark.parametrize("benchmark", ["smoke", "fra-hard-v2"])
+def test_benchmark_is_ported_from_the_known_best_workspace(benchmark: str) -> None:
+    """Re-porting changes nothing: the Workspace is the Known-Best Workspace plus
+    its target stubs and Known Defect patches, and the oracle and Audited Tests
+    are the Known-Best copies plus the benchmark's oracle patches."""
+    assert check(REPO / "benchmarks" / benchmark) == []
 
 
 # ---------------------------------------------------------------------------

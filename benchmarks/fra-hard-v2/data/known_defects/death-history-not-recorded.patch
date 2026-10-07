@@ -1,0 +1,6 @@
+--- a/engine/zones.py
++++ b/engine/zones.py
+@@ -388,3 +388,2 @@
+             # "Dies" means put into a graveyard from the battlefield (700.4).
+-            game.creature_died_this_turn = True
+             game.trigger_manager.fire_event(

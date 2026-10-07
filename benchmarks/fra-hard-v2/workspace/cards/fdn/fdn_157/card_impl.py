@@ -1,0 +1,74 @@
+"""Card implementation for Lightshell Duo."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from engine.card import Creature
+from engine.card_queries import query_yes_no
+from engine.types import Keyword, ManaCost, Zone
+
+if TYPE_CHECKING:
+    from engine.game_state import GameState
+
+
+# region Printed abilities — generated from card_spec.json by scripts/generate_printed_classes.py; do not edit
+
+
+class LightshellDuoAbility1:
+    text = 'Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)'
+
+
+class LightshellDuoAbility2:
+    text = 'When this creature enters, surveil 2. (Look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)'
+
+
+# endregion Printed abilities
+
+
+class LightshellDuo(Creature):
+    """Lightshell Duo — {3}{U} — 3/4 — Rat Otter — Prowess.
+
+    When this creature enters, surveil 2.
+
+    FDN collector number 157.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("name", "Lightshell Duo")
+        kwargs.setdefault("mana_cost", ManaCost.parse("{3}{U}"))
+        kwargs.setdefault("subtypes", {"Rat", "Otter"})
+        kwargs.setdefault("keywords", Keyword.PROWESS)
+        kwargs.setdefault("base_power", 3)
+        kwargs.setdefault("base_toughness", 4)
+        kwargs.setdefault(
+            "rules_text",
+            "Prowess\nWhen this creature enters, surveil 2.",
+        )
+        super().__init__(**kwargs)
+
+    def register_triggers(self, game: "GameState") -> None:
+        """The enters ability is a triggered ability that uses the stack."""
+        from engine.triggers import register_enters_trigger
+
+        register_enters_trigger(game, self, LightshellDuoAbility2, self._enters)
+
+    def _enters(self, game: "GameState", controller: Any) -> None:
+        """ETB: surveil 2."""
+        if controller is None:
+            return
+        library = controller.zones[Zone.LIBRARY]
+        cards = list(library.get_all())
+        if not cards:
+            return
+        top_cards = cards[-min(2, len(cards)):]
+        for card in reversed(top_cards):
+            put_in_gy = query_yes_no(
+                game,
+                controller,
+                f"Surveil: Put {getattr(card, 'name', 'card')} into your graveyard?",
+                source_card=self,
+            )
+            if put_in_gy:
+                library.remove(card)
+                controller.zones[Zone.GRAVEYARD].add(card)
