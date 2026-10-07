@@ -148,12 +148,15 @@ What a player was asked routes answers through the scripts, never assertions, si
 A card is a physical object, so a test may keep a handle to a card it constructed and follow it across zones even though each zone change makes a new object (CR 400.7) — the Glamdring put in hand is now in exile (grilling 2026-10-05).
 The engine names the physical card behind each object and each offered option — for an ability, its source permanent's card — so a handle in a script chooses that very card, never one that merely looks the same.
 A handle chooses its card or any ability of its permanent; `ability(handle, PrintedAbility)` chooses only that printed ability of that permanent, so a test can name one of several objects sharing a printed ability — a card's own ability and the copy it grants another permanent — without relying on the order the engine offers them (grilling 2026-10-06).
-A token is followed by number instead: the game's tokens are numbered in the order they are made, and `token(n)` names the n-th in the view and in scripts (grilling 2026-10-05).
-A token keeps its number after it leaves the battlefield, so a later token never takes it; a token an attempt made that the engine rejects and undoes was never made, so the retry's token takes its number.
-Tokens one effect creates are numbered seat 0's before seat 1's, each seat's in the order its text names them; tokens it makes alike are interchangeable, so every engine reaches the same view.
+A token is followed by number instead, and `token(n)` names it in the view and in scripts (grilling 2026-10-05).
+The number is the test's label, not the engine's: a view check matches each label to a token shown in the same place, and the label stays on that token for the rest of the test, across `run` calls on the same game, even after it leaves the battlefield (grilling 2026-10-07).
+A label matches only a token first seen at the same view check as the label first showed in the expected view, so tokens made in different windows of play never trade labels; tokens one window makes are labels for one another, so an engine may make them in any order — either seat's first, or in another order than its text names them — and those that show alike are matched in the order the engine numbered them (grilling 2026-10-07).
+A token an attempt made that the engine rejects and undoes was never made, so the retry's token takes its label.
 A token has no class in the view: what it is — a 1/1 Soldier or a Food — shows in what it does, so engines need no predefined token classes.
-A copy of a spell on the stack is followed the same way: copies are numbered in the order the game makes them, keeping their numbers once they resolve or are countered, and `spell_copy(n)` names the n-th, so a test can target a copy apart from its original, which shows the same class (grilling 2026-10-05).
-As with tokens, a rejected attempt's copies give their numbers back, so the copies made on the retry take them.
+A copy of a spell is followed the same way, by a label `spell_copy(n)`, so a test can target a copy apart from its original, which shows the same class (grilling 2026-10-05).
+Copies first seen together — Uldaros's copies of several cards exiled at once — are matched by where they show, on the stack by position, whatever order the engine made them in, and keep their labels once they resolve or are countered; a script that names `spell_copy(n)` before any view check has shown that copy names the copy the engine numbered n, unless a label already holds it (grilling 2026-10-07).
+As with tokens, a rejected attempt's copies give their labels back, so the copies made on the retry take them.
+When a view check differs, the report shows the actual view by the engine's numbers, the labels matched so far, and the check — turn, step, active player and script entries begun — at which each token or copy was first seen.
 
 ## Relevant ADRs
 
