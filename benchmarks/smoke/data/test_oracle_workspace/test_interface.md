@@ -50,7 +50,7 @@ game = create_game(
 - `v.step`, `v.active`, `v.asked` (the player whose action question the game is at), `v.game_over` and `v.winner`.
 - `v.where(handle)` is the `Zone` a handled card or a token is in.
 - Tokens are numbered in the order the game makes them: `token(n)` is the n-th, and keeps its number after it leaves the battlefield. Tokens one effect creates are numbered seat 0's first, each seat's in the order it creates them. A token a rejected attempt made gives its number back, so a retry's token takes it.
-- Copies of spells are numbered in the order the game makes them, and keep their numbers once they leave the stack: `spell_copy(n)` is the n-th. A copy shows the class of the spell it copies. A rejected attempt's copies give their numbers back to the copies made on the retry.
+- Copies of spells are numbered in the order the game makes them, and keep their numbers once they leave the stack: `spell_copy(n)` is the n-th. A copy shows the class of the spell it copies. A prepared permanent's copy of its prepare spell is numbered as its controller makes it in exile, and keeps its number when cast (CR 722.3c). A rejected attempt's copies give their numbers back to the copies made on the retry.
 
 Hand, battlefield, graveyard and exile compare without regard to order. Power, toughness, counters, damage, keywords, effects, the mana pool, targets and combat assignments are not in the view.
 

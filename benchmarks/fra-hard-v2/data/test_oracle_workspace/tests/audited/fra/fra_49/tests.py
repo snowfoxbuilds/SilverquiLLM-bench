@@ -1,9 +1,9 @@
 """Bloodline Recollector // Ancestral Craving, played at the table.
 
 Each test builds a position, plays it through both players' scripts and judges
-the card by what the players can see. Whether the Recollector is prepared
-shows only through whether its controller may cast a copy of Ancestral
-Craving: a prepared Recollector shows nothing else on the table.
+the card by what the players can see. As the Recollector becomes prepared, its
+controller makes a copy of Ancestral Craving in exile, which stays there while
+the Recollector stays prepared and which its controller may cast (CR 722.3c).
 """
 
 from card_impl import AncestralCraving, BloodlineRecollector, BloodlineRecollectorAbility1
@@ -25,6 +25,7 @@ from test_interface import (
     Side,
     Step,
     Zone,
+    ability,
     branch,
     card,
     create_game,
@@ -66,15 +67,17 @@ def _kill(t: Table, seat: int, bolts, victims) -> None:
         _bolt(t, seat, bolt, victim, then=[moves(victim, Zone.GRAVEYARD)])
 
 
-def _into_end_step(t: Table, seat: int = 0, *, triggers: int = 1) -> None:
+def _into_end_step(t: Table, seat: int = 0, *, triggers: int = 1, prepares: bool = True) -> None:
     """Every player passes into ``seat``'s end step, where ``triggers``
-    Recollector triggers go on the stack and resolve."""
+    Recollector triggers go on the stack and resolve; each that ``prepares``
+    a Recollector makes a copy of Ancestral Craving in ``seat``'s exile."""
     t.pass_to(Phase.POSTCOMBAT_MAIN, seat)
     t.pass_(seat)
     t.pass_(1 - seat, then=[on_stack(PREPARE, seat) for _ in range(triggers)])
+    made = [copied(AncestralCraving, seat, to=Zone.EXILE)] if prepares else []
     for _ in range(triggers):
         t.pass_(seat)
-        t.pass_(1 - seat, then=[off_stack(PREPARE)])
+        t.pass_(1 - seat, then=[off_stack(PREPARE), *made])
 
 
 def offers_craving(query) -> bool:
@@ -82,20 +85,22 @@ def offers_craving(query) -> bool:
     return any(dict(getattr(option, "attrs", ())).get("printed") is AncestralCraving for option in query.options)
 
 
-def craving(target: int, *recollectors) -> list:
-    """Branches that cast a copy of Ancestral Craving at player ``target``,
-    whether the engine offers the spell itself or a prepared Recollector
-    followed by which of the two to cast."""
-    return [branch(AncestralCraving, choices=[player(target)]),
-            *[branch(source, choices=[player(target)], per_query={offers_craving: [AncestralCraving]})
+def craving(target: int, *recollectors, copy=AncestralCraving) -> list:
+    """Branches that cast a copy of Ancestral Craving at player ``target`` —
+    ``copy``, a ``spell_copy(n)`` when more than one is in exile — whether the
+    engine offers the spell itself or a prepared Recollector followed by which
+    of the two to cast."""
+    return [branch(copy, choices=[player(target)]),
+            *[branch(source, choices=[player(target)], per_query={offers_craving: [copy]})
               for source in recollectors]]
 
 
-def _cast_craving(t: Table, seat: int, swamp, target: int, *recollectors) -> None:
-    """``seat`` taps ``swamp`` and casts a copy of Ancestral Craving at player ``target``."""
+def _cast_craving(t: Table, seat: int, swamp, target: int, *recollectors, copy: int = 1) -> None:
+    """``seat`` taps ``swamp`` and casts ``spell_copy(copy)``, a copy of
+    Ancestral Craving in exile, at player ``target``."""
     t.act(seat, swamp, then=[taps(swamp)])
-    t.act(seat, branches=craving(target, *recollectors), then=[copied(AncestralCraving, seat)],
-          note="the prepared Recollector lets its controller cast a copy of its spell")
+    t.act(seat, branches=craving(target, *recollectors), then=[moves(spell_copy(copy), Zone.STACK, seat=seat)],
+          note="the prepared Recollector lets its controller cast the copy of its spell")
 
 
 def _resolve_craving(t: Table, seat: int, target: int, drawn, life_after: int) -> None:
@@ -215,7 +220,7 @@ def test_token_creatures_dying_count():
     _bolt(t, 0, bolts[2], token(1), then=[ceases(token(1))])
     _into_end_step(t)
     t.act(0, swamp, then=[taps(swamp)])
-    t.act(0, branches=craving(1, recollector), then=[copied(AncestralCraving, 0)])
+    t.act(0, branches=craving(1, recollector), then=[moves(spell_copy(1), Zone.STACK, seat=0)])
     t.run()
 
 
@@ -311,7 +316,7 @@ def test_preparation_ends_when_the_recollector_leaves():
     _kill(t, 0, bolts, lions)
     _into_end_step(t)
     t.act(0, mountain, then=[taps(mountain)])
-    _bolt(t, 0, bolt, recollector, then=[moves(recollector, Zone.GRAVEYARD)])
+    _bolt(t, 0, bolt, recollector, then=[moves(recollector, Zone.GRAVEYARD), ceases(spell_copy(1))])
     t.act(0, swamp, then=[taps(swamp)])
     t.act_illegal(0, branches=craving(1, recollector))
     t.run()
@@ -387,16 +392,18 @@ def test_two_recollectors_prepare_independently():
     t = Table(game)
     _kill(t, 0, bolts, lions)
     t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
-    t.pass_(0, choices=[PREPARE, PREPARE], note="player 0 orders both Recollectors' triggers")
+    t.pass_(0, choices=[ability(recollector, PREPARE), ability(other, PREPARE)],
+            note="player 0 puts the first Recollector's trigger on the stack first, so the other's resolves first")
     t.pass_(1, then=[on_stack(PREPARE, 0), on_stack(PREPARE, 0)])
     t.pass_(0)
-    t.pass_(1, then=[off_stack(PREPARE)])
+    t.pass_(1, then=[off_stack(PREPARE), copied(AncestralCraving, 0, to=Zone.EXILE)])
     t.pass_(0)
-    t.pass_(1, then=[off_stack(PREPARE)])
-    _cast_craving(t, 0, first, 1, recollector, other)
+    t.pass_(1, then=[off_stack(PREPARE), copied(AncestralCraving, 0, to=Zone.EXILE)])
+    t.act(0, first, then=[taps(first)])
+    t.act(0, branches=craving(1, other, copy=spell_copy(1)), then=[moves(spell_copy(1), Zone.STACK, seat=0)])
     _resolve_craving(t, 0, 1, library[:3], 17)
     t.act(0, second, then=[taps(second)])
-    t.act(0, branches=craving(1, recollector, other), then=[copied(AncestralCraving, 0)])
+    t.act(0, branches=craving(1, recollector, copy=spell_copy(2)), then=[moves(spell_copy(2), Zone.STACK, seat=0)])
     _resolve_craving(t, 0, 1, library[3:6], 14)
     t.run()
 
@@ -417,7 +424,8 @@ def test_control_of_the_recollector_carries_its_preparation():
     t.pass_(1)
     t.pass_(0, then=[moves(employment, Zone.GRAVEYARD), gains_control(recollector, 1), appears(1)])
     t.act(1, lands[4], then=[taps(lands[4])])
-    t.act(1, branches=craving(0, recollector), then=[copied(AncestralCraving, 1)])
+    t.act(1, branches=craving(0, recollector), then=[moves(spell_copy(1), Zone.STACK, seat=1)],
+          note="the copy stays in player 0's exile; the Recollector's new controller may cast it")
     t.run()
 
 
@@ -456,7 +464,7 @@ def test_prepared_again_on_a_later_turn_still_casts_one_copy():
     for mountain in mountains:
         t.act(0, mountain, then=[taps(mountain)])
     _kill(t, 0, bolts[3:], lions[3:])
-    _into_end_step(t)
+    _into_end_step(t, prepares=False)
     _cast_craving(t, 0, swamps[0], 1, recollector)
     t.act(0, swamps[1], then=[taps(swamps[1])])
     t.act_illegal(0, branches=craving(1, recollector), note="preparing twice gives one copy")

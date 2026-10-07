@@ -1,8 +1,9 @@
 """Prepared designations and the spell copies they let their controller cast.
 
-A prepared permanent's spell copy is held in its controller's command zone, out
-of every zone a player sees, until it is cast: the rules create the copy only as
-it is cast, so nothing about it may show before then.
+As a permanent becomes prepared, its controller creates a copy of its prepare
+spell in exile, which stays there while the permanent stays on the battlefield
+prepared, and which the permanent's controller may cast (rule 722.3c). The copy
+is numbered as it is made, like any copy.
 """
 
 from engine.casting import grant_cast_permission
@@ -13,8 +14,9 @@ def clear_preparation(game, card):
     card.prepared = False
     spell = getattr(card, "prepared_copy", None)
     if spell is not None:
+        # Outside the stack, a copy of a card ceases to exist (rule 704.5e).
         for player in game.players:
-            zone = player.zones[Zone.COMMAND]
+            zone = player.zones[Zone.EXILE]
             if zone.contains(spell):
                 zone.remove(spell)
     card.prepared_copy = None
@@ -30,13 +32,13 @@ def prepare(game, card, factory):
     spell.is_card_copy = True
     spell.prepared_source = card
     card.prepared_copy = spell
-    card.controller.zones[Zone.COMMAND].add(spell)
-    grant_cast_permission(game, card.controller, spell, from_zone=Zone.COMMAND, controller_source=card)
+    card.controller.zones[Zone.EXILE].add(spell)
+    game.created_copies.append(spell)
+    grant_cast_permission(game, card.controller, spell, from_zone=Zone.EXILE, controller_source=card)
 
 
 def consume_preparation(game, spell):
-    # The copy is created as it is cast (rule 707.12), so it is numbered then.
-    game.created_copies.append(spell)
+    # Casting the copy unprepares its permanent (rule 722.3c).
     source = getattr(spell, "prepared_source", None)
     if source is not None:
         source.prepared = False

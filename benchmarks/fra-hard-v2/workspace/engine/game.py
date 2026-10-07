@@ -174,8 +174,13 @@ def _construct(
     game.active_player_index = active
     game._normal_next_index = 1 - active
     game.turn_number = 1 if active == 0 else 2
+    game.setup_cards = {id(card): card for side in sides for card in _side_cards(side)}
     game.open_window()
     return game
+
+
+def _side_cards(side: Side) -> list[CardImpl]:
+    return [*side.library, *side.hand, *side.graveyard, *side.exile, *side.battlefield]
 
 
 def _place(player: Player, zone: Any, card: CardImpl) -> None:

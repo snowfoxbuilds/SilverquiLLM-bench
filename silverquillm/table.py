@@ -76,6 +76,8 @@ class Change:
             return f"player {self.seat}'s library is shuffled, top first: {order}"
         if self.kind == "on_stack":
             return f"{name} goes on the stack for player {self.seat}"
+        if self.kind == "copied" and self.zone is not None and self.zone.value != "stack":
+            return f"a copy of {name} is made in player {self.seat}'s {self.zone.value}"
         if self.kind == "copied":
             return f"a copy of {name} goes on the stack for player {self.seat}"
         if self.kind == "cleanup_trigger":
@@ -175,10 +177,14 @@ def cleanup_trigger(cls: type, seat: int) -> Change:
     return Change("cleanup_trigger", cls, seat=seat)
 
 
-def copied(cls: type, seat: int) -> Change:
+def copied(cls: type, seat: int, *, to: Any = None) -> Change:
     """A copy of a spell of class ``cls`` goes on top of the stack, controlled
-    by ``seat``; spell copies are numbered in the order they are made."""
-    return Change("copied", cls, seat=seat)
+    by ``seat``; spell copies are numbered in the order they are made.
+
+    ``to=Zone.EXILE`` makes the copy in ``seat``'s exile instead, as a
+    prepared permanent's controller makes a copy of its prepare spell (CR
+    722.3c); casting it later moves it, ``moves(spell_copy(n), Zone.STACK)``."""
+    return Change("copied", cls, to, seat=seat)
 
 
 def off_stack(cls: type) -> Change:
@@ -504,7 +510,11 @@ class Table:
             self._stack.insert(0, ti.Seen(change.item, change.seat))
         elif change.kind == "copied":
             self._copies += 1
-            self._stack.insert(0, ti.Seen(change.item, change.seat, False, ti.SpellCopy(self._copies)))
+            made = ti.Seen(change.item, change.seat, False, ti.SpellCopy(self._copies))
+            if change.zone is None or change.zone is ti.Zone.STACK:
+                self._stack.insert(0, made)
+            else:
+                self._sides[change.seat][change.zone.value].append(made)
         elif change.kind == "cleanup_trigger":
             self._cleanup_triggers.append(ti.Seen(change.item, change.seat))
         elif change.kind == "off_stack":
@@ -527,7 +537,7 @@ class Table:
                     (
                         i
                         for i, seen in enumerate(remaining)
-                        if ((seen.handle == item) if isinstance(item, (ti.Handle, ti.Token)) else (seen.card is item))
+                        if ((seen.handle == item) if isinstance(item, (ti.Handle, ti.Token, ti.SpellCopy)) else (seen.card is item))
                     ),
                     None,
                 )
@@ -585,11 +595,11 @@ class Table:
         found = []
         for place in places:
             for index, seen in enumerate(place):
-                if (seen.handle == item) if isinstance(item, (ti.Handle, ti.Token)) else (seen.card is item):
+                if (seen.handle == item) if isinstance(item, (ti.Handle, ti.Token, ti.SpellCopy)) else (seen.card is item):
                     found.append((place, index, seen))
         if not found:
             raise ScriptError(f"{_name(item)} is not on the board where the change looks for it")
-        if len(found) > 1 and not isinstance(item, (ti.Handle, ti.Token)):
+        if len(found) > 1 and not isinstance(item, (ti.Handle, ti.Token, ti.SpellCopy)):
             if all(seen.card is found[0][2].card and seen.handle is None for _, _, seen in found):
                 return found[0]
             raise ScriptError(f"more than one {_name(item)} could change; name it by handle or zone")
