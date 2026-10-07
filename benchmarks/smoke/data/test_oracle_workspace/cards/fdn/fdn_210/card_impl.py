@@ -44,14 +44,18 @@ class ThrillOfPossibility(Instant):
         )
         super().__init__(**kwargs)
 
-    def on_resolve(self, game: "GameState") -> None:
-        """Draw two cards (discard cost paid during casting)."""
+    def additional_costs(self, game: GameState) -> list[Any]:
+        """Discard a card."""
+        from engine.additional_costs import AdditionalCost, CostOption
+
+        return [AdditionalCost(printed=ThrillOfPossibilityAbility1, options=(CostOption(discard=1),))]
+
+    def on_resolve(self, game: GameState) -> None:
+        """Draw two cards."""
         from engine.game import draw_card
 
         controller = self.controller
         if controller is None:
             return
-        # ENGINE LIMITATION: additional cost (discard) is assumed paid
-        # during casting pipeline. On resolve, just draw 2.
         draw_card(game, controller)
         draw_card(game, controller)

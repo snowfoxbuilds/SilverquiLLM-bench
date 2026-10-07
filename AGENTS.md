@@ -6,7 +6,7 @@ LLM benchmark that evaluates coding ability by tasking models with implementing 
 
 - Language: Python ≥3.12
 - Engine: Python port of XMage (Java, MIT)
-- Base set: FDN Draft Set (301 cards: FDN 001–291 + SPG 074–083) — used as in-context examples
+- Base set: FDN Draft Set (301 cards: FDN 001–291 + SPG 074–083) plus three supporting FDN cards outside it (FDN 669 Basilisk Collar, 687 Demolition Field, 709 Confiscate) — used as in-context examples
 - Benchmark set: SOS Draft Set (271 cards: SOS 001–271, released 2026-04-24) — benchmark targets
 - Agents: Karn-built images paired with v4 or v5 Construct Definitions, executed by SilverquiLLM's own benchmark host with no Ozolith dependency; candidate code is graded only in a network-less grader container
 - License: MIT (matching XMage)

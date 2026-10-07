@@ -57,6 +57,12 @@ class ArbiterOfWoe(Creature):
         kwargs.setdefault('rules_text', 'As an additional cost to cast this spell, sacrifice a creature.\nFlying\nWhen this creature enters, each opponent discards a card and loses 2 life. You draw a card and gain 2 life.')
         super().__init__(**kwargs)
 
+    def additional_costs(self, game: GameState) -> list[Any]:
+        """Sacrifice a creature."""
+        from engine.additional_costs import AdditionalCost, CostOption, creature
+
+        return [AdditionalCost(printed=ArbiterOfWoeAbility1, options=(CostOption(sacrifice=creature),))]
+
     def register_triggers(self, game: GameState) -> None:
         from engine.triggers import TriggerRegistration
         from engine.game import draw_card, discard

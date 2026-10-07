@@ -673,6 +673,34 @@ def cast_spell(
 
     _announce_x(game, player, card)
 
+    # 4b. Announce how each additional cost will be paid (rule 601.2b). An
+    #     alternative is offered only if its extra mana fits on top of some base
+    #     cost the player could pay; reductions that depend on targets are not
+    #     known yet, so a cost they alone make affordable is rejected at payment.
+    from engine import additional_costs
+
+    announced_bases = (
+        [card.flashback_cost]  # type: ignore[attr-defined]
+        if mode is CastMode.FLASHBACK
+        else [card.mana_cost, *card.alternative_costs(game)]
+    )
+    untargeted_reduction = _raw_cost_reduction(game, card, player, targets=[])
+
+    def _affordable(extra: ManaCost | None) -> bool:
+        for base in announced_bases:
+            total = additional_costs.plus(_with_x(base, card.x_value), extra)  # type: ignore[attr-defined]
+            reduced = _apply_cost_reduction(total, min(untargeted_reduction, total.generic))
+            if player.mana_pool.can_pay(reduced):
+                return True
+        return False
+
+    chosen_additional = additional_costs.announce(game, player, card, _affordable)
+    if chosen_additional is None:
+        stack_zone.remove(card)
+        hand.add(card)
+        raise CastingError(f"Cannot cast {card.name!r} — cannot pay its additional cost")
+    added_mana = additional_costs.extra_mana(chosen_additional)
+
     # 5. Choose targets
     target_specs = card.get_targets(game)
     chosen_targets: list[Any] = []
@@ -746,7 +774,7 @@ def cast_spell(
         else [card.mana_cost, *card.alternative_costs(game)]
     )
     base_costs = [
-        _with_x(base, card.x_value)  # type: ignore[attr-defined]
+        additional_costs.plus(_with_x(base, card.x_value), added_mana)  # type: ignore[attr-defined]
         for base in candidate_costs
     ]
     payable: list[tuple[int, ManaCost]] = []
@@ -770,6 +798,9 @@ def cast_spell(
     # Store colors of mana spent on the card for mechanics like Converge
     # that care about the colors used to cast the spell.
     card.colors_spent = list(player.mana_pool.last_payment_colors)  # type: ignore[attr-defined]
+
+    # 6b. The rest of the total cost — sacrifices, discards (rule 601.2h).
+    additional_costs.pay_nonmana(game, player, card, chosen_additional)
 
     # 7. Call on_cast hook
     card.on_cast(game)
@@ -857,8 +888,9 @@ def cast_spell_free(
        resolution normally (permanents → battlefield, non-permanents →
        graveyard).
 
-    No timing check or mana payment is performed.  The spell goes on the
-    stack and can be responded to normally (e.g. countered).
+    No timing check is made and the mana cost is not paid, but additional
+    costs still are (rule 118.9d).  The spell goes on the stack and can be
+    responded to normally (e.g. countered).
 
     If targeting or other post-move checks fail, the card is rolled back
     to its source zone.
@@ -944,6 +976,28 @@ def cast_spell_free(
     stack_zone.add(card)
     _announce_x(game, player, card, free=True)
 
+    # 2b. A spell cast without paying its mana cost still owes its additional
+    #     costs, mana included (rule 118.9d); announce them (rule 601.2b).
+    from engine import additional_costs
+
+    def _free_total(extra: ManaCost | None, targets: list[Any]) -> ManaCost:
+        # The mana cost is replaced by zero, the additional costs are added and
+        # cost reductions apply to the total, as for any cast (rule 601.2f).
+        total = additional_costs.plus(ManaCost(), extra)
+        reduction = _raw_cost_reduction(game, card, player, targets=targets)
+        return _apply_cost_reduction(total, min(reduction, total.generic))
+
+    chosen_additional = additional_costs.announce(
+        game,
+        player,
+        card,
+        lambda extra: player.mana_pool.can_pay(_free_total(extra, [])),
+    )
+    if chosen_additional is None:
+        stack_zone.remove(card)
+        source_zone_container.add(card)
+        raise CastingError(f"Cannot cast {card.name!r} — cannot pay its additional cost")
+
     # 3. Choose targets (with rollback on failure)
     try:
         target_specs = card.get_targets(game)
@@ -989,6 +1043,17 @@ def cast_spell_free(
     activation_context = capture_activation_context(
         game, card, player, chosen_targets
     )
+
+    # 3c. Pay the additional costs (rule 601.2h), reduced now that the targets
+    #     a reduction may depend on are known.
+    total = _free_total(additional_costs.extra_mana(chosen_additional), chosen_targets)
+    if not player.mana_pool.can_pay(total):
+        stack_zone.remove(card)
+        source_zone_container.add(card)
+        raise CastingError(f"Cannot cast {card.name!r} — cannot pay its additional cost")
+    if total.cmc:
+        player.mana_pool.pay(total)
+    additional_costs.pay_nonmana(game, player, card, chosen_additional)
 
     # 4. Call on_cast hook
     card.on_cast(game)
