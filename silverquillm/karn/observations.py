@@ -213,7 +213,8 @@ def normalize_rollout(lines: Iterable[str]) -> tuple[list[dict[str, Any]], list[
             payload = record.get("payload", {})
             if not isinstance(payload, dict):
                 raise TypeError
-        except (ValueError, TypeError, AttributeError):
+        except (ValueError, TypeError, AttributeError, RecursionError):
+            # A deeply nested line is malformed too; it must not abort the whole harvest.
             problems.append("native_record_malformed")
             continue
         kind, timestamp = record.get("type"), record.get("timestamp")
@@ -540,7 +541,7 @@ class CodexTelemetryCollector:
                     return
                 try:
                     collector.ingest_otlp(json.loads(self.rfile.read(length)))
-                except (ValueError, TypeError, KeyError, AttributeError):
+                except (ValueError, TypeError, KeyError, AttributeError, RecursionError):
                     collector.mark_incomplete("otel_payload_malformed")
                     self.send_error(400)
                     return

@@ -11,11 +11,12 @@ from __future__ import annotations
 import json
 import math
 import os
+import stat
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from silverquillm.safe_files import iter_regular_files, open_directory
+from silverquillm.safe_files import DIRECTORY_FLAGS, MAX_DEPTH, open_directory, read_regular_at
 
 from .definition import KarnError, read_regular
 
@@ -24,6 +25,7 @@ MAX_PERCENT = 1000.0
 MAX_STDOUT_BYTES = 256 * 1024 * 1024
 MAX_SESSION_BYTES = 128 * 1024 * 1024
 MAX_SESSION_FILES = 10_000
+MAX_WALK_ENTRIES = 100_000
 # A real reading line is a few kilobytes.
 MAX_LINE_BYTES = 1024 * 1024
 # Reset times outside this range are malformed rather than a real window boundary.
@@ -180,33 +182,88 @@ def _is_rollout(path: PurePosixPath) -> bool:
     return path.name.startswith("rollout-") and path.name.endswith(".jsonl")
 
 
+def _rollouts(descriptor: int) -> tuple[list[tuple[int, tuple[str, ...]]], bool]:
+    """Every rollout below ``sessions`` by modification time, and whether any entry was skipped.
+
+    One unreadable or linked entry is skipped rather than ending the walk, so it cannot hide
+    the readings in files after it.
+    """
+    found, skipped = [], False
+
+    def walk(directory: int, parts: tuple[str, ...]) -> None:
+        nonlocal skipped
+        try:
+            names = sorted(os.listdir(directory))
+        except OSError:
+            skipped = True
+            return
+        for name in names:
+            if len(found) >= MAX_WALK_ENTRIES:
+                skipped = True
+                return
+            try:
+                info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+            except OSError:
+                skipped = True
+                continue
+            if stat.S_ISDIR(info.st_mode) and len(parts) < MAX_DEPTH:
+                try:
+                    child = os.open(name, DIRECTORY_FLAGS, dir_fd=directory)
+                except OSError:
+                    skipped = True
+                    continue
+                try:
+                    walk(child, (*parts, name))
+                finally:
+                    os.close(child)
+            elif stat.S_ISREG(info.st_mode) and _is_rollout(PurePosixPath(name)):
+                found.append((info.st_mtime_ns, (*parts, name)))
+
+    walk(descriptor, ())
+    return sorted(found, reverse=True), skipped
+
+
 def codex_usage(native: Path) -> dict[str, Any]:
-    """Read ``native/sessions`` rollouts only; nothing else in the directory is opened."""
+    """Read ``native/sessions`` rollouts only; nothing else in the directory is opened.
+
+    Rollouts are read newest first, so the byte and file caps drop the oldest ones.
+    """
     try:
         descriptor = open_directory(Path(native), ("sessions",))
     except OSError:
         return missing("codex_sessions_unavailable")
-    newest, reasons, order = None, set(), 0
+    newest, reasons = None, set()
     try:
-        for _, content in iter_regular_files(
-            descriptor,
-            accept=_is_rollout,
-            max_files=MAX_SESSION_FILES,
-            max_bytes=MAX_SESSION_BYTES,
-        ):
-            for document in _documents(content, b'"rate_limits"'):
-                order += 1
-                reading, problem = codex_reading(document)
-                if problem is not None:
-                    reasons.add(problem)
-                if reading is not None:
-                    key = (reading["observed_at"] or "", order)
-                    if newest is None or key > newest[0]:
-                        newest = (key, reading)
-    except OSError:
-        reasons.add("codex_sessions_partially_read")
+        rollouts, skipped = _rollouts(descriptor)
     finally:
         os.close(descriptor)
+    if skipped:
+        reasons.add("codex_sessions_partially_read")
+    budget = MAX_SESSION_BYTES
+    for index, (_, parts) in enumerate(rollouts):
+        if index >= MAX_SESSION_FILES or budget <= 0:
+            reasons.add("codex_sessions_partially_read")
+            break
+        try:
+            directory = open_directory(Path(native), ("sessions", *parts[:-1]))
+            try:
+                content = read_regular_at(directory, parts[-1], budget)
+            finally:
+                os.close(directory)
+        except OSError:
+            # A linked, replaced, oversized or vanished file; older rollouts may still read.
+            reasons.add("codex_sessions_partially_read")
+            continue
+        budget -= len(content)
+        for line, document in enumerate(_documents(content, b'"rate_limits"')):
+            reading, problem = codex_reading(document)
+            if problem is not None:
+                reasons.add(problem)
+            if reading is not None:
+                # Untimed ties go to the newer file, then to the later line within it.
+                key = (reading["observed_at"] or "", -index, line)
+                if newest is None or key > newest[0]:
+                    newest = (key, reading)
     if newest is None:
         return missing("codex_rate_limits_absent", *reasons)
     return _complete(newest[1], reasons)
