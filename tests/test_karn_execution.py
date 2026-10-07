@@ -23,7 +23,6 @@ from silverquillm.results_repo import (
     RunRecord,
     RunRecordExistsError,
     iter_run_records,
-    rebuild_index,
     write_run_record,
 )
 
@@ -220,7 +219,7 @@ def test_grader_failure_is_absent_not_zero_and_does_not_erase_execution(tmp_path
     )
 
 
-def test_mixed_history_reader_and_index_preserve_original_schema(plain_run_clone):
+def test_mixed_history_reader_preserves_original_schema(plain_run_clone):
     opts, new = plain_run_clone.opts, plain_run_clone.record
     legacy = RunRecord(
         run_id="old-run",
@@ -237,15 +236,10 @@ def test_mixed_history_reader_and_index_preserve_original_schema(plain_run_clone
     write_run_record(opts["results_repo"], legacy)
     records = list(iter_run_records(opts["results_repo"]))
     assert {record.candidate.scheme for _, record in records} == {"legacy", "karn-v4"}
-    index = rebuild_index(opts["results_repo"])
-    previous = next(row for row in index if row["run_id"] == "old-run")
-    assert previous["mode"] == "basic" and previous["leaderboard_valid"] is False
-    current = next(row for row in index if row["run_id"] == new.run_id)
-    assert (
-        current["schema_version"] == 2
-        and "mode" not in current
-        and "leaderboard_valid" not in current
-    )
+    by_id = {record.run_id: record for _, record in records}
+    assert by_id["old-run"].mode == "basic" and by_id["old-run"].leaderboard_valid is False
+    current = by_id[new.run_id].manifest
+    assert current["schema_version"] == 2 and "mode" not in current
 
 
 def test_batch_uses_shared_runner_and_does_not_replay_completed_entries(tmp_path):

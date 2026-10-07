@@ -1,4 +1,4 @@
-"""Private results repo: schema, run-record writer, validity rule, derived index.
+"""Private results repo: schema and run-record reader and writer.
 
 Issue #39 §3 moves results out of ``docker/<image>/validated_results/`` into a
 dedicated private results repo, git-as-truth.  This module is the bench side of
@@ -8,7 +8,6 @@ here takes its local path (``repo_root``) and never runs git.
 Layout of a results repo::
 
     AGENTS.md                                   schema doc (results_repo_templates/)
-    runs.jsonl                                  derived index — regenerated, never authoritative
     results/<candidate-hash>/candidate/         the vendored Candidate Bundle (ozolith-v1 only;
                                                 write-once, verified at write time — candidate.py)
     results/<candidate-hash>/<run-id>/manifest.json
@@ -52,18 +51,14 @@ Rules the module enforces:
   SHA-256 of the canonical JSON of the whole identity triple (base digest,
   instruction hash, adapter) — see :func:`candidate_hash` — so two candidates
   differing in any component of the triple never share a directory.
-- **``leaderboard_valid`` has one owner**, :func:`derive_leaderboard_valid`,
-  shared by the writer's callers and the legacy migrator.
 
 Public API
 ----------
 ``CandidateIdentity``, ``RunRecord``, ``candidate_hash``, ``candidate_hash8``,
 ``candidate_dirname``, ``candidate_copy_dir``, ``legacy_image_dir``,
-``legacy_tree_location``, ``derive_leaderboard_valid``,
-``leaderboard_validity_reasons``, ``normalize_collector_number``,
-``write_run_record``, ``read_run_record``, ``record_file_texts``,
-``iter_run_dirs``, ``iter_run_records``, ``rebuild_index``,
-``init_results_repo``, ``resolve_results_repo``, ``load_benchmark_config``.
+``legacy_tree_location``, ``write_run_record``, ``read_run_record``,
+``record_file_texts``, ``iter_run_dirs``, ``iter_run_records``,
+``init_results_repo``, ``resolve_results_repo``.
 """
 
 from __future__ import annotations
@@ -75,7 +70,7 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -83,14 +78,12 @@ from typing import Any
 __all__ = [
     "CANDIDATE_DIRNAME",
     "CANDIDATE_HASH8_LEN",
-    "INDEX_FILENAME",
     "LEGACY_SCHEME",
     "LEGACY_TREE_KIND",
     "MANIFEST_FILENAME",
     "OZOLITH_SCHEME",
     "RESULTS_DIRNAME",
     "RESULTS_REPO_ENV",
-    "RUN_SUMMARY_SCORE_KEYS",
     "SCHEMA_VERSION",
     "SCORES_FILENAME",
     "SCORE_DIMENSIONS",
@@ -104,17 +97,12 @@ __all__ = [
     "candidate_dirname",
     "candidate_hash",
     "candidate_hash8",
-    "derive_leaderboard_valid",
     "init_results_repo",
     "iter_run_dirs",
     "iter_run_records",
-    "leaderboard_validity_reasons",
     "legacy_image_dir",
     "legacy_tree_location",
-    "load_benchmark_config",
-    "normalize_collector_number",
     "read_run_record",
-    "rebuild_index",
     "record_file_texts",
     "resolve_results_repo",
     "write_run_record",
@@ -132,7 +120,6 @@ RESULTS_REPO_ENV = "SILVERQUILLM_RESULTS_REPO"
 RESULTS_DIRNAME = "results"
 MANIFEST_FILENAME = "manifest.json"
 SCORES_FILENAME = "scores.json"
-INDEX_FILENAME = "runs.jsonl"
 AGENTS_FILENAME = "AGENTS.md"
 
 #: Identity scheme of runs migrated from the legacy image lineage
@@ -163,14 +150,6 @@ _ADAPTER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 #: sub-object unchanged.
 SCORE_DIMENSIONS: tuple[str, ...] = ("card_correctness", "fdn_regression", "engine_regression")
 
-#: ``run_summary.json`` block → neutral score key.  ``sos_card_correctness`` is
-#: SOS-specific and is mapped, never copied through.
-RUN_SUMMARY_SCORE_KEYS: dict[str, str] = {
-    "sos_card_correctness": "card_correctness",
-    "fdn_regression": "fdn_regression",
-    "engine_regression": "engine_regression",
-}
-
 #: ``artifact_pointers[].kind`` for a migrated run whose heavy artifacts stay
 #: in place under the bench repo's ``docker/<image>/validated_results/<run>/``.
 LEGACY_TREE_KIND = "legacy-tree"
@@ -178,7 +157,6 @@ LEGACY_TREE_KIND = "legacy-tree"
 TEMPLATE_DIR = Path(__file__).resolve().parent / "results_repo_templates"
 
 _SAFE_SEGMENT_RE = re.compile(r"[^A-Za-z0-9._-]")
-_COLLECTOR_PREFIX_RE = re.compile(r"^[A-Za-z]+_")
 
 #: Every field a schema-v1 ``manifest.json`` carries.  All are required on
 #: read; nothing is defaulted from an absent key.
@@ -377,9 +355,7 @@ class CandidateIdentity:
         :meth:`validate`, the same ones the writer enforces.
         """
         if not isinstance(data, Mapping):
-            raise InvalidRunRecordError(
-                f"candidate identity must be a JSON object, got {data!r}"
-            )
+            raise InvalidRunRecordError(f"candidate identity must be a JSON object, got {data!r}")
         identity = cls(
             base_image_digest=data.get("base_image_digest"),
             instruction_hash=data.get("instruction_hash"),
@@ -638,9 +614,7 @@ class RunRecord:
             )
         run_metadata = manifest["run_metadata"]
         if not isinstance(run_metadata, dict):
-            raise InvalidRunRecordError(
-                f"run_metadata must be a JSON object, got {run_metadata!r}"
-            )
+            raise InvalidRunRecordError(f"run_metadata must be a JSON object, got {run_metadata!r}")
         artifact_pointers = manifest["artifact_pointers"]
         if not isinstance(artifact_pointers, list):
             raise InvalidRunRecordError(
@@ -672,101 +646,6 @@ class RunRecord:
                 f"the recorded candidate ({expected_hash!r})"
             )
         return record
-
-
-# ---------------------------------------------------------------------------
-# leaderboard_valid — the single owner of the rule
-# ---------------------------------------------------------------------------
-
-
-def normalize_collector_number(value: str | int) -> str:
-    """Collector number as an unpadded string: ``"001"``, ``"sos_001"``, ``1`` → ``"1"``.
-
-    Legacy manifests store ``"1"``; ``config.json`` stores ``"001"``;
-    ``eval_result.json`` keys are ``"sos_1"``.  Non-numeric remainders are
-    returned unchanged (minus any ``<set>_`` prefix).
-    """
-    text = str(value).strip()
-    text = _COLLECTOR_PREFIX_RE.sub("", text)
-    if text.isdigit():
-        return str(int(text))
-    return text
-
-
-def _normalized_set(values: Iterable[str | int]) -> set[str]:
-    return {normalize_collector_number(v) for v in values}
-
-
-def leaderboard_validity_reasons(
-    benchmark_config: Mapping[str, Any],
-    card_filter: Iterable[str | int] | None,
-    resumed_from: str | None,
-    scored_card_set: Iterable[str | int],
-) -> list[str]:
-    """Every reason a run is *not* leaderboard-valid; empty means valid.
-
-    Rules (in order):
-
-    1. the benchmark's ``config.json`` says ``leaderboard.eligible: false``
-       (the smoke benchmark is never leaderboard-published);
-    2. ``resumed_from`` is set — Resume Legs inherit prior-leg workspace state
-       (CONTEXT.md → Resume Leg);
-    3. a card filter is present and differs from the benchmark's ``cards``
-       set after integer normalization of collector numbers, preserving set
-       identities when the benchmark uses qualified selections;
-    4. the scored card set differs from the benchmark's ``cards`` set.
-    """
-    reasons: list[str] = []
-    leaderboard = benchmark_config.get("leaderboard") or {}
-    if isinstance(leaderboard, Mapping) and leaderboard.get("eligible", True) is False:
-        reasons.append("benchmark is not leaderboard-eligible (leaderboard.eligible: false)")
-    if resumed_from:
-        reasons.append(f"Resume Leg (resumed_from={resumed_from})")
-    cards = benchmark_config.get("cards") or []
-    qualified = any(":" in str(card) for card in cards)
-    primary_set = str(
-        (benchmark_config.get("draft_set") or {}).get("primary_set_code", "")
-    ).lower()
-
-    def normalized(values: Iterable[str | int]) -> set[str]:
-        if not qualified:
-            return _normalized_set(values)
-        identities = set()
-        for value in values:
-            text = str(value).strip()
-            match = re.fullmatch(r"([A-Za-z0-9]+)[:_](.+)", text)
-            set_code, number = match.groups() if match else (primary_set, text)
-            number = str(int(number)) if number.isdigit() else number
-            identities.add(f"{set_code.lower()}:{number}")
-        return identities
-
-    pool = normalized(cards)
-    if card_filter is not None:
-        filtered = normalized(card_filter)
-        if filtered != pool:
-            reasons.append(
-                f"card filter ({len(filtered)} cards) differs from the benchmark's "
-                f"{len(pool)}-card set"
-            )
-    scored = normalized(scored_card_set)
-    if scored != pool:
-        reasons.append(
-            f"scored card set ({len(scored)} cards) differs from the benchmark's "
-            f"{len(pool)}-card set"
-        )
-    return reasons
-
-
-def derive_leaderboard_valid(
-    benchmark_config: Mapping[str, Any],
-    card_filter: Iterable[str | int] | None,
-    resumed_from: str | None,
-    scored_card_set: Iterable[str | int],
-) -> bool:
-    """``True`` iff :func:`leaderboard_validity_reasons` is empty."""
-    return not leaderboard_validity_reasons(
-        benchmark_config, card_filter, resumed_from, scored_card_set
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -892,49 +771,6 @@ def iter_run_records(repo_root: Path) -> Iterator[tuple[Path, RunRecord]]:
 
 
 # ---------------------------------------------------------------------------
-# Derived index
-# ---------------------------------------------------------------------------
-
-
-def rebuild_index(repo_root: Path) -> list[dict[str, Any]]:
-    """Regenerate ``runs.jsonl`` purely from the tree and return its rows.
-
-    One line per run — candidate hash, run id, benchmark, mode,
-    ``leaderboard_valid``, run date — in ``(candidate_hash, run_id)`` order with
-    sorted keys, so two rebuilds of the same tree are byte-identical.  The
-    index is derived: never hand-edited, never authoritative.
-    """
-    repo_root = Path(repo_root)
-    rows: list[dict[str, Any]] = []
-    for run_dir, record in iter_run_records(repo_root):
-        if record.candidate.scheme in KARN_SCHEMES:
-            rows.append(record.index_row())
-            continue
-        rows.append(
-            {
-                "candidate_hash": run_dir.parent.name,
-                "run_id": record.run_id,
-                "benchmark": record.benchmark,
-                "mode": record.mode,
-                "leaderboard_valid": record.leaderboard_valid,
-                "run_date": record.run_metadata.get("run_date"),
-            }
-        )
-    text = "".join(json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n" for row in rows)
-    index_path = repo_root / INDEX_FILENAME
-    fd, tmp_name = tempfile.mkstemp(prefix=".runs-", suffix=".jsonl", dir=repo_root)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        os.replace(tmp_name, index_path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(tmp_name)
-        raise
-    return rows
-
-
-# ---------------------------------------------------------------------------
 # Repo init / configuration
 # ---------------------------------------------------------------------------
 
@@ -942,12 +778,12 @@ def rebuild_index(repo_root: Path) -> list[dict[str, Any]]:
 def init_results_repo(path: Path) -> list[Path]:
     """Lay out an empty results repo at *path*; return the files written.
 
-    Writes the schema ``AGENTS.md`` (from :data:`TEMPLATE_DIR`), an empty
-    ``results/`` directory (kept with ``.gitkeep``) and an empty derived index.
+    Writes the schema ``AGENTS.md`` (from :data:`TEMPLATE_DIR`) and an empty
+    ``results/`` directory (kept with ``.gitkeep``).
     The whole target is preflighted before the first write: *path* may not
     exist yet, be an empty directory, or be an empty git clone (nothing but
-    ``.git`` inside).  Anything else — including a lone ``runs.jsonl``,
-    ``results/`` tree, or README — is refused, and nothing is ever
+    ``.git`` inside).  Anything else — including a lone ``results/`` tree or
+    README — is refused, and nothing is ever
     overwritten.  If a write fails partway, everything this call created is
     removed again so the operator can simply retry.
     """
@@ -961,9 +797,7 @@ def init_results_repo(path: Path) -> list[Path]:
             raise ResultsRepoError(f"{path} is not a directory")
         entries = sorted(p.name for p in path.iterdir() if p.name != ".git")
         if AGENTS_FILENAME in entries:
-            raise ResultsRepoError(
-                f"{path} is not an empty results repo: {AGENTS_FILENAME} exists"
-            )
+            raise ResultsRepoError(f"{path} is not an empty results repo: {AGENTS_FILENAME} exists")
         if entries:
             raise ResultsRepoError(
                 f"{path} is not empty; refusing to initialize over: {', '.join(entries)}"
@@ -985,10 +819,6 @@ def init_results_repo(path: Path) -> list[Path]:
         gitkeep.write_text("", encoding="utf-8")
         created.append(gitkeep)
         written.append(gitkeep)
-        index_path = path / INDEX_FILENAME
-        index_path.write_text("", encoding="utf-8")
-        created.append(index_path)
-        written.append(index_path)
     except BaseException:
         for created_path in reversed(created):
             with contextlib.suppress(OSError):
@@ -1014,16 +844,3 @@ def resolve_results_repo(
     environ = os.environ if env is None else env
     value = environ.get(RESULTS_REPO_ENV, "").strip()
     return Path(value) if value else None
-
-
-def load_benchmark_config(repo_root: Path, benchmark_id: str) -> dict[str, Any]:
-    """Load ``benchmarks/<benchmark_id>/config.json`` from the bench repo."""
-    if not _is_safe_segment(benchmark_id):
-        raise ResultsRepoError(f"invalid benchmark id: {benchmark_id!r}")
-    config_path = Path(repo_root) / "benchmarks" / benchmark_id / "config.json"
-    if not config_path.is_file():
-        raise ResultsRepoError(f"no benchmark config at {config_path}")
-    config = _load_json(config_path)
-    if not isinstance(config, dict):
-        raise ResultsRepoError(f"{config_path} is not a JSON object")
-    return config

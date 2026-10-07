@@ -431,7 +431,9 @@ _Avoid_: "differential testing" (deprecated XMage approach), "checkpoint validat
 
 **Results Repo**
 
-The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: `results/<candidate-hash>/<run-id>/` holding one Run Record each, `results/<candidate-hash>/candidate/` holding the vendored Candidate Bundle of an `ozolith-v1` candidate (written once on its first run, verified at write time — the copy must recompute to the directory's Candidate Hash — immutable; #65), a derived `runs.jsonl` index regenerated from the tree (never hand-edited, never authoritative), and a root `AGENTS.md` carrying the full schema so the repo is self-contained for analysis agents. Heavy artifacts (transcripts, snapshots, per-card trees) never enter it — records carry pointers — except each record's Workspace Archive; Exclusions live beside the records. Written only through `silverquillm.results_repo`; laid out by `silverquillm results-init <clone>`; the legacy Validated Results corpus is backfilled into it by `scripts/migrate_validated_results.py`.
+The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: one Run Record per Benchmark Run, filed under its Candidate Hash, with Exclusions and each record's Workspace Archive beside the records.
+It carries its own schema so analysis needs nothing else, keeps pointers rather than heavy artifacts such as transcripts and snapshots, and has no derived index: its records are read directly (grilling 2026-10-07).
+Historical `ozolith-v1` candidates keep their vendored Candidate Bundle beside their records.
 
 _Avoid_: "results dir" (the per-run `docker/<image>/results/` working output), "leaderboard repo" (publishing is the separate port into the bench repo's `published/` — see Published Result)
 

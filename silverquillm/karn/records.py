@@ -248,19 +248,6 @@ class KarnRunRecord:
             validate_combined_regression(self.run_metadata["combined_regression"])
         validate_scores(self.scores)
 
-    def index_row(self):
-        return {
-            "schema_version": 2,
-            "candidate_hash": self.candidate.hash,
-            "run_id": self.run_id,
-            "benchmark": self.benchmark,
-            "run_date": self.run_metadata.get("run_date"),
-            "execution_status": self.run_metadata.get("execution", {}).get("status"),
-            "recovery_of": self.run_metadata.get("recovery_of"),
-            "execution_run_id": self.run_metadata.get("execution_run_id", self.run_id),
-            "measurements": self.run_metadata.get("measurements"),
-        }
-
 
 def validate_scores(scores) -> None:
     """Enforce the record score invariants on a ``scores.json``-shaped value."""
