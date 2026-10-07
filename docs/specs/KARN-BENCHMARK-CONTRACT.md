@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-10-03
+Last updated: 2026-10-07
 
 # Karn Benchmark Contract
 
@@ -158,6 +158,10 @@ Claude Code mirrors it (grilling 2026-09-28): the session transcript under its c
 A request the two streams report differently, in shared token counts or model, keeps the transcript's values and leaves the measurements partial; OTel supplies usage only for a request the transcript never records, such as a compaction's.
 The transcript's format is internal to Claude Code, so each pinned Claude Code version is qualified before its measurements count as complete.
 
+Each record also keeps the newest subscription usage reading the run observed for its Login Profile: the provider's weekly-window utilization percentage, the window length, its reset time, and when the reading was observed (grilling 2026-10-07).
+Claude reports it in `rate_limit_event` stdout lines (the `seven_day` window) and Codex in its rollout `rate_limits` (the `primary` window); only those fields are kept, and a run that observed none records the reading as missing.
+The reading feeds the operator's Estimated Weekly Usage in [Run Monitoring](RUN-MONITORING.md) and is not an efficiency measurement.
+
 ### Outcomes and retained evidence
 
 Execution outcome, grading, and measurement completeness are separate observations (grilling 2026-09-26).
@@ -194,6 +198,18 @@ The workstream also covers the CLI and batch paths that retain those observation
 The `login` command enrolls one Login Profile into the pool of the selected existing plugin, or re-enrolls a named one.
 SilverquiLLM runs a completed Karn build by itself; the vendored v4 and v5 construct definition schemas are the only thing it takes from Karn, and no Ozolith package is involved.
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
+[Run Monitoring](RUN-MONITORING.md) defines `top`, the read-only monitor over live runs, the queue, Login Pools, and history.
+
+Every Karn command resolves four host locations the same way: its flag, else its environment variable, else the host configuration file `~/.config/silverquillm/config.toml` (grilling 2026-10-07).
+
+| Location | Flag | Configuration key |
+| --- | --- | --- |
+| Results Repo | `--results-repo` (env `SILVERQUILLM_RESULTS_REPO`) | `results_repo` |
+| Batch queue directory | `--batches-dir` | `batches_dir` |
+| Run directory | `--results-dir` | `runs_dir` |
+| State root (Login Pools) | `--state-root` | `state_root` |
+
+A location none of the three sources sets is an error naming all three, rather than a path relative to the working directory; the state root alone keeps its `~/.local/state/silverquillm` default.
 
 New immutable Run Records use schema 2 and an identity scheme that names the definition version: `karn-v4` for a v4 definition, `karn-v5` for a v5 one.
 An identity whose scheme does not match its `definition_version` is invalid, and records of either scheme stay valid side by side.
