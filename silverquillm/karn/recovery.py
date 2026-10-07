@@ -11,6 +11,7 @@ from pathlib import Path
 
 from silverquillm.queue_state import _write_atomically
 
+from . import provenance
 from .baseline import BaselineStore, baseline_reference_grade, combined_regression
 from .benchmark import load_benchmark
 from .definition import KarnError, canonical, load_candidate
@@ -417,6 +418,7 @@ def _recover(
         previous_record is not None and previous_record.candidate != identity
     ):
         raise KarnError("retained_definition_identity_mismatch")
+    provenance.require_package_from(bench_root)
     benchmark = load_benchmark(bench_root, inputs["benchmark"])
     grader = grader or _recovery_grader(inputs, grader_image, grading_timeout)
     profile = login_profile(state_root, inputs["login"])

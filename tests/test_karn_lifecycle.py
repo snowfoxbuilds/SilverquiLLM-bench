@@ -830,8 +830,11 @@ def test_recover_reports_a_run_that_never_launched(tmp_path, monkeypatch):
 SIGNAL_RUNNER = textwrap.dedent(
     """
     import pathlib, sys, time
-    from silverquillm.karn import execution
+    from silverquillm.karn import execution, provenance
     from silverquillm.karn.host import HostResult
+
+    # The toy benchmark's bench root is a temporary directory, not this package's checkout.
+    provenance.require_package_from = lambda bench_root: None
 
     marker = pathlib.Path(sys.argv[1])
 
