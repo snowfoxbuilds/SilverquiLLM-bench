@@ -32,8 +32,9 @@ class _StormTriggerState:
     Attributes:
         spell: The instant/sorcery whose cast fired this trigger.
         stack_object: That spell's :class:`~engine.stack.StackObject` at fire
-            time. Re-checked at resolution — if it has since left the stack
-            (countered, resolved), no copies are made.
+            time. The copies are made from it even if the spell has since left
+            the stack — a countered spell is copied as it last existed on the
+            stack (rule 707.10), with its targets and choices.
         copies: How many copies this trigger must create — the number of instant
             and sorcery spells the fire-time controller had cast *before* this one
             this turn (rule: "for each *other* instant and sorcery spell you've
@@ -143,11 +144,11 @@ class ThousandYearStorm(Enchantment):
             copies_to_make = state.copies
             if copies_to_make <= 0:
                 return
+            # Copy the captured occurrence, never whatever is pending now: if the
+            # spell was countered, its last known stack object still carries its
+            # targets and choices, so the copies are made all the same.
             original_so = state.stack_object
-            # Fail safe: the triggering spell must still be on the stack. If it
-            # was countered or otherwise left, this trigger makes no copies — it
-            # never falls back to copying some *other* pending spell.
-            if original_so is None or original_so not in game.stack._items:
+            if original_so is None:
                 return
             for _ in range(copies_to_make):
                 new_targets: list[Any] | None = None

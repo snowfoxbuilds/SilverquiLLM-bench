@@ -161,9 +161,10 @@ class TestStormPerTriggerState:
         _bolt(t, second, copies=0)
         t.run()
 
-    def test_countered_triggering_spell_makes_no_copies_and_copies_no_other(self):
-        """Player 1 counters the second Burst Lightning: its trigger makes no
-        copies, and never falls back to copying the first one."""
+    def test_countered_triggering_spell_is_still_copied_and_copies_no_other(self):
+        """Player 1 counters the second Burst Lightning: its trigger still copies
+        it once, as it last existed on the stack, and never copies the first
+        one instead."""
         first, second, offer = card(BurstLightning), card(BurstLightning), card(AnOfferYouCantRefuse)
         t = _table(
             Side(hand=[first, second], battlefield=[ThousandYearStorm], mana={ManaType.RED: 2}),
@@ -178,9 +179,10 @@ class TestStormPerTriggerState:
             moves(offer, Zone.GRAVEYARD), moves(second, Zone.GRAVEYARD), appears(0), appears(0),
             first=1,
         )
+        _copies(t, BurstLightning, 1)
+        _resolve(t, off_stack(BurstLightning), life(1, 18))
         _copies(t, BurstLightning, 0)
-        _copies(t, BurstLightning, 0)
-        _resolve(t, moves(first, Zone.GRAVEYARD), life(1, 18))
+        _resolve(t, moves(first, Zone.GRAVEYARD), life(1, 16))
         t.run()
 
     def test_independent_targets_for_simultaneous_triggers(self):
