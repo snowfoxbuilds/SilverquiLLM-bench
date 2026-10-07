@@ -214,8 +214,8 @@ _Avoid_: "billed cost", "subscription cost" for this estimate
 **Estimated Weekly Usage**
 
 The share of one Login Profile's weekly subscription allowance that is used up, as the operator monitor estimates it (grilling 2026-10-07).
-It starts from the provider's own newest usage reading for that Login Profile, when one exists and has not reset.
-It adds Estimated Cost observed since then, converted at a host-configured provider rate.
+It starts from the provider's own newest usage reading for that Login Profile while that reading's weekly window lasts, and adds Estimated Cost observed since, converted at a host-configured provider rate.
+For one week after the reading's reset it counts Estimated Cost from the reset; past that, or with no reading, it counts the last seven days' Estimated Cost.
 It is an operating aid, not a measurement of any Benchmark Run.
 
 _Avoid_: "quota", "credits", "credential slot usage"

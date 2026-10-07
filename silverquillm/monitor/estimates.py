@@ -86,5 +86,9 @@ def weekly_usage(
     if newest is not None and now < newest.resets_at:
         added = _spent(costs, newest.effective_at) / rate
         return WeeklyUsage(profile, newest.utilization_percent + float(added), added > 0, newest)
-    since = newest.resets_at if newest is not None else now - WEEK
+    # A reading speaks for one window past its reset at most; after that it is stale.
+    if newest is not None and now < newest.resets_at + WEEK:
+        since = newest.resets_at
+    else:
+        since = now - WEEK
     return WeeklyUsage(profile, float(_spent(costs, since) / rate), True, None)

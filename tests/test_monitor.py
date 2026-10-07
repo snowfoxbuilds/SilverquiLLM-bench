@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import fcntl
 import io
 import json
@@ -229,8 +230,7 @@ def test_live_run_stages_follow_the_spec_table(tmp_path):
     running, grading, starting, _orphan = (
         make_run(runs, name) for name in ("r1", "r2", "r3", "r4")
     )
-    finished = make_run(runs, "r5")
-    (finished / "run-record.json").write_text("{}")
+    retain(make_run(runs, "r5") / "run-record.json", "r5")
     (grading / "host").mkdir()
     (grading / "host/host-result.json").write_text("{}")
     (runs / "not-a-run").mkdir()
@@ -262,7 +262,180 @@ def test_a_live_run_outside_the_run_directory_is_found_through_its_container(tmp
 
 def test_without_a_lock_table_a_stage_is_unknown(tmp_path):
     (make_run(tmp_path, "r1") / ".runner.lock").touch()
-    assert live_runs(tmp_path, [], None)[0].stage is Stage.UNKNOWN
+    retain(make_run(tmp_path, "r2") / "run-record.json", "r2")
+    found = live_runs(tmp_path, [], None)
+    # A finished run needs no owner, so it stays in history even without the lock table.
+    assert [(run.run_id, run.stage, run.reasons) for run in found] == [
+        ("r1", Stage.UNKNOWN, ("no_record",))
+    ]
+
+
+def retain(path: Path, run_id: str, *, stopped=True, recovery_of=None, candidate=CANDIDATE_HASH):
+    """A retained record as ``recovery._retain`` writes one: the manifest beside the scores."""
+    metadata = {"execution": {"status": "completed", "workspace_stopped": stopped}}
+    if recovery_of is not None:
+        metadata.update(recovery_of=recovery_of, execution_run_id=recovery_of)
+    manifest = {
+        "schema_version": 2,
+        "run_id": run_id,
+        "candidate_hash": candidate,
+        "benchmark": "hob-medium",
+        "run_metadata": metadata,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"manifest": manifest, "scores": {"card_correctness": {}}}))
+    return path
+
+
+def publish(results_repo: Path, run_id: str, candidate=CANDIDATE_HASH) -> None:
+    (results_repo / "results" / candidate / run_id).mkdir(parents=True, exist_ok=True)
+
+
+def stages(runs, results_repo, *, containers=(), owned=(), pending=frozenset(), tmp_path):
+    with contextlib.ExitStack() as stack:
+        for run_dir in owned:
+            stack.enter_context(run_lock(run_dir))
+        table = held_locks(proc_locks(tmp_path))
+    found = live_runs(
+        runs, list(containers), table, results_repo=results_repo, pending_logins=pending
+    )
+    return {run.run_id: (run.stage, run.reasons) for run in found}
+
+
+def test_a_normal_run_moves_through_every_stage_to_finished(tmp_path):
+    runs, repo = tmp_path / "runs", tmp_path / "repo"
+    run = runs / "r1"
+    run.mkdir(parents=True)
+    (run / ".runner.lock").touch()
+    assert stages(runs, repo, owned=[run], tmp_path=tmp_path) == {"r1": (Stage.STARTING, ())}
+    make_run(runs, "r1")
+    assert stages(runs, repo, owned=[run], tmp_path=tmp_path) == {"r1": (Stage.STARTING, ())}
+    live = [container("r1")]
+    assert stages(runs, repo, containers=live, owned=[run], tmp_path=tmp_path) == {
+        "r1": (Stage.RUNNING, ())
+    }
+    stopped = [container("r1", running=False)]
+    assert stages(runs, repo, containers=stopped, owned=[run], tmp_path=tmp_path) == {
+        "r1": (Stage.GRADING, ())
+    }
+    (run / "host").mkdir()
+    (run / "host/host-result.json").write_text("{}")
+    assert stages(runs, repo, owned=[run], tmp_path=tmp_path) == {"r1": (Stage.GRADING, ())}
+    retain(run / "run-record.json", "r1")
+    assert stages(runs, repo, owned=[run], tmp_path=tmp_path) == {"r1": (Stage.RECORDING, ())}
+    publish(repo, "r1")
+    assert stages(runs, repo, tmp_path=tmp_path) == {}
+
+
+def test_a_killed_runner_with_a_live_container_needs_recovery(tmp_path):
+    runs, repo = tmp_path / "runs", tmp_path / "repo"
+    make_run(runs, "r1")
+    assert stages(runs, repo, containers=[container("r1")], tmp_path=tmp_path) == {
+        "r1": (Stage.NEEDS_RECOVER, ("no_record",))
+    }
+    found = live_runs(runs, [container("r1")], held_locks(proc_locks(tmp_path)))
+    assert found[0].container.running
+
+
+def test_an_unconfirmed_stop_needs_recovery_until_its_linked_recovery_is_published(tmp_path):
+    runs, repo = tmp_path / "runs", tmp_path / "repo"
+    run = make_run(runs, "r1")
+    retain(run / "run-record.json", "r1", stopped=False)
+    publish(repo, "r1")
+    assert stages(runs, repo, tmp_path=tmp_path) == {
+        "r1": (Stage.NEEDS_RECOVER, ("unconfirmed_stop",))
+    }
+    # A recovery in progress holds the run.
+    assert stages(runs, repo, owned=[run], tmp_path=tmp_path) == {"r1": (Stage.RECORDING, ())}
+    retain(run / "recovery-1/run-record.json", "r1-recovery-1", recovery_of="r1")
+    assert stages(runs, repo, tmp_path=tmp_path) == {"r1": (Stage.NEEDS_RECOVER, ("unpublished",))}
+    publish(repo, "r1-recovery-1")
+    # The original stays unconfirmed and unchanged; its linked recovery clears the warning.
+    assert stages(runs, repo, tmp_path=tmp_path) == {}
+    assert (
+        json.loads((run / "run-record.json").read_text())["manifest"]["run_metadata"]["execution"][
+            "workspace_stopped"
+        ]
+        is False
+    )
+
+
+def test_a_retained_but_unpublished_record_needs_recovery_with_final_scores(tmp_path):
+    runs, repo = tmp_path / "runs", tmp_path / "repo"
+    retain(make_run(runs, "r1") / "run-record.json", "r1")
+    assert stages(runs, repo, tmp_path=tmp_path) == {"r1": (Stage.NEEDS_RECOVER, ("unpublished",))}
+    # Without a Results Repo, publication is unknown and never flagged.
+    assert stages(runs, None, tmp_path=tmp_path) == {}
+
+
+def test_a_failed_login_harvest_needs_recovery_until_settled(tmp_path):
+    runs, repo = tmp_path / "runs", tmp_path / "repo"
+    retain(make_run(runs, "r1") / "run-record.json", "r1")
+    publish(repo, "r1")
+    assert stages(runs, repo, pending={"r1"}, tmp_path=tmp_path) == {
+        "r1": (Stage.NEEDS_RECOVER, ("login_settlement_pending",))
+    }
+    assert stages(runs, repo, pending={"other"}, tmp_path=tmp_path) == {}
+
+
+def test_a_profiles_pending_journal_names_the_run_that_owns_it(tmp_path):
+    state = tmp_path / "state"
+    slot = state / "logins/karn-codex-login/slot-1"
+    slot.mkdir(parents=True)
+    (slot / "pool.json").write_text(json.dumps({"plugin_id": "karn-codex-login"}))
+    (slot / "secret.json").write_text("{}")
+    (slot / "active.json").write_text(
+        json.dumps({"run_id": "r1", "container_name": "sq-run-r1", "mounts": ["secret-mount"]})
+    )
+    [profile] = login_profiles(state, held_locks(proc_locks(tmp_path)))
+    assert (profile.pending, profile.pending_run) == (True, "r1")
+
+
+def test_a_recovery_that_ends_unfinished_leaves_its_reasons(tmp_path):
+    runs, repo = tmp_path / "runs", tmp_path / "repo"
+    run = make_run(runs, "r1")
+    retain(run / "run-record.json", "r1", stopped=False)
+    retain(run / "recovery-1/run-record.json", "r1-recovery-1", recovery_of="r1")
+    publish(repo, "r1")
+    assert stages(runs, repo, owned=[run], tmp_path=tmp_path) == {"r1": (Stage.RECORDING, ())}
+    assert stages(runs, repo, pending={"r1"}, tmp_path=tmp_path) == {
+        "r1": (Stage.NEEDS_RECOVER, ("unpublished", "login_settlement_pending"))
+    }
+
+
+def test_unreadable_or_ambiguous_records_need_recovery_with_the_error(tmp_path):
+    runs, repo = tmp_path / "runs", tmp_path / "repo"
+    (make_run(runs, "r1") / "run-record.json").write_text("{not json")
+    run = make_run(runs, "r2")
+    retain(run / "recovery-1/run-record.json", "a", recovery_of="r2")
+    retain(run / "recovery-2/run-record.json", "b", recovery_of="r2")
+    for run_id in ("a", "b"):
+        publish(repo, run_id)
+    assert stages(runs, repo, tmp_path=tmp_path) == {
+        "r1": (Stage.NEEDS_RECOVER, ("unreadable_record",)),
+        "r2": (Stage.NEEDS_RECOVER, ("ambiguous_linked_recovery",)),
+    }
+
+
+def test_a_run_that_never_launched_or_was_published_elsewhere_is_not_shown(tmp_path):
+    runs, repo = tmp_path / "runs", tmp_path / "repo"
+    (runs / "never").mkdir(parents=True)
+    make_run(runs, "moved")
+    publish(repo, "moved", candidate="c" * 64)
+    assert stages(runs, repo, tmp_path=tmp_path) == {}
+
+
+def test_a_linked_recovery_record_never_follows_a_link(tmp_path):
+    runs, repo = tmp_path / "runs", tmp_path / "repo"
+    run = make_run(runs, "r1")
+    retain(run / "run-record.json", "r1", stopped=False)
+    publish(repo, "r1")
+    outside = retain(tmp_path / "outside/run-record.json", "x", recovery_of="r1")
+    (run / "recovery-1").symlink_to(outside.parent, target_is_directory=True)
+    publish(repo, "x")
+    assert stages(runs, repo, tmp_path=tmp_path) == {
+        "r1": (Stage.NEEDS_RECOVER, ("unconfirmed_stop",))
+    }
 
 
 # Candidate display
@@ -623,6 +796,34 @@ def test_weekly_usage_after_the_reset_counts_cost_since_the_reset():
         "p", "codex", RATES, [reading(80.0, NOW - timedelta(days=1), resets, "codex")], costs, NOW
     )
     assert (usage.percent, usage.estimated, usage.reading) == (2.0, True, None)
+
+
+def test_a_reading_speaks_for_one_window_past_its_reset_at_most():
+    resets = datetime(2026, 9, 15, tzinfo=UTC)
+    old = reading(30.0, resets - timedelta(days=1), resets, "codex")
+    costs = [(ms(datetime(2026, 9, 16, tzinfo=UTC)), Decimal(500))]
+
+    def at(moment, readings=(old,), spend=costs):
+        usage = weekly_usage("p", "codex", RATES, list(readings), spend, moment)
+        return usage.percent, usage.estimated, usage.resets_at
+
+    # Before the reset the reading stands; at the reset the following window starts at zero.
+    assert at(resets - timedelta(seconds=1), spend=[]) == (30.0, False, resets)
+    assert at(resets, spend=[]) == (0.0, True, None)
+    # Within the window after the reset, spend since the reset counts, with no reset shown.
+    assert at(resets + timedelta(days=3)) == (100.0, True, None)
+    # At the following weekly boundary the anchor is stale: the trailing seven days count.
+    assert at(resets + timedelta(days=7)) == (100.0, True, None)
+    assert at(resets + timedelta(days=8, seconds=1)) == (0.0, True, None)
+    # Weeks without a reading: the old $500 has aged out (the reviewer's October 7 probe).
+    assert at(datetime(2026, 10, 7, tzinfo=UTC)) == (0.0, True, None)
+    # An idle profile's recent spend ages out of the trailing week on its own.
+    recent = [(ms(NOW - timedelta(days=6, hours=23)), Decimal(50))]
+    assert at(NOW, spend=recent) == (10.0, True, None)
+    assert at(NOW + timedelta(hours=2), spend=recent) == (0.0, True, None)
+    # A fresh reading replaces the fallback.
+    fresh = reading(55.0, NOW - timedelta(hours=1), NOW + timedelta(days=4), "codex")
+    assert at(NOW, readings=(old, fresh), spend=recent) == (55.0, False, NOW + timedelta(days=4))
 
 
 def test_weekly_usage_without_a_reading_counts_seven_days():

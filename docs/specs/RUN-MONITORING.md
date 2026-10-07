@@ -49,34 +49,72 @@ A provider is named by its login plugin: `karn-codex-login` is `codex`, `karn-cl
 | Docker containers labelled `org.silverquillm.run` | Which runs are executing, container start time, and the run directory (the `/workspace` bind source) |
 | `<run-dir>/run-input.json` | Benchmark, construct, Login Profile, budget, and host start time of a live run |
 | `<run-dir>/candidate/constructs/<construct>/definition.json` | Candidate display of a live run |
-| The kernel's lock table (`/proc/locks`) for `<run-dir>/.runner.lock` and each Login Profile's `runner.lock` | Whether a runner still owns a run, and whether a Login Profile is busy, without taking or creating any lock |
+| The kernel's lock table (`/proc/locks`) for `<run-dir>/.runner.lock` and each Login Profile's `runner.lock` | Whether a runner or recovery still owns a run, and whether a Login Profile is busy, without taking or creating any lock |
+| `<run-dir>/run-record.json` and `<run-dir>/recovery-N/run-record.json` | Whether a run's record is retained, whether its workspace writers were confirmed stopped, and its linked recovery |
 | `<run-dir>/observations.events.jsonl` | Live request rows, provisional Estimated Cost |
 | `docker logs -f`, then `<run-dir>/host/stdout.log` and `stderr.log` | Activity, stderr and raw tabs; Claude subscription usage readings |
 | `<run-dir>/snapshots.json`, workspace git history | Workspace tab |
 | `batches/<id>.toml` and `batches/state/<id>.json` | Queued runs and Batch status |
-| Login Pool directories under the state root | Enrolled Login Profiles and pending login journals |
+| Login Pool directories under the state root | Enrolled Login Profiles, and each one's pending login journal with the run that owns it |
 | A Login Profile's stored login (`secret.json`) | The values its login plugin redacts, so live lines can be redacted; nothing derived from it is shown |
 | A live Codex rollout under a busy Login Profile's `plugin/work/sessions/` | Codex subscription usage readings, the `rate_limits` field only |
-| Results Repo `results/` and `exclusions/` | History, Exclusions, past durations, recorded subscription usage readings |
+| Results Repo `results/` and `exclusions/` | History, Exclusions, past durations, recorded subscription usage readings, and whether a retained record is published |
 
 The monitor reads Results Repo files directly and caches each record by modification time, never through `runs.jsonl` (grilling 2026-10-07).
 A Login Profile's `plugin/work` directory sits beside its live credentials, so the monitor reads nothing there except the `rate_limits` field of Codex rollout lines.
 
 ### Run stages
 
-A live run is in exactly one stage (grilling 2026-10-07):
+The monitor follows every run on this host that has a run directory or a run container, and puts each in exactly one stage (grilling 2026-10-07).
+A stage comes from these observations, never from a record's existence alone:
 
-| Stage | Observation | Shown as |
+| Observation | Source |
+| --- | --- |
+| Owner | Whether a process holds the run's `.runner.lock`; the runner and `silverquillm recover` both hold it, so it is read from the kernel's lock table and never taken |
+| Container | Whether `sq-run-<run-id>` is running, stopped, or absent |
+| Retained record | The original `run-record.json`, and any linked recovery `recovery-N/run-record.json` whose `recovery_of` names the run and whose writers were confirmed stopped |
+| Final record | A linked recovery, or an original whose `execution.workspace_stopped` is true; an original with `workspace_stopped: false` is an unconfirmed observation and never final |
+| Publication | Whether each retained record exists in the Results Repo under its Candidate Hash and run id; unknown when no Results Repo is resolved |
+| Pending login | Whether a Login Profile's pending login journal names the run |
+
+The first matching row decides the stage:
+
+| Stage | Rule | Shown as |
 | --- | --- | --- |
-| Starting | Its runner holds `.runner.lock`, its container has not started, and no `host/host-result.json` exists | ◌ |
-| Running | Its runner holds `.runner.lock` and its container is up | ▶ |
-| Grading | Its runner holds `.runner.lock`, its container has stopped or been removed after execution, and no `run-record.json` exists | ⚖ |
-| Needs recover | `run-input.json` exists, no `run-record.json` exists, and no runner holds `.runner.lock`, even when its container is still up | red, top of the running pane |
+| Finished | No owner holds the run, or ownership is unknown, a final record exists, every retained record of the run is published (or no Results Repo is resolved), and no pending login journal names the run | not shown; the run belongs to history |
+| Unknown | The kernel's lock table cannot be read | `?`, with the Needs recover reasons that would apply |
+| Starting | An owner holds the run, no record is retained, its container has not started, and no `host/host-result.json` exists | ◌ |
+| Running | An owner holds the run, no record is retained, and its container is running | ▶ |
+| Grading | An owner holds the run, no record is retained, and its container has stopped or been removed | ⚖ |
+| Recording | An owner holds the run and a record is retained: the runner or a recovery is publishing, settling its login, or reconciling an unconfirmed stop | ✎ |
+| Needs recover | No owner holds the run | red, top of the running pane |
 
-A runner killed outright leaves its detached container running with nothing to harvest it, so a container without its runner needs recovery rather than counting as running.
-Lock ownership comes from the kernel's lock table, never from taking the lock: a probe that held the lock even briefly could make a starting recovery refuse the run; where the table is unavailable the stage shows as unknown.
+Ownership comes from the kernel's lock table, never from taking the lock: a probe that held the lock even briefly could make a starting recovery refuse the run.
 
-A run with a `run-record.json` is finished and belongs to history.
+A Needs recover row names every reason that applies, and whether the run's container is still running:
+
+| Reason | Meaning | What `silverquillm recover` does |
+| --- | --- | --- |
+| No record | The runner died before retaining a record; a detached container may still be running with nothing to harvest it | Stops the workload on request, grades once, and publishes |
+| Unconfirmed stop | The only record is an original with `workspace_stopped: false` and no linked recovery | Stops the workload, settles the login, grades once, and retains and publishes a linked recovery; the original stays unchanged |
+| Unpublished | A retained record, original or linked recovery, is missing from the Results Repo, though its scores may be final | Publishes the same retained record under the same id, without grading again |
+| Login settlement pending | A pending login journal still names the run, so its login harvest failed or was interrupted | Settles that login under the login lock, preserving the run's native sessions first |
+
+A linked recovery that is retained, published, and settled makes the run Finished, so the original's unconfirmed record stops raising a warning while staying unchanged in history.
+A run directory with no `run-input.json`, no retained record, and no owner never launched; recovery has nothing to settle, so the monitor ignores it.
+A published, stopped record in the Results Repo with no local retained record also counts as final.
+A run directory whose records cannot be read, or that has more than one linked recovery, is shown as Needs recover with the error, since `recover` would refuse it too.
+
+These cases must hold:
+
+| Case | Stage over time |
+| --- | --- |
+| A normal run | Starting, Running, Grading, Recording while its record is published, then Finished |
+| The runner is killed while the workload runs | Needs recover (no record), with the container still running |
+| A record retained with `workspace_stopped: false` | Needs recover (unconfirmed stop) until a linked recovery is retained and published, then Finished |
+| A record retained but not yet published | Needs recover (unpublished), even with final scores, until `recover` or a scheduler pass publishes it |
+| A failed login harvest after a published, stopped record | Needs recover (login settlement pending) until settlement succeeds, then Finished |
+| A recovery in progress | Recording while it holds the run, then Finished, or Needs recover with whatever it left unfinished |
 
 ### Candidate display
 
@@ -92,7 +130,7 @@ Live panes refresh every two seconds by default (`--interval`).
 The status pane shows (grilling 2026-10-07):
 
 - the resolved locations and their sources, and the Results Repo clone's last fetch time and how many commits it is behind its remote-tracking branch, both from local refs;
-- counts of queued runs, live runs (running plus grading), and runs finished in the last seven days, with the all-time total dimmed;
+- counts of queued runs, live runs (every stage but Finished), and runs finished in the last seven days, with the all-time total dimmed;
 - for each Login Pool, every Login Profile with a free or busy marker and its Estimated Weekly Usage.
 
 Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, elapsed container time, an elapsed-versus-budget bar, Estimated %, provisional Estimated Cost, and a cost sparkline.
@@ -116,17 +154,22 @@ A Batch header shows a countdown to its `not_before`, or `⚠ needs ack` for a B
 Each Login Profile shows its Estimated Weekly Usage and how old the underlying observation is (grilling 2026-10-07).
 
 A subscription usage reading is a provider's own report of the weekly window: a utilization percentage, a reset time, and when it was observed.
-Claude reports one in its `rate_limit_event` stdout lines (the `seven_day` window); Codex reports one in its rollout `rate_limits` (the window of 10080 minutes).
+Claude reports one in its `rate_limit_event` stdout lines (the `seven_day` window); Codex reports one in its rollout `rate_limits`, as whichever of its windows lasts 10080 minutes (see [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md#efficiency-measurements)).
 The monitor takes the newest reading for a Login Profile from its live run's output, else from the Run Records that name that Login Profile.
+
+A reading speaks for its own weekly window, and for one window after that at most:
 
 | Situation | Shown value |
 | --- | --- |
-| A reading exists and its reset time has not passed | The reading's utilization, plus the Estimated Cost observed on the Login Profile after the reading divided by the provider's rate, marked `≈` when that addition is nonzero |
-| A reading exists and its reset time has passed | The Estimated Cost observed on the Login Profile since the reset, divided by the provider's rate, marked `≈` |
-| No reading exists | The Estimated Cost of the Login Profile's runs over the last seven days, divided by the provider's rate, marked `≈` |
+| The newest reading's reset time has not passed | The reading's utilization, plus the Estimated Cost observed on the Login Profile after the reading divided by the provider's rate, marked `≈` when that addition is nonzero |
+| The newest reading's reset time has passed, less than seven days ago | The Estimated Cost observed on the Login Profile since that reset, divided by the provider's rate, marked `≈` |
+| The newest reading's reset time passed seven days ago or more, or no reading exists | The Estimated Cost observed on the Login Profile over the last seven days, divided by the provider's rate, marked `≈` |
+
+A newer reading always replaces whatever an older one implied.
+Only a value from an unexpired reading shows a reset time; after the reset, the provider's next reset is unknown, so none is shown.
 
 Live runs count with their provisional Estimated Cost, and excluded runs count too, since an Exclusion does not undo spend.
-A value from a reading shows its reset time, as in `41% · resets Thu 14:00 · read 12m ago`.
+A value from an unexpired reading reads like `41% · resets Thu 14:00 · read 12m ago`.
 
 ### Historic view
 

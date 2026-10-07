@@ -32,7 +32,7 @@ from .costs import ProvisionalCost
 from .details import RecordDetail, WorkspaceView, record_detail, workspace_view
 from .estimates import WeeklyUsage, estimated_percent, weekly_usage
 from .history import HistoryStore, RepoFreshness, RunSummary, UsageReading, repo_freshness
-from .live import LiveRun, Stage, live_runs
+from .live import LiveRun, RecordCache, Stage, live_runs
 from .locks import PROC_LOCKS, held_locks
 from .output import LogFollower, LogLine, live_codex_reading, profile_redactions, retained_lines
 from .pools import ProfileStatus, login_profiles
@@ -138,6 +138,7 @@ class Monitor:
         self._history: list[RunSummary] = []
         self._history_at = float("-inf")
         self._live: dict[str, _Live] = {}
+        self._records = RecordCache()
         self._codex_readings: dict[str, tuple[float, UsageReading | None]] = {}
         self._repo = RepoFreshness(None, None)
 
@@ -254,14 +255,22 @@ class Monitor:
         now = self.clock()
         containers, docker_error = self.docker()
         held = held_locks(self.proc_locks)
-        runs = live_runs(self.path("runs_dir"), containers, held)
+        profiles = login_profiles(self.path("state_root"), held)
+        runs = live_runs(
+            self.path("runs_dir"),
+            containers,
+            held,
+            results_repo=self.path("results_repo"),
+            pending_logins={profile.pending_run for profile in profiles if profile.pending_run},
+            cache=self._records,
+        )
         self._track(runs)
         history = self.history()
         views = [
             RunView(
                 run,
                 estimated_percent(run, history, now)
-                if run.stage is not Stage.NEEDS_RECOVER
+                if run.stage not in (Stage.NEEDS_RECOVER, Stage.UNKNOWN)
                 else None,
                 self._live[run.run_id].cost.total if run.native_telemetry else None,
                 self._live[run.run_id].cost.unpriced,
@@ -274,15 +283,12 @@ class Monitor:
             for run in runs
         ]
         queued = queued_batches(self.path("batches_dir"))
-        profiles = login_profiles(self.path("state_root"), held)
         recent = now - FINISHED_WINDOW
         counts = Counts(
             queued=sum(
                 len(batch.runs) for batch in queued if batch.status not in ("legacy", "error")
             ),
-            live=sum(
-                1 for run in runs if run.stage in (Stage.RUNNING, Stage.GRADING, Stage.STARTING)
-            ),
+            live=len(runs),
             finished_recent=sum(1 for run in history if run.run_date and run.run_date >= recent),
             finished_total=len(history),
         )
