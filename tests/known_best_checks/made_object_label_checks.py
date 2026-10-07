@@ -279,6 +279,130 @@ def test_a_token_label_held_through_a_later_window():
 
 
 # ---------------------------------------------------------------------------
+# A label stays on its object: no other object passes for it
+# ---------------------------------------------------------------------------
+
+ZONES = {"hand": Zone.HAND, "battlefield": Zone.BATTLEFIELD, "graveyard": Zone.GRAVEYARD, "exile": Zone.EXILE}
+
+
+def _hidden_then_shown(kind, zone):
+    """Two objects of ``kind`` recorded by the engine: the engine's 1 kept out
+    of sight, its 2 shown in ``zone`` and labelled 1. Returns the game, the
+    engine's 1 and its 2."""
+    game, original = _bolt_on_the_stack()
+    if kind is ti.Token:
+        hidden, shown = _bear(game, game.players[0]), _bear(game, game.players[0])
+        for made in (hidden, shown):
+            game.players[0].zones[Zone.BATTLEFIELD].remove(made)
+    else:
+        hidden, shown = (_copy(game, original).source for _ in range(2))
+        for made in (hidden, shown):
+            game.stack.pop_by_source(made)
+    game.players[0].zones[ZONES[zone]].add(shown)
+    raw = ti._raw_view(game)
+    expected = ti._rename(raw, {kind: {2: 1}})
+    _observe(game, expected)
+    found = ti._match_labels(game, expected, raw)
+    assert found is not None and found[kind] == {1: 2}
+    ti._labels(game, kind).bind(game, found[kind])
+    return game, expected, hidden, shown
+
+
+CASES = [(ti.Token, zone) for zone in ZONES] + [(ti.SpellCopy, "exile"), (ti.SpellCopy, "graveyard")]
+
+
+@pytest.mark.parametrize(("kind", "zone"), CASES)
+def test_another_object_numbered_as_a_label_never_stands_in_for_its_object(kind, zone):
+    game, expected, hidden, shown = _hidden_then_shown(kind, zone)
+    # The labelled object departs (the engine still records it) and the one
+    # the engine numbered 1, first seen a window later, shows in its place.
+    game.players[0].zones[ZONES[zone]].remove(shown)
+    game.players[0].zones[ZONES[zone]].add(hidden)
+    raw = ti._raw_view(game)
+    _observe(game, expected)
+    assert ti._match_labels(game, expected, raw) is None
+
+
+def test_on_the_stack_another_copy_numbered_as_a_label_never_stands_in_for_its_copy():
+    game, original = _bolt_on_the_stack()
+    hidden, shown = (_copy(game, original) for _ in range(2))
+    game.stack.pop_by_source(hidden.source)
+    raw = ti._raw_view(game)
+    expected = ti._rename(raw, {ti.SpellCopy: {2: 1}})
+    _observe(game, expected)
+    found = ti._match_labels(game, expected, raw)
+    assert found is not None and found[ti.SpellCopy] == {1: 2}
+    ti._labels(game, ti.SpellCopy).bind(game, found[ti.SpellCopy])
+    game.stack.pop_by_source(shown.source)
+    game.stack.push(hidden)
+    raw = ti._raw_view(game)
+    _observe(game, expected)
+    assert ti._match_labels(game, expected, raw) is None
+
+
+@pytest.mark.parametrize(("kind", "zone"), CASES)
+def test_a_labelled_object_moving_zones_keeps_its_label(kind, zone):
+    game, expected, hidden, shown = _hidden_then_shown(kind, zone)
+    there = "graveyard" if zone != "graveyard" else "exile"
+    game.players[0].zones[ZONES[zone]].remove(shown)
+    game.players[0].zones[ZONES[there]].add(shown)
+    raw = ti._raw_view(game)
+    moved = ti._rename(raw, {kind: {2: 1}})
+    _observe(game, moved)
+    assert ti._match_labels(game, moved, raw) is not None
+    # And it is still the labelled object, not the hidden one, that matches.
+    assert ti._match_labels(game, expected, raw) is None
+    del hidden
+
+
+def test_a_shown_object_no_label_holds_never_passes_for_a_label():
+    game, expected, hidden, shown = _hidden_then_shown(ti.Token, "battlefield")
+    # Both now show; the expected view shows only token 1 and an unlabelled
+    # token numbered as the engine numbered it.
+    game.players[0].zones[Zone.BATTLEFIELD].add(hidden)
+    raw = ti._raw_view(game)
+    _observe(game, expected)
+    assert ti._match_labels(game, raw, raw) is None
+
+
+def test_a_later_run_on_the_same_game_rejects_another_token_in_the_labelled_ones_place():
+    game = _main()
+    hidden, shown = _bear(game, game.players[0]), _bear(game, game.players[0])
+    game.players[0].zones[Zone.BATTLEFIELD].remove(hidden)
+    expected = ti._rename(ti._raw_view(game), {ti.Token: {2: 1}})
+    final = ti.run(game, [], [], expect=expected)
+    assert final == expected and ti._find(game, token(1)) is shown
+    game.players[0].zones[Zone.BATTLEFIELD].remove(shown)
+    game.players[0].zones[Zone.BATTLEFIELD].add(hidden)
+    with pytest.raises(PlayDiverged):
+        ti.run(game, [], [], expect=expected)
+
+
+def test_a_later_run_on_the_same_game_accepts_the_labelled_token_itself():
+    game = _main()
+    hidden, shown = _bear(game, game.players[0]), _bear(game, game.players[0])
+    game.players[0].zones[Zone.BATTLEFIELD].remove(hidden)
+    expected = ti._rename(ti._raw_view(game), {ti.Token: {2: 1}})
+    ti.run(game, [], [], expect=expected)
+    assert ti.run(game, [], [], expect=expected) == expected
+    del hidden
+
+
+def test_a_script_label_first_shown_in_another_window_names_no_object_of_a_later_one():
+    game = _main()
+    _observe(game, ti._rename(ti._raw_view(game), {}))
+    # Label 1 first shows in an expected view before any token exists...
+    labels = ti._labels(game, ti.Token)
+    labels.label_stamps[1] = ti._clock(game).stamp(ti._raw_view(game))
+    ti._clock(game).actions += 1
+    made = _bear(game, game.players[0])
+    _observe(game, ti._raw_view(game))
+    # ...so the token the engine numbered 1, first seen a window later, is not it.
+    assert ti._find(game, token(1)) is None
+    del made
+
+
+# ---------------------------------------------------------------------------
 # Every Audited suite holds whatever order the engine numbers what it makes in
 # ---------------------------------------------------------------------------
 

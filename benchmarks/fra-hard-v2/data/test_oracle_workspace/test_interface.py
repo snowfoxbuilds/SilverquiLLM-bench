@@ -123,15 +123,15 @@ class Side:
 
 @dataclass(frozen=True)
 class Token:
-    """A token, followed by its number: the game's tokens are numbered in
-    the order the game makes them, so ``token(1)`` is the first token made,
-    and a token keeps its number after it leaves the battlefield.
-
-    Tokens made together — those one effect creates — are numbered seat 0's
-    before seat 1's, each seat's in the order the effect creates them;
-    tokens an effect makes alike are interchangeable. A token a rejected
-    attempt made gives its number back. A token has no class: what it is
-    shows in what it does.
+    """A token, followed by its number. The number is the test's label for
+    the token, not the engine's: the first time a view check finds a token
+    where the expected view has ``token n``, and the token was first seen in
+    the same window of play as ``token n`` first showed, that token becomes
+    ``token(n)`` for the rest of the test, whatever order the engine made
+    its tokens in. The label stays on the token after it leaves the
+    battlefield, and no other token ever passes for it. A token a rejected
+    attempt made frees its label. A token has no class: what it is shows in
+    what it does.
     """
 
     number: int
@@ -141,7 +141,7 @@ class Token:
 
 
 def token(number: int) -> Token:
-    """The ``number``-th token the game makes, counting from 1."""
+    """The token the test labels ``number``, counting from 1."""
     if number < 1:
         raise ValueError(f"tokens are numbered from 1, not {number}")
     return Token(number)
@@ -342,7 +342,8 @@ class _Labels:
     def find(self, game: Any, label: int) -> Any:
         """The object ``label`` names. A label no view check has matched yet
         names the object the engine numbered the same, unless another label
-        holds that object, and is matched to it from then on."""
+        holds that object or the label first showed in a different window
+        than the object, and is matched to it from then on."""
         numbered = self.prune(game)
         if label in self.objects:
             return self.objects[label]
@@ -350,6 +351,10 @@ class _Labels:
             return None
         obj = numbered.objects[label - 1]
         if any(held is obj for held in self.objects.values()):
+            return None
+        shown = self.label_stamps.get(label)
+        seen = self.object_stamps.get(id(obj))
+        if shown is not None and seen is not None and shown != seen[1]:
             return None
         self.objects[label] = obj
         return obj
@@ -494,9 +499,14 @@ def _match_labels(game: Any, expected: View, raw: View) -> dict[type, dict[int, 
                 for want_numbers, got_numbers in groups.values():
                     for label in list(want_numbers):
                         current = held.get(label, fresh.get(label))
-                        if current is not None and current in got_numbers:
-                            want_numbers.remove(label)
-                            got_numbers.remove(current)
+                        if current is None:
+                            continue
+                        # A label stays on its object: another object here,
+                        # whatever its number, never stands in for it.
+                        if current not in got_numbers:
+                            return None
+                        want_numbers.remove(label)
+                        got_numbers.remove(current)
                     taken = set(held.values()) | set(fresh.values())
                     free = sorted(n for n in got_numbers if n not in taken)
                     for label in sorted(n for n in want_numbers if n not in held and n not in fresh):
@@ -510,6 +520,12 @@ def _match_labels(game: Any, expected: View, raw: View) -> dict[type, dict[int, 
                **{n: label for label, n in new[kind].items()}}
         for kind in (Token, SpellCopy)
     }
+    # Every token and copy shown must carry a label; an engine number no
+    # label holds never passes for the test's number that happens to match it.
+    for s in _seen_all(raw):
+        kind = type(s.handle)
+        if kind in rename and s.handle.number not in rename[kind]:
+            return None
     if _rename(raw, rename) != expected:
         return None
     return new
