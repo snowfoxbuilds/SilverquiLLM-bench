@@ -49,12 +49,13 @@ A provider is named by its login plugin: `karn-codex-login` is `codex`, `karn-cl
 | Docker containers labelled `org.silverquillm.run` | Which runs are executing, container start time, and the run directory (the `/workspace` bind source) |
 | `<run-dir>/run-input.json` | Benchmark, construct, Login Profile, budget, and host start time of a live run |
 | `<run-dir>/candidate/constructs/<construct>/definition.json` | Candidate display of a live run |
-| `<run-dir>/.runner.lock`, probed without blocking | Whether a runner still owns a run whose container has stopped |
+| The kernel's lock table (`/proc/locks`) for `<run-dir>/.runner.lock` and each Login Profile's `runner.lock` | Whether a runner still owns a run, and whether a Login Profile is busy, without taking or creating any lock |
 | `<run-dir>/observations.events.jsonl` | Live request rows, provisional Estimated Cost |
 | `docker logs -f`, then `<run-dir>/host/stdout.log` and `stderr.log` | Activity, stderr and raw tabs; Claude subscription usage readings |
 | `<run-dir>/snapshots.json`, workspace git history | Workspace tab |
 | `batches/<id>.toml` and `batches/state/<id>.json` | Queued runs and Batch status |
-| Login Pool directories under the state root | Enrolled Login Profiles and whether each is busy |
+| Login Pool directories under the state root | Enrolled Login Profiles and pending login journals |
+| A Login Profile's stored login (`secret.json`) | The values its login plugin redacts, so live lines can be redacted; nothing derived from it is shown |
 | A live Codex rollout under a busy Login Profile's `plugin/work/sessions/` | Codex subscription usage readings, the `rate_limits` field only |
 | Results Repo `results/` and `exclusions/` | History, Exclusions, past durations, recorded subscription usage readings |
 
@@ -67,9 +68,13 @@ A live run is in exactly one stage (grilling 2026-10-07):
 
 | Stage | Observation | Shown as |
 | --- | --- | --- |
-| Running | Its container is up | ▶ |
-| Grading | Its container has stopped, its runner still holds `.runner.lock`, and no `run-record.json` exists | ⚖ |
-| Needs recover | `run-input.json` exists, no `run-record.json` exists, and no runner holds `.runner.lock` | red, top of the running pane |
+| Starting | Its runner holds `.runner.lock`, its container has not started, and no `host/host-result.json` exists | ◌ |
+| Running | Its runner holds `.runner.lock` and its container is up | ▶ |
+| Grading | Its runner holds `.runner.lock`, its container has stopped or been removed after execution, and no `run-record.json` exists | ⚖ |
+| Needs recover | `run-input.json` exists, no `run-record.json` exists, and no runner holds `.runner.lock`, even when its container is still up | red, top of the running pane |
+
+A runner killed outright leaves its detached container running with nothing to harvest it, so a container without its runner needs recovery rather than counting as running.
+Lock ownership comes from the kernel's lock table, never from taking the lock: a probe that held the lock even briefly could make a starting recovery refuse the run; where the table is unavailable the stage shows as unknown.
 
 A run with a `run-record.json` is finished and belongs to history.
 
