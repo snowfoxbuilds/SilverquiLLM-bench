@@ -51,7 +51,8 @@ class UldarosTheorix(Creature):
                     if card_type in card.card_types and CardType.LAND not in card.card_types
                     and card not in selected]
                 target = choose_object(state, player, options,
-                    f"Exile up to one {card_type.value} card", source_card=self, optional=True)
+                    f"Exile up to one {card_type.value} card", source_card=self, optional=True,
+                    question=card_type)
                 if target is not None:
                     selected.append(target)
             return selected

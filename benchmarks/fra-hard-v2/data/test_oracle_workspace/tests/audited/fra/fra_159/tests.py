@@ -17,6 +17,7 @@ from cards.fdn.fdn_9.card_impl import DazzlingAngel, DazzlingAngelAbility2
 from cards.fdn.fdn_79.card_impl import Boltwave
 from cards.fdn.fdn_98.card_impl import AmbushWolf, AmbushWolfAbility2
 from cards.fdn.fdn_116.card_impl import AnthemOfChampions
+from cards.fdn.fdn_129.card_impl import LeylineAxe
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride, AjaniCallerOfThePrideAbility2
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_163.card_impl import SelfReflection
@@ -30,6 +31,7 @@ from cards.fdn.fdn_212.card_impl import BiteDown
 from cards.fdn.fdn_250.card_impl import BurnishedHart
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fut.fut_78.card_impl import SlaughterPact, SlaughterPactAbility2
+from cards.hob.hob_174.card_impl import GlamdringFoehammer, GleamOfDeath
 from test_interface import (
     Decision,
     ManaType,
@@ -188,7 +190,8 @@ def test_only_one_card_of_a_type_is_exiled():
     first, second = card(SavannahLions), card(SavannahLions)
     game, uldaros = _game([first, second])
     t = Table(game)
-    _cast_uldaros(t, uldaros, [first, second], distinct=True)
+    _cast_uldaros(t, uldaros, branches=[branch(choices=[first, second], distinct=True),
+                                        branch(choices=[first])])
     _resolve_trigger(t, [SavannahLions], then=[moves(first, Zone.EXILE), copied(SavannahLions, 0)],
                      note="the second Lions stays in the graveyard")
     _resolve_top(t, SavannahLions, then=[appears(0)])
@@ -335,6 +338,64 @@ def test_a_single_artifact_creature_is_copied_once():
     _cast_uldaros(t, uldaros, branches=[branch(choices=[hart]), branch(choices=[hart], distinct=True)])
     _resolve_trigger(t, [BurnishedHart], then=[moves(hart, Zone.EXILE), copied(BurnishedHart, 0)])
     _resolve_top(t, BurnishedHart, then=[appears(0)])
+    t.run()
+
+
+def test_an_adventure_card_in_the_graveyard_fills_only_the_artifact_type():
+    """Glamdring in the graveyard is only an artifact (CR 715.4): the scripts
+    prefer Gleam of Death for the sorcery question, so an engine that let it
+    fill that type would exile both artifacts and leave Boltwave behind. An
+    engine that offers Gleam of Death and rejects it, or asks one question for
+    every type and rejects two artifacts, is answered from a fallback."""
+    wave, glamdring, axe = card(Boltwave), card(GlamdringFoehammer), card(LeylineAxe)
+    game, uldaros = _game([wave, glamdring, axe])
+    t = Table(game)
+    _cast_uldaros(t, uldaros, branches=[
+        branch(choices=[GleamOfDeath, LeylineAxe, GlamdringFoehammer, Boltwave]),
+        branch(choices=[LeylineAxe, GlamdringFoehammer, Boltwave]),
+        branch(choices=[LeylineAxe, Boltwave]),
+    ])
+    _resolve_trigger(t, [], then=[moves(axe, Zone.EXILE), moves(wave, Zone.EXILE)],
+                     note="Glamdring stays in the graveyard; no copy is cast")
+    t.run()
+
+
+def test_an_adventure_copy_is_cast_as_its_adventure_within_the_budget():
+    """Glamdring's copy is cast as Gleam of Death (mana value 4) and mills six;
+    the 2 left of the budget would still cast Boltwave's copy, which is declined."""
+    wave, glamdring, uldaros = card(Boltwave), card(GlamdringFoehammer), card(UldarosTheorix)
+    library = _library(7)
+    game = create_game(
+        Side(hand=[uldaros], graveyard=[wave, glamdring], library=library, mana=dict(ULDAROS_MANA)),
+        Side(library=_library()),
+        start=MAIN,
+    )
+    t = Table(game)
+    _cast_uldaros(t, uldaros, [GlamdringFoehammer, Boltwave])
+    _resolve_trigger(t, [GleamOfDeath, GlamdringFoehammer], then=[
+        moves(glamdring, Zone.EXILE), moves(wave, Zone.EXILE), copied(GleamOfDeath, 0),
+    ])
+    _resolve_top(t, GleamOfDeath, then=[moves(c, Zone.GRAVEYARD) for c in library[:6]])
+    t.run()
+
+
+def test_an_adventure_over_the_remaining_budget_is_cast_as_its_artifact():
+    """After Dazzling Angel (3), Gleam of Death (4) no longer fits the budget,
+    so Glamdring's copy is cast as the Equipment (2)."""
+    angel, glamdring = card(DazzlingAngel), card(GlamdringFoehammer)
+    game, uldaros = _game([angel, glamdring])
+    t = Table(game)
+    _cast_uldaros(t, uldaros, [DazzlingAngel, GlamdringFoehammer])
+    t.pass_(0, branches=[
+        branch(choices=[DazzlingAngel, GleamOfDeath, GlamdringFoehammer]),
+        branch(choices=[DazzlingAngel, GlamdringFoehammer]),
+    ])
+    t.pass_(1, then=[
+        off_stack(TRIGGER), moves(angel, Zone.EXILE), moves(glamdring, Zone.EXILE),
+        copied(DazzlingAngel, 0), copied(GlamdringFoehammer, 0),
+    ])
+    _resolve_top(t, GlamdringFoehammer, then=[appears(0)])
+    _resolve_top(t, DazzlingAngel, then=[appears(0)])
     t.run()
 
 
