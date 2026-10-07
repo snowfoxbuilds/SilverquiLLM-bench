@@ -947,22 +947,28 @@ class TestCostSystem:
         _edict_resolves(t, edict, mine, theirs)
         t.run()
 
-    def test_reduction_applies_to_selected_normal_cost_pip_intact(self):
-        """Archmage of Runes makes the Edict's normal cost {2}{B}{B}: one black
-        and three white mana cannot pay it, and a second black, from a Swamp
-        played from hand, can."""
-        edict, drawn = card(BlasphemousEdict), card(Plains)
-        swamps, plains = [card(Swamp) for _ in range(2)], [card(Plains) for _ in range(3)]
+    def test_reduction_leaves_both_black_pips(self):
+        """Archmage of Runes makes the Edict's normal cost {2}{B}{B}: with
+        twelve creatures, one black and three white mana, and no other source,
+        it cannot be cast."""
+        edict = card(BlasphemousEdict)
         mine, theirs = [card(ArchmageOfRunes), *_creatures(5)], _creatures(6)
         t = _table(
-            Side(hand=[edict, swamps[1]], battlefield=[*mine, swamps[0], *plains], library=[drawn]),
+            Side(hand=[edict], battlefield=mine, mana={ManaType.BLACK: 1, ManaType.WHITE: 3}),
             Side(battlefield=theirs),
         )
-        for land in (swamps[0], *plains):
-            t.act(0, land, then=[taps(land)])
         t.act_illegal(0, edict, note="the reduction leaves both {B} pips")
-        t.act(0, swamps[1], then=[moves(swamps[1], Zone.BATTLEFIELD)])
-        t.act(0, swamps[1], then=[taps(swamps[1])])
+        t.run()
+
+    def test_reduction_applies_to_selected_normal_cost_pip_intact(self):
+        """Archmage of Runes makes the Edict's normal cost {2}{B}{B}: with
+        twelve creatures, exactly two black and two white mana cast it."""
+        edict, drawn = card(BlasphemousEdict), card(Plains)
+        mine, theirs = [card(ArchmageOfRunes), *_creatures(5)], _creatures(6)
+        t = _table(
+            Side(hand=[edict], battlefield=mine, library=[drawn], mana={ManaType.BLACK: 2, ManaType.WHITE: 2}),
+            Side(battlefield=theirs),
+        )
         t.act(0, edict, then=[moves(edict, Zone.STACK), on_stack(ArchmageOfRunesAbility2, 0)])
         _resolve(t, off_stack(ArchmageOfRunesAbility2), moves(drawn, Zone.HAND))
         _edict_resolves(t, edict, mine, theirs)

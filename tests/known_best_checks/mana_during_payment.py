@@ -5,9 +5,11 @@ one, until they decline — as an engine may that lets players tap mana while a
 cost is paid (CR 601.2g, 602.2b). The question is optional, so a script that
 names no mana ability declines it.
 
-With ``GREEDY`` set the payer instead activates every mana ability on offer,
-script or not: an action an Audited Test calls illegal for want of mana must
-then still be rejected, or the position left a source that could pay.
+With ``GREEDY`` set, while the payer is playing an ``act_illegal`` entry it
+instead activates every mana ability on offer, script or not: an action an
+Audited Test calls illegal for want of mana must then still be rejected, or the
+position left a source that could pay. Every other entry is asked as usual, so
+the legal play that sets up an illegal attempt runs as scripted.
 
 ``fra-hard-v2``'s portability checks append this file to a card module and
 call :func:`install`, so it must import nothing from the repository."""
@@ -24,6 +26,11 @@ def _game_of(pool):
             if player.mana_pool is pool:
                 return game, player
     return None, None
+
+
+def _playing_illegal(player) -> bool:
+    entry = getattr(getattr(player, "_playing", None), "entry", None)
+    return getattr(getattr(entry, "kind", None), "value", None) == "act_illegal"
 
 
 def _offer(game, player) -> None:
@@ -43,7 +50,7 @@ def _offer(game, player) -> None:
                     actions[decision] = priority._activation(game, player, source, ability)
         if not actions:
             return
-        if GREEDY:
+        if GREEDY and _playing_illegal(player):
             chosen = next(iter(actions))
         else:
             answer = ask(player, PlayerQuery(

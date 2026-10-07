@@ -840,10 +840,10 @@ _casting.cast_permission = _no_life
 '''
 
 
-def run_suite(card: str, suffix: str, tests: str | None = None) -> tuple[int, int, str]:
+def _run_suite(card: str, suffix: str, tests: str | None = None) -> tuple[int, str]:
     """Run ``card``'s hidden suite on the oracle with ``suffix`` appended to its
-    implementation; return (passed, failed, output). ``tests`` replaces the
-    hidden suite with a probe of its own."""
+    implementation; return the child pytest's exit code and output. ``tests``
+    replaces the hidden suite with a probe of its own."""
     code = card.split("_")[0]
     with tempfile.TemporaryDirectory(prefix=f"portability_{card}_") as tmp_dir:
         tmp = Path(tmp_dir)
@@ -860,10 +860,25 @@ def run_suite(card: str, suffix: str, tests: str | None = None) -> tuple[int, in
              "-p", "no:cacheprovider", "-p", "no:xdist", "--tb=line"],
             cwd=tmp, env=env, capture_output=True, text=True, timeout=300, check=False,
         )
-    output = result.stdout + result.stderr
+    return result.returncode, result.stdout + result.stderr
+
+
+def run_suite(card: str, suffix: str, tests: str | None = None) -> tuple[int, int, str]:
+    """Run ``card``'s hidden suite on the oracle with ``suffix`` appended to its
+    implementation; return (passed, failed, output). ``tests`` replaces the
+    hidden suite with a probe of its own."""
+    _, output = _run_suite(card, suffix, tests)
     passed = re.search(r"(\d+) passed", output)
     failed = re.search(r"(\d+) failed", output)
     return int(passed.group(1)) if passed else 0, int(failed.group(1)) if failed else 0, output
+
+
+def assert_suite_completed(card: str, suffix: str, tests: str | None = None) -> None:
+    """Every collected case of the run passed: the child exited cleanly and ran
+    at least one case."""
+    returncode, output = _run_suite(card, suffix, tests)
+    passed = re.search(r"(\d+) passed", output)
+    assert returncode == 0 and passed and int(passed.group(1)) > 0, output[-4000:]
 
 
 TARGETS = (
@@ -903,11 +918,49 @@ def test_emrakul_suite_accepts_an_unpayable_ward_rejected() -> None:
 
 @pytest.mark.parametrize("card", TARGETS)
 def test_no_action_a_suite_calls_illegal_could_be_paid_by_tapping_a_source(card: str) -> None:
-    """With every mana source on offer tapped while a cost is paid, an action
-    a suite calls illegal is still rejected: no position leaves a source that
-    could pay for it."""
-    _, _, output = run_suite(card, MANA_TAPPED_GREEDILY)
-    assert "took effect" not in output, output[-4000:]
+    """While an ``act_illegal`` entry is played, every mana source on offer is
+    tapped as its cost is paid, and the action must still be rejected: no
+    position leaves a source that could pay for it."""
+    assert_suite_completed(card, MANA_TAPPED_GREEDILY)
+
+
+_EMRAKUL_PAYABLE_AFTER_SPENDING = """
+from cards.fdn.fdn_280.card_impl import Forest
+from cards.fdn.fdn_669.card_impl import BasiliskCollar
+from card_impl import EmrakulTheExigentDoom, EmrakulTheExigentDoomAbility5
+from test_interface import ManaType, Phase, Side, Zone, ability, card, create_game
+from table import Table, moves
+
+
+def test_payable_after_spending():
+    emrakul, collar, forest = card(EmrakulTheExigentDoom), card(BasiliskCollar), card(Forest)
+    game = create_game(
+        Side(hand=[emrakul, collar], battlefield=[forest], mana={ManaType.COLORLESS: 3}),
+        Side(), start=(Phase.PRECOMBAT_MAIN, 0),
+    )
+    t = Table(game)
+    t.act(0, collar, then=[moves(collar, Zone.STACK)])
+    t.pass_(0)
+    t.pass_(1, then=[moves(collar, Zone.BATTLEFIELD)])
+    t.act_illegal(0, ability(emrakul, EmrakulTheExigentDoomAbility5), choices=[forest], note="the Forest could pay the third mana")
+    t.run()
+"""
+
+
+def test_the_payment_sweep_reaches_a_payable_illegal_attempt_after_legal_spending() -> None:
+    assert_suite_completed("fra_1", MANA_DURING_PAYMENT, tests=_EMRAKUL_PAYABLE_AFTER_SPENDING)
+    returncode, output = _run_suite("fra_1", MANA_TAPPED_GREEDILY, tests=_EMRAKUL_PAYABLE_AFTER_SPENDING)
+    assert returncode != 0 and "took effect" in output, output[-4000:]
+
+
+@pytest.mark.parametrize("probe", [
+    "import no_such_module\n\ndef test_never_runs():\n    pass\n",
+    "def test_breaks():\n    raise RuntimeError('boom')\n",
+    "# no tests\n",
+])
+def test_a_suite_that_does_not_complete_fails_the_payment_sweep(probe: str) -> None:
+    with pytest.raises(AssertionError):
+        assert_suite_completed("fra_1", MANA_TAPPED_GREEDILY, tests=probe)
 
 
 def test_hall_suite_accepts_a_copied_halls_removed_ability_rejected() -> None:
