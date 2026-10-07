@@ -78,13 +78,25 @@ def test_workspaces_carry_no_directory_summaries(name: str) -> None:
     assert not found, found
 
 
+@pytest.mark.parametrize("name", ("smoke", "fra-hard-v2"))
+def test_workspaces_carry_the_known_best_rulebook(name: str) -> None:
+    """Every ported Workspace and Test Oracle Workspace stages Known-Best's
+    Comprehensive Rules byte for byte, so no benchmark falls behind a rules
+    update (#190); the frozen fra-hard v1 keeps its own."""
+    rulebook = (KNOWN_BEST / "workspace/RULEBOOK.txt").read_bytes()
+    assert rulebook.startswith(b"Magic: The Gathering Comprehensive Rules\n")
+    benchmark = REPO / "benchmarks" / name
+    for root in (benchmark / "workspace", benchmark / "data/test_oracle_workspace"):
+        assert (root / "RULEBOOK.txt").read_bytes() == rulebook, root
+
+
 def test_smoke_oracle_is_the_known_best_workspace() -> None:
     """With identical grading inputs, `test_known_best_workspace.py` already shows
     smoke's oracle passes both regression dimensions (CI check 1)."""
     smoke = REPO / "benchmarks/smoke"
     for item in (
         "engine", "cards", "conftest.py", "pytest.ini", "test_utils.py",
-        "test_interface.py", "test_interface.md", "test_test_interface.py",
+        "test_interface.py", "test_interface.md", "test_test_interface.py", "RULEBOOK.txt",
     ):
         _assert_same_tree(KNOWN_BEST / "workspace" / item, smoke / "data/test_oracle_workspace" / item)
     audited = KNOWN_BEST / "data/tests/audited"

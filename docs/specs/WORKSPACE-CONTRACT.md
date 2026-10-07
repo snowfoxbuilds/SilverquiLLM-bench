@@ -34,7 +34,7 @@ Each benchmark set is fully self-contained: `benchmarks/{target_set}/` is the un
   PROJECT_MAP.md        # map of files and their responsibilities
   prompt.md             # per-run User Prompt (written at stage time)
   run_manifest.json     # per-run manifest (written at stage time)
-  rulebook.txt           # MTG rules reference
+  RULEBOOK.txt          # Comprehensive Rules (ported benchmarks: Known-Best's, see KNOWN-BEST-ENGINE.md)
   pytest.ini            # test config (workspace-local)
   .gitignore
   .git/                 # initialized at stage time, single seed commit

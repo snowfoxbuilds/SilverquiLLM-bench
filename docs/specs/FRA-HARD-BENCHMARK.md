@@ -44,7 +44,7 @@ Collector numbers in different sets are distinct targets even when their numbers
 
 ### Workspaces and instructions
 
-The candidate Workspace is ported from the Known-Best Workspace with `scripts/port_from_known_best.py`: the Known-Best engine and FDN implementations plus the benchmark's Known Defects.
+The candidate Workspace is ported from the Known-Best Workspace with `scripts/port_from_known_best.py`: the Known-Best engine and FDN implementations, its `RULEBOOK.txt`, plus the benchmark's Known Defects.
 It contains eleven behavior-free card stubs with Card Specs under `cards/<set>/<set>_<N>/` for FRA, HOB, WAR and FUT, and `cards/fra/tokens.py` predefines the Jace token "empower Jace" creates and its abilities.
 Both parts of preparation and Adventure cards belong to their one target card.
 Each stub predefines one behavior-free class per face and per printed line of text, such as `GlamdringFoehammer` and `GleamOfDeath`, or `EmrakulTheExigentDoomAbility1`; how those classes relate is the candidate's design (grilling 2026-10-04).
