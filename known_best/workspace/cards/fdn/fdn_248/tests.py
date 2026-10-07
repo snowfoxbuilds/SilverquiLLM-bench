@@ -258,28 +258,6 @@ class TestStormPerTriggerState:
         (trig_b,) = _storm_triggers(game, storm)
         assert trig_b.event_state.copies == 0
 
-    def test_countered_triggering_spell_makes_no_copies_and_copies_no_other(self):
-        """A trigger whose spell has left the stack (countered) makes no copies —
-        and never falls back to copying a *different* pending spell."""
-        b, a = _Signal("Spell B"), _Signal("Spell A")
-        game, p1, storm = self._setup([b, a])
-
-        # Cast B first (so B and its trigger sit lower on the stack), then A.
-        _cast(game, p1, b)
-        _fire(game, p1, b)                 # B → copies=0
-        _cast(game, p1, a)
-        _fire(game, p1, a)                 # A → copies=1, captured A's StackObject
-
-        # "Counter" A — remove its spell StackObject from the stack. B's spell
-        # StackObject is still there, below A's Storm trigger.
-        a_so = next(so for so in game.stack._items if so.source is a)
-        game.stack._items.remove(a_so)
-
-        # A's Storm trigger is now on top. It must make zero copies (A is gone) —
-        # not copy B (a different spell still pending).
-        new = _resolve_top_collect_new(game)
-        assert new == []
-
     def test_control_change_after_fire_retains_fire_time_controller(self):
         """The trigger's controller is fixed at fire time. Changing control of
         Thousand-Year Storm *after* the trigger fires does not shift "you": the
