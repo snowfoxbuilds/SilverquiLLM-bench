@@ -243,6 +243,32 @@ def test_a_removed_package_file_disappears_on_the_next_port(smoke_copy) -> None:
     assert (benchmark / "workspace/AGENTS.md").is_file()
 
 
+def test_a_hidden_engine_test_stays_out_of_the_engine_reference_tests(smoke_copy) -> None:
+    """A listed Audited Engine Test is graded but never staged; the rest are."""
+    from scripts.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    (benchmark / "data/hidden_engine_tests.json").write_text(json.dumps(["test_zones.py"]))
+    port(benchmark, known_best)
+    assert not (benchmark / "workspace/engine_tests/test_zones.py").exists()
+    assert (benchmark / "data/tests/audited/engine/test_zones.py").is_file()
+    assert (benchmark / "workspace/engine_tests/test_stack.py").is_file()
+    assert check(benchmark, known_best) == []
+
+
+@pytest.mark.parametrize("listing", [
+    '"test_zones.py"', '["test_zones.py", "test_zones.py"]', '["no_such_test.py"]',
+    '["../engine/test_zones.py"]', '["/abs/test_zones.py"]', '[1]', "not json",
+])
+def test_a_malformed_hidden_engine_test_listing_fails_the_port(smoke_copy, listing) -> None:
+    from scripts.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    (benchmark / "data/hidden_engine_tests.json").write_text(listing)
+    with pytest.raises(PortError, match="hidden_engine_tests.json"):
+        port(benchmark, known_best)
+
+
 def test_a_removed_workspace_document_disappears_from_the_oracle_mirror(smoke_copy) -> None:
     import shutil
 

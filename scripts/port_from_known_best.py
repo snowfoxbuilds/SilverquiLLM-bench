@@ -13,7 +13,8 @@ exactly these paths, which it replaces wholesale:
   the Test Interface (``test_interface.py``, its ``.md`` and its demonstration tests),
   ``table.py``, the helpers Audited Tests are written with, and ``RULEBOOK.txt``,
   the Comprehensive Rules every ported benchmark stages;
-- ``workspace/engine_tests/``: the Audited Engine Tests, seeding the Engine Reference Tests;
+- ``workspace/engine_tests/``: the Audited Engine Tests, seeding the Engine Reference Tests,
+  less the files ``data/hidden_engine_tests.json`` lists, which stay hidden;
 - ``data/tests/audited/fdn/`` and ``data/tests/audited/engine/``;
 - the Test Oracle Workspace's mirrors of the Workspace's ``AGENTS.md`` and ``skills/``
   and of every ``data/tests/audited/**/tests.py``.
@@ -72,6 +73,7 @@ from scripts.oracle_support import load_layout  # noqa: E402
 KNOWN_BEST = ROOT / "known_best"
 ORACLE = Path("data/test_oracle_workspace")
 DEFECT_PATCHES = Path("data/known_defects")
+HIDDEN_ENGINE_TESTS = Path("data/hidden_engine_tests.json")
 ORACLE_PATCHES = Path("data/oracle_patches")
 WORKSPACE_ITEMS = (
     "engine", "cards/fdn", "conftest.py", "pytest.ini", "test_utils.py",
@@ -289,6 +291,31 @@ def defect_patches(benchmark_root: Path) -> list[Path]:
     return patches
 
 
+def hidden_engine_tests(benchmark_root: Path, known_best: Path) -> list[str]:
+    """The Audited Engine Test files the benchmark keeps out of its Engine
+    Reference Tests: a JSON list of paths relative to the Audited Engine Tests,
+    each an existing ``.py`` file there, listed once."""
+    listing = benchmark_root / HIDDEN_ENGINE_TESTS
+    if not listing.exists() and not listing.is_symlink():
+        return []
+    if listing.is_symlink() or not listing.is_file():
+        raise PortError(f"{listing} must be a regular file")
+    try:
+        paths = json.loads(listing.read_text())
+    except json.JSONDecodeError as error:
+        raise PortError(f"{listing}: {error}") from None
+    if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths):
+        raise PortError(f"{listing} must be a JSON list of paths")
+    if len(set(paths)) != len(paths):
+        raise PortError(f"{listing} lists a path twice")
+    engine = known_best / "data/tests/audited/engine"
+    for relative in paths:
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts or path.suffix != ".py" or not (engine / path).is_file():
+            raise PortError(f"{listing}: {relative!r} is not an Audited Engine Test file")
+    return paths
+
+
 # ---------------------------------------------------------------------------
 # Porting
 # ---------------------------------------------------------------------------
@@ -357,12 +384,15 @@ def _build(benchmark_root: Path, known_best: Path) -> None:
     layout = load_layout(benchmark_root.parents[1], benchmark_root.name, require_cards=True)
     workspace, oracle = benchmark_root / "workspace", benchmark_root / ORACLE
     patches = defect_patches(benchmark_root)
+    hidden = hidden_engine_tests(benchmark_root, known_best)
 
     for tree in (workspace, oracle):
         _copy_known_best_workspace(known_best, tree)
     for suite in AUDITED_ITEMS:
         _replace(known_best / "data/tests/audited" / suite, benchmark_root / "data/tests/audited" / suite)
     _replace(known_best / "data/tests/audited/engine", workspace / "engine_tests")
+    for relative in hidden:
+        (workspace / "engine_tests" / relative).unlink()
 
     _stub_targets(workspace, layout.cards)
     for patch in patches:
