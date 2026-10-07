@@ -1376,7 +1376,7 @@ class ScriptedPlayer(Player):
             if len(selected) >= query.max:
                 break
             for option in options:
-                if option not in selected and self._matches(option, preference):
+                if option not in selected and self._answers(query, option, preference):
                     selected.append(option)
                     break
         if len(selected) < query.min:
@@ -1387,6 +1387,24 @@ class ScriptedPlayer(Player):
         if playing is not None:
             self._chosen.extend((playing.generation, source, _object_key(o)) for o in selected)
         return Answer(tuple(selected))
+
+    def _answers(
+        self,
+        query: PlayerQuery,
+        option: PlayerDecision,
+        preference: PlayerDecision | Handle | Token | SpellCopy | SourcedAbility,
+    ) -> bool:
+        """Whether ``preference`` picks ``option`` at a question other than an
+        action question. At an optional one a handle or token stands for its
+        object, never for one of that object's abilities: a script naming a
+        land as a target must not tap it for mana when the engine asks, while
+        a cost is paid, whether to activate a mana ability (CR 601.2g). An
+        ability at such a question is picked by its printed class or
+        :func:`ability`; at a required one, such as ordering triggered
+        abilities, a handle still picks its object's ability."""
+        if query.min == 0 and isinstance(preference, (Handle, Token, SpellCopy)) and option.kind.value == "ability":
+            return False
+        return self._matches(option, preference)
 
     def _matchers(self, items: Iterable[Any]) -> list[PlayerDecision | Handle | Token | SpellCopy | SourcedAbility]:
         """Each preference as Player Decisions to satisfy — a class stands for

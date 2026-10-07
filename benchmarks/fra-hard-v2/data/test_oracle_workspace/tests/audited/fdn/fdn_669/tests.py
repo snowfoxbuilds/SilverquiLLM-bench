@@ -85,10 +85,12 @@ class TestBasiliskCollarBehaviour:
 
 class TestBasiliskCollarCosts:
     def test_casting_it_costs_one_mana(self):
-        """With no mana the Collar cannot be cast; a Plains' {W} pays its {1}."""
+        """With no mana source the Collar cannot be cast; a Plains, played from
+        hand, pays its {1}."""
         collar, plains = card(BasiliskCollar), card(Plains)
-        t = Table(create_game(Side(hand=[collar], battlefield=[plains]), Side(), start=(Phase.PRECOMBAT_MAIN, 0)))
+        t = Table(create_game(Side(hand=[collar, plains]), Side(), start=(Phase.PRECOMBAT_MAIN, 0)))
         t.act_illegal(0, collar)
+        t.act(0, plains, then=[moves(plains, Zone.BATTLEFIELD)])
         t.act(0, plains, then=[taps(plains)])
         t.act(0, collar, then=[moves(collar, Zone.STACK)])
         t.pass_(0)

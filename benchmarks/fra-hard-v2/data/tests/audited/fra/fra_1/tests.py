@@ -208,7 +208,8 @@ def test_an_opponents_land_can_get_the_grant_but_not_the_permission():
 
 
 def test_exiling_needs_three_mana():
-    emrakul, target = card(EmrakulTheExigentDoom), card(Forest)
+    # The Forest starts tapped: untapped, it could pay the third mana (CR 601.2g).
+    emrakul, target = card(EmrakulTheExigentDoom), card(Forest, tapped=True)
     game = create_game(
         Side(hand=[emrakul], battlefield=[target], library=_library(), mana={ManaType.COLORLESS: 2}),
         Side(library=_library()),
