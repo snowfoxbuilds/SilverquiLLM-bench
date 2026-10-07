@@ -123,15 +123,15 @@ class Side:
 
 @dataclass(frozen=True)
 class Token:
-    """A token, followed by its number: the game's tokens are numbered in
-    the order the game makes them, so ``token(1)`` is the first token made,
-    and a token keeps its number after it leaves the battlefield.
-
-    Tokens made together — those one effect creates — are numbered seat 0's
-    before seat 1's, each seat's in the order the effect creates them;
-    tokens an effect makes alike are interchangeable. A token a rejected
-    attempt made gives its number back. A token has no class: what it is
-    shows in what it does.
+    """A token, followed by its number. The number is the test's label for
+    the token, not the engine's: the first time a view check finds a token
+    where the expected view has ``token n``, and the token was first seen in
+    the same window of play as ``token n`` first showed, that token becomes
+    ``token(n)`` for the rest of the test, whatever order the engine made
+    its tokens in. The label stays on the token after it leaves the
+    battlefield, and no other token ever passes for it. A token a rejected
+    attempt made frees its label. A token has no class: what it is shows in
+    what it does.
     """
 
     number: int
@@ -141,7 +141,7 @@ class Token:
 
 
 def token(number: int) -> Token:
-    """The ``number``-th token the game makes, counting from 1."""
+    """The token the test labels ``number``, counting from 1."""
     if number < 1:
         raise ValueError(f"tokens are numbered from 1, not {number}")
     return Token(number)
@@ -149,11 +149,12 @@ def token(number: int) -> Token:
 
 @dataclass(frozen=True)
 class SpellCopy:
-    """A copy of a spell, followed by its number: the game's spell copies are
-    numbered in the order they are made, like tokens, so ``spell_copy(1)`` is
-    the first copy made — a prepare spell's copy as it is made in exile (CR
-    722.3c). A copy shows the class of the spell it copies; its number tells
-    it from the original."""
+    """A copy of a spell, followed by its number. The number is the test's
+    label for the copy, not the engine's: the first time a view check finds
+    a copy where the expected view has ``copy n``, that copy becomes
+    ``spell_copy(n)`` for the rest of the test, whatever order the engine
+    made its copies in. A copy shows the class of the spell it copies; its
+    number tells it from the original."""
 
     number: int
 
@@ -162,7 +163,7 @@ class SpellCopy:
 
 
 def spell_copy(number: int) -> SpellCopy:
-    """The ``number``-th spell copy the game makes, counting from 1."""
+    """The spell copy the test labels ``number``, counting from 1."""
     if number < 1:
         raise ValueError(f"spell copies are numbered from 1, not {number}")
     return SpellCopy(number)
@@ -246,7 +247,288 @@ def _copies(game: Any) -> _Numbered:
 
 
 def _find(game: Any, followed: Token | SpellCopy) -> Any:
-    return _numbered(game, type(followed)).find(game, followed)
+    return _labels(game, type(followed)).find(game, followed.number)
+
+
+# Turn order, to tell a new turn from a later step of the same one.
+_TURN_ORDER = (
+    Step.UNTAP, Step.UPKEEP, Step.DRAW, Phase.PRECOMBAT_MAIN, Step.BEGIN_COMBAT, Step.DECLARE_ATTACKERS,
+    Step.DECLARE_BLOCKERS, Step.FIRST_STRIKE_DAMAGE, Step.COMBAT_DAMAGE, Step.END_COMBAT, Phase.POSTCOMBAT_MAIN,
+    Step.END, Step.CLEANUP,
+)
+
+
+@dataclass(frozen=True)
+class _Stamp:
+    """When a token or spell copy was first seen: the view check — the turn,
+    step and active player, and how many script entries had begun — at which
+    it first showed. Everything one window of play makes is first seen at
+    the same check."""
+
+    turn: int
+    step: Step | Phase
+    active: int
+    actions: int
+
+    def __str__(self) -> str:
+        return f"turn {self.turn} {_step_name(self.step)}, player {self.active}'s turn, after action {self.actions}"
+
+
+class _Clock:
+    """A game's view checks so far, counted by the test: the turn, inferred
+    from the active player and step each check shows, and the script entries
+    begun, across every ``run`` on the game."""
+
+    def __init__(self) -> None:
+        self.turn = 1
+        self.last: tuple[int, int] | None = None
+        self.actions = 0
+
+    def stamp(self, shown: View) -> _Stamp:
+        rank = _TURN_ORDER.index(shown.step) if shown.step in _TURN_ORDER else 0
+        if self.last is not None and (shown.active != self.last[0] or rank < self.last[1]):
+            self.turn += 1
+        self.last = (shown.active, rank)
+        return _Stamp(self.turn, shown.step, shown.active, self.actions)
+
+
+_CLOCKS: weakref.WeakKeyDictionary[Any, _Clock] = weakref.WeakKeyDictionary()
+
+
+def _clock(game: Any) -> _Clock:
+    return _CLOCKS.setdefault(game, _Clock())
+
+
+class _Labels:
+    """Which of a game's tokens, or spell copies, each test-side number names.
+
+    An engine numbers what it makes in its own order, and two engines may
+    make the same objects in different orders — Uldaros's copies of several
+    cards exiled at once, or the tokens of one effect — so a test's
+    ``token(n)`` or ``copy n`` is a label. A view check matches a label to an
+    object it shows in the same place, and the label stays on that object
+    for the rest of the test, across ``run`` calls on the same game. A label
+    is matched only to an object first seen at the same view check as the
+    label first showed in the expected view, so objects made in different
+    windows of play never trade labels. A label follows the object itself:
+    once a rollback discards the object, the label is free again, as its
+    number is.
+    """
+
+    def __init__(self, kind: type) -> None:
+        self.kind = kind
+        self.objects: dict[int, Any] = {}
+        # When each label first showed in an expected view, and each object
+        # in the game's (the object held, so its identity is not reused).
+        self.label_stamps: dict[int, _Stamp] = {}
+        self.object_stamps: dict[int, tuple[Any, _Stamp]] = {}
+
+    def prune(self, game: Any) -> _Numbered:
+        numbered = _numbered(game, self.kind)
+        numbered.number(game)
+        alive = {id(obj) for obj in numbered.objects}
+        for label, obj in list(self.objects.items()):
+            if id(obj) not in alive:
+                del self.objects[label]
+        for key in [key for key in self.object_stamps if key not in alive]:
+            del self.object_stamps[key]
+        return numbered
+
+    def numbers(self, game: Any) -> dict[int, int]:
+        """Each label's object, by the engine's number for it."""
+        numbered = self.prune(game)
+        return {label: numbered.by_id[id(obj)].number for label, obj in self.objects.items()}
+
+    def find(self, game: Any, label: int) -> Any:
+        """The object ``label`` names. A label no view check has matched yet
+        names the object the engine numbered the same, unless another label
+        holds that object or the label first showed in a different window
+        than the object, and is matched to it from then on."""
+        numbered = self.prune(game)
+        if label in self.objects:
+            return self.objects[label]
+        if label > len(numbered.objects):
+            return None
+        obj = numbered.objects[label - 1]
+        if any(held is obj for held in self.objects.values()):
+            return None
+        shown = self.label_stamps.get(label)
+        seen = self.object_stamps.get(id(obj))
+        if shown is not None and seen is not None and shown != seen[1]:
+            return None
+        self.objects[label] = obj
+        return obj
+
+    def observe(self, game: Any, expected: View, raw: View, stamp: _Stamp) -> None:
+        """Stamp each label and object a view check shows for the first time."""
+        numbered = self.prune(game)
+        for s in _seen_all(expected):
+            if isinstance(s.handle, self.kind):
+                self.label_stamps.setdefault(s.handle.number, stamp)
+        for s in _seen_all(raw):
+            if isinstance(s.handle, self.kind) and s.handle.number <= len(numbered.objects):
+                obj = numbered.objects[s.handle.number - 1]
+                self.object_stamps.setdefault(id(obj), (obj, stamp))
+
+    def stamp_of_number(self, game: Any, number: int) -> _Stamp | None:
+        numbered = _numbered(game, self.kind)
+        if number > len(numbered.objects):
+            return None
+        held = self.object_stamps.get(id(numbered.objects[number - 1]))
+        return held[1] if held else None
+
+    def bind(self, game: Any, numbers: Mapping[int, int]) -> None:
+        numbered = _numbered(game, self.kind)
+        for label, number in numbers.items():
+            self.objects[label] = numbered.objects[number - 1]
+
+    def describe(self, game: Any) -> str:
+        noun = "token" if self.kind is Token else "copy"
+        lines = []
+        for label, number in sorted(self.numbers(game).items()):
+            stamp = self.label_stamps.get(label)
+            lines.append(f"{noun} {label} is the engine's {noun} {number}" + (f" [{stamp}]" if stamp else ""))
+        return ", ".join(lines) or "none"
+
+
+_LABELS: weakref.WeakKeyDictionary[Any, dict[type, _Labels]] = weakref.WeakKeyDictionary()
+
+
+def _labels(game: Any, kind: type) -> _Labels:
+    kinds = _LABELS.setdefault(game, {})
+    if kind not in kinds:
+        kinds[kind] = _Labels(kind)
+    return kinds[kind]
+
+
+def _rename(view_: View, rename: Mapping[type, Mapping[int, int]]) -> View:
+    """``view_`` with each token or spell copy numbered ``n`` renumbered
+    ``rename[its kind][n]``."""
+
+    def seen(s: Seen) -> Seen:
+        kind = type(s.handle)
+        if kind in rename and s.handle.number in rename[kind]:
+            return replace(s, handle=kind(rename[kind][s.handle.number]))
+        return s
+
+    def side(p: PlayerView) -> PlayerView:
+        return PlayerView(p.life, *(tuple(map(seen, getattr(p, zone))) for zone in ("library", *_UNORDERED)))
+
+    return replace(view_, players=tuple(map(side, view_.players)), stack=tuple(map(seen, view_.stack)))
+
+
+def _seen_all(view_: View) -> Iterable[Seen]:
+    yield from view_.stack
+    for side in view_.players:
+        for zone in ("library", *_UNORDERED):
+            yield from getattr(side, zone)
+
+
+def _labelled(game: Any, raw: View) -> View:
+    """``raw``, whose tokens and copies carry the engine's numbers, with each
+    one a label holds shown by its label; one no label holds keeps the
+    engine's number unless a label already shows as that number, and then
+    takes the next number nothing uses."""
+    rename: dict[type, dict[int, int]] = {}
+    for kind in (Token, SpellCopy):
+        held = {number: label for label, number in _labels(game, kind).numbers(game).items()}
+        engine = {s.handle.number for s in _seen_all(raw) if isinstance(s.handle, kind)}
+        used = set(held.values()) | engine
+        rename[kind] = dict(held)
+        for number in sorted(engine - set(held)):
+            if number in held.values():
+                fresh = max(used) + 1
+                used.add(fresh)
+                rename[kind][number] = fresh
+    return _rename(raw, rename)
+
+
+def _match_labels(game: Any, expected: View, raw: View) -> dict[type, dict[int, int]] | None:
+    """The labels to add so that ``raw`` shows as ``expected``, as
+    ``{kind: {label: engine number}}``, or ``None`` if no labelling does.
+
+    Labels already held stay. A label is matched only to an object first
+    seen at the same view check as the label first showed. A token or copy
+    in a zone whose order shows (a library, the stack) is matched by
+    position; in another zone the unmatched ones of the same class, owner
+    and tapped status, first seen together, are matched lowest number to
+    lowest number.
+    """
+    new: dict[type, dict[int, int]] = {}
+    for kind in (Token, SpellCopy):
+        labels_ = _labels(game, kind)
+        held = labels_.numbers(game)
+        fresh: dict[int, int] = {}
+        new[kind] = fresh
+
+        def window(label: int, number: int, labels_: _Labels = labels_) -> bool:
+            return labels_.label_stamps.get(label) == labels_.stamp_of_number(game, number)
+
+        def pair(label: int, number: int, held: dict = held, fresh: dict = fresh, window=window) -> bool:
+            current = held.get(label, fresh.get(label))
+            if current is not None:
+                return current == number
+            if number in held.values() or number in fresh.values() or not window(label, number):
+                return False
+            fresh[label] = number
+            return True
+
+        def ordered(want: Sequence[Seen], got: Sequence[Seen], kind: type = kind, pair=pair) -> bool:
+            if len(want) != len(got):
+                return False
+            for w, g in zip(want, got):
+                if isinstance(w.handle, kind) != isinstance(g.handle, kind):
+                    return False
+                alike = (w.card, w.owner, w.tapped) == (g.card, g.owner, g.tapped)
+                if isinstance(w.handle, kind) and alike and not pair(w.handle.number, g.handle.number):
+                    return False
+            return True
+
+        if not ordered(expected.stack, raw.stack):
+            return None
+        for want_side, got_side in zip(expected.players, raw.players):
+            if not ordered(want_side.library, got_side.library):
+                return None
+        for want_side, got_side in zip(expected.players, raw.players):
+            for zone in _UNORDERED:
+                groups: dict[tuple, tuple[list[int], list[int]]] = {}
+                for index, shown in enumerate((getattr(want_side, zone), getattr(got_side, zone))):
+                    for s in shown:
+                        if isinstance(s.handle, kind):
+                            groups.setdefault((s.card, s.owner, s.tapped), ([], []))[index].append(s.handle.number)
+                for want_numbers, got_numbers in groups.values():
+                    for label in list(want_numbers):
+                        current = held.get(label, fresh.get(label))
+                        if current is None:
+                            continue
+                        # A label stays on its object: another object here,
+                        # whatever its number, never stands in for it.
+                        if current not in got_numbers:
+                            return None
+                        want_numbers.remove(label)
+                        got_numbers.remove(current)
+                    taken = set(held.values()) | set(fresh.values())
+                    free = sorted(n for n in got_numbers if n not in taken)
+                    for label in sorted(n for n in want_numbers if n not in held and n not in fresh):
+                        match = next((n for n in free if window(label, n)), None)
+                        if match is None:
+                            return None
+                        free.remove(match)
+                        fresh[label] = match
+    rename = {
+        kind: {**{n: label for label, n in _labels(game, kind).numbers(game).items()},
+               **{n: label for label, n in new[kind].items()}}
+        for kind in (Token, SpellCopy)
+    }
+    # Every token and copy shown must carry a label; an engine number no
+    # label holds never passes for the test's number that happens to match it.
+    for s in _seen_all(raw):
+        kind = type(s.handle)
+        if kind in rename and s.handle.number not in rename[kind]:
+            return None
+    if _rename(raw, rename) != expected:
+        return None
+    return new
 
 
 # Each game's handles, by the identity of the card each follows.
@@ -396,7 +678,13 @@ class View:
 
 
 def view(game: Any) -> View:
-    """A frozen snapshot of what the players can see of ``game``."""
+    """A frozen snapshot of what the players can see of ``game``, its tokens
+    and spell copies shown by the labels the test's view checks gave them."""
+    return _labelled(game, _raw_view(game))
+
+
+def _raw_view(game: Any) -> View:
+    """The Player View with tokens and spell copies by the engine's numbers."""
     handles = _HANDLES.get(game, {})
     tokens, copies = _tokens(game), _copies(game)
     tokens.number(game)
@@ -1181,6 +1469,7 @@ class _Run:
         self.compare(seat)
 
     def started(self, seat: int, playing: _Playing) -> None:
+        _clock(self.game).actions += 1
         self.last = playing
         self.narrated.append(f"player {seat}: {playing.entry.describe()}")
 
@@ -1194,9 +1483,23 @@ class _Run:
         _ASKED[self.game] = seat
         if not self.checking:
             return
-        actual = view(self.game)
-        if actual != self.expected:
-            self.diverge("the view differs from the expected view" + (" when asked again" if again else ""), actual=actual)
+        if not self._matches(_raw_view(self.game)):
+            self.diverge("the view differs from the expected view" + (" when asked again" if again else ""),
+                         actual=_raw_view(self.game))
+
+    def _matches(self, raw: View) -> bool:
+        """Whether ``raw`` shows as the expected view, once the tokens and
+        spell copies it shows are matched to the expected view's labels;
+        a match found is kept."""
+        stamp = _clock(self.game).stamp(raw)
+        for kind in (Token, SpellCopy):
+            _labels(self.game, kind).observe(self.game, self.expected, raw, stamp)
+        found = _match_labels(self.game, self.expected, raw)
+        if found is None:
+            return False
+        for kind, numbers in found.items():
+            _labels(self.game, kind).bind(self.game, numbers)
+        return True
 
     def out_of_script(self, seat: int) -> None:
         waiting = [s for s, p in enumerate(self.game.players) if p.script]
@@ -1210,10 +1513,10 @@ class _Run:
         leftover = [s for s, p in enumerate(self.game.players) if p.script]
         if self.game.is_game_over and leftover:
             self.diverge(f"the game ended with entries left in player {leftover[0]}'s script")
-        final = view(self.game)
-        if self.checking and final != self.expected:
-            self.diverge("the final view differs from the expected view", actual=final)
-        return final
+        raw = _raw_view(self.game)
+        if self.checking and not self._matches(raw):
+            self.diverge("the final view differs from the expected view", actual=raw)
+        return _labelled(self.game, raw)
 
     def diverge(self, reason: str, query: PlayerQuery | None = None, *, actual: View | None = None) -> None:
         query = query or self.query
@@ -1223,7 +1526,18 @@ class _Run:
             lines += ["", f"Question: {query.prompt}", f"  options: {', '.join(map(_describe_item, query.options)) or '(none)'}",
                       f"  choose {query.min} to {query.max}"]
         if actual is not None:
-            lines += ["", "Expected view:", self.expected.describe(), "", "Actual view:", actual.describe()]
+            lines += ["", "Expected view:", self.expected.describe(), "",
+                      "Actual view (tokens and copies by the engine's numbers):", actual.describe()]
+            for kind, noun in ((Token, "Tokens"), (SpellCopy, "Copies")):
+                labels_ = _labels(self.game, kind)
+                stamps = labels_.object_stamps
+                if labels_.objects or stamps:
+                    lines.append(f"{noun} matched so far: {labels_.describe(self.game)}")
+                    numbered = _numbered(self.game, kind)
+                    seen = [f"{noun.lower()[:-1] if kind is Token else 'copy'} {numbered.by_id[key].number} [{stamp}]"
+                            for key, (_, stamp) in stamps.items() if key in numbered.by_id]
+                    if seen:
+                        lines.append(f"{noun} first seen: " + ", ".join(seen))
         raise _Diverged("\n".join(lines))
 
 
