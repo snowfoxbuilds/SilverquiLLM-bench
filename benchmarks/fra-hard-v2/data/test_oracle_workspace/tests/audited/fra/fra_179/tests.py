@@ -39,6 +39,7 @@ from test_interface import (
     card,
     create_game,
     player,
+    spell_copy,
     token,
 )
 
@@ -301,11 +302,11 @@ def test_a_copied_recollector_prepares_and_casts_its_spell():
     t.pass_(0)
     t.pass_(1, then=[on_stack(BloodlineRecollectorAbility1, 0)])
     t.pass_(0)
-    t.pass_(1, then=[off_stack(BloodlineRecollectorAbility1)])
+    t.pass_(1, then=[off_stack(BloodlineRecollectorAbility1), copied(AncestralCraving, 0, to=Zone.EXILE)])
     t.act(0, swamp, then=[taps(swamp)])
     t.act(0, branches=[branch(AncestralCraving, choices=[player(1)]),
                        branch(hall, choices=[player(1)], per_query={offers_craving: [AncestralCraving]})],
-          then=[copied(AncestralCraving, 0)])
+          then=[moves(spell_copy(1), Zone.STACK, seat=0)])
     t.pass_(0)
     t.pass_(1, then=[off_stack(AncestralCraving), *[moves(c, Zone.HAND) for c in library], life(1, 17)])
     t.run()

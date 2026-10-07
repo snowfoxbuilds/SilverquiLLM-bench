@@ -149,10 +149,11 @@ def token(number: int) -> Token:
 
 @dataclass(frozen=True)
 class SpellCopy:
-    """A copy of a spell on the stack, followed by its number: the game's
-    spell copies are numbered in the order they are put on the stack, like
-    tokens, so ``spell_copy(1)`` is the first copy made. A copy shows the
-    class of the spell it copies; its number tells it from the original."""
+    """A copy of a spell, followed by its number: the game's spell copies are
+    numbered in the order they are made, like tokens, so ``spell_copy(1)`` is
+    the first copy made — a prepare spell's copy as it is made in exile (CR
+    722.3c). A copy shows the class of the spell it copies; its number tells
+    it from the original."""
 
     number: int
 
@@ -161,7 +162,7 @@ class SpellCopy:
 
 
 def spell_copy(number: int) -> SpellCopy:
-    """The ``number``-th spell copy the game puts on the stack, counting from 1."""
+    """The ``number``-th spell copy the game makes, counting from 1."""
     if number < 1:
         raise ValueError(f"spell copies are numbered from 1, not {number}")
     return SpellCopy(number)
