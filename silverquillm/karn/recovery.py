@@ -86,6 +86,7 @@ def recover_run(
     grader: ContainerGrader | None = None,
 ) -> KarnRunRecord:
     """Recover one direct or batch run by id; a live workload is stopped only on request."""
+    provenance.require_package_from(bench_root)
     if not RUN_ID.fullmatch(run_id):
         raise KarnError("invalid_run_id")
     if not (Path(results_dir).resolve() / run_id).is_dir():
@@ -124,7 +125,10 @@ def recover_benchmark(
     """Idempotent: a recovered or retained record is returned instead of recovering twice.
 
     Raises :class:`RunNeverLaunchedError` when the runner died before writing its input.
+    A package from another checkout is refused before the run is locked or anything is
+    settled, published, cleaned up or graded.
     """
+    provenance.require_package_from(bench_root)
     run_dir = Path(results_dir).resolve() / run_id
     with contextlib.ExitStack() as held:
         if run_dir.is_dir():
@@ -418,7 +422,6 @@ def _recover(
         previous_record is not None and previous_record.candidate != identity
     ):
         raise KarnError("retained_definition_identity_mismatch")
-    provenance.require_package_from(bench_root)
     benchmark = load_benchmark(bench_root, inputs["benchmark"])
     grader = grader or _recovery_grader(inputs, grader_image, grading_timeout)
     profile = login_profile(state_root, inputs["login"])

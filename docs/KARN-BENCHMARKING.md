@@ -30,7 +30,7 @@ Every host builds and runs candidates the same way, so any record can be traced 
 
 `run` and `scheduler` refuse a run that breaks steps 2 or 3 before creating anything, with `dirty_source_refused:` and each reason: `recipe_revision_unrecorded` or `recipe_revision_dirty` for the image, and `bench_checkout_dirty` or `benchmark_root_dirty` (or `_not_a_git_checkout`) for the checkouts.
 `--allow-dirty` runs anyway, for development only; the record's `run_metadata.provenance` keeps the overridden reasons beside the host label, both checkouts' commits and the recipe revision.
-`run`, `scheduler`, `regrade` and recovery also refuse, with `package_source_mismatch:`, when the imported package is not `<bench-root>/silverquillm`; `--allow-dirty` does not override it. The provenance's `bench` commit is that package's checkout, the code the grader mounted.
+`run`, `scheduler`, `regrade` and recovery also refuse, with `package_source_mismatch:`, when the imported package is not `<bench-root>/silverquillm`; `--allow-dirty` does not override it. The refusal comes before anything is created or locked: the scheduler leaves its queue state as it was, and recovery settles, publishes, cleans up and grades nothing, so rerunning from the right environment resumes the same entries. The provenance's `bench` commit is that package's checkout, the code the grader mounted.
 
 The current batch (2026-09-28) runs every model at effort `medium` with subagents disabled. The bench does not enforce either, so candidates stay generic.
 
