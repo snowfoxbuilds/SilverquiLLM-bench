@@ -1,6 +1,11 @@
 --- a/engine/abilities.py
 +++ b/engine/abilities.py
-@@ -20,7 +20,6 @@
+@@ -16,12 +16,10 @@
+ 
+ from __future__ import annotations
+ 
+-import re
+ from dataclasses import dataclass, field
  from typing import TYPE_CHECKING, Any, Callable
  
  from engine.casting import is_sorcery_speed
@@ -8,42 +13,67 @@
  from engine.triggers import _effect_wants_controller, _required_positional
  from engine.stack import (
      ActivationContext,
-@@ -197,17 +196,6 @@
+@@ -87,9 +85,6 @@
+             spends no resources. ``None`` means no extra restriction beyond the
+             source's ``_cant_activate`` suppression.
+         printed: The predefined class of the printed ability (see ADR-017).
+-            Its text's cost says whether the ability has a {T} or {Q} cost,
+-            which a summoning-sick creature cannot pay (rule 302.6); ``cost``
+-            pays it without checking that.
+     """
+ 
+     source: Any
+@@ -201,37 +196,6 @@
      return True
  
  
--def _summoning_sick(source: Any) -> bool:
--    """Whether *source* is a creature that has not been under its controller's
--    control continuously since their most recent turn began and lacks haste
--    (rule 302.6)."""
+-_QUOTED = re.compile(r'"([^"]*)"')
+-
+-
+-def has_tap_symbol_cost(printed: type | None) -> bool:
+-    """Whether the printed ability's cost includes the tap symbol {T} or the
+-    untap symbol {Q}: its text before the first colon outside quotation marks.
+-    A text with no such colon grants a quoted ability ('Enchanted creature has
+-    "{T}: ..."'), and the cost is the quoted ability's. Tapping something in
+-    words ("Tap an untapped creature you control") is not the symbol, and an
+-    ability with no predefined class has no printed cost to read."""
+-    text = getattr(printed, "text", None) or ""
+-    unquoted = _QUOTED.sub(lambda quoted: " " * len(quoted.group()), text)
+-    if ":" in unquoted:
+-        costs = [text[: unquoted.index(":")]]
+-    else:
+-        costs = [quoted.split(":", 1)[0] for quoted in _QUOTED.findall(text) if ":" in quoted]
+-    return any("{T}" in cost or "{Q}" in cost for cost in costs)
+-
+-
+-def _summoning_sick(game: GameState, source: Any) -> bool:
+-    """Whether *source* is a creature permanent that has not been under its
+-    controller's control continuously since their most recent turn began and
+-    lacks haste (rule 302.6)."""
 -    return (
 -        CardType.CREATURE in getattr(source, "card_types", ())
 -        and getattr(source, "summoning_sick", False)
 -        and Keyword.HASTE not in getattr(source, "keywords", Keyword(0))
+-        and any(game.get_battlefield(player).contains(source) for player in game.players)
 -    )
 -
 -
  # ---------------------------------------------------------------------------
  # Activate ability — main entry point
  # ---------------------------------------------------------------------------
-@@ -327,19 +315,10 @@
-         # refers to its source can find it after a sacrifice cost (608.2h).
-         context = capture_activation_context(game, source, controller, [])
+@@ -327,15 +291,6 @@
+             "Cannot activate ability — activation is illegal (timing or zone)"
+         )
  
--    # 6. Pay costs. A cost that taps or untaps the source is a {T} or {Q} cost,
--    #    which a summoning-sick creature cannot pay (rule 302.6); the priority
--    #    attempt rolls the payment back.
--    sick = _summoning_sick(source)
--    tapped_before = getattr(source, "is_tapped", False)
-+    # 6. Pay costs
-     cost_paid = ability.cost(game, source)
-     if not cost_paid:
-         raise AbilityError("Cannot activate ability — cost could not be paid")
--    if sick and getattr(source, "is_tapped", False) != tapped_before:
+-    # 3b. A summoning-sick creature cannot activate an ability whose cost has
+-    #     {T} or {Q} (rule 302.6), mana abilities included. Known from the
+-    #     printed cost, before anything is chosen or paid.
+-    if _summoning_sick(game, source) and has_tap_symbol_cost(ability.printed):
 -        raise AbilityError(
 -            "Cannot activate ability — a creature's {T} or {Q} ability needs it "
 -            "under its controller's control since their most recent turn began"
 -        )
- 
-     # 7. Resolve or push
-     if ability.is_mana_ability:
+-
+     # 4. Choose targets (rule 602.2b/2c) — BEFORE paying costs, so an ability
+     #    with no legal target cannot be activated and spends no mana. The chosen
+     #    targets are stored on the stack object and are not re-selected at

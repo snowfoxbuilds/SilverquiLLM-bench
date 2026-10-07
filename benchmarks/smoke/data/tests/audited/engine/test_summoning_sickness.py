@@ -8,23 +8,25 @@ whose turn it is now.
 
 Each is seen through real FDN cards: Krenko, Mob Boss's {T} ability makes a
 Goblin when it resolves; Llanowar Elves and Ruby, Daring Tracker tap for mana;
-Confiscate hands Llanowar Elves to a new controller.
+Confiscate hands Llanowar Elves to a new controller; Burnished Hart's cost
+has no {T}, so the restriction never applies to it.
 """
 
 from __future__ import annotations
 
+from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_204.card_impl import KrenkoMobBoss, KrenkoMobBossAbility1
 from cards.fdn.fdn_227.card_impl import LlanowarElves
 from cards.fdn.fdn_245.card_impl import RubyDaringTracker
+from cards.fdn.fdn_250.card_impl import BurnishedHart, BurnishedHartAbility1
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_274.card_impl import Island
 from cards.fdn.fdn_278.card_impl import Mountain
 from cards.fdn.fdn_280.card_impl import Forest
 from cards.fdn.fdn_709.card_impl import Confiscate
-from test_interface import Phase, Side, Zone, card, create_game, player
-
 from table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
+from test_interface import ManaType, Phase, Side, Zone, card, create_game, player, shuffled
 
 
 def _library() -> list:
@@ -63,7 +65,7 @@ def _krenko_cast() -> tuple[Table, object]:
 
 class TestCreatureThatJustArrived:
     def test_cannot_use_its_tap_ability_the_turn_it_is_cast(self):
-        t, krenko = _krenko_cast()
+        t, _ = _krenko_cast()
         t.act_illegal(0, KrenkoMobBossAbility1, note="Krenko arrived this turn")
         t.pass_(0)
         t.pass_(1)
@@ -72,7 +74,7 @@ class TestCreatureThatJustArrived:
     def test_still_cannot_on_the_opponents_turn(self):
         """Player 0's most recent turn began before Krenko arrived, so it
         stays unable to tap through player 1's turn."""
-        t, krenko = _krenko_cast()
+        t, _ = _krenko_cast()
         t.pass_to(Phase.PRECOMBAT_MAIN, 1)
         t.pass_(1)
         t.act_illegal(0, KrenkoMobBossAbility1, note="player 1's turn; player 0's began without Krenko")
@@ -136,3 +138,21 @@ class TestCreatureThatChangedControl:
         t.pass_to(Phase.PRECOMBAT_MAIN, 0)
         _cast(t, 0, second, [elves])
         t.run()
+
+    def test_an_ability_without_tap_in_its_cost_is_not_restricted(self):
+        """Burnished Hart's cost is {3} and sacrificing it, with no {T}: taken
+        with Confiscate, tapped, it is sacrificed and its ability resolves for
+        its new controller that same turn."""
+        confiscate, hart, lions = card(Confiscate), card(BurnishedHart, tapped=True), card(SavannahLions)
+        islands = [card(Island) for _ in range(6)]
+        t = Table(create_game(
+            Side(hand=[confiscate], battlefield=islands, library=[lions], mana={ManaType.COLORLESS: 3}),
+            Side(battlefield=[hart]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        ))
+        _cast(t, 0, confiscate, islands, choices=[hart], then=[gains_control(hart, 0)])
+        t.act(0, hart, then=[moves(hart, Zone.GRAVEYARD), moves(confiscate, Zone.GRAVEYARD),
+                             on_stack(BurnishedHartAbility1, 0)])
+        t.pass_(0)
+        t.pass_(1, then=[off_stack(BurnishedHartAbility1)], note="no basic land to find")
+        t.run(chance=[shuffled(lions)])
