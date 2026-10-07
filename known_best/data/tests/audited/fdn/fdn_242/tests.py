@@ -8,7 +8,7 @@ from cards.fdn.fdn_242.card_impl import LathrilBladeOfTheElves, LathrilBladeOfTh
 from cards.fdn.fdn_272.card_impl import Plains
 from test_interface import Side, Step, card, create_game, token
 
-from silverquillm.table import Table, appears, life, off_stack, on_stack, taps
+from table import Table, appears, life, off_stack, on_stack, taps
 
 
 def _attack(t: Table, attackers, *, damage) -> None:

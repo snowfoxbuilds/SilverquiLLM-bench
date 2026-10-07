@@ -30,7 +30,7 @@ from engine.card import Creature
 from engine.casting import _apply_cost_reduction
 from engine.game_state import GameState
 from engine.types import ManaCost, ManaType, Phase
-from silverquillm.table import Table, moves, taps
+from table import Table, moves, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 

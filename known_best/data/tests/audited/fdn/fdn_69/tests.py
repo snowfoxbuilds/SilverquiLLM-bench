@@ -11,7 +11,7 @@ from engine.card import printed_class
 from engine.types import ManaCost, ManaType
 from test_interface import Phase, Side, Zone, card, create_game, player
 
-from silverquillm.table import Table, moves
+from table import Table, moves
 
 _MANA = {ManaType.BLACK: 1, ManaType.COLORLESS: 2}
 

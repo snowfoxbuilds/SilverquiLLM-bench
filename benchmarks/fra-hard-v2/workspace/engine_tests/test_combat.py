@@ -64,7 +64,7 @@ from engine.game_state import GameState
 from engine.player import Player
 from engine.triggers import TriggerRegistration
 from engine.types import Keyword, Zone
-from silverquillm.table import (
+from table import (
     Table,
     appears,
     first_strike_damage,

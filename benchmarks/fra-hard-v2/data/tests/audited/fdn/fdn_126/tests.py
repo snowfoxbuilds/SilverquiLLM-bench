@@ -29,7 +29,7 @@ from engine.types import ManaCost, ManaType, Phase, Step, Zone
 from test_interface import Side, card
 from test_interface import create_game as table_game
 
-from silverquillm.table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
+from table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
 
 TRIGGER, DOUBLE = ZimoneParadoxSculptorAbility1, ZimoneParadoxSculptorAbility2
 

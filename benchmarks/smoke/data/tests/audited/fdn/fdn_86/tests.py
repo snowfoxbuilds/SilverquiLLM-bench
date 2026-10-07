@@ -25,7 +25,7 @@ from cards.fdn.fdn_249.card_impl import AdventuringGear, AdventuringGearAbility2
 from engine.types import ManaType, Zone
 from test_interface import Phase, Side, card, create_game
 
-from silverquillm.table import Table, appears, moves, off_stack, on_stack, taps
+from table import Table, appears, moves, off_stack, on_stack, taps
 
 _SPELL_MANA = {ManaType.RED: 1, ManaType.COLORLESS: 2}
 

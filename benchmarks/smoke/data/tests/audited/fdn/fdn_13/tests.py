@@ -16,7 +16,7 @@ from engine.card import Instant, printed_class
 from engine.types import ManaCost
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, life, moves, taps
+from table import Table, life, moves, taps
 
 _W = {ManaType.WHITE: 1}
 

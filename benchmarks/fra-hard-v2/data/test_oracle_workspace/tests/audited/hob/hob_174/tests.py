@@ -26,7 +26,7 @@ from cards.fdn.fdn_250.card_impl import BurnishedHart
 from cards.fdn.fdn_272.card_impl import Plains
 from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game, player, spell_copy
 
-from silverquillm.table import Table, appears, copied, life, moves, off_stack, on_stack, taps
+from table import Table, appears, copied, life, moves, off_stack, on_stack, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 GLEAM_MANA = {ManaType.BLUE: 1, ManaType.COLORLESS: 3}

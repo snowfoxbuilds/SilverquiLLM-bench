@@ -30,7 +30,7 @@ from engine.decisions import Decision
 from engine.types import ManaType, Phase, Zone
 from test_interface import PlayDiverged, Side, card, create_game
 
-from silverquillm.table import Table, moves, taps
+from table import Table, moves, taps
 
 AUDITED = Path(__file__).resolve().parents[2] / "known_best/data/tests/audited/fdn/fdn_172/tests.py"
 HOW_TO_PAY = "Choose how to pay the additional cost"

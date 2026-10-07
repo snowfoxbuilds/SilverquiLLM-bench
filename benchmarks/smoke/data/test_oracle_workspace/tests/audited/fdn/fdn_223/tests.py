@@ -26,7 +26,7 @@ from cards.fdn.fdn_278.card_impl import Mountain
 from cards.fdn.fdn_280.card_impl import Forest
 from test_interface import Phase, Side, Step, Zone, card, create_game, player
 
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
+from table import Table, appears, life, moves, off_stack, on_stack, taps
 
 FLICKER, SPIRIT = KykarZephyrAwakenerAbility3, KykarZephyrAwakenerAbility4
 

@@ -17,7 +17,7 @@ from engine.card import printed_class
 from engine.types import ManaCost
 from test_interface import ManaType, Phase, Side, Zone, card, create_game
 
-from silverquillm.table import Table, appears, gains_control, moves, off_stack, on_stack, taps
+from table import Table, appears, gains_control, moves, off_stack, on_stack, taps
 
 
 def _bouncer_enters(*, hand=(), mine=(), theirs=(), targets=(), fallback=()):

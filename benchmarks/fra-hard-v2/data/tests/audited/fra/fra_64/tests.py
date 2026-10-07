@@ -26,7 +26,7 @@ from cards.fra.tokens import JaceTokenAbility1, JaceTokenAbility2
 from cards.war.war_143.card_impl import SarkhanTheMasterless, SarkhanTheMasterlessAbility2
 from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game, token
 
-from silverquillm.table import (
+from table import (
     Table,
     appears,
     ceases,

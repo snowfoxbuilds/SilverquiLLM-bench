@@ -19,7 +19,7 @@ from engine.game_state import GameState
 from test_interface import Phase, Side, Zone, card, create_game
 from test_utils import DeterministicPlayer
 
-from silverquillm.table import Table, moves, off_stack, on_stack, taps
+from table import Table, moves, off_stack, on_stack, taps
 
 # ---------------------------------------------------------------------------
 # ActivatedAbilityInstance — construction

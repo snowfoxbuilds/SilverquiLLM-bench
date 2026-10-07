@@ -19,7 +19,7 @@ from engine.game_state import GameState
 from engine.player import Player
 from engine.queries import Answer
 from engine.types import ManaCost, Supertype, Zone
-from silverquillm.table import Table, moves, taps
+from table import Table, moves, taps
 
 
 class FnPlayer(Player):

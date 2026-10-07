@@ -19,7 +19,7 @@ from engine.card import printed_class
 from engine.types import ManaCost
 from test_interface import Decision, ManaType, Phase, Side, Zone, card, create_game
 
-from silverquillm.table import Table, moves, off_stack, on_stack, taps
+from table import Table, moves, off_stack, on_stack, taps
 
 
 def _cast_scourge(t, scourge, x, *, then):

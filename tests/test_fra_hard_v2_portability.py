@@ -954,7 +954,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.hob.hob_174.card_impl import GlamdringFoehammer, GleamOfDeath
 from test_interface import ManaType, Phase, Side, Zone, card, create_game, spell_copy
 
-from silverquillm.table import Table, appears, copied, moves, off_stack, on_stack
+from table import Table, appears, copied, moves, off_stack, on_stack
 
 
 def _copy_cast_as_gleam():

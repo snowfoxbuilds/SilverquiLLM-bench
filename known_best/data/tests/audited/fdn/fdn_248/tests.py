@@ -29,7 +29,7 @@ from engine.card import printed_class
 from engine.types import ManaCost
 from test_interface import Decision, ManaType, Phase, Side, Zone, card, create_game, player
 
-from silverquillm.table import Table, appears, copied, life, moves, off_stack, on_stack, taps
+from table import Table, appears, copied, life, moves, off_stack, on_stack, taps
 
 STORM = ThousandYearStormAbility1
 MAIN = (Phase.PRECOMBAT_MAIN, 0)

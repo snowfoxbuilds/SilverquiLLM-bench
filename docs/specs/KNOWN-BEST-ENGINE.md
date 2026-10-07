@@ -52,6 +52,7 @@ known_best/
 │   ├── test_interface.py            Test Interface (benchmark-owned)
 │   ├── test_interface.md            its documentation (benchmark-owned)
 │   ├── test_test_interface.py       tests that demonstrate it (not graded)
+│   ├── table.py                     Audited Tests' helpers (benchmark-owned)
 │   └── test_utils.py                Reference Tests' helpers
 └── data/tests/audited/
     ├── fdn/<card_id>/tests.py       FDN Audited Tests
@@ -61,7 +62,7 @@ known_best/
 | From `known_best/` | To a benchmark |
 | --- | --- |
 | `workspace/engine/`, `workspace/cards/fdn/` | `workspace/` and the Test Oracle Workspace |
-| `workspace/test_interface.py`, `workspace/test_interface.md`, `workspace/test_test_interface.py`, `workspace/test_utils.py` | `workspace/` and the Test Oracle Workspace |
+| `workspace/test_interface.py`, `workspace/test_interface.md`, `workspace/test_test_interface.py`, `workspace/table.py`, `workspace/test_utils.py` | `workspace/` and the Test Oracle Workspace |
 | `workspace/RULEBOOK.txt` | `workspace/` and the Test Oracle Workspace |
 | `data/tests/audited/fdn/`, `data/tests/audited/engine/` | `data/tests/audited/` |
 | `data/tests/audited/engine/` | `workspace/engine_tests/`, seeding the Engine Reference Tests |

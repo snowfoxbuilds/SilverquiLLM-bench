@@ -69,7 +69,7 @@ from engine.casting import (
 )
 from engine.decisions import Decision
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
-from silverquillm.table import Table, appears, copied, life, moves, off_stack, on_stack, taps, wins
+from table import Table, appears, copied, life, moves, off_stack, on_stack, taps, wins
 
 R, W, U = ManaType.RED, ManaType.WHITE, ManaType.BLUE
 NO_NEW_TARGETS = Decision.no()

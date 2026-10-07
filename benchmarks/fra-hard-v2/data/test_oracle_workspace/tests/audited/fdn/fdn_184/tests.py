@@ -18,7 +18,7 @@ from cards.fdn.fdn_274.card_impl import Island
 from cards.fdn.fdn_276.card_impl import Swamp
 from test_interface import ManaType, Phase, Side, Zone, card, create_game, shuffled
 
-from silverquillm.table import Table, moves, off_stack, on_stack, taps
+from table import Table, moves, off_stack, on_stack, taps
 
 
 def _cast_demon(t, demon, wanted, lands=()):

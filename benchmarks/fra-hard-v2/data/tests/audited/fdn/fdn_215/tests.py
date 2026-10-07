@@ -27,7 +27,7 @@ from test_interface import Phase as TablePhase
 from test_interface import Side, card, create_game, shuffled
 from test_interface import Zone as TableZone
 
-from silverquillm.table import Table, appears, gains_control, moves, taps
+from table import Table, appears, gains_control, moves, taps
 
 
 def _table(mine=(), theirs=(), library=()):

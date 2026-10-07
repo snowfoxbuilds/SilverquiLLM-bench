@@ -32,7 +32,7 @@ from cards.fdn.fdn_278.card_impl import Mountain
 from cards.fdn.fdn_709.card_impl import Confiscate
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, player, token
 
-from silverquillm.table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
+from table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 PINGS = SarkhanTheMasterlessAbility1

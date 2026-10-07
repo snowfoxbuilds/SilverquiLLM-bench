@@ -14,7 +14,7 @@ from engine.card import printed_class
 from engine.types import Keyword, ManaCost
 from test_interface import Phase, Side, Zone, card, create_game, player
 
-from silverquillm.table import Table, life, moves, off_stack, on_stack
+from table import Table, life, moves, off_stack, on_stack
 
 
 def _table(brand, *elves):

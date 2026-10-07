@@ -18,7 +18,7 @@ from engine.card import Creature, printed_class
 from engine.types import Keyword, ManaCost
 from test_interface import Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, life, moves, taps
+from table import Table, life, moves, taps
 
 
 class TestHealersHawkProperties:

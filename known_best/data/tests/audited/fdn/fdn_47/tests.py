@@ -10,7 +10,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_274.card_impl import Island
 from test_interface import Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, appears, moves, off_stack, on_stack, taps
+from table import Table, appears, moves, off_stack, on_stack, taps
 
 
 def test_second_draw_mints_blue_flying_faerie():

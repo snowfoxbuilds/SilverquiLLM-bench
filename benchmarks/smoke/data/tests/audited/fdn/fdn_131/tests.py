@@ -13,7 +13,7 @@ from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_280.card_impl import Forest
 from test_interface import ManaType, Phase, Side, Zone, card, create_game
 
-from silverquillm.table import Table, moves, off_stack, on_stack, taps
+from table import Table, moves, off_stack, on_stack, taps
 
 
 def test_sacrificing_a_creature_draws_a_card():

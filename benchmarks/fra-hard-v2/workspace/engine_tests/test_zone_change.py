@@ -43,7 +43,7 @@ from engine.state_based_actions import resolve_state_based_actions
 from engine.triggers import TriggerRegistration
 from engine.types import Zone
 from engine.zones import move_to_zone
-from silverquillm.table import Table, life, moves, taps
+from table import Table, life, moves, taps
 
 
 def _creature(name: str = "Test Creature", power: int = 1, toughness: int = 1) -> Creature:

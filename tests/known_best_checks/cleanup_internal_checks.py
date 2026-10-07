@@ -18,7 +18,7 @@ from engine.turn import _do_cleanup_step
 from test_interface import Side, Step, Zone, card, create_game
 from test_utils import DeterministicPlayer
 
-from silverquillm.table import Table, life, moves, taps
+from table import Table, life, moves, taps
 
 # ---------------------------------------------------------------------------
 # Helpers

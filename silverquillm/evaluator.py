@@ -1066,7 +1066,7 @@ def _eval_engine(
         if support.is_file():
             shutil.copy2(support, workspace / "test_utils.py")
         if test_interface is not None:
-            shutil.copy2(test_interface, workspace / "test_interface.py")
+            _copy_interface(test_interface, workspace)
         for name in ("conftest.py", "pytest.ini"):
             source = support_dir / name
             if source.is_file():
@@ -1133,6 +1133,23 @@ class EvalPaths:
     test_utils: Path
     engine_support: Path
     test_interface: Path | None = None
+    table: Path | None = None
+
+
+def interface_table(test_interface: Path) -> Path | None:
+    """The ``table.py`` beside *test_interface*: the benchmark's Audited Test
+    helpers, which grading puts beside the Audited Tests with it."""
+    table = test_interface.parent / "table.py"
+    return table if table.is_file() else None
+
+
+def _copy_interface(test_interface: Path, destination: Path) -> None:
+    """Copy the benchmark's Test Interface, and its ``table.py`` when it has
+    one, into *destination*, ahead of anything the candidate staged."""
+    shutil.copy2(test_interface, destination / "test_interface.py")
+    table = interface_table(test_interface)
+    if table is not None:
+        shutil.copy2(table, destination / "table.py")
 
 
 def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
@@ -1142,7 +1159,8 @@ def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
     falls back to the staged workspace copy for benchmarks that ship only the
     latter. ``test_interface`` is the benchmark's Test Interface, resolved the
     same way, or ``None`` for a benchmark that has none; a benchmark that has
-    one grades with it and never with ``test_utils``.
+    one grades with it and never with ``test_utils``. ``table`` is the
+    ``table.py`` beside it, when the benchmark ships one.
 
     ``engine_tests`` is the hidden Audited Engine Tests directory
     ``data/tests/audited/engine`` whenever it exists, even empty; otherwise it
@@ -1179,6 +1197,7 @@ def resolve_eval_paths(benchmark_root: Path, target_set: str) -> EvalPaths:
         test_utils=oracle_test_utils if oracle_test_utils.is_file() else workspace_test_utils,
         engine_support=benchmark_root / "workspace",
         test_interface=test_interface,
+        table=interface_table(test_interface) if test_interface is not None else None,
     )
 
 
@@ -1206,8 +1225,9 @@ def _grade_audited_card(
     the score — while the card's own ``cards.<set>.<card>.card_impl`` and
     ``engine`` still resolve from the tree the agent left behind (the evidence).
     A card-directory ``conftest.py`` is preserved as authoritative fixtures.
-    A benchmark with a Test Interface copies its *test_interface* in the same
-    way instead, and ``test_utils`` then resolves from the agent's tree.
+    A benchmark with a Test Interface copies its *test_interface*, and the
+    ``table.py`` beside it, in the same way instead, and ``test_utils`` then
+    resolves from the agent's tree.
     Missing authoritative support fails visibly rather than scoring as zero.
     """
     if not test_file.exists():
@@ -1224,7 +1244,10 @@ def _grade_audited_card(
     tmp_dir = tempfile.mkdtemp(prefix="eval_contract_")
     try:
         tmp = Path(tmp_dir)
-        shutil.copy2(support, tmp / name)
+        if test_interface:
+            _copy_interface(test_interface, tmp)
+        else:
+            shutil.copy2(support, tmp / name)
         card_conftest = test_file.parent / "conftest.py"
         if card_conftest.is_file():
             shutil.copy2(card_conftest, tmp / "conftest.py")

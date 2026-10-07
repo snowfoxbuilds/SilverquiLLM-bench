@@ -50,7 +50,7 @@ from test_interface import (
     view,
 )
 
-from silverquillm.table import (
+from table import (
     ScriptError,
     Table,
     appears,
@@ -1566,7 +1566,7 @@ def test_lethal_combat_damage_ends_the_game_before_its_triggers_are_ordered():
 
 
 def test_table_plays_a_first_strike_damage_step_only_when_stated() -> None:
-    from silverquillm.table import Change, Table, first_strike_damage
+    from table import Change, Table, first_strike_damage
 
     def _steps(*changes: Change) -> list[str]:
         game = ti.create_game(ti.Side(), ti.Side(), start=(Step.DECLARE_BLOCKERS, 0))

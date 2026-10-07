@@ -18,7 +18,7 @@ from cards.fdn.fdn_274.card_impl import Island
 from cards.fdn.fdn_709.card_impl import Confiscate
 from test_interface import Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, gains_control, life, moves, off_stack, on_stack, taps
+from table import Table, gains_control, life, moves, off_stack, on_stack, taps
 
 
 def _islands(n=6):

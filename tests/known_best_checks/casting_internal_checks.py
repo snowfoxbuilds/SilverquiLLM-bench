@@ -22,7 +22,7 @@ from engine.types import ManaCost, ManaType, Phase, Step, Zone
 from test_interface import Side, card, create_game
 from test_utils import DeterministicPlayer
 
-from silverquillm.table import Table, moves, off_stack, on_stack, taps
+from table import Table, moves, off_stack, on_stack, taps
 
 R, W, U = ManaType.RED, ManaType.WHITE, ManaType.BLUE
 NO_NEW_TARGETS = Decision.no()

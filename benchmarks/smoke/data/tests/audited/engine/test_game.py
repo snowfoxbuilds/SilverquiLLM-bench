@@ -54,7 +54,7 @@ from engine.game import (
 )
 from engine.game_state import GameState
 from engine.types import Keyword, Phase, Step, Zone
-from silverquillm.table import Table, draw_game, life, moves, off_stack, on_stack, taps, wins
+from table import Table, draw_game, life, moves, off_stack, on_stack, taps, wins
 
 # ---------------------------------------------------------------------------
 # Helpers

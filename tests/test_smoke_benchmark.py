@@ -197,10 +197,10 @@ def _build_overlay(root: Path) -> Path:
 
 
 def _subprocess_env(ws: Path) -> dict[str, str]:
-    """Environment for the overlay run: the overlay, then the repo root for the
-    host-side Audited Test helpers (``silverquillm.table``), as grading puts
-    them; the repo root has no ``engine`` / ``cards``, so neither the committed
-    workspaces nor an inherited PYTHONPATH can supply them."""
+    """Environment for the overlay run: the overlay (which holds ``table``,
+    the Audited Test helpers), then the repo root; the repo root has no
+    ``engine`` / ``cards``, so neither the committed workspaces nor an
+    inherited PYTHONPATH can supply them."""
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     env["PYTHONPATH"] = os.pathsep.join((str(ws), str(REPO_ROOT)))
     return env

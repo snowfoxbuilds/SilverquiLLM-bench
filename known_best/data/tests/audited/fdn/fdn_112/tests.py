@@ -17,7 +17,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_280.card_impl import Forest
 from test_interface import Decision, ManaType, Phase, Side, Zone, card, create_game, shuffled
 
-from silverquillm.table import Table, appears, gains_control, moves, off_stack, on_stack
+from table import Table, appears, gains_control, moves, off_stack, on_stack
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 

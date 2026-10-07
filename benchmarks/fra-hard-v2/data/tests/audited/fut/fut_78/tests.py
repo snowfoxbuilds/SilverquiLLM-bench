@@ -15,7 +15,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_276.card_impl import Swamp
 from test_interface import Decision, ManaType, Phase, Side, Step, Zone, branch, card, create_game
 
-from silverquillm.table import Table, life, moves, off_stack, on_stack, taps, wins
+from table import Table, life, moves, off_stack, on_stack, taps, wins
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 PACT_COMES_DUE = SlaughterPactAbility2

@@ -26,7 +26,7 @@ from test_utils import DeterministicPlayer
 from engine.game_state import GameState
 from engine.types import ManaType, Phase, Step, Zone
 from engine.zones import ZoneContainer
-from silverquillm.table import Table
+from table import Table
 
 
 # ---------------------------------------------------------------------------

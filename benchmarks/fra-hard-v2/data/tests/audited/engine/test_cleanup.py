@@ -41,7 +41,7 @@ from test_utils import DeterministicPlayer
 from engine.card import CardImpl, Creature
 from engine.game_state import GameState
 from engine.turn import MAX_HAND_SIZE
-from silverquillm.table import Table, cleanup_trigger, extra_turn, life, moves, off_stack, taps
+from table import Table, cleanup_trigger, extra_turn, life, moves, off_stack, taps
 
 # ---------------------------------------------------------------------------
 # Helpers

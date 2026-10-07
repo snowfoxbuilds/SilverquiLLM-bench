@@ -18,7 +18,7 @@ from test_interface import (
     token,
 )
 
-from silverquillm.table import Table, appears, ceases, life, moves, off_stack, on_stack, taps
+from table import Table, appears, ceases, life, moves, off_stack, on_stack, taps
 
 
 def arrange(*, hand=()):

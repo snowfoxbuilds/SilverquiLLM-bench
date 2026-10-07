@@ -15,7 +15,7 @@ from engine.card import Equipment, printed_class
 from engine.types import Keyword, ManaCost
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, life, moves, off_stack, on_stack, taps
+from table import Table, life, moves, off_stack, on_stack, taps
 
 
 def test_static_data():

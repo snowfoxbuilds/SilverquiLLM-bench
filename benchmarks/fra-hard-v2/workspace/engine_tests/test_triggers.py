@@ -58,7 +58,7 @@ from engine.game_state import GameState
 from engine.stack import StackObject
 from engine.triggers import TriggerManager, TriggerRegistration
 from engine.types import Zone
-from silverquillm.table import (
+from table import (
     Table,
     appears,
     copied,

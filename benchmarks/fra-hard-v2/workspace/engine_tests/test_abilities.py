@@ -47,7 +47,7 @@ from engine.abilities import (
     LoyaltyAbilityInstance,
 )
 from engine.game_state import GameState
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
+from table import Table, appears, life, moves, off_stack, on_stack, taps
 
 # ---------------------------------------------------------------------------
 # ActivatedAbilityInstance — construction

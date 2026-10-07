@@ -22,7 +22,7 @@ from engine.card import Enchantment
 from engine.types import ManaCost
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, token
 
-from silverquillm.table import Table, appears, ceases, life, moves, off_stack, on_stack, taps
+from table import Table, appears, ceases, life, moves, off_stack, on_stack, taps
 
 
 class TestExtravagantReplicationProperties:

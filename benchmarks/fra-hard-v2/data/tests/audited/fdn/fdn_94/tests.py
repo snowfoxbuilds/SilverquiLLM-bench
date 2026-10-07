@@ -14,7 +14,7 @@ from engine.card import printed_class
 from engine.types import ManaCost, ManaType
 from test_interface import Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, moves, off_stack, on_stack, stays_tapped, untaps
+from table import Table, moves, off_stack, on_stack, stays_tapped, untaps
 
 
 class TestSlumberingCerberusProperties:

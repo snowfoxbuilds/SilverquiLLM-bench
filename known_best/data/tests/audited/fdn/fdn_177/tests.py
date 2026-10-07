@@ -15,7 +15,7 @@ from engine.card import printed_class
 from engine.types import ManaCost
 from test_interface import ManaType, Phase, Side, Zone, card, create_game
 
-from silverquillm.table import Table, moves
+from table import Table, moves
 
 
 def _table(waltz, spare, graveyard=()):

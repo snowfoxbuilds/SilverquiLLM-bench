@@ -12,9 +12,11 @@ turn's draw from the known library. A test also states the turn's shape the
 view cannot show: an extra turn, a first-strike combat damage step (CR 510.4)
 or a trigger during cleanup (CR 514.3a).
 
-These helpers need no engine. They live with the Audited Tests on the host and
-never enter the Workspace; they import the benchmark's ``test_interface``,
-which grading puts on the path.
+These helpers need no engine: they import only ``test_interface``. Like it,
+this file is part of the benchmark, fixed in every Workspace, and grading
+puts the benchmark's own copy beside the Audited Tests, so the Engine
+Reference Tests a Workspace ships and the hidden Audited Tests import the same
+helpers.
 """
 
 from __future__ import annotations

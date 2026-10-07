@@ -31,7 +31,7 @@ from test_interface import (
     spell_copy,
 )
 
-from silverquillm.table import Table, copied, life, moves, off_stack, on_stack, taps
+from table import Table, copied, life, moves, off_stack, on_stack, taps
 
 KEEP_TARGETS = Decision.no()
 

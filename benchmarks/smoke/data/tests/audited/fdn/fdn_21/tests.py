@@ -13,7 +13,7 @@ from cards.fdn.fdn_227.card_impl import LlanowarElves
 from cards.fdn.fdn_272.card_impl import Plains
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, token
 
-from silverquillm.table import Table, appears, ceases, life, moves, off_stack, on_stack, taps
+from table import Table, appears, ceases, life, moves, off_stack, on_stack, taps
 
 
 def _cast_parent(p1_battlefield=()):

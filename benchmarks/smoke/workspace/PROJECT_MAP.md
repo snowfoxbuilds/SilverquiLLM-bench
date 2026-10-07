@@ -9,6 +9,7 @@ conftest.py        — Pytest fixtures shared across the workspace
 test_utils.py      — Shared test helpers (`create_game`, `set_board_state`, `script`, `run_scripts`, `cast_spell`, …) built on the Test Interface's scripted player.
 test_utils.md      — API reference for `test_utils.py` (Priority Query, action script and Intent test API)
 test_interface.py  — The Test Interface (fixed; see test_interface.md)
+table.py           — Helpers the engine tests are written with, built on the Test Interface (fixed)
 .gitignore         — Git ignore rules
 engine/            — Canonical game engine source. Imported as `engine`.
                      Choice layer: `decisions.py` (Player Decisions, Game Symbols

@@ -26,7 +26,7 @@ import pytest
 from cards.fdn.fdn_687.card_impl import DemolitionFieldAbility2
 from test_interface import PlayDiverged, Zone
 
-from silverquillm.table import moves, on_stack
+from table import moves, on_stack
 
 REPO = Path(__file__).resolve().parents[2]
 WORKSPACE = REPO / "known_best/workspace"

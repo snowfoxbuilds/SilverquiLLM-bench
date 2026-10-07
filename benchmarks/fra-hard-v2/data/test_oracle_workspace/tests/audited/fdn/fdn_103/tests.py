@@ -12,7 +12,7 @@ from cards.fdn.fdn_227.card_impl import LlanowarElves
 from cards.fdn.fdn_280.card_impl import Forest
 from test_interface import Phase, Side, Step, Zone, card, create_game, token
 
-from silverquillm.table import Table, appears, ceases, life, moves, off_stack, on_stack, taps
+from table import Table, appears, ceases, life, moves, off_stack, on_stack, taps
 
 
 class TestElfswornGiantToken:

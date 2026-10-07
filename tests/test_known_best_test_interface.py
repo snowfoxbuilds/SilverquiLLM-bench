@@ -3,7 +3,7 @@
 
 The checks import the workspace's own ``engine``, ``cards`` and
 ``test_interface``, so they run in a subprocess rooted at
-``known_best/workspace``; the repo root is on the path for ``silverquillm.table``.
+``known_best/workspace``, where ``table`` lives too.
 """
 
 from __future__ import annotations

@@ -20,7 +20,7 @@ from engine.card import printed_class
 from engine.types import CardType, ManaCost
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, token
 
-from silverquillm.table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
+from table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
 
 
 def _trick_at(lions, *, mine=(), hand=()):

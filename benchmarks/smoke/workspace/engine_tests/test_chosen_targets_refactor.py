@@ -29,7 +29,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_278.card_impl import Mountain
 from test_interface import ManaType, Phase, Side, Zone, card, create_game, player
 
-from silverquillm.table import Table, life, moves, taps
+from table import Table, life, moves, taps
 
 
 def _main_phase(p0: Side, p1: Side) -> Table:

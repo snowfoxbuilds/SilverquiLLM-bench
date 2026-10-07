@@ -17,7 +17,7 @@ from cards.fdn.fdn_223.card_impl import GiantGrowth
 from engine.types import Zone
 from test_interface import ManaType, Phase, Side, card, create_game
 
-from silverquillm.table import Table, moves, off_stack, on_stack
+from table import Table, moves, off_stack, on_stack
 
 
 def _cast(t, spell, *, choices, then=(), returning=()):
