@@ -4,6 +4,10 @@ A record from any host must be traceable to committed sources: the candidate rec
 image was built from (Karn's ``karn.config.revision`` image label) and the bench code and
 benchmark data that ran and graded it. A dirty source is refused unless the operator
 passes ``--allow-dirty``, and the record keeps what was overridden.
+
+The grader mounts the imported ``silverquillm`` package, so a run or regrade is refused
+outright when that package is not the bench root's own: ``--allow-dirty`` cannot override
+grading with another checkout's code.
 """
 
 from __future__ import annotations
@@ -37,6 +41,26 @@ FIELDS = {
 
 class DirtySourceError(KarnError):
     """The run's sources are not all committed; the message lists each reason."""
+
+
+class PackageSourceError(KarnError):
+    """The imported ``silverquillm`` package is not the bench root's own."""
+
+
+def require_package_from(bench_root: Path) -> None:
+    """Refuse unless the imported package, which the grader mounts, is ``<bench_root>/silverquillm``.
+
+    An editable install or a symlinked environment from another checkout would otherwise
+    grade with that checkout's code while the benchmark data comes from *bench_root*.
+    """
+    expected = (Path(bench_root) / "silverquillm").resolve()
+    if PACKAGE.resolve() != expected:
+        raise PackageSourceError(
+            f"package_source_mismatch: silverquillm is imported from {PACKAGE.resolve()}, "
+            f"but the bench root's package is {expected}. Install silverquillm from the bench "
+            f"root (pip install -e {Path(bench_root).resolve()}) or run with "
+            f"PYTHONPATH={Path(bench_root).resolve()}."
+        )
 
 
 def host_label() -> tuple[str, str]:
@@ -92,7 +116,11 @@ def recipe_revision(image_labels: dict) -> str | None:
 
 
 def collect(image_labels: dict, bench_root: Path, *, allow_dirty: bool) -> dict:
-    """The run's provenance; raises :class:`DirtySourceError` unless every source is clean."""
+    """The run's provenance; raises :class:`DirtySourceError` unless every source is clean.
+
+    ``bench`` is the checkout of the imported package, the code the grader mounts.
+    """
+    require_package_from(bench_root)
     label, source = host_label()
     bench = checkout_state(PACKAGE)
     benchmark_root = checkout_state(Path(bench_root).resolve())

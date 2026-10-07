@@ -24,12 +24,13 @@ Every host builds and runs candidates the same way, so any record can be traced 
 
 1. Commit and push a recipe change to bench-results before building it, and pull before building someone else's.
 2. Build from the committed tree, `karn build ~/bench-results/karn/constructs/<label> --out <dir>` or the whole `karn` directory, never with `--worktree`.
-3. Run bench code from a pushed `main` commit, with no uncommitted change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`; a detached worktree per batch keeps runs off the checkout you edit.
+3. Run bench code from a pushed `main` commit, with no uncommitted change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`; a detached worktree per batch keeps runs off the checkout you edit. The imported `silverquillm` must be that worktree's own, since the grader mounts it: install it there (`uv pip install -e .` in the worktree's environment) or set `PYTHONPATH` to the worktree; an environment linked from another checkout grades with that checkout's code.
 4. Set `SILVERQUILLM_HOST_LABEL` to a short name for the host (otherwise its hostname is recorded).
 5. Use a subscription on one host at a time; enroll each host's slots with its own logins where you can.
 
 `run` and `scheduler` refuse a run that breaks steps 2 or 3 before creating anything, with `dirty_source_refused:` and each reason: `recipe_revision_unrecorded` or `recipe_revision_dirty` for the image, and `bench_checkout_dirty` or `benchmark_root_dirty` (or `_not_a_git_checkout`) for the checkouts.
 `--allow-dirty` runs anyway, for development only; the record's `run_metadata.provenance` keeps the overridden reasons beside the host label, both checkouts' commits and the recipe revision.
+`run`, `scheduler`, `regrade` and recovery also refuse, with `package_source_mismatch:`, when the imported package is not `<bench-root>/silverquillm`; `--allow-dirty` does not override it. The refusal comes before anything is created or locked: the scheduler leaves its queue state as it was, and recovery settles, publishes, cleans up and grades nothing, so rerunning from the right environment resumes the same entries. The provenance's `bench` commit is that package's checkout, the code the grader mounted.
 
 The current batch (2026-09-28) runs every model at effort `medium` with subagents disabled. The bench does not enforce either, so candidates stay generic.
 

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from silverquillm.queue_state import SchedulerLock, _write_atomically
 
+from . import provenance
 from .definition import KarnError
 from .execution import NATIVE_TELEMETRY, run_benchmark
 from .grader import DEFAULT_GRADING_TIMEOUT
@@ -222,6 +223,7 @@ class KarnScheduler:
 
     def run_until_idle(self) -> int:
         """One pass; when nothing ran only because no login could serve it, that is an error."""
+        self._require_package()
         with SchedulerLock(self.directory):
             count = self._run_locked()
         if not count and self.unavailable_logins:
@@ -311,7 +313,14 @@ class KarnScheduler:
                 _recovered(row, record)
             self._save(state_path, state)
 
+    def _require_package(self) -> None:
+        """A package from another checkout is a configuration error, not a failed entry: it
+        escapes before the queue is locked, recovered or launched, so fixing the environment
+        and rerunning resumes the same entries."""
+        provenance.require_package_from(self.options["bench_root"])
+
     def _run_locked(self) -> int:
+        self._require_package()
         self._recover_running_states()
         self.unavailable_logins = {}
         count = 0
@@ -418,6 +427,7 @@ class KarnScheduler:
         return count
 
     def serve(self, poll_seconds: float = 30):
+        self._require_package()
         with SchedulerLock(self.directory):
             while True:
                 self._run_locked()

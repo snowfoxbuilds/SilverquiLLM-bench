@@ -1,5 +1,9 @@
 """The environment unit tests build runs in: no grader Docker, and a clean run provenance.
 
+Unit tests grade toy benchmarks from temporary bench roots, so the rule that the imported
+package is the bench root's own is lifted too; ``tests/test_karn_results_sharing.py``
+exercises it directly.
+
 The suite's autouse fixtures apply it to every unit test; a module-scoped fixture that builds
 runs once applies it itself (``tests/retained_runs.py``).
 """
@@ -45,6 +49,13 @@ def record_clean_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def accept_any_bench_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    from silverquillm.karn import provenance
+
+    monkeypatch.setattr(provenance, "require_package_from", lambda bench_root: None)
+
+
 def apply(monkeypatch: pytest.MonkeyPatch) -> None:
     refuse_grader_docker(monkeypatch)
     record_clean_provenance(monkeypatch)
+    accept_any_bench_root(monkeypatch)

@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from silverquillm.karn import execution, recovery
+from silverquillm.karn import execution, provenance, recovery
 from silverquillm.karn.batching import KarnScheduler
 from silverquillm.karn.definition import KarnError, canonical, digest, load_candidate
 from silverquillm.karn.execution import login_profile, run_benchmark
@@ -830,8 +830,11 @@ def test_recover_reports_a_run_that_never_launched(tmp_path, monkeypatch):
 SIGNAL_RUNNER = textwrap.dedent(
     """
     import pathlib, sys, time
-    from silverquillm.karn import execution
+    from silverquillm.karn import execution, provenance
     from silverquillm.karn.host import HostResult
+
+    # The toy benchmark's bench root is a temporary directory, not this package's checkout.
+    provenance.require_package_from = lambda bench_root: None
 
     marker = pathlib.Path(sys.argv[1])
 
@@ -2314,3 +2317,202 @@ def test_scheduler_reconciles_an_unconfirmed_blocked_run_once_and_keeps_the_batc
     assert published[first["run_id"]].scores == retained["scores"]
     assert executed == [first["run_id"], second["run_id"]]
     assert graded == [second["run_id"], first["run_id"]]
+
+
+# ---- a package from another checkout ------------------------------------------------------
+
+#: The real guard; the unit environment lifts it for each test.
+REQUIRE_PACKAGE_FROM = provenance.require_package_from
+
+
+def from_another_checkout(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(provenance, "require_package_from", REQUIRE_PACKAGE_FROM)
+    monkeypatch.setattr(provenance, "PACKAGE", tmp_path / "elsewhere" / "silverquillm")
+
+
+def from_bench_root(monkeypatch, bench_root: Path) -> None:
+    monkeypatch.setattr(provenance, "PACKAGE", Path(bench_root) / "silverquillm")
+
+
+def tree_bytes(root: Path) -> dict:
+    return {
+        path.relative_to(root): path.read_bytes() if path.is_file() else None
+        for path in sorted(Path(root).rglob("*"))
+    }
+
+
+def untouchable(**kwargs):
+    pytest.fail("a refused scheduler must neither execute nor recover")
+
+
+@pytest.mark.parametrize("allow_dirty", [False, True])
+def test_a_scheduler_on_another_checkouts_package_creates_no_queue_state(
+    tmp_path, monkeypatch, allow_dirty
+):
+    directory = batch(tmp_path / "batches")
+    before = tree_bytes(directory)
+    from_another_checkout(monkeypatch, tmp_path)
+    refused = scheduler(
+        tmp_path, directory, executor=untouchable, recoverer=untouchable, allow_dirty=allow_dirty
+    )
+    with pytest.raises(provenance.PackageSourceError, match="package_source_mismatch"):
+        refused.run_until_idle()
+    with pytest.raises(provenance.PackageSourceError, match="package_source_mismatch"):
+        refused.serve(poll_seconds=0)
+    assert tree_bytes(directory) == before
+
+    from_bench_root(monkeypatch, tmp_path)
+    assert scheduler(tmp_path, directory, executor=completed).run_until_idle() == 2
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert [row["status"] for row in state["runs"]] == ["done", "done"]
+
+
+@pytest.mark.parametrize("allow_dirty", [False, True])
+def test_a_scheduler_on_another_checkouts_package_leaves_running_rows_for_recovery(
+    tmp_path, monkeypatch, allow_dirty
+):
+    directory = batch(tmp_path / "batches")
+
+    def interrupted(**kwargs):
+        kwargs["on_launch"]()
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        scheduler(tmp_path, directory, executor=interrupted).run_until_idle()
+    before = tree_bytes(directory)
+    assert [row["status"] for row in json.loads(before[Path("state/trial.json")])["runs"]] == [
+        "running"
+    ]
+
+    from_another_checkout(monkeypatch, tmp_path)
+    refused = scheduler(
+        tmp_path, directory, executor=untouchable, recoverer=untouchable, allow_dirty=allow_dirty
+    )
+    with pytest.raises(provenance.PackageSourceError):
+        refused.run_until_idle()
+    with pytest.raises(provenance.PackageSourceError):
+        refused.serve(poll_seconds=0)
+    assert tree_bytes(directory) == before
+
+    from_bench_root(monkeypatch, tmp_path)
+    recovered, executed = [], []
+
+    def recover(**kwargs):
+        recovered.append(kwargs["run_id"])
+        return completed(**kwargs)
+
+    def execute(**kwargs):
+        executed.append(kwargs["run_id"])
+        return completed(**kwargs)
+
+    assert scheduler(tmp_path, directory, executor=execute, recoverer=recover).run_until_idle() == 1
+    state = json.loads((directory / "state/trial.json").read_text())
+    assert recovered == [state["runs"][0]["run_id"]]
+    assert executed == [state["runs"][1]["run_id"]]
+    assert [row["status"] for row in state["runs"]] == ["done", "done"]
+
+
+def test_recovery_on_another_checkouts_package_refuses_a_run_that_never_launched(
+    tmp_path, monkeypatch
+):
+    opts = options(tmp_path)
+    run_dir = Path(opts["results_dir"]) / "killed"
+    run_dir.mkdir(parents=True)
+    docker = ContainerDocker(running=False)
+    monkeypatch.setattr(
+        recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
+    )
+    from_another_checkout(monkeypatch, tmp_path)
+    with pytest.raises(provenance.PackageSourceError):
+        recovery.recover_benchmark(
+            run_id="killed",
+            spec={},
+            **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+        )
+    assert list(run_dir.iterdir()) == []
+    assert docker.commands == []
+
+
+def test_recovery_on_another_checkouts_package_leaves_an_interrupted_run_ungraded(
+    tmp_path, monkeypatch
+):
+    opts = options(tmp_path)
+
+    class Killed(FixtureHost):
+        def run(self, *args, **kwargs):
+            raise SystemExit(137)
+
+    with pytest.raises(SystemExit):
+        run_benchmark(**{**opts, "host": Killed()}, run_id="killed")
+    docker = ContainerDocker(running=False)
+    monkeypatch.setattr(
+        recovery, "DockerHost", lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=None)
+    )
+    common = {key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")}
+    before = {key: tree_bytes(common[key]) for key in ("results_dir", "results_repo")}
+    from_another_checkout(monkeypatch, tmp_path)
+    monkeypatch.setattr(recovery, "grader_for", lambda *a, **k: pytest.fail("recovery graded"))
+    with pytest.raises(provenance.PackageSourceError):
+        recovery.recover_benchmark(run_id="killed", spec={}, **common)
+    assert {key: tree_bytes(common[key]) for key in ("results_dir", "results_repo")} == before
+    assert docker.commands == []
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
+def test_recovery_on_another_checkouts_package_settles_and_publishes_nothing(
+    tmp_path, monkeypatch, harvest_failed
+):
+    run = harvest_failed
+    docker = recovery_docker(monkeypatch, run.common["state_root"])
+    before = {key: tree_bytes(run.common[key]) for key in ("results_dir", "results_repo")}
+    from_another_checkout(monkeypatch, tmp_path)
+    with pytest.raises(provenance.PackageSourceError):
+        recover_run_id(run)
+    assert {key: tree_bytes(run.common[key]) for key in ("results_dir", "results_repo")} == before
+    assert run.profile.pending()["run_id"] == run.run_id
+    assert docker.commands == []
+
+    from_bench_root(monkeypatch, run.common["bench_root"])
+    first = recover_run_id(run)
+    assert first.manifest == run.record.manifest and run.profile.pending() is None
+    assert recover_run_id(run).manifest == first.manifest
+
+
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
+def test_recovery_on_another_checkouts_package_publishes_no_retained_record(
+    tmp_path, monkeypatch
+):
+    import fcntl
+
+    from silverquillm.karn import records
+
+    monkeypatch.setattr(records.write_record, "__kwdefaults__", {"lock_seconds": 0.2})
+    results = tmp_path / "records/results"
+    results.mkdir(parents=True)
+    holder = os.open(results, os.O_RDONLY | os.O_DIRECTORY)
+    fcntl.flock(holder, fcntl.LOCK_EX)
+    try:
+        with pytest.raises(RecordWritePendingError):
+            harvest_failed_run(tmp_path)
+    finally:
+        os.close(holder)
+    profile = pool_slot((tmp_path / "state").resolve())
+    recovery_docker(monkeypatch, (tmp_path / "state").resolve())
+    common = {
+        "bench_root": tmp_path / "data",
+        "results_dir": tmp_path / "runs",
+        "results_repo": tmp_path / "records",
+        "state_root": tmp_path / "state",
+    }
+    before = {key: tree_bytes(common[key]) for key in ("results_dir", "results_repo")}
+    from_another_checkout(monkeypatch, tmp_path)
+    with pytest.raises(provenance.PackageSourceError):
+        recovery.recover_benchmark(run_id="run-a", spec={}, **common)
+    assert {key: tree_bytes(common[key]) for key in ("results_dir", "results_repo")} == before
+    assert not list(iter_run_records(tmp_path / "records"))
+    assert profile.pending()["run_id"] == "run-a"
+
+    from_bench_root(monkeypatch, common["bench_root"])
+    recovery.recover_benchmark(run_id="run-a", spec={}, **common)
+    assert [r.run_id for _, r in iter_run_records(tmp_path / "records")] == ["run-a"]
+    assert profile.pending() is None

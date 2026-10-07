@@ -11,6 +11,7 @@ from pathlib import Path
 
 from silverquillm.queue_state import _write_atomically
 
+from . import provenance
 from .baseline import BaselineStore, baseline_reference_grade, combined_regression
 from .benchmark import load_benchmark
 from .definition import KarnError, canonical, load_candidate
@@ -85,6 +86,7 @@ def recover_run(
     grader: ContainerGrader | None = None,
 ) -> KarnRunRecord:
     """Recover one direct or batch run by id; a live workload is stopped only on request."""
+    provenance.require_package_from(bench_root)
     if not RUN_ID.fullmatch(run_id):
         raise KarnError("invalid_run_id")
     if not (Path(results_dir).resolve() / run_id).is_dir():
@@ -123,7 +125,10 @@ def recover_benchmark(
     """Idempotent: a recovered or retained record is returned instead of recovering twice.
 
     Raises :class:`RunNeverLaunchedError` when the runner died before writing its input.
+    A package from another checkout is refused before the run is locked or anything is
+    settled, published, cleaned up or graded.
     """
+    provenance.require_package_from(bench_root)
     run_dir = Path(results_dir).resolve() / run_id
     with contextlib.ExitStack() as held:
         if run_dir.is_dir():

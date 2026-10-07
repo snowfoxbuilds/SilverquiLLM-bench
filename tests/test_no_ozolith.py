@@ -89,8 +89,9 @@ assert "trial [karn-v5]" in listed and "old [legacy]: unsupported legacy batch" 
 assert '"unsupported_legacy_batch"' in invoke("queue", "ls", "--json", "--batches-dir", str(mixed))
 assert "unsupported legacy batch" in invoke("top", "--batches-dir", str(mixed))
 
-options = []
-for flag in ("--bench-root", "--results-dir", "--results-repo", "--state-root"):
+# The scheduler and recovery refuse a bench root whose package is not the one imported.
+options = ["--bench-root", str(Path(silverquillm.__file__).resolve().parents[1])]
+for flag in ("--results-dir", "--results-repo", "--state-root"):
     target = scratch / flag.strip("-")
     target.mkdir()
     options += [flag, str(target)]

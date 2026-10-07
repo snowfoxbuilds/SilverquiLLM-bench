@@ -28,6 +28,7 @@ from pathlib import Path
 from silverquillm.known_defects import has_known_defects_manifest
 from silverquillm.results_repo import InvalidRunRecordError, iter_run_dirs
 
+from . import provenance
 from .baseline import (
     STABLE_UNAVAILABLE,
     BaselineStore,
@@ -656,6 +657,7 @@ def regrade(
         kept = Path(kept).resolve()
         if out.is_relative_to(kept) or kept.is_relative_to(out):
             raise KarnError(f"regrade_output_overlaps_{name}")
+    provenance.require_package_from(bench_root)
     benchmark = load_benchmark(bench_root, benchmark_id)
     records, unreadable = select_records(
         Path(results_repo).resolve(), benchmark_id, runs, candidates

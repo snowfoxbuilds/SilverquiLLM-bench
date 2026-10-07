@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -422,6 +423,93 @@ def test_a_dirty_run_is_refused_before_any_evidence_exists(tmp_path, checkout, m
         run_benchmark(**opts, run_id="refused")
     assert not (opts["results_dir"] / "refused").exists()
     assert not opts["results_repo"].exists()
+
+
+# ---- the imported package must be the bench root's own -----------------------------------------
+
+#: The real rule; unit tests lift it so toy benchmarks can grade from temporary bench roots.
+REQUIRE_PACKAGE_FROM = provenance.require_package_from
+REPO = Path(provenance.__file__).resolve().parents[2]
+
+
+def test_a_package_from_another_checkout_is_refused(checkout, tmp_path, monkeypatch):
+    other = tmp_path / "other"
+    (other / "silverquillm").mkdir(parents=True)
+    monkeypatch.setattr(provenance, "PACKAGE", other / "silverquillm")
+    with pytest.raises(provenance.PackageSourceError) as refused:
+        REQUIRE_PACKAGE_FROM(checkout)
+    message = str(refused.value)
+    assert str(other / "silverquillm") in message and str(checkout / "silverquillm") in message
+    assert f"PYTHONPATH={checkout}" in message
+
+
+def test_the_bench_roots_own_package_passes_even_through_a_link(checkout, tmp_path, monkeypatch):
+    monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
+    REQUIRE_PACKAGE_FROM(checkout)
+    (tmp_path / "linked").symlink_to(checkout)
+    REQUIRE_PACKAGE_FROM(tmp_path / "linked")
+
+
+def test_allow_dirty_does_not_admit_another_checkouts_package(checkout, tmp_path, monkeypatch):
+    monkeypatch.setattr(provenance, "require_package_from", REQUIRE_PACKAGE_FROM)
+    monkeypatch.setattr(provenance, "PACKAGE", tmp_path / "other/silverquillm")
+    with pytest.raises(provenance.PackageSourceError):
+        provenance.collect({provenance.RECIPE_LABEL: "a" * 40}, checkout, allow_dirty=True)
+
+
+def test_a_regrade_from_another_checkouts_package_is_refused(edited, tmp_path, monkeypatch):
+    monkeypatch.setattr(provenance, "require_package_from", REQUIRE_PACKAGE_FROM)
+    with pytest.raises(provenance.PackageSourceError):
+        regrade(**_another_host(edited, tmp_path, OtherHostDocker()))
+    assert not (tmp_path / "regrade").exists()
+
+
+GUARD = (
+    "import sys; from pathlib import Path; from silverquillm.karn import provenance;"
+    "provenance.require_package_from(Path(sys.argv[1])); print(provenance.PACKAGE)"
+)
+
+
+def _launch(tmp_path, bench_root, how):
+    """Run the rule in a fresh interpreter that finds silverquillm in this repo *how*."""
+    environment = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    if how == "pythonpath":
+        command = [sys.executable, "-c", GUARD, str(bench_root)]
+        environment["PYTHONPATH"] = str(REPO)
+    else:  # a path-entry editable install: a .pth line naming the checkout
+        site_dir = tmp_path / "site"
+        site_dir.mkdir(exist_ok=True)
+        (site_dir / "repo.pth").write_text(f"{REPO}\n")
+        command = [
+            sys.executable,
+            "-I",
+            "-c",
+            f"import site; site.addsitedir({str(site_dir)!r}); {GUARD}",
+            str(bench_root),
+        ]
+    return subprocess.run(
+        command,
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize("how", ["pythonpath", "editable_install"])
+def test_a_fresh_interpreter_checks_where_it_found_the_package(tmp_path, how):
+    accepted = _launch(tmp_path, REPO, how)
+    assert accepted.returncode == 0, accepted.stderr
+    assert Path(accepted.stdout.strip()).resolve() == REPO / "silverquillm"
+
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    refused = _launch(tmp_path, elsewhere, how)
+    assert refused.returncode != 0
+    assert "package_source_mismatch" in refused.stderr
+    assert str(REPO / "silverquillm") in refused.stderr
 
 
 def test_a_record_carries_its_provenance_and_malformed_provenance_is_invalid(edited_template):
