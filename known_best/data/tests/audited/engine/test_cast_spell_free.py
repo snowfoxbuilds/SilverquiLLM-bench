@@ -45,7 +45,7 @@ def _etali_attacks(p0_top, p1_top, *, choices=(), p1_hand=(), p1_lands=0, p1_lib
     t = Table(game)
     t.pass_to(Step.DECLARE_ATTACKERS, 0)
     t.act(0, etali, then=[taps(etali), on_stack(EtaliPrimalStormAbility1, 0)])
-    t.pass_(0, choices=[Decision.yes(), *choices])
+    t.pass_(0, choices=[Decision.yes(), *choices, p0_top, p1_top])
     exiled = [off_stack(EtaliPrimalStormAbility1)]
     for top in (p0_top, p1_top):
         # A spell on the stack is seen on its controller's side.

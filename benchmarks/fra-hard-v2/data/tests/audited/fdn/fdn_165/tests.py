@@ -65,7 +65,7 @@ class TestThinkTwiceFlashbackExile:
         t = Table(game)
         t.pass_to(Step.DECLARE_ATTACKERS, 0)
         t.act(0, etali, then=[taps(etali), on_stack(EtaliPrimalStormAbility1, 0)])
-        t.pass_(0, choices=[Decision.yes()])
+        t.pass_(0, choices=[Decision.yes(), think])
         t.pass_(
             1,
             then=[off_stack(EtaliPrimalStormAbility1), moves(think, Zone.STACK, seat=0), moves(p1_top, Zone.EXILE)],

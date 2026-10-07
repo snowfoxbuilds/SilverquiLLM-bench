@@ -4,7 +4,8 @@ creatures in combat (rule 510.4), additional costs are paid (rule 601.2h),
 and control effects apply in dependency order and leave a permanent
 summoning sick only when its controller changes (rules 613.8, 302.6), and a
 spell copied after it left the stack keeps its own choices (rule 707.10). The
-FDN Audited Tests also hold with every question's options reversed.
+FDN Audited Tests also hold with every question's options reversed, and Etali's
+free casts however the engine asks which spells to cast.
 
 The checks import the workspace's own ``engine``, ``cards`` and
 ``test_interface``, so they run in a subprocess rooted at
@@ -37,6 +38,8 @@ CHECKS = Path(__file__).resolve().parent / "known_best_checks"
         "additional_cost_checks.py",
         "additional_cost_portability_checks.py",
         "reversed_option_checks.py",
+        "optional_choice_presentation_checks.py",
+        "made_object_label_checks.py",
         "control_effect_checks.py",
     ],
 )

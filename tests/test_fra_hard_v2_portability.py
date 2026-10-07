@@ -291,6 +291,68 @@ if not getattr(_test_interface.ScriptedPlayer, "_every_question_reversed", False
     _test_interface.ScriptedPlayer._every_question_reversed = True
 '''
 
+# Asks Jace's surveil as a choice of the cards to put into the graveyard (rule
+# 701.25a) — the top card offered, choosing none keeps it on top — rather than
+# as a yes/no question.
+SURVEIL_AS_CARD_CHOICE = '''
+import engine.planeswalker as _planeswalker
+from engine.card_queries import choose_object as _choose_object
+
+_yes_no = _planeswalker.query_yes_no
+
+
+def _surveil_as_card_choice(game, player, prompt, *, source_card=None):
+    if prompt != "Put the surveilled card in your graveyard?":
+        return _yes_no(game, player, prompt, source_card=source_card)
+    top = game.get_library(player).get_all()[-1]
+    return _choose_object(game, player, [top], "Choose cards to put into your graveyard",
+                          source_card=source_card, optional=True) is not None
+
+
+_planeswalker.query_yes_no = _surveil_as_card_choice
+'''
+
+# Faulty: surveil never puts the card into the graveyard, whatever is answered.
+SURVEIL_KEEPS_THE_CARD = '''
+import engine.planeswalker as _planeswalker
+
+_yes_no = _planeswalker.query_yes_no
+_planeswalker.query_yes_no = lambda game, player, prompt, *, source_card=None: (
+    False if prompt == "Put the surveilled card in your graveyard?"
+    else _yes_no(game, player, prompt, source_card=source_card))
+'''
+
+# Numbers the tokens and spell copies the engine makes in another order: each
+# window's in reverse, with an object no view ever shows numbered before each,
+# as an engine may that makes Uldaros's copies of several cards at once in its
+# own order, or numbers copies it never casts. Tests label what is made, so
+# the order an engine numbers it in never shows.
+RENUMBERED_MADE = '''
+import engine.game_state as _game_state
+
+
+class _Unseen:
+    pass
+
+
+class _Renumbering(list):
+    def append(self, item):
+        self.insert(0, item)
+        self.insert(0, _Unseen())
+
+
+if not getattr(_game_state.GameState, "_made_renumbered", False):
+    _original_init = _game_state.GameState.__init__
+
+    def _renumbering_init(self, *args, _original_init=_original_init, **kwargs):
+        _original_init(self, *args, **kwargs)
+        self.created_tokens = _Renumbering(self.created_tokens)
+        self.created_copies = _Renumbering(self.created_copies)
+
+    _game_state.GameState.__init__ = _renumbering_init
+    _game_state.GameState._made_renumbered = True
+'''
+
 # Faulty: a spell's additional cost is never paid.
 COSTS_WAIVED = '''
 import engine.additional_costs as _additional_costs
@@ -808,7 +870,8 @@ TARGETS = (
                                      "exiled_source_first", "consumed_face_first", "reversed",
                                      "exiled_abilities_first", "costs_all_offered", "costs_reversed",
                                      "costs_all_offered_reversed", "every_question_reversed",
-                                     "rejects_casts_directly"])
+                                     "rejects_casts_directly", "surveil_as_card_choice",
+                                     "renumbered_made"])
 def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None:
     suffix = {"offer_then_reject": OFFER_THEN_REJECT, "card_then_face": CARD_THEN_FACE,
               "card_then_face_all_sources": CARD_THEN_FACE_ALL_SOURCES,
@@ -818,7 +881,9 @@ def test_suite_accepts_every_valid_presentation(card: str, variant: str) -> None
               "costs_all_offered": COSTS_ALL_OFFERED, "costs_reversed": COSTS_REVERSED,
               "costs_all_offered_reversed": COSTS_ALL_OFFERED + COSTS_REVERSED,
               "every_question_reversed": EVERY_QUESTION_REVERSED,
-              "rejects_casts_directly": REJECTS_CASTS_DIRECTLY}[variant]
+              "rejects_casts_directly": REJECTS_CASTS_DIRECTLY,
+              "surveil_as_card_choice": SURVEIL_AS_CARD_CHOICE,
+              "renumbered_made": RENUMBERED_MADE}[variant]
     passed, failed, output = run_suite(card, suffix)
     assert passed and not failed, output[-4000:]
 
@@ -845,6 +910,8 @@ def test_uldaros_suite_accepts_forbidden_choices_offered_then_rejected(suffix: s
     ("fra_49", PREPARED_AFTER_CASTING),
     ("fra_64", LOYALTY_EVERY_TIME),
     ("fra_64", ANIMATION_KEEPS_PLANESWALKER),
+    ("fra_64", SURVEIL_KEEPS_THE_CARD),
+    ("fra_64", SURVEIL_AS_CARD_CHOICE + SURVEIL_KEEPS_THE_CARD),
     ("war_143", LOYALTY_EVERY_TIME),
     ("war_143", ANIMATION_NEVER_ENDS),
     ("fut_78", OFFER_THEN_REJECT + PACT_TARGETS_ANY_CREATURE),

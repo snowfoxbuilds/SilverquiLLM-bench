@@ -80,7 +80,7 @@ def test_enters_and_creates_a_jace_token_with_one_loyalty():
     t = Table(game)
     _cast_lurker(t, 0, lurker)
     t.act_illegal(0, DRAW, note="1 loyalty cannot pay −3")
-    _activate(t, 0, SURVEIL, choices=[Decision.yes()], then=[moves(top, Zone.GRAVEYARD)])
+    _activate(t, 0, SURVEIL, choices=[Decision.yes(), top], then=[moves(top, Zone.GRAVEYARD)])
     t.run()
 
 
@@ -177,7 +177,7 @@ def test_grant_needs_sanctum_lurker_on_the_battlefield():
     _kill(t, 0, bolt, lurker, then=[moves(lurker, Zone.GRAVEYARD)])
     t.act_illegal(0, DRAIN)
     t.act(0, SURVEIL, then=[on_stack(SURVEIL, 0), ceases(JACE)], note="paying −1 leaves Jace at 0, and nothing keeps it")
-    t.pass_(0, choices=[Decision.yes()])
+    t.pass_(0, choices=[Decision.yes(), top])
     t.pass_(1, then=[off_stack(SURVEIL), moves(top, Zone.GRAVEYARD)])
     t.run()
 
@@ -208,7 +208,7 @@ def test_zero_loyalty_jace_stays_while_lurker_remains():
                  Side(hand=[bolt], mana={ManaType.RED: 1}, library=[Plains]))
     t = Table(game)
     _cast_lurker(t, 0, lurker)
-    _activate(t, 0, SURVEIL, choices=[Decision.yes()], then=[moves(top, Zone.GRAVEYARD)], note="Jace at 0 stays")
+    _activate(t, 0, SURVEIL, choices=[Decision.yes(), top], then=[moves(top, Zone.GRAVEYARD)], note="Jace at 0 stays")
     t.pass_(0)
     _kill(t, 1, bolt, lurker, then=[moves(lurker, Zone.GRAVEYARD), ceases(JACE)])
     t.run()
@@ -225,7 +225,7 @@ def test_another_lurker_keeps_zero_loyalty_jace():
     )
     t = Table(game)
     _cast_lurker(t, 0, cast)
-    _activate(t, 0, SURVEIL, choices=[Decision.yes()], then=[moves(top, Zone.GRAVEYARD)])
+    _activate(t, 0, SURVEIL, choices=[Decision.yes(), top], then=[moves(top, Zone.GRAVEYARD)])
     t.pass_(0)
     _kill(t, 1, first, cast, then=[moves(cast, Zone.GRAVEYARD)])
     t.pass_(0)
@@ -305,7 +305,7 @@ def test_opponents_lurker_does_not_protect_my_jace():
                  Side(hand=[bolt], battlefield=[theirs], mana={ManaType.RED: 1}, library=[Plains]))
     t = Table(game)
     _cast_lurker(t, 0, mine)
-    _activate(t, 0, SURVEIL, choices=[Decision.yes()], then=[moves(top, Zone.GRAVEYARD)])
+    _activate(t, 0, SURVEIL, choices=[Decision.yes(), top], then=[moves(top, Zone.GRAVEYARD)])
     t.pass_(0)
     _kill(t, 1, bolt, mine, then=[moves(mine, Zone.GRAVEYARD), ceases(JACE)])
     t.run()
@@ -338,7 +338,7 @@ def test_stolen_lurker_stops_protecting_its_owners_jace():
                  Side(hand=[employment], battlefield=mountains, library=[Plains]))
     t = Table(game)
     _cast_lurker(t, 0, lurker)
-    _activate(t, 0, SURVEIL, choices=[Decision.yes()], then=[moves(top, Zone.GRAVEYARD)])
+    _activate(t, 0, SURVEIL, choices=[Decision.yes(), top], then=[moves(top, Zone.GRAVEYARD)])
     t.pass_to(Phase.PRECOMBAT_MAIN, 1)
     for mountain in mountains:
         t.act(1, mountain, then=[taps(mountain)])
