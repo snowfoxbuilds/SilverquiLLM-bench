@@ -111,7 +111,7 @@ A Batch header shows a countdown to its `not_before`, or `⚠ needs ack` for a B
 Each Login Profile shows its Estimated Weekly Usage and how old the underlying observation is (grilling 2026-10-07).
 
 A subscription usage reading is a provider's own report of the weekly window: a utilization percentage, a reset time, and when it was observed.
-Claude reports one in its `rate_limit_event` stdout lines (the `seven_day` window); Codex reports one in its rollout `rate_limits` (the `primary` window of 10080 minutes).
+Claude reports one in its `rate_limit_event` stdout lines (the `seven_day` window); Codex reports one in its rollout `rate_limits` (the window of 10080 minutes).
 The monitor takes the newest reading for a Login Profile from its live run's output, else from the Run Records that name that Login Profile.
 
 | Situation | Shown value |
