@@ -38,7 +38,7 @@ from test_interface import (
     token,
 )
 
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
+from table import Table, appears, life, moves, off_stack, on_stack, taps
 
 FLICKER = Decision.mode(printed=KykarZephyrAwakenerAbility3)
 SPIRIT = Decision.mode(printed=KykarZephyrAwakenerAbility4)

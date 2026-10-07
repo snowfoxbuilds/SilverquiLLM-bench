@@ -12,7 +12,7 @@ from engine.card import Equipment, printed_class
 from engine.types import Keyword, ManaCost, Supertype
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, first_strike_damage, life, moves, off_stack, on_stack, taps
+from table import Table, first_strike_damage, life, moves, off_stack, on_stack, taps
 
 
 def _cast_cleave(t: Table, cleave, onto) -> None:

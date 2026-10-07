@@ -23,7 +23,7 @@ from cards.fdn.fdn_274.card_impl import Island
 from cards.fdn.fdn_280.card_impl import Forest
 from test_interface import Phase, Side, Zone, card, create_game
 
-from silverquillm.table import Table, appears, moves, off_stack, on_stack, taps
+from table import Table, appears, moves, off_stack, on_stack, taps
 
 
 def _tap(t: Table, *lands) -> None:

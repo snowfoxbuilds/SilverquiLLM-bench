@@ -17,7 +17,7 @@ from engine.stack import StackObject
 from test_interface import Decision, Phase, Side, Step, Zone, card, create_game, player
 from test_utils import DeterministicPlayer
 
-from silverquillm.table import appears, copied, life, moves, off_stack, on_stack, taps
+from table import appears, copied, life, moves, off_stack, on_stack, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 

@@ -30,7 +30,7 @@ from test_utils import (
     set_board_state,
 )
 
-from silverquillm.table import (
+from table import (
     Table,
     first_strike_damage,
     life,

@@ -23,7 +23,7 @@ from cards.fdn.fdn_188.card_impl import Abrade, AbradeAbility2
 from cards.fdn.fdn_278.card_impl import Mountain
 from test_interface import Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, first_strike_damage, life, moves, off_stack, on_stack, taps
+from table import Table, first_strike_damage, life, moves, off_stack, on_stack, taps
 
 RAID = AleshaWhoLaughsAtFateAbility3
 

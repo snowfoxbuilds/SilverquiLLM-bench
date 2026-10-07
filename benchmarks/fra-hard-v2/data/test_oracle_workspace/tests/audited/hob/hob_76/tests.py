@@ -18,7 +18,7 @@ from cards.fdn.fdn_274.card_impl import Island
 from cards.fut.fut_78.card_impl import SlaughterPact, SlaughterPactAbility2
 from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game, player
 
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps, wins
+from table import Table, appears, life, moves, off_stack, on_stack, taps, wins
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 

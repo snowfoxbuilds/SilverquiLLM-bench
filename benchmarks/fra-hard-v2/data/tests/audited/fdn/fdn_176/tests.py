@@ -14,7 +14,7 @@ from cards.fdn.fdn_176.card_impl import LilianaDreadhordeGeneral, LilianaDreadho
 from cards.fdn.fdn_272.card_impl import Plains
 from test_interface import Phase, Side, Step, Zone, card, create_game, player, token
 
-from silverquillm.table import Table, appears, ceases, moves, off_stack, on_stack, taps
+from table import Table, appears, ceases, moves, off_stack, on_stack, taps
 
 
 class TestLilianaPlusOne:

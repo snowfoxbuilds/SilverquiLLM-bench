@@ -11,7 +11,7 @@ from cards.fdn.fdn_121.card_impl import KomaWorldEater, KomaWorldEaterAbility4
 from cards.fdn.fdn_280.card_impl import Forest
 from test_interface import Side, Step, card, create_game, token
 
-from silverquillm.table import Table, appears, life, off_stack, on_stack, taps
+from table import Table, appears, life, off_stack, on_stack, taps
 
 
 def _unblocked(t, *attackers, then):

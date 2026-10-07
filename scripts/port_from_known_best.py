@@ -9,9 +9,10 @@ Porting hard-copies ``known_best/`` into ``benchmarks/<BENCHMARK>/`` and owns
 exactly these paths, which it replaces wholesale:
 
 - ``workspace/`` and ``data/test_oracle_workspace/``: ``engine/``, ``cards/fdn/``,
-  the ``cards/`` package files, ``conftest.py``, ``pytest.ini``, ``test_utils.py``
-  the Test Interface (``test_interface.py``, its ``.md`` and its demonstration tests)
-  and ``RULEBOOK.txt``, the Comprehensive Rules every ported benchmark stages;
+  the ``cards/`` package files, ``conftest.py``, ``pytest.ini``, ``test_utils.py``,
+  the Test Interface (``test_interface.py``, its ``.md`` and its demonstration tests),
+  ``table.py``, the helpers Audited Tests are written with, and ``RULEBOOK.txt``,
+  the Comprehensive Rules every ported benchmark stages;
 - ``workspace/engine_tests/``: the Audited Engine Tests, seeding the Engine Reference Tests;
 - ``data/tests/audited/fdn/`` and ``data/tests/audited/engine/``;
 - the Test Oracle Workspace's mirrors of the Workspace's ``AGENTS.md`` and ``skills/``
@@ -74,7 +75,7 @@ DEFECT_PATCHES = Path("data/known_defects")
 ORACLE_PATCHES = Path("data/oracle_patches")
 WORKSPACE_ITEMS = (
     "engine", "cards/fdn", "conftest.py", "pytest.ini", "test_utils.py",
-    "test_interface.py", "test_interface.md", "test_test_interface.py", "RULEBOOK.txt",
+    "test_interface.py", "test_interface.md", "test_test_interface.py", "table.py", "RULEBOOK.txt",
 )
 AUDITED_ITEMS = ("fdn", "engine")
 _IGNORE = shutil.ignore_patterns("__pycache__", ".pytest_cache", "*.pyc")

@@ -74,7 +74,7 @@ from engine.state_based_actions import check_state_based_actions
 from engine.triggers import TriggerRegistration
 from engine.types import CardType, Keyword, ManaCost, ManaType, Phase, Step, Zone
 from engine.zones import move_to_zone
-from silverquillm.table import (
+from table import (
     Table,
     appears,
     first_strike_damage,

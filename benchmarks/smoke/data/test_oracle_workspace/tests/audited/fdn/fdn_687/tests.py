@@ -26,7 +26,7 @@ from cards.fdn.fdn_687.card_impl import (
 )
 from test_interface import Decision, Phase, Side, Zone, ability, card, create_game, shuffled
 
-from silverquillm.table import Table, moves, off_stack, on_stack, shuffles, taps
+from table import Table, moves, off_stack, on_stack, shuffles, taps
 
 YES, NO = Decision.yes(), Decision.no()
 

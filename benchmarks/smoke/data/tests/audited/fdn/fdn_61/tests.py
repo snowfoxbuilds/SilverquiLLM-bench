@@ -17,7 +17,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_278.card_impl import Mountain
 from test_interface import Phase, Side, Zone, card, create_game
 
-from silverquillm.table import Table, appears, gains_control, moves, off_stack, on_stack, taps
+from table import Table, appears, gains_control, moves, off_stack, on_stack, taps
 
 
 def _tap(t, seat, lands):

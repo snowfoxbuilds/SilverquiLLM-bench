@@ -22,7 +22,7 @@ from cards.fdn.fdn_709.card_impl import Confiscate
 from engine.types import ManaType
 from test_interface import Decision, Phase, Side, Zone, card, create_game
 
-from silverquillm.table import Table, gains_control, moves, taps
+from table import Table, gains_control, moves, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 SACRIFICE = Decision.ability(index=0, printed=EatenAliveAbility1)

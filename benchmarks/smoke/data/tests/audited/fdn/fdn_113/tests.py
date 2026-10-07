@@ -13,7 +13,7 @@ from cards.fdn.fdn_147.card_impl import SerraAngel
 from cards.fdn.fdn_280.card_impl import Forest
 from test_interface import Decision, Phase, Side, Step, create_game, token
 
-from silverquillm.table import Table, appears, life, off_stack, on_stack, taps
+from table import Table, appears, life, off_stack, on_stack, taps
 
 TOKEN_MODE = Decision.mode(printed=SylvanScavengingAbility3)
 

@@ -17,7 +17,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_278.card_impl import Mountain
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, token
 
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
+from table import Table, appears, life, moves, off_stack, on_stack, taps
 
 _ARAHBO_MANA = {ManaType.WHITE: 1, ManaType.COLORLESS: 2}
 

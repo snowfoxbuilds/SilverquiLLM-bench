@@ -13,7 +13,7 @@ from __future__ import annotations
 from cards.fdn.fdn_271.card_impl import WindScarredCrag, WindScarredCragAbility2
 from test_interface import Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, life, moves, off_stack, on_stack, taps
+from table import Table, life, moves, off_stack, on_stack, taps
 
 
 def _play_crag() -> Table:

@@ -19,7 +19,7 @@ from engine.card import Instant
 from engine.types import ManaCost
 from test_interface import ManaType, Phase, Side, Zone, card, create_game, player
 
-from silverquillm.table import Table, appears, moves, taps
+from table import Table, appears, moves, taps
 
 
 def _table(p0: Side, p1: Side) -> Table:

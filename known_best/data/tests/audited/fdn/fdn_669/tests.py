@@ -13,7 +13,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_669.card_impl import BasiliskCollar, BasiliskCollarAbility2
 from test_interface import Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, life, moves, off_stack, on_stack, taps
+from table import Table, life, moves, off_stack, on_stack, taps
 
 
 def _equipped_lions(*theirs):

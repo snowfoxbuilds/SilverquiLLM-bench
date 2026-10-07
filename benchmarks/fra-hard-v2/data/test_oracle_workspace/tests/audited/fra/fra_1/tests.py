@@ -31,7 +31,7 @@ from cards.fdn.fdn_280.card_impl import Forest, ForestAbility1
 from cards.fdn.fdn_687.card_impl import DemolitionField, DemolitionFieldAbility2
 from test_interface import Decision, ManaType, Phase, Side, Step, Zone, ability, branch, card, create_game, player
 
-from silverquillm.table import Table, life, moves, off_stack, on_stack, taps, untaps
+from table import Table, life, moves, off_stack, on_stack, taps, untaps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 EXILE_ABILITY = EmrakulTheExigentDoomAbility5

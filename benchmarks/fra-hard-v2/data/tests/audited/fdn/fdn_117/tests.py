@@ -24,7 +24,7 @@ from cards.fdn.fdn_276.card_impl import Swamp
 from cards.fdn.fdn_280.card_impl import Forest
 from test_interface import Decision, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
+from table import Table, appears, life, moves, off_stack, on_stack, taps
 
 ANIMIST = AshrootAnimistAbility2
 

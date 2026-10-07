@@ -11,7 +11,7 @@ from cards.fdn.fdn_204.card_impl import KrenkoMobBoss, KrenkoMobBossAbility1
 from cards.fdn.fdn_272.card_impl import Plains
 from test_interface import Phase, Side, card, create_game
 
-from silverquillm.table import Table, appears, off_stack, on_stack, taps
+from table import Table, appears, off_stack, on_stack, taps
 
 
 def _mint(t, krenko, tokens):

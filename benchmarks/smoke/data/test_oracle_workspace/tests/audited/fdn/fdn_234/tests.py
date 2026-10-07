@@ -25,7 +25,7 @@ from engine.card import printed_class
 from engine.types import ManaCost, Supertype
 from test_interface import Phase, Side, Zone, card, create_game, shuffled
 
-from silverquillm.table import Table, moves, off_stack, on_stack
+from table import Table, moves, off_stack, on_stack
 
 
 @pytest.fixture(autouse=True)

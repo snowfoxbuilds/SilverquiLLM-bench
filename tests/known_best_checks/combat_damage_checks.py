@@ -19,7 +19,7 @@ from cards.fdn.spg_77.card_impl import Embercleave, EmbercleaveAbility3
 from engine.types import ManaType, Phase, Step, Zone
 from test_interface import Side, card, create_game
 
-from silverquillm.table import (
+from table import (
     Table,
     appears,
     first_strike_damage,

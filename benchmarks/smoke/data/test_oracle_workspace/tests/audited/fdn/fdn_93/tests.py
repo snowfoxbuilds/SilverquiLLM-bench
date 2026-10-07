@@ -12,7 +12,7 @@ from cards.fdn.fdn_93.card_impl import SearslicerGoblin, SearslicerGoblinAbility
 from cards.fdn.fdn_272.card_impl import Plains
 from test_interface import Phase, Side, Step, card, create_game, token
 
-from silverquillm.table import Table, appears, life, off_stack, on_stack, taps
+from table import Table, appears, life, off_stack, on_stack, taps
 
 
 def _searslicer_in_play():

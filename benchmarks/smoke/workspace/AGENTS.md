@@ -58,8 +58,8 @@ Tests drive play with action scripts and answer every other choice with
    extensions over card-specific hacks. Existing cards and engine behavior must
    keep working, including public names such as `engine.card.CardImpl`,
    `engine.game` and the Player Query machinery, and the engine surface
-   `test_interface.md` names. `test_interface.py` and `test_interface.md`
-   are fixed: do not change them.
+   `test_interface.md` names. `test_interface.py`, `test_interface.md` and
+   `table.py` are fixed: do not change them.
 
 3. **Life changes go through `gain_life` / `lose_life`** — A card
    implementation changes a player's life **only** by calling

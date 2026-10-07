@@ -1,7 +1,7 @@
 """The agent-visible grading support is the one grading uses.
 
 A benchmark with a Test Interface (smoke onward) stages the very
-``test_interface.py`` grading pairs with the candidate's engine
+``test_interface.py`` and ``table.py`` grading pairs with the candidate's engine
 (TEST-INTERFACE.md); one without (hob-medium, fra-hard v1) stages a
 ``test_utils.py`` byte-identical to the grading copy (AUDITED-TEST-SUITE.md), so
 an agent's own tests can use every helper, and the same activation semantics,
@@ -26,10 +26,12 @@ def test_staged_grading_support_is_the_grading_copy(benchmark, target_set):
     root = REPO_ROOT / "benchmarks" / benchmark
     paths = resolve_eval_paths(root, target_set)
     if paths.test_interface is not None:
-        staged, grading = root / "workspace" / "test_interface.py", paths.test_interface
+        pairs = [(root / "workspace" / "test_interface.py", paths.test_interface)]
+        pairs.append((root / "workspace" / "table.py", paths.table))
     else:
-        staged, grading = root / "workspace" / "test_utils.py", paths.test_utils
-    assert staged.read_bytes() == grading.read_bytes()
+        pairs = [(root / "workspace" / "test_utils.py", paths.test_utils)]
+    for staged, grading in pairs:
+        assert grading is not None and staged.read_bytes() == grading.read_bytes()
 
 
 def test_benchmarks_from_smoke_onward_grade_with_their_test_interface():

@@ -19,7 +19,7 @@ from test_utils import (
     resolve_stack,
 )
 
-from silverquillm.table import Table, moves
+from table import Table, moves
 
 
 def arrange(*, extra_mana=0, hand=(), battlefield=()):

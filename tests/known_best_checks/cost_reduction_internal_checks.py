@@ -13,7 +13,7 @@ from engine.types import ManaCost, ManaType, Phase, Step
 from test_interface import Side, Zone, card, create_game
 from test_utils import DeterministicPlayer
 
-from silverquillm.table import Table, moves, taps
+from table import Table, moves, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 

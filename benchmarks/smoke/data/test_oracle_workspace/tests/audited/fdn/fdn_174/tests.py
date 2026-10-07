@@ -16,7 +16,7 @@ from engine.card import Instant
 from engine.types import ManaCost
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
+from table import Table, appears, life, moves, off_stack, on_stack, taps
 
 
 def arrange(*, extra_mana=0, hand=(), battlefield=()):

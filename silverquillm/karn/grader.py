@@ -452,6 +452,7 @@ class ContainerGrader:
             paths.engine_support / "pytest.ini",
             paths.test_utils,
             *([paths.test_interface] if paths.test_interface is not None else []),
+            *([paths.table] if paths.table is not None else []),
         )
         container_root = f"{PACKAGE_ROOT}/benchmarks/{root.name}"
         mounts = [

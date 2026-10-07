@@ -24,7 +24,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_274.card_impl import Island
 from test_interface import Decision, Side, Step, Zone, card, create_game, player
 
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
+from table import Table, appears, life, moves, off_stack, on_stack, taps
 
 
 def _etali_attacks(p0_top, p1_top, *, choices=(), p1_hand=(), p1_lands=0, p1_library=()):

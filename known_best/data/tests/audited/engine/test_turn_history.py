@@ -18,7 +18,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_278.card_impl import Mountain
 from test_interface import Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import (
+from table import (
     Table,
     appears,
     life,

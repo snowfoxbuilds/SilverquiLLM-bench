@@ -26,7 +26,7 @@ from test_utils import (
     enter_permanent,
 )
 
-from silverquillm.table import Table, moves, taps
+from table import Table, moves, taps
 
 
 def _creature(name: str = "Test Creature", power: int = 1, toughness: int = 1) -> Creature:

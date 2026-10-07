@@ -14,7 +14,7 @@ from engine.card import Equipment, printed_class
 from engine.types import ManaCost
 from test_interface import Phase, Side, Step, Zone, card, create_game
 
-from silverquillm.table import Table, life, moves, off_stack, on_stack, taps
+from table import Table, life, moves, off_stack, on_stack, taps
 
 
 class TestSwiftfootBootsProperties:

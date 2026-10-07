@@ -29,7 +29,7 @@ from engine.card import printed_class
 from engine.types import CardType, ManaCost, Supertype
 from test_interface import Phase, Side, Step, Zone, card, create_game, token
 
-from silverquillm.table import (
+from table import (
     Table,
     appears,
     first_strike_damage,

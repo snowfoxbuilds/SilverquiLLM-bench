@@ -14,7 +14,7 @@ from test_interface import ManaType, Phase, Side, card, create_game
 from test_utils import create_game as legacy_create_game
 from test_utils import set_board_state
 
-from silverquillm.table import Table, moves
+from table import Table, moves
 
 
 def _library_card(name: str = "Blank"):

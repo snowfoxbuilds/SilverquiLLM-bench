@@ -36,7 +36,7 @@ from test_utils import DeterministicPlayer
 
 from engine.game_state import GameState
 from engine.stack import Stack, StackObject, check_state_based_actions
-from silverquillm.table import Table, appears, copied, life, moves, off_stack, on_stack, taps
+from table import Table, appears, copied, life, moves, off_stack, on_stack, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 

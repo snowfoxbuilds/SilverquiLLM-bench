@@ -43,7 +43,7 @@ from test_interface import (
     token,
 )
 
-from silverquillm.table import (
+from table import (
     Table,
     appears,
     becomes,

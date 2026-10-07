@@ -20,7 +20,7 @@ from test_interface import Phase, Side, Step, Zone, card, create_game, player
 from test_utils import DeterministicPlayer
 
 from engine.game_state import GameState
-from silverquillm.table import Table, extra_turn, life, moves, taps
+from table import Table, extra_turn, life, moves, taps
 
 # ---------------------------------------------------------------------------
 # Helpers

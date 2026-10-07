@@ -22,7 +22,7 @@ from engine.decisions import Decision
 from engine.types import ManaCost, ManaType
 from test_interface import Phase, Side, Zone, card, create_game
 
-from silverquillm.table import Table, moves, off_stack, on_stack
+from table import Table, moves, off_stack, on_stack
 
 
 def test_is_planeswalker():

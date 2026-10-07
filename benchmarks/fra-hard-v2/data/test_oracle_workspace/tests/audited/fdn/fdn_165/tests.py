@@ -18,7 +18,7 @@ from engine.card import Instant
 from engine.types import ManaCost, Zone
 from test_interface import Decision, ManaType, Phase, Side, Step, card, create_game
 
-from silverquillm.table import Table, moves, off_stack, on_stack, taps
+from table import Table, moves, off_stack, on_stack, taps
 
 
 class TestThinkTwiceProperties:

@@ -23,7 +23,7 @@ from cards.fdn.fdn_278.card_impl import Mountain
 from cards.hob.hob_174.card_impl import GlamdringFoehammer, GleamOfDeath
 from test_interface import ManaType, Phase, Side, Step, Zone, branch, card, create_game, player
 
-from silverquillm.table import Table, appears, life, moves, off_stack, on_stack, taps
+from table import Table, appears, life, moves, off_stack, on_stack, taps
 
 TRIGGER = BilboThiefInTheNightAbility2
 COMBAT = (Step.BEGIN_COMBAT, 0)

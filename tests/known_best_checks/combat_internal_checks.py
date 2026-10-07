@@ -17,7 +17,7 @@ from engine.types import Keyword, Zone
 from test_interface import Decision, Phase, Side, Step, create_game
 from test_utils import DeterministicPlayer
 
-from silverquillm.table import (
+from table import (
     Table,
     first_strike_damage,
     moves,

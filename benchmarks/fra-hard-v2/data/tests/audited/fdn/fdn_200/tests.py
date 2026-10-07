@@ -18,7 +18,7 @@ from cards.fdn.fdn_200.card_impl import (
 from cards.fdn.fdn_272.card_impl import Plains
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, token
 
-from silverquillm.table import Table, appears, ceases, life, moves, taps
+from table import Table, appears, ceases, life, moves, taps
 
 
 def _cast(t, surprise, mode, *, then=()):

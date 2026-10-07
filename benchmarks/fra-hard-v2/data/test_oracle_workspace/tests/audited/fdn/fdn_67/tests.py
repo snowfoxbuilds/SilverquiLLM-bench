@@ -16,7 +16,7 @@ from engine.card import printed_class
 from engine.types import CardType, ManaCost, ManaType
 from test_interface import Phase, Side, Zone, card, create_game, token
 
-from silverquillm.table import Table, appears, ceases, moves, taps
+from table import Table, appears, ceases, moves, taps
 
 
 def _cast_revenge(graveyard, hand=()):

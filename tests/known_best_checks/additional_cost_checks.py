@@ -22,7 +22,7 @@ from engine.queries import Answer
 from engine.types import ManaType, Phase, Zone
 from test_interface import Side, card, create_game
 
-from silverquillm.table import Table, moves
+from table import Table, moves
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 

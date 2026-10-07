@@ -13,7 +13,7 @@ from cards.fdn.fdn_191.card_impl import BrazenScourge
 from cards.fdn.fdn_272.card_impl import Plains
 from test_interface import ManaType, Phase, Side, Step, Zone, card, create_game, token
 
-from silverquillm.table import Table, appears, life, moves, taps
+from table import Table, appears, life, moves, taps
 
 
 class TestStrokeOfMidnightMint:

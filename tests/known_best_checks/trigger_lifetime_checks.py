@@ -26,7 +26,7 @@ from cards.fdn.fdn_272.card_impl import Plains
 from engine.types import ManaType, Phase, Zone
 from test_interface import Side, card, create_game
 
-from silverquillm.table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
+from table import Table, appears, gains_control, life, moves, off_stack, on_stack, taps
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 
