@@ -57,6 +57,17 @@ def _unit_environment(request, monkeypatch):
 
 
 @pytest.fixture(scope="session")
+def _empty_config_home(tmp_path_factory):
+    return tmp_path_factory.mktemp("config-home")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_host_config(_empty_config_home, monkeypatch):
+    """No test reads the operator's real ``~/.config/silverquillm/config.toml``."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(_empty_config_home))
+
+
+@pytest.fixture(scope="session")
 def plain_run(tmp_path_factory):
     """One successful simulated benchmark of the toy benchmark, built once; read it, never change it."""
     from .retained_runs import build_plain_run

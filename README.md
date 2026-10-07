@@ -71,14 +71,17 @@ Use Python 3.13, Docker, Karn on the build host, and a host Codex or Claude Code
 Install the benchmark with `pip install -e .`.
 SilverquiLLM runs a completed Karn build by itself; it needs no Ozolith package.
 
-The candidate recipes live in the results repository at `karn/constructs/<label>`. Build them from its committed tree, then build the grader image, before running:
+The candidate recipes live in the results repository at `karn/constructs/<label>`. Build them from its committed tree, then build the grader image, before running.
+Commands find the results repository, batch queue, run directory, and login state through their flags or `~/.config/silverquillm/config.toml` (see [Karn benchmarking](docs/KARN-BENCHMARKING.md#host-configuration)):
 
 ```bash
+mkdir -p ~/.config/silverquillm
+printf 'results_repo = "~/bench-results"\nbatches_dir = "~/bench-batches"\nruns_dir = "~/bench-runs"\n' > ~/.config/silverquillm/config.toml
 karn build ~/bench-results/karn --out ~/bench-builds/roster-1
 silverquillm grader build
 silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-codex
-silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark smoke --results-repo ~/bench-results
-silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark hob-medium --results-repo ~/bench-results
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark smoke
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark hob-medium
 ```
 
 Grading runs the agent's code only inside the grader container: no network, no access to your home directory, environment, or login.
