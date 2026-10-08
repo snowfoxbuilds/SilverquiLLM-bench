@@ -26,6 +26,8 @@ from silverquillm.host_config import (
     resolve_location,
     resolve_locations,
 )
+from silverquillm.karn.definition import KarnError
+from silverquillm.karn.provenance import host_label as resolve_host_label
 
 from .containers import RUN_CONTAINER_PREFIX, RunContainer, run_containers
 from .costs import ProvisionalCost
@@ -56,10 +58,16 @@ class RunView:
     estimated_percent: float | None
     """None without comparable history (RUN-MONITORING.md, Dashboard)."""
     cost: Decimal | None
-    """Provisional Estimated Cost, shown with ``~``; None with native telemetry off."""
+    """The record's Estimated Cost once the run has one (``cost_recorded``), else the
+    provisional one shown with ``~``; None when neither is known."""
     unpriced_requests: int
     request_costs: tuple[tuple[int, Decimal], ...]
     """``(timestamp_ms, usd)`` per priced request, oldest first, for a sparkline."""
+    cost_recorded: bool = False
+    cost_completeness: str | None = None
+    """The recorded measurement's completeness; None while the cost is provisional."""
+    conflicting_requests: int = 0
+    """Live observations of one request that disagree, each charged once."""
 
     def budget_fraction(self, now: datetime) -> float | None:
         elapsed = self.run.elapsed_seconds(now)
@@ -97,6 +105,8 @@ class MonitorSnapshot:
     counts: Counts
     repo: RepoFreshness
     exclusion_error: str | None
+    host_label: str | None = None
+    """This host's label; only records naming it count toward its Login Profiles."""
 
 
 @dataclass
@@ -104,6 +114,21 @@ class _Live:
     run: LiveRun
     cost: ProvisionalCost
     follower: LogFollower | None = None
+
+
+def _local_host_label(environ, hostname) -> str | None:
+    """This host's label as run provenance records it; None when it is invalid."""
+    try:
+        return resolve_host_label(environ, hostname)[0]
+    except KarnError:
+        return None
+
+
+def _spend_rank(record: RunSummary, local: bool) -> tuple:
+    """Which record of one execution counts: a stopped linked recovery reconciles its
+    original, and this host's retained copy is at least as current as a published one."""
+    recovered = record.recovery_of is not None and record.workspace_stopped is True
+    return (recovered, local, record.run_date.timestamp() if record.run_date else 0.0)
 
 
 def _canonical_login(login: str | None, profiles: list[ProfileStatus]) -> str | None:
@@ -123,6 +148,7 @@ class Monitor:
     popen: Callable[..., subprocess.Popen] = subprocess.Popen
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     follow_output: bool = True
+    hostname: Callable[[], str] | None = None
 
     def __post_init__(self):
         self._config_error: str | None = None
@@ -133,6 +159,7 @@ class Monitor:
             self._config_error = _config_message(error)
             self.config = HostConfig(path=config_path(self.environ), loaded=False)
         self.locations = self._resolve()
+        self.host_label = _local_host_label(self.environ, self.hostname)
         self.history_store = HistoryStore(self.locations["results_repo"].path)
         self._history: list[RunSummary] = []
         self._history_at = float("-inf")
@@ -202,27 +229,54 @@ class Monitor:
             self._codex_readings[login] = checked
         return checked[1]
 
-    def _profiles(
-        self, profiles: list[ProfileStatus], history: list[RunSummary], now: datetime
-    ) -> list[ProfileView]:
+    def _executions(
+        self, profiles: list[ProfileStatus], history: list[RunSummary], local: list[RunSummary]
+    ) -> tuple[dict[str, tuple[str, RunSummary]], dict[str, list[UsageReading]]]:
+        """For each execution this host ran, its Login Profile and the one record whose spend
+        counts, and every reading this host's records observed per Login Profile.
+
+        A record is this host's when it is retained in this host's run directory or its
+        provenance names this host's label; any other record stays in history only.
+        """
+        best: dict[str, tuple[tuple, str, RunSummary]] = {}
         readings: dict[str, list[UsageReading]] = defaultdict(list)
-        costs: dict[str, list[tuple[int, Decimal]]] = defaultdict(list)
-        recorded = set()
-        for summary in history:
-            recorded.add(summary.run_id)
+        mine = [(summary, False) for summary in history if self._mine(summary)]
+        for summary, local_copy in [*mine, *((summary, True) for summary in local)]:
             login = _canonical_login(summary.login_profile, profiles)
             if login is None:
                 continue
-            costs[login].extend(summary.request_costs)
             if summary.usage_reading is not None:
                 readings[login].append(summary.usage_reading)
+            rank = _spend_rank(summary, local_copy)
+            current = best.get(summary.execution_id)
+            if current is None or rank > current[0]:
+                best[summary.execution_id] = (rank, login, summary)
+        return {key: (login, record) for key, (_, login, record) in best.items()}, readings
+
+    def _mine(self, summary: RunSummary) -> bool:
+        return self.host_label is not None and summary.host_label == self.host_label
+
+    def _profiles(
+        self,
+        profiles: list[ProfileStatus],
+        history: list[RunSummary],
+        local: list[RunSummary],
+        now: datetime,
+    ) -> list[ProfileView]:
+        live_records = [
+            entry.run.record for entry in self._live.values() if entry.run.record is not None
+        ]
+        executions, readings = self._executions(profiles, history, [*local, *live_records])
+        costs: dict[str, list[tuple[int, Decimal]]] = defaultdict(list)
+        for login, record in executions.values():
+            costs[login].extend(record.request_costs)
         holder = {}
         for run_id, entry in self._live.items():
             login = entry.run.login_profile
             if login is None:
                 continue
             holder[login] = run_id
-            if run_id not in recorded:
+            if run_id not in executions:
                 costs[login].extend(
                     (row.timestamp_ms, row.usd)
                     for row in entry.cost.requests
@@ -250,6 +304,33 @@ class Monitor:
             for profile in profiles
         ]
 
+    def _view(self, run: LiveRun, history: list[RunSummary], now: datetime) -> RunView:
+        percent = (
+            estimated_percent(run, history, now)
+            if run.stage not in (Stage.NEEDS_RECOVER, Stage.UNKNOWN)
+            else None
+        )
+        cost = self._live[run.run_id].cost
+        record = run.record
+        if record is not None:
+            return RunView(
+                run,
+                percent,
+                record.estimated_cost,
+                record.unpriced_requests,
+                record.request_costs,
+                cost_recorded=True,
+                cost_completeness=record.cost_completeness or "missing",
+            )
+        return RunView(
+            run,
+            percent,
+            cost.total if run.native_telemetry else None,
+            cost.unpriced,
+            tuple((row.timestamp_ms, row.usd) for row in cost.requests if row.usd is not None),
+            conflicting_requests=cost.conflicts,
+        )
+
     def snapshot(self) -> MonitorSnapshot:
         now = self.clock()
         containers, docker_error = self.docker()
@@ -265,22 +346,7 @@ class Monitor:
         )
         self._track(runs)
         history = self.history()
-        views = [
-            RunView(
-                run,
-                estimated_percent(run, history, now)
-                if run.stage not in (Stage.NEEDS_RECOVER, Stage.UNKNOWN)
-                else None,
-                self._live[run.run_id].cost.total if run.native_telemetry else None,
-                self._live[run.run_id].cost.unpriced,
-                tuple(
-                    (row.timestamp_ms, row.usd)
-                    for row in self._live[run.run_id].cost.requests
-                    if row.usd is not None
-                ),
-            )
-            for run in runs
-        ]
+        views = [self._view(run, history, now) for run in runs]
         queued = queued_batches(self.path("batches_dir"))
         recent = now - FINISHED_WINDOW
         counts = Counts(
@@ -299,10 +365,11 @@ class Monitor:
             docker_error=docker_error,
             running=views,
             queued=queued,
-            profiles=self._profiles(profiles, history, now),
+            profiles=self._profiles(profiles, history, self._records.retained_records(), now),
             counts=counts,
             repo=self._repo,
             exclusion_error=self.history_store.exclusion_error,
+            host_label=self.host_label,
         )
 
     def output(self, run_id: str, stream: str | None = None, since: int = 0) -> list[LogLine]:

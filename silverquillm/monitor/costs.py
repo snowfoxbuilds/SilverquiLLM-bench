@@ -74,7 +74,10 @@ class ProvisionalCost:
     _codex: list = field(default_factory=list)
     _claude: list = field(default_factory=list)
     _priced: list = field(default_factory=list)
+    _requests: dict = field(default_factory=dict)
     available: bool = False
+    conflicts: int = 0
+    """Repeated observations of one Claude request that disagree with its first."""
 
     def update(self) -> None:
         path = self.run_dir / EVENTS_FILE
@@ -114,6 +117,7 @@ class ProvisionalCost:
     def _reset(self) -> None:
         self._offset, self._partial = 0, b""
         self._seen, self._codex, self._claude, self._priced = set(), [], [], []
+        self._requests, self.conflicts = {}, 0
 
     def _ingest(self, event: dict) -> bool:
         attributes = event.get("attributes")
@@ -127,14 +131,23 @@ class ProvisionalCost:
         kind = event.get("kind")
         if kind == "claude_code.api_request":
             self._seen.add(identity)
-            self._claude.append(
-                RequestCost(
-                    _stamp(event),
-                    attributes.get("model") if isinstance(attributes.get("model"), str) else None,
-                    {key: _count(attributes.get(source)) for key, source in CLAUDE_TOKENS.items()},
-                    _usd(attributes.get("cost_usd")),
-                )
+            row = RequestCost(
+                _stamp(event),
+                attributes.get("model") if isinstance(attributes.get("model"), str) else None,
+                {key: _count(attributes.get(source)) for key, source in CLAUDE_TOKENS.items()},
+                _usd(attributes.get("cost_usd")),
             )
+            request = attributes.get("request_id")
+            if isinstance(request, str) and request:
+                # One logical request observed again is never charged twice, as
+                # ``summarize_claude_events`` keeps the first; a disagreement is flagged.
+                first = self._requests.get(request)
+                if first is not None:
+                    if (first.model, first.tokens, first.usd) != (row.model, row.tokens, row.usd):
+                        self.conflicts += 1
+                    return False
+                self._requests[request] = row
+            self._claude.append(row)
             return True
         if (
             kind in ("codex.sse_event", "codex.websocket_event")

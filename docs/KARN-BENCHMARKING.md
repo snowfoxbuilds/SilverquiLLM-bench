@@ -204,7 +204,7 @@ A run left active by a crashed scheduler is recovered before further execution.
 Recovery confirms that its container has stopped, removes only resources carrying that run's ownership label, preserves available measurements/workspace, and records the interrupted outcome without replaying the model task.
 Keep both batch state and local run artifacts for this recovery.
 If an immutable record already exists but its writers were unconfirmed, successful reconciliation appends a linked recovery observation and preserves the original record bytes.
-The index and queue expose `recovery_of` and `execution_run_id` so this additional observation is distinguishable from another model execution.
+The record itself and the queue carry `recovery_of` and `execution_run_id`, so a reader of the records tells this additional observation apart from another model execution.
 Each host maintains its own queue and login state.
 A scheduler interrupted before a run wrote its `run-input.json` never launched that run; the entry is recorded as failed with `interrupted_before_launch` and the batch continues.
 
@@ -260,7 +260,7 @@ The batch state row is not rewritten and still reads `failed`; the published rec
 ## Historical records
 
 Schema 1 records and their identities, including `legacy` and `ozolith-v1`, keep their existing meaning and stay readable without Ozolith; every `ozolith-v1` record carries its vendored bundle.
-The shared reader and index accept both schemas; new rows do not invent a historical mode or leaderboard flag.
+The shared record reader accepts both schemas; new records do not invent a historical mode or leaderboard flag.
 Candidate Bundles can no longer be run, promoted, or published; rebuild an old candidate as a Karn construct to run it again.
 Batch files and state in the Candidate Bundle format are shown as unsupported and never run or rewritten.
 `legacy resume` replaces a prior leg's `prompt.md` and `run_manifest.json` with fresh files instead of writing through links, and refuses a prior leg whose `prompt.md` is a link or whose `workspace_final` holds a FIFO, socket, or device.

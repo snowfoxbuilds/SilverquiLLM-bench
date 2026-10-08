@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from silverquillm.karn.exclusions import ExclusionError, load_exclusions
+from silverquillm.karn.records import InvalidRunRecordError, KarnRunRecord
 
 from ._read import MAX_USD, instant, mapping, number, read_json
 from .candidates import CandidateDisplay, candidate_display
@@ -62,6 +63,9 @@ class RunSummary:
     scores: dict[str, Score]
     estimated_cost: Decimal | None
     cost_complete: bool
+    cost_completeness: str | None
+    """The measurement's own completeness: ``complete``, ``partial``, ``missing``, or None."""
+    unpriced_requests: int
     agent_turns: int | None
     total_tokens: int | None
     login_profile: str | None
@@ -71,8 +75,17 @@ class RunSummary:
     """``(timestamp_ms, usd)`` of each priced request."""
     usage_reading: UsageReading | None
     path: Path
+    workspace_stopped: bool | None = None
+    recovery_of: str | None = None
+    """The run whose execution this linked recovery reconciles."""
+    execution_run_id: str | None = None
     excluded: str | None = None
     """The Exclusion's reason code."""
+
+    @property
+    def execution_id(self) -> str:
+        """The execution this record observes: a linked recovery shares its original's."""
+        return self.execution_run_id or self.recovery_of or self.run_id
 
     @property
     def duration_seconds(self) -> float | None:
@@ -107,20 +120,23 @@ def _rows(value: Any) -> list[dict]:
     return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
 
 
-def _request_costs(measurements: dict) -> tuple[tuple[int, Decimal], ...]:
+def _request_costs(measurements: dict) -> tuple[tuple[tuple[int, Decimal], ...], int]:
+    """``(timestamp_ms, usd)`` of each priced request, and how many requests are unpriced."""
     prices = {
         row["response_id"]: _decimal(row.get("usd"))
         for row in _rows(measurements.get("request_prices"))
         if isinstance(row.get("response_id"), str)
     }
-    costs = []
+    costs, unpriced = [], 0
     for request in _rows(measurements.get("requests")):
         response_id = request.get("response_id")
         usd = prices.get(response_id) if isinstance(response_id, str) else None
         stamp = _int(request.get("timestamp_ms"))
         if usd is not None and stamp:
             costs.append((stamp, usd))
-    return tuple(sorted(costs))
+        else:
+            unpriced += 1
+    return tuple(sorted(costs)), unpriced
 
 
 def _reading(measurements: dict, stopped_at: datetime | None) -> UsageReading | None:
@@ -163,6 +179,8 @@ def summarize(manifest: Any, scores: Any, path: Path) -> RunSummary | None:
     cost = mapping(measurements.get("estimated_cost"))
     login = metadata.get("login_profile")
     host_label = provenance.get("host_label")
+    request_costs, unpriced = _request_costs(measurements)
+    stopped = execution.get("workspace_stopped")
     return RunSummary(
         run_id=manifest["run_id"],
         candidate_hash=str(candidate_hash),
@@ -176,6 +194,8 @@ def summarize(manifest: Any, scores: Any, path: Path) -> RunSummary | None:
         scores={name: _score(mapping(scores).get(name)) for name in DIMENSIONS},
         estimated_cost=_decimal(cost.get("value")),
         cost_complete=cost.get("completeness") == "complete",
+        cost_completeness=_text(cost.get("completeness")),
+        unpriced_requests=unpriced,
         agent_turns=_int(_value(mapping(measurements.get("agent_turns")).get("total"))),
         total_tokens=_int(mapping(usage).get("total_tokens")),
         login_profile=login if isinstance(login, str) else None,
@@ -185,10 +205,42 @@ def summarize(manifest: Any, scores: Any, path: Path) -> RunSummary | None:
             str(candidate_hash),
             provenance.get("recipe_revision"),
         ),
-        request_costs=_request_costs(measurements),
+        request_costs=request_costs,
         usage_reading=_reading(measurements, stopped_at),
         path=path,
+        workspace_stopped=stopped if isinstance(stopped, bool) else None,
+        recovery_of=_text(metadata.get("recovery_of")),
+        execution_run_id=_text(metadata.get("execution_run_id")),
     )
+
+
+def _text(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+# What a record's own validation can raise on a hostile document, beyond its own error type.
+RECORD_ERRORS = (
+    InvalidRunRecordError,
+    ValueError,
+    TypeError,
+    KeyError,
+    AttributeError,
+    RecursionError,
+    OverflowError,
+)
+
+
+def validated_summary(manifest: Any, scores: Any, path: Path) -> RunSummary | None:
+    """A summary of a schema 2 Run Record that passes the record's own validation, else None.
+
+    Only a validated record may establish that a run is finished (RUN-MONITORING.md, Run
+    stages); history itself shows every readable record.
+    """
+    try:
+        KarnRunRecord(manifest, scores).validate()
+    except RECORD_ERRORS:
+        return None
+    return summarize(manifest, scores, path)
 
 
 def _state(path: Path) -> tuple[int, int] | None:

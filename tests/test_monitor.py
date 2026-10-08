@@ -15,12 +15,13 @@ from pathlib import Path
 import pytest
 
 from silverquillm.karn import subscription_usage as subscription_usage_module
-from silverquillm.karn.definition import KarnError
+from silverquillm.karn.definition import KarnError, canonical, decode_definition, digest
 from silverquillm.karn.exclusions import Exclusion, write_exclusion
 from silverquillm.karn.execution import run_lock
 from silverquillm.karn.login import secret_values
 from silverquillm.karn.observations import normalize_rollout
-from silverquillm.karn.records import KarnIdentity
+from silverquillm.karn.records import KarnIdentity, KarnRunRecord, missing_scores
+from silverquillm.karn.records import write_record as write_run_record
 from silverquillm.karn.subscription_usage import codex_usage
 from silverquillm.monitor import Monitor, Stage
 from silverquillm.monitor.candidates import candidate_display
@@ -45,19 +46,33 @@ from silverquillm.monitor.queue import queued_batches
 from .test_karn_subscription_usage import claude_event, codex_line, write_lines
 
 NOW = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
+VECTOR = Path(__file__).parent / "fixtures/karn/wire-vectors-v4/canonical-definition-id/input.json"
+
+
+def _definition() -> dict:
+    value = json.loads(VECTOR.read_bytes())
+    value["name"] = "bare-claude-opus"
+    value["runtime"]["plugins"] = []
+    value["runtime"]["environment"] = {
+        "CONSTRUCT_MODEL": "claude-opus-5-5",
+        "CONSTRUCT_EFFORT": "max",
+    }
+    return decode_definition(canonical(value))
+
+
+DEFINITION = _definition()
 IDENTITY = {
     "scheme": "karn-v4",
     "definition_version": 4,
-    "definition_id": "721421d8-4725-5cfc-ab31-4f9cc8e7b9f1",
-    "definition_digest": "sha256:" + "a" * 64,
-    "image": "sha256:" + "b" * 64,
+    "definition_id": DEFINITION["definition_id"],
+    "definition_digest": digest(canonical(DEFINITION)),
+    "image": DEFINITION["image"],
     "image_id": "sha256:" + "b" * 64,
 }
 CANDIDATE_HASH = KarnIdentity.from_dict(IDENTITY).hash
-DEFINITION = {
-    "name": "bare-claude-opus",
-    "runtime": {"environment": {"CONSTRUCT_MODEL": "claude-opus-5-5", "CONSTRUCT_EFFORT": "max"}},
-}
+# Another build of the same definition: a different image, so a different Candidate Hash.
+OTHER_IDENTITY = {**IDENTITY, "image_id": "sha256:" + "c" * 64}
+OTHER_HASH = KarnIdentity.from_dict(OTHER_IDENTITY).hash
 
 
 def finishes(call, timeout=10.0):
@@ -270,25 +285,94 @@ def test_without_a_lock_table_a_stage_is_unknown(tmp_path):
     ]
 
 
-def retain(path: Path, run_id: str, *, stopped=True, recovery_of=None, candidate=CANDIDATE_HASH):
-    """A retained record as ``recovery._retain`` writes one: the manifest beside the scores."""
-    metadata = {"execution": {"status": "completed", "workspace_stopped": stopped}}
+START = datetime(2026, 10, 6, 10, 0, tzinfo=UTC)
+
+
+def valid_record(
+    run_id: str,
+    *,
+    stopped=True,
+    recovery_of=None,
+    identity=IDENTITY,
+    login="karn-claude-login/bare-claude-opus",
+    host: str | None = "host-a",
+    cost: str | None = "1.50",
+    completeness="complete",
+    requests=((START + timedelta(minutes=1), "1.50"),),
+    usage=None,
+    run_date="2026-10-06T10:00:00+00:00",
+) -> KarnRunRecord:
+    """A schema 2 record that passes the record's own validation, as a run writes one."""
+    measurements = {
+        "estimated_cost": {"completeness": completeness, "reasons": [], "value": cost},
+        "requests": [
+            {"response_id": f"{run_id}-{index}", "timestamp_ms": ms(moment)}
+            for index, (moment, _) in enumerate(requests)
+        ],
+        "request_prices": [
+            {"response_id": f"{run_id}-{index}", "usd": usd}
+            for index, (_, usd) in enumerate(requests)
+        ],
+    }
+    if usage is not None:
+        measurements["subscription_usage"] = usage
+    metadata = {
+        "run_date": run_date,
+        "benchmark_input": {},
+        "candidate_definition": DEFINITION,
+        "login_profile": login,
+        "grading_source": {},
+        "measurements": measurements,
+        "execution": {
+            "status": "completed",
+            "workspace_stopped": stopped,
+            "started_at": START.isoformat(),
+            "stopped_at": (START + timedelta(minutes=20)).isoformat(),
+        },
+    }
+    if host is not None:
+        metadata["provenance"] = {
+            "host_label": host,
+            "host_label_source": "env",
+            "bench": {"commit": None, "dirty": None},
+            "benchmark_root": {"commit": None, "dirty": None},
+            "recipe_revision": None,
+            "allow_dirty": False,
+            "dirty_reasons": [],
+        }
     if recovery_of is not None:
         metadata.update(recovery_of=recovery_of, execution_run_id=recovery_of)
     manifest = {
         "schema_version": 2,
         "run_id": run_id,
-        "candidate_hash": candidate,
+        "candidate": identity,
+        "candidate_hash": KarnIdentity.from_dict(identity).hash,
         "benchmark": "hob-medium",
+        "budget_seconds": 14400,
         "run_metadata": metadata,
+        "artifact_pointers": [],
     }
+    record = KarnRunRecord(manifest, missing_scores("grading_not_run"))
+    record.validate()
+    return record
+
+
+def retain(path: Path, run_id: str, **fields) -> Path:
+    """A retained record as ``recovery._retain`` writes one: the manifest beside the scores."""
+    record = valid_record(run_id, **fields)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"manifest": manifest, "scores": {"card_correctness": {}}}))
+    path.write_text(json.dumps({"manifest": record.manifest, "scores": record.scores}))
     return path
 
 
-def publish(results_repo: Path, run_id: str, candidate=CANDIDATE_HASH) -> None:
-    (results_repo / "results" / candidate / run_id).mkdir(parents=True, exist_ok=True)
+def publish(results_repo: Path, run_id: str, *, retained: Path | None = None, **fields) -> Path:
+    """Publish the record retained at ``retained``, else a new valid one, as the writer does."""
+    if retained is not None:
+        document = json.loads(retained.read_text())
+        record = KarnRunRecord(document["manifest"], document["scores"])
+    else:
+        record = valid_record(run_id, **fields)
+    return write_run_record(results_repo, record)
 
 
 def stages(runs, results_repo, *, containers=(), owned=(), pending=frozenset(), tmp_path):
@@ -321,9 +405,9 @@ def test_a_normal_run_moves_through_every_stage_to_finished(tmp_path):
     (run / "host").mkdir()
     (run / "host/host-result.json").write_text("{}")
     assert stages(runs, repo, owned=[run], tmp_path=tmp_path) == {"r1": (Stage.GRADING, ())}
-    retain(run / "run-record.json", "r1")
+    retained = retain(run / "run-record.json", "r1")
     assert stages(runs, repo, owned=[run], tmp_path=tmp_path) == {"r1": (Stage.RECORDING, ())}
-    publish(repo, "r1")
+    publish(repo, "r1", retained=retained)
     assert stages(runs, repo, tmp_path=tmp_path) == {}
 
 
@@ -340,16 +424,15 @@ def test_a_killed_runner_with_a_live_container_needs_recovery(tmp_path):
 def test_an_unconfirmed_stop_needs_recovery_until_its_linked_recovery_is_published(tmp_path):
     runs, repo = tmp_path / "runs", tmp_path / "repo"
     run = make_run(runs, "r1")
-    retain(run / "run-record.json", "r1", stopped=False)
-    publish(repo, "r1")
+    publish(repo, "r1", retained=retain(run / "run-record.json", "r1", stopped=False))
     assert stages(runs, repo, tmp_path=tmp_path) == {
         "r1": (Stage.NEEDS_RECOVER, ("unconfirmed_stop",))
     }
     # A recovery in progress holds the run.
     assert stages(runs, repo, owned=[run], tmp_path=tmp_path) == {"r1": (Stage.RECORDING, ())}
-    retain(run / "recovery-1/run-record.json", "r1-recovery-1", recovery_of="r1")
+    recovered = retain(run / "recovery-1/run-record.json", "r1-recovery-1", recovery_of="r1")
     assert stages(runs, repo, tmp_path=tmp_path) == {"r1": (Stage.NEEDS_RECOVER, ("unpublished",))}
-    publish(repo, "r1-recovery-1")
+    publish(repo, "r1-recovery-1", retained=recovered)
     # The original stays unconfirmed and unchanged; its linked recovery clears the warning.
     assert stages(runs, repo, tmp_path=tmp_path) == {}
     assert (
@@ -370,8 +453,7 @@ def test_a_retained_but_unpublished_record_needs_recovery_with_final_scores(tmp_
 
 def test_a_failed_login_harvest_needs_recovery_until_settled(tmp_path):
     runs, repo = tmp_path / "runs", tmp_path / "repo"
-    retain(make_run(runs, "r1") / "run-record.json", "r1")
-    publish(repo, "r1")
+    publish(repo, "r1", retained=retain(make_run(runs, "r1") / "run-record.json", "r1"))
     assert stages(runs, repo, pending={"r1"}, tmp_path=tmp_path) == {
         "r1": (Stage.NEEDS_RECOVER, ("login_settlement_pending",))
     }
@@ -394,9 +476,9 @@ def test_a_profiles_pending_journal_names_the_run_that_owns_it(tmp_path):
 def test_a_recovery_that_ends_unfinished_leaves_its_reasons(tmp_path):
     runs, repo = tmp_path / "runs", tmp_path / "repo"
     run = make_run(runs, "r1")
-    retain(run / "run-record.json", "r1", stopped=False)
+    original = retain(run / "run-record.json", "r1", stopped=False)
     retain(run / "recovery-1/run-record.json", "r1-recovery-1", recovery_of="r1")
-    publish(repo, "r1")
+    publish(repo, "r1", retained=original)
     assert stages(runs, repo, owned=[run], tmp_path=tmp_path) == {"r1": (Stage.RECORDING, ())}
     assert stages(runs, repo, pending={"r1"}, tmp_path=tmp_path) == {
         "r1": (Stage.NEEDS_RECOVER, ("unpublished", "login_settlement_pending"))
@@ -407,10 +489,9 @@ def test_unreadable_or_ambiguous_records_need_recovery_with_the_error(tmp_path):
     runs, repo = tmp_path / "runs", tmp_path / "repo"
     (make_run(runs, "r1") / "run-record.json").write_text("{not json")
     run = make_run(runs, "r2")
-    retain(run / "recovery-1/run-record.json", "a", recovery_of="r2")
-    retain(run / "recovery-2/run-record.json", "b", recovery_of="r2")
-    for run_id in ("a", "b"):
-        publish(repo, run_id)
+    for index, run_id in enumerate(("a", "b"), 1):
+        path = retain(run / f"recovery-{index}/run-record.json", run_id, recovery_of="r2")
+        publish(repo, run_id, retained=path)
     assert stages(runs, repo, tmp_path=tmp_path) == {
         "r1": (Stage.NEEDS_RECOVER, ("unreadable_record",)),
         "r2": (Stage.NEEDS_RECOVER, ("ambiguous_linked_recovery",)),
@@ -421,18 +502,17 @@ def test_a_run_that_never_launched_or_was_published_elsewhere_is_not_shown(tmp_p
     runs, repo = tmp_path / "runs", tmp_path / "repo"
     (runs / "never").mkdir(parents=True)
     make_run(runs, "moved")
-    publish(repo, "moved", candidate="c" * 64)
+    publish(repo, "moved", identity=OTHER_IDENTITY)
     assert stages(runs, repo, tmp_path=tmp_path) == {}
 
 
 def test_a_linked_recovery_record_never_follows_a_link(tmp_path):
     runs, repo = tmp_path / "runs", tmp_path / "repo"
     run = make_run(runs, "r1")
-    retain(run / "run-record.json", "r1", stopped=False)
-    publish(repo, "r1")
+    publish(repo, "r1", retained=retain(run / "run-record.json", "r1", stopped=False))
     outside = retain(tmp_path / "outside/run-record.json", "x", recovery_of="r1")
     (run / "recovery-1").symlink_to(outside.parent, target_is_directory=True)
-    publish(repo, "x")
+    publish(repo, "x", retained=outside)
     assert stages(runs, repo, tmp_path=tmp_path) == {
         "r1": (Stage.NEEDS_RECOVER, ("unconfirmed_stop",))
     }
@@ -569,7 +649,9 @@ def write_record(
     run_date="2026-10-06T10:00:00+00:00",
     definition=DEFINITION,
     candidate_hash=CANDIDATE_HASH,
+    host: str | None = None,
 ):
+    """A history record shaped as the Results Repo holds one; history reads it unvalidated."""
     directory = repo / "results" / candidate_hash / run_id
     directory.mkdir(parents=True)
     start = datetime(2026, 10, 6, 10, 0, tzinfo=UTC)
@@ -600,6 +682,8 @@ def write_record(
             },
         },
     }
+    if host is not None:
+        manifest["run_metadata"]["provenance"] = {"host_label": host}
     scores = {
         "card_correctness": {
             "evaluated": True,
@@ -1166,6 +1250,7 @@ def test_a_snapshot_reads_everything_and_writes_nothing(tmp_path):
                 "observed_at": None,
             },
         },
+        host="host-a",
     )
     enroll_slot(state, "karn-claude-login", "bare-claude-opus")
     write_batch(
@@ -1188,7 +1273,10 @@ def test_a_snapshot_reads_everything_and_writes_nothing(tmp_path):
                 "batches_dir": batches,
                 "state_root": state,
             },
-            environ={"XDG_CONFIG_HOME": str(tmp_path / "config")},
+            environ={
+                "XDG_CONFIG_HOME": str(tmp_path / "config"),
+                "SILVERQUILLM_HOST_LABEL": "host-a",
+            },
             docker=lambda: ([container("live")], None),
             proc_locks=lock,
             clock=lambda: NOW,
