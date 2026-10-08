@@ -336,9 +336,13 @@ class KarnScheduler:
                 for row in state["runs"]
             )
 
-        def retry_claimable():
+        def retry_claimable(*, retry_dead_workers=False):
             for name, plugin in list(deferred.items()):
-                if plugin is None or (
+                if plugin is None:
+                    if retry_dead_workers:
+                        del deferred[name]
+                    continue
+                if (
                     not unpooled_live()
                     if plugin == "unpooled"
                     else LoginPool(
@@ -509,7 +513,7 @@ class KarnScheduler:
                 if interrupted is not None:
                     raise interrupted
                 if time.monotonic() >= retry_at:
-                    retry_claimable()
+                    retry_claimable(retry_dead_workers=True)
                     dispatch_needed = True
                     retry_at = time.monotonic() + self.slot_poll_seconds
                 if dispatch_needed and not any(job["probing"] for job in active.values()):

@@ -387,6 +387,62 @@ def test_dead_worker_does_not_stall_refilling_while_another_run_continues(tmp_pa
     assert [row["status"] for row in rows] == ["running", "done", "done"]
 
 
+@pytest.mark.parametrize("poll_seconds", [0.1, 2.0])
+def test_prelaunch_worker_death_retries_only_on_slot_poll(tmp_path, poll_seconds):
+    from tests.scheduler_fixtures import ThreadWorker
+
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    state.mkdir()
+    _batch(directory, ["crash"])
+    _batch(directory, ["keeper"], "unpooled", batch="b")
+    attempts = []
+
+    class DeadWorker:
+        owner = None
+
+        def __init__(self):
+            self.connection, child = multiprocessing.Pipe()
+            child.close()
+
+        def alive(self):
+            return False
+
+        def close(self):
+            self.connection.close()
+
+    def worker_factory(executor, arguments):
+        if arguments["construct"] == "crash":
+            attempts.append(time.monotonic())
+            assert len(attempts) < 100, "prelaunch failures are spinning without a poll delay"
+            return DeadWorker()
+        return ThreadWorker(executor, arguments)
+
+    def execute(**kwargs):
+        kwargs["on_login_selected"](None)
+        kwargs["on_launch"]()
+        time.sleep(0.05)
+        kwargs["on_login_released"]()
+        time.sleep(0.3)
+        return SimpleNamespace(
+            run_metadata={"execution": {"status": "completed"}},
+            candidate=SimpleNamespace(to_dict=dict),
+        )
+
+    scheduler = make_scheduler(
+        directory, state, worker_factory=worker_factory, slot_poll_seconds=poll_seconds
+    )
+    scheduler.executor = execute
+    started = time.monotonic()
+    assert scheduler.run_until_idle() == 1
+    elapsed = time.monotonic() - started
+    assert len(attempts) <= int(elapsed / poll_seconds) + 1
+    if poll_seconds == 0.1:
+        assert len(attempts) > 1
+    else:
+        assert len(attempts) == 1
+    assert read_state(directory / "state/a.json", "a")["runs"] == []
+
+
 def test_restart_fills_a_free_slot_beside_an_external_live_worker(tmp_path):
     directory, state = tmp_path / "batches", tmp_path / "state"
     _enroll(state, 2)
