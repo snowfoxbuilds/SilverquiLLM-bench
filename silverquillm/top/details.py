@@ -87,6 +87,14 @@ def header(shown: Shown, now: datetime, theme: Theme) -> Table:
     left.append(f"{theme.glyph('sep')}{login or fmt.DASH}", style=theme.style("muted"))
     if summary is not None and summary.host_label:
         left.append(f"{theme.glyph('sep')}host {summary.host_label}", style=theme.style("muted"))
+    if summary is not None and summary.recovery_of:
+        left.append(
+            f"{theme.glyph('sep')}recovers {summary.recovery_of[:8]}", style=theme.style("warn")
+        )
+    elif summary is not None and summary.execution_id != summary.run_id:
+        left.append(
+            f"{theme.glyph('sep')}execution {summary.execution_id[:8]}", style=theme.style("muted")
+        )
     left.append("\n")
     if live is not None:
         run = live.run
@@ -132,12 +140,22 @@ def header(shown: Shown, now: datetime, theme: Theme) -> Table:
             right.add_row(label, fmt.score(summary.scores.get(name), theme))
         cost = fmt.money(summary.estimated_cost, theme)
         if summary.estimated_cost is not None and not summary.cost_complete:
-            cost.append(" partial", style=theme.style("muted"))
+            completeness = summary.cost_completeness or "partial"
+            cost.append(f" {completeness}", style=theme.style("muted"))
+        if summary.unpriced_requests:
+            cost.append(f" +{summary.unpriced_requests} unpriced", style=theme.style("muted"))
         right.add_row("cost", cost)
         right.add_row("turns", fmt.count(summary.agent_turns))
         right.add_row("tokens", fmt.count(summary.total_tokens))
     elif live is not None:
-        right.add_row("cost", fmt.money(live.cost, theme, provisional=True))
+        spend = fmt.spend(
+            live.cost,
+            theme,
+            recorded=live.cost_recorded,
+            completeness=live.cost_completeness,
+            conflicting=live.conflicting_requests,
+        )
+        right.add_row("cost", spend)
         right.add_row("requests", str(len(shown.requests)))
     if detail is not None and detail.breakdown:
         for name, (tokens, usd) in detail.breakdown.items():

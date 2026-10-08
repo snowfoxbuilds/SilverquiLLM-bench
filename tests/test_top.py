@@ -42,6 +42,43 @@ def test_weekly_usage_from_a_reading_shows_reset_and_age():
     assert "resets" in text and "read 12m ago" in text
 
 
+def test_a_reading_of_unknown_time_shows_its_age_as_a_lower_bound():
+    reading = UsageReading(
+        "claude", 41.0, 10080, NOW + timedelta(days=1), None, NOW - timedelta(minutes=12)
+    )
+    usage = WeeklyUsage("p", 41.0, False, reading)
+    assert "read ≥12m ago" in fmt.weekly(usage, NOW, MTG).plain
+    assert "read >=12m ago" in fmt.weekly(usage, NOW, PLAIN).plain
+
+
+def test_a_recorded_cost_drops_the_provisional_mark_and_flags_what_is_incomplete():
+    amount = Decimal("8.41")
+    provisional = fmt.spend(amount, MTG, recorded=False, completeness=None).plain
+    complete = fmt.spend(amount, MTG, recorded=True, completeness="complete").plain
+    partial = fmt.spend(amount, MTG, recorded=True, completeness="partial").plain
+    conflicting = fmt.spend(amount, PLAIN, recorded=True, completeness="complete", conflicting=2)
+    assert provisional == "~$8.41"
+    assert complete == "$8.41"
+    assert partial == "$8.41*"
+    assert conflicting.plain == "$8.41 !=2"
+    assert fmt.spend(None, MTG, recorded=True, completeness="missing").plain == fmt.DASH
+
+
+@pytest.mark.parametrize(
+    ("code", "words"),
+    [
+        ("mismatched_record", "record mismatched"),
+        ("unreadable_published_record", "published record unreadable"),
+        ("ambiguous_published_record", "published records disagree"),
+    ],
+)
+def test_published_record_problems_read_as_words(code, words):
+    from types import SimpleNamespace
+
+    run = SimpleNamespace(container=None, reasons=(code,))
+    assert fmt.reasons(run, MTG).plain == words
+
+
 def test_an_estimated_weekly_usage_is_marked_and_has_no_reset():
     text = fmt.weekly(WeeklyUsage("p", 47.4, True, None), NOW, MTG).plain
     assert text == "≈ 47%"
@@ -514,6 +551,53 @@ def test_each_location_source_sits_beside_its_path():
     lines = _plain(StatusPane._where(FakeMonitor().snapshot(), MTG)).splitlines()
     assert any("bench-results (config)" in line for line in lines), lines
     assert any("silverquillm (default)" in line for line in lines), lines
+
+
+def test_the_status_pane_names_this_hosts_label():
+    from silverquillm.top.dashboard import StatusPane
+
+    monitor = FakeMonitor()
+    lines = _plain(StatusPane._where(monitor.snapshot(), MTG)).splitlines()
+    assert any(line.split()[:2] == ["host", "lab-1"] for line in lines), lines
+    monitor.host_label = None
+    lines = _plain(StatusPane._where(monitor.snapshot(), MTG)).splitlines()
+    assert any(line.split()[:2] == ["host", "unlabelled"] for line in lines), lines
+
+
+def test_a_recovery_record_names_the_run_it_recovers():
+    from dataclasses import replace
+
+    from silverquillm.top.details import Shown, header
+
+    original = history()[0]
+    recovery = replace(original, run_id="f" * 32, recovery_of=original.run_id)
+    text = _plain(header(Shown(recovery.run_id, summary=recovery), NOW, MTG))
+    assert f"recovers {original.run_id[:8]}" in text
+    plain = _plain(header(Shown(original.run_id, summary=original), NOW, MTG))
+    assert "recovers" not in plain and "execution" not in plain
+
+
+def test_a_running_row_switches_to_its_records_cost():
+    from dataclasses import replace
+
+    from silverquillm.top.dashboard import RunningPane
+
+    view = next(view for view in FakeMonitor().running if view.cost is not None)
+    live_spend = RunningPane._cells(view, NOW, MTG)[-1].plain
+    recorded = replace(
+        view, cost_recorded=True, cost_completeness="partial", conflicting_requests=1
+    )
+    recorded_spend = RunningPane._cells(recorded, NOW, MTG)[-1].plain
+    assert live_spend.startswith("~$")
+    assert recorded_spend.startswith("$") and "*" in recorded_spend and "≠1" in recorded_spend
+
+
+def test_a_partly_priced_record_says_so_in_its_details():
+    from silverquillm.top.details import Shown, header
+
+    partial = next(run for run in history() if not run.cost_complete)
+    text = _plain(header(Shown(partial.run_id, summary=partial), NOW, MTG))
+    assert "partial" in text and "+3 unpriced" in text
 
 
 def test_a_run_needing_recovery_has_its_own_badge():

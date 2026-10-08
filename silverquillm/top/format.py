@@ -76,6 +76,23 @@ def money(amount: Decimal | None, theme: Theme, *, provisional: bool = False) ->
     return Text(f"{prefix}${amount:,.2f}", style=style)
 
 
+def spend(
+    amount: Decimal | None,
+    theme: Theme,
+    *,
+    recorded: bool,
+    completeness: str | None,
+    conflicting: int = 0,
+) -> Text:
+    """A run's cost: ``~`` while provisional, ``*`` when its record calls it incomplete."""
+    text = money(amount, theme, provisional=not recorded)
+    if amount is not None and recorded and completeness not in (None, "complete"):
+        text.append(theme.glyph("partial"), style=theme.style("muted"))
+    if conflicting:
+        text.append(f" {theme.glyph('conflict')}{conflicting}", style=theme.style("warn"))
+    return text
+
+
 def count(value: int | None) -> str:
     if value is None:
         return DASH
@@ -131,8 +148,10 @@ def weekly(usage: WeeklyUsage | None, now: datetime, theme: Theme) -> Text:
     if usage.resets_at is not None:
         reset = usage.resets_at.astimezone().strftime("%a %H:%M")
         text.append(f"{theme.glyph('sep')}resets {reset}", style=theme.style("muted"))
+        bound = "" if usage.reading_age_exact else theme.glyph("at_least")
         text.append(
-            f"{theme.glyph('sep')}read {ago(usage.reading_age(now))}", style=theme.style("muted")
+            f"{theme.glyph('sep')}read {bound}{ago(usage.reading_age(now))}",
+            style=theme.style("muted"),
         )
     return text
 
@@ -165,6 +184,9 @@ REASONS = {
     "login_settlement_pending": "login unsettled",
     "unreadable_record": "record unreadable",
     "ambiguous_linked_recovery": "recoveries disagree",
+    "mismatched_record": "record mismatched",
+    "unreadable_published_record": "published record unreadable",
+    "ambiguous_published_record": "published records disagree",
 }
 
 

@@ -95,6 +95,7 @@ class StatusPane(Horizontal):
         elif repo.behind == 0:
             fetched.append(" · up to date", style=theme.style("good"))
         table.add_row("fetch", fetched)
+        table.add_row("host", Text(snapshot.host_label or "unlabelled", style=muted))
         for problem in (snapshot.config_error, snapshot.docker_error, snapshot.exclusion_error):
             if problem:
                 table.add_row(Text(theme.glyph("problem")), Text(problem, style=theme.style("bad")))
@@ -242,7 +243,13 @@ class RunningPane(Vertical):
         fraction = view.budget_fraction(now)
         used = f" · {fraction * 100:.0f}%" if fraction is not None else ""
         progress.append(f"\n{fmt.short_duration(elapsed)} of {budget}{used}", style=muted)
-        spend = fmt.money(view.cost, theme, provisional=True)
+        spend = fmt.spend(
+            view.cost,
+            theme,
+            recorded=view.cost_recorded,
+            completeness=view.cost_completeness,
+            conflicting=view.conflicting_requests,
+        )
         if view.unpriced_requests:
             spend.append(f" +{view.unpriced_requests}?", style=muted)
         spend.append("\n")

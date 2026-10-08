@@ -355,6 +355,8 @@ def history():
                 scores=scores,
                 estimated_cost=Decimal(cost),
                 cost_complete=index != 2,
+                cost_completeness="complete" if index != 2 else "partial",
+                unpriced_requests=0 if index != 2 else 3,
                 agent_turns=300 + 41 * index,
                 total_tokens=12_000_000 + 1_300_000 * index,
                 login_profile=login,
@@ -514,6 +516,7 @@ class FakeMonitor:
         self.closed = False
         self.shutdown_begun = False
         self.root = root
+        self.host_label: str | None = "lab-1"
         self.output_calls: list[tuple] = []
 
     def snapshot(self) -> MonitorSnapshot:
@@ -539,6 +542,7 @@ class FakeMonitor:
             counts=Counts(queued=5, live=len(self.running), finished_recent=6, finished_total=354),
             repo=RepoFreshness(NOW - timedelta(hours=2), 3),
             exclusion_error=None,
+            host_label=self.host_label,
         )
 
     def history(self, *, refresh: bool = False):

@@ -163,6 +163,7 @@ Codex request events are priced with the bench's price table, as at the end of a
 Claude request events lack the cache-write duration split that the price table needs, so Claude runs sum Claude Code's own per-request `cost_usd`, charging one logical request (`request_id`) once even when it is observed again; a repeat that disagrees is counted as a conflict, and an event without a request id stands alone.
 Once a valid record applies to the run, the row shows that record's Estimated Cost, its completeness, and its priced requests, without waiting for publication or for history to refresh.
 The applicable record is a linked recovery before the original, and a locally retained copy before a published one; a missing recorded cost stays missing rather than falling back to the live figure.
+A recorded figure drops the `~`, carries `*` when its record calls it incomplete, and shows `≠N` for N conflicting request observations.
 
 The queued pane lists the not-yet-started run specs in execution order, under one header line per Batch (grilling 2026-10-07).
 Each row shows the benchmark, Candidate display, and budget; a queued run has no Login Profile until it launches.
@@ -197,7 +198,7 @@ A live run counts its applicable record once it has one, and its provisional Est
 Excluded runs count too, since an Exclusion does not undo spend.
 
 A Claude reading retained in a record has no time of its own; the run's container stop bounds it.
-Such a reading counts spend only after that stop, so spend between the reading and the stop is missing: its value is always marked `≈`, and its age is shown as a lower bound.
+Such a reading counts spend only after that stop, so spend between the reading and the stop is missing: its value is always marked `≈`, and its age is shown as a lower bound, as in `read ≥3h ago`.
 When the same reading was also seen live with a time, the timed observation is used.
 A value from an unexpired reading reads like `41% · resets Thu 14:00 · read 12m ago`.
 
