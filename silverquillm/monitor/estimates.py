@@ -55,8 +55,14 @@ class WeeklyUsage:
         return self.reading.resets_at if self.reading else None
 
     def reading_age(self, now: datetime) -> timedelta | None:
+        """The reading's age; at least this old when ``reading_age_exact`` is False."""
         moment = self.reading.effective_at if self.reading else None
         return now - moment if moment else None
+
+    @property
+    def reading_age_exact(self) -> bool:
+        """False when the reading's time is unknown and its run's stop bounds it."""
+        return self.reading is not None and self.reading.observed_at is not None
 
 
 def _spent(costs: Iterable[tuple[int, Decimal]], since: datetime | None) -> Decimal:
@@ -81,11 +87,19 @@ def weekly_usage(
     if rate is None or rate <= 0:
         return None
     costs = list(costs)
-    timed = [r for r in readings if r.provider == provider and r.effective_at is not None]
-    newest = max(timed, key=lambda r: r.effective_at, default=None)
+    usable = [r for r in readings if r.provider == provider and r.effective_at is not None]
+    observed = {(r.utilization_percent, r.resets_at) for r in usable if r.observed_at}
+    # A record's untimed copy of a reading already seen live is that same observation.
+    usable = [
+        r for r in usable if r.observed_at or (r.utilization_percent, r.resets_at) not in observed
+    ]
+    newest = max(usable, key=lambda r: r.effective_at, default=None)
     if newest is not None and now < newest.resets_at:
         added = _spent(costs, newest.effective_at) / rate
-        return WeeklyUsage(profile, newest.utilization_percent + float(added), added > 0, newest)
+        # An untimed reading counts spend only after its run's stop, so spend between the
+        # reading and that stop is missing: the value is approximate either way.
+        approximate = added > 0 or newest.observed_at is None
+        return WeeklyUsage(profile, newest.utilization_percent + float(added), approximate, newest)
     # A reading speaks for one window past its reset at most; after that it is stale.
     if newest is not None and now < newest.resets_at + WEEK:
         since = newest.resets_at

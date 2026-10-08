@@ -16,6 +16,7 @@ import os
 import re
 import socket
 import subprocess
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from .definition import KarnError
@@ -63,13 +64,15 @@ def require_package_from(bench_root: Path) -> None:
         )
 
 
-def host_label() -> tuple[str, str]:
-    configured = os.environ.get(HOST_LABEL_ENV)
+def host_label(
+    environ: Mapping[str, str] | None = None, hostname: Callable[[], str] | None = None
+) -> tuple[str, str]:
+    configured = (os.environ if environ is None else environ).get(HOST_LABEL_ENV)
     if configured is not None:
         if not LABEL.fullmatch(configured):
             raise KarnError("invalid_host_label")
         return configured, "env"
-    name = socket.gethostname().split(".")[0]
+    name = (hostname or socket.gethostname)().split(".")[0]
     return (name if LABEL.fullmatch(name) else "unknown"), "hostname"
 
 

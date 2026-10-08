@@ -16,11 +16,13 @@ from silverquillm.karn.subscription_usage import provider_for
 from ._read import instant, mapping, read_json
 from .candidates import CandidateDisplay, candidate_display
 from .containers import RunContainer
+from .history import RunSummary, validated_summary
 from .locks import lock_held
 
 RUN_ID_LIMIT = 64
 RECOVERY_DIRECTORY = re.compile(r"recovery-[0-9]+")
 CANDIDATE_HASH = re.compile(r"[0-9a-f]{64}")
+RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 
 
 class Stage(enum.Enum):
@@ -53,6 +55,9 @@ class LiveRun:
     telemetry_adapter: str | None
     reasons: tuple[str, ...] = ()
     """Why a Needs recover or Unknown run needs recovery (RUN-MONITORING.md, Run stages)."""
+    record: RunSummary | None = None
+    """The validated record describing this execution, None until one exists: a linked
+    recovery before the original, a locally retained copy before a published one."""
 
     @property
     def started_at(self) -> datetime | None:
@@ -70,67 +75,89 @@ class LiveRun:
         return max(0.0, (end - start).total_seconds())
 
 
-@dataclass(frozen=True)
-class RetainedRecord:
-    """The parts of a retained record a stage needs; the scores are never kept."""
-
-    run_id: str
-    candidate_hash: str
-    stopped: bool
-    recovery_of: str | None
-
-
 UNREADABLE = "unreadable_record"
+MISMATCHED = "mismatched_record"
+UNREADABLE_PUBLISHED = "unreadable_published_record"
+AMBIGUOUS_PUBLISHED = "ambiguous_published_record"
+
+
+def _file_state(path: Path) -> tuple[int, int, int] | None:
+    try:
+        info = os.stat(path, follow_symlinks=False)
+    except OSError:
+        return None
+    return (info.st_ino, info.st_mtime_ns, info.st_size)
 
 
 @dataclass
 class RecordCache:
-    """Retained records are never rewritten, so each is parsed once per file identity."""
+    """Validated Run Records, each parsed once per file identity.
 
-    _entries: dict[Path, tuple[tuple[int, int, int], RetainedRecord | None]] = field(
-        default_factory=dict
-    )
+    Records are never rewritten, so a record whose files keep their identity keeps its
+    verdict; a record that fails the record's own validation reads as ``UNREADABLE``.
+    """
 
-    def read(self, path: Path) -> RetainedRecord | str | None:
-        """The record at ``path``, None when absent, or ``UNREADABLE``."""
-        try:
-            info = os.stat(path, follow_symlinks=False)
-        except OSError:
-            self._entries.pop(path, None)
+    _retained: dict[Path, tuple[tuple, RunSummary | None]] = field(default_factory=dict)
+    _published: dict[Path, tuple[tuple, RunSummary | None]] = field(default_factory=dict)
+    _seen: set[Path] = field(default_factory=set)
+
+    def begin(self) -> None:
+        """Start a pass; ``retained_records`` then lists only what this pass read."""
+        self._seen = set()
+
+    def read(self, path: Path) -> RunSummary | str | None:
+        """The retained record at ``path``, None when absent, or ``UNREADABLE``."""
+        key = _file_state(path)
+        if key is None:
+            self._retained.pop(path, None)
             return None
-        key = (info.st_ino, info.st_mtime_ns, info.st_size)
-        cached = self._entries.get(path)
+        cached = self._retained.get(path)
         if cached is None or cached[0] != key:
-            cached = (key, _retained(read_json(path)))
-            self._entries[path] = cached
+            document = mapping(read_json(path))
+            summary = validated_summary(document.get("manifest"), document.get("scores"), path)
+            cached = (key, summary)
+            self._retained[path] = cached
+        self._seen.add(path)
         return cached[1] if cached[1] is not None else UNREADABLE
 
+    def published(self, directory: Path) -> RunSummary | str | None:
+        """The published record in ``directory``, None when absent, or ``UNREADABLE``.
 
-def _retained(document) -> RetainedRecord | None:
-    manifest = mapping(mapping(document).get("manifest"))
-    metadata = mapping(manifest.get("run_metadata"))
-    stopped = mapping(metadata.get("execution")).get("workspace_stopped")
-    run_id, candidate_hash = manifest.get("run_id"), manifest.get("candidate_hash")
-    recovery_of = metadata.get("recovery_of")
-    if (
-        not isinstance(run_id, str)
-        or not isinstance(candidate_hash, str)
-        or not CANDIDATE_HASH.fullmatch(candidate_hash)
-        or not isinstance(stopped, bool)
-        or not (recovery_of is None or isinstance(recovery_of, str))
-    ):
-        return None
-    return RetainedRecord(run_id, candidate_hash, stopped, recovery_of)
+        As ``read_record`` requires, its identity must match the directory it is stored in.
+        """
+        if os.path.islink(directory) or not os.path.isdir(directory):
+            self._published.pop(directory, None)
+            return None
+        manifest, scores = directory / "manifest.json", directory / "scores.json"
+        key = (_file_state(manifest), _file_state(scores))
+        cached = self._published.get(directory)
+        if cached is None or cached[0] != key:
+            summary = validated_summary(read_json(manifest), read_json(scores), directory)
+            if summary is not None and (
+                summary.run_id != directory.name or summary.candidate_hash != directory.parent.name
+            ):
+                summary = None
+            cached = (key, summary)
+            self._published[directory] = cached
+        return cached[1] if cached[1] is not None else UNREADABLE
+
+    def retained_records(self) -> list[RunSummary]:
+        """Every valid record retained under a run directory read in this pass."""
+        return [
+            entry[1]
+            for path, entry in self._retained.items()
+            if path in self._seen and entry[1] is not None
+        ]
 
 
 @dataclass(frozen=True)
 class _Records:
-    original: RetainedRecord | None
-    linked: RetainedRecord | None
+    original: RunSummary | None
+    linked: RunSummary | None
     errors: tuple[str, ...]
 
     @property
-    def retained(self) -> list[RetainedRecord]:
+    def retained(self) -> list[RunSummary]:
         return [record for record in (self.original, self.linked) if record is not None]
 
 
@@ -142,8 +169,11 @@ def _records(run_dir: Path, cache: RecordCache) -> _Records:
     """
     errors = []
     original = cache.read(run_dir / "run-record.json")
-    if original == UNREADABLE or (original is not None and original.run_id != run_dir.name):
+    if original == UNREADABLE:
         errors.append(UNREADABLE)
+        original = None
+    elif original is not None and original.run_id != run_dir.name:
+        errors.append(MISMATCHED)
         original = None
     try:
         entries = [
@@ -158,45 +188,105 @@ def _records(run_dir: Path, cache: RecordCache) -> _Records:
         record = cache.read(Path(entry.path) / "run-record.json")
         if record == UNREADABLE:
             errors.append(UNREADABLE)
-        elif record is not None and record.recovery_of == run_dir.name and record.stopped:
+        elif record is not None and record.recovery_of == run_dir.name and record.workspace_stopped:
             linked.append(record)
     if len(linked) > 1:
         errors.append("ambiguous_linked_recovery")
     return _Records(original, linked[0] if len(linked) == 1 else None, tuple(dict.fromkeys(errors)))
 
 
-def _published(results_repo: Path | None, record: RetainedRecord) -> bool:
-    if results_repo is None:
-        return True  # Without a Results Repo publication is unknown, so it is never flagged.
-    return (Path(results_repo) / "results" / record.candidate_hash / record.run_id).is_dir()
+def _destination(results_repo: Path, record: RunSummary) -> Path:
+    return Path(results_repo) / "results" / record.candidate_hash / record.run_id
 
 
-def _published_without_local_record(results_repo: Path | None, run_id: str) -> bool:
+def _published_link(
+    run_dir: Path, results_repo: Path | None, cache: RecordCache
+) -> RunSummary | None:
+    """The published linked recovery ``recovery-record.json`` names, when it is valid.
+
+    The link names a record only by id, as recovery reads it; anything else is ignored.
+    """
     if results_repo is None:
-        return False
+        return None
+    link = mapping(read_json(run_dir / "recovery-record.json", limit=64 * 1024))
+    run_id, candidate_hash = link.get("run_id"), link.get("candidate_hash")
+    if not (
+        isinstance(run_id, str)
+        and RUN_ID.fullmatch(run_id)
+        and isinstance(candidate_hash, str)
+        and CANDIDATE_HASH.fullmatch(candidate_hash)
+    ):
+        return None
+    record = cache.published(Path(results_repo) / "results" / candidate_hash / run_id)
+    if (
+        isinstance(record, RunSummary)
+        and record.recovery_of == run_dir.name
+        and record.workspace_stopped
+    ):
+        return record
+    return None
+
+
+def _published_elsewhere(
+    results_repo: Path | None, run_id: str, cache: RecordCache
+) -> tuple[RunSummary | None, tuple[str, ...]]:
+    """The run's only published record when this host retains none, and why it is not final."""
+    if results_repo is None:
+        return None, ("no_record",)
     try:
-        return any((Path(results_repo) / "results").glob("*/" + run_id))
+        matches = [
+            path for path in (Path(results_repo) / "results").glob("*/" + run_id) if path.is_dir()
+        ]
     except (OSError, ValueError):
-        return False
+        matches = []
+    if not matches:
+        return None, ("no_record",)
+    if len(matches) > 1:
+        return None, (AMBIGUOUS_PUBLISHED,)
+    record = cache.published(matches[0])
+    if not isinstance(record, RunSummary):
+        return None, (UNREADABLE_PUBLISHED,)
+    return record, (() if record.workspace_stopped else ("unconfirmed_stop",))
 
 
-def _recovery_reasons(
-    run_dir: Path, records: _Records, results_repo: Path | None, pending_logins: Collection[str]
-) -> tuple[str, ...]:
-    """Why a run still needs ``silverquillm recover``; empty once it is Finished."""
+@dataclass(frozen=True)
+class _Verdict:
+    reasons: tuple[str, ...]
+    record: RunSummary | None
+    """The record whose measurements now describe the run's execution, when one exists."""
+
+
+def _verdict(
+    run_dir: Path,
+    records: _Records,
+    results_repo: Path | None,
+    pending_logins: Collection[str],
+    cache: RecordCache,
+) -> _Verdict:
+    """Why a run still needs ``silverquillm recover``, empty once it is Finished, and the
+    record that applies to it; finality follows ``recovery._finalized_record``."""
     reasons = list(records.errors)
     original = records.original
-    final = records.linked or (original if original is not None and original.stopped else None)
-    if final is None and not records.errors:
-        if original is not None:
-            reasons.append("unconfirmed_stop")
-        elif not _published_without_local_record(results_repo, run_dir.name):
-            reasons.append("no_record")
-    if any(not _published(results_repo, record) for record in records.retained):
-        reasons.append("unpublished")
+    link = _published_link(run_dir, results_repo, cache)
+    record = link or records.linked or original
+    if link is None:
+        final = records.linked or (original if original and original.workspace_stopped else None)
+        if final is None and not records.errors:
+            if original is not None:
+                reasons.append("unconfirmed_stop")
+            else:
+                record, missing = _published_elsewhere(results_repo, run_dir.name, cache)
+                reasons.extend(missing)
+        if results_repo is not None:
+            for retained in records.retained:
+                published = cache.published(_destination(results_repo, retained))
+                if published is None:
+                    reasons.append("unpublished")
+                elif published == UNREADABLE:
+                    reasons.append(UNREADABLE_PUBLISHED)
     if run_dir.name in pending_logins:
         reasons.append("login_settlement_pending")
-    return tuple(reasons)
+    return _Verdict(tuple(dict.fromkeys(reasons)), record)
 
 
 def _stage(
@@ -253,7 +343,8 @@ def _live_run(
         if container is None and not owned and not records.retained and not records.errors:
             return None  # Never launched, or not a run at all: recovery has nothing to settle.
         run_input = {}
-    reasons = _recovery_reasons(run_dir, records, results_repo, pending_logins)
+    verdict = _verdict(run_dir, records, results_repo, pending_logins, cache)
+    reasons = verdict.reasons
     stage = _stage(run_dir, container, owned, records, reasons)
     if stage is None:
         return None
@@ -282,6 +373,7 @@ def _live_run(
         native_telemetry=telemetry.get("enabled") is True,
         telemetry_adapter=adapter,
         reasons=reasons if stage in (Stage.NEEDS_RECOVER, Stage.UNKNOWN) else (),
+        record=verdict.record,
     )
 
 
@@ -316,6 +408,7 @@ def live_runs(
     another run directory is found too.
     """
     cache = cache if cache is not None else RecordCache()
+    cache.begin()
     by_dir: dict[Path, RunContainer | None] = {path: None for path in _run_dirs(runs_dir)}
     for container in containers:
         run_dir = container.run_dir

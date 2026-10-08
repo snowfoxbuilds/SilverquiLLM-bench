@@ -37,8 +37,8 @@ karn/                                       the Karn recipes that build the cand
   on the candidate's first run, and verified at write time (TheOzolith's
   verifier must recompute the copy to this directory's hash); never edited.
   Later runs re-verify it and skip the write; a copy that no longer recomputes
-  to its directory is refused, never repaired. It is never a run: the reader
-  and the index skip the name. Hash = authority; copy = resolution.
+  to its directory is refused, never repaired. It is never a run: a record
+  reader skips the name. Hash = authority; copy = resolution.
 - `<run-id>` is the Benchmark Run's id (for migrated legacy runs, the original
   run directory name, e.g. `sos-cc-opus-48-bare-2026-05-30T04-02`; for
   Contract Runs `<benchmark>-<candidate-dir>-<timestamp>`).
@@ -82,9 +82,9 @@ The three existing score-dimension names remain; an absent dimension uses `evalu
 Coverage distinguishes the complete reference population from cards with executed audited cases.
 A snapshot fallback names its selected source while retaining the final workspace separately.
 Host grading inputs have content fingerprints in `run_metadata.grading_inputs`.
-A later recovery observation can have its own record id while `recovery_of` and `execution_run_id` link it to the original model execution; the prior record remains unchanged, and the derived index exposes that link.
+A later recovery observation can have its own record id while `recovery_of` and `execution_run_id` link it to the original model execution; the prior record remains unchanged, and a reader of the records sees that link in the recovery's own record.
 
-The reader and derived index preserve both schemas without changing historical identities or interpreting new data through historical publication rules.
+The record reader preserves both schemas without changing historical identities or interpreting new data through historical publication rules.
 The remaining schema details below describe schema 1 only.
 
 ## Workspace archives
