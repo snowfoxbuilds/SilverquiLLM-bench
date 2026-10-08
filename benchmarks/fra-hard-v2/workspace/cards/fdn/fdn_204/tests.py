@@ -29,7 +29,6 @@ class TestKrenkoMobBossMint:
         krenko = KrenkoMobBoss()
         game = create_game()
         set_board_state(game, 0, battlefield=[krenko])
-        krenko.summoning_sick = False  # under player 0's control since their turn began (rule 302.6)
 
         activate_card_ability(game, game.players[0], krenko, 0)
         resolve_stack(game)
