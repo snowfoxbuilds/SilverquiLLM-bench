@@ -192,6 +192,39 @@ class LoginPool:
                 names.append(entry.name)
         return names
 
+    def has_claimable_slot(self) -> bool:
+        """Read-only admission hint for settled slots; acquisition remains authoritative."""
+        for name in enrolled_slots(self.root, self.plugin_id):
+            directory = self.root / name
+            descriptor = None
+            try:
+                if cooldown_until(directory) is not None:
+                    continue
+                try:
+                    descriptor = os.open(directory / "runner.lock", os.O_RDONLY | os.O_NOFOLLOW)
+                except FileNotFoundError:
+                    # A newly enrolled slot may never have been locked. Do not create its lock.
+                    pass
+                if descriptor is not None:
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    if not os.path.samestat(
+                        os.fstat(descriptor),
+                        os.stat(directory / "runner.lock", follow_symlinks=False),
+                    ):
+                        continue
+                # Unlike acquire's artifact-specific recovery, a capacity probe cannot settle.
+                journal = directory / "active.json"
+                if journal.exists() or journal.is_symlink():
+                    continue
+                if stored_secret_plugin(directory) == self.plugin_id:
+                    return True
+            except (KarnError, OSError):
+                continue
+            finally:
+                if descriptor is not None:
+                    os.close(descriptor)
+        return False
+
     def new_slot(self) -> LoginProfile:
         """Claim the lowest unused ``slot-N``; mkdir is the claim, so two enrollments never share."""
         with self._creating():

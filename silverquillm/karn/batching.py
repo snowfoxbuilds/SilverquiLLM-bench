@@ -11,6 +11,7 @@ import time
 import tomllib
 import uuid
 from datetime import UTC, datetime
+from multiprocessing.connection import wait
 from pathlib import Path
 
 from silverquillm.queue_state import SchedulerLock, _write_atomically
@@ -20,7 +21,7 @@ from .definition import KarnError
 from .execution import NATIVE_TELEMETRY, run_benchmark
 from .grader import DEFAULT_GRADING_TIMEOUT
 from .login import LoginInUseError
-from .login_pool import LoginPoolUnavailableError
+from .login_pool import LoginPool, LoginPoolUnavailableError, logins_root
 from .records import RecordWritePendingError
 from .scheduler_worker import SpawnWorker, owner_alive
 
@@ -325,6 +326,27 @@ class KarnScheduler:
         interrupted = None
         draining = False
 
+        def unpooled_live():
+            return any(
+                row["status"] == "running"
+                and "login" in row
+                and row["login"] is None
+                and (row["run_id"] in active or owner_alive(row.get("worker")))
+                for state in states.values()
+                for row in state["runs"]
+            )
+
+        def retry_claimable():
+            for name, plugin in list(deferred.items()):
+                if plugin is None or (
+                    not unpooled_live()
+                    if plugin == "unpooled"
+                    else LoginPool(
+                        logins_root(self.options["state_root"]) / plugin, plugin
+                    ).has_claimable_slot()
+                ):
+                    del deferred[name]
+
         def save(path, state):
             try:
                 self._save(path, state)
@@ -348,6 +370,8 @@ class KarnScheduler:
 
         def events():
             nonlocal count, interrupted
+            changed = False
+            released = False
             for run_id, job in list(active.items()):
                 worker = job["worker"]
                 terminal = False
@@ -356,10 +380,11 @@ class KarnScheduler:
                         kind, value = worker.connection.recv()
                     except EOFError:
                         break
+                    changed = True
                     if kind == "warning":
                         self._warn(f"{job['name']}: {value}")
                     elif kind == "released":
-                        deferred.clear()
+                        released = True
                     elif kind == "selected":
                         job["login"] = value
                         plugin = value.split("/", 1)[0] if value else "unpooled"
@@ -367,14 +392,7 @@ class KarnScheduler:
                             name < job["name"] and pool == plugin for name, pool in deferred.items()
                         )
                         if value is None:
-                            admitted = admitted and not any(
-                                row["status"] == "running"
-                                and "login" in row
-                                and row["login"] is None
-                                and (row["run_id"] in active or owner_alive(row.get("worker")))
-                                for state in states.values()
-                                for row in state["runs"]
-                            )
+                            admitted = admitted and not unpooled_live()
                         acknowledge(worker, admitted and interrupted is None)
                     elif kind == "launch":
                         if interrupted is None:
@@ -393,7 +411,7 @@ class KarnScheduler:
                         )
                         terminal = True
                     elif kind == "result":
-                        deferred.clear()
+                        released = True
                         launch(job)
                         job["row"].update(value, finished_at=datetime.now(UTC).isoformat())
                         save(job["state_path"], job["state"])
@@ -403,15 +421,19 @@ class KarnScheduler:
                         if value.get("execution_status") == "interrupted":
                             interrupted = KeyboardInterrupt()
                 if terminal or not worker.alive():
+                    changed = True
                     worker.close()
                     del active[run_id]
                     if not terminal:
-                        deferred.clear()
+                        released = True
                         # A dead worker leaves its launched row for ordinary recovery.
                         if job["row"].get("started_at"):
                             self._warn(f"{job['name']}: worker exited; recovery required")
                         else:
                             deferred[job["name"]] = None
+            if released:
+                retry_claimable()
+            return changed
 
         def dispatch():
             paths = set(self.directory.glob("*.toml")) | {
@@ -481,20 +503,25 @@ class KarnScheduler:
 
         try:
             retry_at = time.monotonic()
+            dispatch_needed = True
             while True:
-                events()
+                dispatch_needed = events() or dispatch_needed
                 if interrupted is not None:
                     raise interrupted
                 if time.monotonic() >= retry_at:
-                    deferred.clear()
+                    retry_claimable()
+                    dispatch_needed = True
                     retry_at = time.monotonic() + self.slot_poll_seconds
-                if not any(job["probing"] for job in active.values()) and dispatch():
-                    continue
+                if dispatch_needed and not any(job["probing"] for job in active.values()):
+                    dispatch_needed = False
+                    if dispatch():
+                        continue
                 if not active:
                     break
-                # Polling observes a released login even while its former worker is grading.
-                # Connection.poll avoids blocking signal delivery or a serve sleep override.
-                next(iter(active.values()))["worker"].connection.poll(0.01)
+                wait(
+                    [job["worker"].connection for job in active.values()],
+                    timeout=max(0, retry_at - time.monotonic()),
+                )
         except BaseException:
             draining = True
             previous = {}

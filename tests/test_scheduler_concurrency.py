@@ -8,6 +8,7 @@ import multiprocessing
 import os
 import signal
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,6 +17,7 @@ import pytest
 from silverquillm.karn.batching import KarnScheduler, read_state
 from silverquillm.karn.definition import KarnError, canonical
 from silverquillm.karn.interruption import terminate_as_interrupt
+from silverquillm.karn.login_cooldown import set_cooldown
 from silverquillm.karn.login_pool import LoginPool
 from silverquillm.karn.scheduler_worker import SpawnWorker, owner_alive, process_identity
 from silverquillm.queue_state import SchedulerLock
@@ -37,6 +39,8 @@ def _execute(**kwargs):
     state = kwargs["state_root"]
     name = kwargs["construct"]
     plugin = kwargs["benchmark_id"]
+    with (state / (name + ".attempts")).open("a") as attempts:
+        attempts.write("attempt\n")
     with contextlib.ExitStack() as held:
         login = None
         if plugin != "unpooled":
@@ -79,7 +83,7 @@ def _execute(**kwargs):
 
 
 def _scheduler_process(directory, state):
-    runner = make_scheduler(directory, state)
+    runner = make_scheduler(directory, state, slot_poll_seconds=0.1)
     if (state / "fail-saves").exists():
         save = runner._save
 
@@ -181,6 +185,60 @@ def test_native_workers_fill_slots_and_refill_before_grading_finishes(tmp_path):
         pass
 
 
+def test_busy_entry_does_not_repeat_preflight_until_release(tmp_path):
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    _enroll(state, 1)
+    _batch(directory, ["first", "second"])
+    with _running(directory, state):
+        _wait_file(state / "first.started")
+        _wait_file(state / "second.attempts")
+        time.sleep(0.6)
+        assert (state / "second.attempts").read_text().splitlines() == ["attempt"]
+        (state / "first.release").touch()
+        _wait_file(state / "second.started", timeout=3)
+        assert not (state / "first.finished").exists()
+        (state / "second.release").touch()
+        (state / "first.grade").touch()
+        _wait_file(state / "count")
+    assert len((state / "second.attempts").read_text().splitlines()) == 2
+
+
+@pytest.mark.parametrize("blocked", ["external", "cooldown", "empty"])
+def test_capacity_poll_detects_external_changes_without_preflight_churn(tmp_path, blocked):
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    _enroll(state, 1, CODEX)
+    _batch(directory, ["waiting"])
+    _batch(directory, ["keeper", "next-keeper"], CODEX, batch="b")
+    with contextlib.ExitStack() as held:
+        if blocked != "empty":
+            pool = _enroll(state, 1)
+            if blocked == "external":
+                pool.acquire(held, wait=False)
+            else:
+                now = datetime.now(UTC)
+                set_cooldown(pool.root / "slot-0", now + timedelta(hours=1), now=now)
+        with _running(directory, state):
+            _wait_file(state / "keeper.started")
+            time.sleep(0.6)
+            assert (state / "waiting.attempts").read_text().splitlines() == ["attempt"]
+            (state / "keeper.release").touch()
+            _wait_file(state / "next-keeper.started")
+            assert (state / "waiting.attempts").read_text().splitlines() == ["attempt"]
+            if blocked == "external":
+                held.close()
+            elif blocked == "empty":
+                _enroll(state, 1)
+            else:
+                now = datetime.now(UTC)
+                set_cooldown(pool.root / "slot-0", now + timedelta(seconds=2), now=now)
+            _wait_file(state / "waiting.started", timeout=4)
+            assert not (state / "next-keeper.finished").exists()
+            (state / "waiting.release").touch()
+            (state / "next-keeper.release").touch()
+            _wait_file(state / "count")
+    assert len((state / "waiting.attempts").read_text().splitlines()) == 2
+
+
 def test_shutdown_drains_every_owned_run_and_releases_all_locks(tmp_path):
     directory, state = tmp_path / "batches", tmp_path / "state"
     pool = _enroll(state, 2)
@@ -265,13 +323,50 @@ def test_unpooled_entries_remain_serial(tmp_path):
     _batch(directory, ["one", "two"], "unpooled")
     with _running(directory, state):
         _wait_file(state / "one.started")
-        time.sleep(0.2)
+        _wait_file(state / "two.attempts")
+        time.sleep(0.6)
         assert not (state / "two.started").exists()
+        assert (state / "two.attempts").read_text().splitlines() == ["attempt"]
         (state / "one.release").touch()
         _wait_file(state / "two.started")
         assert (state / "one.finished").exists()
         (state / "two.release").touch()
         _wait_file(state / "count")
+
+
+def test_idle_active_worker_scans_batches_only_on_events_or_timer(tmp_path, monkeypatch):
+    import threading
+
+    from silverquillm.karn import batching
+    from tests.scheduler_fixtures import ThreadWorker
+
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    state.mkdir()
+    _batch(directory, ["one"], "unpooled")
+    launched = threading.Event()
+    scans = []
+    load_batch = batching.load_batch
+
+    def counted_load(path):
+        scans.append(time.monotonic())
+        return load_batch(path)
+
+    def execute(**kwargs):
+        kwargs["on_login_selected"](None)
+        kwargs["on_launch"]()
+        launched.set()
+        time.sleep(0.5)
+        return SimpleNamespace(
+            run_metadata={"execution": {"status": "completed"}},
+            candidate=SimpleNamespace(to_dict=dict),
+        )
+
+    monkeypatch.setattr(batching, "load_batch", counted_load)
+    scheduler = make_scheduler(directory, state, worker_factory=ThreadWorker, slot_poll_seconds=2)
+    scheduler.executor = execute
+    assert scheduler.run_until_idle() == 1
+    assert launched.is_set()
+    assert len(scans) <= 5
 
 
 def test_dead_worker_does_not_stall_refilling_while_another_run_continues(tmp_path):

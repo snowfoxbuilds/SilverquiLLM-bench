@@ -56,6 +56,40 @@ def acquire(target: LoginPool, **options):
     return hold, target.acquire(hold, poll_seconds=0.01, **options)
 
 
+def test_capacity_probe_is_read_only_and_obeys_settled_slot_eligibility(tmp_path):
+    target = LoginPool(tmp_path / "missing", PLUGIN)
+    assert not target.has_claimable_slot()
+    assert not target.root.exists()
+    target = pool(tmp_path)
+    profile = slot(target, "one")
+    assert target.has_claimable_slot()
+    assert not (profile.directory / "runner.lock").exists()
+    with profile.exclusive():
+        assert not target.has_claimable_slot()
+    assert target.has_claimable_slot()
+    now = datetime.now(UTC)
+    set_cooldown(profile.directory, now + timedelta(hours=1), now=now)
+    assert not target.has_claimable_slot()
+    set_cooldown(profile.directory, now - timedelta(seconds=1), now=now)
+    before = {path: path.read_bytes() for path in profile.directory.iterdir() if path.is_file()}
+    assert target.has_claimable_slot()
+    assert before == {
+        path: path.read_bytes() for path in profile.directory.iterdir() if path.is_file()
+    }
+    pend(profile)
+    assert not target.has_claimable_slot()
+    assert profile.pending() is not None
+    profile.settled()
+    profile.set_secret("login.one", "malformed")
+    assert not target.has_claimable_slot()
+    enroll(profile, "karn-codex-login")
+    assert not target.has_claimable_slot()
+    enroll(profile)
+    assert target.has_claimable_slot()
+    with contextlib.ExitStack() as held:
+        assert target.acquire(held, wait=False) == profile
+
+
 @contextlib.contextmanager
 def held_elsewhere(profile):
     held, done = threading.Event(), threading.Event()
