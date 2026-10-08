@@ -105,6 +105,7 @@ def test_interrupt_before_run_input_fails_the_row_and_the_batch_continues(
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_login_selected"](None)
         kwargs["on_launch"]()
         if created_run_directory:
             (kwargs["results_dir"] / kwargs["run_id"]).mkdir(parents=True)
