@@ -32,6 +32,16 @@ KEYS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
         ),
     ),
     (
+        "Dashboard LOGINS pane",
+        (
+            ("tab / click", "focus a Login Pool and select a profile"),
+            ("↑ ↓ / k j", "select the previous / next Login Profile"),
+            ("← → / h l", "move to the other pool, or out of the pane"),
+            ("t", "cooldown the selected profile for 1h; each press adds 1h"),
+            ("c", "end the selected profile's cooldown in 10s"),
+        ),
+    ),
+    (
         "History",
         (
             ("b / l", "focus the browse tree / the run list"),

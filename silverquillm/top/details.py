@@ -92,8 +92,10 @@ def header(shown: Shown, now: datetime, theme: Theme) -> Table:
     left.append("\n")
     if candidate is not None:
         left.append(candidate.label, style=theme.style("title", bold=True))
-        for label in candidate.secondary:
-            left.append(f"  {label}", style=theme.style("muted"))
+        # The header has room for the whole recipe revision that lists cut short.
+        for label in (candidate.hash8, candidate.recipe_revision):
+            if label:
+                left.append(f"  {label}", style=theme.style("muted"))
         left.append("\n")
     left.append_text(fmt.badge(benchmark, theme))
     left.append(f"{theme.glyph('sep')}{login or fmt.DASH}", style=theme.style("muted"))

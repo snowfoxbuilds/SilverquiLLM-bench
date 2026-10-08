@@ -16,9 +16,11 @@ from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import ContentSwitcher, Static
 
+from silverquillm.karn.definition import KarnError
 from silverquillm.monitor import LogLine, Monitor, MonitorSnapshot, RunSummary, WorkspaceView
 
-from .dashboard import DashboardView, RunChosen
+from . import cooldowns
+from .dashboard import CooldownWanted, DashboardView, PoolPanel, RunChosen
 from .details import DetailsView
 from .historic import HistoryView
 from .keys import HelpScreen
@@ -74,9 +76,12 @@ def _tag(style: str, text: str) -> str:
 
 
 class MonitorApp(App):
-    """Read-only: every monitor call runs in a worker, and nothing here writes or locks."""
+    """Every monitor call runs in a worker, and nothing here locks; the one write is a
+    Login Cooldown the operator asks for from the status pane (RUN-MONITORING.md)."""
 
     ENABLE_COMMAND_PALETTE = False
+    # The LOGINS pools come first on screen, but the running runs are what opens on start.
+    AUTO_FOCUS = "#running-table"
     TITLE = "silverquillm top"
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("1", "view('dashboard')", "Dashboard", show=False),
@@ -428,8 +433,11 @@ class MonitorApp(App):
         if self.notice:
             parts.append("  " + _tag(look.style("warn"), escape(self.notice)))
         self.query_one("#topbar", Static).update("".join(parts))
+        profiles = isinstance(self.focused, PoolPanel)
         hints = {
-            "dashboard": "tab pane · enter open run",
+            "dashboard": "↑↓ slot · ←→ pool · t cooldown +1h · c end cooldown in 10s"
+            if profiles
+            else "tab pane · enter open run",
             "history": "b browse · l list · enter open · s/</> sort · S reverse · x excluded",
             "details": "esc back · [ ] tabs · ↑↓ pgup pgdn scroll",
         }[self._current]
@@ -463,6 +471,34 @@ class MonitorApp(App):
     def action_help(self) -> None:
         if not isinstance(self.screen, HelpScreen):
             self.push_screen(HelpScreen(self.look))
+
+    def on_descendant_focus(self) -> None:
+        self._draw_bars()
+
+    def on_cooldown_wanted(self, message: CooldownWanted) -> None:
+        """Write the cooldown through the CLI's own path, then refresh at once to show it."""
+        location = self.snapshot.locations.get("state_root") if self.snapshot else None
+        if location is None or location.path is None:
+            self.notify("no state root: cannot set a cooldown", severity="error")
+            return
+        now = self.clock()
+        try:
+            if message.lengthen:
+                until = cooldowns.lengthen(location.path, message.plugin_id, message.slot, now=now)
+            else:
+                until = cooldowns.end_soon(location.path, message.plugin_id, message.slot, now=now)
+        except (KarnError, OSError) as error:
+            self.notify(f"{message.slot}: cooldown not written ({error})", severity="error")
+            return
+        if until is None:
+            self.notify(f"{message.slot} has no cooldown to end")
+            return
+        local = until.astimezone()
+        if message.lengthen:
+            self.notify(f"{message.slot} cooldown until {local:%a %H:%M} (+1h)")
+        else:
+            self.notify(f"{message.slot} cooldown ends at {local:%H:%M:%S} (in 10s)")
+        self.poll()
 
     def on_run_chosen(self, message: RunChosen) -> None:
         details = self.query_one(DetailsView)

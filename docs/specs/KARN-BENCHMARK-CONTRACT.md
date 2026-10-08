@@ -122,7 +122,7 @@ The run input and record name the profile a run used, so recovery settles exactl
 Concurrent runs on one subscription share its rate limits; the operator accepts this, and the named profile lets a slowdown be traced (grilling 2026-09-28).
 An operator can put profiles under a Login Cooldown for a set time, such as when a subscription nears its weekly limit (grilling 2026-10-08).
 A cooling-down profile counts as busy until the cooldown ends: a run passes over it and, with no other profile free, waits rather than refusing; a run already holding the profile is unaffected.
-The cooldown is a host-local file beside the profile's stored login (`cooldown.json`, its end time in UTC), written atomically by `silverquillm login cooldown` alone; it never touches the stored login, the profile's lock, or a run, and an expired or unreadable one is no cooldown, so nothing has to remove it.
+The cooldown is a host-local file beside the profile's stored login (`cooldown.json`, its end time in UTC), written atomically only by `silverquillm login cooldown` or the cooldown keys of [Run Monitoring](RUN-MONITORING.md), through the same code; it never touches the stored login, the profile's lock, or a run, and an expired or unreadable one is no cooldown, so nothing has to remove it.
 No new account registry, credential-deduplication system, or cross-host coordination is part of this integration (grilling 2026-09-26).
 Each host benchmarks independently.
 

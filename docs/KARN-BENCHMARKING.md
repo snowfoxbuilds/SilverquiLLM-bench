@@ -99,6 +99,7 @@ silverquillm login cooldown --agent codex --clear --slots slot-1
 A slot not enrolled in that pool is refused with the enrolled ones listed.
 A cooling-down slot counts as busy: runs and batch entries pass over it, and wait (`waiting for a login slot: … cooling down`) when no other slot is free; a run already holding the slot carries on.
 The cooldown ends by itself at its time; `silverquillm top` shows each cooling-down slot and when it ends.
+In `top`'s LOGINS pane, select a slot and press `t` to hold it one more hour per press, or `c` to end its cooldown ten seconds from now.
 
 ### Claude constructs
 

@@ -48,6 +48,11 @@ class Theme:
             parts.append("bold reverse" if not bold else "reverse")
         return " ".join(parts) or "none"
 
+    def selected(self) -> str:
+        """A Rich style marking a selected line: the cursor colour, or reverse video."""
+        color = self.colors.get("cursor")
+        return f"on {color}" if color and not color.startswith("ansi_default") else "reverse"
+
     def badge(self, benchmark: str | None) -> str:
         if not benchmark:
             return self.glyph("badge_default")
@@ -92,11 +97,18 @@ Screen {{ background: {c("background")}; color: {c("text")}; overflow: hidden; }
     padding: 0 1;
 }}
 .pane:focus-within {{ border: {self.border} {c("border_focus")}; }}
-#status {{ height: auto; max-height: 16; }}
-#where {{ width: 1fr; max-width: 58; margin-right: 2; }}
-#counts {{ width: 22; margin-right: 3; padding-left: 2; border-left: solid {c("border")}; }}
-.compact #where {{ max-width: 40; }}
-#pools {{ width: 1fr; min-width: 44; }}
+#top-row {{ height: auto; }}
+#status {{ width: 56; height: auto; }}
+#status.compact {{ width: 44; }}
+#where, #counts {{ height: auto; }}
+#counts {{ margin-top: 1; }}
+#logins {{ width: 1fr; height: auto; max-height: 13; }}
+#pool-row {{ height: auto; }}
+#pool-row.stacked {{ layout: vertical; }}
+.pool {{ width: 1fr; height: auto; }}
+#pool-row #pool-claude {{ margin-right: 3; }}
+#pool-row.stacked #pool-claude {{ margin-right: 0; margin-bottom: 1; }}
+.pool:focus {{ background: {c("surface")}; }}
 #running {{ height: 2fr; min-height: 6; }}
 #queued {{ height: 1fr; min-height: 4; }}
 #nav {{ width: 40; }}

@@ -21,7 +21,7 @@ from textual.widgets import DataTable, TabbedContent, Tree
 
 from silverquillm.top import _driver
 from silverquillm.top.app import build_app
-from silverquillm.top.dashboard import RunningPane, StatusPane
+from silverquillm.top.dashboard import LoginsPane, RunningPane
 from silverquillm.top.details import TAB_FOCUS, DetailsView
 from silverquillm.top.historic import HistoryView
 from silverquillm.top.keys import KEYS, HelpScreen, help_table
@@ -88,15 +88,15 @@ def test_the_progress_bar_does_not_warm_like_a_limit():
 
 def test_a_cooled_down_profile_shows_its_hold_and_is_not_untapped():
     snapshot = FakeMonitor().snapshot()
-    text = _plain(StatusPane._pools(snapshot, MTG))
+    text = _plain(LoginsPane.pool(snapshot, "codex", MTG))
     line = next(row for row in text.splitlines() if "slot-2" in row)
     assert MTG.glyph("cooldown") in line
     assert "cooldown until" in line and "(3h12m00s)" not in line
     assert "(3h12m)" in line
     codex = next(row for row in text.splitlines() if "CODEX pool" in row)
-    # slot-1 is busy and slot-2 cools down; only bare-codex-luna could take a run now.
-    assert "1/3 untapped" in codex
-    plain = _plain(StatusPane._pools(snapshot, PLAIN))
+    # slot-1, slot-3 and slot-5 are busy and slot-2 cools down; luna and slot-4 are free.
+    assert "2/6 untapped" in codex
+    plain = _plain(LoginsPane.pool(snapshot, "codex", PLAIN))
     assert any("z slot-2" in row for row in plain.splitlines())
 
 
@@ -110,15 +110,36 @@ def test_a_cooldown_reads_its_end_and_what_is_left():
 # Layout ------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("width", [200, 160, 120])
 @synchronous
-async def test_the_three_panes_stack_across_the_full_width():
+async def test_status_and_logins_share_the_top_above_the_full_width_panes(width):
     app = _app()
-    async with app.run_test(size=(120, 50)) as pilot:
+    async with app.run_test(size=(width, 50)) as pilot:
         await _settle(app, pilot)
-        regions = [app.query_one(name).region for name in ("#status", "#running", "#queued")]
-        assert all(region.x == 0 and region.width == 120 for region in regions)
-        assert regions[0].y < regions[1].y < regions[2].y
-        assert regions[0].bottom <= regions[1].y and regions[1].bottom <= regions[2].y
+        status, logins = (app.query_one(name).region for name in ("#status", "#logins"))
+        assert status.x == 0 and status.y == logins.y and status.right <= logins.x
+        assert logins.right == width and logins.width > status.width
+        below = [app.query_one(name).region for name in ("#running", "#queued")]
+        assert all(region.x == 0 and region.width == width for region in below)
+        assert max(status.bottom, logins.bottom) <= below[0].y
+        assert below[0].bottom <= below[1].y
+
+
+@synchronous
+async def test_the_two_pools_sit_side_by_side_and_stack_when_too_narrow():
+    app = _app()
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        claude, codex = (app.query_one(f"#pool-{name}").region for name in ("claude", "codex"))
+        assert claude.y == codex.y and claude.right <= codex.x
+        # Six profiles a pool, under one header: the top row stays about as tall as status.
+        assert claude.height == 7
+        assert not app.query_one("#pool-row").has_class("stacked")
+        await pilot.resize_terminal(110, 50)
+        await _settle(app, pilot)
+        assert app.query_one("#pool-row").has_class("stacked")
+        claude, codex = (app.query_one(f"#pool-{name}").region for name in ("claude", "codex"))
+        assert claude.x == codex.x and claude.bottom <= codex.y
 
 
 # Keyboard ----------------------------------------------------------------------

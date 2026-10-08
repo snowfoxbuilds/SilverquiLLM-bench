@@ -29,7 +29,9 @@ class CandidateDisplay:
 
     @property
     def secondary(self) -> tuple[str, ...]:
-        return tuple(label for label in (self.hash8, self.recipe_revision) if label)
+        """Short labels for lists: the recipe revision is a full commit id, cut like hash8."""
+        revision = self.recipe_revision[:8] if self.recipe_revision else None
+        return tuple(label for label in (self.hash8, revision) if label)
 
 
 def _text(value: Any) -> str:

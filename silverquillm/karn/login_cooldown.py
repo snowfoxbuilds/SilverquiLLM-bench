@@ -1,8 +1,9 @@
 """Login Cooldowns: an operator's hold that keeps a Login Profile out of new runs until a time.
 
-A cooldown is one small file beside a slot's stored login. Only ``silverquillm login
-cooldown`` writes it; pool acquisition and the monitor only read it, and an expired or
-unreadable one is simply no cooldown, so nothing ever has to clean it up.
+A cooldown is one small file beside a slot's stored login. Only the operator writes it,
+through ``silverquillm login cooldown`` or the monitor's cooldown keys; pool acquisition
+only reads it, and an expired or unreadable one is simply no cooldown, so nothing ever has
+to clean it up.
 """
 
 from __future__ import annotations
@@ -40,6 +41,24 @@ def set_cooldown(directory: Path, until: datetime, *, now: datetime) -> None:
     """Hold the slot in ``directory`` until ``until``; its login and lock are never touched."""
     document = {"format": 1, "set_at": _stamp(now), "until": _stamp(until)}
     write_private(Path(directory) / COOLDOWN_FILE, canonical(document))
+
+
+def extend_cooldown(directory: Path, by: timedelta, *, now: datetime) -> datetime:
+    """Hold the slot ``by`` longer than its cooldown in force, or than ``now`` without one."""
+    until = max(now, cooldown_until(directory, now=now) or now) + by
+    if until - now > MAX_COOLDOWN:
+        raise KarnError("invalid_cooldown_duration")
+    set_cooldown(directory, until, now=now)
+    return until
+
+
+def end_cooldown_after(directory: Path, grace: timedelta, *, now: datetime) -> datetime | None:
+    """End the slot's cooldown ``grace`` from ``now``; None, writing nothing, without one."""
+    if cooldown_until(directory, now=now) is None:
+        return None
+    until = now + grace
+    set_cooldown(directory, until, now=now)
+    return until
 
 
 def clear_cooldown(directory: Path) -> bool:

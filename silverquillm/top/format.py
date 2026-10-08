@@ -192,8 +192,11 @@ def sparkline(
     return Text(chars, style=theme.style("spark"))
 
 
-def weekly(usage: WeeklyUsage | None, now: datetime, theme: Theme) -> Text:
-    """``41% · resets Thu 14:00 · read 12m ago``, or ``≈ 47%`` when estimated."""
+def weekly(usage: WeeklyUsage | None, now: datetime, theme: Theme, *, short: bool = False) -> Text:
+    """``41% · resets Thu 14:00 · read 12m ago``, or ``≈ 47%`` when estimated.
+
+    ``short`` drops the words for a narrow column: ``41% · Thu 14:00 · 12m ago``.
+    """
     if usage is None:
         return Text("no rate", style=theme.style("muted"))
     role = "bad" if usage.percent >= 90 else "warn" if usage.percent >= 75 else "text"
@@ -203,10 +206,11 @@ def weekly(usage: WeeklyUsage | None, now: datetime, theme: Theme) -> Text:
     text.append(f"{usage.percent:.0f}%", style=theme.style(role, bold=True))
     if usage.resets_at is not None:
         reset = usage.resets_at.astimezone().strftime("%a %H:%M")
-        text.append(f"{theme.glyph('sep')}resets {reset}", style=theme.style("muted"))
+        resets, read = ("", "") if short else ("resets ", "read ")
+        text.append(f"{theme.glyph('sep')}{resets}{reset}", style=theme.style("muted"))
         bound = "" if usage.reading_age_exact else theme.glyph("at_least")
         text.append(
-            f"{theme.glyph('sep')}read {bound}{ago(usage.reading_age(now))}",
+            f"{theme.glyph('sep')}{read}{bound}{ago(usage.reading_age(now))}",
             style=theme.style("muted"),
         )
     return text
