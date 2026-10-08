@@ -42,6 +42,8 @@ BAR_WIDTH = 12
 SPARK_WIDTH = 16
 CANDIDATE_WIDTH = 48
 COMPACT_CANDIDATE_WIDTH = 34
+COMPACT_PROGRESS_WIDTH = 24
+COMPACT_SPARK_WIDTH = 12
 WEEKLY_BAR = 10
 POOLS = ("claude", "codex")
 """The Login Pools the LOGINS pane shows, left to right, one per login plugin."""
@@ -455,9 +457,10 @@ class RunningPane(Vertical):
         table.clear()
         self._order = []
         now = snapshot.taken_at
-        width = COMPACT_CANDIDATE_WIDTH if self.app.size.width < COMPACT else CANDIDATE_WIDTH
+        compact = self.app.size.width < COMPACT
+        width = COMPACT_CANDIDATE_WIDTH if compact else CANDIDATE_WIDTH
         for view in runs:
-            cells = self._cells(view, now, theme, candidate_width=width)
+            cells = self._cells(view, now, theme, candidate_width=width, compact=compact)
             table.add_row(*cells, key=view.run.run_id, height=2)
             self._order.append(view.run.run_id)
         if selected in self._order:
@@ -465,7 +468,12 @@ class RunningPane(Vertical):
 
     @staticmethod
     def _cells(
-        view: RunView, now: datetime, theme: Theme, *, candidate_width: int = CANDIDATE_WIDTH
+        view: RunView,
+        now: datetime,
+        theme: Theme,
+        *,
+        candidate_width: int = CANDIDATE_WIDTH,
+        compact: bool = False,
     ) -> tuple:
         """Two lines per run: what and where on top, how far and how much below."""
         run = view.run
@@ -489,7 +497,9 @@ class RunningPane(Vertical):
         if run.stage in (Stage.NEEDS_RECOVER, Stage.UNKNOWN):
             # Its progress no longer matters; why it is stuck, and whether it still runs, does.
             progress = fmt.reasons(run, theme)
-            progress.truncate(candidate_width, overflow="ellipsis")
+            progress.truncate(
+                COMPACT_PROGRESS_WIDTH if compact else candidate_width, overflow="ellipsis"
+            )
         else:
             progress = fmt.progress(view.estimated_percent, BAR_WIDTH, theme)
         progress.append("\n")
@@ -505,7 +515,8 @@ class RunningPane(Vertical):
             spend.append(f" +{view.unpriced_requests}?", style=muted)
         spend.append("\n")
         stamp = int(now.timestamp() * 1000)
-        spend.append_text(fmt.sparkline(view.request_costs, SPARK_WIDTH, theme, until_ms=stamp))
+        spark = COMPACT_SPARK_WIDTH if compact else SPARK_WIDTH
+        spend.append_text(fmt.sparkline(view.request_costs, spark, theme, until_ms=stamp))
         return stage, where, candidate, progress, spend
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:

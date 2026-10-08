@@ -102,7 +102,7 @@ Screen {{ background: {c("background")}; color: {c("text")}; overflow: hidden; }
 #status.compact {{ width: 44; }}
 #where, #counts {{ height: auto; }}
 #counts {{ margin-top: 1; }}
-#logins {{ width: 1fr; height: auto; max-height: 13; }}
+#logins {{ width: 1fr; height: 100%; }}
 #pool-row {{ height: auto; }}
 #pool-row.stacked {{ layout: vertical; }}
 .pool {{ width: 1fr; height: auto; }}
