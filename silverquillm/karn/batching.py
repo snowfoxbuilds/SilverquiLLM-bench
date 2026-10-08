@@ -379,6 +379,8 @@ class KarnScheduler:
             for run_id, job in list(active.items()):
                 worker = job["worker"]
                 terminal = False
+                # Once death is observed, all of this worker's messages are available to drain.
+                alive = worker.alive()
                 while worker.connection.poll():
                     try:
                         kind, value = worker.connection.recv()
@@ -424,7 +426,7 @@ class KarnScheduler:
                         terminal = True
                         if value.get("execution_status") == "interrupted":
                             interrupted = KeyboardInterrupt()
-                if terminal or not worker.alive():
+                if terminal or not alive:
                     changed = True
                     worker.close()
                     del active[run_id]

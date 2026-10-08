@@ -82,6 +82,14 @@ def _execute(**kwargs):
         )
 
 
+def _complete_after_release(**kwargs):
+    _wait_file(kwargs["state_root"] / "complete")
+    return SimpleNamespace(
+        run_metadata={"execution": {"status": "completed"}},
+        candidate=SimpleNamespace(to_dict=dict),
+    )
+
+
 def _scheduler_process(directory, state):
     runner = make_scheduler(directory, state, slot_poll_seconds=0.1)
     if (state / "fail-saves").exists():
@@ -441,6 +449,46 @@ def test_prelaunch_worker_death_retries_only_on_slot_poll(tmp_path, poll_seconds
     else:
         assert len(attempts) == 1
     assert read_state(directory / "state/a.json", "a")["runs"] == []
+
+
+@pytest.mark.parametrize("spawn", [False, True])
+def test_result_sent_between_empty_poll_and_worker_exit_is_retained(tmp_path, spawn):
+    from tests.scheduler_fixtures import ThreadWorker
+
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    state.mkdir()
+    _batch(directory, ["one"])
+
+    def worker_factory(executor, arguments):
+        worker = (SpawnWorker if spawn else ThreadWorker)(executor, arguments)
+        connection = worker.connection
+
+        class CompleteAfterEmptyPoll:
+            completed = False
+
+            def __getattr__(self, name):
+                return getattr(connection, name)
+
+            def poll(self, *args):
+                ready = connection.poll(*args)
+                if not self.completed:
+                    assert not ready
+                    self.completed = True
+                    (state / "complete").touch()
+                    deadline = time.monotonic() + 10
+                    while worker.alive():
+                        assert time.monotonic() < deadline
+                        time.sleep(0.01)
+                return ready
+
+        worker.connection = CompleteAfterEmptyPoll()
+        return worker
+
+    scheduler = make_scheduler(directory, state, worker_factory=worker_factory)
+    scheduler.executor = _complete_after_release
+    assert scheduler.run_until_idle() == 1
+    assert read_state(directory / "state/a.json", "a")["runs"][0]["status"] == "done"
+    assert not scheduler.warnings
 
 
 def test_restart_fills_a_free_slot_beside_an_external_live_worker(tmp_path):

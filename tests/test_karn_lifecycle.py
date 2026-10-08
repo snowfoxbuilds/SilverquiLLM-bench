@@ -1491,6 +1491,7 @@ def test_an_unrecoverable_row_fails_and_the_scheduler_continues(tmp_path, failur
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_login_selected"](None)
         kwargs["on_launch"]()
         raise KeyboardInterrupt
 
@@ -1522,6 +1523,7 @@ def test_a_recoverer_interrupt_still_propagates(tmp_path):
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_login_selected"](None)
         kwargs["on_launch"]()
         raise KeyboardInterrupt
 
@@ -2377,6 +2379,7 @@ def test_a_scheduler_on_another_checkouts_package_leaves_running_rows_for_recove
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_login_selected"](None)
         kwargs["on_launch"]()
         raise KeyboardInterrupt
 
