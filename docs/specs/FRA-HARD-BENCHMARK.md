@@ -89,8 +89,8 @@ Adopting them made fra-hard-v2 a separate benchmark, `benchmarks/fra-hard-v2/`, 
 fra-hard v1 stays read-only with its runs and grades: it takes no fixes and no new runs, and its runs are never regraded against fra-hard-v2's suites (grilling 2026-10-04).
 
 Execution and network-less candidate grading follow [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md).
-The benchmark starts in Beta while candidate calibration is pending.
-Completing the oracle and tests does not by itself promote the benchmark to Benchmarking or claim that candidate calibration has occurred.
+The benchmark started in Beta while candidate calibration was pending, and moved to Benchmarking on 2026-10-07 after calibration runs of Opus 5.5, GPT-6 Astra and GPT-6.1 Sol across effort levels (grilling 2026-10-07).
+Its Workspace is now locked: Known-Best fixes reach its hidden Audited Tests and Test Oracle Workspace only by hand, and runs made on an earlier Workspace are not comparable with runs on the locked one.
 
 ## Relevant ADRs
 
