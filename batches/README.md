@@ -29,12 +29,15 @@ The file is reread before every not-yet-started entry, so appending entries to a
 
 ## Execution
 
-- Entries run serially in file order, through the same lifecycle as `silverquillm run`.
+- The scheduler fills free eligible Login Pool slots automatically, through the same lifecycle as `silverquillm run`; no concurrency setting is needed.
+- Entries start in file order within a batch and can overlap. Batches with a slot available take priority in filename order; a blocked batch does not hold up another batch's pool. Completion order can differ from start order.
 - A batch without committed state is blocked until acknowledged once with `--replay-without-state <id>`, because starting from entry 0 could replay finished runs.
 - A failed entry is recorded with its evidence and the batch continues.
-- An entry whose login another runner holds stays pending and is retried on the next pass.
-- A run left `running` by a crashed or killed scheduler is recovered before anything else runs; one that never wrote its run input is recorded as failed with `interrupted_before_launch`.
+- An entry with no eligible slot stays pending, along with later entries in its batch. It counts as started only after claiming a slot.
+- All runs left `running` by a crashed or killed scheduler are checked for recovery; runs still owned by a live worker are deferred. An unowned run that never wrote its run input is recorded as failed with `interrupted_before_launch`.
 - A record that could not be written in time is marked `record_write_pending` and written on the scheduler's next start or by `silverquillm recover`.
+
+The [Karn Benchmark Contract](../docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records) defines dispatch, recovery, and shutdown behavior, including the single concurrent run allowed for candidates without a login plugin.
 
 `silverquillm queue ls` lists the queue without touching it; `silverquillm top` is the read-only monitor over the queue, live runs, Login Profiles and history (see `docs/specs/RUN-MONITORING.md`).
 

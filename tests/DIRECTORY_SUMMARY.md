@@ -21,6 +21,8 @@ Test root directory for the SilverquiLLM-bench project. Contains top-level test 
 | `test_pi_adapter.py` | **Pi adapter tests** — --no-interactive, stdin passing. |
 | `test_karn_*.py` | **Karn v4 tests** — definition intake, engine isolation, execution and records, host and login lifecycle, observations, the grader (`test_karn_grader.py`), and interruption/recovery/contention (`test_karn_lifecycle.py`); Docker-backed cases (`test_karn_end_to_end.py`, `test_karn_grader_docker.py`, and `integration`-marked tests elsewhere) run only with `-m integration`. |
 | `grader_fixtures.py` | **Local grader stand-in (helper, not a test)** — interprets the grader container's exact `docker run` arguments without Docker; unit tests inject `local_grader()`. |
+| `test_scheduler_concurrency.py` | **Native scheduler concurrency tests** — spawned workers filling slots and refilling before grading finishes, shutdown draining workers and releasing locks, recovery of every running row with live owners deferred, independent pools, failed or dead workers, restart beside an external live worker, and serial execution for candidates without a login plugin. |
+| `scheduler_fixtures.py` | **Scheduler worker stand-in (helper, not a test)** — thread-backed worker for unit tests that inject execution behavior. |
 | `test_no_ozolith.py` | **No-Ozolith guard (ADR-014)** — a fresh interpreter refusing every `theozolith*` import loads every module and retained script and runs every command; no dependency or extra names Ozolith. |
 | `test_agent_session.py` | **Agent session tests** — Workspace setup, blind/test-informed phases, adapter lifecycle. |
 | `test_agent_session_adapter.py` | **Session + adapter integration** — Adapter wiring into session. |

@@ -6,15 +6,18 @@ import contextlib
 import json
 import os
 import threading
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from silverquillm.karn.definition import KarnError, canonical
 from silverquillm.karn.execution import login_profile
 from silverquillm.karn.login import LoginProfile
+from silverquillm.karn.login_cooldown import set_cooldown
 from silverquillm.karn.login_pool import (
     SLOT_RECORD,
     LoginPool,
+    LoginPoolBusyError,
     adopt_legacy_login,
     stored_login_plugin,
 )
@@ -53,6 +56,40 @@ def acquire(target: LoginPool, **options):
     return hold, target.acquire(hold, poll_seconds=0.01, **options)
 
 
+def test_capacity_probe_is_read_only_and_obeys_settled_slot_eligibility(tmp_path):
+    target = LoginPool(tmp_path / "missing", PLUGIN)
+    assert not target.has_claimable_slot()
+    assert not target.root.exists()
+    target = pool(tmp_path)
+    profile = slot(target, "one")
+    assert target.has_claimable_slot()
+    assert not (profile.directory / "runner.lock").exists()
+    with profile.exclusive():
+        assert not target.has_claimable_slot()
+    assert target.has_claimable_slot()
+    now = datetime.now(UTC)
+    set_cooldown(profile.directory, now + timedelta(hours=1), now=now)
+    assert not target.has_claimable_slot()
+    set_cooldown(profile.directory, now - timedelta(seconds=1), now=now)
+    before = {path: path.read_bytes() for path in profile.directory.iterdir() if path.is_file()}
+    assert target.has_claimable_slot()
+    assert before == {
+        path: path.read_bytes() for path in profile.directory.iterdir() if path.is_file()
+    }
+    pend(profile)
+    assert not target.has_claimable_slot()
+    assert profile.pending() is not None
+    profile.settled()
+    profile.set_secret("login.one", "malformed")
+    assert not target.has_claimable_slot()
+    enroll(profile, "karn-codex-login")
+    assert not target.has_claimable_slot()
+    enroll(profile)
+    assert target.has_claimable_slot()
+    with contextlib.ExitStack() as held:
+        assert target.acquire(held, wait=False) == profile
+
+
 @contextlib.contextmanager
 def held_elsewhere(profile):
     held, done = threading.Event(), threading.Event()
@@ -77,6 +114,21 @@ def test_an_empty_pool_refuses_and_names_the_plugin(tmp_path):
     target.named_slot("unfinished")  # an enrollment that stored nothing is not a slot
     with pytest.raises(KarnError, match="login_pool_empty:karn-claude-login"):
         acquire(target)
+
+
+def test_nonblocking_acquisition_distinguishes_busy_and_cooling_slots(tmp_path):
+    target = pool(tmp_path)
+    profile = slot(target, "a")
+    with (
+        held_elsewhere(profile),
+        contextlib.ExitStack() as held,
+        pytest.raises(LoginPoolBusyError, match="login_pool_busy:karn-claude-login"),
+    ):
+        target.acquire(held, wait=False)
+    now = datetime.now(UTC)
+    set_cooldown(profile.directory, now + timedelta(hours=1), now=now)
+    with contextlib.ExitStack() as held, pytest.raises(LoginPoolBusyError):
+        target.acquire(held, wait=False)
 
 
 def test_a_free_slot_is_locked_for_the_holder_until_released(tmp_path):

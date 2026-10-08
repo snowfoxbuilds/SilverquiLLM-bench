@@ -31,6 +31,7 @@ from silverquillm.results_repo import RunRecordExistsError, iter_run_records
 
 from .grader_fixtures import local_grader
 from .retained_runs import building, clone_tree, rebase_options
+from .scheduler_fixtures import ThreadWorker
 from .test_karn_execution import FixtureHost, benchmark_data, options
 from .test_karn_host import FIXTURES, FakeDocker, make_candidate
 
@@ -92,6 +93,7 @@ def scheduler(tmp_path, directory, **changes):
         results_dir=tmp_path / "runs",
         results_repo=tmp_path / "records",
         state_root=tmp_path / "state",
+        worker_factory=ThreadWorker,
         **{"replay_without_state": ["trial"], **changes},
     )
 
@@ -103,6 +105,7 @@ def test_interrupt_before_run_input_fails_the_row_and_the_batch_continues(
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_login_selected"](None)
         kwargs["on_launch"]()
         if created_run_directory:
             (kwargs["results_dir"] / kwargs["run_id"]).mkdir(parents=True)
@@ -134,7 +137,7 @@ def test_interrupt_before_run_input_fails_the_row_and_the_batch_continues(
     assert executed == [state["runs"][1]["run_id"]]
 
 
-def test_a_batch_entry_waits_for_a_busy_login_slot_instead_of_deferring(tmp_path):
+def test_a_batch_entry_defers_a_busy_login_slot_without_consuming_the_entry(tmp_path):
     directory = batch(tmp_path / "batches", entries=1)
     opts = login_options(tmp_path / "fixture")
     (directory / "trial.toml").write_text(
@@ -145,18 +148,17 @@ def test_a_batch_entry_waits_for_a_busy_login_slot_instead_of_deferring(tmp_path
     with held_elsewhere(pool_slot(opts["state_root"])) as release:
 
         def execute(**kwargs):
-            report = kwargs.pop("login_wait")
-            return run_benchmark(
-                **kwargs, host=FixtureHost(), login_wait=lambda m: (report(m), release())
-            )
+            return run_benchmark(**kwargs, host=FixtureHost())
 
         runner = scheduler(opts["bench_root"], directory, executor=execute)
         runner.options["state_root"] = Path(opts["state_root"]).resolve()
         runner.options["login_poll_seconds"] = 0.05
-        assert runner.run_until_idle() == 1
+        assert runner.run_until_idle() == 0
+        assert json.loads((directory / "state/trial.json").read_text())["runs"] == []
+        release()
+    assert runner.run_until_idle() == 1
     state = json.loads((directory / "state/trial.json").read_text())
     assert [row["status"] for row in state["runs"]] == ["done"]
-    assert any("waiting for a login slot" in warning for warning in runner.warnings)
 
 
 def test_batch_entries_select_their_grader_by_the_candidates_python(tmp_path, monkeypatch):
@@ -1195,7 +1197,7 @@ def test_a_run_never_adopts_a_legacy_login_by_itself(tmp_path):
     assert not Path(opts["results_dir"]).exists()
 
 
-def test_a_batch_entry_interrupted_while_waiting_for_a_slot_stays_pending(tmp_path):
+def test_a_batch_entry_interrupted_before_a_slot_claim_stays_pending(tmp_path):
     directory = batch(tmp_path / "batches", entries=1)
     opts = login_options(tmp_path / "fixture")
     (directory / "trial.toml").write_text(
@@ -1204,12 +1206,8 @@ def test_a_batch_entry_interrupted_while_waiting_for_a_slot_stays_pending(tmp_pa
         + '\nconstruct="bare"\nbenchmark="example"\n'
     )
 
-    def interrupt(message):
-        raise KeyboardInterrupt
-
     def execute(**kwargs):
-        kwargs.pop("login_wait")
-        return run_benchmark(**kwargs, host=FixtureHost(), login_wait=interrupt)
+        raise KeyboardInterrupt
 
     runner = scheduler(opts["bench_root"], directory, executor=execute)
     runner.options["state_root"] = Path(opts["state_root"]).resolve()
@@ -1493,6 +1491,7 @@ def test_an_unrecoverable_row_fails_and_the_scheduler_continues(tmp_path, failur
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_login_selected"](None)
         kwargs["on_launch"]()
         raise KeyboardInterrupt
 
@@ -1524,6 +1523,7 @@ def test_a_recoverer_interrupt_still_propagates(tmp_path):
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_login_selected"](None)
         kwargs["on_launch"]()
         raise KeyboardInterrupt
 
@@ -1927,6 +1927,7 @@ def batch_scheduler(tmp_path, directory, executor):
         state_root=tmp_path / "state",
         replay_without_state=["trial"],
         executor=executor,
+        worker_factory=ThreadWorker,
     )
 
 
@@ -2273,9 +2274,13 @@ def test_scheduler_reconciles_an_unconfirmed_blocked_run_once_and_keeps_the_batc
     executed = []
 
     def execute(**kwargs):
-        executed.append(kwargs["run_id"])
-        host = UnstoppedHost() if len(executed) == 1 else FixtureHost()
-        return run_benchmark(**kwargs, host=host)
+        host = UnstoppedHost() if not executed else FixtureHost()
+        launch = kwargs.pop("on_launch")
+        return run_benchmark(
+            **kwargs,
+            host=host,
+            on_launch=lambda: (executed.append(kwargs["run_id"]), launch()),
+        )
 
     held_records.hold()
     batch_scheduler(tmp_path, directory, execute).run_until_idle()
@@ -2374,6 +2379,7 @@ def test_a_scheduler_on_another_checkouts_package_leaves_running_rows_for_recove
     directory = batch(tmp_path / "batches")
 
     def interrupted(**kwargs):
+        kwargs["on_login_selected"](None)
         kwargs["on_launch"]()
         raise KeyboardInterrupt
 
@@ -2427,7 +2433,10 @@ def test_recovery_on_another_checkouts_package_refuses_a_run_that_never_launched
         recovery.recover_benchmark(
             run_id="killed",
             spec={},
-            **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
+            **{
+                key: opts[key]
+                for key in ("bench_root", "results_dir", "results_repo", "state_root")
+            },
         )
     assert list(run_dir.iterdir()) == []
     assert docker.commands == []
@@ -2479,9 +2488,7 @@ def test_recovery_on_another_checkouts_package_settles_and_publishes_nothing(
 
 
 @pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
-def test_recovery_on_another_checkouts_package_publishes_no_retained_record(
-    tmp_path, monkeypatch
-):
+def test_recovery_on_another_checkouts_package_publishes_no_retained_record(tmp_path, monkeypatch):
     import fcntl
 
     from silverquillm.karn import records

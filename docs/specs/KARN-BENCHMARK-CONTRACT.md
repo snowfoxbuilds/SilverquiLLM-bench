@@ -117,7 +117,8 @@ Each run starts with fresh native state; only authentication persists between ru
 At most one runner on the host may use a login at a time because concurrent token refresh can invalidate the shared authentication (grilling 2026-09-26).
 Use the existing local login binding and a host-local exclusive runner lock per profile, shared by direct runs, scheduler execution, and enrollment.
 Exclusive ownership covers authentication preparation, execution, and final authentication harvest; recovery confirms that a prior runner's container has stopped before reusing its login.
-When every usable profile of the pool is busy, a run waits for one instead of refusing, and nothing of the run exists, nor does a batch count it as started, until it holds a profile; a pool that can never serve it leaves that batch's entries pending for a later pass while other batches run (grilling 2026-09-28).
+When every usable profile of the pool is busy, a direct run waits for one instead of refusing; the scheduler leaves that batch's entries pending while other batches can run.
+Nothing of the run exists, nor does a batch count it as started, until it holds a profile; a pool that can never serve it likewise leaves that batch's entries pending for a later pass (grilling 2026-09-28).
 The run input and record name the profile a run used, so recovery settles exactly that profile; a profile left pending by an interrupted run serves no other run until it is settled, except that a run bringing the same plugin artifact may take it last and settle it first (grilling 2026-09-28).
 Concurrent runs on one subscription share its rate limits; the operator accepts this, and the named profile lets a slowdown be traced (grilling 2026-09-28).
 An operator can put profiles under a Login Cooldown for a set time, such as when a subscription nears its weekly limit (grilling 2026-10-08).
@@ -210,6 +211,13 @@ The workstream also covers the CLI and batch paths that retain those observation
 ### Operator entrypoints and records
 
 `silverquillm run` and `silverquillm scheduler` share the same staging, execution, observation, harvesting, and grading lifecycle, and `silverquillm recover` settles an interrupted run from its retained evidence without rerunning work.
+The scheduler dispatches concurrently into every free eligible Login Profile, with no fixed worker limit. Busy, unusable, or cooling-down profiles cannot increase available capacity; pending profiles retain the settlement requirements above.
+Batches take priority in filename order among those whose next unstarted entry can start. Entries within a Batch start in file order: a blocked unstarted entry defers later entries in that Batch, but not another Batch with available capacity. Multiple entries of one Batch may run concurrently and finish out of order.
+An entry is recorded as started only once its worker holds a Login Profile. When execution and authentication harvest release a profile, another entry may claim it while the earlier worker grades or publishes its record.
+Candidates without a login plugin have no pool to bound concurrency, so the scheduler runs at most one such candidate at a time.
+With `--once`, the scheduler fills currently eligible slots and drains its own workers, continuing to dispatch as slots become available. It returns when no workers of its own remain and no queued entry is currently eligible; it does not wait for externally busy slots, cooldown expiry, or future `not_before` times. Continuous serving retries deferred entries on later passes.
+On restart, recovery checks every running state row; a row still owned by a live worker is deferred without interrupting that worker. Other eligible work may proceed.
+Ctrl-C, SIGTERM, and SIGHUP stop new dispatch, interrupt the scheduler's own workers, and drain their cleanup and state updates before releasing the exclusive queue lock.
 The `login` command enrolls one Login Profile into the pool of the selected existing plugin, or re-enrolls a named one; `login cooldown` sets or lifts a Login Cooldown on named profiles, or every profile, of one provider's pool.
 SilverquiLLM runs a completed Karn build by itself; the vendored v4 and v5 construct definition schemas are the only thing it takes from Karn, and no Ozolith package is involved.
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
