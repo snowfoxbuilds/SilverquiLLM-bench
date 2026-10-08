@@ -41,6 +41,10 @@ class LoginPoolUnavailableError(KarnError):
     """No slot can ever serve this run until the operator enrolls or recovers one."""
 
 
+class LoginPoolBusyError(KarnError):
+    """Usable slots exist, but their owners or cooldowns prevent an immediate claim."""
+
+
 def logins_root(state_root: Path) -> Path:
     return Path(state_root).resolve() / "logins"
 
@@ -222,6 +226,7 @@ class LoginPool:
         settle_artifact: str | None = None,
         poll_seconds: float = DEFAULT_POLL_SECONDS,
         on_wait: Callable[[str], None] | None = None,
+        wait: bool = True,
     ) -> LoginProfile:
         """Lock a free slot into ``hold``, waiting while every usable slot is busy.
 
@@ -296,6 +301,8 @@ class LoginPool:
                 # Only a damaged login needs re-enrolling; anything else waits for recovery.
                 reason = "unusable" if damaged_logins == len(names) else "pending"
                 raise LoginPoolUnavailableError(f"login_pool_{reason}:{self.plugin_id}")
+            if not wait:
+                raise LoginPoolBusyError("login_pool_busy:" + self.plugin_id)
             if not announced:
                 held = f"all {busy} usable {self.plugin_id} slots are busy"
                 if cooling and not busy:

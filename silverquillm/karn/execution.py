@@ -285,7 +285,10 @@ def run_benchmark(
     native_telemetry: str = "auto",
     login_poll_seconds: float = DEFAULT_POLL_SECONDS,
     login_wait=None,
+    login_blocking: bool = True,
     on_launch=None,
+    on_login_selected=None,
+    on_login_released=None,
     allow_dirty: bool = False,
 ) -> KarnRunRecord:
     """Refuse what cannot run before any evidence exists, then collect under both locks.
@@ -322,8 +325,11 @@ def run_benchmark(
                 settle_artifact=candidate.plugins[0].row["artifact"],
                 poll_seconds=login_poll_seconds,
                 on_wait=login_wait,
+                wait=login_blocking,
             )
             login = pool.ref(selected_login)
+        if on_login_selected is not None:
+            on_login_selected(login)
         if on_launch is not None:
             on_launch()
         run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -347,6 +353,7 @@ def run_benchmark(
             grader=grader,
             evaluator=evaluator,
             login_hold=login_hold,
+            on_login_released=on_login_released,
             provenance=provenance,
             baseline_store=BaselineStore(Path(state_root).resolve() / "baseline-grades"),
         )
@@ -372,6 +379,7 @@ def _collect(
     grader,
     evaluator,
     login_hold,
+    on_login_released,
     provenance,
     baseline_store,
 ) -> KarnRunRecord:
@@ -503,6 +511,8 @@ def _collect(
                     collector.mark_incomplete("host_execution_failed")
                 # The host has harvested the login; grading must not keep it from other runs.
                 login_hold.close()
+                if selected_login is not None and on_login_released is not None:
+                    on_login_released()
             try:
                 metadata["measurements"] = collector.finalize(exit_kind=observed.status)
             except Exception:  # noqa: BLE001 -- measurement failure must not suppress grading.

@@ -72,7 +72,7 @@ Enrollment uses the host's Codex CLI in an isolated home, through Karn's existin
 Logins are pooled per login plugin in `<state-root>/logins/<plugin-id>/<slot>`: any construct with that plugin can use any slot, so a new construct needs no new login.
 Each `silverquillm login` enrolls one new slot (`slot-1`, `slot-2`, …) through a fresh login; `--slot NAME` re-enrolls that slot instead.
 A slot serves one run at a time, so enroll as many slots per provider as runs you want at once, and use the same state root for direct runs and batches.
-A run takes any free slot; when every usable slot is busy, a direct run or batch entry waits for one (`waiting for a login slot`) before creating anything, and a batch entry counts as started only once it holds a slot, so a scheduler stopped while waiting leaves it pending.
+A run takes any free eligible slot. When every usable slot is busy, a direct run waits (`waiting for a login slot`) before creating anything; the scheduler leaves the entry pending and tries other batches. A batch entry counts as started only once it holds a slot, so a scheduler stopped before claiming one leaves it pending.
 With no slot enrolled a run refuses with `login_pool_empty:<plugin-id>`. The scheduler then leaves that batch's entries pending, warns once per pass, and goes on with other batches; `serve` retries on its next pass, and `--once` exits with the error only if nothing else ran.
 Each slot records the plugin it was enrolled through and serves only that plugin's pool.
 Before a settled slot is taken, its stored login is checked, without being copied, refreshed or changed, to be a readable file of that plugin's own shape; a damaged slot is skipped with a warning naming only the reason (such as `login_secret_malformed`), and the run takes another.
@@ -98,7 +98,7 @@ silverquillm login cooldown --agent codex --clear --slots slot-1
 `--duration` takes spans like `30m`, `5h`, `2d` or `1h30m`, up to a year; `--clear` lifts the cooldown instead.
 A slot not enrolled in that pool is refused with the enrolled ones listed.
 `--state-root` works before or after `cooldown` (`login --state-root X cooldown …` or `login cooldown --state-root X …`); given in both places, the one after `cooldown` wins, and with neither the configuration file or default applies.
-A cooling-down slot counts as busy: runs and batch entries pass over it, and wait (`waiting for a login slot: … cooling down`) when no other slot is free; a run already holding the slot carries on.
+A cooling-down slot counts as busy: runs and batch entries pass over it. When no other slot is free, a direct run waits (`waiting for a login slot: … cooling down`) and the scheduler defers that batch; a run already holding the slot carries on.
 The cooldown ends by itself at its time; `silverquillm top` shows each cooling-down slot and when it ends.
 In `top`'s LOGINS pane, select a slot and press `t` to hold it one more hour per press, or `c` to end its cooldown ten seconds from now.
 
@@ -214,11 +214,19 @@ In `top`, every action has a key and `?` lists them; `--no-mouse` leaves the mou
 
 The first invocation acknowledges the missing state for that one new batch.
 Subsequent invocations resume from the recorded cursor; omit the acknowledgement flag.
-Entries execute serially in file order, and later entries are reread before starting.
+The scheduler automatically fills every free eligible Login Pool slot, including multiple runs from the same batch, with no concurrency flag.
+It starts entries in file order and rereads later entries before starting them. Among batches whose next entry can claim a slot, filename order takes priority.
+A batch whose next unstarted entry cannot claim a slot stays pending while other batches can start; later entries in that same batch wait their turn.
+Released slots can take another entry while an earlier run is still grading, so runs can finish out of order.
+Candidates without a login plugin run at most one at a time within the scheduler.
 An optional timezone-aware `not_before` applies to a whole batch.
 Failed entries retain their data and the scheduler continues.
 
-A run left active by a crashed scheduler is recovered before further execution.
+`--once` fills currently eligible slots and waits for the runs it starts, refilling available slots as it goes.
+Once none of its own workers remain, it returns if the remaining entries are blocked, including by externally busy slots, cooldowns, or a future `not_before`.
+Omit `--once` to keep serving the queue and retry those entries on later passes. A direct `run` still waits for a busy slot.
+
+On restart, the scheduler checks every run left active by a crashed scheduler for recovery. A run still owned by a live worker is left alone while other eligible work proceeds.
 Recovery confirms that its container has stopped, removes only resources carrying that run's ownership label, preserves available measurements/workspace, and records the interrupted outcome without replaying the model task.
 Keep both batch state and local run artifacts for this recovery.
 If an immutable record already exists but its writers were unconfirmed, successful reconciliation appends a linked recovery observation and preserves the original record bytes.
@@ -230,6 +238,7 @@ A scheduler interrupted before a run wrote its `run-input.json` never launched t
 It refuses a run whose container is still running unless `--stop` is given, and refuses a run another process is still executing.
 Recovering an already recovered run returns the existing record.
 SIGTERM and SIGHUP interrupt `run`, `scheduler`, and `recover` like Ctrl-C, so the workload is stopped and the interrupted outcome recorded; a grading or probe container in progress is killed and removed rather than left running.
+The scheduler stops dispatching, interrupts its active workers, and waits for them to finish cleanup and state updates before releasing the queue lock.
 
 ### Recovery guarantees
 

@@ -279,7 +279,7 @@ def cooldown(ctx, agent, slots, every, duration, clear, more_slots, state_root):
 @ALLOW_DIRTY_OPTION
 @common_options
 def scheduler(batches_dir, once, poll_seconds, replay_without_state, allow_dirty, **options):
-    """Execute due batches serially through the same run lifecycle."""
+    """Execute due batches across every available login slot."""
     from silverquillm.queue_state import SchedulerLockedError
 
     from .batching import KarnScheduler, queue_rows

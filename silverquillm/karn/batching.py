@@ -1,10 +1,12 @@
-"""Local serial Karn batches, using the shared queue lock and atomic writer."""
+"""Local Karn batches, filling available login slots under one queue owner."""
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
+import signal
 import time
 import tomllib
 import uuid
@@ -20,6 +22,7 @@ from .grader import DEFAULT_GRADING_TIMEOUT
 from .login import LoginInUseError
 from .login_pool import LoginPoolUnavailableError
 from .records import RecordWritePendingError
+from .scheduler_worker import SpawnWorker, owner_alive
 
 # New batch files declare FORMAT; earlier karn-v4 files keep loading unchanged. The batch
 # format is independent of its candidates' Construct Definition versions.
@@ -77,8 +80,6 @@ def read_state(path: Path, batch_id: str) -> dict | None:
             raise ValueError
         for index, row in enumerate(value["runs"]):
             if row["index"] != index or row["status"] not in ("running", "done", "failed"):
-                raise ValueError
-            if row["status"] == "running" and index != len(value["runs"]) - 1:
                 raise ValueError
             if not isinstance(row["run_id"], str) or not isinstance(row["spec"], dict):
                 raise TypeError
@@ -167,14 +168,6 @@ def _published(row: dict) -> None:
         del row["error"]
 
 
-def _flag_unsettled_login(row: dict, record) -> None:
-    """A harvest the host could not finish is settled by a later pass or the login's next run."""
-    errors = record.run_metadata["execution"].get("observation_errors", [])
-    unsettled = sorted({"login_harvest_failed", "login_harvest_pending"}.intersection(errors))
-    if unsettled:
-        row["login_settlement_pending"] = ",".join(unsettled)
-
-
 class KarnScheduler:
     def __init__(
         self,
@@ -191,6 +184,8 @@ class KarnScheduler:
         executor=run_benchmark,
         recoverer=None,
         allow_dirty: bool = False,
+        worker_factory=SpawnWorker,
+        slot_poll_seconds: float = 5.0,
     ):
         self.directory = Path(batches_dir).resolve()
         self.options = {
@@ -205,6 +200,8 @@ class KarnScheduler:
         self.allow_dirty = allow_dirty
         self.replay = set(replay_without_state)
         self.executor, self.recoverer = executor, recoverer
+        self.worker_factory = worker_factory
+        self.slot_poll_seconds = slot_poll_seconds
         self.warnings = []
         # Login pools that could serve no entry during the latest pass, by batch.
         self.unavailable_logins: dict[str, str] = {}
@@ -229,11 +226,6 @@ class KarnScheduler:
         if not count and self.unavailable_logins:
             raise LoginPoolUnavailableError(min(self.unavailable_logins.values()))
         return count
-
-    def _warn(self, message: str) -> None:
-        if message not in self.warnings:
-            self.warnings.append(message)
-            logging.getLogger(__name__).warning("%s", message)
 
     def _retry_pending(self, state_path: Path, state: dict, row: dict) -> None:
         """Publish a retained record or settle the run's login; never execute the task again."""
@@ -264,6 +256,7 @@ class KarnScheduler:
     def _recover_running_states(self):
         from .recovery import LoginSettlementPendingError, RunNeverLaunchedError
 
+        states = {}
         for state_path in sorted((self.directory / "state").glob("*.json")):
             try:
                 header = json.loads(state_path.read_text())
@@ -273,45 +266,48 @@ class KarnScheduler:
                 self._warn("unsupported_legacy_state:" + state_path.name)
                 continue
             state = read_state(state_path, state_path.stem)
+            states[state_path.stem] = state
             if self.recoverer is None:
                 from .recovery import recover_benchmark
 
                 self.recoverer = recover_benchmark
             for row in state["runs"]:
+                if owner_alive(row.get("worker")):
+                    continue
                 if row.get("record_write_pending") or row.get("login_settlement_pending"):
                     self._retry_pending(state_path, state, row)
-            if not state["runs"] or state["runs"][-1]["status"] != "running":
-                continue
-            row = state["runs"][-1]
-            try:
-                record = self.recoverer(run_id=row["run_id"], spec=row["spec"], **self.options)
-            except RunNeverLaunchedError as error:
-                row.update(
-                    status="failed",
-                    error=str(error),
-                    recovered_at=datetime.now(UTC).isoformat(),
-                )
+                if row["status"] != "running":
+                    continue
+                try:
+                    record = self.recoverer(run_id=row["run_id"], spec=row["spec"], **self.options)
+                except RunNeverLaunchedError as error:
+                    row.update(
+                        status="failed",
+                        error=str(error),
+                        recovered_at=datetime.now(UTC).isoformat(),
+                    )
+                except LoginInUseError:
+                    self._warn(f"{state_path.stem}: login_in_use; recovery deferred")
+                    continue
+                except RecordWritePendingError as error:
+                    _recovered(row, error.record)
+                    row["record_write_pending"] = True
+                except LoginSettlementPendingError as error:
+                    _recovered(row, error.record)
+                    row["login_settlement_pending"] = str(error)
+                except Exception as error:  # noqa: BLE001 -- one row must not stop recovery of the others.
+                    if isinstance(error, KarnError) and str(error) == "run_in_progress":
+                        self._warn(f"{state_path.stem}: run_in_progress; recovery deferred")
+                        continue
+                    row.update(
+                        status="failed",
+                        error="recovery_failed:" + _failure_reason(error),
+                        recovered_at=datetime.now(UTC).isoformat(),
+                    )
+                else:
+                    _recovered(row, record)
                 self._save(state_path, state)
-                continue
-            except LoginInUseError:
-                self._warn(f"{state_path.stem}: login_in_use; recovery deferred")
-                continue
-            except RecordWritePendingError as error:
-                # The recovered record is retained; later passes publish that same record.
-                _recovered(row, error.record)
-                row["record_write_pending"] = True
-            except LoginSettlementPendingError as error:
-                _recovered(row, error.record)
-                row["login_settlement_pending"] = str(error)
-            except Exception as error:  # noqa: BLE001 -- one unrecoverable row must not stop every scheduler start.
-                row.update(
-                    status="failed",
-                    error="recovery_failed:" + _failure_reason(error),
-                    recovered_at=datetime.now(UTC).isoformat(),
-                )
-            else:
-                _recovered(row, record)
-            self._save(state_path, state)
+        return states
 
     def _require_package(self) -> None:
         """A package from another checkout is a configuration error, not a failed entry: it
@@ -321,109 +317,204 @@ class KarnScheduler:
 
     def _run_locked(self) -> int:
         self._require_package()
-        self._recover_running_states()
+        states = self._recover_running_states()
         self.unavailable_logins = {}
+        active = {}
+        deferred = {}
         count = 0
-        for path in sorted(self.directory.glob("*.toml")):
+        interrupted = None
+        draining = False
+
+        def save(path, state):
             try:
-                batch = load_batch(path)
-                if batch is None:
-                    self._warn("unsupported_legacy_batch:" + path.name)
+                self._save(path, state)
+            except Exception as error:
+                if not draining:
+                    raise
+                self._warn("queue save failed during shutdown: " + _failure_reason(error))
+
+        def acknowledge(worker, admitted):
+            with contextlib.suppress(BrokenPipeError, EOFError, OSError):
+                worker.connection.send(admitted)
+
+        def launch(job):
+            row, state, state_path = job["row"], job["state"], job["state_path"]
+            if not row.get("started_at"):
+                row.update(started_at=datetime.now(UTC).isoformat(), worker=job["worker"].owner)
+                if "login" in job:
+                    row["login"] = job["login"]
+                state["runs"].append(row)
+                save(state_path, state)
+
+        def events():
+            nonlocal count, interrupted
+            for run_id, job in list(active.items()):
+                worker = job["worker"]
+                terminal = False
+                while worker.connection.poll():
+                    try:
+                        kind, value = worker.connection.recv()
+                    except EOFError:
+                        break
+                    if kind == "warning":
+                        self._warn(f"{job['name']}: {value}")
+                    elif kind == "released":
+                        deferred.clear()
+                    elif kind == "selected":
+                        job["login"] = value
+                        plugin = value.split("/", 1)[0] if value else "unpooled"
+                        admitted = not any(
+                            name < job["name"] and pool == plugin for name, pool in deferred.items()
+                        )
+                        if value is None:
+                            admitted = admitted and not any(
+                                row["status"] == "running"
+                                and "login" in row
+                                and row["login"] is None
+                                and (row["run_id"] in active or owner_alive(row.get("worker")))
+                                for state in states.values()
+                                for row in state["runs"]
+                            )
+                        acknowledge(worker, admitted and interrupted is None)
+                    elif kind == "launch":
+                        if interrupted is None:
+                            launch(job)
+                        acknowledge(worker, interrupted is None)
+                        job["probing"] = False
+                    elif kind in ("busy", "unavailable"):
+                        deferred[job["name"]] = value.rsplit(":", 1)[-1]
+                        if kind == "unavailable":
+                            self.unavailable_logins[job["name"]] = value
+                            self._warn(f"{job['name']}: {value}; entries stay pending")
+                        terminal = True
+                    elif kind == "interrupt":
+                        interrupted = (
+                            SystemExit(value) if value is not None else KeyboardInterrupt()
+                        )
+                        terminal = True
+                    elif kind == "result":
+                        deferred.clear()
+                        launch(job)
+                        job["row"].update(value, finished_at=datetime.now(UTC).isoformat())
+                        save(job["state_path"], job["state"])
+                        self.unavailable_logins.pop(job["name"], None)
+                        count += 1
+                        terminal = True
+                        if value.get("execution_status") == "interrupted":
+                            interrupted = KeyboardInterrupt()
+                if terminal or not worker.alive():
+                    worker.close()
+                    del active[run_id]
+                    if not terminal:
+                        deferred.clear()
+                        # A dead worker leaves its launched row for ordinary recovery.
+                        if job["row"].get("started_at"):
+                            self._warn(f"{job['name']}: worker exited; recovery required")
+                        else:
+                            deferred[job["name"]] = None
+
+        def dispatch():
+            paths = set(self.directory.glob("*.toml")) | {
+                self.directory / (name + ".toml") for name in states
+            }
+            for path in sorted(paths):
+                if path.stem in deferred:
                     continue
-                state_path = self.directory / "state" / (path.stem + ".json")
-                state = read_state(state_path, path.stem)
-            except KarnError as error:
-                self._warn(str(error))
-                continue
-            if state is not None and state["runs"] and state["runs"][-1]["status"] == "running":
-                continue
-            if state is None:
-                if path.stem not in self.replay:
-                    continue
-                state = {"schema_version": 2, "batch": path.stem, "runs": []}
-                self._save(state_path, state)
-            while True:
                 try:
                     batch = load_batch(path)
-                except KarnError as error:
-                    self._warn(str(error))
-                    break
-                if batch is None or len(state["runs"]) >= len(batch["runs"]):
-                    break
-                if batch.get("not_before") and batch["not_before"] > datetime.now(UTC):
-                    break
-                spec = dict(batch["runs"][len(state["runs"])])
-                row = {
-                    "index": len(state["runs"]),
-                    "run_id": uuid.uuid4().hex,
-                    "spec": spec,
-                    "status": "running",
-                }
-
-                def launch(row=row, state=state, state_path=state_path):
-                    """Count the entry as started only once it holds a login and is launching."""
-                    if not row.get("started_at"):
-                        row["started_at"] = datetime.now(UTC).isoformat()
-                        state["runs"].append(row)
-                        self._save(state_path, state)
-
-                build = Path(spec["build_output"])
-                if not build.is_absolute():
-                    build = self.options["bench_root"] / build
-                try:
-                    record = self.executor(
+                    if batch is None:
+                        self._warn("unsupported_legacy_batch:" + path.name)
+                        continue
+                    state_path = self.directory / "state" / (path.stem + ".json")
+                    if path.stem not in states:
+                        state = read_state(state_path, path.stem)
+                        if state is None:
+                            if path.stem not in self.replay:
+                                continue
+                            state = {"schema_version": 2, "batch": path.stem, "runs": []}
+                            self._save(state_path, state)
+                        states[path.stem] = state
+                    state = states[path.stem]
+                    if len(state["runs"]) >= len(batch["runs"]):
+                        continue
+                    if batch.get("not_before") and batch["not_before"] > datetime.now(UTC):
+                        continue
+                    spec = dict(batch["runs"][len(state["runs"])])
+                    row = {
+                        "index": len(state["runs"]),
+                        "run_id": uuid.uuid4().hex,
+                        "spec": spec,
+                        "status": "running",
+                    }
+                    build = Path(spec["build_output"])
+                    if not build.is_absolute():
+                        build = self.options["bench_root"] / build
+                    arguments = dict(
                         build_output=build,
                         construct=spec["construct"],
                         benchmark_id=spec["benchmark"],
                         budget_seconds=spec.get("budget_seconds", 86400),
                         native_telemetry=spec.get("native_telemetry", "auto"),
                         run_id=row["run_id"],
-                        # A run waits for a free login slot; the wait is reported, not deferred.
-                        login_wait=lambda message, name=path.stem: self._warn(f"{name}: {message}"),
-                        on_launch=launch,
                         allow_dirty=self.allow_dirty,
                         **self.options,
                     )
-                    launch()
-                    status = record.run_metadata["execution"]["status"]
-                    row.update(
-                        status="done" if status == "completed" else "failed",
-                        execution_status=status,
-                        candidate=record.candidate.to_dict(),
+                    blocked = signal.pthread_sigmask(
+                        signal.SIG_BLOCK, (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
                     )
-                    _flag_unsettled_login(row, record)
-                except LoginPoolUnavailableError as error:
-                    # No login can serve this batch until the operator enrolls or recovers one;
-                    # its entry never started, so it and the rest stay pending for a later pass,
-                    # while other batches go on.
-                    self.unavailable_logins[path.stem] = str(error)
-                    message = f"{path.stem}: {error}; entries stay pending"
-                    if message not in self.warnings:
-                        self.warnings.append(message)
-                    logging.getLogger(__name__).warning("%s", message)
+                    try:
+                        worker = self.worker_factory(self.executor, arguments)
+                        active[row["run_id"]] = {
+                            "worker": worker,
+                            "row": row,
+                            "state": state,
+                            "state_path": state_path,
+                            "name": path.stem,
+                            "probing": True,
+                        }
+                    finally:
+                        signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
+                    return True
+                except KarnError as error:
+                    self._warn(str(error))
+            return False
+
+        try:
+            retry_at = time.monotonic()
+            while True:
+                events()
+                if interrupted is not None:
+                    raise interrupted
+                if time.monotonic() >= retry_at:
+                    deferred.clear()
+                    retry_at = time.monotonic() + self.slot_poll_seconds
+                if not any(job["probing"] for job in active.values()) and dispatch():
+                    continue
+                if not active:
                     break
-                except RecordWritePendingError as error:
-                    status = error.record.run_metadata["execution"]["status"]
-                    row.update(
-                        status="done" if status == "completed" else "failed",
-                        execution_status=status,
-                        candidate=error.record.candidate.to_dict(),
-                        record_write_pending=True,
-                        error=str(error),
-                    )
-                    launch()
-                    _flag_unsettled_login(row, error.record)
-                except Exception as error:  # noqa: BLE001 -- one failed run does not discard the rest of a batch.
-                    launch()
-                    row.update(
-                        status="failed",
-                        error=str(error) if isinstance(error, KarnError) else type(error).__name__,
-                    )
-                row["finished_at"] = datetime.now(UTC).isoformat()
-                self._save(state_path, state)
-                count += 1
-                if row.get("execution_status") == "interrupted":
-                    raise KeyboardInterrupt
+                # Polling observes a released login even while its former worker is grading.
+                # Connection.poll avoids blocking signal delivery or a serve sleep override.
+                next(iter(active.values()))["worker"].connection.poll(0.01)
+        except BaseException:
+            draining = True
+            previous = {}
+            for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+                try:
+                    previous[number] = signal.signal(number, signal.SIG_IGN)
+                except ValueError:
+                    pass
+            try:
+                interrupted = interrupted or KeyboardInterrupt()
+                for job in active.values():
+                    job["worker"].interrupt()
+                while active:
+                    events()
+                    if active:
+                        next(iter(active.values()))["worker"].connection.poll(0.01)
+            finally:
+                for number, handler in previous.items():
+                    signal.signal(number, handler)
+            raise
         return count
 
     def serve(self, poll_seconds: float = 30):

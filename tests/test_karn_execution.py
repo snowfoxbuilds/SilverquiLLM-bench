@@ -27,6 +27,7 @@ from silverquillm.results_repo import (
 )
 
 from .grader_fixtures import local_grader
+from .scheduler_fixtures import ThreadWorker
 from .test_karn_host import FakeDocker, make_candidate
 
 
@@ -264,6 +265,7 @@ def test_batch_uses_shared_runner_and_does_not_replay_completed_entries(tmp_path
 
     scheduler = KarnScheduler(
         directory,
+        worker_factory=ThreadWorker,
         **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
         replay_without_state=["trial"],
         executor=execute,
@@ -287,6 +289,7 @@ def test_legacy_batches_and_state_are_reported_once_and_never_rewritten(tmp_path
     before = {path: path.read_bytes() for path in (batch, state)}
     scheduler = KarnScheduler(
         directory,
+        worker_factory=ThreadWorker,
         bench_root=tmp_path,
         results_dir=tmp_path / "runs",
         results_repo=tmp_path / "results",
@@ -454,6 +457,7 @@ def test_batch_recovers_finalized_local_record_even_when_batch_file_was_removed(
 
     scheduler = KarnScheduler(
         directory,
+        worker_factory=ThreadWorker,
         **{key: opts[key] for key in ("bench_root", "results_dir", "results_repo", "state_root")},
         replay_without_state=["trial"],
         executor=execute,
@@ -497,6 +501,7 @@ def test_mid_run_batch_edit_keeps_completed_state_and_continues_other_batches(tm
 
     scheduler = KarnScheduler(
         directory,
+        worker_factory=ThreadWorker,
         bench_root=tmp_path,
         results_dir=tmp_path / "runs",
         results_repo=tmp_path / "records",
@@ -548,6 +553,7 @@ def test_operator_interruption_records_state_and_stops_before_next_run(tmp_path)
 
     scheduler = KarnScheduler(
         directory,
+        worker_factory=ThreadWorker,
         bench_root=tmp_path,
         results_dir=tmp_path / "runs",
         results_repo=tmp_path / "records",

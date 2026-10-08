@@ -583,6 +583,35 @@ def test_queued_runs_are_the_specs_a_batch_has_not_started(tmp_path):
     assert not (batches / "state/b-unacknowledged.json").exists()
 
 
+def test_multiple_running_batch_rows_leave_only_unstarted_entries_queued(tmp_path):
+    batches = tmp_path / "batches"
+    write_batch(
+        batches,
+        "parallel",
+        'format="karn-v5"\n'
+        + "".join(
+            RUN_SPEC.format(build=tmp_path / "build", benchmark=name)
+            for name in ("smoke", "hob-medium", "fra-hard")
+        ),
+    )
+    (batches / "state").mkdir()
+    (batches / "state/parallel.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "batch": "parallel",
+                "runs": [
+                    {"index": index, "run_id": f"r{index}", "spec": {}, "status": "running"}
+                    for index in range(2)
+                ],
+            }
+        )
+    )
+    [found] = queued_batches(batches)
+    assert (found.status, found.started, found.total) == ("running", 2, 3)
+    assert [(run.index, run.benchmark) for run in found.runs] == [(2, "fra-hard")]
+
+
 # Login Pools
 
 

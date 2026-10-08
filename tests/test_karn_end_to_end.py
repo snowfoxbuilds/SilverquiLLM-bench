@@ -22,6 +22,7 @@ from silverquillm.karn.host import DockerHost
 from silverquillm.karn.login_pool import LoginPool
 from silverquillm.results_repo import iter_run_records
 
+from .scheduler_fixtures import ThreadWorker
 from .test_karn_execution import benchmark_data
 from .test_karn_host import FIXTURES, make_candidate
 from .test_karn_observations import journal, otlp, record
@@ -103,7 +104,9 @@ def test_direct_and_batch_cli_retain_all_three_dimensions(tmp_path, python_image
         candidate.runtime["environment"]["KARN_TEST_IMPLEMENTATIONS"] = json.dumps(reference)
         candidate.definition_path.write_bytes(canonical(candidate.definition))
         candidate = load_candidate(candidate.build_output, "bare")
+    # The fixture uses a local Python image without a committed Karn recipe.
     common = [
+        "--allow-dirty",
         "--bench-root",
         str(REPO),
         "--results-dir",
@@ -148,15 +151,21 @@ def test_direct_and_batch_cli_retain_all_three_dimensions(tmp_path, python_image
     assert "1 run(s) executed" in queued.stdout
     records = list(iter_run_records(tmp_path / "records"))
     assert len(records) == 2
+    reference_scores = records[0][1].scores
     for _, result in records:
         assert result.benchmark == benchmark
         assert result.run_metadata["execution"]["status"] == "completed"
         assert all(
             score["evaluated"] and score["tests_total"] > 0 for score in result.scores.values()
         ), result.scores
+        # The benchmark retains known defects; direct and queued grades must agree.
         for dimension in ("fdn_regression", "engine_regression"):
             assert (
-                result.scores[dimension]["tests_passed"] == result.scores[dimension]["tests_total"]
+                result.scores[dimension]["tests_passed"],
+                result.scores[dimension]["tests_total"],
+            ) == (
+                reference_scores[dimension]["tests_passed"],
+                reference_scores[dimension]["tests_total"],
             ), result.scores[dimension]
         assert result.run_metadata["measurements"]["estimated_cost"]["value"] is None
         assert (tmp_path / "runs" / result.run_id / "workspace_final/integration-marker").exists()
@@ -175,6 +184,11 @@ def test_direct_and_batch_cli_retain_all_three_dimensions(tmp_path, python_image
             for path in (source / "data/tests/audited/fdn").iterdir()
             if (path / "tests.py").is_file()
         }
+        if config["draft_set"]["primary_set_code"] == "FDN":
+            # FDN targets are scored in card correctness.
+            targets = {f"fdn_{number}" for number in config["cards"]}
+            population -= targets
+            covered -= targets
         coverage = result.scores["fdn_regression"]["coverage"]
         assert set(coverage["population_cards"]) == population
         assert set(coverage["evaluated_cards"]) == covered
@@ -328,6 +342,7 @@ def test_batch_recovers_a_live_orphan_and_grades_partial_work_without_replay(
 
     scheduler = KarnScheduler(
         batches,
+        worker_factory=ThreadWorker,
         bench_root=root,
         results_dir=tmp_path / "runs",
         results_repo=tmp_path / "records",

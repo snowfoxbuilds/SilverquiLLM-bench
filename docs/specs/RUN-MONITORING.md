@@ -184,7 +184,8 @@ Once a valid record applies to the run, the row shows that record's Estimated Co
 The applicable record is a linked recovery before the original, and a locally retained copy before a published one; a missing recorded cost stays missing rather than falling back to the live figure.
 A recorded figure drops the `~`, carries `*` when its record calls it incomplete, and shows `≠N` for N conflicting request observations.
 
-The queued pane lists the not-yet-started run specs in execution order, under one header line per Batch (grilling 2026-10-07).
+The queued pane lists the not-yet-started run specs in queue priority order, under one header line per Batch (grilling 2026-10-07).
+The scheduler may start a later Batch when an earlier Batch has no eligible Login Profile; dispatch follows the [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records).
 Each run takes one line with its benchmark, budget and Candidate display; a queued run has no Login Profile until it launches.
 A Batch's header line shows its countdown to `not_before`, or `⚠ needs ack` for a Batch with no committed state, and how many of its runs have started.
 
