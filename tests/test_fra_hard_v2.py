@@ -25,7 +25,7 @@ def test_pool_keeps_each_targets_set():
     assert config["cards"] == [f"{code}:{number}" for code, number in POOL]
     assert config["draft_set"] == {"primary_set_code": "FRA", "collector_range": "001-290",
                                    "extra_set_codes": ["HOB", "WAR", "FUT"]}
-    assert config["tier"] == "Beta"
+    assert config["tier"] == "Benchmarking"
     pool = json.loads((BENCH / "data/pool.json").read_text())
     assert [(entry["set"], entry["collector_number"]) for entry in pool] == list(POOL)
     for entry in pool:

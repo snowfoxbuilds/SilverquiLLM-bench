@@ -222,6 +222,36 @@
           "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_division_is_locked_in_at_activation"
         ]
       }
+    },
+    {
+      "id": "storm-copy-gains-targets",
+      "description": "A Thousand-Year Storm copy given new targets is asked for every target its spell allows, so it can gain an \"up to one\" target its original left unchosen.",
+      "rules": [
+        "CR 115.7",
+        "CR 707.10"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "fdn_regression": [
+          "fdn_248/tests.py::TestStormCopyRetargeting::test_copy_cannot_gain_a_target_its_original_left_unchosen"
+        ]
+      }
+    },
+    {
+      "id": "summoning-sick-creature-taps",
+      "description": "A creature can use its {T} abilities, mana abilities included, before it has been under its controller's control continuously since their most recent turn began.",
+      "rules": [
+        "CR 302.6"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "engine_regression": [
+          "test_summoning_sickness.py::TestCreatureThatJustArrived::test_cannot_use_its_tap_ability_the_turn_it_is_cast",
+          "test_summoning_sickness.py::TestCreatureThatJustArrived::test_still_cannot_on_the_opponents_turn",
+          "test_summoning_sickness.py::TestCreatureThatJustArrived::test_cannot_tap_for_mana_the_turn_it_is_cast",
+          "test_summoning_sickness.py::TestCreatureThatChangedControl::test_cannot_tap_for_its_new_controller"
+        ]
+      }
     }
   ]
 }

@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-06
+Last updated: 2026-10-07
 
 # Known-Best Engine
 
@@ -65,7 +65,7 @@ known_best/
 | `workspace/test_interface.py`, `workspace/test_interface.md`, `workspace/test_test_interface.py`, `workspace/table.py`, `workspace/test_utils.py` | `workspace/` and the Test Oracle Workspace |
 | `workspace/RULEBOOK.txt` | `workspace/` and the Test Oracle Workspace |
 | `data/tests/audited/fdn/`, `data/tests/audited/engine/` | `data/tests/audited/` |
-| `data/tests/audited/engine/` | `workspace/engine_tests/`, seeding the Engine Reference Tests |
+| `data/tests/audited/engine/` | `workspace/engine_tests/`, seeding the Engine Reference Tests, less the files the benchmark lists as hidden |
 
 It deliberately holds no `config.json` (it is not a benchmark), no target-set cards or stubs, no agent-facing documents beyond the Test Interface's own and the rulebook, no Test Oracle Workspace or oracle extension, and no Engine Reference Tests.
 Engine Regression grades a benchmark's `data/tests/audited/engine/` whenever that directory exists and otherwise the host copy of `workspace/engine_tests/`, so `known_best/` is graded by exactly the code that grades benchmarks.
@@ -84,8 +84,11 @@ Copies are hard copies, so each benchmark stays self-contained after the Known-B
 Every test a Workspace ships must at least collect where a candidate runs it: a Platform Test stages each ported benchmark, and the Known-Best Workspace assembled the same way with no stubs and no Known Defects, through the staging a run uses, and runs its tests with nothing importable beyond the Workspace, the standard library and installed tools; the Known-Best one must pass them all (grilling 2026-10-07).
 
 `scripts/port_from_known_best.py <benchmark>` performs the port and can be re-run whenever the Known-Best Workspace changes; `--check` reports what a port would change, and a Platform Test runs it for every benchmark ported this way.
+The port is for benchmarks in Beta: it refuses a benchmark in Benchmarking or Released whole, and `--check` skips one, so a Known-Best fix reaches a Benchmarking benchmark's hidden Audited Tests or Test Oracle Workspace only by hand (grilling 2026-10-07).
 It owns only the copied paths in the table above, the Test Oracle Workspace's mirrors of the Workspace's `AGENTS.md`, `skills/` and Audited Test suites, and the target cards' Workspace stubs, which it generates from their Card Specs; every other path, such as the agent-facing documents, target Test Oracle Impls and target Audited Tests, is the benchmark's own.
 Each Known Defect is recorded as a patch against the Known-Best Workspace, `data/known_defects/<id>.patch`, which the port applies to the Workspace in manifest order; oracle engine extensions may likewise be recorded as patches in `data/oracle_patches/`.
+A defect's patch also keeps the Reference Tests a Known-Best fix changed as the Workspace already had them, so recording a defect in an existing benchmark leaves its Workspace as it was (grilling 2026-10-07).
+A benchmark may keep an Audited Engine Test file out of its Engine Reference Tests by listing it, relative to `data/tests/audited/engine/`, in `data/hidden_engine_tests.json`: it is still graded but never staged, so a Known Defect the benchmark deliberately leaves unfixed is pinned by hidden tests a candidate gains by fixing it, without a visible test failing from the start (grilling 2026-10-07).
 A patch that no longer applies fails the port, and the defect is re-recorded against the new Known-Best code.
 A malformed patch, a deletion that would leave content behind, or a path outside the patched tree fails it too, and a failing patch changes nothing; the paths the port owns are synchronized with the Known-Best Workspace, deletions included.
 The port builds the whole result in a staged copy and publishes only what differs, so a failure at any step changes nothing; it follows no symlinks — a link anywhere in the benchmark or the Known-Best input fails it before anything is built — checks every path it will replace before replacing any, and replaces whole a path whose type changed, a file that became a directory or the reverse.
@@ -161,7 +164,7 @@ The grading inputs are checked against the requested digest before and after the
 When review of a run turns up a new defect (grilling 2026-10-02):
 
 1. Fix it in the Known-Best Workspace's engine or FDN implementation and add any Audited Test that pins it.
-2. Port the fix into the Test Oracle Workspace of every non-Released benchmark that carries the defect.
+2. Port the fix into the Test Oracle Workspace of every non-Released benchmark that carries the defect: by re-running the port for a Beta benchmark, by hand for a Benchmarking one.
 3. Add an `inherited` entry to each such benchmark's manifest and update its Audited Tests.
 4. Recompute the baseline reference grade and regrade every run of those benchmarks.
 

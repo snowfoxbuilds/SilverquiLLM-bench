@@ -13,7 +13,8 @@ exactly these paths, which it replaces wholesale:
   the Test Interface (``test_interface.py``, its ``.md`` and its demonstration tests),
   ``table.py``, the helpers Audited Tests are written with, and ``RULEBOOK.txt``,
   the Comprehensive Rules every ported benchmark stages;
-- ``workspace/engine_tests/``: the Audited Engine Tests, seeding the Engine Reference Tests;
+- ``workspace/engine_tests/``: the Audited Engine Tests, seeding the Engine Reference Tests,
+  less the files ``data/hidden_engine_tests.json`` lists, which stay hidden;
 - ``data/tests/audited/fdn/`` and ``data/tests/audited/engine/``;
 - the Test Oracle Workspace's mirrors of the Workspace's ``AGENTS.md`` and ``skills/``
   and of every ``data/tests/audited/**/tests.py``.
@@ -24,6 +25,11 @@ Workspace, disappears from the ported trees too.
 
 Every other path is the benchmark's own and is left alone: its agent documents,
 its target cards outside ``cards/fdn/`` and their Audited Tests.
+
+Porting is for benchmarks in Beta. A benchmark whose Benchmark Tier is
+Benchmarking or Released is refused whole: its Workspace is locked, and a
+Known-Best fix reaches its hidden Audited Tests or Test Oracle Workspace only by
+hand. ``--check`` skips such a benchmark and exits 0.
 
 Each target card (``config.json``) becomes a behavior-free stub in the Workspace,
 generated from its Card Spec by ``scripts/generate_printed_classes.py``; an FDN
@@ -66,12 +72,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.generate_printed_classes import render  # noqa: E402
-from scripts.oracle_support import load_layout  # noqa: E402
+from scripts.generate_printed_classes import render
+from scripts.oracle_support import load_layout
 
 KNOWN_BEST = ROOT / "known_best"
 ORACLE = Path("data/test_oracle_workspace")
 DEFECT_PATCHES = Path("data/known_defects")
+HIDDEN_ENGINE_TESTS = Path("data/hidden_engine_tests.json")
 ORACLE_PATCHES = Path("data/oracle_patches")
 WORKSPACE_ITEMS = (
     "engine", "cards/fdn", "conftest.py", "pytest.ini", "test_utils.py",
@@ -82,8 +89,31 @@ _IGNORE = shutil.ignore_patterns("__pycache__", ".pytest_cache", "*.pyc")
 _CACHES = ("__pycache__", ".pytest_cache")
 
 
+PORTABLE_TIER = "beta"
+
+
 class PortError(Exception):
     """The benchmark cannot be ported as configured."""
+
+
+def benchmark_tier(benchmark_root: Path) -> str:
+    """The benchmark's Benchmark Tier, as its ``config.json`` records it."""
+    try:
+        tier = json.loads((benchmark_root / "config.json").read_text())["tier"]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise PortError(f"{benchmark_root / 'config.json'}: no readable Benchmark Tier ({error})") from None
+    if not isinstance(tier, str):
+        raise PortError(f"{benchmark_root / 'config.json'}: tier {tier!r} is not a Benchmark Tier")
+    return tier
+
+
+def _require_beta(benchmark_root: Path) -> None:
+    tier = benchmark_tier(benchmark_root)
+    if tier.lower() != PORTABLE_TIER:
+        raise PortError(
+            f"{benchmark_root.name} is in {tier}; only Beta benchmarks are ported, "
+            "and a Known-Best fix reaches it only by hand"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -289,6 +319,31 @@ def defect_patches(benchmark_root: Path) -> list[Path]:
     return patches
 
 
+def hidden_engine_tests(benchmark_root: Path, known_best: Path) -> list[str]:
+    """The Audited Engine Test files the benchmark keeps out of its Engine
+    Reference Tests: a JSON list of paths relative to the Audited Engine Tests,
+    each an existing ``.py`` file there, listed once."""
+    listing = benchmark_root / HIDDEN_ENGINE_TESTS
+    if not listing.exists() and not listing.is_symlink():
+        return []
+    if listing.is_symlink() or not listing.is_file():
+        raise PortError(f"{listing} must be a regular file")
+    try:
+        paths = json.loads(listing.read_text())
+    except json.JSONDecodeError as error:
+        raise PortError(f"{listing}: {error}") from None
+    if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths):
+        raise PortError(f"{listing} must be a JSON list of paths")
+    if len(set(paths)) != len(paths):
+        raise PortError(f"{listing} lists a path twice")
+    engine = known_best / "data/tests/audited/engine"
+    for relative in paths:
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts or path.suffix != ".py" or not (engine / path).is_file():
+            raise PortError(f"{listing}: {relative!r} is not an Audited Engine Test file")
+    return paths
+
+
 # ---------------------------------------------------------------------------
 # Porting
 # ---------------------------------------------------------------------------
@@ -357,12 +412,15 @@ def _build(benchmark_root: Path, known_best: Path) -> None:
     layout = load_layout(benchmark_root.parents[1], benchmark_root.name, require_cards=True)
     workspace, oracle = benchmark_root / "workspace", benchmark_root / ORACLE
     patches = defect_patches(benchmark_root)
+    hidden = hidden_engine_tests(benchmark_root, known_best)
 
     for tree in (workspace, oracle):
         _copy_known_best_workspace(known_best, tree)
     for suite in AUDITED_ITEMS:
         _replace(known_best / "data/tests/audited" / suite, benchmark_root / "data/tests/audited" / suite)
     _replace(known_best / "data/tests/audited/engine", workspace / "engine_tests")
+    for relative in hidden:
+        (workspace / "engine_tests" / relative).unlink()
 
     _stub_targets(workspace, layout.cards)
     for patch in patches:
@@ -419,7 +477,8 @@ def _preflight(benchmark_root: Path, relatives: list[str]) -> None:
 def _staged(benchmark_root: Path, known_best: Path) -> Iterator[Path]:
     """A ported copy of ``benchmark_root``, built whole before anything is
     published, so a failing step leaves the benchmark untouched. Both inputs
-    must be free of links (:func:`_refuse_links`)."""
+    must be free of links (:func:`_refuse_links`), and the benchmark in Beta."""
+    _require_beta(benchmark_root)
     _refuse_links(benchmark_root)
     _refuse_links(known_best)
     with tempfile.TemporaryDirectory(prefix="port_") as tmp:
@@ -463,6 +522,10 @@ def main() -> int:
         parser.error(f"no benchmark at {benchmark_root}")
     try:
         if args.check:
+            tier = benchmark_tier(benchmark_root)
+            if tier.lower() != PORTABLE_TIER:
+                print(f"skipped: {args.benchmark} is in {tier}; only Beta benchmarks are ported")
+                return 0
             changed = check(benchmark_root)
             for path in changed:
                 print(f"would change: {path}")

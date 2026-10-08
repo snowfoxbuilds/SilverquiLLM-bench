@@ -21,7 +21,7 @@ Tier transitions are **forward-only and non-reversible except for grave, explici
 
 - **Benchmarking → Beta** invalidates all existing benchmarks for that identity.
 - **Released → Benchmarking** forces retraction of all published scores.
-Enforcement is a **CI check** that reads the **base branch's** `tier`, expands it to locked path-globs, runs `git diff --name-only base...head`, and fails the PR if any changed path matches a locked glob. Locked paths by tier: Benchmarking locks `benchmarks/<bench>/workspace/`; Released additionally locks the oracle impls/engine (`benchmarks/<bench>/data/test_oracle_workspace/`) and audited tests (`benchmarks/<bench>/data/tests/audited/`). `config.json` is **never** a locked path, so a pure tier-transition PR (touching only `config.json`) always passes — and because a PR's edits are judged against the base (pre-transition, stricter) tier, lowering a tier and editing newly-unlocked files in the *same* PR is structurally impossible; those edits must land in a follow-up PR after the transition merges. No bypass label or transition carve-out is required. The tier is flipped via a human PR edit to `config.json`. SOS and hob-medium are **Released** (amended 2026-10-02).
+Enforcement is a **CI check** that reads the **base branch's** `tier`, expands it to locked path-globs, runs `git diff --name-only base...head`, and fails the PR if any changed path matches a locked glob. Locked paths by tier: Benchmarking locks `benchmarks/<bench>/workspace/`; Released additionally locks the oracle impls/engine (`benchmarks/<bench>/data/test_oracle_workspace/`) and audited tests (`benchmarks/<bench>/data/tests/audited/`). `config.json` is **never** a locked path, so a pure tier-transition PR (touching only `config.json`) always passes — and because a PR's edits are judged against the base (pre-transition, stricter) tier, lowering a tier and editing newly-unlocked files in the *same* PR is structurally impossible; those edits must land in a follow-up PR after the transition merges. No bypass label or transition carve-out is required. The tier is flipped via a human PR edit to `config.json`. SOS and hob-medium are **Released** (amended 2026-10-02); fra-hard-v2 is **Benchmarking** (amended 2026-10-07, #202).
 
 ## Tier Transition Log
 
@@ -30,6 +30,7 @@ Tier transitions are recorded here — there is no separate log file. Each entry
 - 2026-05-28 — `sos` set to **Benchmarking** (initial tiering; `workspace/` locked).
 - 2026-10-02 — `sos` **Benchmarking → Released**: the legacy SOS lineage is frozen, and Known-Best Engine fixes never reach it (#123). No pre-Release harvest + investigation pass ran; the requirement is waived for a lineage that takes no further runs.
 - 2026-10-02 — `hob-medium` **Beta → Released**, skipping Benchmarking: its runs are complete and it is frozen for comparability (#123). The pre-Release harvest + investigation pass is waived; the failure review of its runs took its place.
+- 2026-10-07 — `fra-hard-v2` **Beta → Benchmarking** (`workspace/` locked): candidate calibration runs found no remaining Workspace or grading gaps beyond those #202 fixes in its hidden tests (#202). Runs made on earlier Beta Workspaces are not comparable with runs on the locked one.
 ## Consequences
 
 - **Positive**: Scores are comparable within a tier. "What may change" is explicit and machine-enforced. Because Released freezes audited tests, the manual investigation/discovery skill (v1 Test Harvester) and any test promotion run only *before* Release — so Released scores never drift.
@@ -44,3 +45,4 @@ Tier transitions are recorded here — there is no separate log file. Each entry
 ## Amendments
 
 - **2026-10-02 (#123)**: Recorded SOS and hob-medium as Released in the body and the Tier Transition Log; hob-medium moved from Beta straight to Released, which the forward-only rule permits.
+- **2026-10-07 (#202)**: Recorded fra-hard-v2 as Benchmarking in the body and the Tier Transition Log.

@@ -1,0 +1,63 @@
+--- a/cards/fdn/fdn_248/card_impl.py
++++ b/cards/fdn/fdn_248/card_impl.py
+@@ -173,14 +173,11 @@
+                         # target at that position. The requirements are the
+                         # ones the spell was cast with: a copy keeps the
+                         # original's mode, so the card is not asked again.
+-                        # A copy keeps the original's number of targets too
+-                        # (rule 707.10): an "up to one" target the original
+-                        # left unchosen stays unchosen (rule 115.7).
+                         specs = original_so.target_requirements
+                         if specs is None:
+                             specs = spell.get_targets(game)
+                         new_targets = []
+-                        for i, spec in enumerate(list(specs)[:len(original_so.targets)]):
++                        for i, spec in enumerate(specs):
+                             try:
+                                 chosen = query_spell_target(
+                                     game,
+@@ -191,7 +188,7 @@
+                                 )
+                             except CastingError:
+                                 chosen = None
+-                            if chosen is None:
++                            if chosen is None and i < len(original_so.targets):
+                                 chosen = original_so.targets[i]
+                             new_targets.append(chosen)
+                 copy_obj = copy_spell(game, original_so, controller, new_targets)
+--- a/cards/fdn/fdn_248/tests.py
++++ b/cards/fdn/fdn_248/tests.py
+@@ -419,19 +419,18 @@
+         assert c1.damage_marked == 10      # original + copy both hit c1
+ 
+     def test_copy_dependent_retarget_offers_only_matching_equipment(self):
+-        """The original targets c1 and its Equipment eq1. Retarget the copy to a
+-        new creature c2 and — via the shared dependent machinery — an Equipment
+-        attached to *that* creature (eq2). eq1 (on the other creature) is not a
+-        legal option; eq2 is."""
++        """Retarget the copy to a new creature c2 and — via the shared dependent
++        machinery — an Equipment attached to *that* creature (eq2). eq1 (on the
++        other creature) is not a legal option; eq2 is."""
+         game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = self._setup()
+-        self._cast_fiery(game, p1, fiery, [c1, eq1])
++        self._cast_fiery(game, p1, fiery, [c1])
+         self._fire_storm(game, p1, fiery, retarget=True,
+                          copy_target_prefs=(_pref(game, c2), _pref(game, eq2)))
+         resolve_stack(game)
+         self._end_storm(p1)
+         assert c2.damage_marked == 5       # copy hit the new creature
+         assert game.get_exile(p2).contains(eq2)      # dependent Equipment exiled
+-        assert game.get_exile(p2).contains(eq1)      # the original's own Equipment
++        assert not game.get_exile(p2).contains(eq1)  # other creature's, never targeted
+         assert c1.damage_marked == 5       # original still hit c1
+ 
+     def test_copy_new_target_leave_and_return_rejected(self):
+@@ -441,7 +440,7 @@
+         game, p1, p2, storm, fiery, c1, c2, eq1, eq2 = self._setup()
+         self._cast_fiery(game, p1, fiery, [c1])
+         self._fire_storm(game, p1, fiery, retarget=True,
+-                         copy_target_prefs=(_pref(game, c2),))  # the original has no Equipment target
++                         copy_target_prefs=(_pref(game, c2),))  # decline Equipment
+         resolve_top_of_stack(game)         # resolve ONLY Storm's trigger → makes the copy
+         self._end_storm(p1)
+         move_to_zone(game, c2, Zone.BATTLEFIELD, Zone.EXILE)
