@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-10-07
+Last updated: 2026-10-08
 
 # Karn Benchmark Contract
 
@@ -120,6 +120,9 @@ Exclusive ownership covers authentication preparation, execution, and final auth
 When every usable profile of the pool is busy, a run waits for one instead of refusing, and nothing of the run exists, nor does a batch count it as started, until it holds a profile; a pool that can never serve it leaves that batch's entries pending for a later pass while other batches run (grilling 2026-09-28).
 The run input and record name the profile a run used, so recovery settles exactly that profile; a profile left pending by an interrupted run serves no other run until it is settled, except that a run bringing the same plugin artifact may take it last and settle it first (grilling 2026-09-28).
 Concurrent runs on one subscription share its rate limits; the operator accepts this, and the named profile lets a slowdown be traced (grilling 2026-09-28).
+An operator can put profiles under a Login Cooldown for a set time, such as when a subscription nears its weekly limit (grilling 2026-10-08).
+A cooling-down profile counts as busy until the cooldown ends: a run passes over it and, with no other profile free, waits rather than refusing; a run already holding the profile is unaffected.
+The cooldown is a host-local file beside the profile's stored login (`cooldown.json`, its end time in UTC), written atomically only by `silverquillm login cooldown` or the cooldown keys of [Run Monitoring](RUN-MONITORING.md), through the same code; it never touches the stored login, the profile's lock, or a run, and an expired or unreadable one is no cooldown, so nothing has to remove it.
 No new account registry, credential-deduplication system, or cross-host coordination is part of this integration (grilling 2026-09-26).
 Each host benchmarks independently.
 
@@ -207,7 +210,7 @@ The workstream also covers the CLI and batch paths that retain those observation
 ### Operator entrypoints and records
 
 `silverquillm run` and `silverquillm scheduler` share the same staging, execution, observation, harvesting, and grading lifecycle, and `silverquillm recover` settles an interrupted run from its retained evidence without rerunning work.
-The `login` command enrolls one Login Profile into the pool of the selected existing plugin, or re-enrolls a named one.
+The `login` command enrolls one Login Profile into the pool of the selected existing plugin, or re-enrolls a named one; `login cooldown` sets or lifts a Login Cooldown on named profiles, or every profile, of one provider's pool.
 SilverquiLLM runs a completed Karn build by itself; the vendored v4 and v5 construct definition schemas are the only thing it takes from Karn, and no Ozolith package is involved.
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
 [Run Monitoring](RUN-MONITORING.md) defines `top`, the read-only monitor over live runs, the queue, Login Pools, and history.

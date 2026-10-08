@@ -331,7 +331,7 @@ async def test_stuck_runs_show_why_and_whether_their_container_runs():
         stuck = next(row for row in rows if "needs recover" in row)
         assert "no record" in stuck and "login unsettled" in stuck and "container up" in stuck
         assert any("recording" in row for row in rows)
-        assert "cccc3333" in _plain(app.query_one("#pools").content)
+        assert "cccc3333" in _plain(app.query_one("#pool-claude").content)
         assert app.query_one("#running").border_subtitle == "4 unfinished on this host"
         await pilot.press("enter")
         await _settle(app, pilot)

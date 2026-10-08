@@ -48,6 +48,11 @@ class Theme:
             parts.append("bold reverse" if not bold else "reverse")
         return " ".join(parts) or "none"
 
+    def selected(self) -> str:
+        """A Rich style marking a selected line: the cursor colour, or reverse video."""
+        color = self.colors.get("cursor")
+        return f"on {color}" if color and not color.startswith("ansi_default") else "reverse"
+
     def badge(self, benchmark: str | None) -> str:
         if not benchmark:
             return self.glyph("badge_default")
@@ -92,17 +97,20 @@ Screen {{ background: {c("background")}; color: {c("text")}; overflow: hidden; }
     padding: 0 1;
 }}
 .pane:focus-within {{ border: {self.border} {c("border_focus")}; }}
-#status {{ height: auto; max-height: 16; }}
-#where {{ width: 1fr; max-width: 64; margin-right: 2; }}
-#counts {{ width: 22; margin-right: 3; padding-left: 2; border-left: solid {c("border")}; }}
-#pools {{ width: 1fr; min-width: 44; }}
-#lower {{ height: 1fr; }}
-#running {{ width: 3fr; }}
-#queued {{ width: 1fr; min-width: 34; max-width: 56; }}
-.narrow #lower {{ layout: vertical; }}
-.narrow #where {{ max-width: 44; }}
-.narrow #running {{ width: 1fr; height: 2fr; }}
-.narrow #queued {{ width: 1fr; max-width: 100%; height: 1fr; }}
+#top-row {{ height: auto; }}
+#status {{ width: 56; height: auto; }}
+#status.compact {{ width: 44; }}
+#where, #counts {{ height: auto; }}
+#counts {{ margin-top: 1; }}
+#logins {{ width: 1fr; height: 100%; }}
+#pool-row {{ height: auto; }}
+#pool-row.stacked {{ layout: vertical; }}
+.pool {{ width: 1fr; height: auto; }}
+#pool-row #pool-claude {{ margin-right: 3; }}
+#pool-row.stacked #pool-claude {{ margin-right: 0; margin-bottom: 1; }}
+.pool:focus {{ background: {c("surface")}; }}
+#running {{ height: 2fr; min-height: 6; }}
+#queued {{ height: 1fr; min-height: 4; }}
 #nav {{ width: 40; }}
 #runs {{ width: 1fr; }}
 #detail-head {{ height: auto; max-height: 12; }}
@@ -121,6 +129,9 @@ RichLog {{ background: {c("surface")}; }}
 TabbedContent ContentTabs {{ background: {c("surface")}; }}
 Tab.-active {{ color: {c("title")}; text-style: bold; }}
 .empty {{ color: {c("muted")}; padding: 1 2; }}
+HelpScreen {{ align: center middle; background: {c("background")} 70%; }}
+#help {{ width: 90; max-width: 100%; height: auto; max-height: 100%; padding: 1 2; }}
+#help > Static {{ width: 100%; height: auto; }}
 """
 
 
@@ -150,6 +161,7 @@ MTG = Theme(
         "unknown": "#7a8296",
         "claude": "#e0875f",
         "codex": "#4fbf9f",
+        "cooldown": "#8fd3ff",
         "provider": BLACK_MANA,
         "mythic": "#f07a2a",
         "rare": "#d9b44a",
@@ -176,6 +188,7 @@ MTG = Theme(
         "tapped": "↷",
         "untapped": "◦",
         "pending": "⚠",
+        "cooldown": "❄",
         "lock_unknown": "?",
         "running": "▸",
         "grading": "⚖",
@@ -244,6 +257,7 @@ PLAIN = Theme(
         "tapped": "*",
         "untapped": "-",
         "pending": "!",
+        "cooldown": "z",
         "lock_unknown": "?",
         "running": ">",
         "grading": "=",

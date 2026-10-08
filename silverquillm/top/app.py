@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import ClassVar
 
-from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.markup import escape
@@ -17,11 +16,14 @@ from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import ContentSwitcher, Static
 
+from silverquillm.karn.definition import KarnError
 from silverquillm.monitor import LogLine, Monitor, MonitorSnapshot, RunSummary, WorkspaceView
 
-from .dashboard import NARROW, DashboardView, RunChosen
+from . import cooldowns
+from .dashboard import CooldownWanted, DashboardView, PoolPanel, RunChosen
 from .details import DetailsView
 from .historic import HistoryView
+from .keys import HelpScreen
 from .theme import Theme
 
 VIEWS = (("dashboard", "1", "Dashboard"), ("history", "2", "History"), ("details", "3", "Run"))
@@ -74,9 +76,12 @@ def _tag(style: str, text: str) -> str:
 
 
 class MonitorApp(App):
-    """Read-only: every monitor call runs in a worker, and nothing here writes or locks."""
+    """Every monitor call runs in a worker, and nothing here locks; the one write is a
+    Login Cooldown the operator asks for from the status pane (RUN-MONITORING.md)."""
 
     ENABLE_COMMAND_PALETTE = False
+    # The LOGINS pools come first on screen, but the running runs are what opens on start.
+    AUTO_FOCUS = "#running-table"
     TITLE = "silverquillm top"
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("1", "view('dashboard')", "Dashboard", show=False),
@@ -84,6 +89,7 @@ class MonitorApp(App):
         Binding("3", "view('details')", "Run", show=False),
         Binding("escape", "back", "Back", show=False),
         Binding("r", "refresh", "Refresh", show=False),
+        Binding("question_mark", "help", "Keys", show=False),
         Binding("q", "quit", "Quit", show=False),
     ]
 
@@ -95,8 +101,9 @@ class MonitorApp(App):
         interval: float = 2.0,
         notice: str | None = None,
         clock=lambda: datetime.now(UTC),
+        driver_class=None,
     ) -> None:
-        super().__init__(ansi_color=look.name == "plain")
+        super().__init__(driver_class=driver_class, ansi_color=look.name == "plain")
         self.monitor = monitor
         self.look = look
         self.interval = interval
@@ -132,10 +139,6 @@ class MonitorApp(App):
         self._draw_bars()
         self.poll()
         self._timer = self.set_interval(self.interval, self.poll)
-
-    def on_resize(self, event: events.Resize) -> None:
-        # Below this width the queue moves under the running runs so their rows fit.
-        self.query_one(DashboardView).set_class(event.size.width < NARROW, "narrow")
 
     def on_unmount(self) -> None:
         self.release_monitor()
@@ -430,14 +433,20 @@ class MonitorApp(App):
         if self.notice:
             parts.append("  " + _tag(look.style("warn"), escape(self.notice)))
         self.query_one("#topbar", Static).update("".join(parts))
+        profiles = isinstance(self.focused, PoolPanel)
         hints = {
-            "dashboard": "enter/click open run",
-            "history": "enter/click open run · click header or s sort · S reverse · x excluded",
-            "details": "esc back · tabs: click or ←/→",
+            "dashboard": "↑↓ slot · ←→ pool · t cooldown +1h · c end cooldown in 10s"
+            if profiles
+            else "tab pane · enter open run",
+            "history": "b browse · l list · enter open · s/</> sort · S reverse · x excluded",
+            "details": "esc back · [ ] tabs · ↑↓ pgup pgdn scroll",
         }[self._current]
         keys = _tag(muted, f" 1/2/3 views · {hints} · r refresh · ")
         self.query_one("#keys", Static).update(
-            keys + f"[@click=app.quit]{_tag(muted, 'q quit')}[/]"
+            keys
+            + f"[@click=app.help]{_tag(look.style('accent'), '? keys')}[/]"
+            + _tag(muted, " · ")
+            + f"[@click=app.quit]{_tag(muted, 'q quit')}[/]"
         )
 
     def action_view(self, name: str) -> None:
@@ -449,12 +458,46 @@ class MonitorApp(App):
         focus = {"dashboard": "#running-table", "history": "#runs-table"}.get(name)
         if focus:
             self.query_one(focus).focus()
+        elif name == "details":
+            self.query_one(DetailsView).focus_tab()
 
     def action_back(self) -> None:
         if self._current == "details":
             self.action_view(self._previous if self._previous != "details" else "dashboard")
 
     def action_refresh(self) -> None:
+        self.poll()
+
+    def action_help(self) -> None:
+        if not isinstance(self.screen, HelpScreen):
+            self.push_screen(HelpScreen(self.look))
+
+    def on_descendant_focus(self) -> None:
+        self._draw_bars()
+
+    def on_cooldown_wanted(self, message: CooldownWanted) -> None:
+        """Write the cooldown through the CLI's own path, then refresh at once to show it."""
+        location = self.snapshot.locations.get("state_root") if self.snapshot else None
+        if location is None or location.path is None:
+            self.notify("no state root: cannot set a cooldown", severity="error")
+            return
+        now = self.clock()
+        try:
+            if message.lengthen:
+                until = cooldowns.lengthen(location.path, message.plugin_id, message.slot, now=now)
+            else:
+                until = cooldowns.end_soon(location.path, message.plugin_id, message.slot, now=now)
+        except (KarnError, OSError) as error:
+            self.notify(f"{message.slot}: cooldown not written ({error})", severity="error")
+            return
+        if until is None:
+            self.notify(f"{message.slot} has no cooldown to end")
+            return
+        local = until.astimezone()
+        if message.lengthen:
+            self.notify(f"{message.slot} cooldown until {local:%a %H:%M} (+1h)")
+        else:
+            self.notify(f"{message.slot} cooldown ends at {local:%H:%M:%S} (in 10s)")
         self.poll()
 
     def on_run_chosen(self, message: RunChosen) -> None:

@@ -195,6 +195,11 @@ def _reading(provider, percent, resets_in, read_ago):
 
 # The killed smoke run still owns its Claude login's settlement.
 PENDING = {"bare-claude-haiku": "cccc3333" * 4}
+# The operator held one idle login of each pool back for a few hours.
+COOLING = {
+    "slot-2": NOW + timedelta(hours=3, minutes=12),
+    "claude-5": NOW + timedelta(minutes=50),
+}
 
 
 def profiles():
@@ -235,10 +240,41 @@ def profiles():
         ),
         ("karn-codex-login", "slot-2", "codex", False, WeeklyUsage("", 3.0, True, None)),
         ("karn-codex-login", "bare-codex-luna", "codex", False, None),
+        # Six of each, as the operator runs them: the rest of each pool.
+        (
+            "karn-claude-login",
+            "claude-4",
+            "claude",
+            True,
+            WeeklyUsage("", 62.5, True, None),
+        ),
+        ("karn-claude-login", "claude-5", "claude", False, WeeklyUsage("", 7.0, True, None)),
+        (
+            "karn-claude-login",
+            "claude-6",
+            "claude",
+            False,
+            WeeklyUsage(
+                "", 24.0, False, _reading("claude", 24.0, timedelta(days=6), timedelta(minutes=3))
+            ),
+        ),
+        (
+            "karn-codex-login",
+            "slot-3",
+            "codex",
+            True,
+            WeeklyUsage(
+                "", 71.0, False, _reading("codex", 71.0, timedelta(days=1), timedelta(minutes=8))
+            ),
+        ),
+        ("karn-codex-login", "slot-4", "codex", False, WeeklyUsage("", 12.4, True, None)),
+        ("karn-codex-login", "slot-5", "codex", True, WeeklyUsage("", 33.0, True, None)),
     ]
     return [
         ProfileView(
-            ProfileStatus(plugin, slot, provider, busy, slot in PENDING, PENDING.get(slot)),
+            ProfileStatus(
+                plugin, slot, provider, busy, slot in PENDING, PENDING.get(slot), COOLING.get(slot)
+            ),
             WeeklyUsage(f"{plugin}/{slot}", w.percent, w.estimated, w.reading) if w else None,
             None,
         )

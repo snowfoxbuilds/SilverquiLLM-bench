@@ -86,6 +86,22 @@ silverquillm login --build-output BUILD --construct CONSTRUCT --adopt LEGACY
 
 It becomes a slot named `LEGACY` in the pool of `CONSTRUCT`'s login plugin, after checking that its stored login has that plugin's own shape (`legacy_login_belongs_to_other_plugin` otherwise). A legacy login with a pending run is refused (`legacy_login_pending`) until `silverquillm recover` settles it. Runs never adopt a legacy login by themselves.
 
+To keep slots out of new runs for a while, such as when a subscription nears its weekly limit, put them under a Login Cooldown:
+
+```bash
+silverquillm login cooldown --agent codex --duration 5h --slots slot-1 slot-2
+silverquillm login cooldown --agent claude --duration 2d --all
+silverquillm login cooldown --agent codex --clear --slots slot-1
+```
+
+`--agent` picks the pool (`codex` or `claude`); name its slots with `--slots`, or take every enrolled slot with `--all`.
+`--duration` takes spans like `30m`, `5h`, `2d` or `1h30m`, up to a year; `--clear` lifts the cooldown instead.
+A slot not enrolled in that pool is refused with the enrolled ones listed.
+`--state-root` works before or after `cooldown` (`login --state-root X cooldown …` or `login cooldown --state-root X …`); given in both places, the one after `cooldown` wins, and with neither the configuration file or default applies.
+A cooling-down slot counts as busy: runs and batch entries pass over it, and wait (`waiting for a login slot: … cooling down`) when no other slot is free; a run already holding the slot carries on.
+The cooldown ends by itself at its time; `silverquillm top` shows each cooling-down slot and when it ends.
+In `top`'s LOGINS pane, select a slot and press `t` to hold it one more hour per press, or `c` to end its cooldown ten seconds from now.
+
 ### Claude constructs
 
 The Claude constructs run Claude Code 2.1.284 through `claude@1` on a Claude subscription, with the stock `karn-claude-login` plugin.
@@ -193,6 +209,8 @@ silverquillm scheduler --once --replay-without-state hob-learning
 silverquillm queue ls
 silverquillm top   # needs the monitor extra: pip install -e '.[monitor]'
 ```
+
+In `top`, every action has a key and `?` lists them; `--no-mouse` leaves the mouse to the terminal for selecting text.
 
 The first invocation acknowledges the missing state for that one new batch.
 Subsequent invocations resume from the recorded cursor; omit the acknowledgement flag.

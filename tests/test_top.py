@@ -7,6 +7,7 @@ import functools
 import io
 import json
 import os
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -549,8 +550,9 @@ def test_each_location_source_sits_beside_its_path():
     from silverquillm.top.dashboard import StatusPane
 
     lines = _plain(StatusPane._where(FakeMonitor().snapshot(), MTG)).splitlines()
-    assert any("bench-results (config)" in line for line in lines), lines
-    assert any("silverquillm (default)" in line for line in lines), lines
+    # Each source has its own column right after the paths, on its path's line.
+    assert any(re.search(r"bench-results\s+\(config\)", line) for line in lines), lines
+    assert any(re.search(r"silverquillm\s+\(default\)", line) for line in lines), lines
 
 
 def test_the_status_pane_names_this_hosts_label():

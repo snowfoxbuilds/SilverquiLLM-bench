@@ -130,8 +130,12 @@ def _walk(node):
 class HistoryView(Horizontal):
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("s", "cycle_sort", "Sort"),
+        Binding("greater_than_sign", "cycle_sort", "Next column", show=False),
+        Binding("less_than_sign", "cycle_sort(-1)", "Previous column", show=False),
         Binding("S", "reverse_sort", "Reverse"),
         Binding("x", "toggle_excluded", "Excluded"),
+        Binding("b", "focus_browse", "Browse", show=False),
+        Binding("l", "focus_list", "Runs", show=False),
     ]
 
     def __init__(self, theme: Theme) -> None:
@@ -322,8 +326,14 @@ class HistoryView(Horizontal):
         if run is not None:
             self.post_message(RunChosen(run.run_id, pinned=True, record_path=str(run.path)))
 
-    def action_cycle_sort(self) -> None:
-        index = (COLUMN_KEYS.index(self.sort_key) + 1) % len(COLUMN_KEYS)
+    def action_focus_browse(self) -> None:
+        self.query_one(Tree).focus()
+
+    def action_focus_list(self) -> None:
+        self.query_one("#runs-table", DataTable).focus()
+
+    def action_cycle_sort(self, step: int = 1) -> None:
+        index = (COLUMN_KEYS.index(self.sort_key) + step) % len(COLUMN_KEYS)
         self.sort_key = COLUMN_KEYS[index]
         self._fill()
 

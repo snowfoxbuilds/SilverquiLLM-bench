@@ -333,6 +333,13 @@ A benchmark is built by porting a copy of it.
 
 _Avoid_: "master workspace", "reference workspace"
 
+**Login Cooldown**
+
+An operator's hold that keeps one Login Profile out of new Benchmark Runs until a set time, such as while its subscription nears a usage limit (grilling 2026-10-08).
+Runs treat a cooling-down profile as busy and wait for it; a run already using the profile is unaffected, and the hold ends by itself.
+
+_Avoid_: "disabled slot", "pause" (the profile stays enrolled and its runs are not paused), "lockout"
+
 **Login Pool**
 
 The host-local set of Login Profiles enrolled through one login plugin, such as every Claude subscription login on the host.
@@ -596,6 +603,7 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - A Pipeline Validation Run exercises the orchestration pipeline; its observations are retained as learning data alongside other run outcomes.
 - The existing publication pipeline requires a Promoted Candidate that verifies by recomputation and permits its knowledge to be published; these publication rules do not gate collection or analysis of Karn run data.
 - Each Login Profile has one Estimated Weekly Usage, fed by every Benchmark Run that used it, excluded runs included.
+- A Login Profile is under at most one Login Cooldown at a time; setting another replaces it.
 - A Batch holds ordered run specs; the scheduler executes one run at a time, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
 - Filesystem checks (does the file exist, does it differ from the template?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only.
 - `run_summary.json` is automatically generated after evaluation by aggregating per-card `result.json` files. The aggregator is a pure, idempotent function.

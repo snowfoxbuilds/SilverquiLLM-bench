@@ -4,7 +4,7 @@ Last updated: 2026-10-08
 
 # Run Monitoring
 
-`silverquillm top` is a read-only terminal monitor over this host's live Benchmark Runs, the batch queue, the Login Pools, and the Results Repo's history.
+`silverquillm top` is a terminal monitor over this host's live Benchmark Runs, the batch queue, the Login Pools, and the Results Repo's history; the only thing it changes is a Login Cooldown the operator asks for.
 
 ## Context
 
@@ -20,8 +20,9 @@ This page replaces the historical image-run artifact and telemetry spec; that la
 The monitor is a Textual application shipped as the optional `monitor` extra (`silverquillm-bench[monitor]`), so grader and candidate environments never install it; without the extra, `top` prints a one-line install hint.
 Without a terminal, `top` draws nothing and points to `queue ls`.
 
-The monitor is read-only (grilling 2026-10-07).
-It never writes a file, takes a lock that a runner or the scheduler takes, stops or recovers a run, edits a Batch, or fetches or pulls the Results Repo.
+The monitor is read-only with one exception (grilling 2026-10-07).
+It never takes a lock that a runner or the scheduler takes, stops or recovers a run, edits a Batch, or fetches or pulls the Results Repo.
+Its one write is a Login Cooldown the operator asks for with a key in the LOGINS pane (2026-10-08): it goes through the same file and validation as `silverquillm login cooldown`, only for an enrolled Login Profile, and touches nothing else of the slot (not its stored login, its lock, or a run holding it).
 Stopping a run, recovering, and editing the queue stay CLI and file operations.
 
 Live views cover this host only: its Docker daemon, its run directory, its batch queue, and its Login Pools (grilling 2026-10-07).
@@ -30,7 +31,7 @@ History comes from the local Results Repo clone as it stands; runs from other ho
 ### Locations and host configuration
 
 The monitor resolves the Results Repo, batch queue directory, run directory, and state root exactly as every Karn command does, through the host configuration described in [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records).
-The status pane names each resolved location and the source it came from (flag, environment, or configuration file).
+The STATUS pane names each resolved location and the source it came from (flag, environment, or configuration file).
 
 The configuration file also carries the monitor's own settings (grilling 2026-10-07):
 
@@ -133,25 +134,42 @@ These cases must hold:
 
 A Benchmark Candidate is shown as `name · model · effort`: the Construct Definition's `name` and its `CONSTRUCT_MODEL` and `CONSTRUCT_EFFORT` runtime environment values, with `—` for a missing value (grilling 2026-10-07).
 A Construct Definition's name alone does not identify a configuration, since one name has been built with different models and efforts, and every rebuild changes the Candidate Hash.
-Secondary labels, shown dimmed, are the first eight characters of the Candidate Hash and the image's recipe revision.
+Secondary labels, shown dimmed, are the first eight characters of the Candidate Hash and of the image's recipe revision, a full commit id (2026-10-08).
+Run details show the recipe revision whole.
 
 ### Dashboard
 
-The dashboard has three panes: a narrow status pane across the top, the running pane filling most of the bottom left, and a narrow queued pane on the bottom right.
+The dashboard's top row holds the STATUS pane, a single column on the left, and the LOGINS pane, which takes the larger share of the width; below them the running pane and then the queued pane each span the full width (2026-10-08).
+Below 150 columns the STATUS column narrows, cutting long paths, and the two top panes stay side by side.
 Live panes refresh every two seconds by default (`--interval`).
 Reads run off the interface thread, one at a time: a refresh asked for while one is reading runs once after it, however many ticks or `r` presses arrived, so a slow Docker daemon delays the view rather than piling up reads.
 Every read the app starts reports back exactly once, whether it read, was skipped as stale, or failed, so a read that fails or goes stale never stops later ones.
 The reads run on the app's own daemon threads, never the event loop's default executor, so the process exits without waiting for a read in flight.
 Quitting stops new reads, tells the monitor's followers to end their `docker logs` without waiting for them, and closes the monitor on the last read's own thread, or at once when none is in flight.
 
-The status pane shows (grilling 2026-10-07):
+The STATUS pane shows, one above another (grilling 2026-10-07):
 
 - the resolved locations and their sources, this host's label, and the Results Repo clone's last fetch time and how many commits it is behind its remote-tracking branch, both from local refs;
-- counts of queued runs, live runs (every stage but Finished), and runs finished in the last seven days, with the all-time total dimmed;
-- for each Login Pool, every Login Profile with a free or busy marker and its Estimated Weekly Usage, and for a profile with a pending login journal the run that owns its settlement.
+- counts of queued runs, live runs (every stage but Finished), and runs finished in the last seven days, with the all-time total dimmed.
 
-Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, elapsed container time, an elapsed-versus-budget bar, Estimated %, Estimated Cost, and a cost sparkline.
-A Needs recover or Unknown row shows whether its container is up or stopped, then its reasons, in place of the budget bar.
+The LOGINS pane shows each Login Pool under its own header with its untapped count, then one line per Login Profile: a free, busy, pending or cooling-down marker, a usage bar, and its Estimated Weekly Usage with reset time and reading age (2026-10-08).
+A profile with a pending login journal names the run that owns its settlement before its usage.
+The pools sit side by side, one column each, so six profiles a pool fit in the height of the STATUS pane.
+The pane takes the fullest form that fits the width uncut: usage bars and full wording, then without the bars, then with the wording shortened (`41% · Thu 14:00 · 12m ago`); failing those, the form that fits by cutting only profile names.
+When no form fits two columns, the pools stack and the pane scrolls, as it does whenever a pool has more profiles than its height.
+
+A Login Profile under a Login Cooldown shows its own marker and colour and reads `cooldown until Thu 14:00 (3h12m)` before its usage (grilling 2026-10-08).
+A pool's untapped count counts only profiles a new run could take now: not busy, not pending, and not cooling down.
+
+Each pool takes the keyboard focus in turn, and the focused pool marks its selected profile; the pane scrolls to keep it in view (2026-10-08).
+`t` holds the selected profile for one more hour: an hour from now, or an hour past a cooldown already in force, so each press adds an hour.
+`c` ends the selected profile's cooldown ten seconds from now rather than at once, and does nothing but say so when it has none.
+Each write refreshes the view at once and says what it set; a write that fails says why and changes nothing.
+
+Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, a progress bar with its Estimated %, elapsed container time with the budget beside it, Estimated Cost, and a cost sparkline.
+The progress bar is the Estimated %, not the share of the budget used: a run is measured against how long past runs took, and the budget is only the limit it stops at (grilling 2026-10-08).
+With no past runs to measure against there is no bar, only the elapsed time and budget.
+A Needs recover or Unknown row shows whether its container is up or stopped, then its reasons, in place of the progress bar.
 Selecting a row opens its run details.
 
 **Estimated %** is the elapsed container time divided by the median container duration (`stopped_at` minus `started_at`) of completed, non-excluded runs of the same benchmark (grilling 2026-10-07).
@@ -167,8 +185,8 @@ The applicable record is a linked recovery before the original, and a locally re
 A recorded figure drops the `~`, carries `*` when its record calls it incomplete, and shows `≠N` for N conflicting request observations.
 
 The queued pane lists the not-yet-started run specs in execution order, under one header line per Batch (grilling 2026-10-07).
-Each row shows the benchmark, Candidate display, and budget; a queued run has no Login Profile until it launches.
-A Batch header shows a countdown to its `not_before`, or `⚠ needs ack` for a Batch with no committed state.
+Each run takes one line with its benchmark, budget and Candidate display; a queued run has no Login Profile until it launches.
+A Batch's header line shows its countdown to `not_before`, or `⚠ needs ack` for a Batch with no committed state, and how many of its runs have started.
 
 ### Estimated Weekly Usage
 
@@ -232,6 +250,7 @@ The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the
 | Raw | Unrendered stdout |
 
 A Needs recover or Unknown run's header also names its reasons and whether its container is up.
+A live run's header shows the same progress bar and Estimated % as its dashboard row, with the budget as text beside the elapsed time.
 
 A live run's tabs follow `docker logs -f` and the events file; a historical run's tabs read the retained files.
 Opening a run clears every tab, table, sparkline and the header first, and they show loading or unavailable until that run's own evidence arrives: nothing of the previously shown run appears under another run's header.
@@ -249,8 +268,33 @@ The native transcript is not shown: for Claude it largely duplicates stdout, and
 
 ### Navigation
 
-Number keys and clicks on the view tabs switch between the dashboard, historic view, and run details; Enter or a click opens a row; Escape goes back; `r` refreshes now; `q` quits.
-In the historic view a click on a column header, or `s`, changes the sort column, `S` reverses it, and `x` hides or shows excluded runs, which otherwise sit dimmed beneath the included ones.
+Every action has a key, and the mouse is a convenience on top: a terminal reached through mosh and a multiplexer may not deliver clicks at all (grilling 2026-10-08).
+`?` lists every key over the current view, and the footer names the keys of the view in front.
+The list never grows past the terminal: it opens focused, scrolls with ↑ ↓, page up/down, Home and End, and on closing returns focus where it was.
+
+| Keys | Where | Action |
+| --- | --- | --- |
+| `1` `2` `3`, or a click on a view tab | everywhere | dashboard, historic view, run details |
+| Tab, Shift+Tab | everywhere | move between panes and tables |
+| arrows, PgUp, PgDn, Home, End | everywhere | move within, or scroll, the focused pane |
+| Enter, or a click on a row | dashboard, history | open the selected run |
+| ↑ ↓ or `k` `j`, or a click on a profile | LOGINS pane | select a Login Profile |
+| ← → or `h` `l` | LOGINS pane | the other pool, or the neighbouring pane |
+| `t` | LOGINS pane | hold the selected profile one more hour |
+| `c` | LOGINS pane | end the selected profile's cooldown in ten seconds |
+| Escape | run details | back to the view it was opened from |
+| `r` | everywhere | refresh now |
+| `?` | everywhere | the key list |
+| `q` | everywhere | quit |
+| `b`, `l` | history | focus the browse tree, the run list |
+| Enter, Space | browse tree | show that benchmark, candidate or hash; expand or collapse |
+| `s` or `>`, `<`, or a click on a column header | history | sort by the next or previous column |
+| `S` | history | reverse the sort |
+| `x` | history | hide or show excluded runs, which otherwise sit dimmed beneath the included ones |
+| `[`, `]`, or a click on a tab | run details | previous or next tab, whose log or table then takes the keys |
+
+`--no-mouse` leaves the mouse to the terminal, for selecting text.
+The monitor asks the terminal for mouse reports in character cells only, never in pixels: a multiplexer reached over mosh may offer pixel reports without knowing the real pixel size, which puts clicks in the wrong place.
 
 ### Look and feel
 
