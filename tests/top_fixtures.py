@@ -512,6 +512,7 @@ class FakeMonitor:
         self.running = running_views() if running is None else running
         self.runs = history() if runs is None else runs
         self.closed = False
+        self.shutdown_begun = False
         self.root = root
         self.output_calls: list[tuple] = []
 
@@ -566,6 +567,9 @@ class FakeMonitor:
             None,
             "final",
         )
+
+    def begin_shutdown(self):
+        self.shutdown_begun = True
 
     def close(self):
         self.closed = True

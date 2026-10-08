@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -15,7 +16,6 @@ from textual.markup import escape
 from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import ContentSwitcher, Static
-from textual.worker import Worker, WorkerState
 
 from silverquillm.monitor import LogLine, Monitor, MonitorSnapshot, RunSummary
 
@@ -39,17 +39,27 @@ class Fetch:
     summary: RunSummary | None
 
 
-class Polled(Message):
-    def __init__(self, snapshot: MonitorSnapshot, runs: list[RunSummary]) -> None:
-        super().__init__()
-        self.snapshot, self.runs = snapshot, runs
+@dataclass(frozen=True)
+class Polled:
+    snapshot: MonitorSnapshot
+    runs: list[RunSummary]
 
 
-class Fetched(Message):
-    def __init__(self, request: Fetch, lines: list[LogLine], requests, workspace, detail) -> None:
+@dataclass(frozen=True)
+class Fetched:
+    request: Fetch
+    lines: list[LogLine]
+    requests: list
+    workspace: object
+    detail: object
+
+
+class JobDone(Message):
+    """Every started job posts exactly one of these, whether it read, skipped or failed."""
+
+    def __init__(self, kind: str, job: int, result: Polled | Fetched | None) -> None:
         super().__init__()
-        self.request, self.lines, self.requests = request, lines, requests
-        self.workspace, self.detail = workspace, detail
+        self.kind, self.job, self.result = kind, job, result
 
 
 def _tag(style: str, text: str) -> str:
@@ -93,8 +103,10 @@ class MonitorApp(App):
         self._state = threading.Lock()
         self._inflight = 0
         self._shutting_down = self._close_wanted = self._monitor_closed = False
-        self._polling = self._poll_again = False
-        self._fetching = self._fetch_again = False
+        # Per kind of job: the one in flight (by id) and whether another is wanted after it.
+        self._job_ids = itertools.count(1)
+        self._active: dict[str, int | None] = {"poll": None, "details": None}
+        self._again: dict[str, bool] = {"poll": False, "details": False}
         self._timer: Timer | None = None
         self._details: DetailsView | None = None
         self._previous = "dashboard"
@@ -125,22 +137,32 @@ class MonitorApp(App):
         self._stop_scheduling()
         self.exit()
 
+    @property
+    def busy(self) -> dict[str, bool]:
+        """Which kinds of job have one in flight; for tests and the curious."""
+        return {kind: job is not None for kind, job in self._active.items()}
+
     # Background work -------------------------------------------------------
     #
     # A thread cannot be cancelled, so each kind of work has at most one thread in flight and
     # at most one coalesced request waiting behind it: a slow Docker daemon then delays the
-    # view instead of piling up threads. Scheduling flags change only on the UI thread.
+    # view instead of piling up threads. The threads are the app's own daemon threads, not
+    # asyncio's default executor, whose teardown would make quitting wait for a stuck read.
+    # Scheduling state changes only on the UI thread, when a job's ``JobDone`` arrives.
 
     def _stop_scheduling(self) -> None:
-        self._shutting_down = True
+        if not self._shutting_down:
+            self._shutting_down = True
+            # Followers' ``docker logs`` exit now; nothing here waits for them.
+            self.monitor.begin_shutdown()
         if self._timer is not None:
             self._timer.stop()
             self._timer = None
 
     def release_monitor(self) -> None:
-        """Close the monitor once no worker can use it, without waiting on a worker.
+        """Close the monitor once no job can use it, without waiting on a job.
 
-        With work in flight, the last worker to finish closes it instead.
+        With a job in flight, the last job to finish closes it on its own thread instead.
         """
         self._stop_scheduling()
         with self._state:
@@ -150,46 +172,68 @@ class MonitorApp(App):
         if close:
             self.monitor.close()
 
-    def _start(self, work: Callable[[], Message | None], group: str) -> None:
+    def _start(self, kind: str, work: Callable[[], Polled | Fetched | None]) -> None:
+        job = next(self._job_ids)
+        self._active[kind] = job
         with self._state:
             self._inflight += 1
-        self.run_worker(lambda: self._guarded(work), group=group, thread=True, exit_on_error=False)
-
-    def _guarded(self, work: Callable[[], Message | None]) -> None:
+        thread = threading.Thread(
+            target=self._run, args=(kind, job, work), name=f"top-{kind}-{job}", daemon=True
+        )
         try:
-            result = None if self._shutting_down else work()
-            if result is not None and not self._shutting_down:
-                try:
-                    self.post_message(result)
-                except RuntimeError:
-                    pass  # the app's event loop has already closed
-        finally:
-            with self._state:
-                self._inflight -= 1
-                close = self._close_wanted and self._inflight == 0 and not self._monitor_closed
-                self._monitor_closed = self._monitor_closed or close
-            if close:
-                self.monitor.close()
+            thread.start()
+        except RuntimeError:  # no thread to be had: the slot frees and the next tick retries
+            self._finish()
+            self._active[kind] = None
 
-    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
-        # A worker that raised posts nothing; free its slot so scheduling continues.
-        if event.state is WorkerState.ERROR:
-            if event.worker.group == "poll":
-                self._polling = False
-                self._resume_poll()
-            elif event.worker.group == "details":
-                self._fetching = False
-                self._resume_fetch()
+    def _run(self, kind: str, job: int, work: Callable[[], Polled | Fetched | None]) -> None:
+        result = None
+        try:
+            if not self._shutting_down:
+                result = work()
+        except Exception:  # noqa: BLE001 - a failed read frees its slot like any other
+            result = None
+        finally:
+            try:
+                self.post_message(JobDone(kind, job, result))
+            except RuntimeError:
+                pass  # the app's event loop has already closed
+            self._finish()
+
+    def _finish(self) -> None:
+        with self._state:
+            self._inflight -= 1
+            close = self._close_wanted and self._inflight == 0 and not self._monitor_closed
+            self._monitor_closed = self._monitor_closed or close
+        if close:
+            self.monitor.close()
+
+    def on_job_done(self, message: JobDone) -> None:
+        if self._active.get(message.kind) != message.job:
+            return  # an old job's completion never frees a newer job's slot
+        self._active[message.kind] = None
+        if self._shutting_down:
+            return
+        result = message.result
+        if isinstance(result, Polled):
+            self._apply(result.snapshot, result.runs)
+        elif isinstance(result, Fetched):
+            self._fetched(result)
+        self._resume(message.kind)
+
+    def _resume(self, kind: str) -> None:
+        if self._again[kind]:
+            self._again[kind] = False
+            self.poll() if kind == "poll" else self.fetch_details()
 
     def poll(self) -> None:
         """Ask for a fresh snapshot; a request while one is in flight runs after it, once."""
         if self._shutting_down:
             return
-        if self._polling:
-            self._poll_again = True
+        if self._active["poll"] is not None:
+            self._again["poll"] = True
             return
-        self._polling = True
-        self._start(self._read_snapshot, "poll")
+        self._start("poll", self._read_snapshot)
 
     def _read_snapshot(self) -> Polled | None:
         with self._lock:
@@ -198,18 +242,6 @@ class MonitorApp(App):
             snapshot = self.monitor.snapshot()
             runs = self.monitor.history()
         return Polled(snapshot, runs)
-
-    def on_polled(self, message: Polled) -> None:
-        self._polling = False
-        if self._shutting_down:
-            return
-        self._apply(message.snapshot, message.runs)
-        self._resume_poll()
-
-    def _resume_poll(self) -> None:
-        if self._poll_again:
-            self._poll_again = False
-            self.poll()
 
     def _apply(self, snapshot: MonitorSnapshot, runs: list[RunSummary]) -> None:
         self.snapshot, self.runs = snapshot, runs
@@ -239,8 +271,8 @@ class MonitorApp(App):
         shown = details.shown
         if shown is None or self._shutting_down:
             return
-        if self._fetching:
-            self._fetch_again = True
+        if self._active["details"] is not None:
+            self._again["details"] = True
             return
         live = shown.live is not None
         want_logs = live or not shown.retained_loaded
@@ -257,8 +289,7 @@ class MonitorApp(App):
             want_logs,
             shown.summary if want_detail else None,
         )
-        self._fetching = True
-        self._start(lambda: self._read_details(request), "details")
+        self._start("details", lambda: self._read_details(request))
 
     def _read_details(self, request: Fetch) -> Fetched | None:
         with self._lock:
@@ -283,10 +314,7 @@ class MonitorApp(App):
         details = self._details
         return details is None or details.generation != request.generation
 
-    def on_fetched(self, message: Fetched) -> None:
-        self._fetching = False
-        if self._shutting_down:
-            return
+    def _fetched(self, message: Fetched) -> None:
         details = self.query_one(DetailsView)
         shown, request = details.shown, message.request
         if (
@@ -295,12 +323,6 @@ class MonitorApp(App):
             and (shown.live is not None) == request.live
         ):
             self._show_details(details, message)
-        self._resume_fetch()
-
-    def _resume_fetch(self) -> None:
-        if self._fetch_again:
-            self._fetch_again = False
-            self.fetch_details()
 
     def _show_details(self, details: DetailsView, message: Fetched) -> None:
         shown, request = details.shown, message.request
@@ -314,6 +336,8 @@ class MonitorApp(App):
         elif message.detail is not None:
             shown.detail, shown.detail_ready = message.detail, True
             details.show_requests(message.detail.requests, self.clock())
+        elif request.summary is not None:
+            details.show_requests_unavailable()
         details.show_header(self.clock())
 
     # Views -----------------------------------------------------------------

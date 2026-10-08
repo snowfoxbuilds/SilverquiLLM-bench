@@ -7,6 +7,7 @@ import functools
 import io
 import json
 import os
+import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -313,9 +314,13 @@ def _app(monitor=None, theme=MTG):
     return build_app(monitor or FakeMonitor(), theme, interval=60, clock=lambda: NOW)
 
 
-async def _settle(app, pilot):
+async def _settle(app, pilot, timeout=5.0):
+    """Until no poll or details job is in flight or wanted, and the view has caught up."""
+    deadline = time.monotonic() + timeout
     await pilot.pause()
-    await app.workers.wait_for_complete()
+    while any(app.busy.values()):
+        assert time.monotonic() < deadline, "the app's jobs never finished"
+        await pilot.pause(0.01)
     await pilot.pause()
 
 
@@ -546,6 +551,9 @@ async def test_unpriced_recorded_requests_say_so():
 def _plain(renderable) -> str:
     from rich.console import Console
 
-    console = Console(width=160, record=True, color_system=None)
+    # Pinned size and its own file: the ambient terminal never changes what is rendered.
+    console = Console(
+        width=160, height=50, record=True, color_system=None, file=io.StringIO(), _environ={}
+    )
     console.print(renderable)
     return console.export_text()

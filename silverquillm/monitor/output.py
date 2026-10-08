@@ -277,6 +277,14 @@ class LogFollower:
                 if line.seq > seq and (stream is None or line.stream == stream)
             ]
 
+    def signal_stop(self) -> None:
+        """Ask ``docker logs`` to exit without waiting for it or the reader threads."""
+        if self._process is not None and self._process.poll() is None:
+            try:
+                self._process.terminate()
+            except OSError:
+                pass
+
     def stop(self) -> None:
         if self._process is not None and self._process.poll() is None:
             self._process.terminate()

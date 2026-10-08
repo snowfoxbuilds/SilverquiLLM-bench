@@ -108,6 +108,10 @@ Screen {{ background: {c("background")}; color: {c("text")}; overflow: hidden; }
 #detail-head {{ height: auto; max-height: 12; }}
 #detail-tabs {{ height: 1fr; }}
 DataTable {{ background: {c("surface")}; }}
+/* Tables fill their pane: an auto-height table can miss the relayout after rows arrive. */
+#running-table, #runs-table, #requests-table {{ height: 1fr; }}
+#tab-workspace Horizontal, #snapshots-table, #commits-table {{ height: 1fr; }}
+#workspace-note {{ height: auto; }}
 DataTable > .datatable--header {{ background: {c("surface")}; color: {c("title")}; text-style: bold; }}
 DataTable > .datatable--cursor {{ background: {c("cursor")}; color: {c("text")}; }}
 DataTable > .datatable--hover {{ background: {c("hover")}; }}
@@ -188,6 +192,7 @@ MTG = Theme(
         "live": "◉ LIVE",
         "needs_recover_badge": "⚠ NEEDS RECOVER",
         "historical": "◼ HISTORICAL",
+        "loading": "◌",
         "queued": "◷",
         "finished": "✔",
         "batch": "⬢",
@@ -252,6 +257,7 @@ PLAIN = Theme(
         "live": "[LIVE]",
         "needs_recover_badge": "[NEEDS RECOVER]",
         "historical": "[HISTORICAL]",
+        "loading": "...",
         "queued": "o",
         "finished": "v",
         "batch": "#",

@@ -141,6 +141,7 @@ class Monitor:
         self._records = RecordCache()
         self._codex_readings: dict[str, tuple[float, UsageReading | None]] = {}
         self._repo = RepoFreshness(None, None)
+        self._stopping = False
 
     def _resolve(self) -> dict[str, ResolvedLocation]:
         try:
@@ -185,6 +186,7 @@ class Monitor:
                 entry.cost.update()
             if (
                 self.follow_output
+                and not self._stopping
                 and entry.follower is None
                 and run.container is not None
                 and run.stage is Stage.RUNNING
@@ -195,6 +197,8 @@ class Monitor:
                     popen=self.popen,
                 )
                 entry.follower.start()
+                if self._stopping:  # shutdown began while it was starting
+                    entry.follower.signal_stop()
 
     def _codex_reading(self, login: str) -> UsageReading | None:
         checked = self._codex_readings.get(login)
@@ -346,8 +350,19 @@ class Monitor:
         entry = self._live.get(run_id)
         return entry.cost.requests if entry is not None else []
 
+    def begin_shutdown(self) -> None:
+        """Stop every log follower without waiting, and start no new ones.
+
+        Safe from any thread while a poll is in progress; ``close`` still does the waiting.
+        """
+        self._stopping = True
+        for entry in list(self._live.values()):
+            if entry.follower is not None:
+                entry.follower.signal_stop()
+
     def close(self) -> None:
-        for entry in self._live.values():
+        self._stopping = True
+        for entry in list(self._live.values()):
             if entry.follower is not None:
                 entry.follower.stop()
         self._live.clear()

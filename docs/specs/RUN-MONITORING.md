@@ -127,7 +127,9 @@ Secondary labels, shown dimmed, are the first eight characters of the Candidate 
 The dashboard has three panes: a narrow status pane across the top, the running pane filling most of the bottom left, and a narrow queued pane on the bottom right.
 Live panes refresh every two seconds by default (`--interval`).
 Reads run off the interface thread, one at a time: a refresh asked for while one is reading runs once after it, however many ticks or `r` presses arrived, so a slow Docker daemon delays the view rather than piling up reads.
-Quitting stops new reads at once and never waits on one in flight; the monitor's followers are closed when the last read finishes.
+Every read the app starts reports back exactly once, whether it read, was skipped as stale, or failed, so a read that fails or goes stale never stops later ones.
+The reads run on the app's own daemon threads, never the event loop's default executor, so the process exits without waiting for a read in flight.
+Quitting stops new reads, tells the monitor's followers to end their `docker logs` without waiting for them, and closes the monitor on the last read's own thread, or at once when none is in flight.
 
 The status pane shows (grilling 2026-10-07):
 
@@ -200,6 +202,7 @@ The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the
 A Needs recover or Unknown run's header also names its reasons and whether its container is up.
 
 A live run's tabs follow `docker logs -f` and the events file; a historical run's tabs read the retained files.
+Opening a run clears every tab, table, sparkline and the header first, and they show loading or unavailable until that run's own evidence arrives: nothing of the previously shown run appears under another run's header.
 A run that leaves the live view reads its retained logs once, even when this host has none, and keeps asking for its Run Record's detail on every refresh until the detail reads: its summary can reach the history after the run finishes, and a manifest can be briefly unreadable.
 Each stream keeps its own newest 4000 lines in its tabs, so a flood of stderr never evicts stdout from Activity and Raw.
 Everything taken from a run, its records or its workspace is drawn as literal text, never as markup, and an out-of-range or non-finite number in candidate output is shown as unknown.

@@ -193,9 +193,11 @@ class DetailsView(Vertical):
             with TabPane("Requests", id="tab-requests"):
                 yield Static(id="request-spark")
                 yield DataTable(id="requests-table", cursor_type="row")
-            with TabPane("Workspace", id="tab-workspace"), Horizontal():
-                yield DataTable(id="snapshots-table", cursor_type="row")
-                yield DataTable(id="commits-table", cursor_type="row")
+            with TabPane("Workspace", id="tab-workspace"), Vertical():
+                yield Static(id="workspace-note")
+                with Horizontal():
+                    yield DataTable(id="snapshots-table", cursor_type="row")
+                    yield DataTable(id="commits-table", cursor_type="row")
             with TabPane("Raw", id="tab-raw"):
                 yield RichLog(id="log-raw", max_lines=MAX_LOG_LINES, wrap=False)
         yield Static(
@@ -220,12 +222,31 @@ class DetailsView(Vertical):
         self.query_one("#detail-tabs").display = not empty
 
     def open(self, run_id: str) -> Shown:
-        for log in self.query(RichLog):
-            log.clear()
+        """Show another run: nothing of the previous run may remain under its header."""
         self.generation += 1
         self.shown = Shown(run_id)
+        for log in self.query(RichLog):
+            log.clear()
+        theme = self.theme_
+        loading = Text(f"{theme.glyph('loading')} loading", style=theme.style("muted"))
+        head = self.query_one("#detail-head", Static)
+        head.update(Text.assemble(Text(f"run {run_id}  ", style=theme.style("muted")), loading))
+        head.border_title = "RUN"
+        for table in ("#requests-table", "#snapshots-table", "#commits-table"):
+            self.query_one(table, DataTable).clear()
+        self.query_one("#request-spark", Static).update(loading)
+        self.query_one("#workspace-note", Static).update(loading)
         self._show_empty(False)
         return self.shown
+
+    def show_requests_unavailable(self) -> None:
+        """A recorded run whose Run Record could not be read (yet): say so, show nothing."""
+        if self.shown is None:
+            return
+        self.query_one("#requests-table", DataTable).clear()
+        self.query_one("#request-spark", Static).update(
+            Text("the Run Record is not readable yet", style=self.theme_.style("muted"))
+        )
 
     def restart_output(self) -> None:
         """A run that just left the live view: its output now comes from retained logs."""
@@ -304,6 +325,8 @@ class DetailsView(Vertical):
             return
         theme = self.theme_
         self.shown.workspace = view
+        note = "" if view.snapshots or view.commits else "no workspace evidence on this host"
+        self.query_one("#workspace-note", Static).update(Text(note, style=theme.style("muted")))
         snapshots = self.query_one("#snapshots-table", DataTable)
         snapshots.clear()
         for entry in view.snapshots:
