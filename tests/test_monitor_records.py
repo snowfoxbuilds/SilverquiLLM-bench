@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import contextlib
 import json
-from datetime import timedelta
+import shutil
+import time
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -17,17 +19,23 @@ from silverquillm.monitor import Monitor, Stage
 from silverquillm.monitor.costs import ProvisionalCost
 from silverquillm.monitor.estimates import weekly_usage
 from silverquillm.monitor.history import UsageReading
+from silverquillm.monitor.live import live_runs
+from silverquillm.monitor.locks import held_locks
 
+from .test_karn_subscription_usage import claude_event
 from .test_monitor import (
     CANDIDATE_HASH,
     NOW,
     OTHER_HASH,
+    OTHER_IDENTITY,
     START,
+    FakeProcess,
     container,
     enroll_slot,
     event,
     make_run,
     ms,
+    proc_locks,
     publish,
     retain,
     stages,
@@ -60,8 +68,10 @@ def at(minutes, usd):
 class Host:
     """This host's run directory, Results Repo clone and one enrolled Claude Login Profile."""
 
-    def __init__(self, tmp_path: Path, *, label: str | None = "host-a", hostname=None):
+    def __init__(self, tmp_path: Path, *, label: str | None = "host-a", hostname=None, popen=None):
         self.tmp_path = tmp_path
+        self.now = NOW
+        self.popen = popen
         self.runs, self.repo, self.state = (tmp_path / n for n in ("runs", "repo", "state"))
         self.runs.mkdir()
         self.repo.mkdir()
@@ -74,6 +84,10 @@ class Host:
         self.locks.write_text("")
         self.containers = []
         self._monitor = None
+
+    def release(self) -> None:
+        """Every runner has exited: the copied lock table holds nothing."""
+        self.locks.write_text("")
 
     def own(self, *run_dirs: Path) -> None:
         """Hold these runs' locks in the copied lock table, as their runners would."""
@@ -90,9 +104,10 @@ class Host:
                 environ=self.environ,
                 docker=lambda: (list(self.containers), None),
                 proc_locks=self.locks,
-                clock=lambda: NOW,
-                follow_output=False,
+                clock=lambda: self.now,
+                follow_output=self.popen is not None,
                 hostname=self.hostname,
+                **({"popen": self.popen} if self.popen is not None else {}),
             )
         return self._monitor
 
@@ -412,3 +427,255 @@ def test_a_live_reading_wins_over_its_untimed_retained_copy():
     weekly = weekly_usage(PROFILE, "claude", RATES, [copy, live], [], NOW)
     assert (weekly.percent, weekly.estimated, weekly.reading_age_exact) == (30.0, False, True)
     assert weekly.reading_age(NOW) == timedelta(hours=3)
+
+
+# Directory and container observations of one run join by its canonical path
+
+
+def owned_table(tmp_path, *run_dirs):
+    with contextlib.ExitStack() as stack:
+        for run_dir in run_dirs:
+            stack.enter_context(run_lock(run_dir))
+        return held_locks(proc_locks(tmp_path))
+
+
+def rows(found):
+    return [(run.run_id, run.stage, run.container is not None) for run in found]
+
+
+@pytest.mark.parametrize("root", ["absolute", "relative", "linked"])
+@pytest.mark.parametrize("owned", [True, False])
+def test_each_physical_run_is_one_row_however_its_root_is_named(tmp_path, monkeypatch, root, owned):
+    real = tmp_path / "real-runs"
+    run = make_run(real, "r1")
+    table = owned_table(tmp_path, *([run] if owned else []))
+    if root == "relative":
+        monkeypatch.chdir(tmp_path)
+        runs = Path("real-runs")
+    elif root == "linked":
+        runs = tmp_path / "runs-link"
+        runs.symlink_to(real, target_is_directory=True)
+    else:
+        runs = real
+    # The runner resolves its paths before launch, so Docker names the real directory.
+    found = live_runs(runs, [container("r1", run_dir=run)], table)
+    stage = Stage.RUNNING if owned else Stage.NEEDS_RECOVER
+    assert rows(found) == [("r1", stage, True)]
+    assert found[0].container.running
+
+
+@pytest.mark.parametrize("owned", [True, False])
+def test_a_run_outside_the_root_is_still_found_once_through_its_container(tmp_path, owned):
+    runs = tmp_path / "runs"
+    make_run(runs, "r1")
+    elsewhere = make_run(tmp_path / "elsewhere", "r9")
+    table = owned_table(tmp_path, *([elsewhere] if owned else []))
+    found = live_runs(runs, [container("r9", run_dir=elsewhere)], table)
+    stage = Stage.RUNNING if owned else Stage.NEEDS_RECOVER
+    assert sorted(rows(found), key=str) == [
+        ("r1", Stage.NEEDS_RECOVER, False),
+        ("r9", stage, True),
+    ]
+
+
+def test_a_linked_child_run_directory_is_still_not_listed(tmp_path):
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    target = make_run(tmp_path / "elsewhere", "r1")
+    (runs / "r1").symlink_to(target, target_is_directory=True)
+    assert live_runs(runs, [], owned_table(tmp_path)) == []
+
+
+def test_an_unavailable_run_root_or_container_path_never_fails_the_listing(tmp_path):
+    missing = tmp_path / "no-such-runs"
+    bogus = container("r1", run_dir=Path("/no/such/place/r1"))
+    assert rows(live_runs(missing, [bogus], owned_table(tmp_path))) == [
+        ("r1", Stage.NEEDS_RECOVER, True)
+    ]
+
+
+def test_a_linked_run_root_counts_one_live_run_in_a_snapshot(tmp_path):
+    host = Host(tmp_path)
+    real = tmp_path / "real-runs"
+    run = make_run(real, "r1")
+    host.runs.rmdir()
+    host.runs.symlink_to(real, target_is_directory=True)
+    host.own(run)
+    host.containers = [container("r1", run_dir=run)]
+    snapshot = host.snapshot()
+    assert [(view.run.run_id, view.run.stage) for view in snapshot.running] == [
+        ("r1", Stage.RUNNING)
+    ]
+    assert snapshot.counts.live == 1
+
+
+# Only validated records charge spend or anchor usage
+
+
+def test_a_record_missing_its_scores_stays_in_history_but_charges_nothing(tmp_path):
+    host = Host(tmp_path)
+    directory = publish(host.repo, "r1", usage=claude_usage(60.0), requests=[at(1, "25")])
+    scores = (directory / "scores.json").read_text()
+    (directory / "scores.json").unlink()
+    weekly = host.weekly()
+    assert (weekly.percent, weekly.reading) == (0.0, None)
+    assert [run.run_id for run in host.monitor.history()] == ["r1"]
+    # The same record becomes readable on a later refresh and then anchors the usage.
+    (directory / "scores.json").write_text(scores)
+    weekly = host.weekly()
+    assert (weekly.percent, weekly.reading.utilization_percent) == (60.0, 60.0)
+
+
+def test_a_misfiled_record_charges_nothing(tmp_path):
+    host = Host(tmp_path)
+    directory = publish(host.repo, "r1", requests=[at(1, "25")])
+    misfiled = host.repo / "results" / OTHER_HASH / "r1"
+    misfiled.parent.mkdir(parents=True)
+    shutil.move(directory, misfiled)
+    assert host.weekly().percent == 0.0
+    assert [run.run_id for run in host.monitor.history()] == ["r1"]
+
+
+def test_a_record_with_an_invalid_candidate_identity_charges_nothing(tmp_path):
+    host = Host(tmp_path)
+    directory = publish(host.repo, "r1", requests=[at(1, "25")])
+    manifest = json.loads((directory / "manifest.json").read_text())
+    manifest["candidate"] = OTHER_IDENTITY
+    (directory / "manifest.json").write_text(json.dumps(manifest))
+    assert host.weekly().percent == 0.0
+
+
+def test_an_invalid_recovery_never_replaces_its_valid_original(tmp_path):
+    host = Host(tmp_path)
+    run = make_run(host.runs, "r1")
+    original = retain(
+        run / "run-record.json", "r1", stopped=False, cost="25", requests=[at(1, "25")]
+    )
+    publish(host.repo, "r1", retained=original)
+    recovery = publish(
+        host.repo, "r1-recovery-1", recovery_of="r1", cost="2500", requests=[at(1, "2500")]
+    )
+    (recovery / "scores.json").unlink()
+    snapshot = host.snapshot()
+    [view] = snapshot.running
+    assert (view.run.stage, view.cost) == (Stage.NEEDS_RECOVER, Decimal(25))
+    # The profile charges the same record the run's own view shows: $25 at $25 per 1%.
+    assert snapshot.profiles[0].weekly.percent == pytest.approx(1.0)
+
+
+def test_a_history_only_original_and_invalid_recovery_charge_the_original(tmp_path):
+    host = Host(tmp_path)
+    publish(host.repo, "r1", stopped=False, requests=[at(1, "25")])
+    recovery = publish(host.repo, "r1-recovery-1", recovery_of="r1", requests=[at(1, "2500")])
+    (recovery / "scores.json").unlink()
+    assert host.weekly().percent == pytest.approx(1.0)
+
+
+# A reading seen live outlives the run that saw it
+
+
+def stdout_with_reading(fraction, minute):
+    """``docker logs`` stdout carrying one weekly reading, logged at 11:``minute``."""
+    line = json.dumps(claude_event(fraction)).encode()
+    return b"2026-10-07T11:%02d:00.000000000Z " % minute + line + b"\n"
+
+
+class Followers:
+    """A fake ``docker logs`` per run container, each emitting its configured stdout."""
+
+    def __init__(self):
+        self.stdout: dict[str, bytes] = {}
+
+    def __call__(self, arguments, **kwargs):
+        return FakeProcess(self.stdout.get(arguments[-1], b""), b"")
+
+
+def settle(host, expected):
+    """Snapshot until the background followers have delivered their lines."""
+    deadline = time.monotonic() + 5
+    while True:
+        weekly = host.weekly()
+        if weekly.percent == pytest.approx(expected) or time.monotonic() > deadline:
+            return weekly
+        time.sleep(0.02)
+
+
+def live_cost(run, usd, moment):
+    line = event("e-" + run.name, "claude_code.api_request", {"cost_usd": usd}, stamp=ms(moment))
+    (run / "observations.events.jsonl").write_text(json.dumps(line) + "\n")
+
+
+def test_a_timed_reading_survives_its_run_finishing(tmp_path):
+    followers = Followers()
+    host = Host(tmp_path, popen=followers)
+    run = make_run(host.runs, "r1")
+    spent = NOW - timedelta(minutes=10)
+    followers.stdout["sq-run-r1"] = stdout_with_reading(0.30, 30)
+    live_cost(run, "25", spent)
+    host.own(run)
+    host.containers = [container("r1")]
+    # Running: the live 30% reading at 11:30 plus the $25 after it.
+    weekly = settle(host, 31.0)
+    assert (weekly.percent, weekly.reading_age_exact) == (pytest.approx(31.0), True)
+
+    # Recording: the record keeps only an untimed copy of the same reading.
+    usage = claude_usage(30.0, resets="2026-10-08T14:00:00Z")
+    record = retain(run / "run-record.json", "r1", usage=usage, requests=[(spent, "25")])
+    host.containers = []
+    assert host.snapshot().running[0].run.stage is Stage.RECORDING
+    weekly = host.weekly()
+    assert (weekly.percent, weekly.reading_age_exact) == (pytest.approx(31.0), True)
+
+    # Finished, before history is refreshed and after: the observation time is not lost.
+    publish(host.repo, "r1", retained=record)
+    host.release()
+    snapshot = host.monitor.snapshot()
+    assert snapshot.running == []
+    weekly = snapshot.profiles[0].weekly
+    assert (weekly.percent, weekly.reading_age_exact) == (pytest.approx(31.0), True)
+    assert weekly.reading_age(NOW) == timedelta(minutes=30)
+    weekly = host.weekly()
+    assert (weekly.percent, weekly.reading_age_exact) == (pytest.approx(31.0), True)
+
+
+def test_the_next_run_keeps_then_replaces_the_retained_reading_until_it_expires(tmp_path):
+    followers = Followers()
+    host = Host(tmp_path, popen=followers)
+    first = make_run(host.runs, "r1")
+    followers.stdout["sq-run-r1"] = stdout_with_reading(0.30, 30)
+    host.own(first)
+    host.containers = [container("r1")]
+    settle(host, 30.0)
+    publish(host.repo, "r1", retained=retain(first / "run-record.json", "r1", requests=[]))
+    host.release()
+    host.containers = []
+    assert host.weekly().percent == pytest.approx(30.0)
+
+    # The next run on the profile has no reading of its own, so the kept one still anchors.
+    second = make_run(host.runs, "r2")
+    live_cost(second, "25", NOW - timedelta(minutes=5))
+    host.own(second)
+    host.containers = [container("r2")]
+    assert host.weekly().percent == pytest.approx(31.0)
+    publish(host.repo, "r2", retained=retain(second / "run-record.json", "r2", requests=[]))
+    host.release()
+    host.containers = []
+    host.weekly()
+
+    # A genuinely newer reading replaces it; spend before that reading is inside it.
+    third = make_run(host.runs, "r3")
+    followers.stdout["sq-run-r3"] = stdout_with_reading(0.40, 58)
+    host.own(third)
+    host.containers = [container("r3")]
+    weekly = settle(host, 40.0)
+    assert weekly.reading.observed_at == NOW - timedelta(minutes=2)
+
+    # Past its reset the reading anchors nothing but the spend since the reset.
+    host.release()
+    host.containers = []
+    host.now = datetime.fromisoformat("2026-10-08T15:00:00+00:00")
+    weekly = host.weekly()
+    assert (weekly.reading, weekly.estimated) == (None, True)
+    # A window past that it is dropped, and the last seven days count.
+    host.now = datetime.fromisoformat("2026-10-15T15:00:00+00:00")
+    assert (host.weekly().percent, host.weekly().reading) == (0.0, None)

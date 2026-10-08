@@ -99,11 +99,11 @@ class RecordCache:
 
     _retained: dict[Path, tuple[tuple, RunSummary | None]] = field(default_factory=dict)
     _published: dict[Path, tuple[tuple, RunSummary | None]] = field(default_factory=dict)
-    _seen: set[Path] = field(default_factory=set)
+    _applicable: dict[Path, RunSummary] = field(default_factory=dict)
 
     def begin(self) -> None:
-        """Start a pass; ``retained_records`` then lists only what this pass read."""
-        self._seen = set()
+        """Start a pass; ``applicable_records`` then lists only what this pass selected."""
+        self._applicable = {}
 
     def read(self, path: Path) -> RunSummary | str | None:
         """The retained record at ``path``, None when absent, or ``UNREADABLE``."""
@@ -117,7 +117,6 @@ class RecordCache:
             summary = validated_summary(document.get("manifest"), document.get("scores"), path)
             cached = (key, summary)
             self._retained[path] = cached
-        self._seen.add(path)
         return cached[1] if cached[1] is not None else UNREADABLE
 
     def published(self, directory: Path) -> RunSummary | str | None:
@@ -141,13 +140,14 @@ class RecordCache:
             self._published[directory] = cached
         return cached[1] if cached[1] is not None else UNREADABLE
 
-    def retained_records(self) -> list[RunSummary]:
-        """Every valid record retained under a run directory read in this pass."""
-        return [
-            entry[1]
-            for path, entry in self._retained.items()
-            if path in self._seen and entry[1] is not None
-        ]
+    def select(self, run_dir: Path, record: RunSummary | None) -> None:
+        if record is not None:
+            self._applicable[run_dir] = record
+
+    def applicable_records(self) -> list[RunSummary]:
+        """The one record that applies to each run directory read in this pass, Finished or
+        not: the same validated, linkage-checked record the run's own view uses."""
+        return list(self._applicable.values())
 
 
 @dataclass(frozen=True)
@@ -344,6 +344,7 @@ def _live_run(
             return None  # Never launched, or not a run at all: recovery has nothing to settle.
         run_input = {}
     verdict = _verdict(run_dir, records, results_repo, pending_logins, cache)
+    cache.select(run_dir, verdict.record)
     reasons = verdict.reasons
     stage = _stage(run_dir, container, owned, records, reasons)
     if stage is None:
@@ -375,6 +376,20 @@ def _live_run(
         reasons=reasons if stage in (Stage.NEEDS_RECOVER, Stage.UNKNOWN) else (),
         record=verdict.record,
     )
+
+
+def _canonical(run_dir: Path) -> Path:
+    """``run_dir`` under its resolved parent, so a relative or linked run root and a
+    container's absolute bind source name one run; the run directory itself is never followed.
+    """
+    try:
+        parent = os.path.realpath(run_dir.parent)
+    except (OSError, ValueError):
+        try:
+            parent = os.path.abspath(run_dir.parent)
+        except (OSError, ValueError):
+            return run_dir
+    return Path(parent) / run_dir.name
 
 
 def _run_dirs(runs_dir: Path | None) -> list[Path]:
@@ -409,13 +424,15 @@ def live_runs(
     """
     cache = cache if cache is not None else RecordCache()
     cache.begin()
-    by_dir: dict[Path, RunContainer | None] = {path: None for path in _run_dirs(runs_dir)}
+    by_dir: dict[Path, RunContainer | None] = {
+        _canonical(path): None for path in _run_dirs(runs_dir)
+    }
     for container in containers:
         run_dir = container.run_dir
         if run_dir is None and runs_dir is not None:
             run_dir = Path(runs_dir) / container.run_id
         if run_dir is not None and run_dir.name == container.run_id:
-            by_dir[run_dir] = container
+            by_dir[_canonical(run_dir)] = container
     found = []
     for run_dir, container in by_dir.items():
         run = _live_run(

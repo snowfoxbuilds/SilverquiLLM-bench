@@ -1236,7 +1236,7 @@ def test_a_snapshot_reads_everything_and_writes_nothing(tmp_path):
     (runs / "live" / "observations.events.jsonl").write_text(
         json.dumps(event("e1", "claude_code.api_request", {"cost_usd": "25"}, stamp=ms(NOW))) + "\n"
     )
-    write_record(
+    publish(
         repo,
         "done",
         usage={
