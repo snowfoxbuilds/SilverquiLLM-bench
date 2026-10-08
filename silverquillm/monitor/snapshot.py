@@ -387,7 +387,7 @@ class Monitor:
         now = self.clock()
         containers, docker_error = self.docker()
         held = held_locks(self.proc_locks)
-        profiles = login_profiles(self.path("state_root"), held)
+        profiles = login_profiles(self.path("state_root"), held, now=now)
         runs = live_runs(
             self.path("runs_dir"),
             containers,

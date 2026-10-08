@@ -93,16 +93,12 @@ Screen {{ background: {c("background")}; color: {c("text")}; overflow: hidden; }
 }}
 .pane:focus-within {{ border: {self.border} {c("border_focus")}; }}
 #status {{ height: auto; max-height: 16; }}
-#where {{ width: 1fr; max-width: 64; margin-right: 2; }}
+#where {{ width: 1fr; max-width: 58; margin-right: 2; }}
 #counts {{ width: 22; margin-right: 3; padding-left: 2; border-left: solid {c("border")}; }}
+.compact #where {{ max-width: 40; }}
 #pools {{ width: 1fr; min-width: 44; }}
-#lower {{ height: 1fr; }}
-#running {{ width: 3fr; }}
-#queued {{ width: 1fr; min-width: 34; max-width: 56; }}
-.narrow #lower {{ layout: vertical; }}
-.narrow #where {{ max-width: 44; }}
-.narrow #running {{ width: 1fr; height: 2fr; }}
-.narrow #queued {{ width: 1fr; max-width: 100%; height: 1fr; }}
+#running {{ height: 2fr; min-height: 6; }}
+#queued {{ height: 1fr; min-height: 4; }}
 #nav {{ width: 40; }}
 #runs {{ width: 1fr; }}
 #detail-head {{ height: auto; max-height: 12; }}
@@ -121,6 +117,8 @@ RichLog {{ background: {c("surface")}; }}
 TabbedContent ContentTabs {{ background: {c("surface")}; }}
 Tab.-active {{ color: {c("title")}; text-style: bold; }}
 .empty {{ color: {c("muted")}; padding: 1 2; }}
+HelpScreen {{ align: center middle; background: {c("background")} 70%; }}
+#help {{ width: auto; height: auto; max-width: 96; padding: 1 2; }}
 """
 
 
@@ -150,6 +148,7 @@ MTG = Theme(
         "unknown": "#7a8296",
         "claude": "#e0875f",
         "codex": "#4fbf9f",
+        "cooldown": "#8fd3ff",
         "provider": BLACK_MANA,
         "mythic": "#f07a2a",
         "rare": "#d9b44a",
@@ -176,6 +175,7 @@ MTG = Theme(
         "tapped": "↷",
         "untapped": "◦",
         "pending": "⚠",
+        "cooldown": "❄",
         "lock_unknown": "?",
         "running": "▸",
         "grading": "⚖",
@@ -244,6 +244,7 @@ PLAIN = Theme(
         "tapped": "*",
         "untapped": "-",
         "pending": "!",
+        "cooldown": "z",
         "lock_unknown": "?",
         "running": ">",
         "grading": "=",

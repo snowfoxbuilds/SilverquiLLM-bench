@@ -1,4 +1,4 @@
-"""The dashboard: status across the top, running runs bottom left, the queue bottom right."""
+"""The dashboard: status, running runs and the queue, stacked across the full width."""
 
 from __future__ import annotations
 
@@ -33,13 +33,14 @@ LOCATION_LABELS = {
     "runs_dir": "runs",
     "state_root": "state",
 }
-NARROW = 150
-"""Below this many columns the dashboard compacts, see MonitorApp.on_resize."""
+COMPACT = 150
+"""Below this many columns the status and running panes tighten so their text fits."""
 BAR_WIDTH = 12
 SPARK_WIDTH = 16
-CANDIDATE_WIDTH = 36
-REASONS_WIDTH = 44
+CANDIDATE_WIDTH = 48
+COMPACT_CANDIDATE_WIDTH = 34
 WEEKLY_BAR = 10
+QUEUED_BENCHMARK_WIDTH = 18
 
 
 class RunChosen(Message):
@@ -77,34 +78,38 @@ class StatusPane(Horizontal):
         theme = self.theme_
         self.query_one("#where", Static).update(self._where(snapshot, theme))
         self.query_one("#counts", Static).update(self._counts(snapshot, theme))
-        compact = self.app.size.width < NARROW
+        compact = self.app.size.width < COMPACT
+        self.set_class(compact, "compact")
         self.query_one("#pools", Static).update(self._pools(snapshot, theme, compact=compact))
 
     @staticmethod
     def _where(snapshot: MonitorSnapshot, theme: Theme) -> Table:
-        table = Table.grid(padding=(0, 1))
+        table = Table.grid(padding=(0, 1), expand=True)
         table.add_column(style=theme.style("muted"), no_wrap=True, min_width=7)
-        table.add_column(overflow="ellipsis", no_wrap=True)
+        table.add_column(overflow="ellipsis", no_wrap=True, ratio=1)
+        table.add_column(no_wrap=True)
         muted = theme.style("muted")
         for key, label in LOCATION_LABELS.items():
             location = snapshot.locations.get(key)
             if location is None or location.path is None:
-                table.add_row(label, Text("unset", style=theme.style("bad", bold=True)))
+                table.add_row(label, Text("unset", style=theme.style("bad", bold=True)), "")
             else:
-                where = Text(_short(location.path))
-                where.append(f" ({location.source})", style=muted)
-                table.add_row(label, where)
+                # The source keeps its own column, so a long path is the part cut short.
+                source = Text(f"({location.source})", style=muted)
+                table.add_row(label, Text(_short(location.path)), source)
         repo = snapshot.repo
         fetched = Text(fmt.ago(snapshot.taken_at - repo.last_fetch) if repo.last_fetch else "never")
         if repo.behind:
             fetched.append(f" · {repo.behind} behind", style=theme.style("warn", bold=True))
         elif repo.behind == 0:
             fetched.append(" · up to date", style=theme.style("good"))
-        table.add_row("fetch", fetched)
-        table.add_row("host", Text(snapshot.host_label or "unlabelled", style=muted))
+        table.add_row("fetch", fetched, "")
+        table.add_row("host", Text(snapshot.host_label or "unlabelled", style=muted), "")
         for problem in (snapshot.config_error, snapshot.docker_error, snapshot.exclusion_error):
             if problem:
-                table.add_row(Text(theme.glyph("problem")), Text(problem, style=theme.style("bad")))
+                table.add_row(
+                    Text(theme.glyph("problem")), Text(problem, style=theme.style("bad")), ""
+                )
         return table
 
     @staticmethod
@@ -139,20 +144,25 @@ class StatusPane(Horizontal):
         for provider in sorted(pools):
             views = pools[provider]
             role = fmt.provider_role(provider)
-            free = sum(1 for view in views if view.status.busy is False)
+            # Untapped means a new run could take it now: not busy, pending or cooling down.
+            free = sum(1 for view in views if view.status.free)
             title = Text(f"{provider.upper()} pool", style=theme.style(role, bold=True))
             untapped = Text(f"{free}/{len(views)} untapped", style=theme.style("muted"))
             table.add_row(title, untapped) if compact else table.add_row(title, "", untapped)
             for view in sorted(views, key=lambda item: item.status.slot):
-                name, bar, weekly = StatusPane._profile(view, snapshot.taken_at, theme)
+                name, bar, weekly = StatusPane._profile(
+                    view, snapshot.taken_at, theme, compact=compact
+                )
                 table.add_row(name, weekly) if compact else table.add_row(name, bar, weekly)
         return table
 
     @staticmethod
-    def _profile(view: ProfileView, now: datetime, theme: Theme) -> tuple:
+    def _profile(view: ProfileView, now: datetime, theme: Theme, *, compact: bool = False) -> tuple:
         status = view.status
         if status.pending:
             mark = Text(theme.glyph("pending"), style=theme.style("bad", bold=True))
+        elif status.cooldown_until is not None and not status.busy:
+            mark = Text(theme.glyph("cooldown"), style=theme.style("cooldown", bold=True))
         elif status.busy is None:
             mark = Text(theme.glyph("lock_unknown"), style=theme.style("muted"))
         elif status.busy:
@@ -171,7 +181,16 @@ class StatusPane(Horizontal):
                 style=theme.style("bad"),
             )
         percent = view.weekly.percent / 100 if view.weekly else None
-        return name, fmt.bar(percent, WEEKLY_BAR, theme), fmt.weekly(view.weekly, now, theme)
+        weekly = fmt.weekly(view.weekly, now, theme)
+        if status.cooldown_until is not None:
+            # A held profile reads its hold first: when it ends matters more than its usage,
+            # which a compact pane leaves out.
+            held = fmt.cooldown(status.cooldown_until, now, theme, short=compact)
+            if not compact:
+                held.append(theme.glyph("sep"), style=theme.style("muted"))
+                held.append_text(weekly)
+            weekly = held
+        return name, fmt.bar(percent, WEEKLY_BAR, theme), weekly
 
 
 class RunningPane(Vertical):
@@ -210,14 +229,18 @@ class RunningPane(Vertical):
         table.clear()
         self._order = []
         now = snapshot.taken_at
+        width = COMPACT_CANDIDATE_WIDTH if self.app.size.width < COMPACT else CANDIDATE_WIDTH
         for view in runs:
-            table.add_row(*self._cells(view, now, theme), key=view.run.run_id, height=2)
+            cells = self._cells(view, now, theme, candidate_width=width)
+            table.add_row(*cells, key=view.run.run_id, height=2)
             self._order.append(view.run.run_id)
         if selected in self._order:
             table.move_cursor(row=self._order.index(selected), animate=False)
 
     @staticmethod
-    def _cells(view: RunView, now: datetime, theme: Theme) -> tuple:
+    def _cells(
+        view: RunView, now: datetime, theme: Theme, *, candidate_width: int = CANDIDATE_WIDTH
+    ) -> tuple:
         """Two lines per run: what and where on top, how far and how much below."""
         run = view.run
         muted = theme.style("muted")
@@ -230,25 +253,18 @@ class RunningPane(Vertical):
             f"\n{theme.glyph('tapped')} {login}", style=theme.style(fmt.provider_role(run.provider))
         )
         candidate = Text(run.candidate.label, style=theme.style("text", bold=True))
-        candidate.truncate(CANDIDATE_WIDTH, overflow="ellipsis")
+        candidate.truncate(candidate_width, overflow="ellipsis")
         if run.stage is Stage.NEEDS_RECOVER:
             candidate.stylize(theme.style("needs_recover"))
         candidate.append("\n" + "  ".join((*run.candidate.secondary, run.run_id[:8])), style=muted)
         if run.stage in (Stage.NEEDS_RECOVER, Stage.UNKNOWN):
-            # Its budget no longer matters; why it is stuck, and whether it still runs, does.
+            # Its progress no longer matters; why it is stuck, and whether it still runs, does.
             progress = fmt.reasons(run, theme)
-            progress.truncate(REASONS_WIDTH, overflow="ellipsis")
+            progress.truncate(candidate_width, overflow="ellipsis")
         else:
-            progress = fmt.bar(view.budget_fraction(now), BAR_WIDTH, theme)
-        if view.estimated_percent is not None:
-            progress.append(
-                f" {theme.glyph('estimated')}{view.estimated_percent:.0f}%",
-                style=theme.style("accent", bold=True),
-            )
-        budget = fmt.short_duration(run.budget_seconds) if run.budget_seconds else fmt.DASH
-        fraction = view.budget_fraction(now)
-        used = f" · {fraction * 100:.0f}%" if fraction is not None else ""
-        progress.append(f"\n{fmt.short_duration(elapsed)} of {budget}{used}", style=muted)
+            progress = fmt.progress(view.estimated_percent, BAR_WIDTH, theme)
+        progress.append("\n")
+        progress.append_text(fmt.elapsed_of_budget(elapsed, run.budget_seconds, theme))
         spend = fmt.spend(
             view.cost,
             theme,
@@ -286,10 +302,9 @@ class QueuedPane(VerticalScroll):
         for batch in snapshot.queued:
             if batch.status == "done" and not batch.runs:
                 continue
-            lines.append(
-                Text(f"{theme.glyph('batch')} {batch.batch}", style=theme.style("title", bold=True))
+            state = Text(
+                f"{theme.glyph('batch')} {batch.batch}  ", style=theme.style("title", bold=True)
             )
-            state = Text("  ")
             if batch.needs_ack:
                 state.append(theme.glyph("needs_ack"), style=theme.style("warn", bold=True))
             elif batch.not_before is not None and batch.not_before > snapshot.taken_at:
@@ -306,31 +321,31 @@ class QueuedPane(VerticalScroll):
                 total += 1
                 run = Text("  ")
                 run.append_text(fmt.badge(queued.benchmark, theme))
-                run.append(
-                    f"{theme.glyph('sep')}{fmt.short_duration(queued.budget_seconds)}", style=muted
-                )
+                run.pad_right(max(0, QUEUED_BENCHMARK_WIDTH - run.cell_len))
+                run.append(f"{fmt.short_duration(queued.budget_seconds):>4}  ", style=muted)
+                run.append(queued.candidate.label, style=theme.style("text"))
                 lines.append(run)
-                lines.append(Text(f"    {queued.candidate.label}", style=theme.style("text")))
         if not lines:
             lines.append(Text("nothing queued", style=muted))
         self.border_subtitle = f"{total} runs"
-        # One line per entry: a long candidate is cut with an ellipsis rather than wrapped.
-        width = max(8, self.scrollable_content_region.width or 40)
-        for line in lines:
-            line.truncate(width, overflow="ellipsis")
-        self.query_one("#queue-body", Static).update(Text("\n").join(lines))
+        # One line per entry: a long candidate is cut at the pane's edge rather than wrapped,
+        # at whatever width the pane has when drawn.
+        body = Text("\n").join(lines)
+        body.no_wrap, body.overflow = True, "ellipsis"
+        self.query_one("#queue-body", Static).update(body)
 
 
 class DashboardView(Vertical):
+    """Three full-width panes stacked: status, running runs, then the queue."""
+
     def __init__(self, theme: Theme) -> None:
         super().__init__(id="dashboard")
         self.theme_ = theme
 
     def compose(self) -> ComposeResult:
         yield StatusPane(self.theme_)
-        with Horizontal(id="lower"):
-            yield RunningPane(self.theme_)
-            yield QueuedPane(self.theme_)
+        yield RunningPane(self.theme_)
+        yield QueuedPane(self.theme_)
 
     def show(self, snapshot: MonitorSnapshot) -> None:
         self.query_one(StatusPane).show(snapshot)

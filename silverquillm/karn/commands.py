@@ -129,11 +129,9 @@ def _report(record, *, exit_on_status=True):
         raise click.exceptions.Exit(130 if execution["status"] == "interrupted" else 1)
 
 
-@click.command("login")
-@click.option(
-    "--build-output", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path)
-)
-@click.option("--construct", required=True, help="Any construct using the login plugin.")
+@click.group("login", invoke_without_command=True)
+@click.option("--build-output", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--construct", help="Any construct using the login plugin.")
 @click.option("--slot", help="Re-enroll this slot of the pool; omitted, enroll a new slot.")
 @click.option(
     "--adopt",
@@ -141,11 +139,22 @@ def _report(record, *, exit_on_status=True):
     help="Move the per-construct login LEGACY, enrolled before pools, into the pool as a slot.",
 )
 @STATE_ROOT_OPTION
-def enroll(build_output, construct, slot, adopt, state_root):
+@click.pass_context
+def enroll(ctx, build_output, construct, slot, adopt, state_root):
     """Enroll one subscription login into the pool of the construct's Karn login plugin.
 
     Each slot serves one run at a time, so enroll as many as runs you want concurrently.
+    `login cooldown` holds slots out of new runs for a while instead.
     """
+    if ctx.invoked_subcommand is not None:
+        return
+    missing = [
+        flag
+        for flag, value in (("--build-output", build_output), ("--construct", construct))
+        if value is None
+    ]
+    if missing:
+        raise click.UsageError(f"Missing option {' and '.join(missing)}.", ctx)
     from .login import LOGIN_PLUGINS
     from .login_pool import LoginPool, adopt_legacy_login
 
@@ -177,6 +186,67 @@ def enroll(build_output, construct, slot, adopt, state_root):
     except (KarnError, OSError, ValueError) as error:
         raise click.ClickException(str(error)) from None
     raise click.exceptions.Exit(status)
+
+
+AGENTS = {"codex": "karn-codex-login", "claude": "karn-claude-login"}
+
+
+@enroll.command("cooldown")
+@click.option(
+    "--agent",
+    required=True,
+    type=click.Choice(sorted(AGENTS)),
+    help="The provider whose Login Pool holds the slots.",
+)
+@click.option("--slots", multiple=True, metavar="SLOT", help="A slot to hold; repeat or list.")
+@click.option("--all", "every", is_flag=True, help="Every enrolled slot of the pool.")
+@click.option("--duration", metavar="SPAN", help="How long, such as 30m, 5h, 2d or 1h30m.")
+@click.option("--clear", is_flag=True, help="Lift the cooldown instead of setting one.")
+@click.argument("more_slots", nargs=-1, metavar="[SLOT]...")
+@STATE_ROOT_OPTION
+def cooldown(agent, slots, every, duration, clear, more_slots, state_root):
+    """Hold Login Profiles out of new runs until a duration passes (a Login Cooldown).
+
+    A run already holding a slot is unaffected; runs and batch entries wait for a free one.
+    """
+    from datetime import UTC, datetime
+
+    from .login_cooldown import clear_cooldown, parse_duration, set_cooldown
+    from .login_pool import enrolled_slots, logins_root
+
+    names = [*slots, *more_slots]
+    if every and names:
+        raise click.UsageError("Pass --slots or --all, not both.")
+    if not every and not names:
+        raise click.UsageError("Name the slots with --slots, or pass --all.")
+    if clear == (duration is not None):
+        raise click.UsageError("Pass exactly one of --duration or --clear.")
+    plugin_id = AGENTS[agent]
+    pool_root = logins_root(state_root) / plugin_id
+    enrolled = enrolled_slots(pool_root, plugin_id)
+    unknown = [name for name in names if name not in enrolled]
+    if unknown:
+        listed = ", ".join(enrolled) or "none"
+        raise click.UsageError(
+            f"Not enrolled in the {agent} pool: {', '.join(unknown)} (enrolled: {listed})."
+        )
+    chosen = enrolled if every else list(dict.fromkeys(names))
+    try:
+        if clear:
+            for name in chosen:
+                lifted = clear_cooldown(pool_root / name)
+                click.echo(
+                    f"{plugin_id}/{name}: " + ("cooldown lifted" if lifted else "no cooldown")
+                )
+            return
+        now = datetime.now(UTC)
+        until = now + parse_duration(duration)
+        for name in chosen:
+            set_cooldown(pool_root / name, until, now=now)
+            stamp = until.astimezone().strftime("%a %Y-%m-%d %H:%M %Z")
+            click.echo(f"{plugin_id}/{name}: cooling down until {stamp}")
+    except (KarnError, OSError) as error:
+        raise click.ClickException(str(error)) from None
 
 
 @click.command()
@@ -385,15 +455,21 @@ def _monitor_location(key: str, help: str):
     "--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds."
 )
 @click.option("--no-flair", is_flag=True, help="Monochrome theme with plain glyphs.")
+@click.option(
+    "--no-mouse", is_flag=True, help="Leave the mouse to the terminal; every action has a key."
+)
 @_monitor_location("results_repo", "The results repo clone.")
 @_monitor_location("batches_dir", "The batch queue directory.")
 @_monitor_location("runs_dir", "The run directory.")
 @_monitor_location("state_root", "The state root holding the Login Pools.")
-def top(interval, no_flair, **locations):
-    """Read-only monitor: live runs, queue, Login Profiles, history and run details. q quits."""
+def top(interval, no_flair, no_mouse, **locations):
+    """Read-only monitor: live runs, queue, Login Profiles, history and run details.
+
+    Every action has a key; press ? in the monitor for the list. q quits.
+    """
     from silverquillm.top import launch
 
-    raise SystemExit(launch(locations, interval=interval, no_flair=no_flair))
+    raise SystemExit(launch(locations, interval=interval, no_flair=no_flair, mouse=not no_mouse))
 
 
 @click.group()

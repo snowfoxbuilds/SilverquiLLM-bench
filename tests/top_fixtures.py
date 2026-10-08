@@ -195,6 +195,8 @@ def _reading(provider, percent, resets_in, read_ago):
 
 # The killed smoke run still owns its Claude login's settlement.
 PENDING = {"bare-claude-haiku": "cccc3333" * 4}
+# The operator held one idle Codex login back for a few hours.
+COOLING = {"slot-2": NOW + timedelta(hours=3, minutes=12)}
 
 
 def profiles():
@@ -238,7 +240,9 @@ def profiles():
     ]
     return [
         ProfileView(
-            ProfileStatus(plugin, slot, provider, busy, slot in PENDING, PENDING.get(slot)),
+            ProfileStatus(
+                plugin, slot, provider, busy, slot in PENDING, PENDING.get(slot), COOLING.get(slot)
+            ),
             WeeklyUsage(f"{plugin}/{slot}", w.percent, w.estimated, w.reading) if w else None,
             None,
         )

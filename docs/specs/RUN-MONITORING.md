@@ -137,7 +137,7 @@ Secondary labels, shown dimmed, are the first eight characters of the Candidate 
 
 ### Dashboard
 
-The dashboard has three panes: a narrow status pane across the top, the running pane filling most of the bottom left, and a narrow queued pane on the bottom right.
+The dashboard stacks three panes, each across the full width: the status pane, then the running pane, then the queued pane (grilling 2026-10-08).
 Live panes refresh every two seconds by default (`--interval`).
 Reads run off the interface thread, one at a time: a refresh asked for while one is reading runs once after it, however many ticks or `r` presses arrived, so a slow Docker daemon delays the view rather than piling up reads.
 Every read the app starts reports back exactly once, whether it read, was skipped as stale, or failed, so a read that fails or goes stale never stops later ones.
@@ -148,10 +148,16 @@ The status pane shows (grilling 2026-10-07):
 
 - the resolved locations and their sources, this host's label, and the Results Repo clone's last fetch time and how many commits it is behind its remote-tracking branch, both from local refs;
 - counts of queued runs, live runs (every stage but Finished), and runs finished in the last seven days, with the all-time total dimmed;
-- for each Login Pool, every Login Profile with a free or busy marker and its Estimated Weekly Usage, and for a profile with a pending login journal the run that owns its settlement.
+- for each Login Pool, every Login Profile with a free, busy or cooling-down marker and its Estimated Weekly Usage, and for a profile with a pending login journal the run that owns its settlement.
 
-Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, elapsed container time, an elapsed-versus-budget bar, Estimated %, Estimated Cost, and a cost sparkline.
-A Needs recover or Unknown row shows whether its container is up or stopped, then its reasons, in place of the budget bar.
+A Login Profile under a Login Cooldown shows its own marker and colour and reads `cooldown until Thu 14:00 (3h12m)` before its usage (grilling 2026-10-08).
+A pool's untapped count counts only profiles a new run could take now: not busy, not pending, and not cooling down.
+The monitor reads a cooldown and never writes one; `silverquillm login cooldown` sets and lifts them.
+
+Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, a progress bar with its Estimated %, elapsed container time with the budget beside it, Estimated Cost, and a cost sparkline.
+The progress bar is the Estimated %, not the share of the budget used: a run is measured against how long past runs took, and the budget is only the limit it stops at (grilling 2026-10-08).
+With no past runs to measure against there is no bar, only the elapsed time and budget.
+A Needs recover or Unknown row shows whether its container is up or stopped, then its reasons, in place of the progress bar.
 Selecting a row opens its run details.
 
 **Estimated %** is the elapsed container time divided by the median container duration (`stopped_at` minus `started_at`) of completed, non-excluded runs of the same benchmark (grilling 2026-10-07).
@@ -167,8 +173,8 @@ The applicable record is a linked recovery before the original, and a locally re
 A recorded figure drops the `~`, carries `*` when its record calls it incomplete, and shows `≠N` for N conflicting request observations.
 
 The queued pane lists the not-yet-started run specs in execution order, under one header line per Batch (grilling 2026-10-07).
-Each row shows the benchmark, Candidate display, and budget; a queued run has no Login Profile until it launches.
-A Batch header shows a countdown to its `not_before`, or `⚠ needs ack` for a Batch with no committed state.
+Each run takes one line with its benchmark, budget and Candidate display; a queued run has no Login Profile until it launches.
+A Batch's header line shows its countdown to `not_before`, or `⚠ needs ack` for a Batch with no committed state, and how many of its runs have started.
 
 ### Estimated Weekly Usage
 
@@ -232,6 +238,7 @@ The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the
 | Raw | Unrendered stdout |
 
 A Needs recover or Unknown run's header also names its reasons and whether its container is up.
+A live run's header shows the same progress bar and Estimated % as its dashboard row, with the budget as text beside the elapsed time.
 
 A live run's tabs follow `docker logs -f` and the events file; a historical run's tabs read the retained files.
 Opening a run clears every tab, table, sparkline and the header first, and they show loading or unavailable until that run's own evidence arrives: nothing of the previously shown run appears under another run's header.
@@ -249,8 +256,28 @@ The native transcript is not shown: for Claude it largely duplicates stdout, and
 
 ### Navigation
 
-Number keys and clicks on the view tabs switch between the dashboard, historic view, and run details; Enter or a click opens a row; Escape goes back; `r` refreshes now; `q` quits.
-In the historic view a click on a column header, or `s`, changes the sort column, `S` reverses it, and `x` hides or shows excluded runs, which otherwise sit dimmed beneath the included ones.
+Every action has a key, and the mouse is a convenience on top: a terminal reached through mosh and a multiplexer may not deliver clicks at all (grilling 2026-10-08).
+`?` lists every key over the current view, and the footer names the keys of the view in front.
+
+| Keys | Where | Action |
+| --- | --- | --- |
+| `1` `2` `3`, or a click on a view tab | everywhere | dashboard, historic view, run details |
+| Tab, Shift+Tab | everywhere | move between panes and tables |
+| arrows, PgUp, PgDn, Home, End | everywhere | move within, or scroll, the focused pane |
+| Enter, or a click on a row | dashboard, history | open the selected run |
+| Escape | run details | back to the view it was opened from |
+| `r` | everywhere | refresh now |
+| `?` | everywhere | the key list |
+| `q` | everywhere | quit |
+| `b`, `l` | history | focus the browse tree, the run list |
+| Enter, Space | browse tree | show that benchmark, candidate or hash; expand or collapse |
+| `s` or `>`, `<`, or a click on a column header | history | sort by the next or previous column |
+| `S` | history | reverse the sort |
+| `x` | history | hide or show excluded runs, which otherwise sit dimmed beneath the included ones |
+| `[`, `]`, or a click on a tab | run details | previous or next tab, whose log or table then takes the keys |
+
+`--no-mouse` leaves the mouse to the terminal, for selecting text.
+The monitor asks the terminal for mouse reports in character cells only, never in pixels: a multiplexer reached over mosh may offer pixel reports without knowing the real pixel size, which puts clicks in the wrong place.
 
 ### Look and feel
 

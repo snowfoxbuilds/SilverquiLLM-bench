@@ -22,11 +22,21 @@ def textual_available() -> bool:
     return importlib.util.find_spec("textual") is not None
 
 
+def _driver():
+    """Cell-coordinate mouse reporting on POSIX terminals (see ``terminal``)."""
+    if sys.platform == "win32":
+        return None
+    from .terminal import CellMouseDriver
+
+    return CellMouseDriver
+
+
 def launch(
     given: Mapping[str, Path | None],
     *,
     interval: float = 2.0,
     no_flair: bool = False,
+    mouse: bool = True,
     stdin: TextIO | None = None,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
@@ -48,8 +58,8 @@ def launch(
     app = None
     try:
         look, notice = theme_named(monitor.config.theme, no_flair=no_flair)
-        app = build_app(monitor, look, interval=interval, notice=notice)
-        app.run()
+        app = build_app(monitor, look, interval=interval, notice=notice, driver_class=_driver())
+        app.run(mouse=mouse)
     finally:
         # The app closes the monitor once its last worker is done, never under one.
         if app is None:

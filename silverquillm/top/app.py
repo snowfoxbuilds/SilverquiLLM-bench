@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import ClassVar
 
-from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
 from textual.markup import escape
@@ -19,9 +18,10 @@ from textual.widgets import ContentSwitcher, Static
 
 from silverquillm.monitor import LogLine, Monitor, MonitorSnapshot, RunSummary, WorkspaceView
 
-from .dashboard import NARROW, DashboardView, RunChosen
+from .dashboard import DashboardView, RunChosen
 from .details import DetailsView
 from .historic import HistoryView
+from .keys import HelpScreen
 from .theme import Theme
 
 VIEWS = (("dashboard", "1", "Dashboard"), ("history", "2", "History"), ("details", "3", "Run"))
@@ -84,6 +84,7 @@ class MonitorApp(App):
         Binding("3", "view('details')", "Run", show=False),
         Binding("escape", "back", "Back", show=False),
         Binding("r", "refresh", "Refresh", show=False),
+        Binding("question_mark", "help", "Keys", show=False),
         Binding("q", "quit", "Quit", show=False),
     ]
 
@@ -95,8 +96,9 @@ class MonitorApp(App):
         interval: float = 2.0,
         notice: str | None = None,
         clock=lambda: datetime.now(UTC),
+        driver_class=None,
     ) -> None:
-        super().__init__(ansi_color=look.name == "plain")
+        super().__init__(driver_class=driver_class, ansi_color=look.name == "plain")
         self.monitor = monitor
         self.look = look
         self.interval = interval
@@ -132,10 +134,6 @@ class MonitorApp(App):
         self._draw_bars()
         self.poll()
         self._timer = self.set_interval(self.interval, self.poll)
-
-    def on_resize(self, event: events.Resize) -> None:
-        # Below this width the queue moves under the running runs so their rows fit.
-        self.query_one(DashboardView).set_class(event.size.width < NARROW, "narrow")
 
     def on_unmount(self) -> None:
         self.release_monitor()
@@ -431,13 +429,16 @@ class MonitorApp(App):
             parts.append("  " + _tag(look.style("warn"), escape(self.notice)))
         self.query_one("#topbar", Static).update("".join(parts))
         hints = {
-            "dashboard": "enter/click open run",
-            "history": "enter/click open run · click header or s sort · S reverse · x excluded",
-            "details": "esc back · tabs: click or ←/→",
+            "dashboard": "tab pane · enter open run",
+            "history": "b browse · l list · enter open · s/</> sort · S reverse · x excluded",
+            "details": "esc back · [ ] tabs · ↑↓ pgup pgdn scroll",
         }[self._current]
         keys = _tag(muted, f" 1/2/3 views · {hints} · r refresh · ")
         self.query_one("#keys", Static).update(
-            keys + f"[@click=app.quit]{_tag(muted, 'q quit')}[/]"
+            keys
+            + f"[@click=app.help]{_tag(look.style('accent'), '? keys')}[/]"
+            + _tag(muted, " · ")
+            + f"[@click=app.quit]{_tag(muted, 'q quit')}[/]"
         )
 
     def action_view(self, name: str) -> None:
@@ -449,6 +450,8 @@ class MonitorApp(App):
         focus = {"dashboard": "#running-table", "history": "#runs-table"}.get(name)
         if focus:
             self.query_one(focus).focus()
+        elif name == "details":
+            self.query_one(DetailsView).focus_tab()
 
     def action_back(self) -> None:
         if self._current == "details":
@@ -456,6 +459,10 @@ class MonitorApp(App):
 
     def action_refresh(self) -> None:
         self.poll()
+
+    def action_help(self) -> None:
+        if not isinstance(self.screen, HelpScreen):
+            self.push_screen(HelpScreen(self.look))
 
     def on_run_chosen(self, message: RunChosen) -> None:
         details = self.query_one(DetailsView)

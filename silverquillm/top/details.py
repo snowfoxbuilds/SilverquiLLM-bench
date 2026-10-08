@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import ClassVar
 
 from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, RichLog, Static, TabbedContent, TabPane
 
@@ -109,13 +111,11 @@ def header(shown: Shown, now: datetime, theme: Theme) -> Table:
     if live is not None:
         run = live.run
         left.append_text(fmt.stage(run.stage, theme))
-        left.append(
-            f"  {fmt.duration(run.elapsed_seconds(now))} of {fmt.duration(run.budget_seconds)}  ",
-            style=theme.style("text"),
-        )
-        left.append_text(fmt.bar(live.budget_fraction(now), 20, theme))
+        left.append("  ")
+        left.append_text(fmt.elapsed_of_budget(run.elapsed_seconds(now), run.budget_seconds, theme))
         if live.estimated_percent is not None:
-            left.append(f"  est {live.estimated_percent:.0f}%", style=theme.style("accent"))
+            left.append("  ")
+            left.append_text(fmt.progress(live.estimated_percent, 20, theme))
         left.append(f"\nstarted {fmt.when(run.started_at)}", style=theme.style("muted"))
         if run.stage in (Stage.NEEDS_RECOVER, Stage.UNKNOWN):
             left.append("\n")
@@ -201,7 +201,22 @@ def activity_rows(line: LogLine, theme: Theme) -> list[Table]:
     return rows
 
 
+TAB_FOCUS = {
+    "tab-activity": "#log-activity",
+    "tab-stderr": "#log-stderr",
+    "tab-requests": "#requests-table",
+    "tab-workspace": "#commits-table",
+    "tab-raw": "#log-raw",
+}
+"""What each tab's keys scroll once the tab is chosen from the keyboard."""
+
+
 class DetailsView(Vertical):
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("left_square_bracket", "tab(-1)", "Previous tab", show=False),
+        Binding("right_square_bracket", "tab(1)", "Next tab", show=False),
+    ]
+
     def __init__(self, theme: Theme) -> None:
         super().__init__(id="details")
         self.theme_ = theme
@@ -243,6 +258,20 @@ class DetailsView(Vertical):
         for label in ("time", "action", "message", "commit"):
             commits.add_column(label)
         self._show_empty(True)
+
+    def action_tab(self, step: int) -> None:
+        tabs = self.query_one("#detail-tabs", TabbedContent)
+        order = list(TAB_FOCUS)
+        current = order.index(tabs.active) if tabs.active in order else 0
+        tabs.active = order[(current + step) % len(order)]
+        self.focus_tab()
+
+    def focus_tab(self) -> None:
+        """Hand the keys to the active tab's log or table, so arrows and pages scroll it."""
+        tabs = self.query_one("#detail-tabs", TabbedContent)
+        target = TAB_FOCUS.get(tabs.active)
+        if target and self.query_one("#detail-tabs").display:
+            self.query_one(target).focus()
 
     def _show_empty(self, empty: bool) -> None:
         self.query_one("#details-empty").display = empty

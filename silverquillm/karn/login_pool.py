@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .definition import KarnError, canonical, read_regular, strict_json
 from .login import LOGIN_PLUGINS, LoginInUseError, LoginProfile, private_directory, write_private
+from .login_cooldown import cooldown_until
 
 SLOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 DEFAULT_POLL_SECONDS = 5.0
@@ -54,6 +55,22 @@ def _fsync_directory(path: Path) -> None:
 
 def _announce(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
+
+
+def enrolled_slots(pool: Path, plugin_id: str) -> list[str]:
+    """A pool's enrolled slots, like ``LoginPool.enrolled`` but never creating the pool directory."""
+    try:
+        entries = sorted(os.scandir(pool), key=lambda entry: entry.name)
+    except OSError:
+        return []
+    return [
+        entry.name
+        for entry in entries
+        if SLOT_NAME.fullmatch(entry.name)
+        and entry.is_dir(follow_symlinks=False)
+        and (Path(entry.path) / "secret.json").is_file()
+        and recorded_plugin(Path(entry.path)) == plugin_id
+    ]
 
 
 def recorded_plugin(directory: Path) -> str | None:
@@ -214,8 +231,10 @@ class LoginPool:
         taken only when no settled slot is free and the journal names ``settle_artifact``,
         the plugin artifact this run brings, so the host can preserve that run's native state
         and settle it as a login's next run always has. Its stored login is left for that
-        plugin to judge. Any other pending slot waits for ``recover``. With no slot enrolled,
-        or none usable and none busy, waiting could never end, so those refuse instead.
+        plugin to judge. Any other pending slot waits for ``recover``. A slot under a Login
+        Cooldown counts as busy until the cooldown ends, so a run waits for it rather than
+        refusing. With no slot enrolled, or none usable and none busy or cooling down,
+        waiting could never end, so those refuse instead.
         """
         report = on_wait or _announce
         announced, skipped = False, set()
@@ -230,7 +249,7 @@ class LoginPool:
             names = self.enrolled()
             if not names:
                 raise LoginPoolUnavailableError("login_pool_empty:" + self.plugin_id)
-            busy = damaged_logins = 0
+            busy = cooling = damaged_logins = 0
             # Every lock taken while choosing is released here unless handed to ``hold``.
             with contextlib.ExitStack() as candidates:
                 settleable = None
@@ -238,6 +257,9 @@ class LoginPool:
                     lock = contextlib.ExitStack()
                     try:
                         profile = self.slot(name)
+                        if cooldown_until(profile.directory) is not None:
+                            cooling += 1
+                            continue
                         lock.enter_context(profile.exclusive())
                     except LoginInUseError:
                         busy += 1
@@ -270,14 +292,19 @@ class LoginPool:
                 if settleable is not None:
                     hold.enter_context(settleable[1].pop_all())
                     return settleable[0]
-            if not busy:
+            if not busy and not cooling:
                 # Only a damaged login needs re-enrolling; anything else waits for recovery.
                 reason = "unusable" if damaged_logins == len(names) else "pending"
                 raise LoginPoolUnavailableError(f"login_pool_{reason}:{self.plugin_id}")
             if not announced:
-                report(
-                    f"waiting for a login slot: all {busy} usable {self.plugin_id} slots are busy"
-                )
+                held = f"all {busy} usable {self.plugin_id} slots are busy"
+                if cooling and not busy:
+                    held = f"all {cooling} usable {self.plugin_id} slots are cooling down"
+                elif cooling:
+                    held = (
+                        f"{busy} usable {self.plugin_id} slots are busy and {cooling} cooling down"
+                    )
+                report(f"waiting for a login slot: {held}")
                 announced = True
             time.sleep(poll_seconds)
 
