@@ -1,6 +1,6 @@
 """Harvest retarget tests — ``harvest_validated_results.py --results-repo`` (#63 Part B, item 6).
 
-The Harvested Results rows produced from the migrated results repo must be
+The Harvested Results rows produced from a results repo of legacy records must be
 identical to the rows produced by the legacy ``docker/`` walk for the same
 corpus: same discovery order, same ``image`` column (the legacy identity), same
 per-node and legacy rollup rows.  Filters behave identically on both paths.
@@ -32,7 +32,6 @@ def _load_script(name: str) -> Any:
 
 
 harvest_mod = _load_script("harvest_validated_results")
-migrate_mod = _load_script("migrate_validated_results")
 
 SOS_CONFIG_TEXT = (REPO_ROOT / "benchmarks" / "sos" / "config.json").read_text()
 LEGACY_FILTER = ["1", "4", "13", "57", "97", "120", "201", "226", "245", "257"]
@@ -189,14 +188,37 @@ def build_corpus(bench_root: Path) -> None:
 
 @pytest.fixture
 def corpus(tmp_path: Path) -> tuple[Path, Path]:
-    """``(bench_root, results_repo)`` with the fixture corpus migrated."""
+    """``(bench_root, results_repo)`` with one legacy record per corpus run.
+
+    Each record carries the ``legacy-tree`` pointer back into the corpus, as the
+    records of the legacy backfill did.
+    """
     bench_root = tmp_path / "bench"
     build_corpus(bench_root)
     results_repo = tmp_path / "results-clone"
     rr.init_results_repo(results_repo)
-    plan = migrate_mod.plan_migration(bench_root, results_repo)
-    assert not plan.skipped
-    migrate_mod.apply_migration(plan, results_repo)
+    for legacy in harvest_mod.discover_validated_runs(bench_root):
+        rr.write_run_record(
+            results_repo,
+            rr.RunRecord(
+                run_id=legacy.run,
+                candidate=rr.CandidateIdentity.legacy(legacy.image),
+                mode="legacy",
+                benchmark="sos",
+                budget_seconds=600,
+                leaderboard_valid=False,
+                resumed_from=None,
+                run_metadata={},
+                proposal_status=None,
+                scores={"card_correctness": {}, "fdn_regression": {}, "engine_regression": {}},
+                artifact_pointers=[
+                    {
+                        "kind": rr.LEGACY_TREE_KIND,
+                        "location": rr.legacy_tree_location(legacy.image, legacy.run),
+                    }
+                ],
+            ),
+        )
     return bench_root, results_repo
 
 
@@ -308,9 +330,7 @@ class TestResultsRepoDiscovery:
         rr.init_results_repo(tmp_path / "empty")
         assert harvest_mod.discover_validated_runs(tmp_path, results_repo=tmp_path / "empty") == []
 
-    def test_a_tampered_pointer_fails_the_harvest_loudly(
-        self, corpus: tuple[Path, Path]
-    ) -> None:
+    def test_a_tampered_pointer_fails_the_harvest_loudly(self, corpus: tuple[Path, Path]) -> None:
         bench_root, results_repo = corpus
         manifest = (
             results_repo

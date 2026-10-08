@@ -1,6 +1,6 @@
 # Batch queue
 
-The file-backed queue `silverquillm scheduler` executes.
+The file-backed queue `silverquillm scheduler` executes, found through `--batches-dir` or `batches_dir` in the host configuration file.
 Operator instructions live in [Karn benchmarking](../docs/KARN-BENCHMARKING.md).
 
 - **`<id>.toml`** — one Batch, authored in your editor and never written by the scheduler.
@@ -19,12 +19,12 @@ not_before = 2026-10-01T09:00:00Z   # optional, timezone-aware, applies to the w
 build_output = "/tmp/bench-codex-build"   # completed `karn build` output; relative paths resolve from --bench-root
 construct = "bare-codex"
 benchmark = "hob-medium"
-login = "benchmark"                        # optional Login Profile
 budget_seconds = 86400                     # optional, default 86400
 native_telemetry = "auto"                  # optional: auto, codex, or none
 ```
 
 `format`, `not_before`, and `runs` are the only top-level keys, and each run accepts only the keys above.
+A run names no Login Profile: it takes any free one from its candidate's Login Pool when it starts.
 The file is reread before every not-yet-started entry, so appending entries to a running batch is safe.
 
 ## Execution
@@ -36,7 +36,7 @@ The file is reread before every not-yet-started entry, so appending entries to a
 - A run left `running` by a crashed or killed scheduler is recovered before anything else runs; one that never wrote its run input is recorded as failed with `interrupted_before_launch`.
 - A record that could not be written in time is marked `record_write_pending` and written on the scheduler's next start or by `silverquillm recover`.
 
-`silverquillm queue ls` and `silverquillm top` show the queue without touching it.
+`silverquillm queue ls` lists the queue without touching it; `silverquillm top` is the read-only monitor over the queue, live runs, Login Profiles and history (see `docs/specs/RUN-MONITORING.md`).
 
 ## Historical batches
 

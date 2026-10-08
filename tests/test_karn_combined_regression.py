@@ -967,6 +967,10 @@ def test_regrade_accepts_a_state_root_and_keeps_the_digest_helper_importable(tmp
             str(tmp_path / "out"),
             "--state-root",
             str(tmp_path / "s"),
+            "--results-dir",
+            str(tmp_path / "runs"),
+            "--results-repo",
+            str(tmp_path / "results"),
         ],
     )
     assert "stopped_after_parsing" in result.output

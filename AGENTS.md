@@ -38,7 +38,7 @@ All specs, code, and agent instructions use these terms exactly.
 | `SCORING.md` | Three evaluation dimensions, complexity weighting, leaderboard format |
 | `AGENT-CONTAINERS.md` | Docker black-box architecture, file-based contract, entrypoint design, isolation guarantees |
 | `WORKSPACE-CONTRACT.md` | Workspace layout, card directory invariant, Run Manifest, writable engine, FDN/SOS structure |
-| `RUN-ARTIFACTS-AND-TELEMETRY.md` | Existing artifact layouts, workspace snapshots and recovery; Karn observations are governed by KARN-BENCHMARK-CONTRACT.md |
+| `RUN-MONITORING.md` | The read-only `silverquillm top` monitor: dashboard of live runs, queue and Login Profiles with Estimated Weekly Usage; historic browser over the Results Repo; run details with live output |
 | `AUDITED-TEST-CONVENTIONS.md` | Safety conventions for Audited Tests and the Reference Tests maintainers write |
 | `PLATFORM-TEST-CONVENTIONS.md` | Platform Test safety, and keeping Simulated Benchmarks to end-to-end tests with shared, cloned setup |
 | `17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format for engine correctness validation |

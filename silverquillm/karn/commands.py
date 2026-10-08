@@ -12,33 +12,23 @@ from pathlib import Path
 
 import click
 
+from silverquillm.host_config import LOCATIONS, location_option
+
 from .definition import KarnError, load_candidate
 from .exclusions import REASONS as REASON_CODES
 from .grader import DEFAULT_GRADING_TIMEOUT, GRADER_BASES
 from .host import DockerHost
 from .interruption import terminate_as_interrupt
 
-BATCHES_DIR_OPTION = click.option(
-    "--batches-dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=Path("batches"),
-    show_default=True,
-    help="The batch queue directory.",
-)
+BATCHES_DIR_OPTION = location_option("batches_dir", help="The batch queue directory.")
 
 
 BENCH_ROOT_OPTION = click.option(
     "--bench-root", type=click.Path(file_okay=False, path_type=Path), default=Path.cwd
 )
-RESULTS_DIR_OPTION = click.option(
-    "--results-dir", type=click.Path(file_okay=False, path_type=Path), default=Path("runs/karn")
-)
-RESULTS_REPO_OPTION = click.option(
-    "--results-repo",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=Path("results"),
-    envvar="SILVERQUILLM_RESULTS_REPO",
-)
+RESULTS_DIR_OPTION = location_option("runs_dir", help="The run directory.")
+RESULTS_REPO_OPTION = location_option("results_repo", help="The results repo clone.")
+STATE_ROOT_OPTION = location_option("state_root")
 GRADING_TIMEOUT_OPTION = click.option(
     "--grading-timeout",
     type=click.IntRange(min=1),
@@ -64,11 +54,7 @@ def common_options(function):
             BENCH_ROOT_OPTION,
             RESULTS_DIR_OPTION,
             RESULTS_REPO_OPTION,
-            click.option(
-                "--state-root",
-                type=click.Path(file_okay=False, path_type=Path),
-                default=lambda: Path.home() / ".local/state/silverquillm",
-            ),
+            STATE_ROOT_OPTION,
             click.option(
                 "--collector-host",
                 default=None,
@@ -154,11 +140,7 @@ def _report(record, *, exit_on_status=True):
     metavar="LEGACY",
     help="Move the per-construct login LEGACY, enrolled before pools, into the pool as a slot.",
 )
-@click.option(
-    "--state-root",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=lambda: Path.home() / ".local/state/silverquillm",
-)
+@STATE_ROOT_OPTION
 def enroll(build_output, construct, slot, adopt, state_root):
     """Enroll one subscription login into the pool of the construct's Karn login plugin.
 
@@ -301,12 +283,7 @@ def recover(run_id, stop, **options):
         "host, on this host's grader for the same Python; the output names both images."
     ),
 )
-@click.option(
-    "--state-root",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=lambda: Path.home() / ".local/state/silverquillm",
-    help="Where baseline reference grades are kept, as for run.",
-)
+@location_option("state_root", help="Where baseline reference grades are kept, as for run.")
 @BENCH_ROOT_OPTION
 @RESULTS_DIR_OPTION
 @RESULTS_REPO_OPTION
@@ -392,16 +369,31 @@ def queue_ls(batches_dir, as_json):
         click.echo(line)
 
 
-@click.command()
-@BATCHES_DIR_OPTION
-@click.option(
-    "--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds"
-)
-def top(batches_dir, interval):
-    """Live, read-only view of the batch queue. q quits."""
-    from .queue_view import run_top
+def _monitor_location(key: str, help: str):
+    """A location flag that, unlike the run commands', may stay unset: the monitor shows it."""
+    return click.option(
+        LOCATIONS[key].flag,
+        key,
+        type=click.Path(file_okay=False, path_type=Path),
+        default=None,
+        help=help + " Defaults to the environment, then the host configuration file.",
+    )
 
-    run_top(batches_dir, interval=interval)
+
+@click.command()
+@click.option(
+    "--interval", type=float, default=2.0, show_default=True, help="Refresh interval in seconds."
+)
+@click.option("--no-flair", is_flag=True, help="Monochrome theme with plain glyphs.")
+@_monitor_location("results_repo", "The results repo clone.")
+@_monitor_location("batches_dir", "The batch queue directory.")
+@_monitor_location("runs_dir", "The run directory.")
+@_monitor_location("state_root", "The state root holding the Login Pools.")
+def top(interval, no_flair, **locations):
+    """Read-only monitor: live runs, queue, Login Profiles, history and run details. q quits."""
+    from silverquillm.top import launch
+
+    raise SystemExit(launch(locations, interval=interval, no_flair=no_flair))
 
 
 @click.group()

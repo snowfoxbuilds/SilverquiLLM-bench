@@ -10,6 +10,20 @@ uv pip install --python .venv/bin/python -e .
 source .venv/bin/activate
 ```
 
+## Host configuration
+
+Every command finds the results repository, the batch queue, the run directory, and the state root the same way: its flag (`--results-repo`, `--batches-dir`, `--results-dir`, `--state-root`), else its environment variable (only `SILVERQUILLM_RESULTS_REPO` has one), else the host configuration file.
+Only the state root has a default; any other location left unset is an error naming all three sources, never a path relative to the working directory.
+Relative paths in the file resolve from the file's own directory.
+
+```toml
+# ~/.config/silverquillm/config.toml ($XDG_CONFIG_HOME/silverquillm/config.toml when set)
+results_repo = "~/bench-results"
+batches_dir = "~/bench-batches"
+runs_dir = "~/SilverquiLLM-bench/runs/karn"
+# state_root = "~/.local/state/silverquillm"   # the default
+```
+
 ## Build and enroll
 
 The candidate recipes live in the results repository, beside the records they produce: `karn/constructs/<label>` in bench-results is a Karn Config Repo, so any host with that repository can rebuild the same candidates.
@@ -119,8 +133,8 @@ Isolation protects the host, not score integrity: candidate code shares the pyte
 ## Run and inspect
 
 ```bash
-silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark smoke --results-repo ./private-results
-silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark hob-medium --results-repo ./private-results
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark smoke
+silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark hob-medium
 ```
 
 Use `--bench-root` when launching outside the benchmark checkout.
@@ -133,8 +147,8 @@ The default `auto` enables them for whichever of `CODEX_HOME` or `CLAUDE_CONFIG_
 For Claude Code the relay is configured through the environment (`CLAUDE_CODE_ENABLE_TELEMETRY` and the `OTEL_*` exporter variables, prompts and tool details never logged), since Claude Code reads its exporter nowhere else; the host sets only those variables, and records them.
 A `restricted` network runs its egress proxy with the candidate image's own `python3`; an image without it is refused before launch with `restricted_network_requires_python3`.
 
-Each run retains its workspace, snapshots, stopped final workspace, grading-source decision, selected definition and plugin artifacts, sanitized observations, and independent grades under `runs/karn/<run-id>/` by default.
-The immutable schema 2 record lives under `private-results/results/<candidate-hash>/<run-id>/`.
+Each run retains its workspace, snapshots, stopped final workspace, grading-source decision, selected definition and plugin artifacts, sanitized observations, and independent grades under `<runs_dir>/<run-id>/`.
+The immutable schema 2 record lives under `<results_repo>/results/<candidate-hash>/<run-id>/`.
 Estimated cost is API-equivalent USD, not the subscription bill.
 `cost_breakdown` beside it tallies tokens and USD by type: uncached input, cache reads, cache writes, 1-hour cache writes (Anthropic prices them above the 5-minute ones), and output.
 Every cost is a standard-tier equivalent, whatever tier served the request: each priced request carries `rate_basis: "standard"`, Claude requests keep their transcript `speed` and `service_tier`, and Codex requests keep `requested_service_tier`, the tier Codex put in its request (`mixed` when a thread used several). Codex never reports the tier the server applied.
@@ -143,7 +157,7 @@ Turns, usage, and cost are complete only for a Codex version whose journal and t
 Claude Code runs are read from its session transcripts, subagents included, with the OTel stream as a cross-check; a compaction's own request appears only in OTel.
 Each OTel request is reconciled with its transcript response on uncached, cache-read, cache-write, and output tokens and on the model; a disagreement or a missing field keeps the transcript's values and marks the measurements partial (`otel_usage_conflicts_with_native`, `otel_model_conflicts_with_native`, or a `…_comparison_unavailable` reason); two transcript responses claiming one request id are flagged `native_request_identity_reused`, and repeated OTel reports of one request count once, flagged `otel_request_observations_conflict` if they disagree in tokens, model, speed, query source, or cost.
 Claude Code 2.1.284 is qualified, from smoke run 93ffaa74 on `bare-claude-haiku`; measurements from any other version are marked partial with `native_version_not_qualified`.
-Qualify a version from a real run whose relay was on: `scripts/qualify_claude_telemetry.py runs/karn/RUN_ID --out proof.json` checks that both streams agree request by request, and rejects every disagreement the runtime reconciliation flags; it exits nonzero unless the run qualifies; commit a qualifying proof with that run's `observations.events.jsonl` under `tests/fixtures/karn_observations_claude_<version>/` and add the version to `QUALIFIED_CLAUDE_VERSIONS`.
+Qualify a version from a real run whose relay was on: `scripts/qualify_claude_telemetry.py <runs_dir>/RUN_ID --out proof.json` checks that both streams agree request by request, and rejects every disagreement the runtime reconciliation flags; it exits nonzero unless the run qualifies; commit a qualifying proof with that run's `observations.events.jsonl` under `tests/fixtures/karn_observations_claude_<version>/` and add the version to `QUALIFIED_CLAUDE_VERSIONS`.
 FDN coverage lists tested and uncovered cards explicitly.
 Run metadata fingerprints the actual host grading suites, test helpers, and replay identity maps; unavailable hashes remain explicit observations.
 
@@ -175,9 +189,9 @@ budget_seconds = 86400
 ```
 
 ```bash
-silverquillm scheduler --once --replay-without-state hob-learning --results-repo ./private-results
+silverquillm scheduler --once --replay-without-state hob-learning
 silverquillm queue ls
-silverquillm top
+silverquillm top   # needs the monitor extra: pip install -e '.[monitor]'
 ```
 
 The first invocation acknowledges the missing state for that one new batch.
@@ -190,7 +204,7 @@ A run left active by a crashed scheduler is recovered before further execution.
 Recovery confirms that its container has stopped, removes only resources carrying that run's ownership label, preserves available measurements/workspace, and records the interrupted outcome without replaying the model task.
 Keep both batch state and local run artifacts for this recovery.
 If an immutable record already exists but its writers were unconfirmed, successful reconciliation appends a linked recovery observation and preserves the original record bytes.
-The index and queue expose `recovery_of` and `execution_run_id` so this additional observation is distinguishable from another model execution.
+The record itself and the queue carry `recovery_of` and `execution_run_id`, so a reader of the records tells this additional observation apart from another model execution.
 Each host maintains its own queue and login state.
 A scheduler interrupted before a run wrote its `run-input.json` never launched that run; the entry is recorded as failed with `interrupted_before_launch` and the batch continues.
 
@@ -246,7 +260,7 @@ The batch state row is not rewritten and still reads `failed`; the published rec
 ## Historical records
 
 Schema 1 records and their identities, including `legacy` and `ozolith-v1`, keep their existing meaning and stay readable without Ozolith; every `ozolith-v1` record carries its vendored bundle.
-The shared reader and index accept both schemas; new rows do not invent a historical mode or leaderboard flag.
+The shared record reader accepts both schemas; new records do not invent a historical mode or leaderboard flag.
 Candidate Bundles can no longer be run, promoted, or published; rebuild an old candidate as a Karn construct to run it again.
 Batch files and state in the Candidate Bundle format are shown as unsupported and never run or rewritten.
 `legacy resume` replaces a prior leg's `prompt.md` and `run_manifest.json` with fresh files instead of writing through links, and refuses a prior leg whose `prompt.md` is a link or whose `workspace_final` holds a FIFO, socket, or device.
@@ -257,7 +271,7 @@ The historical `--image` lineage remains under `silverquillm legacy`; `legacy re
 After Audited Tests or other grading inputs change, re-grade the runs already recorded instead of rerunning them:
 
 ```sh
-silverquillm regrade --benchmark hob-medium --results-repo ~/bench-results --results-dir runs/karn --out regrades/hob-medium
+silverquillm regrade --benchmark hob-medium --out regrades/hob-medium
 ```
 
 - Each run is graded again from the workspace it was graded from (`grading_source.selected`), found under `--results-dir/<run-id>`, on the grader image its record names, with the same container isolation as a run. A record's artifact pointers are not followed, so a record from another host never chooses what is mounted.
@@ -282,8 +296,8 @@ The outcome is kept in the run artifacts as `results-attachments.<run-id>.json`;
 Records from before archives, or whose archive failed, are backfilled on the host that holds their run artifacts:
 
 ```sh
-silverquillm results archive --results-repo ~/bench-results --results-dir runs/karn --dry-run
-silverquillm results archive --results-repo ~/bench-results --results-dir runs/karn
+silverquillm results archive --dry-run
+silverquillm results archive
 ```
 
 A record whose run artifacts are elsewhere is skipped (`run_artifacts_unavailable`), as is a run with no graded workspace; anything that fails verification is `refused` with its reason, and the command exits 1.
@@ -297,8 +311,8 @@ An unknown measurement never excludes a run: absent, null or empty measurements,
 Exclude anything else yourself, with a note a later reader can check:
 
 ```sh
-silverquillm results exclude RUN_ID --reason subagents_used --note "Sonnet delegated to Opus subagents" --results-repo ~/bench-results
-silverquillm results exclude RUN_ID --reason superseded --superseded-by RETRY_ID --note "rerun after the host outage" --results-repo ~/bench-results
+silverquillm results exclude RUN_ID --reason subagents_used --note "Sonnet delegated to Opus subagents"
+silverquillm results exclude RUN_ID --reason superseded --superseded-by RETRY_ID --note "rerun after the host outage"
 ```
 
 Reasons are `subagents_used`, `subagents_uncounted`, `never_executed`, `host_failed`, `superseded` (requires `--superseded-by`), `benchmark_defect`, `pilot` and `other`.

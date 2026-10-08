@@ -11,7 +11,7 @@ The container receives the full benchmark problem set — all cards, the engine,
 See also:
 
 - [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) for the canonical Workspace layout and card/engine edit contract.
-- [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) for snapshots, telemetry, fallback, and log artifacts.
+- The historical image-run artifact layout (formerly `RUN-ARTIFACTS-AND-TELEMETRY.md`, removed 2026-10-07; see git history) for snapshots, telemetry, fallback, and log artifacts.
 ## Architecture
 
 ```mermaid

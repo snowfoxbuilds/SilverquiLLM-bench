@@ -189,7 +189,7 @@ Agent Container
 | `BENCHMARK-RUNNER.md` | Host-side runner overview |
 | `AGENT-CONTAINERS.md` | Docker Agent Container architecture |
 | `WORKSPACE-CONTRACT.md` | Canonical Workspace layout and card/engine edit contract |
-| `RUN-ARTIFACTS-AND-TELEMETRY.md` | `workspace_final/`, Git snapshots, telemetry, fallback, Docker logs |
+| `RUN-MONITORING.md` | Read-only `top` monitor over live runs, queue, Login Profiles and history |
 | `SCORING.md` | Three evaluation dimensions and leaderboard format |
 | `AUDITED-TEST-CONVENTIONS.md` | Audited and Reference Test safety rules |
 | `PLATFORM-TEST-CONVENTIONS.md` | Platform Test safety and cost rules |

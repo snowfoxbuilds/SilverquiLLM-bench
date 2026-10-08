@@ -211,6 +211,15 @@ It supports resource-use comparisons and does not represent the actual subscript
 
 _Avoid_: "billed cost", "subscription cost" for this estimate
 
+**Estimated Weekly Usage**
+
+The share of one Login Profile's weekly subscription allowance that is used up, as the operator monitor estimates it (grilling 2026-10-07).
+It starts from the provider's own newest usage reading for that Login Profile while that reading's weekly window lasts, and adds Estimated Cost observed since, converted at a host-configured provider rate.
+For one week after the reading's reset it counts Estimated Cost from the reset; past that, or with no reading, it counts the last seven days' Estimated Cost.
+It is an operating aid, not a measurement of any Benchmark Run.
+
+_Avoid_: "quota", "credits", "credential slot usage"
+
 **Exclusion**
 
 A Results Repo entry that leaves one Run Record out of analyses, naming a reason code and a note, without changing the record.
@@ -422,7 +431,9 @@ _Avoid_: "differential testing" (deprecated XMage approach), "checkpoint validat
 
 **Results Repo**
 
-The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: `results/<candidate-hash>/<run-id>/` holding one Run Record each, `results/<candidate-hash>/candidate/` holding the vendored Candidate Bundle of an `ozolith-v1` candidate (written once on its first run, verified at write time — the copy must recompute to the directory's Candidate Hash — immutable; #65), a derived `runs.jsonl` index regenerated from the tree (never hand-edited, never authoritative), and a root `AGENTS.md` carrying the full schema so the repo is self-contained for analysis agents. Heavy artifacts (transcripts, snapshots, per-card trees) never enter it — records carry pointers — except each record's Workspace Archive; Exclusions live beside the records. Written only through `silverquillm.results_repo`; laid out by `silverquillm results-init <clone>`; the legacy Validated Results corpus is backfilled into it by `scripts/migrate_validated_results.py`.
+The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: one Run Record per Benchmark Run, filed under its Candidate Hash, with Exclusions and each record's Workspace Archive beside the records.
+It carries its own schema so analysis needs nothing else, keeps pointers rather than heavy artifacts such as transcripts and snapshots, and has no derived index: its records are read directly (grilling 2026-10-07).
+Historical `ozolith-v1` candidates keep their vendored Candidate Bundle beside their records.
 
 _Avoid_: "results dir" (the per-run `docker/<image>/results/` working output), "leaderboard repo" (publishing is the separate port into the bench repo's `published/` — see Published Result)
 
@@ -584,6 +595,7 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - The Base Set's Draft Set cards (FDN 001–291 + SPG 074–083) are validated via Replay Validation against 17lands GRE JSON data before scored benchmark runs.
 - A Pipeline Validation Run exercises the orchestration pipeline; its observations are retained as learning data alongside other run outcomes.
 - The existing publication pipeline requires a Promoted Candidate that verifies by recomputation and permits its knowledge to be published; these publication rules do not gate collection or analysis of Karn run data.
+- Each Login Profile has one Estimated Weekly Usage, fed by every Benchmark Run that used it, excluded runs included.
 - A Batch holds ordered run specs; the scheduler executes one run at a time, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
 - Filesystem checks (does the file exist, does it differ from the template?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only.
 - `run_summary.json` is automatically generated after evaluation by aggregating per-card `result.json` files. The aggregator is a pure, idempotent function.

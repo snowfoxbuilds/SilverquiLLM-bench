@@ -17,7 +17,7 @@ The runner is the host-side orchestrator. It prepares everything the agent needs
 Detailed contracts are split into focused specs:
 
 - [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) defines the Workspace layout, Run Manifest, card directory invariant, and in-place engine editing model.
-- [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) defines `workspace_final/`, snapshot fallback, telemetry, Docker logs, and smoke runs (the `silverquillm legacy smoke` command vs. the smoke benchmark).
+- The historical image-run artifact layout (formerly `RUN-ARTIFACTS-AND-TELEMETRY.md`, removed 2026-10-07; see git history) defined `workspace_final/`, snapshot fallback, telemetry, Docker logs, and smoke runs (the `silverquillm legacy smoke` command vs. the smoke benchmark).
 ## Architecture
 
 ```mermaid
@@ -127,7 +127,7 @@ Differences from `run`:
 - Runner appends a Resume Preamble to the User Prompt informing the agent that this is a resume. Conditional additional lines disclose snapshot fallback (if used) and image change (if applicable).
 - Refuses resumes when prior `run_status` is `no_viable_output_produced` or when `workspace_final/` is missing. A future `--from-snapshots` flag may be added for borderline cases.
 - Accepts resumes from runs that used snapshot fallback; the Resume Preamble discloses the rollback so the agent knows its inherited state is not where the prior agent stopped.
-Resume Legs are never leaderboard-valid — any run with `resumed_from` set has `leaderboard_valid = false`. See [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) → Run summary.
+Resume Legs are never leaderboard-valid — any run with `resumed_from` set has `leaderboard_valid = false`. See the historical image-run artifact layout (formerly `RUN-ARTIFACTS-AND-TELEMETRY.md`, removed 2026-10-07; see git history) → Run summary.
 
 ### Locating the prior run
 
@@ -192,7 +192,7 @@ On timeout, the runner still harvests partial results and the latest usable Outp
 
 The runner uses a pipe-readers + poll-loop architecture: two dedicated threads drain the Docker stdout/stderr pipes to host files, while the main thread polls all monitored files (Docker log dumps, `/output/` files) on a roughly 1-second interval to produce colorized terminal output, check timeouts, and run snapshots. This avoids pipe-buffer deadlock while keeping the main loop single-threaded and simple.
 
-The runner streams Docker stdout/stderr live to the terminal while also saving them as `docker_stdout.log` and `docker_stderr.log` in the run results, supporting long-run monitoring and post-run debugging without container cooperation. Live lines are prefixed with stream labels and colorized by output type (colorization follows `--color`, default `auto`); the saved log files stay split by stream and carry no ANSI color codes. v1 also ships a tabbed post-run log viewer, `silverquillm legacy logs --run`, with tabs over the per-channel files (see [RUN-ARTIFACTS-AND-TELEMETRY.md](RUN-ARTIFACTS-AND-TELEMETRY.md) → Terminal channels); live labeled streaming remains the default, and the originally deferred viewer was lifted once the runner stabilized and a run surfaced concrete triage pain (grilling 2026-05-23).
+The runner streams Docker stdout/stderr live to the terminal while also saving them as `docker_stdout.log` and `docker_stderr.log` in the run results, supporting long-run monitoring and post-run debugging without container cooperation. Live lines are prefixed with stream labels and colorized by output type (colorization follows `--color`, default `auto`); the saved log files stay split by stream and carry no ANSI color codes. v1 also ships a tabbed post-run log viewer, `silverquillm legacy logs --run`, with tabs over the per-channel files (see the historical image-run artifact layout (formerly `RUN-ARTIFACTS-AND-TELEMETRY.md`, removed 2026-10-07; see git history) → Terminal channels); live labeled streaming remains the default, and the originally deferred viewer was lifted once the runner stabilized and a run surfaced concrete triage pain (grilling 2026-05-23).
 
 ## Result Harvesting
 

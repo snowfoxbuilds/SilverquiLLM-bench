@@ -26,7 +26,7 @@ leaderboard.
 
 Distinct from the historical `silverquillm legacy smoke` **command**, which is container-boot
 validation only (a synthetic workspace, no real cards) — see
-RUN-ARTIFACTS-AND-TELEMETRY.md → Smoke runs.
+the removed `RUN-ARTIFACTS-AND-TELEMETRY.md` → Smoke runs in git history.
 
 ## Layout
 

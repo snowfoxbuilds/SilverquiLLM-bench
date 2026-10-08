@@ -10,7 +10,6 @@ repo to read, filter, and aggregate runs. The bench repo
 
 ```
 AGENTS.md                                   this file — the schema
-runs.jsonl                                  derived index (see "Index is derived")
 results/<candidate-hash>/candidate/         the vendored Candidate Bundle (ozolith-v1 only)
 results/<candidate-hash>/<run-id>/manifest.json
 results/<candidate-hash>/<run-id>/scores.json
@@ -38,8 +37,8 @@ karn/                                       the Karn recipes that build the cand
   on the candidate's first run, and verified at write time (TheOzolith's
   verifier must recompute the copy to this directory's hash); never edited.
   Later runs re-verify it and skip the write; a copy that no longer recomputes
-  to its directory is refused, never repaired. It is never a run: the reader
-  and the index skip the name. Hash = authority; copy = resolution.
+  to its directory is refused, never repaired. It is never a run: a record
+  reader skips the name. Hash = authority; copy = resolution.
 - `<run-id>` is the Benchmark Run's id (for migrated legacy runs, the original
   run directory name, e.g. `sos-cc-opus-48-bare-2026-05-30T04-02`; for
   Contract Runs `<benchmark>-<candidate-dir>-<timestamp>`).
@@ -49,10 +48,9 @@ karn/                                       the Karn recipes that build the cand
 1. **Records are immutable.** A `<run-id>` directory is written once, atomically,
    and never edited. Corrections are new runs, not edits. The writer refuses to
    overwrite.
-2. **Index is derived.** `runs.jsonl` is regenerated from the tree
-   (`python scripts/rebuild_results_index.py --results-repo <path>` in the bench
-   repo). It is never hand-edited and never authoritative: if the index and the
-   tree disagree, the tree wins — rebuild the index.
+2. **There is no index.** Read the records under `results/` directly; the
+   tree is the only source. A `runs.jsonl` left from an older layout is stale
+   and is never read.
 3. **Heavy artifacts never enter git, except graded workspaces as diffs.**
    Transcripts, logs, workspace snapshots and per-card trees live elsewhere;
    `manifest.json` carries *pointers* only. Each record's graded workspace is
@@ -84,9 +82,9 @@ The three existing score-dimension names remain; an absent dimension uses `evalu
 Coverage distinguishes the complete reference population from cards with executed audited cases.
 A snapshot fallback names its selected source while retaining the final workspace separately.
 Host grading inputs have content fingerprints in `run_metadata.grading_inputs`.
-A later recovery observation can have its own record id while `recovery_of` and `execution_run_id` link it to the original model execution; the prior record remains unchanged, and the derived index exposes that link.
+A later recovery observation can have its own record id while `recovery_of` and `execution_run_id` link it to the original model execution; the prior record remains unchanged, and a reader of the records sees that link in the recovery's own record.
 
-The reader and derived index preserve both schemas without changing historical identities or interpreting new data through historical publication rules.
+The record reader preserves both schemas without changing historical identities or interpreting new data through historical publication rules.
 The remaining schema details below describe schema 1 only.
 
 ## Workspace archives
@@ -238,12 +236,6 @@ holding the bench's `run_summary.json` block for that dimension unchanged:
 `card_correctness` is the target-set dimension (SOS card correctness for `sos`,
 HOB card correctness for the HOB benchmarks). A migrated SOS record, a smoke
 record and a HOB record all have this shape.
-
-## `runs.jsonl`
-
-One JSON object per line, sorted by `(candidate_hash, run_id)`, keys sorted:
-`candidate_hash`, `run_id`, `benchmark`, `mode`, `leaderboard_valid`, `run_date`.
-Rebuild it after any change to `results/`.
 
 ## Publishing
 
