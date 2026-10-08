@@ -84,6 +84,7 @@ Copies are hard copies, so each benchmark stays self-contained after the Known-B
 Every test a Workspace ships must at least collect where a candidate runs it: a Platform Test stages each ported benchmark, and the Known-Best Workspace assembled the same way with no stubs and no Known Defects, through the staging a run uses, and runs its tests with nothing importable beyond the Workspace, the standard library and installed tools; the Known-Best one must pass them all (grilling 2026-10-07).
 
 `scripts/port_from_known_best.py <benchmark>` performs the port and can be re-run whenever the Known-Best Workspace changes; `--check` reports what a port would change, and a Platform Test runs it for every benchmark ported this way.
+The port is for benchmarks in Beta: it refuses a benchmark in Benchmarking or Released whole, and `--check` skips one, so a Known-Best fix reaches a Benchmarking benchmark's hidden Audited Tests or Test Oracle Workspace only by hand (grilling 2026-10-07).
 It owns only the copied paths in the table above, the Test Oracle Workspace's mirrors of the Workspace's `AGENTS.md`, `skills/` and Audited Test suites, and the target cards' Workspace stubs, which it generates from their Card Specs; every other path, such as the agent-facing documents, target Test Oracle Impls and target Audited Tests, is the benchmark's own.
 Each Known Defect is recorded as a patch against the Known-Best Workspace, `data/known_defects/<id>.patch`, which the port applies to the Workspace in manifest order; oracle engine extensions may likewise be recorded as patches in `data/oracle_patches/`.
 A defect's patch also keeps the Reference Tests a Known-Best fix changed as the Workspace already had them, so recording a defect in an existing benchmark leaves its Workspace as it was (grilling 2026-10-07).
@@ -163,7 +164,7 @@ The grading inputs are checked against the requested digest before and after the
 When review of a run turns up a new defect (grilling 2026-10-02):
 
 1. Fix it in the Known-Best Workspace's engine or FDN implementation and add any Audited Test that pins it.
-2. Port the fix into the Test Oracle Workspace of every non-Released benchmark that carries the defect.
+2. Port the fix into the Test Oracle Workspace of every non-Released benchmark that carries the defect: by re-running the port for a Beta benchmark, by hand for a Benchmarking one.
 3. Add an `inherited` entry to each such benchmark's manifest and update its Audited Tests.
 4. Recompute the baseline reference grade and regrade every run of those benchmarks.
 

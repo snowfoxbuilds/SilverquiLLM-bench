@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from scripts.port_from_known_best import PortError, apply_patch, check, defect_patches
+from scripts.port_from_known_best import (
+    PortError,
+    apply_patch,
+    benchmark_tier,
+    check,
+    defect_patches,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 PATCH = """\
@@ -89,8 +95,47 @@ def test_a_patch_must_belong_to_a_listed_defect(tmp_path: Path) -> None:
 def test_benchmark_is_ported_from_the_known_best_workspace(benchmark: str) -> None:
     """Re-porting changes nothing: the Workspace is the Known-Best Workspace plus
     its target stubs and Known Defect patches, and the oracle and Audited Tests
-    are the Known-Best copies plus the benchmark's oracle patches."""
-    assert check(REPO / "benchmarks" / benchmark) == []
+    are the Known-Best copies plus the benchmark's oracle patches. A benchmark
+    past Beta is no longer ported, so there is nothing to check."""
+    root = REPO / "benchmarks" / benchmark
+    if benchmark_tier(root).lower() != "beta":
+        pytest.skip(f"{benchmark} is in {benchmark_tier(root)}; it is no longer ported")
+    assert check(root) == []
+
+
+@pytest.mark.parametrize("tier", ["Benchmarking", "Released"])
+def test_a_benchmark_past_beta_is_refused_whole(smoke_copy, tier) -> None:
+    """Neither a port nor a check touches a locked benchmark, Workspace or not."""
+    from scripts.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    config = json.loads((benchmark / "config.json").read_text())
+    (benchmark / "config.json").write_text(json.dumps({**config, "tier": tier}))
+    (known_best / "workspace/engine/abilities.py").write_text("# changed\n")
+    (known_best / "data/tests/audited/engine/test_zones.py").write_text("# changed\n")
+
+    def contents() -> dict[str, bytes]:
+        return {str(p.relative_to(benchmark)): p.read_bytes() for p in sorted(benchmark.rglob("*")) if p.is_file()}
+
+    before = contents()
+    for attempt in (port, check):
+        with pytest.raises(PortError, match=f"in {tier}; only Beta"):
+            attempt(benchmark, known_best)
+    assert contents() == before
+
+
+def test_the_command_line_check_skips_a_benchmark_past_beta(monkeypatch, tmp_path, capsys) -> None:
+    import scripts.port_from_known_best as script
+
+    root = tmp_path / "benchmarks/locked"
+    root.mkdir(parents=True)
+    (root / "config.json").write_text(json.dumps({"tier": "Benchmarking"}))
+    monkeypatch.setattr(script, "ROOT", tmp_path)
+    monkeypatch.setattr("sys.argv", ["port_from_known_best.py", "--check", "locked"])
+    assert script.main() == 0
+    assert "skipped: locked is in Benchmarking" in capsys.readouterr().out
+    monkeypatch.setattr("sys.argv", ["port_from_known_best.py", "locked"])
+    assert script.main() == 2
 
 
 # ---------------------------------------------------------------------------
