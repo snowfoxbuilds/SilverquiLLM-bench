@@ -66,6 +66,7 @@ A Login Profile's `plugin/work` directory sits beside its live credentials, so t
 ### Run stages
 
 The monitor follows every run on this host that has a run directory or a run container, and puts each in exactly one stage (grilling 2026-10-07).
+A run directory and a run container are one run when the directory's path, taken under its resolved parent, is the container's bind source, so a relative or linked run root still yields one row per run; a linked run directory itself is never followed.
 A stage comes from these observations, never from a record's existence alone:
 
 | Observation | Source |
@@ -170,6 +171,7 @@ Each Login Profile shows its Estimated Weekly Usage and how old the underlying o
 A subscription usage reading is a provider's own report of the weekly window: a utilization percentage, a reset time, and when it was observed.
 Claude reports one in its `rate_limit_event` stdout lines (the `seven_day` window); Codex reports one in its rollout `rate_limits`, as whichever of its windows lasts 10080 minutes (see [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md#efficiency-measurements)).
 The monitor takes the newest reading for a Login Profile from its live run's output, else from the Run Records that name that Login Profile.
+A reading seen live is kept in memory for its Login Profile after its run ends, since the run's record may hold only an untimed copy of it; a newer reading replaces it, and it is dropped once it can no longer anchor a value.
 
 A reading speaks for its own weekly window, and for one window after that at most:
 
@@ -186,8 +188,11 @@ Only this host's records count toward its Login Profiles, since a Login Profile 
 A record is this host's when it is retained in this host's run directory, or when its provenance names this host's label, resolved as run provenance resolves it (`SILVERQUILLM_HOST_LABEL`, else the hostname's first label).
 A record without host provenance stays in history but never counts toward local usage, and a record naming only a slot, from before Login Pools, is matched to this host's Login Profile of that slot.
 
+A record supplies a reading or spend only when it passes the Run Record's own validation and, when published, is filed under its own identity; history still lists the rest.
+
 Each execution's spend counts once.
-A linked recovery reconciles its original's execution without running the model again, so of an execution's records only one counts: a stopped linked recovery before its original, and this host's retained copy before a published one.
+A linked recovery reconciles its original's execution without running the model again, so of an execution's records only one counts.
+For a run with a directory on this host that is the record its own row applies, Finished or not, so the row and its Login Profile agree; otherwise a stopped linked recovery counts before its original.
 A live run counts its applicable record once it has one, and its provisional Estimated Cost before that.
 Excluded runs count too, since an Exclusion does not undo spend.
 

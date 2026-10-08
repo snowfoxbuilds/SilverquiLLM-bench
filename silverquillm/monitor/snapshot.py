@@ -31,7 +31,7 @@ from silverquillm.karn.provenance import host_label as resolve_host_label
 
 from .containers import RUN_CONTAINER_PREFIX, RunContainer, run_containers
 from .costs import ProvisionalCost
-from .estimates import WeeklyUsage, estimated_percent, weekly_usage
+from .estimates import WEEK, WeeklyUsage, estimated_percent, weekly_usage
 from .history import HistoryStore, RepoFreshness, RunSummary, UsageReading, repo_freshness
 from .live import LiveRun, RecordCache, Stage, live_runs
 from .locks import PROC_LOCKS, held_locks
@@ -41,6 +41,8 @@ from .queue import QueuedBatch, queued_batches
 
 CODEX_READING_SECONDS = 30.0
 HISTORY_SECONDS = 10.0
+OBSERVED_PROFILES = 64
+"""At most this many Login Profiles keep a live-observed reading after their run ends."""
 FINISHED_WINDOW = timedelta(days=7)
 # A deeply nested file recurses; an unknown ``~user`` path fails to expand.
 CONFIG_ERRORS = (HostConfigError, RecursionError, RuntimeError, ValueError, OSError)
@@ -125,10 +127,20 @@ def _local_host_label(environ, hostname) -> str | None:
 
 
 def _spend_rank(record: RunSummary, local: bool) -> tuple:
-    """Which record of one execution counts: a stopped linked recovery reconciles its
-    original, and this host's retained copy is at least as current as a published one."""
+    """Which record of one execution counts. The record selected for a run directory on
+    this host comes first, so its profile and its own view agree; among published records a
+    stopped linked recovery reconciles its original."""
     recovered = record.recovery_of is not None and record.workspace_stopped is True
-    return (recovered, local, record.run_date.timestamp() if record.run_date else 0.0)
+    return (local, recovered, record.run_date.timestamp() if record.run_date else 0.0)
+
+
+def _newer(reading: UsageReading, than: UsageReading | None) -> bool:
+    if than is None:
+        return True
+    return (reading.effective_at, reading.observed_at is not None) > (
+        than.effective_at,
+        than.observed_at is not None,
+    )
 
 
 def _canonical_login(login: str | None, profiles: list[ProfileStatus]) -> str | None:
@@ -166,6 +178,7 @@ class Monitor:
         self._live: dict[str, _Live] = {}
         self._records = RecordCache()
         self._codex_readings: dict[str, tuple[float, UsageReading | None]] = {}
+        self._observed: dict[str, UsageReading] = {}
         self._repo = RepoFreshness(None, None)
 
     def _resolve(self) -> dict[str, ResolvedLocation]:
@@ -199,6 +212,8 @@ class Monitor:
         for run_id in set(self._live) - set(current):
             entry = self._live.pop(run_id)
             if entry.follower is not None:
+                # The run's record may keep only an untimed copy of what was seen live.
+                self._observe(entry.run.login_profile, entry.follower.reading)
                 entry.follower.stop()
         for run_id, run in current.items():
             entry = self._live.get(run_id)
@@ -229,18 +244,50 @@ class Monitor:
             self._codex_readings[login] = checked
         return checked[1]
 
+    def _observe(self, login: str | None, reading: UsageReading | None) -> None:
+        """Keep the newest reading seen live for ``login`` beyond the follower that saw it."""
+        if login is None or reading is None or reading.effective_at is None:
+            return
+        if _newer(reading, self._observed.get(login)):
+            self._observed[login] = reading
+
+    def _observed_readings(self, now: datetime) -> dict[str, UsageReading]:
+        # A reading speaks for one window past its reset at most (estimates.weekly_usage).
+        self._observed = {
+            login: reading
+            for login, reading in self._observed.items()
+            if now < reading.resets_at + WEEK
+        }
+        if len(self._observed) > OBSERVED_PROFILES:
+            newest = sorted(self._observed.items(), key=lambda item: item[1].effective_at)
+            self._observed = dict(newest[-OBSERVED_PROFILES:])
+        return self._observed
+
+    def _accountable(self, history: list[RunSummary]) -> list[RunSummary]:
+        """This host's published records that pass the record's own validation and are
+        filed under their own identity; history shows the rest but they charge nothing."""
+        found = []
+        for summary in history:
+            if not self._mine(summary):
+                continue
+            record = self._records.published(summary.path)
+            if isinstance(record, RunSummary):
+                found.append(record)
+        return found
+
     def _executions(
         self, profiles: list[ProfileStatus], history: list[RunSummary], local: list[RunSummary]
     ) -> tuple[dict[str, tuple[str, RunSummary]], dict[str, list[UsageReading]]]:
         """For each execution this host ran, its Login Profile and the one record whose spend
-        counts, and every reading this host's records observed per Login Profile.
+        counts, and every reading those records observed per Login Profile.
 
-        A record is this host's when it is retained in this host's run directory or its
-        provenance names this host's label; any other record stays in history only.
+        A record is this host's when it applies to a run in this host's run directory or its
+        provenance names this host's label; any other record stays in history only. Only
+        validated records count, so invalid evidence neither charges spend nor anchors usage.
         """
         best: dict[str, tuple[tuple, str, RunSummary]] = {}
         readings: dict[str, list[UsageReading]] = defaultdict(list)
-        mine = [(summary, False) for summary in history if self._mine(summary)]
+        mine = [(summary, False) for summary in self._accountable(history)]
         for summary, local_copy in [*mine, *((summary, True) for summary in local)]:
             login = _canonical_login(summary.login_profile, profiles)
             if login is None:
@@ -263,10 +310,7 @@ class Monitor:
         local: list[RunSummary],
         now: datetime,
     ) -> list[ProfileView]:
-        live_records = [
-            entry.run.record for entry in self._live.values() if entry.run.record is not None
-        ]
-        executions, readings = self._executions(profiles, history, [*local, *live_records])
+        executions, readings = self._executions(profiles, history, local)
         costs: dict[str, list[tuple[int, Decimal]]] = defaultdict(list)
         for login, record in executions.values():
             costs[login].extend(record.request_costs)
@@ -282,12 +326,12 @@ class Monitor:
                     for row in entry.cost.requests
                     if row.usd is not None
                 )
-            if entry.follower is not None and entry.follower.reading is not None:
-                readings[login].append(entry.follower.reading)
+            if entry.follower is not None:
+                self._observe(login, entry.follower.reading)
             if entry.run.provider == "codex" and entry.run.stage is Stage.RUNNING:
-                reading = self._codex_reading(login)
-                if reading is not None:
-                    readings[login].append(reading)
+                self._observe(login, self._codex_reading(login))
+        for login, reading in self._observed_readings(now).items():
+            readings[_canonical_login(login, profiles)].append(reading)
         return [
             ProfileView(
                 profile,
@@ -365,7 +409,7 @@ class Monitor:
             docker_error=docker_error,
             running=views,
             queued=queued,
-            profiles=self._profiles(profiles, history, self._records.retained_records(), now),
+            profiles=self._profiles(profiles, history, self._records.applicable_records(), now),
             counts=counts,
             repo=self._repo,
             exclusion_error=self.history_store.exclusion_error,
