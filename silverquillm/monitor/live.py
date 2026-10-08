@@ -13,7 +13,7 @@ from pathlib import Path
 from silverquillm.karn.records import InvalidRunRecordError, KarnIdentity
 from silverquillm.karn.subscription_usage import provider_for
 
-from ._read import instant, mapping, read_json
+from ._read import count, instant, mapping, read_json
 from .candidates import CandidateDisplay, candidate_display
 from .containers import RunContainer
 from .history import RunSummary, validated_summary
@@ -148,6 +148,10 @@ class RecordCache:
         """The one record that applies to each run directory read in this pass, Finished or
         not: the same validated, linkage-checked record the run's own view uses."""
         return list(self._applicable.values())
+
+    def applicable_by_run(self) -> dict[str, RunSummary]:
+        """``applicable_records`` keyed by the run directory's name, the execution's run id."""
+        return {run_dir.name: record for run_dir, record in self._applicable.items()}
 
 
 @dataclass(frozen=True)
@@ -314,6 +318,17 @@ def _stage(
     return Stage.STARTING
 
 
+def run_candidate_hash(run_dir: Path | None) -> str | None:
+    """The Candidate Hash a local run directory's ``run-input.json`` names, else None."""
+    if run_dir is None:
+        return None
+    try:
+        identity = mapping(read_json(run_dir / "run-input.json")).get("candidate_identity")
+        return KarnIdentity.from_dict(identity).hash
+    except InvalidRunRecordError:
+        return None
+
+
 def _candidate(run_dir: Path, run_input: dict) -> tuple[CandidateDisplay, str | None]:
     construct = run_input.get("construct")
     definition = None
@@ -368,7 +383,7 @@ def _live_run(
         candidate_hash=candidate_hash,
         login_profile=login,
         provider=provider_for(login, adapter),
-        budget_seconds=budget if type(budget) is int else None,
+        budget_seconds=count(budget),
         host_started_at=instant(run_input.get("started_at")),
         container=container,
         native_telemetry=telemetry.get("enabled") is True,

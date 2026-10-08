@@ -558,6 +558,13 @@ class FakeMonitor:
     def workspace(self, run_id):
         return workspace()
 
+    def local_candidate_hash(self, run_id):
+        """This host ran each fixture run for the first history record naming it."""
+        for view in self.running:
+            if view.run.run_id == run_id:
+                return view.run.candidate_hash
+        return next((run.candidate_hash for run in self.runs if run.run_id == run_id), None)
+
     def record_detail(self, summary):
         return RecordDetail(
             requests(),

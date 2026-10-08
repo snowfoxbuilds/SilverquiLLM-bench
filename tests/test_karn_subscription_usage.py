@@ -278,6 +278,12 @@ def test_codex_reads_the_pinned_cli_rollout_shape(tmp_path):
         ({"used_percent": 1.0, "window_minutes": "10080", "resets_at": 1}, "weekly", 12.0),
         ({"used_percent": "x", "window_minutes": WEEK, "resets_at": 1791046725}, "weekly", 12.0),
         ({"used_percent": 1.0, "window_minutes": 60, "resets_at": 1}, None, None),
+        (
+            {"used_percent": 50.0, "window_minutes": 10080.0, "resets_at": 1791046725},
+            "weekly",
+            12.0,
+        ),
+        ({"used_percent": 50.0, "window_minutes": 10080.0, "resets_at": 1791046725}, None, None),
     ],
 )
 def test_codex_chooses_the_window_lasting_a_week_whatever_its_name(
@@ -294,6 +300,17 @@ def test_codex_chooses_the_window_lasting_a_week_whatever_its_name(
         assert result["completeness"] == "missing"
     else:
         assert result["value"]["utilization_percent"] == expected
+
+
+def test_a_float_week_length_is_malformed_not_weekly(tmp_path):
+    """The contract calls a non-integer window length malformed, even 10080.0."""
+    floating = {"used_percent": 50.0, "window_minutes": 10080.0, "resets_at": 1791046725}
+    line = codex_line(0)
+    line["payload"]["rate_limits"].update(primary=floating, secondary=None)
+    write_lines(tmp_path / "work/sessions/rollout-x.jsonl", [line])
+    result = codex_usage(tmp_path / "work")
+    assert result["value"] is None
+    assert "malformed_reading_dropped" in result["reasons"]
 
 
 def test_codex_keeps_only_the_allowlisted_fields(tmp_path):

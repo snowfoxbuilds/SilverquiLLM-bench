@@ -19,6 +19,7 @@ from silverquillm.monitor import (
     RunView,
     Stage,
     WorkspaceView,
+    bounded_timestamp_ms,
     render_line,
 )
 
@@ -43,6 +44,8 @@ class Shown:
     run_id: str
     pinned: bool = False
     """Opened as one Run Record from history, which stays the record shown."""
+    record_path: str | None = None
+    """The pinned record's path: run ids alone do not identify a published record."""
     live: RunView | None = None
     summary: RunSummary | None = None
     """The applicable Run Record: header, requests and breakdown all come from it."""
@@ -246,10 +249,10 @@ class DetailsView(Vertical):
         self.query_one("#detail-head").display = not empty
         self.query_one("#detail-tabs").display = not empty
 
-    def open(self, run_id: str, *, pinned: bool = False) -> Shown:
+    def open(self, run_id: str, *, pinned: bool = False, record_path: str | None = None) -> Shown:
         """Show another run: nothing of the previous run may remain under its header."""
         self.generation += 1
-        self.shown = Shown(run_id, pinned=pinned)
+        self.shown = Shown(run_id, pinned=pinned, record_path=record_path)
         for log in self.query(RichLog):
             log.clear()
         theme = self.theme_
@@ -385,7 +388,7 @@ class DetailsView(Vertical):
 def _from_ms(stamp: int) -> datetime | None:
     from datetime import UTC
 
-    if not stamp:
+    if bounded_timestamp_ms(stamp) is None:
         return None
     try:
         return datetime.fromtimestamp(stamp / 1000, UTC)

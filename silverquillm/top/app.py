@@ -17,7 +17,7 @@ from textual.message import Message
 from textual.timer import Timer
 from textual.widgets import ContentSwitcher, Static
 
-from silverquillm.monitor import LogLine, Monitor, MonitorSnapshot, RunSummary
+from silverquillm.monitor import LogLine, Monitor, MonitorSnapshot, RunSummary, WorkspaceView
 
 from .dashboard import NARROW, DashboardView, RunChosen
 from .details import DetailsView
@@ -41,6 +41,9 @@ class Fetch:
     record_key: tuple[str, str] | None
     provisional: bool
     """No record applies to this live run yet, so its requests come from telemetry."""
+    record_hash: str | None = None
+    """A pinned record's Candidate Hash: this host's logs and workspace are shown only when
+    its run directory was launched for that candidate, since run ids can repeat."""
 
 
 @dataclass(frozen=True)
@@ -264,6 +267,14 @@ class MonitorApp(App):
             (view for view in self.snapshot.running if view.run.run_id == shown.run_id), None
         )
         summary = self._applicable(shown)
+        if (
+            shown.pinned
+            and shown.live is not None
+            and summary is not None
+            and shown.live.run.candidate_hash not in (None, summary.candidate_hash)
+        ):
+            # Same run id, another candidate's execution: none of it belongs to this record.
+            shown.live = None
         key = (summary.run_id, str(summary.path)) if summary is not None else None
         shown.summary = summary
         if key != shown.record_key:
@@ -280,23 +291,39 @@ class MonitorApp(App):
     def _applicable(self, shown) -> RunSummary | None:
         """The one Run Record the details view takes its record facts from.
 
-        A record opened from history stays that record. An unfinished execution follows the
-        record the monitor applies to it, and keeps the last one once the run finishes, so a
-        linked recovery is not swapped back for its original.
+        A record opened from history stays exactly that record, found by its path. Any other
+        execution follows the record the monitor applies to it this pass, live or Finished, so a
+        recovery that finishes between two polls still replaces its original. The last applied
+        record is only a fallback for a pass that could not read one.
         """
 
-        def history(run_id: str) -> RunSummary | None:
-            return next((run for run in self.runs if run.run_id == run_id), None)
+        def history(run_id: str, candidate_hash: str | None = None) -> RunSummary | None:
+            return next(
+                (
+                    run
+                    for run in self.runs
+                    if run.run_id == run_id
+                    and (candidate_hash is None or run.candidate_hash == candidate_hash)
+                ),
+                None,
+            )
 
         if shown.pinned:
+            if shown.record_path is not None:
+                return next((run for run in self.runs if str(run.path) == shown.record_path), None)
             return history(shown.run_id)
         if shown.live is not None:
             record = shown.live.run.record
             if record is not None:
                 shown.last_record = record
             return record
+        current = self.snapshot.records.get(shown.run_id) if self.snapshot else None
+        if current is not None:
+            shown.last_record = current
+            return current
         if shown.last_record is not None:
-            return history(shown.last_record.run_id) or shown.last_record
+            last = shown.last_record
+            return history(last.run_id, last.candidate_hash) or last
         return history(shown.run_id)
 
     def fetch_details(self) -> None:
@@ -325,6 +352,7 @@ class MonitorApp(App):
             shown.summary if want_detail else None,
             shown.record_key,
             provisional,
+            shown.summary.candidate_hash if shown.pinned and shown.summary is not None else None,
         )
         self._start("details", lambda: self._read_details(request))
 
@@ -335,9 +363,11 @@ class MonitorApp(App):
             lines: list[LogLine] = []
             requests: list = []
             workspace = detail = None
-            if request.logs:
+            if request.logs and not self._foreign(request):
                 lines = self.monitor.output(request.run_id, since=request.since)
                 workspace = self.monitor.workspace(request.run_id)
+            elif request.logs:
+                workspace = WorkspaceView([], [])
             if request.provisional:
                 requests = list(self.monitor.provisional_requests(request.run_id))
             if request.summary is not None:
@@ -346,6 +376,12 @@ class MonitorApp(App):
                 except Exception:  # noqa: BLE001 - an unreadable record is retried, not fatal
                     detail = None
         return Fetched(request, lines, requests, workspace, detail)
+
+    def _foreign(self, request: Fetch) -> bool:
+        """This host's run directory under the run id belongs to another candidate's record."""
+        if request.live or request.record_hash is None:
+            return False
+        return self.monitor.local_candidate_hash(request.run_id) != request.record_hash
 
     def _stale(self, request: Fetch) -> bool:
         details = self._details
@@ -423,7 +459,7 @@ class MonitorApp(App):
 
     def on_run_chosen(self, message: RunChosen) -> None:
         details = self.query_one(DetailsView)
-        details.open(message.run_id, pinned=message.pinned)
+        details.open(message.run_id, pinned=message.pinned, record_path=message.record_path)
         self.action_view("details")
         self._refresh_details()
 

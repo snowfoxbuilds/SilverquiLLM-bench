@@ -8,7 +8,14 @@ from decimal import Decimal
 
 from rich.text import Text
 
-from silverquillm.monitor import LiveRun, Score, Stage, WeeklyUsage
+from silverquillm.monitor import (
+    LiveRun,
+    Score,
+    Stage,
+    WeeklyUsage,
+    bounded_count,
+    bounded_timestamp_ms,
+)
 
 from .theme import Theme
 
@@ -94,6 +101,8 @@ def spend(
 
 
 def count(value: int | None) -> str:
+    """A count shortened to k/M/G; anything that is not a sane count reads as unknown."""
+    value = bounded_count(value)
     if value is None:
         return DASH
     for limit, suffix in ((1_000_000_000, "G"), (1_000_000, "M"), (1_000, "k")):
@@ -124,15 +133,16 @@ def sparkline(
     """
     if width <= 0:
         return Text("")
-    dated = [(stamp, usd) for stamp, usd in points if stamp > 0]
+    dated = [(stamp, usd) for stamp, usd in points if bounded_timestamp_ms(stamp) is not None]
     if not dated:
         return Text(" " * width)
     start = min(stamp for stamp, _ in dated)
-    end = max(until_ms or 0, max(stamp for stamp, _ in dated), start + 1)
-    span = (end - start) / width
+    end = max(bounded_timestamp_ms(until_ms) or 0, max(stamp for stamp, _ in dated), start + 1)
     buckets = [Decimal(0)] * width
     for stamp, usd in dated:
-        buckets[max(0, min(width - 1, int((stamp - start) / span)))] += usd
+        # Integer arithmetic: a float span of far-apart stamps would lose or overflow.
+        index = (stamp - start) * width // (end - start)
+        buckets[max(0, min(width - 1, index))] += usd
     top = max(buckets)
     ramp = theme.glyph("spark")
     if top <= 0:

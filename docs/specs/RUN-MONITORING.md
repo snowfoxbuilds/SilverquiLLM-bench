@@ -216,6 +216,7 @@ A run occupies one line: run date, benchmark, Candidate display, execution statu
 Every column sorts.
 Excluded runs are dimmed with their reason code, and a key hides them.
 Combined Regression joins the line once records carry it.
+A line is one Run Record, identified by where it is stored: two published records can share a run id under different Candidate Hashes, and both stay listed, each opening as itself.
 Selecting a run opens its run details.
 
 ### Run details view
@@ -235,12 +236,12 @@ A Needs recover or Unknown run's header also names its reasons and whether its c
 A live run's tabs follow `docker logs -f` and the events file; a historical run's tabs read the retained files.
 Opening a run clears every tab, table, sparkline and the header first, and they show loading or unavailable until that run's own evidence arrives: nothing of the previously shown run appears under another run's header.
 The header's record facts, the Requests tab and the cost breakdown all come from one applicable Run Record, the one the dashboard applies to the run.
-An unfinished run follows the record the monitor applies to it, a retained copy awaiting publication or a linked recovery included, and keeps that record once the run finishes; its telemetry supplies requests only while no record applies.
+Any other run follows the record the monitor applies to its execution on each refresh, live or Finished, a retained copy awaiting publication or a linked recovery included, so a recovery that finishes entirely between two refreshes still replaces its original; the last applied record is kept only for a refresh that could not read one, and telemetry supplies requests only while no record applies.
 When another record comes to apply, such as a linked recovery replacing its original, everything the old record supplied is cleared and a fetch made for it is ignored.
-A record opened from history stays that record, so an original keeps showing as the original.
+A record opened from history stays that record, found by its stored location, so an original keeps showing as the original; this host's live view, logs and workspace accompany it only when this host's run under that run id was launched for the record's Candidate Hash.
 A run that leaves the live view reads its retained logs once, even when this host has none, and the applicable record's detail is asked for on every refresh until it reads: its summary can reach the history after the run finishes, and a record file can be briefly unreadable.
 Each stream keeps its own newest 4000 lines in its tabs, so a flood of stderr never evicts stdout from Activity and Raw.
-Everything taken from a run, its records or its workspace is drawn as literal text, never as markup, and an out-of-range or non-finite number in candidate output is shown as unknown.
+Everything taken from a run, its records or its workspace is drawn as literal text, never as markup, and an out-of-range or non-finite number in candidate output, telemetry or a record (a count above 10^15, a time no date can hold, a negative or wrong-typed value) is shown as unknown rather than as zero, while the request it belongs to still counts.
 Live Docker logs are unredacted, so the monitor applies the login plugin's redactions to every line before showing it.
 Those redactions are the Login Profile's stored login when the follow starts, so a token the candidate refreshes mid-run is redacted only from the retained logs, which the host redacts with the refreshed values at capture.
 A followed run keeps its newest 2000 lines, each cut at 16 KiB.

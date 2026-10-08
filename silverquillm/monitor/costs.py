@@ -18,7 +18,7 @@ from typing import Any
 from silverquillm.karn.observations import _OTLP_TOKENS
 from silverquillm.karn.pricing import price_requests
 
-from ._read import MAX_USD
+from ._read import MAX_USD, count, timestamp_ms
 
 EVENTS_FILE = "observations.events.jsonl"
 # Read at most this much per update; a backlog is consumed over successive polls.
@@ -43,8 +43,8 @@ class RequestCost:
 def _count(value: Any) -> int | None:
     # ``isdigit`` alone admits digits ``int`` refuses, such as superscripts.
     if isinstance(value, str) and value.isascii() and value.isdigit() and len(value) <= 20:
-        return int(value)
-    return value if type(value) is int and value >= 0 else None
+        value = int(value)
+    return count(value)
 
 
 def _usd(value: Any) -> Decimal | None:
@@ -58,8 +58,7 @@ def _usd(value: Any) -> Decimal | None:
 
 
 def _stamp(event: dict) -> int:
-    stamp = event.get("timestamp_ms")
-    return stamp if type(stamp) is int and stamp > 0 else 0
+    return timestamp_ms(event.get("timestamp_ms")) or 0
 
 
 @dataclass

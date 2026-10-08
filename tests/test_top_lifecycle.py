@@ -7,6 +7,7 @@ import dataclasses
 import json
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -196,7 +197,7 @@ async def test_switching_runs_never_shows_the_previous_runs_output():
 async def test_a_record_that_reaches_history_late_is_still_shown():
     monitor = FakeMonitor()
     run_id = monitor.running[0].run.run_id
-    late = dataclasses.replace(history()[0], run_id=run_id)
+    late = dataclasses.replace(history()[0], run_id=run_id, path=Path("/results/late"))
     app = _app(monitor)
     async with app.run_test(size=(160, 44)) as pilot:
         await _settle(app, pilot)

@@ -122,7 +122,11 @@ def codex_reading(document: Any) -> tuple[dict[str, Any] | None, str | None]:
         if not isinstance(window, dict):
             continue
         minutes = window.get("window_minutes")
-        if isinstance(minutes, bool) or minutes != WEEK_MINUTES:
+        if type(minutes) is not int:
+            # A non-integer length is malformed, even one equal to a week (10080.0).
+            malformed = malformed or (isinstance(minutes, float) and minutes == WEEK_MINUTES)
+            continue
+        if minutes != WEEK_MINUTES:
             continue
         reading = _reading(
             "codex",

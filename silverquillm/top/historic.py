@@ -166,7 +166,7 @@ class HistoryView(Horizontal):
     def show(self, runs: list[RunSummary]) -> None:
         """Rebuild only when a record or Exclusion changed, so browsing is not reset."""
         signature = tuple(
-            (run.run_id, run.excluded, run.status, run.estimated_cost, run.candidate_hash)
+            (str(run.path), run.excluded, run.status, run.estimated_cost, run.candidate_hash)
             for run in runs
         )
         if self._loaded and signature == self._signature:
@@ -259,16 +259,17 @@ class HistoryView(Horizontal):
         )
         if not self.hide_excluded:
             shown.sort(key=lambda run: run.excluded is not None)
+        # A row is one Run Record: two records can share a run id under different candidates.
         previous = (
-            self._shown[table.cursor_row].run_id
+            str(self._shown[table.cursor_row].path)
             if 0 <= table.cursor_row < len(self._shown)
             else None
         )
         self._shown = shown
         table.clear()
         for run in shown:
-            table.add_row(*run_cells(run, theme), key=run.run_id)
-        order = [run.run_id for run in shown]
+            table.add_row(*run_cells(run, theme), key=str(run.path))
+        order = [str(run.path) for run in shown]
         if previous in order:
             table.move_cursor(row=order.index(previous), animate=False)
         empty = self.query_one("#runs-empty", Static)
@@ -317,8 +318,9 @@ class HistoryView(Horizontal):
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         event.stop()
-        if event.row_key.value:
-            self.post_message(RunChosen(event.row_key.value, pinned=True))
+        run = next((run for run in self._shown if str(run.path) == event.row_key.value), None)
+        if run is not None:
+            self.post_message(RunChosen(run.run_id, pinned=True, record_path=str(run.path)))
 
     def action_cycle_sort(self) -> None:
         index = (COLUMN_KEYS.index(self.sort_key) + 1) % len(COLUMN_KEYS)

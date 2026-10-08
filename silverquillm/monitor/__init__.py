@@ -4,6 +4,8 @@ It never writes a file, takes a lock a runner or the scheduler takes, stops or r
 run, edits a Batch, or contacts a remote. ``Monitor`` is the entry point a view polls.
 """
 
+from ._read import count as bounded_count
+from ._read import timestamp_ms as bounded_timestamp_ms
 from .activity import ActivityItem, render_line
 from .candidates import CandidateDisplay, candidate_display
 from .costs import ProvisionalCost, RequestCost
@@ -43,6 +45,8 @@ __all__ = [
     "UsageReading",
     "WeeklyUsage",
     "WorkspaceView",
+    "bounded_count",
+    "bounded_timestamp_ms",
     "candidate_display",
     "estimated_percent",
     "render_line",

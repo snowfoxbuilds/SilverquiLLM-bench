@@ -34,7 +34,7 @@ from .costs import ProvisionalCost
 from .details import RecordDetail, WorkspaceView, record_detail, workspace_view
 from .estimates import WEEK, WeeklyUsage, estimated_percent, weekly_usage
 from .history import HistoryStore, RepoFreshness, RunSummary, UsageReading, repo_freshness
-from .live import LiveRun, RecordCache, Stage, live_runs
+from .live import LiveRun, RecordCache, Stage, live_runs, run_candidate_hash
 from .locks import PROC_LOCKS, held_locks
 from .output import LogFollower, LogLine, live_codex_reading, profile_redactions, retained_lines
 from .pools import ProfileStatus, login_profiles
@@ -110,6 +110,9 @@ class MonitorSnapshot:
     exclusion_error: str | None
     host_label: str | None = None
     """This host's label; only records naming it count toward its Login Profiles."""
+    records: Mapping[str, RunSummary] = field(default_factory=dict)
+    """The validated record that applies to each local execution this pass, Finished or not,
+    keyed by the execution's run id: the record a run details view takes its facts from."""
 
 
 @dataclass
@@ -419,6 +422,7 @@ class Monitor:
             repo=self._repo,
             exclusion_error=self.history_store.exclusion_error,
             host_label=self.host_label,
+            records=self._records.applicable_by_run(),
         )
 
     def output(self, run_id: str, stream: str | None = None, since: int = 0) -> list[LogLine]:
@@ -448,6 +452,10 @@ class Monitor:
         if runs_dir is None or "/" in run_id or run_id.startswith(".") or not run_id:
             return None
         return Path(runs_dir) / run_id
+
+    def local_candidate_hash(self, run_id: str) -> str | None:
+        """The Candidate Hash this host's run directory for ``run_id`` was launched with."""
+        return run_candidate_hash(self.run_dir(run_id))
 
     def workspace(self, run_id: str) -> WorkspaceView:
         """The run's snapshot timeline and the agent's commits, when this host has them."""

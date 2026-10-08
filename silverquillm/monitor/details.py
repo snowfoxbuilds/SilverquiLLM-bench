@@ -15,7 +15,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from ._read import MAX_USD, instant, mapping, read_json
+from ._read import MAX_USD, count, instant, mapping, read_json, timestamp_ms
 from .costs import RequestCost
 
 MAX_REFLOG = 4 * 1024 * 1024
@@ -31,10 +31,6 @@ def _usd(value: Any) -> Decimal | None:
     except InvalidOperation:
         return None
     return amount if amount.is_finite() and 0 <= amount <= MAX_USD else None
-
-
-def _count(value: Any) -> int | None:
-    return value if type(value) is int and value >= 0 else None
 
 
 def _rows(value: Any) -> list[dict]:
@@ -75,21 +71,21 @@ def record_detail(record: Path) -> RecordDetail | None:
     }
     requests = []
     for row in _rows(measurements.get("requests")):
-        stamp = _count(row.get("timestamp_ms"))
+        stamp = timestamp_ms(row.get("timestamp_ms"))
         response_id = row.get("response_id")
         usage = mapping(row.get("usage"))
         requests.append(
             RequestCost(
                 stamp or 0,
                 row.get("model") if isinstance(row.get("model"), str) else None,
-                {key: _count(value) for key, value in usage.items() if isinstance(key, str)},
+                {key: count(value) for key, value in usage.items() if isinstance(key, str)},
                 prices.get(response_id) if isinstance(response_id, str) else None,
             )
         )
     requests.sort(key=lambda request: request.timestamp_ms)
     breakdown_value = mapping(mapping(measurements.get("cost_breakdown")).get("value"))
     breakdown = {
-        name: (_count(mapping(cell).get("tokens")), _usd(mapping(cell).get("usd")))
+        name: (count(mapping(cell).get("tokens")), _usd(mapping(cell).get("usd")))
         for name in COST_TYPES
         if isinstance(cell := breakdown_value.get(name), dict)
     }
@@ -136,7 +132,7 @@ def _snapshots(run_dir: Path) -> list[SnapshotEntry]:
     entries, previous_digest, previous_files = [], None, None
     for row in _rows(read_json(run_dir / "snapshots.json")):
         digest = row.get("digest") if isinstance(row.get("digest"), str) else None
-        files = _count(row.get("files"))
+        files = count(row.get("files"))
         entries.append(
             SnapshotEntry(
                 instant(row.get("captured_at")),

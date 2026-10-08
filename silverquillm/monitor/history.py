@@ -17,7 +17,7 @@ from typing import Any
 from silverquillm.karn.exclusions import ExclusionError, load_exclusions
 from silverquillm.karn.records import InvalidRunRecordError, KarnRunRecord
 
-from ._read import MAX_USD, instant, mapping, number, read_json
+from ._read import MAX_USD, count, instant, mapping, number, read_json, timestamp_ms
 from .candidates import CandidateDisplay, candidate_display
 
 DIMENSIONS = ("card_correctness", "fdn_regression", "engine_regression")
@@ -131,7 +131,7 @@ def _request_costs(measurements: dict) -> tuple[tuple[tuple[int, Decimal], ...],
     for request in _rows(measurements.get("requests")):
         response_id = request.get("response_id")
         usd = prices.get(response_id) if isinstance(response_id, str) else None
-        stamp = _int(request.get("timestamp_ms"))
+        stamp = timestamp_ms(request.get("timestamp_ms"))
         if usd is not None and stamp:
             costs.append((stamp, usd))
         else:
@@ -149,7 +149,7 @@ def _reading(measurements: dict, stopped_at: datetime | None) -> UsageReading | 
     return UsageReading(
         value["provider"],
         percent,
-        _int(value.get("window_minutes")) or 0,
+        count(value.get("window_minutes")) or 0,
         resets_at,
         instant(value.get("observed_at")),
         stopped_at,
@@ -161,8 +161,8 @@ def _score(value: Any) -> Score:
     return Score(
         value.get("evaluated") is True,
         number(value.get("pass_rate")),
-        _int(value.get("tests_passed")),
-        _int(value.get("tests_total")),
+        count(value.get("tests_passed")),
+        count(value.get("tests_total")),
     )
 
 
@@ -190,14 +190,14 @@ def summarize(manifest: Any, scores: Any, path: Path) -> RunSummary | None:
         status=execution.get("status") if isinstance(execution.get("status"), str) else None,
         started_at=instant(execution.get("started_at")),
         stopped_at=stopped_at,
-        budget_seconds=_int(manifest.get("budget_seconds")),
+        budget_seconds=count(manifest.get("budget_seconds")),
         scores={name: _score(mapping(scores).get(name)) for name in DIMENSIONS},
         estimated_cost=_decimal(cost.get("value")),
         cost_complete=cost.get("completeness") == "complete",
         cost_completeness=_text(cost.get("completeness")),
         unpriced_requests=unpriced,
-        agent_turns=_int(_value(mapping(measurements.get("agent_turns")).get("total"))),
-        total_tokens=_int(mapping(usage).get("total_tokens")),
+        agent_turns=count(_value(mapping(measurements.get("agent_turns")).get("total"))),
+        total_tokens=count(mapping(usage).get("total_tokens")),
         login_profile=login if isinstance(login, str) else None,
         host_label=host_label if isinstance(host_label, str) else None,
         candidate=candidate_display(
