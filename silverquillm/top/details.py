@@ -41,8 +41,15 @@ class Shown:
     """What the details view currently shows, as the app last observed it."""
 
     run_id: str
+    pinned: bool = False
+    """Opened as one Run Record from history, which stays the record shown."""
     live: RunView | None = None
     summary: RunSummary | None = None
+    """The applicable Run Record: header, requests and breakdown all come from it."""
+    record_key: tuple[str, str] | None = None
+    """``summary``'s identity; when it changes, the shown detail is obsolete."""
+    last_record: RunSummary | None = None
+    """The record that last applied while the run was live, kept once it leaves the live view."""
     detail: RecordDetail | None = None
     seq: int = 0
     lines: int = 0
@@ -239,10 +246,10 @@ class DetailsView(Vertical):
         self.query_one("#detail-head").display = not empty
         self.query_one("#detail-tabs").display = not empty
 
-    def open(self, run_id: str) -> Shown:
+    def open(self, run_id: str, *, pinned: bool = False) -> Shown:
         """Show another run: nothing of the previous run may remain under its header."""
         self.generation += 1
-        self.shown = Shown(run_id)
+        self.shown = Shown(run_id, pinned=pinned)
         for log in self.query(RichLog):
             log.clear()
         theme = self.theme_
@@ -256,6 +263,14 @@ class DetailsView(Vertical):
         self.query_one("#workspace-note", Static).update(loading)
         self._show_empty(False)
         return self.shown
+
+    def clear_requests(self) -> None:
+        """The applicable record changed: its requests are loading and the old ones are gone."""
+        theme = self.theme_
+        self.query_one("#requests-table", DataTable).clear()
+        self.query_one("#request-spark", Static).update(
+            Text(f"{theme.glyph('loading')} loading", style=theme.style("muted"))
+        )
 
     def show_requests_unavailable(self) -> None:
         """A recorded run whose Run Record could not be read (yet): say so, show nothing."""

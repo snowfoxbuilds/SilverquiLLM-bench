@@ -52,8 +52,17 @@ class RecordDetail:
     grading_source: str | None
 
 
-def record_detail(record_dir: Path) -> RecordDetail | None:
-    manifest = read_json(Path(record_dir) / "manifest.json")
+def record_detail(record: Path) -> RecordDetail | None:
+    """Detail of a published record's directory, or of a retained ``run-record.json``.
+
+    A retained record is the runner's ``{"manifest": …, "scores": …}`` envelope; a published
+    one keeps its manifest in ``manifest.json``.
+    """
+    record = Path(record)
+    if record.suffix == ".json":
+        manifest = mapping(read_json(record)).get("manifest")
+    else:
+        manifest = read_json(record / "manifest.json")
     if not isinstance(manifest, dict):
         return None
     metadata = mapping(manifest.get("run_metadata"))

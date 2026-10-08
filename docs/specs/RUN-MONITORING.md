@@ -229,7 +229,11 @@ A Needs recover or Unknown run's header also names its reasons and whether its c
 
 A live run's tabs follow `docker logs -f` and the events file; a historical run's tabs read the retained files.
 Opening a run clears every tab, table, sparkline and the header first, and they show loading or unavailable until that run's own evidence arrives: nothing of the previously shown run appears under another run's header.
-A run that leaves the live view reads its retained logs once, even when this host has none, and keeps asking for its Run Record's detail on every refresh until the detail reads: its summary can reach the history after the run finishes, and a manifest can be briefly unreadable.
+The header's record facts, the Requests tab and the cost breakdown all come from one applicable Run Record, the one the dashboard applies to the run.
+An unfinished run follows the record the monitor applies to it, a retained copy awaiting publication or a linked recovery included, and keeps that record once the run finishes; its telemetry supplies requests only while no record applies.
+When another record comes to apply, such as a linked recovery replacing its original, everything the old record supplied is cleared and a fetch made for it is ignored.
+A record opened from history stays that record, so an original keeps showing as the original.
+A run that leaves the live view reads its retained logs once, even when this host has none, and the applicable record's detail is asked for on every refresh until it reads: its summary can reach the history after the run finishes, and a record file can be briefly unreadable.
 Each stream keeps its own newest 4000 lines in its tabs, so a flood of stderr never evicts stdout from Activity and Raw.
 Everything taken from a run, its records or its workspace is drawn as literal text, never as markup, and an out-of-range or non-finite number in candidate output is shown as unknown.
 Live Docker logs are unredacted, so the monitor applies the login plugin's redactions to every line before showing it.

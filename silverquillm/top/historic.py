@@ -318,7 +318,7 @@ class HistoryView(Horizontal):
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         event.stop()
         if event.row_key.value:
-            self.post_message(RunChosen(event.row_key.value))
+            self.post_message(RunChosen(event.row_key.value, pinned=True))
 
     def action_cycle_sort(self) -> None:
         index = (COLUMN_KEYS.index(self.sort_key) + 1) % len(COLUMN_KEYS)

@@ -116,15 +116,23 @@ def bar(fraction: float | None, width: int, theme: Theme) -> Text:
 def sparkline(
     points: Sequence[tuple[int, Decimal]], width: int, theme: Theme, *, until_ms: int | None = None
 ) -> Text:
-    """Spend per time bucket across the run so far, one character per bucket."""
-    if not points:
+    """Spend per time bucket across the run so far, one character per bucket.
+
+    Points arrive in telemetry order, not time order, and a stamp of 0 or less
+    means the request's time is unknown: those stay out of the plot (they still
+    count in totals elsewhere) and the bounds come from the known stamps alone.
+    """
+    if width <= 0:
+        return Text("")
+    dated = [(stamp, usd) for stamp, usd in points if stamp > 0]
+    if not dated:
         return Text(" " * width)
-    start = points[0][0]
-    end = max(until_ms or 0, points[-1][0], start + 1)
+    start = min(stamp for stamp, _ in dated)
+    end = max(until_ms or 0, max(stamp for stamp, _ in dated), start + 1)
     span = (end - start) / width
     buckets = [Decimal(0)] * width
-    for stamp, usd in points:
-        buckets[min(width - 1, int((stamp - start) / span))] += usd
+    for stamp, usd in dated:
+        buckets[max(0, min(width - 1, int((stamp - start) / span)))] += usd
     top = max(buckets)
     ramp = theme.glyph("spark")
     if top <= 0:

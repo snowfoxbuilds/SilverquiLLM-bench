@@ -37,6 +37,10 @@ class Fetch:
     since: int
     logs: bool
     summary: RunSummary | None
+    """The applicable record whose detail to read, or None when none is wanted."""
+    record_key: tuple[str, str] | None
+    provisional: bool
+    """No record applies to this live run yet, so its requests come from telemetry."""
 
 
 @dataclass(frozen=True)
@@ -259,11 +263,41 @@ class MonitorApp(App):
         shown.live = next(
             (view for view in self.snapshot.running if view.run.run_id == shown.run_id), None
         )
-        shown.summary = next((run for run in self.runs if run.run_id == shown.run_id), None)
+        summary = self._applicable(shown)
+        key = (summary.run_id, str(summary.path)) if summary is not None else None
+        shown.summary = summary
+        if key != shown.record_key:
+            # Another record now applies, as when a linked recovery replaces the original:
+            # whatever the old record supplied is obsolete, and a fetch for it is ignored.
+            shown.record_key, shown.detail, shown.detail_ready = key, None, False
+            shown.requests = []
+            details.clear_requests()
         if was_live and shown.live is None:
             details.restart_output()
         details.show_header(self.snapshot.taken_at)
         self.fetch_details()
+
+    def _applicable(self, shown) -> RunSummary | None:
+        """The one Run Record the details view takes its record facts from.
+
+        A record opened from history stays that record. An unfinished execution follows the
+        record the monitor applies to it, and keeps the last one once the run finishes, so a
+        linked recovery is not swapped back for its original.
+        """
+
+        def history(run_id: str) -> RunSummary | None:
+            return next((run for run in self.runs if run.run_id == run_id), None)
+
+        if shown.pinned:
+            return history(shown.run_id)
+        if shown.live is not None:
+            record = shown.live.run.record
+            if record is not None:
+                shown.last_record = record
+            return record
+        if shown.last_record is not None:
+            return history(shown.last_record.run_id) or shown.last_record
+        return history(shown.run_id)
 
     def fetch_details(self) -> None:
         """Fetch what the shown run still lacks; at most one fetch is in flight."""
@@ -276,10 +310,11 @@ class MonitorApp(App):
             return
         live = shown.live is not None
         want_logs = live or not shown.retained_loaded
-        # A recorded run's detail is retried until it reads: its summary can reach the
-        # history after the run leaves the live view, and a manifest can be briefly unreadable.
-        want_detail = not live and not shown.detail_ready and shown.summary is not None
-        if not (want_logs or want_detail):
+        # The applicable record's detail is retried until it reads, live or not: its summary
+        # can arrive late, and a record file can be briefly unreadable.
+        want_detail = not shown.detail_ready and shown.summary is not None
+        provisional = live and shown.summary is None
+        if not (want_logs or want_detail or provisional):
             return
         request = Fetch(
             details.generation,
@@ -288,6 +323,8 @@ class MonitorApp(App):
             shown.seq if live else 0,
             want_logs,
             shown.summary if want_detail else None,
+            shown.record_key,
+            provisional,
         )
         self._start("details", lambda: self._read_details(request))
 
@@ -301,7 +338,7 @@ class MonitorApp(App):
             if request.logs:
                 lines = self.monitor.output(request.run_id, since=request.since)
                 workspace = self.monitor.workspace(request.run_id)
-            if request.live:
+            if request.provisional:
                 requests = list(self.monitor.provisional_requests(request.run_id))
             if request.summary is not None:
                 try:
@@ -331,13 +368,15 @@ class MonitorApp(App):
             shown.retained_loaded = not request.live
         if message.workspace is not None:
             details.show_workspace(message.workspace)
-        if request.live:
+        if request.summary is not None:
+            if request.record_key == shown.record_key:  # else another record applies by now
+                if message.detail is not None:
+                    shown.detail, shown.detail_ready = message.detail, True
+                    details.show_requests(message.detail.requests, self.clock())
+                else:
+                    details.show_requests_unavailable()
+        elif request.provisional and shown.record_key is None:
             details.show_requests(message.requests, self.clock())
-        elif message.detail is not None:
-            shown.detail, shown.detail_ready = message.detail, True
-            details.show_requests(message.detail.requests, self.clock())
-        elif request.summary is not None:
-            details.show_requests_unavailable()
         details.show_header(self.clock())
 
     # Views -----------------------------------------------------------------
@@ -384,7 +423,7 @@ class MonitorApp(App):
 
     def on_run_chosen(self, message: RunChosen) -> None:
         details = self.query_one(DetailsView)
-        details.open(message.run_id)
+        details.open(message.run_id, pinned=message.pinned)
         self.action_view("details")
         self._refresh_details()
 

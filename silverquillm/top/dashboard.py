@@ -45,9 +45,11 @@ WEEKLY_BAR = 10
 class RunChosen(Message):
     """The operator picked a run to open in run details."""
 
-    def __init__(self, run_id: str) -> None:
+    def __init__(self, run_id: str, *, pinned: bool = False) -> None:
         super().__init__()
         self.run_id = run_id
+        self.pinned = pinned
+        """Opened as one Run Record from history: details keep showing that record."""
 
 
 def _short(path) -> str:
