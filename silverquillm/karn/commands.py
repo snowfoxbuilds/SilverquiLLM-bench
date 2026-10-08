@@ -129,6 +129,10 @@ def _report(record, *, exit_on_status=True):
         raise click.exceptions.Exit(130 if execution["status"] == "interrupted" else 1)
 
 
+# A `--state-root` given to `login` itself carries down to its subcommands.
+_LOGIN_STATE_ROOT = "silverquillm.login.state_root"
+
+
 class _LoginGroup(click.Group):
     def resolve_command(self, ctx, args):
         if args and args[0] not in self.commands and not args[0].startswith("-"):
@@ -160,6 +164,8 @@ def enroll(ctx, build_output, construct, slot, adopt, state_root):
     `login cooldown` holds slots out of new runs for a while instead.
     """
     if ctx.invoked_subcommand is not None:
+        if ctx.get_parameter_source("state_root") is click.core.ParameterSource.COMMANDLINE:
+            ctx.meta[_LOGIN_STATE_ROOT] = state_root
         return
     missing = [
         flag
@@ -217,7 +223,8 @@ AGENTS = {"codex": "karn-codex-login", "claude": "karn-claude-login"}
 @click.option("--clear", is_flag=True, help="Lift the cooldown instead of setting one.")
 @click.argument("more_slots", nargs=-1, metavar="[SLOT]...")
 @STATE_ROOT_OPTION
-def cooldown(agent, slots, every, duration, clear, more_slots, state_root):
+@click.pass_context
+def cooldown(ctx, agent, slots, every, duration, clear, more_slots, state_root):
     """Hold Login Profiles out of new runs until a duration passes (a Login Cooldown).
 
     A run already holding a slot is unaffected; runs and batch entries wait for a free one.
@@ -227,6 +234,8 @@ def cooldown(agent, slots, every, duration, clear, more_slots, state_root):
     from .login_cooldown import clear_cooldown, parse_duration, set_cooldown
     from .login_pool import enrolled_slots, logins_root
 
+    if ctx.get_parameter_source("state_root") is not click.core.ParameterSource.COMMANDLINE:
+        state_root = ctx.meta.get(_LOGIN_STATE_ROOT, state_root)
     names = [*slots, *more_slots]
     if every and names:
         raise click.UsageError("Pass --slots or --all, not both.")

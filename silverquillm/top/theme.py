@@ -130,7 +130,8 @@ TabbedContent ContentTabs {{ background: {c("surface")}; }}
 Tab.-active {{ color: {c("title")}; text-style: bold; }}
 .empty {{ color: {c("muted")}; padding: 1 2; }}
 HelpScreen {{ align: center middle; background: {c("background")} 70%; }}
-#help {{ width: auto; height: auto; max-width: 96; padding: 1 2; }}
+#help {{ width: 90; max-width: 100%; height: auto; max-height: 100%; padding: 1 2; }}
+#help > Static {{ width: 100%; height: auto; }}
 """
 
 

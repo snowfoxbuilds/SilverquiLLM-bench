@@ -97,6 +97,7 @@ silverquillm login cooldown --agent codex --clear --slots slot-1
 `--agent` picks the pool (`codex` or `claude`); name its slots with `--slots`, or take every enrolled slot with `--all`.
 `--duration` takes spans like `30m`, `5h`, `2d` or `1h30m`, up to a year; `--clear` lifts the cooldown instead.
 A slot not enrolled in that pool is refused with the enrolled ones listed.
+`--state-root` works before or after `cooldown` (`login --state-root X cooldown …` or `login cooldown --state-root X …`); given in both places, the one after `cooldown` wins, and with neither the configuration file or default applies.
 A cooling-down slot counts as busy: runs and batch entries pass over it, and wait (`waiting for a login slot: … cooling down`) when no other slot is free; a run already holding the slot carries on.
 The cooldown ends by itself at its time; `silverquillm top` shows each cooling-down slot and when it ends.
 In `top`'s LOGINS pane, select a slot and press `t` to hold it one more hour per press, or `c` to end its cooldown ten seconds from now.

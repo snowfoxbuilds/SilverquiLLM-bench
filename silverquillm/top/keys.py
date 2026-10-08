@@ -12,6 +12,7 @@ from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
+from textual.containers import VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Static
 
@@ -90,7 +91,12 @@ class HelpScreen(ModalScreen):
         self.theme_ = theme
 
     def compose(self) -> ComposeResult:
-        body = Static(help_table(self.theme_), id="help", classes="pane")
+        # Bounded by the screen and focused on open, so a short terminal reaches every row
+        # by keyboard.
+        body = VerticalScroll(Static(help_table(self.theme_)), id="help", classes="pane")
         body.border_title = "KEYS"
-        body.border_subtitle = "esc closes"
+        body.border_subtitle = "↑ ↓ pgup pgdn home end scroll · esc closes"
         yield body
+
+    def on_mount(self) -> None:
+        self.query_one("#help", VerticalScroll).focus()

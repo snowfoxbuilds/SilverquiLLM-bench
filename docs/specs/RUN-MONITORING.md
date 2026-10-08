@@ -270,6 +270,7 @@ The native transcript is not shown: for Claude it largely duplicates stdout, and
 
 Every action has a key, and the mouse is a convenience on top: a terminal reached through mosh and a multiplexer may not deliver clicks at all (grilling 2026-10-08).
 `?` lists every key over the current view, and the footer names the keys of the view in front.
+The list never grows past the terminal: it opens focused, scrolls with ↑ ↓, page up/down, Home and End, and on closing returns focus where it was.
 
 | Keys | Where | Action |
 | --- | --- | --- |

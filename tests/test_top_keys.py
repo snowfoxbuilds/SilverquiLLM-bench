@@ -165,6 +165,61 @@ async def test_question_mark_lists_every_key_and_closes_again():
         assert "? keys" in footer
 
 
+def _help_shows_its_end(app) -> bool:
+    body = app.screen.query_one("#help")
+    assert body.region.y >= 0 and body.region.bottom <= app.size.height
+    return body.scroll_y >= body.max_scroll_y
+
+
+@pytest.mark.parametrize("size", [(120, 24), (80, 24)])
+@synchronous
+async def test_a_short_terminal_reaches_every_key_by_keyboard(size):
+    app = _app()
+    async with app.run_test(size=size) as pilot:
+        await _settle(app, pilot)
+        await pilot.press("tab")
+        before = app.focused
+        await pilot.press("question_mark")
+        body = app.screen.query_one("#help")
+        assert app.focused is body
+        assert body.max_scroll_y > 0, "the list should not fit 24 rows"
+        assert body.scroll_y == 0 and not _help_shows_its_end(app)
+        await pilot.press("end")
+        await pilot.pause()
+        assert _help_shows_its_end(app)
+        await pilot.press("home")
+        await pilot.pause()
+        assert body.scroll_y == 0
+        for _ in range(40):
+            await pilot.press("down")
+        await pilot.pause()
+        assert _help_shows_its_end(app)
+        await pilot.press("escape")
+        assert not isinstance(app.screen, HelpScreen)
+        assert app.focused is before
+
+
+@synchronous
+async def test_the_key_list_stays_reachable_when_resized_while_open():
+    app = _app()
+    async with app.run_test(size=(140, 50)) as pilot:
+        await _settle(app, pilot)
+        await pilot.press("question_mark")
+        body = app.screen.query_one("#help")
+        assert body.max_scroll_y == 0
+        await pilot.resize_terminal(80, 20)
+        await pilot.pause()
+        assert body.max_scroll_y > 0
+        await pilot.press("pagedown", "end")
+        await pilot.pause()
+        assert _help_shows_its_end(app)
+        await pilot.resize_terminal(140, 50)
+        await pilot.pause()
+        assert body.max_scroll_y == 0 and _help_shows_its_end(app)
+        await pilot.press("q")
+        assert not isinstance(app.screen, HelpScreen)
+
+
 @synchronous
 async def test_every_view_is_usable_from_the_keyboard_alone():
     monitor = FakeMonitor()

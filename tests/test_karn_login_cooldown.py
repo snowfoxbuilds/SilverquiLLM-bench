@@ -224,3 +224,83 @@ def test_the_monitor_reads_each_profiles_cooldown_without_writing(tmp_path):
     later = login_profiles(tmp_path / "state", frozenset(), now=NOW + timedelta(hours=4))
     assert all(view.cooldown_until is None for view in later)
     assert sorted(path.name for path in target.root.rglob("*")) == before
+
+
+def _two_roots(tmp_path, monkeypatch, *names):
+    """The same slot names enrolled under an explicit root and under the configured one."""
+    explicit, configured = tmp_path / "explicit", tmp_path / "configured"
+    for root in (explicit, configured):
+        target = LoginPool.of(root, "karn-codex-login")
+        for name in names:
+            enroll(target.named_slot(name), target.plugin_id)
+    config_home = tmp_path / "xdg"
+    (config_home / "silverquillm").mkdir(parents=True)
+    (config_home / "silverquillm" / "config.toml").write_text(f'state_root = "{configured}"\n')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    return explicit, configured
+
+
+def _tree(root):
+    return {
+        path.relative_to(root): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _slot(root, name):
+    return LoginPool.of(root, "karn-codex-login").root / name
+
+
+def _invoke(group_root, sub_root, *args):
+    group = ["--state-root", str(group_root)] if group_root else []
+    sub = ["--state-root", str(sub_root)] if sub_root else []
+    return CliRunner().invoke(main, ["login", *group, "cooldown", *sub, "--agent", "codex", *args])
+
+
+@pytest.mark.parametrize("placement", ["before", "after", "both"])
+@pytest.mark.parametrize("selection", [("--slots", "slot-1"), ("--all",)])
+def test_an_explicit_state_root_chooses_the_pool_wherever_it_is_given(
+    tmp_path, monkeypatch, placement, selection
+):
+    explicit, configured = _two_roots(tmp_path, monkeypatch, "slot-1", "slot-2")
+    decoy = tmp_path / "decoy"
+    group_root = {"before": explicit, "after": None, "both": decoy}[placement]
+    sub_root = {"before": None, "after": explicit, "both": explicit}[placement]
+    untouched = _tree(configured)
+
+    hold = _invoke(group_root, sub_root, "--duration", "1h", *selection)
+    assert hold.exit_code == 0, hold.output
+    assert cooldown_until(_slot(explicit, "slot-1")) is not None
+    assert _tree(configured) == untouched
+    assert not decoy.exists()
+
+    lift = _invoke(group_root, sub_root, "--clear", *selection)
+    assert lift.exit_code == 0, lift.output
+    assert "cooldown lifted" in lift.output
+    assert cooldown_until(_slot(explicit, "slot-1")) is None
+    assert _tree(configured) == untouched
+
+
+def test_without_a_flag_the_configured_state_root_holds_the_slot(tmp_path, monkeypatch):
+    explicit, configured = _two_roots(tmp_path, monkeypatch, "slot-1")
+    untouched = _tree(explicit)
+    result = _invoke(None, None, "--duration", "1h", "--slots", "slot-1")
+    assert result.exit_code == 0, result.output
+    assert cooldown_until(_slot(configured, "slot-1")) is not None
+    assert _tree(explicit) == untouched
+
+
+@pytest.mark.parametrize("placement", ["before", "after"])
+def test_an_unknown_slot_in_the_chosen_root_never_falls_back_to_another_pool(
+    tmp_path, monkeypatch, placement
+):
+    explicit, configured = _two_roots(tmp_path, monkeypatch, "slot-1")
+    elsewhere = LoginPool.of(configured, "karn-codex-login")
+    enroll(elsewhere.named_slot("slot-9"), elsewhere.plugin_id)
+    before = (_tree(explicit), _tree(configured))
+    group_root, sub_root = (explicit, None) if placement == "before" else (None, explicit)
+    result = _invoke(group_root, sub_root, "--duration", "1h", "--slots", "slot-9")
+    assert result.exit_code == 2
+    assert "Not enrolled in the codex pool: slot-9 (enrolled: slot-1)" in result.output
+    assert (_tree(explicit), _tree(configured)) == before
