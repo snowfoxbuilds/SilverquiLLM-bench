@@ -129,7 +129,20 @@ def _report(record, *, exit_on_status=True):
         raise click.exceptions.Exit(130 if execution["status"] == "interrupted" else 1)
 
 
-@click.group("login", invoke_without_command=True)
+class _LoginGroup(click.Group):
+    def resolve_command(self, ctx, args):
+        if args and args[0] not in self.commands and not args[0].startswith("-"):
+            raise click.UsageError(
+                f"unexpected extra argument ({args[0]}): a login is never named; "
+                "it comes from the construct's pool (subcommands: "
+                + ", ".join(sorted(self.commands))
+                + ")",
+                ctx,
+            )
+        return super().resolve_command(ctx, args)
+
+
+@click.group("login", cls=_LoginGroup, invoke_without_command=True)
 @click.option("--build-output", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--construct", help="Any construct using the login plugin.")
 @click.option("--slot", help="Re-enroll this slot of the pool; omitted, enroll a new slot.")
