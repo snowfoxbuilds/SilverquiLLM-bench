@@ -21,7 +21,7 @@ def copy_card(card, player):
     result = copy(card)
     result.__dict__ = {key: copy(value) for key, value in card.__dict__.items()
                        if not key.startswith(("_printed_", "_copy_"))
-                       and key not in ("get_loyalty_abilities", "get_mana_abilities", "_game")}
+                       and key not in ("get_activated_abilities", "get_loyalty_abilities", "get_mana_abilities", "_game")}
     result.__dict__.update(copiable_values(card))
     result.object_id = GameObject._next_id
     GameObject._next_id += 1
