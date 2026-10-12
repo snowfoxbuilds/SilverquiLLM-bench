@@ -8,6 +8,7 @@ the game going on.
 """
 
 from card_impl import SlaughterPact, SlaughterPactAbility2
+from cards.fdn.fdn_17.card_impl import HeraldOfEternalDawn
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_171.card_impl import DiregrafGhoul
 from cards.fdn.fdn_192.card_impl import BurstLightning
@@ -232,5 +233,20 @@ def test_two_pacts_paid_in_full():
     _to_next_upkeep(t, triggers=2, choices=[PACT_COMES_DUE, PACT_COMES_DUE])
     _pay(t, 0, swamps[:3])
     _pay(t, 0, swamps[3:])
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    t.run()
+
+
+def test_herald_of_eternal_dawn_keeps_an_unpaid_pact_from_losing():
+    """While player 0 controls Herald of Eternal Dawn they can't lose the game:
+    the pact goes unpaid and the game goes on."""
+    pact, lions, herald = card(SlaughterPact), card(SavannahLions), card(HeraldOfEternalDawn)
+    game = create_game(Side(hand=[pact], battlefield=[herald], library=_library()),
+                       Side(battlefield=[lions], library=_library()), start=MAIN)
+    t = Table(game)
+    _pact(t, 0, pact, lions)
+    _to_next_upkeep(t)
+    t.pass_(0, choices=[Decision.no()], note="no mana to pay {2}{B}")
+    t.pass_(1, then=[off_stack(PACT_COMES_DUE)])
     t.pass_to(Phase.PRECOMBAT_MAIN, 0)
     t.run()

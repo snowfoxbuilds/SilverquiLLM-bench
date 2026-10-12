@@ -8,17 +8,21 @@ empty mana pool can still cast.
 
 from card_impl import InsideInformation
 from cards.fdn.fdn_79.card_impl import Boltwave
+from cards.fdn.fdn_131.card_impl import RavenousAmulet
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_160.card_impl import AnOfferYouCantRefuse
 from cards.fdn.fdn_173.card_impl import Exsanguinate
 from cards.fdn.fdn_175.card_impl import HerosDownfall
+from cards.fdn.fdn_188.card_impl import Abrade, AbradeAbility3
 from cards.fdn.fdn_192.card_impl import BurstLightning
+from cards.fdn.fdn_248.card_impl import ThousandYearStorm, ThousandYearStormAbility1
 from cards.fdn.fdn_272.card_impl import Plains
 from cards.fdn.fdn_274.card_impl import Island
 from cards.fut.fut_78.card_impl import SlaughterPact, SlaughterPactAbility2
+from cards.hob.hob_174.card_impl import GlamdringFoehammer, GleamOfDeath
 from test_interface import Decision, ManaType, Phase, Side, Step, Zone, card, create_game, player
 
-from table import Table, appears, life, moves, off_stack, on_stack, taps, wins
+from table import Table, appears, copied, life, moves, off_stack, on_stack, taps, wins
 
 MAIN = (Phase.PRECOMBAT_MAIN, 0)
 
@@ -27,14 +31,15 @@ def _plains(n: int = 3) -> list:
     return [card(Plains) for _ in range(n)]
 
 
-def _game(library, *, x: int = 0, hand=(), extra_mana=None, life_total: int = 20, seat1_hand=(),
-          seat1_battlefield=(), seat1_mana=None):
+def _game(library, *, x: int = 0, hand=(), extra_mana=None, life_total: int = 20, battlefield=(), own_library=None,
+          seat1_hand=(), seat1_battlefield=(), seat1_mana=None):
     info = card(InsideInformation)
     mana = {ManaType.BLACK: 2, ManaType.COLORLESS: x}
     for kind, amount in (extra_mana or {}).items():
         mana[kind] = mana.get(kind, 0) + amount
     game = create_game(
-        Side(hand=[info, *hand], library=_plains(), mana=mana, life=life_total),
+        Side(hand=[info, *hand], battlefield=list(battlefield), library=own_library or _plains(), mana=mana,
+             life=life_total),
         Side(library=list(library), hand=list(seat1_hand), battlefield=list(seat1_battlefield),
              mana=dict(seat1_mana or {})),
         start=MAIN,
@@ -265,4 +270,60 @@ def test_a_pact_cast_this_way_still_comes_due_for_its_caster():
     t.pass_(0, then=[on_stack(SlaughterPactAbility2, 0)], note="the pact comes due at its caster's upkeep")
     t.pass_(0, choices=[Decision.no()], note="no mana to pay {2}{B}")
     t.pass_(1, then=[off_stack(SlaughterPactAbility2), wins(1)])
+    t.run()
+
+
+def test_a_thousand_year_storm_copy_keeps_x_and_its_cards_may_be_played():
+    """Boltwave was cast first this turn, so Thousand-Year Storm copies Inside
+    Information once. The copy keeps X = 2 (CR 707.10): resolving first, it
+    exiles the top two cards, the original the next two, and player 0 may cast
+    a card the copy exiled for life."""
+    storm, wave, lions = card(ThousandYearStorm), card(Boltwave), card(SavannahLions)
+    library = [lions, card(Plains), card(BurstLightning), card(Plains), card(Plains)]
+    game, info = _game(library, x=2, hand=[wave], battlefield=[storm], extra_mana={ManaType.RED: 1})
+    t = Table(game)
+    t.act(0, wave, then=[moves(wave, Zone.STACK), on_stack(ThousandYearStormAbility1, 0)])
+    _resolve(t, then=[off_stack(ThousandYearStormAbility1)], note="nothing was cast before Boltwave: no copy")
+    _resolve(t, then=[moves(wave, Zone.GRAVEYARD), life(1, 17)])
+    t.act(0, info, choices=[Decision.number(2), player(1)],
+          then=[moves(info, Zone.STACK), on_stack(ThousandYearStormAbility1, 0)])
+    t.pass_(0, choices=[Decision.no()], note="the copy keeps player 1 as its target")
+    t.pass_(1, then=[off_stack(ThousandYearStormAbility1), copied(InsideInformation, 0)])
+    _resolve(t, then=[off_stack(InsideInformation), *(moves(c, Zone.EXILE) for c in library[:2])])
+    _resolve(t, then=[moves(info, Zone.GRAVEYARD), *(moves(c, Zone.EXILE) for c in library[2:4])])
+    t.act(0, lions, then=[moves(lions, Zone.STACK, seat=0), life(0, 19)],
+          note="the copy's exile lets player 0 cast it for life too")
+    _resolve(t, then=[moves(lions, Zone.BATTLEFIELD, seat=0)])
+    t.run()
+
+
+def test_an_adventure_costs_its_own_mana_value_in_life_and_the_equipment_then_costs_mana():
+    """Gleam of Death (mana value 4) is cast from the exile for 4 life and mills
+    player 0's six cards. Resolved, the card is exiled on its Adventure as a new
+    object (CR 400.7, 715.4): Inside Information's permission is gone, and the
+    Adventure's lets Glamdring be cast for its {2}, so no life is paid."""
+    glamdring = card(GlamdringFoehammer)
+    own = _plains(6)
+    library = [glamdring, card(Plains)]
+    game, info = _game(library, x=1, own_library=own, extra_mana={ManaType.COLORLESS: 2})
+    t = Table(game)
+    _cast_info(t, info, library, 1)
+    t.act(0, GleamOfDeath, glamdring, then=[moves(glamdring, Zone.STACK, face=GleamOfDeath, seat=0), life(0, 16)])
+    _resolve(t, then=[*(moves(c, Zone.GRAVEYARD) for c in own), moves(glamdring, Zone.EXILE)])
+    t.act(0, GlamdringFoehammer, glamdring, then=[moves(glamdring, Zone.STACK, seat=0)],
+          note="{2} from the pool pays it; life stays at 16")
+    _resolve(t, then=[moves(glamdring, Zone.BATTLEFIELD, seat=0)])
+    t.run()
+
+
+def test_a_modal_spell_costs_its_mana_value_in_life_whichever_mode():
+    """Abrade (mana value 2) costs 2 life with its second mode chosen, and
+    destroys player 1's artifact."""
+    abrade, amulet = card(Abrade), card(RavenousAmulet)
+    library = [abrade, card(Plains)]
+    game, info = _game(library, x=1, seat1_battlefield=[amulet])
+    t = Table(game)
+    _cast_info(t, info, library, 1)
+    t.act(0, abrade, choices=[AbradeAbility3, amulet], then=[moves(abrade, Zone.STACK, seat=0), life(0, 18)])
+    _resolve(t, then=[moves(abrade, Zone.GRAVEYARD), moves(amulet, Zone.GRAVEYARD)])
     t.run()
