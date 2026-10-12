@@ -1,5 +1,7 @@
 # SilverquiLLM-bench
 
+Latest results live on [snowfoxbuilds.com](https://snowfoxbuilds.com/silverquillm), and the newest round is written up in [the hob-medium Post](https://snowfoxbuilds.com/blog/silverquillm-hob-medium/). To hear about each new write-up when it comes out, subscribe to [the newsletter](https://snowfoxbuilds.substack.com).
+
 A benchmark for evaluating LLM coding agents by tasking them with implementing **Magic: The Gathering** cards as Python classes inside a custom game engine.
 
 Each task is a small but real software-engineering job: read a spec, understand natural-language rules text, extend an existing codebase, and produce a working, tested implementation. Cards are drawn from a recently released MTG set to minimize training-data contamination and measure genuine code-generation ability rather than recall.
@@ -67,9 +69,11 @@ Audited tests are never visible to the agent. Agent-written tests are harvested 
 
 ## Quickstart
 
+Runs currently need [Karn](https://snowfoxbuilds.com/karn) to build the agent images, and Karn isn't public yet. Until it is, the engine, the tests and the benchmark data are all here to read.
+
 Use Python 3.13, Docker, Karn on the build host, and a host Codex or Claude Code CLI for subscription enrollment.
 Install the benchmark with `pip install -e .`.
-SilverquiLLM runs a completed Karn build by itself; it needs no Ozolith package.
+SilverquiLLM-bench runs a completed Karn build by itself; it needs no Ozolith package.
 
 The candidate recipes live in the results repository at `karn/constructs/<label>`. Build them from its committed tree, then build the grader image, before running.
 Commands find the results repository, batch queue, run directory, and login state through their flags or `~/.config/silverquillm/config.toml` (see [Karn benchmarking](docs/KARN-BENCHMARKING.md#host-configuration)):
@@ -126,11 +130,13 @@ Historical Candidate Bundle batches are shown as unsupported and never run.
 
 A leaderboard-valid run requires the full target set, an unfiltered run, and a successful, evaluatable final state. Smoke runs, filtered runs, and runs that produced no viable output are excluded. The regression dimensions are reported separately rather than folded into a single composite score.
 
+Published results are on [snowfoxbuilds.com](https://snowfoxbuilds.com/silverquillm).
+
 ---
 
 ## Agent Images
 
-New agents are Karn constructs: a v5 Construct Definition built into an exact image by `karn build`, which SilverquiLLM runs without rebuilding (see [Karn benchmarking](docs/KARN-BENCHMARKING.md)).
+New agents are Karn constructs: a v5 Construct Definition built into an exact image by `karn build`, which SilverquiLLM-bench runs without rebuilding (see [Karn benchmarking](docs/KARN-BENCHMARKING.md)).
 The images under [docker/](docker/) belong to the historical `--image` lineage run by `silverquillm legacy`.
 
 ---
