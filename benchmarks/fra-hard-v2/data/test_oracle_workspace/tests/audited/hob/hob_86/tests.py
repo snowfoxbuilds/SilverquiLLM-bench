@@ -4,10 +4,11 @@ Player 1's creatures die on player 0's turn, usually to player 0's Burst
 Lightning, and player 0 then casts Supper for Spiders. A returned card shows on
 player 0's side as the card it is, still player 1's. That it is a Food and no
 longer a creature shows in what it can do: it gains 3 life, cannot attack or
-block, and is not a creature to target.
+block, is not a creature to target, and does not enter as a creature.
 """
 
 from card_impl import SupperForSpiders, SupperForSpidersAbility1
+from cards.fdn.fdn_9.card_impl import DazzlingAngel
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_175.card_impl import HerosDownfall
 from cards.fdn.fdn_187.card_impl import Zombify
@@ -163,10 +164,22 @@ def test_a_food_is_not_a_creature_to_target():
 
 
 def test_a_food_cannot_attack_on_a_later_turn():
+    """On player 0's next turn the Lions is no longer summoning sick, so only
+    its not being a creature keeps it from attacking."""
     t, supper, lions = _killed_lions()
     _supper(t, supper, [lions])
+    t.pass_to(Step.DECLARE_ATTACKERS, 1)
     t.pass_to(Step.DECLARE_ATTACKERS, 0)
     t.act_illegal(0, lions, note="it is not a creature, now or after the turn it was made a Food")
+    t.run()
+
+
+def test_a_returned_card_does_not_enter_as_a_creature():
+    """It is a Food as it enters (CR 611.3c), so player 0's Dazzling Angel
+    sees no other creature enter and gains no life."""
+    angel = card(DazzlingAngel)
+    t, supper, lions = _killed_lions(battlefield=[angel])
+    _supper(t, supper, [lions], note="Dazzling Angel does not trigger")
     t.run()
 
 

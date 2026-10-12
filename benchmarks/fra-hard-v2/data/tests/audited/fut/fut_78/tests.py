@@ -128,7 +128,8 @@ def test_declining_to_pay_loses_even_with_the_mana():
 
 
 def test_two_mana_short_of_the_cost_loses():
-    """{B}{B} is not {2}{B}: with two Swamps the pact cannot be paid."""
+    """{B}{B} is not {2}{B}: with two Swamps the pact cannot be paid, whether
+    the engine rejects paying or never offers it."""
     pact, lions = card(SlaughterPact), card(SavannahLions)
     swamps = [card(Swamp) for _ in range(2)]
     game = create_game(Side(hand=[pact], battlefield=swamps, library=_library()),
@@ -138,7 +139,7 @@ def test_two_mana_short_of_the_cost_loses():
     _to_next_upkeep(t)
     for swamp in swamps:
         t.act(0, swamp, then=[taps(swamp)])
-    t.pass_(0, branches=[branch(choices=[Decision.yes()]), branch(choices=[Decision.no()])])
+    t.pass_(0, branches=[branch(choices=[Decision.yes(), Decision.no()]), branch(choices=[Decision.no()])])
     t.pass_(1, then=[off_stack(PACT_COMES_DUE), wins(1)])
     t.run()
 

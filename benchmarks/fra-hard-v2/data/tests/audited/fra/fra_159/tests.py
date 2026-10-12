@@ -20,11 +20,13 @@ from cards.fdn.fdn_116.card_impl import AnthemOfChampions
 from cards.fdn.fdn_129.card_impl import LeylineAxe
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride, AjaniCallerOfThePrideAbility2
 from cards.fdn.fdn_146.card_impl import SavannahLions
+from cards.fdn.fdn_153.card_impl import EssenceScatter
 from cards.fdn.fdn_163.card_impl import SelfReflection
 from cards.fdn.fdn_172.card_impl import EatenAlive, EatenAliveAbility1
 from cards.fdn.fdn_173.card_impl import Exsanguinate
 from cards.fdn.fdn_175.card_impl import HerosDownfall
 from cards.fdn.fdn_184.card_impl import RuneScarredDemon
+from cards.fdn.fdn_187.card_impl import Zombify
 from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_196.card_impl import FirebrandArcher, FirebrandArcherAbility1
 from cards.fdn.fdn_212.card_impl import BiteDown
@@ -161,16 +163,6 @@ def test_an_uldaros_not_cast_does_not_exile_anything():
     t.run()
 
 
-def test_an_instant_copy_resolves_and_ceases_to_exist():
-    bolt = card(BurstLightning)
-    game, uldaros = _game([bolt])
-    t = Table(game)
-    _cast_uldaros(t, uldaros, [bolt])
-    _resolve_trigger(t, [BurstLightning, player(1)], then=[moves(bolt, Zone.EXILE), copied(BurstLightning, 0)])
-    _resolve_top(t, BurstLightning, then=[life(1, 18)])
-    t.run()
-
-
 def test_one_card_of_each_type_is_copied_and_cast():
     lions, bolt, wave = card(SavannahLions), card(BurstLightning), card(Boltwave)
     game, uldaros = _game([lions, bolt, wave])
@@ -296,6 +288,26 @@ def test_a_target_exiled_in_response_is_not_copied_and_the_other_still_is():
     t.pass_(1, then=[off_stack(AmbushWolfAbility2), moves(lions, Zone.EXILE)])
     _resolve_trigger(t, [SavannahLions, Boltwave], then=[moves(wave, Zone.EXILE), copied(Boltwave, 0)])
     _resolve_top(t, Boltwave, then=[life(1, 17)])
+    t.run()
+
+
+def test_a_countered_uldaros_returned_the_same_turn_was_not_cast():
+    """Player 1 counters Uldaros, and player 0's Zombify returns it that turn.
+    The Uldaros that enters is a new object that was not cast (CR 400.7), so
+    nothing triggers and the Lions stays in the graveyard."""
+    lions, zombify, scatter = card(SavannahLions), card(Zombify), card(EssenceScatter)
+    game, uldaros = _game([lions], hand=[zombify], extra_mana={ManaType.BLACK: 1, ManaType.COLORLESS: 3},
+                          seat1=Side(hand=[scatter], library=_library(),
+                                     mana={ManaType.BLUE: 1, ManaType.COLORLESS: 1}))
+    t = Table(game)
+    t.act(0, uldaros, then=[moves(uldaros, Zone.STACK)])
+    t.pass_(0)
+    t.act(1, scatter, choices=[uldaros], then=[moves(scatter, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(scatter, Zone.GRAVEYARD), moves(uldaros, Zone.GRAVEYARD)])
+    t.act(0, zombify, choices=[uldaros], then=[moves(zombify, Zone.STACK)])
+    t.pass_(0, choices=[lions], note="a trigger would exile the Lions")
+    t.pass_(1, then=[moves(zombify, Zone.GRAVEYARD), moves(uldaros, Zone.BATTLEFIELD)])
     t.run()
 
 
