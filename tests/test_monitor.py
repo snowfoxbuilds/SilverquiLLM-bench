@@ -835,8 +835,16 @@ def test_a_record_written_before_reported_cost_uses_its_coverage_total():
     assert (cost, source) == ({"value": "5.37", "completeness": "complete"}, "reported")
     measurements["estimated_cost"]["reasons"].append("native_version_not_qualified")
     assert run_cost(measurements)[0]["completeness"] == "partial"
-    # Per-request figures were never recorded, so none count toward weekly usage.
+    # Neither figure was recorded per request, so none count toward weekly usage.
     assert summary_of(measurements).request_costs == ()
+
+
+def test_a_record_written_before_reported_cost_keeps_its_estimated_weekly_spend():
+    measurements = cost_measurements(estimated="25.00")
+    measurements["coverage"] = {"native_reported_cost_usd": "25.00"}
+    run = summary_of(measurements)
+    assert (run.cost, run.cost_source) == (Decimal("25.00"), "reported")
+    assert run.request_costs == ((1_790_000_000_000, Decimal("25.00")),)
 
 
 def test_history_rereads_only_changed_records(tmp_path, monkeypatch):
@@ -896,6 +904,22 @@ def test_hostile_record_values_are_dropped_not_fatal(tmp_path):
     for run in runs:
         assert (run.request_costs, run.usage_reading, run.stopped_at) == ((), None, None)
         assert run.target.pass_rate is None
+
+
+@pytest.mark.parametrize("cost", ["estimated_cost", "reported_cost"])
+@pytest.mark.parametrize("completeness", [[], {}])
+def test_an_unhashable_cost_completeness_ranks_as_unknown(tmp_path, cost, completeness):
+    repo = tmp_path / "repo"
+    directory = write_record(repo, "hostile")
+    manifest = json.loads((directory / "manifest.json").read_text())
+    measurements = manifest["run_metadata"]["measurements"]
+    measurements["reported_cost"] = {"completeness": "complete", "reasons": [], "value": "1.50"}
+    measurements[cost]["completeness"] = completeness
+    (directory / "manifest.json").write_text(json.dumps(manifest))
+    write_record(repo, "run-a")
+    runs = {run.run_id: run for run in HistoryStore(repo).runs()}
+    assert runs.keys() == {"hostile", "run-a"}
+    assert runs["hostile"].cost == Decimal("1.50")
 
 
 def test_a_malformed_record_is_skipped(tmp_path):

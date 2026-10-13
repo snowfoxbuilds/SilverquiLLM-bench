@@ -18,6 +18,7 @@ from silverquillm.karn.claude_observations import (
 )
 from silverquillm.karn.host import NATIVE_TELEMETRY_ENVIRONMENT
 from silverquillm.karn.observations import summarize_events
+from silverquillm.monitor.history import run_cost
 
 SESSION = "0b9c7f6e-1111-4222-8333-944455556666"
 
@@ -981,3 +982,28 @@ def test_a_request_whose_reported_cost_is_malformed_leaves_the_total_partial():
     assert result["reported_cost"]["value"] == "0.0123"
     assert "otel_cost_malformed" in result["reported_cost"]["reasons"]
     assert [row["response_id"] for row in result["request_reported_costs"]] == ["msg_02"]
+
+
+def test_no_valid_reported_cost_is_missing_and_the_run_cost_is_the_estimate():
+    result = reconciled(
+        api_request("req_01", cost_usd="NaN"), api_request("req_02", cost_usd="NaN")
+    )
+    assert result["reported_cost"]["value"] is None
+    assert result["reported_cost"]["completeness"] == "missing"
+    assert {"otel_cost_malformed", "native_cost_not_reported"} <= set(
+        result["reported_cost"]["reasons"]
+    )
+    cost, source = run_cost(result)
+    assert (cost["value"], source) == (result["estimated_cost"]["value"], "estimated")
+
+
+@pytest.mark.parametrize("first", [True, False])
+def test_a_reused_request_id_does_not_charge_the_clis_cost_twice(first):
+    extra = assistant("msg_00", "req_01", [{"type": "text"}])
+    body = main_transcript()
+    transcript = [body[0], *extra, *body[1:]] if first else [*body, *extra]
+    events = qualified(events_of(transcript) + api_request("req_01") + api_request("req_02"))
+    result = summarize_claude_events(events, exit_kind="completed")
+    assert result["reported_cost"]["value"] == "0.0246"
+    assert result["coverage"]["native_reported_cost_usd"] == "0.0246"
+    assert len(result["request_reported_costs"]) == 2

@@ -13,7 +13,8 @@ Claude Code already reports an API-equivalent USD figure for each request it mak
 
 Each run records the native CLI's own figure as its Reported Cost, per request and in total, beside the Estimated Cost, which is still computed and recorded in full.
 A run's Run Cost, the figure the bench shows and sums, is its Reported Cost whenever that is at least as complete as its Estimated Cost, and its Estimated Cost otherwise.
-The Reported Cost takes the run's observation reasons, version qualification included, but none of the price table's, and a Reported Cost that differs from a complete Estimated Cost is marked partial.
+The Reported Cost takes the run's observation reasons, version qualification included, but none of the price table's; a Reported Cost that differs from a complete Estimated Cost stays as complete as it was and adds the warning `reported_cost_disagrees_with_estimate`.
+Only a valid figure from the CLI is a Reported Cost: a run whose requests all lack one has none, never a zero.
 Codex reports no cost, so a Codex run's Run Cost is its Estimated Cost.
 
 ## Consequences

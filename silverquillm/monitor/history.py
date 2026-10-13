@@ -159,18 +159,24 @@ def run_cost(measurements: dict) -> tuple[dict, str]:
         reported = mapping(measurements.get("reported_cost"))
     else:
         reported = _legacy_reported_cost(measurements)
-    rank = _COMPLETENESS_RANK.get
-    if _decimal(reported.get("value")) is not None and rank(
-        reported.get("completeness"), 0
-    ) >= rank(estimated.get("completeness"), 0):
+    if _decimal(reported.get("value")) is not None and _rank(reported) >= _rank(estimated):
         return reported, "reported"
     return estimated, "estimated"
 
 
+def _rank(measurement: dict) -> int:
+    completeness = measurement.get("completeness")
+    return _COMPLETENESS_RANK.get(completeness, 0) if isinstance(completeness, str) else 0
+
+
 def _request_costs(measurements: dict, source: str) -> tuple[tuple[tuple[int, Decimal], ...], int]:
     """``(timestamp_ms, usd)`` of each request ``source`` gives a figure, and how many requests
-    it leaves without one."""
-    rows = "request_reported_costs" if source == "reported" else "request_prices"
+    it leaves without one.
+
+    A record written before ADR-019 has no reported per-request figures, so its weekly spend
+    still comes from the price table's request prices even when its total is reported."""
+    reported = source == "reported" and "request_reported_costs" in measurements
+    rows = "request_reported_costs" if reported else "request_prices"
     prices = {
         row["response_id"]: _decimal(row.get("usd"))
         for row in _rows(measurements.get(rows))

@@ -498,9 +498,11 @@ def summarize_claude_events(
                 "response_identity": "otel_observation",
             }
         )
+    # Each request's figure goes to its first response only; a later response reusing the
+    # request id is left unpriced, so the CLI's figure is never counted twice.
     for response in (e for e in rows if e["kind"] == "response"):
         if response.get("request_id") in by_request:
-            reported[response["response_id"]] = by_request[response["request_id"]]
+            reported[response["response_id"]] = by_request.pop(response["request_id"])
     if otel and native_requests - otel_requests:
         reasons.append("otel_missing_native_request")
     unresolved = max(0, len(compactions) - otel_compactions)

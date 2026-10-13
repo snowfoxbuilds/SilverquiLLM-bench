@@ -193,7 +193,7 @@ The provisional figure comes from the run's live telemetry events and is marked 
 Codex request events are priced with the bench's price table, as at the end of a run.
 Claude request events lack the cache-write duration split that the price table needs, so Claude runs sum Claude Code's own per-request `cost_usd`, charging one logical request (`request_id`) once even when it is observed again; a repeat that disagrees is counted as a conflict, and an event without a request id stands alone.
 Once a valid record applies to the run, the row shows that record's Run Cost, its completeness, and the requests its source gives a figure, without waiting for publication or for history to refresh.
-A record's Run Cost is its Reported Cost when that is at least as complete as its Estimated Cost, otherwise its Estimated Cost; a record written before the Reported Cost was recorded falls back to the reported total in its coverage, complete unless its Estimated Cost had a reason beyond pricing, and has no per-request reported figures.
+A record's Run Cost is its Reported Cost when that is at least as complete as its Estimated Cost, otherwise its Estimated Cost; a record written before the Reported Cost was recorded falls back to the reported total in its coverage, complete unless its Estimated Cost had a reason beyond pricing, and has no per-request reported figures, so its weekly spend counts its per-request Estimated Cost instead.
 The applicable record is a linked recovery before the original, and a locally retained copy before a published one; a missing recorded cost stays missing rather than falling back to the live figure.
 A recorded figure drops the `~`, carries `*` when its record calls it incomplete, and shows `≠N` for N conflicting request observations.
 
@@ -228,6 +228,8 @@ A record is this host's when it is retained in this host's run directory, or whe
 A record without host provenance stays in history but never counts toward local usage, and a record naming only a slot, from before Login Pools, is matched to this host's Login Profile of that slot.
 
 A record supplies a reading or spend only when it passes the Run Record's own validation and, when published, is filed under its own identity; history still lists the rest.
+
+A record's spend is the per-request figures of its Run Cost's source, each at its request's time; a record written before the Reported Cost was recorded counts its per-request Estimated Cost, since it has no reported ones.
 
 Each execution's spend counts once.
 A linked recovery reconciles its original's execution without running the model again, so of an execution's records only one counts.

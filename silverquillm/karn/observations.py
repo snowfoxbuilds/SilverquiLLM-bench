@@ -478,7 +478,10 @@ def _measurements(
     costs_present = bool(priced_values) or observed_zero
     estimated = format(sum(priced_values, Decimal(0)), "f")
     reported, reported_reasons, cost_warnings = None, list(reasons), []
-    if reported_costs is None:
+    # Only a valid figure, or a run with no requests at all, is a Reported Cost; an empty
+    # mapping beside requests is a missing one, never a zero.
+    reported_present = reported_costs is not None and (bool(reported_costs) or observed_zero)
+    if not reported_present:
         reported_reasons.append("native_cost_not_reported")
     else:
         total = sum(reported_costs.values(), Decimal(0))
@@ -498,9 +501,7 @@ def _measurements(
         },
         "usage": _measurement(totals, usage_reasons, present=bool(requests) or observed_zero),
         # The native CLI's own figure, preferred over the price-table estimate (ADR-019).
-        "reported_cost": _measurement(
-            reported, reported_reasons, present=reported_costs is not None
-        ),
+        "reported_cost": _measurement(reported, reported_reasons, present=reported_present),
         "estimated_cost": _measurement(estimated, cost_reasons, present=costs_present),
         "cost_warnings": cost_warnings,
         # Input by type (uncached, cache read, 5-minute and 1-hour write) beside output.
