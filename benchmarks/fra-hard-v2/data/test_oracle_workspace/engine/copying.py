@@ -14,6 +14,14 @@ def copiable_values(card):
     values = {key: copy(getattr(card, key)) for key in CHARACTERISTICS if hasattr(card, key)}
     values["card_types"] = set(card._original_card_types)
     values["keywords"] = card._original_keywords
+    if "_subtypes_before_effects" in card.__dict__:
+        values["subtypes"] = set(card.__dict__["_subtypes_before_effects"])
+    if "_colors_before_effects" in card.__dict__:
+        colors = card.__dict__["_colors_before_effects"]
+        if colors is None:
+            values.pop("colors", None)
+        else:
+            values["colors"] = set(colors)
     return values
 
 
@@ -43,6 +51,9 @@ def copy_card(card, player):
 
 
 def become_copy(game, card, target):
+    # Undo layer effects first, so neither the values kept for end_copy nor the
+    # ones the next recalculation starts from are an effect's.
+    card._reset_characteristics()
     if not hasattr(card, "_copy_original_class"):
         card._copy_original_class = type(card)
         card._copy_original_values = copiable_values(card)
@@ -84,6 +95,7 @@ def end_copy(card, game):
         return
     game.trigger_manager.unregister(card)
     game.replacement_manager.unregister(card)
+    card._reset_characteristics()
     original = card._copy_original_values
     card.__class__ = card._copy_original_class
     for key in CHARACTERISTICS:

@@ -33,7 +33,6 @@ class ImprisonedInTheMoonAbility2:
 
 
 _ABILITY_GETTERS = ("get_activated_abilities", "get_mana_abilities", "get_loyalty_abilities")
-_NO_COLORS = object()
 
 
 def _is_on_battlefield(game: Any, obj: Any) -> bool:
@@ -128,42 +127,17 @@ def _remove_abilities(game: Any, perm: Any) -> None:
             setattr(perm, name, _imprisonable(game, perm, name))
 
 
-def _change_type(game: Any, perm: Any) -> None:
-    """Layer 4: *perm* is a land with no other card types.
-
-    ``_reset_characteristics`` restores card types but not subtypes or colors,
-    so the first imprisonment keeps them to give back by :func:`_watch_release`.
-    """
-    if "_before_imprisonment" not in perm.__dict__:
-        perm._before_imprisonment = (set(perm.subtypes), perm.__dict__.get("colors", _NO_COLORS))
-        _watch_release(game, perm)
+def _change_type(perm: Any) -> None:
+    """Layer 4: *perm* is a land with no other card types or subtypes."""
+    perm.__dict__.setdefault("_subtypes_before_effects", set(perm.subtypes))
     perm.card_types = {CardType.LAND}
     perm.subtypes = set()
 
 
-def _watch_release(game: Any, perm: Any) -> None:
-    """Give *perm* back the subtypes and colors it had once nothing imprisons
-    it, wherever it is: an Aura's effects end as it leaves the battlefield, so
-    this effect has a source of its own."""
-
-    def _apply(game: GameState) -> None:
-        if _imprisoned(game, perm):
-            return
-        subtypes, colors = perm.__dict__.pop("_before_imprisonment")
-        perm.subtypes = subtypes
-        if colors is _NO_COLORS:
-            perm.__dict__.pop("colors", None)
-        else:
-            perm.colors = colors
-        game.effect_manager.remove(release)
-
-    release = game.effect_manager.add(ContinuousEffect(
-        source=_apply,
-        layer=Layer.TYPE,
-        sublayer=None,
-        apply=_apply,
-        duration=DURATION_PERMANENT,
-    ))
+def _make_colorless(perm: Any) -> None:
+    """Layer 5: *perm* is colorless."""
+    perm.__dict__.setdefault("_colors_before_effects", getattr(perm, "colors", None))
+    perm.colors = set()
 
 
 class ImprisonedInTheMoon(Aura):
@@ -246,11 +220,11 @@ class ImprisonedInTheMoon(Aura):
 
         def _apply_type(game: GameState) -> None:
             if aura_ref._imprisons(game, perm):
-                _change_type(game, perm)
+                _change_type(perm)
 
         def _apply_color(game: GameState) -> None:
             if aura_ref._imprisons(game, perm):
-                perm.colors = set()
+                _make_colorless(perm)
 
         def _apply_ability(game: GameState) -> None:
             if aura_ref._imprisons(game, perm):

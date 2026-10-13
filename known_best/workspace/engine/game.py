@@ -587,6 +587,13 @@ def mint_token_copy(original: Any) -> Any:
     GameObject._next_id += 1
     token.is_token = True
 
+    # Ability getters an effect set on the original object answer for that
+    # object, and are no copiable value (rule 707.2): the copy has its own.
+    for key in [key for key in token.__dict__ if key.startswith("_printed_")]:
+        del token.__dict__[key]
+    for name in ("get_activated_abilities", "get_mana_abilities", "get_loyalty_abilities"):
+        token.__dict__.pop(name, None)
+
     # Break aliasing of mutable characteristic containers a shallow copy shares.
     # ("colors" is the explicit colour identity factory-minted tokens carry —
     # see cards/fdn/tokens.py — and is as mutable as the other three.)

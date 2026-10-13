@@ -21,18 +21,17 @@
  
  if TYPE_CHECKING:
      from engine.game_state import GameState
-@@ -32,10 +30,6 @@
+@@ -32,9 +30,6 @@ class ImprisonedInTheMoonAbility2:
  # endregion Printed abilities
  
  
 -_ABILITY_GETTERS = ("get_activated_abilities", "get_mana_abilities", "get_loyalty_abilities")
--_NO_COLORS = object()
 -
 -
  def _is_on_battlefield(game: Any, obj: Any) -> bool:
      """Check if *obj* is on any player's battlefield."""
      for player in game.players:
-@@ -66,106 +60,6 @@
+@@ -65,81 +60,6 @@ def _creature_land_planeswalker_targets(game: Any) -> list[Any]:
      return targets
  
  
@@ -98,48 +97,23 @@
 -            setattr(perm, name, _imprisonable(game, perm, name))
 -
 -
--def _change_type(game: Any, perm: Any) -> None:
--    """Layer 4: *perm* is a land with no other card types.
--
--    ``_reset_characteristics`` restores card types but not subtypes or colors,
--    so the first imprisonment keeps them to give back by :func:`_watch_release`.
--    """
--    if "_before_imprisonment" not in perm.__dict__:
--        perm._before_imprisonment = (set(perm.subtypes), perm.__dict__.get("colors", _NO_COLORS))
--        _watch_release(game, perm)
+-def _change_type(perm: Any) -> None:
+-    """Layer 4: *perm* is a land with no other card types or subtypes."""
+-    perm.__dict__.setdefault("_subtypes_before_effects", set(perm.subtypes))
 -    perm.card_types = {CardType.LAND}
 -    perm.subtypes = set()
 -
 -
--def _watch_release(game: Any, perm: Any) -> None:
--    """Give *perm* back the subtypes and colors it had once nothing imprisons
--    it, wherever it is: an Aura's effects end as it leaves the battlefield, so
--    this effect has a source of its own."""
--
--    def _apply(game: GameState) -> None:
--        if _imprisoned(game, perm):
--            return
--        subtypes, colors = perm.__dict__.pop("_before_imprisonment")
--        perm.subtypes = subtypes
--        if colors is _NO_COLORS:
--            perm.__dict__.pop("colors", None)
--        else:
--            perm.colors = colors
--        game.effect_manager.remove(release)
--
--    release = game.effect_manager.add(ContinuousEffect(
--        source=_apply,
--        layer=Layer.TYPE,
--        sublayer=None,
--        apply=_apply,
--        duration=DURATION_PERMANENT,
--    ))
+-def _make_colorless(perm: Any) -> None:
+-    """Layer 5: *perm* is colorless."""
+-    perm.__dict__.setdefault("_colors_before_effects", getattr(perm, "colors", None))
+-    perm.colors = set()
 -
 -
  class ImprisonedInTheMoon(Aura):
      """Imprisoned in the Moon — {2}{U}.
  
-@@ -186,6 +80,9 @@
+@@ -160,6 +80,9 @@ class ImprisonedInTheMoon(Aura):
              '"{T}: Add {C}" and loses all other card types and abilities.',
          )
          super().__init__(**kwargs)
@@ -149,7 +123,7 @@
  
      # -- targeting --------------------------------------------------------
  
-@@ -220,47 +117,110 @@
+@@ -194,47 +117,110 @@ class ImprisonedInTheMoon(Aura):
          if not (ctypes & {CardType.CREATURE, CardType.LAND, CardType.PLANESWALKER}):
              return
          self.attached_to = target
@@ -217,7 +191,7 @@
 +        # Layer 4: Type-changing effect
          def _apply_type(game: GameState) -> None:
 -            if aura_ref._imprisons(game, perm):
--                _change_type(game, perm)
+-                _change_type(perm)
 +            if not _is_on_battlefield(game, aura_ref):
 +                return
 +            perm = aura_ref.attached_to
@@ -237,7 +211,7 @@
 +        # Layer 5: Color-changing effect (colorless)
          def _apply_color(game: GameState) -> None:
 -            if aura_ref._imprisons(game, perm):
--                perm.colors = set()
+-                _make_colorless(perm)
 +            if not _is_on_battlefield(game, aura_ref):
 +                return
 +            perm = aura_ref.attached_to
@@ -258,6 +232,15 @@
          def _apply_ability(game: GameState) -> None:
 -            if aura_ref._imprisons(game, perm):
 -                _remove_abilities(game, perm)
+-
+-        for layer, apply in ((Layer.TYPE, _apply_type), (Layer.COLOR, _apply_color), (Layer.ABILITY, _apply_ability)):
+-            game.effect_manager.add(ContinuousEffect(
+-                source=aura_ref,
+-                layer=layer,
+-                sublayer=None,
+-                apply=apply,
+-                duration=DURATION_PERMANENT,
+-            ))
 +            if not _is_on_battlefield(game, aura_ref):
 +                return
 +            perm = aura_ref.attached_to
@@ -273,18 +256,46 @@
 +            duration=DURATION_PERMANENT,
 +        )
 +        self._ability_effect_ref = game.effect_manager.add(ability_effect)
- 
--        for layer, apply in ((Layer.TYPE, _apply_type), (Layer.COLOR, _apply_color), (Layer.ABILITY, _apply_ability)):
--            game.effect_manager.add(ContinuousEffect(
--                source=aura_ref,
--                layer=layer,
--                sublayer=None,
--                apply=apply,
--                duration=DURATION_PERMANENT,
--            ))
++
 +        # ENGINE LIMITATION: The enchanted permanent should gain the mana
 +        # ability "{T}: Add {C}".  Implementing this properly requires engine
 +        # support for dynamically granting activated mana abilities to
 +        # permanents via continuous effects.  Currently the engine has no
 +        # mechanism to inject a ManaAbility into an arbitrary permanent at
 +        # the continuous-effect layer.
+--- a/engine/card.py
++++ b/engine/card.py
+@@ -319,17 +319,6 @@ class CardImpl(GameObject):
+         """
+         self.card_types = set(self._original_card_types)
+         self.keywords = self._original_keywords
+-        # A layer 4 or 5 effect that changes subtypes or colors keeps what it
+-        # found under these keys, so each recalculation starts from the values
+-        # it would have without the effect — whatever they have become since.
+-        if "_subtypes_before_effects" in self.__dict__:
+-            self.subtypes = self.__dict__.pop("_subtypes_before_effects")
+-        if "_colors_before_effects" in self.__dict__:
+-            colors = self.__dict__.pop("_colors_before_effects")
+-            if colors is None:
+-                self.__dict__.pop("colors", None)
+-            else:
+-                self.colors = colors
+ 
+     def reset_for_zone_change(self) -> None:
+         """Forget everything this object accumulated on the battlefield.
+--- a/engine/game.py
++++ b/engine/game.py
+@@ -587,13 +587,6 @@ def mint_token_copy(original: Any) -> Any:
+     GameObject._next_id += 1
+     token.is_token = True
+ 
+-    # Ability getters an effect set on the original object answer for that
+-    # object, and are no copiable value (rule 707.2): the copy has its own.
+-    for key in [key for key in token.__dict__ if key.startswith("_printed_")]:
+-        del token.__dict__[key]
+-    for name in ("get_activated_abilities", "get_mana_abilities", "get_loyalty_abilities"):
+-        token.__dict__.pop(name, None)
+-
+     # Break aliasing of mutable characteristic containers a shallow copy shares.
+     # ("colors" is the explicit colour identity factory-minted tokens carry —
+     # see cards/fdn/tokens.py — and is as mutable as the other three.)

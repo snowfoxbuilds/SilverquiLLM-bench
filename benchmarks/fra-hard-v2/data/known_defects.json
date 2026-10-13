@@ -269,7 +269,7 @@
           "fdn_156/tests.py::TestImprisonedLand::test_an_opponents_land_taps_for_colorless_for_its_controller",
           "fdn_156/tests.py::TestImprisonedCreature::test_a_creature_becomes_a_land_tapping_for_colorless",
           "fdn_156/tests.py::TestImprisonedCreature::test_an_opponents_creature_taps_for_colorless_for_its_controller",
-          "fdn_156/tests.py::TestImprisonedCreature::test_destroying_the_aura_makes_it_an_elf_again"
+          "fdn_156/tests.py::TestImprisonedCreature::test_destroying_the_aura_makes_archdruid_count_it_again"
         ]
       }
     }

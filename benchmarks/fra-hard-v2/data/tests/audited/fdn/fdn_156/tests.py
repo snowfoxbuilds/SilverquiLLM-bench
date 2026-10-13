@@ -2,9 +2,10 @@
 
 Each test puts Imprisoned in the Moon on a permanent and judges it by what the
 players can do with that permanent: which of its abilities they may still
-activate, what its "{T}: Add {C}" pays for, and whether it can be targeted as a
-creature or as an Elf. Destroying the Aura with Cathar Commando shows the
-permanent getting back what it had.
+activate, what its "{T}: Add {C}" pays for and for whom, whether it can be
+targeted as a creature, and whether Elvish Archdruid counts it among the Elves.
+Destroying the Aura with Cathar Commando shows the permanent getting back what
+it had.
 """
 
 from __future__ import annotations
@@ -37,14 +38,15 @@ class TestImprisonedInTheMoonProperties:
         assert "Aura" in moon.subtypes
 
 
-def _game(battlefield=(), hand=(), opposing=()):
+def _game(battlefield=(), hand=(), opposing=(), opposing_hand=()):
     """Player 0's main phase with Imprisoned in the Moon and three Islands to
-    cast it, ``battlefield`` and ``hand`` beside them, against ``opposing``."""
+    cast it, ``battlefield`` and ``hand`` beside them, against ``opposing``
+    and ``opposing_hand``."""
     moon = card(ImprisonedInTheMoon)
     islands = [card(Island) for _ in range(3)]
     game = create_game(
         Side(hand=[moon, *hand], battlefield=[*islands, *battlefield]),
-        Side(battlefield=list(opposing)),
+        Side(hand=list(opposing_hand), battlefield=list(opposing)),
         start=MAIN,
     )
     return Table(game), moon, islands
@@ -57,6 +59,14 @@ def _imprison(t, moon, islands, target):
     t.act(0, moon, choices=[target], then=[moves(moon, Zone.STACK)])
     t.pass_(0)
     t.pass_(1, then=[moves(moon, Zone.BATTLEFIELD)])
+
+
+def _flash_in_cathar(t, permanent, plains, cathar):
+    """Player 1, holding priority, taps ``permanent`` for {C} and the Plains for
+    {W}, and flashes in Cathar Commando ({1}{W}) with them."""
+    t.act(1, ability(permanent, TAP_FOR_C), then=[taps(permanent)])
+    t.act(1, plains, then=[taps(plains)])
+    t.act(1, cathar, then=[moves(cathar, Zone.STACK)])
 
 
 def _destroy(t, cathar, plains, moon):
@@ -98,21 +108,26 @@ class TestImprisonedLand:
         t.run()
 
     def test_an_opponents_land_taps_for_colorless_for_its_controller(self):
-        forest = card(Forest)
-        t, moon, islands = _game(opposing=[forest])
+        """The {C} goes to the Forest's controller, who pays Cathar Commando's
+        generic mana with it."""
+        forest, plains, cathar = card(Forest), card(Plains), card(CatharCommando)
+        t, moon, islands = _game(opposing=[forest, plains], opposing_hand=[cathar])
         _imprison(t, moon, islands, forest)
         t.pass_(0)
         t.act_illegal(1, ability(forest, ForestAbility1))
-        t.act(1, ability(forest, TAP_FOR_C), then=[taps(forest)])
+        _flash_in_cathar(t, forest, plains, cathar)
         t.run()
 
     def test_destroying_the_aura_gives_the_forest_back_its_green(self):
-        forest, plains, cathar = card(Forest), card(Plains), card(CatharCommando)
-        t, moon, islands = _game(battlefield=[forest, plains, cathar])
+        """With the Aura gone the Forest taps for {G} again, which casts
+        Llanowar Elves, and no longer for {C}."""
+        forest, plains, cathar, elves = card(Forest), card(Plains), card(CatharCommando), card(LlanowarElves)
+        t, moon, islands = _game(battlefield=[forest, plains, cathar], hand=[elves])
         _imprison(t, moon, islands, forest)
         _destroy(t, cathar, plains, moon)
         t.act_illegal(0, ability(forest, TAP_FOR_C))
         t.act(0, ability(forest, ForestAbility1), then=[taps(forest)])
+        t.act(0, elves, then=[moves(elves, Zone.STACK)])
         t.run()
 
 
@@ -132,23 +147,30 @@ class TestImprisonedCreature:
         t.run()
 
     def test_an_opponents_creature_taps_for_colorless_for_its_controller(self):
-        elves = card(LlanowarElves)
-        t, moon, islands = _game(opposing=[elves])
+        """The {C} goes to the Elves' controller, who pays Cathar Commando's
+        generic mana with it."""
+        elves, plains, cathar = card(LlanowarElves), card(Plains), card(CatharCommando)
+        t, moon, islands = _game(opposing=[elves, plains], opposing_hand=[cathar])
         _imprison(t, moon, islands, elves)
         t.pass_(0)
         t.act_illegal(1, ability(elves, LlanowarElvesAbility1))
-        t.act(1, ability(elves, TAP_FOR_C), then=[taps(elves)])
+        _flash_in_cathar(t, elves, plains, cathar)
         t.run()
 
     def test_destroying_the_aura_makes_it_a_creature_again(self):
-        """With the Aura gone, Llanowar Elves taps for {G} and not {C}, and
-        Hero's Downfall destroys it."""
+        """With the Aura gone, Llanowar Elves taps for {G} again, which casts
+        another Llanowar Elves, and not for {C}; Hero's Downfall destroys it."""
         elves, plains, cathar, downfall = card(LlanowarElves), card(Plains), card(CatharCommando), card(HerosDownfall)
+        other = card(LlanowarElves)
         swamps = [card(Swamp) for _ in range(3)]
-        t, moon, islands = _game(battlefield=[elves, plains, cathar, *swamps], hand=[downfall])
+        t, moon, islands = _game(battlefield=[elves, plains, cathar, *swamps], hand=[downfall, other])
         _imprison(t, moon, islands, elves)
         _destroy(t, cathar, plains, moon)
         t.act_illegal(0, ability(elves, TAP_FOR_C))
+        t.act(0, ability(elves, LlanowarElvesAbility1), then=[taps(elves)])
+        t.act(0, other, then=[moves(other, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(other, Zone.BATTLEFIELD)])
         for swamp in swamps:
             t.act(0, swamp, then=[taps(swamp)])
         t.act(0, downfall, choices=[elves], then=[moves(downfall, Zone.STACK)])
@@ -156,20 +178,22 @@ class TestImprisonedCreature:
         t.pass_(1, then=[moves(downfall, Zone.GRAVEYARD), moves(elves, Zone.GRAVEYARD)])
         t.run()
 
-    def test_an_imprisoned_elf_is_no_elf(self):
-        """The imprisoned Llanowar Elves loses its creature types: Elvish
-        Archdruid counts only itself and adds one {G}, enough for one more
-        Llanowar Elves but not a second."""
+    def test_archdruid_does_not_count_an_imprisoned_elf(self):
+        """Elvish Archdruid adds {G} for each Elf its controller controls; the
+        imprisoned Llanowar Elves is not counted, so it adds one {G}: enough for
+        one more Llanowar Elves, which resolves, but not a second."""
         elves, archdruid = card(LlanowarElves), card(ElvishArchdruid)
         first, second = card(LlanowarElves), card(LlanowarElves)
         t, moon, islands = _game(battlefield=[elves, archdruid], hand=[first, second])
         _imprison(t, moon, islands, elves)
         t.act(0, ability(archdruid, ElvishArchdruidAbility2), then=[taps(archdruid)])
         t.act(0, first, then=[moves(first, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(first, Zone.BATTLEFIELD)])
         t.act_illegal(0, second, note="Archdruid added only {G}")
         t.run()
 
-    def test_destroying_the_aura_makes_it_an_elf_again(self):
+    def test_destroying_the_aura_makes_archdruid_count_it_again(self):
         """With the Aura gone, Elvish Archdruid counts Llanowar Elves again and
         adds {G}{G}, enough for two more Llanowar Elves."""
         elves, archdruid, plains, cathar = card(LlanowarElves), card(ElvishArchdruid), card(Plains), card(CatharCommando)
