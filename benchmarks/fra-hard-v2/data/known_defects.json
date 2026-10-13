@@ -252,6 +252,26 @@
           "test_summoning_sickness.py::TestCreatureThatChangedControl::test_cannot_tap_for_its_new_controller"
         ]
       }
+    },
+    {
+      "id": "fdn-156-keeps-abilities",
+      "description": "Imprisoned in the Moon leaves the enchanted permanent its mana abilities, and a noncreature its other activated abilities, never grants \"{T}: Add {C}\", and keeps it without creature types after the Aura is gone.",
+      "rules": [
+        "CR 613.1d",
+        "CR 613.1f"
+      ],
+      "kind": "inherited",
+      "failing_tests": {
+        "fdn_regression": [
+          "fdn_156/tests.py::TestImprisonedLand::test_a_forest_taps_for_colorless_instead_of_green",
+          "fdn_156/tests.py::TestImprisonedLand::test_its_colorless_mana_cannot_pay_green",
+          "fdn_156/tests.py::TestImprisonedLand::test_a_land_loses_its_other_activated_abilities",
+          "fdn_156/tests.py::TestImprisonedLand::test_an_opponents_land_taps_for_colorless_for_its_controller",
+          "fdn_156/tests.py::TestImprisonedCreature::test_a_creature_becomes_a_land_tapping_for_colorless",
+          "fdn_156/tests.py::TestImprisonedCreature::test_an_opponents_creature_taps_for_colorless_for_its_controller",
+          "fdn_156/tests.py::TestImprisonedCreature::test_destroying_the_aura_makes_archdruid_count_it_again"
+        ]
+      }
     }
   ]
 }

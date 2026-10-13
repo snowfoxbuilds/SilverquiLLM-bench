@@ -10,7 +10,7 @@ from card_impl import HallOfEchoes, HallOfEchoesAbility1, HallOfEchoesAbility2
 from cards.fdn.fdn_16.card_impl import HelpfulHunter
 from cards.fdn.fdn_40.card_impl import HighFaeTrickster
 from cards.fdn.fdn_76.card_impl import VengefulBloodwitch, VengefulBloodwitchAbility1
-from cards.fdn.fdn_77.card_impl import ZulAshurLichLord
+from cards.fdn.fdn_91.card_impl import KellanPlanarTrailblazer
 from cards.fdn.fdn_117.card_impl import AshrootAnimist, AshrootAnimistAbility2
 from cards.fdn.fdn_134.card_impl import AjaniCallerOfThePride, AjaniCallerOfThePrideAbility1
 from cards.fdn.fdn_146.card_impl import SavannahLions
@@ -198,18 +198,17 @@ def test_a_target_gone_before_resolution_copies_nothing():
 
 
 def test_the_legend_rule_does_not_apply_this_turn():
-    """The Hall copying Zul Ashur, the original and another Zul Ashur cast
-    that turn all stay on the battlefield until the copy ends."""
-    hall, zul, another = card(HallOfEchoes), card(ZulAshurLichLord), card(ZulAshurLichLord)
-    swamps = [card(Swamp), card(Swamp)]
-    game = _game([hall, zul, *swamps], hand=[another])
+    """The Hall copying Kellan, the original and another Kellan cast that turn
+    all stay on the battlefield until the copy ends."""
+    hall, kellan, another = card(HallOfEchoes), card(KellanPlanarTrailblazer), card(KellanPlanarTrailblazer)
+    mountain = card(Mountain)
+    game = _game([hall, kellan, mountain], hand=[another])
     t = Table(game)
-    _copy(t, hall, zul, ZulAshurLichLord)
-    for land in swamps:
-        t.act(0, land, then=[taps(land)])
+    _copy(t, hall, kellan, KellanPlanarTrailblazer)
+    t.act(0, mountain, then=[taps(mountain)])
     t.act(0, another, then=[moves(another, Zone.STACK)])
     t.pass_(0)
-    t.pass_(1, then=[moves(another, Zone.BATTLEFIELD)], note="three Zul Ashurs, and the legend rule does not apply")
+    t.pass_(1, then=[moves(another, Zone.BATTLEFIELD)], note="three Kellans, and the legend rule does not apply")
     t.pass_to(Phase.POSTCOMBAT_MAIN, 0)
     t.run()
 
@@ -327,17 +326,17 @@ def test_the_hall_destroyed_in_response_copies_nothing_but_still_lifts_the_legen
     """Player 1's Demolition Field destroys the Hall in response. Its target is
     still legal, so the ability resolves: there is no Hall to become a copy, but
     the legend rule still does not apply to player 0 this turn, and a second
-    Zul Ashur stays beside the first."""
-    hall, zul, another = card(HallOfEchoes), card(ZulAshurLichLord), card(ZulAshurLichLord)
+    Kellan stays beside the first."""
+    hall, kellan, another = card(HallOfEchoes), card(KellanPlanarTrailblazer), card(KellanPlanarTrailblazer)
     field, plains = card(DemolitionField), [card(Plains), card(Plains)]
     game = create_game(
-        Side(hand=[another], battlefield=[hall, zul], library=[SavannahLions] * 3,
-             mana={ManaType.COLORLESS: 5, ManaType.BLACK: 2}),
+        Side(hand=[another], battlefield=[hall, kellan], library=[SavannahLions] * 3,
+             mana={ManaType.COLORLESS: 5, ManaType.RED: 1}),
         Side(battlefield=[field, *plains], library=[SavannahLions] * 3),
         start=MAIN,
     )
     t = Table(game)
-    t.act(0, COPY, choices=[zul], then=[on_stack(COPY, 0)])
+    t.act(0, COPY, choices=[kellan], then=[on_stack(COPY, 0)])
     t.pass_(0)
     for land in plains:
         t.act(1, land, then=[taps(land)])
@@ -349,7 +348,7 @@ def test_the_hall_destroyed_in_response_copies_nothing_but_still_lifts_the_legen
     t.pass_(1, then=[off_stack(COPY)])
     t.act(0, another, then=[moves(another, Zone.STACK)])
     t.pass_(0)
-    t.pass_(1, then=[moves(another, Zone.BATTLEFIELD)], note="two Zul Ashurs, and the legend rule does not apply")
+    t.pass_(1, then=[moves(another, Zone.BATTLEFIELD)], note="two Kellans, and the legend rule does not apply")
     t.run()
 
 
@@ -434,19 +433,92 @@ def test_a_target_stolen_in_response_is_not_copied():
 
 
 def test_each_players_hall_lifts_the_legend_rule_for_its_controller():
-    """Both players' Halls copy their own Zul Ashur: each player keeps both."""
+    """Both players' Halls copy their own Kellan: each player keeps both."""
     mine, theirs = card(HallOfEchoes), card(HallOfEchoes)
-    my_zul, their_zul = card(ZulAshurLichLord), card(ZulAshurLichLord)
+    my_kellan, their_kellan = card(KellanPlanarTrailblazer), card(KellanPlanarTrailblazer)
     game = create_game(
-        Side(battlefield=[mine, my_zul], library=_library(), mana={ManaType.COLORLESS: 5}),
-        Side(battlefield=[theirs, their_zul], library=_library(), mana={ManaType.COLORLESS: 5}),
+        Side(battlefield=[mine, my_kellan], library=_library(), mana={ManaType.COLORLESS: 5}),
+        Side(battlefield=[theirs, their_kellan], library=_library(), mana={ManaType.COLORLESS: 5}),
         start=MAIN,
     )
     t = Table(game)
-    _copy(t, mine, my_zul, ZulAshurLichLord)
+    _copy(t, mine, my_kellan, KellanPlanarTrailblazer)
     t.pass_(0)
-    t.act(1, COPY, choices=[their_zul], then=[on_stack(COPY, 1)])
+    t.act(1, COPY, choices=[their_kellan], then=[on_stack(COPY, 1)])
     t.pass_(1)
-    t.pass_(0, then=[off_stack(COPY), becomes(theirs, ZulAshurLichLord)],
+    t.pass_(0, then=[off_stack(COPY), becomes(theirs, KellanPlanarTrailblazer)],
             note="player 1's own Hall lifts the legend rule for player 1")
+    t.run()
+
+
+def test_the_legend_rule_still_applies_to_the_opponent():
+    """Player 0 copies their Kellan in response to player 1's second Kellan.
+    The legend rule is lifted only for player 0's permanents, so player 1
+    keeps one Kellan."""
+    hall, mine = card(HallOfEchoes), card(KellanPlanarTrailblazer)
+    theirs, another, mountain = card(KellanPlanarTrailblazer), card(KellanPlanarTrailblazer), card(Mountain)
+    game = create_game(
+        Side(battlefield=[hall, mine], library=_library(), mana={ManaType.COLORLESS: 5}),
+        Side(hand=[another], battlefield=[theirs, mountain], library=_library()),
+        start=(Phase.PRECOMBAT_MAIN, 1),
+    )
+    t = Table(game)
+    t.act(1, mountain, then=[taps(mountain)])
+    t.act(1, another, then=[moves(another, Zone.STACK)])
+    t.pass_(1)
+    t.act(0, COPY, choices=[mine], then=[on_stack(COPY, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(COPY), becomes(hall, KellanPlanarTrailblazer)])
+    t.pass_(1, choices=[theirs], note="player 1 keeps the first Kellan")
+    t.pass_(0, then=[moves(another, Zone.BATTLEFIELD), moves(another, Zone.GRAVEYARD)])
+    t.run()
+
+
+def test_the_legend_rule_applies_again_on_a_later_turn():
+    """The Hall lifts the legend rule only for the turn it resolves: on player
+    0's next turn a second Kellan meets the legend rule, and player 0 keeps one."""
+    hall, kellan, another = card(HallOfEchoes), card(KellanPlanarTrailblazer), card(KellanPlanarTrailblazer)
+    mountain = card(Mountain)
+    game = _game([hall, kellan, mountain], hand=[another])
+    t = Table(game)
+    _copy(t, hall, kellan, KellanPlanarTrailblazer)
+    t.pass_to(Step.END, 0)
+    t.pass_(0)
+    t.pass_(1, then=[becomes(hall, HallOfEchoes)])
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    t.act(0, mountain, then=[taps(mountain)])
+    t.act(0, another, then=[moves(another, Zone.STACK)])
+    t.pass_(0, choices=[kellan], note="player 0 keeps the first Kellan")
+    t.pass_(1, then=[moves(another, Zone.BATTLEFIELD), moves(another, Zone.GRAVEYARD)])
+    t.run()
+
+
+def test_as_a_copy_the_hall_has_no_mana_ability():
+    """The Hall as a Lions has only the Lions' abilities: it cannot tap for {C}."""
+    hall, lions, gear = card(HallOfEchoes), card(SavannahLions), card(AdventuringGear)
+    game = _game([hall, lions], hand=[gear])
+    t = Table(game)
+    _copy(t, hall, lions, SavannahLions)
+    t.act_illegal(0, HallOfEchoesAbility1, note="a Lions has no mana ability")
+    t.act_illegal(0, gear, note="nothing pays {1}")
+    t.run()
+
+
+def test_of_two_activations_the_last_to_resolve_decides():
+    """Activated twice before either resolves, the Hall becomes a copy of the
+    Firebrand, then of the Lions (CR 707.4), attacks as the Lions, and is a
+    land again once the turn ends."""
+    hall, lions, firebrand = card(HallOfEchoes), card(SavannahLions), card(FanaticalFirebrand)
+    game = _game([hall, lions, firebrand], mana=10)
+    t = Table(game)
+    t.act(0, COPY, choices=[lions], then=[on_stack(COPY, 0)])
+    t.act(0, COPY, choices=[firebrand], then=[on_stack(COPY, 0)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(COPY), becomes(hall, FanaticalFirebrand)])
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(COPY), becomes(hall, SavannahLions)])
+    _attack(t, hall, [life(1, 18)])
+    t.pass_to(Step.END, 0)
+    t.pass_(0)
+    t.pass_(1, then=[becomes(hall, HallOfEchoes)])
     t.run()

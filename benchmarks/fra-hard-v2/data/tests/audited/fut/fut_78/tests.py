@@ -8,6 +8,7 @@ the game going on.
 """
 
 from card_impl import SlaughterPact, SlaughterPactAbility2
+from cards.fdn.fdn_17.card_impl import HeraldOfEternalDawn
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_171.card_impl import DiregrafGhoul
 from cards.fdn.fdn_192.card_impl import BurstLightning
@@ -128,7 +129,8 @@ def test_declining_to_pay_loses_even_with_the_mana():
 
 
 def test_two_mana_short_of_the_cost_loses():
-    """{B}{B} is not {2}{B}: with two Swamps the pact cannot be paid."""
+    """{B}{B} is not {2}{B}: with two Swamps the pact cannot be paid, whether
+    the engine rejects paying or never offers it."""
     pact, lions = card(SlaughterPact), card(SavannahLions)
     swamps = [card(Swamp) for _ in range(2)]
     game = create_game(Side(hand=[pact], battlefield=swamps, library=_library()),
@@ -138,7 +140,7 @@ def test_two_mana_short_of_the_cost_loses():
     _to_next_upkeep(t)
     for swamp in swamps:
         t.act(0, swamp, then=[taps(swamp)])
-    t.pass_(0, branches=[branch(choices=[Decision.yes()]), branch(choices=[Decision.no()])])
+    t.pass_(0, branches=[branch(choices=[Decision.yes(), Decision.no()]), branch(choices=[Decision.no()])])
     t.pass_(1, then=[off_stack(PACT_COMES_DUE), wins(1)])
     t.run()
 
@@ -231,5 +233,20 @@ def test_two_pacts_paid_in_full():
     _to_next_upkeep(t, triggers=2, choices=[PACT_COMES_DUE, PACT_COMES_DUE])
     _pay(t, 0, swamps[:3])
     _pay(t, 0, swamps[3:])
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    t.run()
+
+
+def test_herald_of_eternal_dawn_keeps_an_unpaid_pact_from_losing():
+    """While player 0 controls Herald of Eternal Dawn they can't lose the game:
+    the pact goes unpaid and the game goes on."""
+    pact, lions, herald = card(SlaughterPact), card(SavannahLions), card(HeraldOfEternalDawn)
+    game = create_game(Side(hand=[pact], battlefield=[herald], library=_library()),
+                       Side(battlefield=[lions], library=_library()), start=MAIN)
+    t = Table(game)
+    _pact(t, 0, pact, lions)
+    _to_next_upkeep(t)
+    t.pass_(0, choices=[Decision.no()], note="no mana to pay {2}{B}")
+    t.pass_(1, then=[off_stack(PACT_COMES_DUE)])
     t.pass_to(Phase.PRECOMBAT_MAIN, 0)
     t.run()

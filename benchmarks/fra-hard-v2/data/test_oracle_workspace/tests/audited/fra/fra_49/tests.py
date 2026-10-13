@@ -199,6 +199,32 @@ def test_the_opponents_creatures_count():
     t.run()
 
 
+def test_it_prepares_at_the_opponents_end_step_and_the_copy_is_cast_then():
+    """Three of player 1's creatures die on player 1's turn: player 0's
+    Recollector becomes prepared at that turn's end step, and player 0 casts
+    the instant copy there."""
+    swamp, recollector, library = card(Swamp), card(BloodlineRecollector), _library()
+    lions = [card(SavannahLions) for _ in range(3)]
+    bolts = [card(BurstLightning) for _ in range(3)]
+    game = create_game(
+        Side(battlefield=[recollector, swamp], library=_library()),
+        Side(hand=bolts, battlefield=lions, library=library, mana={ManaType.RED: 3}),
+        start=(Phase.PRECOMBAT_MAIN, 1),
+    )
+    t = Table(game)
+    _kill(t, 1, bolts, lions)
+    t.pass_to(Phase.POSTCOMBAT_MAIN, 1)
+    t.pass_(1)
+    t.pass_(0, then=[on_stack(PREPARE, 0)])
+    t.pass_(1)
+    t.pass_(0, then=[off_stack(PREPARE), copied(AncestralCraving, 0, to=Zone.EXILE)])
+    t.pass_(1)
+    _cast_craving(t, 0, swamp, 1, recollector)
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(AncestralCraving), *[moves(c, Zone.HAND) for c in library[:3]], life(1, 17)])
+    t.run()
+
+
 def test_token_creatures_dying_count():
     """Two Lions and the Soldier token Resolute Reinforcements makes die."""
     swamp, reinforcements, recollector = card(Swamp), card(ResoluteReinforcements), card(BloodlineRecollector)

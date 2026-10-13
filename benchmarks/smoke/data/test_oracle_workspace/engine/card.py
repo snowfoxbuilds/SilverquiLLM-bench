@@ -319,6 +319,17 @@ class CardImpl(GameObject):
         """
         self.card_types = set(self._original_card_types)
         self.keywords = self._original_keywords
+        # A layer 4 or 5 effect that changes subtypes or colors keeps what it
+        # found under these keys, so each recalculation starts from the values
+        # it would have without the effect — whatever they have become since.
+        if "_subtypes_before_effects" in self.__dict__:
+            self.subtypes = self.__dict__.pop("_subtypes_before_effects")
+        if "_colors_before_effects" in self.__dict__:
+            colors = self.__dict__.pop("_colors_before_effects")
+            if colors is None:
+                self.__dict__.pop("colors", None)
+            else:
+                self.colors = colors
 
     def reset_for_zone_change(self) -> None:
         """Forget everything this object accumulated on the battlefield.

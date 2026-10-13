@@ -181,8 +181,14 @@ class TestCardType:
     def test_member_exists(self, name: str) -> None:
         assert name in CardType.__members__
 
-    def test_exactly_seven_members(self) -> None:
-        assert len(CardType) == 7
+    def test_every_member_is_a_card_type_of_the_rules(self) -> None:
+        """An engine may add the other card types CR 205.2a lists, such as
+        battle and kindred, but no type the rules do not define."""
+        assert set(CardType.__members__) <= {
+            "ARTIFACT", "BATTLE", "CONSPIRACY", "CREATURE", "DUNGEON",
+            "ENCHANTMENT", "INSTANT", "KINDRED", "LAND", "PHENOMENON", "PLANE",
+            "PLANESWALKER", "SCHEME", "SORCERY", "VANGUARD",
+        }
 
 
 # ---------------------------------------------------------------------------

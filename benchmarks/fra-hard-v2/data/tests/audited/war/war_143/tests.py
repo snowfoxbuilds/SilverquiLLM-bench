@@ -23,6 +23,7 @@ from cards.fdn.fdn_134.card_impl import (
 from cards.fdn.fdn_146.card_impl import SavannahLions
 from cards.fdn.fdn_171.card_impl import DiregrafGhoul
 from cards.fdn.fdn_175.card_impl import HerosDownfall
+from cards.fdn.fdn_192.card_impl import BurstLightning
 from cards.fdn.fdn_197.card_impl import FirespitterWhelp
 from cards.fdn.fdn_206.card_impl import ShivanDragon
 from cards.fdn.fdn_227.card_impl import LlanowarElves
@@ -169,6 +170,28 @@ def _confiscate_in_response(t: Table, sarkhan, ability, confiscate) -> None:
 def _thief():
     trickster, confiscate = card(HighFaeTrickster), card(Confiscate)
     return Side(hand=[confiscate], battlefield=[trickster], mana={ManaType.BLUE: 6}, library=_library()), confiscate
+
+
+def test_damage_to_an_animated_sarkhan_removes_no_loyalty():
+    """A Dragon Sarkhan is no planeswalker (ruling 2019-05-03), so player 1's
+    Burst Lightning removes none of its 6 loyalty, and Sarkhan pays -3 on
+    each of player 0's next two turns."""
+    sarkhan, bolt = card(SarkhanTheMasterless), card(BurstLightning)
+    game = create_game(Side(battlefield=[sarkhan], library=_library()),
+                       Side(hand=[bolt], mana={ManaType.RED: 1}, library=_library()), start=MAIN)
+    t = Table(game)
+    _activate(t, 0, ANIMATE)
+    t.pass_(0)
+    t.act(1, bolt, choices=[sarkhan], then=[moves(bolt, Zone.STACK)])
+    t.pass_(1)
+    t.pass_(0, then=[moves(bolt, Zone.GRAVEYARD)], note="2 damage to a 4/4 creature")
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    _activate(t, 0, DRAGON, then=[appears(0)])
+    t.pass_to(Phase.PRECOMBAT_MAIN, 0)
+    t.act(0, DRAGON, then=[on_stack(DRAGON, 0), moves(sarkhan, Zone.GRAVEYARD)], note="3 pays -3 and leaves 0")
+    t.pass_(0)
+    t.pass_(1, then=[off_stack(DRAGON), appears(0)])
+    t.run()
 
 
 def test_a_plus_one_stolen_in_response_animates_its_activators_planeswalkers():

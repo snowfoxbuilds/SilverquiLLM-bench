@@ -60,7 +60,9 @@ class SlaughterPact(Instant):
             if pool.can_pay(UPKEEP_COST) and query_yes_no(state, controller, 'Pay {2}{B}?', source_card=self):
                 pool.pay(UPKEEP_COST)
                 return
-            controller.has_lost = True
+            # Herald of Eternal Dawn marks its controller as unable to lose (CR 104.3).
+            if not getattr(controller, 'cant_lose', False):
+                controller.has_lost = True
 
         register_delayed_trigger(
             game, BeginningOfUpkeepTriggeredEvent, controller, pay_or_lose,
