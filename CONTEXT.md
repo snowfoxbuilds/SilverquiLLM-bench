@@ -225,16 +225,17 @@ _Avoid_: "Engine Tests" alone (formerly named both the visible and the graded su
 
 **Estimated Cost**
 
-The API-equivalent USD estimate of a Benchmark Run's observed model usage under a recorded pricing basis.
+The bench's own API-equivalent USD estimate of a Benchmark Run's observed model usage, priced from a versioned model-price table.
 It supports resource-use comparisons and does not represent the actual subscription charge attributable to the run (grilling 2026-09-26).
+It stands beside the Reported Cost as a cross-check, and is the Run Cost when no as-complete Reported Cost exists (ADR-019).
 
 _Avoid_: "billed cost", "subscription cost" for this estimate
 
 **Estimated Weekly Usage**
 
 The share of one Login Profile's weekly subscription allowance that is used up, as the operator monitor estimates it (grilling 2026-10-07).
-It starts from the provider's own newest usage reading for that Login Profile while that reading's weekly window lasts, and adds Estimated Cost observed since, converted at a host-configured provider rate.
-For one week after the reading's reset it counts Estimated Cost from the reset; past that, or with no reading, it counts the last seven days' Estimated Cost.
+It starts from the provider's own newest usage reading for that Login Profile while that reading's weekly window lasts, and adds Run Cost observed since, converted at a host-configured provider rate.
+For one week after the reading's reset it counts Run Cost from the reset; past that, or with no reading, it counts the last seven days' Run Cost.
 It is an operating aid, not a measurement of any Benchmark Run.
 
 _Avoid_: "quota", "credits", "credential slot usage"
@@ -455,6 +456,14 @@ Engine correctness check that replays 17lands GRE (Game Rules Engine) state stre
 
 _Avoid_: "differential testing" (deprecated XMage approach), "checkpoint validation" (we do full state comparison, not just EOT checkpoints), "aggregate CSV" (that's a different 17lands dataset)
 
+**Reported Cost**
+
+The API-equivalent USD figure a Benchmark Run's native agent CLI reports for its own model requests, such as Claude Code's per-request cost.
+Like the Estimated Cost it is not the subscription charge; unlike it, the bench does not compute it, so it covers pricing the bench's table lacks (ADR-019).
+Codex reports none.
+
+_Avoid_: "actual cost", "billed cost"
+
 **Results Repo**
 
 The dedicated private git repository `bench-results` that is the home of benchmark results (#39 §3), git-as-truth: one Run Record per Benchmark Run, filed under its Candidate Hash, with Exclusions and each record's Workspace Archive beside the records.
@@ -482,6 +491,12 @@ Extra lines the runner appends to the User Prompt when staging a Resume Leg. Alw
 
 _Avoid_: "resume notice", "resume header"
 
+**Run Cost**
+
+The cost the bench shows and sums for a Benchmark Run: its Reported Cost when that is at least as complete as its Estimated Cost, otherwise its Estimated Cost (ADR-019).
+
+_Avoid_: "cost" for either component alone when the distinction matters
+
 **Run Manifest** *(historical image runs)*
 
 Minimal runtime facts written by the runner to `/workspace/run_manifest.json` immediately before container launch. Contains only `timeout_seconds` and `deadline_utc`; it is advisory to the Agent Container and does not configure agent behavior.
@@ -491,7 +506,7 @@ _Avoid_: "config.json" (implies agent configuration), "agent config"
 **Run Record**
 
 An immutable account of a Benchmark Run's selected candidate, benchmark, conditions, observed outcomes, and available evidence.
-It retains grading, Estimated Cost, Agent Turns, and diagnostics when available, explaining missing or partial observations instead of discarding an unsuccessful run (grilling 2026-09-26).
+It retains grading, Reported and Estimated Cost, Agent Turns, and diagnostics when available, explaining missing or partial observations instead of discarding an unsuccessful run (grilling 2026-09-26).
 Historical records retain their original schemas, identities, and interpretation.
 
 _Avoid_: "run summary" (`run_summary.json` is the legacy per-run aggregate the record's scores are mapped from), "result" alone

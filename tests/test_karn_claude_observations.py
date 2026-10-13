@@ -896,3 +896,86 @@ def test_subagent_threads_count_sidechain_transcripts_only():
     assert both["subagent_threads"] == 1
     # An observation, not a reason: the child adds no incompleteness of its own.
     assert set(both["usage"]["reasons"]) == set(main["usage"]["reasons"])
+
+
+def table_priced(*requests):
+    """``api_request`` events each reporting the price table's own figure for its request."""
+    native = summarize_claude_events(qualified(events_of(main_transcript())), exit_kind="completed")
+    prices = {row["response_id"]: row["usd"] for row in native["request_prices"]}
+    by_request = {"req_01": prices["msg_01"], "req_02": prices["msg_02"]}
+    return [api_request(request, cost_usd=float(by_request[request])) for request in requests]
+
+
+def test_claude_codes_reported_cost_is_recorded_beside_the_estimate():
+    result = reconciled(*table_priced("req_01", "req_02"))
+    assert result["reported_cost"]["completeness"] == "complete", result["reported_cost"]
+    assert Decimal(result["reported_cost"]["value"]) == Decimal(result["estimated_cost"]["value"])
+    assert result["reported_cost"]["value"] == result["coverage"]["native_reported_cost_usd"]
+    reported = {row["response_id"]: row["usd"] for row in result["request_reported_costs"]}
+    priced = {row["response_id"]: row["usd"] for row in result["request_prices"]}
+    assert {k: Decimal(v) for k, v in reported.items()} == {
+        k: Decimal(v) for k, v in priced.items()
+    }
+
+
+def test_a_reported_cost_that_differs_from_a_complete_estimate_is_partial():
+    result = reconciled(api_request("req_01", cost_usd=5.0), api_request("req_02", cost_usd=5.0))
+    assert result["estimated_cost"]["completeness"] == "complete"
+    assert result["reported_cost"]["value"] == "10.0"
+    assert result["reported_cost"]["reasons"] == ["reported_cost_disagrees_with_estimate"]
+
+
+def test_a_model_missing_from_the_price_table_still_has_its_reported_cost():
+    events = qualified(events_of(main_transcript()) + api_request("req_01") + api_request("req_02"))
+    for event in events:
+        if event["kind"] == "response":
+            event["model"] = "claude-unpriced-9"
+        if event["source"] == "otel":
+            event["attributes"]["model"] = "claude-unpriced-9"
+    result = summarize_claude_events(events, exit_kind="completed")
+    assert result["estimated_cost"]["value"] is None
+    assert "model_price_unavailable" in result["estimated_cost"]["reasons"]
+    assert result["reported_cost"] == {
+        "value": "0.0246",
+        "completeness": "complete",
+        "reasons": [],
+    }
+
+
+def test_a_compaction_and_every_session_add_their_reported_costs():
+    other = "1c2d3e4f-1111-4222-8333-944455556666"
+    second = [
+        row.replace(SESSION, other).replace("msg_0", "msg_1").replace("req_0", "req_1")
+        for row in main_transcript()
+    ]
+    transcripts = main_transcript() + [
+        line("system", second=4, subtype="compact_boundary", compactMetadata={"preTokens": 9})
+    ]
+    otel = [
+        *api_request("req_01"),
+        *api_request("req_02"),
+        *api_request("req_c", "compact", cache_creation_tokens="0"),
+        *api_request("req_11", **{"session.id": other}),
+        *api_request("req_12", **{"session.id": other}),
+    ]
+    result = summarize_claude_events(
+        qualified(events_of(transcripts, second) + otel), exit_kind="completed"
+    )
+    assert result["coverage"]["native_threads"] == 2
+    assert result["reported_cost"]["value"] == "0.0615"
+    assert len(result["request_reported_costs"]) == len(result["requests"]) == 5
+
+
+def test_without_otel_there_is_no_reported_cost():
+    result = summarize_claude_events(qualified(events_of(main_transcript())), exit_kind="completed")
+    assert result["reported_cost"]["value"] is None
+    assert result["reported_cost"]["completeness"] == "missing"
+    assert "native_cost_not_reported" in result["reported_cost"]["reasons"]
+    assert result["request_reported_costs"] == []
+
+
+def test_a_request_whose_reported_cost_is_malformed_leaves_the_total_partial():
+    result = reconciled(api_request("req_01", cost_usd="NaN"), api_request("req_02"))
+    assert result["reported_cost"]["value"] == "0.0123"
+    assert "otel_cost_malformed" in result["reported_cost"]["reasons"]
+    assert [row["response_id"] for row in result["request_reported_costs"]] == ["msg_02"]

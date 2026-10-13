@@ -428,7 +428,7 @@ async def test_history_sorts_and_hides_excluded_runs():
         assert len(view.shown) == len(history()) - 1
         view.sort_key, view.sort_reverse = "cost", True
         view.action_reverse_sort()
-        costs = [run.estimated_cost for run in view.shown]
+        costs = [run.cost for run in view.shown]
         assert costs == sorted(costs)
         await pilot.press("s")
         assert view.sort_key == "duration"

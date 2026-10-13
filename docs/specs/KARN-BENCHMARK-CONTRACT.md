@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-10-08
+Last updated: 2026-10-13
 
 # Karn Benchmark Contract
 
@@ -18,7 +18,7 @@ This page defines the bench's consumer contract; Karn's [Construct Contract](htt
 The goal of this integration is to collect data, learn from it, and improve candidates and benchmark tooling (grilling 2026-09-26).
 It does not build a leaderboard eligibility system.
 Completed, unsuccessful, interrupted, and partially observed runs remain useful evidence.
-Record what ran, the available implementation and grades, Estimated Cost, Agent Turns, execution outcome, and observation completeness without reducing those facts to a single eligibility verdict.
+Record what ran, the available implementation and grades, Reported and Estimated Cost, Agent Turns, execution outcome, and observation completeness without reducing those facts to a single eligibility verdict.
 Missing measurements are explained; they do not become zero and do not cause the available data to be discarded.
 
 The analyst chooses comparisons and filters appropriate to the question being investigated.
@@ -136,7 +136,7 @@ A definition timeout shorter than the requested Benchmark Run budget is refused 
 The host enforces the requested run deadline when the definition permits a longer run.
 
 Wall-clock observations support deadline enforcement and diagnosis, but are secondary comparison metrics (grilling 2026-09-26).
-Estimated Cost and Agent Turns are primary efficiency measurements and are recorded rather than used as stopping limits in the first integration (grilling 2026-09-26).
+Run Cost and Agent Turns are primary efficiency measurements and are recorded rather than used as stopping limits in the first integration (grilling 2026-09-26).
 
 ### Efficiency measurements
 
@@ -154,6 +154,11 @@ Usage is normalized into these types from each provider's own convention: OpenAI
 The estimate is a comparison of resource usage and does not claim to allocate the actual subscription charge to the run.
 Every request is priced at standard-tier rates, whatever speed or service tier served it (grilling 2026-09-28): a flex, fast-mode or priority request counts as its standard-rate equivalent, so estimates compare token usage rather than billing tier. Each request records the tier observed for it, the tier Claude Code's transcript reports or the tier Codex requested in its telemetry, and a request for an unpriced model stays unpriced.
 Missing or incomplete observations remain explicitly missing or incomplete, rather than becoming zero.
+
+A run's Run Cost prefers the native CLI's own figure, its Reported Cost, over the bench's Estimated Cost whenever the Reported Cost is at least as complete; the Estimated Cost stays recorded beside it (ADR-019).
+Claude Code reports an API-equivalent USD figure for every request it makes, compactions and subagents included, so a Claude run records that figure per request and in total; Codex reports none, so a Codex run's Reported Cost is missing and its Run Cost is the Estimated Cost.
+The Reported Cost shares the run's observation reasons but none of the price table's, so a model the table cannot price still has one.
+A Reported Cost that differs from a complete Estimated Cost is partial, flagged `reported_cost_disagrees_with_estimate`, because the two agree on every request the table prices fully.
 
 The integration qualifies response, tool-call, and usage capture against the pinned native CLI.
 The current stock result file's usage:null and whole-request turn.completed events do not establish the required measurements.
@@ -291,3 +296,4 @@ This consumer contract governs Karn v4 and v5 execution.
 | [ADR-013](../adr/ADR-013-grading-runs-in-a-network-less-grader-container.md) | Candidate code executes only in a network-less grader container |
 | [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | SilverquiLLM runs Karn constructs without Ozolith; Candidate Bundle execution is removed |
 | [ADR-015](../adr/ADR-015-results-repo-keeps-graded-workspaces-as-diffs.md) | The results repo keeps each graded workspace as a diff from one shared baseline |
+| [ADR-019](../adr/ADR-019-run-cost-prefers-the-native-clis-reported-cost.md) | A run's cost prefers the native CLI's Reported Cost over the bench's Estimated Cost |

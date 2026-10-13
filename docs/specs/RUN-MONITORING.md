@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-08
+Last updated: 2026-10-13
 
 # Run Monitoring
 
@@ -49,8 +49,8 @@ The configuration file also carries the monitor's own settings (grilling 2026-10
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `[usage_rates] codex` | `5` | Estimated Cost in USD that counts as 1% of a Codex Login Profile's weekly allowance |
-| `[usage_rates] claude` | `25` | Estimated Cost in USD that counts as 1% of a Claude Login Profile's weekly allowance |
+| `[usage_rates] codex` | `5` | Run Cost in USD that counts as 1% of a Codex Login Profile's weekly allowance |
+| `[usage_rates] claude` | `25` | Run Cost in USD that counts as 1% of a Claude Login Profile's weekly allowance |
 | `[monitor] theme` | the built-in theme | Theme name, see Look and feel |
 
 A provider is named by its login plugin: `karn-codex-login` is `codex`, `karn-claude-login` is `claude`.
@@ -64,7 +64,7 @@ A provider is named by its login plugin: `karn-codex-login` is `codex`, `karn-cl
 | `<run-dir>/candidate/constructs/<construct>/definition.json` | Candidate display of a live run |
 | The kernel's lock table (`/proc/locks`) for `<run-dir>/.runner.lock` and each Login Profile's `runner.lock` | Whether a runner or recovery still owns a run, and whether a Login Profile is busy, without taking or creating any lock |
 | `<run-dir>/run-record.json` and `<run-dir>/recovery-N/run-record.json` | Whether a run's record is retained, whether its workspace writers were confirmed stopped, and its linked recovery |
-| `<run-dir>/observations.events.jsonl` | Live request rows, provisional Estimated Cost |
+| `<run-dir>/observations.events.jsonl` | Live request rows, provisional Run Cost |
 | `docker logs -f`, then `<run-dir>/host/stdout.log` and `stderr.log` | Activity, stderr and raw tabs; Claude subscription usage readings |
 | `<run-dir>/snapshots.json`, workspace git history | Workspace tab |
 | `batches/<id>.toml` and `batches/state/<id>.json` | Queued runs and Batch status |
@@ -178,7 +178,7 @@ Each pool takes the keyboard focus in turn, and the focused pool marks its selec
 `c` ends the selected profile's cooldown ten seconds from now rather than at once, and does nothing but say so when it has none.
 Each write refreshes the view at once and says what it set; a write that fails says why and changes nothing.
 
-Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, a progress bar with its Estimated %, elapsed container time with the budget beside it, Estimated Cost, and a cost sparkline.
+Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, a progress bar with its Estimated %, elapsed container time with the budget beside it, Run Cost, and a cost sparkline.
 The progress bar is the Estimated %, not the share of the budget used: a run is measured against how long past runs took, and the budget is only the limit it stops at (grilling 2026-10-08).
 With no past runs to measure against there is no bar, only the elapsed time and budget.
 A Needs recover or Unknown row shows whether its container is up or stopped, then its reasons, in place of the progress bar.
@@ -188,11 +188,12 @@ Selecting a row opens its run details.
 Those runs are the same Candidate Hash's when it has any, and otherwise the same Candidate display's.
 The figure stays at most 99% while the run is live and is blank when no such run exists.
 
-**Estimated Cost** is provisional until the run has a record, then the record's own (grilling 2026-10-07).
+**Run Cost** is provisional until the run has a record, then the record's own (grilling 2026-10-07).
 The provisional figure comes from the run's live telemetry events and is marked `~`; with native telemetry off it is blank.
 Codex request events are priced with the bench's price table, as at the end of a run.
 Claude request events lack the cache-write duration split that the price table needs, so Claude runs sum Claude Code's own per-request `cost_usd`, charging one logical request (`request_id`) once even when it is observed again; a repeat that disagrees is counted as a conflict, and an event without a request id stands alone.
-Once a valid record applies to the run, the row shows that record's Estimated Cost, its completeness, and its priced requests, without waiting for publication or for history to refresh.
+Once a valid record applies to the run, the row shows that record's Run Cost, its completeness, and the requests its source gives a figure, without waiting for publication or for history to refresh.
+A record's Run Cost is its Reported Cost when that is at least as complete as its Estimated Cost, otherwise its Estimated Cost; a record written before the Reported Cost was recorded falls back to the reported total in its coverage, complete unless its Estimated Cost had a reason beyond pricing, and has no per-request reported figures.
 The applicable record is a linked recovery before the original, and a locally retained copy before a published one; a missing recorded cost stays missing rather than falling back to the live figure.
 A recorded figure drops the `~`, carries `*` when its record calls it incomplete, and shows `≠N` for N conflicting request observations.
 
@@ -215,9 +216,9 @@ A reading speaks for its own weekly window, and for one window after that at mos
 
 | Situation | Shown value |
 | --- | --- |
-| The newest reading's reset time has not passed | The reading's utilization, plus the Estimated Cost observed on the Login Profile after the reading divided by the provider's rate, marked `≈` when that addition is nonzero |
-| The newest reading's reset time has passed, less than seven days ago | The Estimated Cost observed on the Login Profile since that reset, divided by the provider's rate, marked `≈` |
-| The newest reading's reset time passed seven days ago or more, or no reading exists | The Estimated Cost observed on the Login Profile over the last seven days, divided by the provider's rate, marked `≈` |
+| The newest reading's reset time has not passed | The reading's utilization, plus the Run Cost observed on the Login Profile after the reading divided by the provider's rate, marked `≈` when that addition is nonzero |
+| The newest reading's reset time has passed, less than seven days ago | The Run Cost observed on the Login Profile since that reset, divided by the provider's rate, marked `≈` |
+| The newest reading's reset time passed seven days ago or more, or no reading exists | The Run Cost observed on the Login Profile over the last seven days, divided by the provider's rate, marked `≈` |
 
 A newer reading always replaces whatever an older one implied.
 Only a value from an unexpired reading shows a reset time; after the reset, the provider's next reset is unknown, so none is shown.
@@ -231,7 +232,7 @@ A record supplies a reading or spend only when it passes the Run Record's own va
 Each execution's spend counts once.
 A linked recovery reconciles its original's execution without running the model again, so of an execution's records only one counts.
 For a run with a directory on this host that is the record its own row applies, Finished or not, so the row and its Login Profile agree; otherwise a stopped linked recovery counts before its original.
-A live run counts its applicable record once it has one, and its provisional Estimated Cost before that.
+A live run counts its applicable record once it has one, and its provisional Run Cost before that.
 Excluded runs count too, since an Exclusion does not undo spend.
 
 A Claude reading retained in a record has no time of its own; the run's container stop bounds it.
@@ -244,7 +245,7 @@ A value from an unexpired reading reads like `41% · resets Thu 14:00 · read 12
 The historic view browses by benchmark, by Candidate display, or by run (grilling 2026-10-07).
 Selecting a benchmark or a Candidate display lists its runs; a Candidate display expands to its individual Candidate Hashes.
 
-A run occupies one line: run date, benchmark, Candidate display, execution status, container duration over budget, target-card pass rate with passed/total, FDN Card Regression pass rate, Engine Regression pass rate, Estimated Cost, Agent Turns, total tokens, Login Profile, host label, and the short run id.
+A run occupies one line: run date, benchmark, Candidate display, execution status, container duration over budget, target-card pass rate with passed/total, FDN Card Regression pass rate, Engine Regression pass rate, Run Cost, Agent Turns, total tokens, Login Profile, host label, and the short run id.
 Every column sorts.
 Excluded runs are dimmed with their reason code, and a key hides them.
 Combined Regression joins the line once records carry it.
@@ -253,7 +254,7 @@ Selecting a run opens its run details.
 
 ### Run details view
 
-The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the Candidate display and secondary labels, Login Profile, timings, scores, Estimated Cost with its breakdown, Agent Turns, and token usage, each as available (grilling 2026-10-07).
+The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the Candidate display and secondary labels, Login Profile, timings, scores, Run Cost with its source (`reported` or `estimated`) and the Estimated Cost's breakdown by token type, Agent Turns, and token usage, each as available (grilling 2026-10-07).
 
 | Tab | Content |
 | --- | --- |
@@ -324,3 +325,4 @@ Pass rates take a rarity colour: mythic from 90%, rare from 70%, uncommon from 4
 | --- | --- |
 | [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Karn v4 execution and observations have an independent consumer contract |
 | [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | The Karn commands, `top` among them, own the top level |
+| [ADR-019](../adr/ADR-019-run-cost-prefers-the-native-clis-reported-cost.md) | The monitor shows and sums the Run Cost, which prefers the native CLI's Reported Cost |

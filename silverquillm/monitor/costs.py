@@ -1,4 +1,4 @@
-"""A live run's provisional Estimated Cost from its telemetry events (RUN-MONITORING.md, Dashboard).
+"""A live run's provisional Run Cost from its telemetry events (RUN-MONITORING.md, Dashboard).
 
 Codex request events are priced with the bench's price table, as the end of a run prices
 them when native journals are missing. Claude's events lack the cache-write duration

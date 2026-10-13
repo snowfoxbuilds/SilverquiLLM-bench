@@ -1,0 +1,64 @@
+{
+  "agent_turns": {
+    "responses": {
+      "completeness": "complete",
+      "reasons": [],
+      "value": 52
+    },
+    "tool_calls": {
+      "completeness": "complete",
+      "reasons": [],
+      "value": 50
+    },
+    "total": {
+      "completeness": "complete",
+      "reasons": [],
+      "value": 102
+    }
+  },
+  "cost_breakdown": {
+    "completeness": "missing",
+    "reasons": [
+      "model_price_unavailable"
+    ],
+    "value": null
+  },
+  "coverage": {
+    "deduplicated_events": 207,
+    "exit_kind": "completed",
+    "model_basis": "native_message_model; observation, not provider attestation",
+    "native_reported_cost_usd": "0.05956861000000000223",
+    "native_threads": 1,
+    "native_versions": [
+      "2.1.293"
+    ],
+    "observed_threads": 1,
+    "remote_or_local_compactions": 1
+  },
+  "estimated_cost": {
+    "completeness": "missing",
+    "reasons": [
+      "model_price_unavailable"
+    ],
+    "value": null
+  },
+  "events_sha256": "23d45658e4a8ded248da5cec5d595140f8d5491ccb1d1c56cc083d647a556217",
+  "mismatches": [],
+  "native_binary": "claude-code 2.1.293",
+  "paid_inference": true,
+  "qualified": true,
+  "usage": {
+    "completeness": "partial",
+    "reasons": [
+      "missing_reasoning_output_tokens"
+    ],
+    "value": {
+      "cache_write_input_tokens": 111603,
+      "cached_input_tokens": 2047836,
+      "input_tokens": 2169476,
+      "output_tokens": 31693,
+      "reasoning_output_tokens": 11579,
+      "total_tokens": 2201169
+    }
+  }
+}

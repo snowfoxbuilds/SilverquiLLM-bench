@@ -17,6 +17,7 @@ from typing import Any
 
 from ._read import MAX_USD, count, instant, mapping, read_json, timestamp_ms
 from .costs import RequestCost
+from .history import run_cost
 
 MAX_REFLOG = 4 * 1024 * 1024
 MAX_COMMITS = 500
@@ -64,9 +65,11 @@ def record_detail(record: Path) -> RecordDetail | None:
     metadata = mapping(manifest.get("run_metadata"))
     measurements = mapping(metadata.get("measurements"))
     execution = mapping(metadata.get("execution"))
+    _, source = run_cost(measurements)
+    rows = "request_reported_costs" if source == "reported" else "request_prices"
     prices = {
         row["response_id"]: _usd(row.get("usd"))
-        for row in _rows(measurements.get("request_prices"))
+        for row in _rows(measurements.get(rows))
         if isinstance(row.get("response_id"), str)
     }
     requests = []

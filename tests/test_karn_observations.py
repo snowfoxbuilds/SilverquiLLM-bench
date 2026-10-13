@@ -181,6 +181,16 @@ def test_missing_observations_are_not_zero_but_confirmed_no_requests_are_zero():
     assert zero["estimated_cost"]["value"] == "0"
 
 
+def test_codex_reports_no_cost_so_its_cost_is_the_estimate():
+    events, _ = normalize_rollout(journal())
+    result = summarize_events(events, exit_kind="completed")
+    assert result["reported_cost"]["value"] is None
+    assert result["reported_cost"]["completeness"] == "missing"
+    assert "native_cost_not_reported" in result["reported_cost"]["reasons"]
+    assert result["request_reported_costs"] == []
+    assert result["estimated_cost"]["value"] is not None
+
+
 def test_interrupted_model_response_retains_lower_bound_and_missing_usage():
     events, _ = normalize_rollout(journal(response=None, closed=False))
     events += normalize_otlp(otlp())

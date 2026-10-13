@@ -440,6 +440,12 @@ def summarize_events(
     )
 
 
+def _agrees(reported: Decimal, estimated: Decimal) -> bool:
+    """Whether a reported total matches a complete estimate, beyond the float noise of the
+    CLI's per-request figures."""
+    return abs(reported - estimated) <= max(reported, estimated) * Decimal("1e-6")
+
+
 def _measurements(
     requests: list[dict[str, Any]],
     response_count: int,
@@ -449,7 +455,10 @@ def _measurements(
     coverage: dict[str, Any],
     *,
     subagent_threads: int | None = None,
+    reported_costs: dict[str, Decimal] | None = None,
 ) -> dict[str, Any]:
+    """``reported_costs`` maps a request's ``response_id`` to the native CLI's own USD figure
+    for it; None means the CLI reported no cost at all, as Codex does not."""
     observed_zero = present and not response_count and not reasons
     turn_reasons = list(reasons)
     usage_reasons = list(reasons)
@@ -467,6 +476,15 @@ def _measurements(
         usage_reasons.append("per_response_usage_unavailable")
         cost_reasons.append("per_response_usage_unavailable")
     costs_present = bool(priced_values) or observed_zero
+    estimated = format(sum(priced_values, Decimal(0)), "f")
+    reported, reported_reasons = None, list(reasons)
+    if reported_costs is None:
+        reported_reasons.append("native_cost_not_reported")
+    else:
+        total = sum(reported_costs.values(), Decimal(0))
+        reported = format(total, "f")
+        if costs_present and not cost_reasons and not _agrees(total, Decimal(estimated)):
+            reported_reasons.append("reported_cost_disagrees_with_estimate")
     return {
         "schema_version": 1,
         # Agent threads beyond the main one: an observation, never an incompleteness reason.
@@ -478,15 +496,21 @@ def _measurements(
             "total": _measurement(response_count + tool_count, turn_reasons, present=present),
         },
         "usage": _measurement(totals, usage_reasons, present=bool(requests) or observed_zero),
-        "estimated_cost": _measurement(
-            format(sum(priced_values, Decimal(0)), "f"), cost_reasons, present=costs_present
+        # The native CLI's own figure, preferred over the price-table estimate (ADR-019).
+        "reported_cost": _measurement(
+            reported, reported_reasons, present=reported_costs is not None
         ),
+        "estimated_cost": _measurement(estimated, cost_reasons, present=costs_present),
         # Input by type (uncached, cache read, 5-minute and 1-hour write) beside output.
         "cost_breakdown": _measurement(
             total_breakdown(priced), cost_reasons, present=costs_present
         ),
         "requests": requests,
         "request_prices": priced,
+        "request_reported_costs": [
+            {"response_id": response, "usd": format(usd, "f")}
+            for response, usd in (reported_costs or {}).items()
+        ],
         "price_table": price_table_metadata(),
         "coverage": coverage,
     }

@@ -150,12 +150,15 @@ def header(shown: Shown, now: datetime, theme: Theme) -> Table:
             ("engine_regression", "engine"),
         ):
             right.add_row(label, fmt.score(summary.scores.get(name), theme))
-        cost = fmt.money(summary.estimated_cost, theme)
-        if summary.estimated_cost is not None and not summary.cost_complete:
+        cost = fmt.money(summary.cost, theme)
+        if summary.cost is not None and not summary.cost_complete:
             completeness = summary.cost_completeness or "partial"
             cost.append(f" {completeness}", style=theme.style("muted"))
+        if summary.cost is not None:
+            cost.append(f" {summary.cost_source}", style=theme.style("muted"))
         if summary.unpriced_requests:
-            cost.append(f" +{summary.unpriced_requests} unpriced", style=theme.style("muted"))
+            missing = "unreported" if summary.cost_source == "reported" else "unpriced"
+            cost.append(f" +{summary.unpriced_requests} {missing}", style=theme.style("muted"))
         right.add_row("cost", cost)
         right.add_row("turns", fmt.count(summary.agent_turns))
         right.add_row("tokens", fmt.count(summary.total_tokens))

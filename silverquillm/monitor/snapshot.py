@@ -396,7 +396,7 @@ class Monitor:
             return RunView(
                 run,
                 percent,
-                record.estimated_cost,
+                record.cost,
                 record.unpriced_requests,
                 record.request_costs,
                 cost_recorded=True,
