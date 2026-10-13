@@ -20,7 +20,7 @@ Codex reports no cost, so a Codex run's Run Cost is its Estimated Cost.
 
 - **Positive**: a model the table cannot price, or prices only by a rule the table lacks, still has a cost, and Claude runs need no hand-maintained price for each new model.
 - **Positive**: the Estimated Cost remains a reproducible, independent check on every figure the CLI reports.
-- **Negative**: the Run Cost of a Claude run rests on a figure the workload's own process produces, which a candidate could in principle steer; only the disagreement flag, version qualification, and the recorded Estimated Cost guard it.
+- **Negative**: the Run Cost of a Claude run rests on a figure the workload's own process produces, which a candidate could in principle steer; only the disagreement warning, version qualification, and the recorded Estimated Cost guard it. The warning never demotes the Reported Cost: a price-table gap, such as a changed list price or a long-context tier the table lacks, would otherwise demote the figure the decision trusts.
 - **Neutral**: Claude and Codex runs take their cost from different sources, so a comparison across providers compares a CLI's figure with the bench's table where the two cannot be checked against each other.
 
 ## Alternatives Considered

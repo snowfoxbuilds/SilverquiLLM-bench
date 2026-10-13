@@ -173,7 +173,7 @@ The immutable schema 2 record lives under `<results_repo>/results/<candidate-has
 Cost is API-equivalent USD, not the subscription bill.
 A run's cost is its `reported_cost`, the native CLI's own figure, whenever that is at least as complete as `estimated_cost`, the bench's price-table estimate; otherwise it is the estimate.
 Claude Code reports a figure for every request (its OTel `cost_usd`, the same total as its final `result` line), listed per request in `request_reported_costs` beside the table's `request_prices`; Codex reports none, so a Codex run's `reported_cost` is missing with `native_cost_not_reported` and its cost is the estimate.
-A `reported_cost` that differs from a complete estimate is partial with `reported_cost_disagrees_with_estimate`.
+A `reported_cost` that differs from a complete estimate stays complete; `cost_warnings` then lists `reported_cost_disagrees_with_estimate`.
 `cost_breakdown` beside it tallies tokens and USD by type: uncached input, cache reads, cache writes, 1-hour cache writes (Anthropic prices them above the 5-minute ones), and output.
 Every cost is a standard-tier equivalent, whatever tier served the request: each priced request carries `rate_basis: "standard"`, Claude requests keep their transcript `speed` and `service_tier`, and Codex requests keep `requested_service_tier`, the tier Codex put in its request (`mixed` when a thread used several). Codex never reports the tier the server applied.
 Agent turns count model responses plus tool calls; missing measurements remain null with an explanation.

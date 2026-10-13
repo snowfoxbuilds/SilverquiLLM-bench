@@ -477,14 +477,15 @@ def _measurements(
         cost_reasons.append("per_response_usage_unavailable")
     costs_present = bool(priced_values) or observed_zero
     estimated = format(sum(priced_values, Decimal(0)), "f")
-    reported, reported_reasons = None, list(reasons)
+    reported, reported_reasons, cost_warnings = None, list(reasons), []
     if reported_costs is None:
         reported_reasons.append("native_cost_not_reported")
     else:
         total = sum(reported_costs.values(), Decimal(0))
         reported = format(total, "f")
+        # A warning, not a reason: the Reported Cost stays the Run Cost (ADR-019).
         if costs_present and not cost_reasons and not _agrees(total, Decimal(estimated)):
-            reported_reasons.append("reported_cost_disagrees_with_estimate")
+            cost_warnings.append("reported_cost_disagrees_with_estimate")
     return {
         "schema_version": 1,
         # Agent threads beyond the main one: an observation, never an incompleteness reason.
@@ -501,6 +502,7 @@ def _measurements(
             reported, reported_reasons, present=reported_costs is not None
         ),
         "estimated_cost": _measurement(estimated, cost_reasons, present=costs_present),
+        "cost_warnings": cost_warnings,
         # Input by type (uncached, cache read, 5-minute and 1-hour write) beside output.
         "cost_breakdown": _measurement(
             total_breakdown(priced), cost_reasons, present=costs_present

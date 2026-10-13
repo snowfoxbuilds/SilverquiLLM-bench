@@ -911,6 +911,7 @@ def test_claude_codes_reported_cost_is_recorded_beside_the_estimate():
     assert result["reported_cost"]["completeness"] == "complete", result["reported_cost"]
     assert Decimal(result["reported_cost"]["value"]) == Decimal(result["estimated_cost"]["value"])
     assert result["reported_cost"]["value"] == result["coverage"]["native_reported_cost_usd"]
+    assert result["cost_warnings"] == []
     reported = {row["response_id"]: row["usd"] for row in result["request_reported_costs"]}
     priced = {row["response_id"]: row["usd"] for row in result["request_prices"]}
     assert {k: Decimal(v) for k, v in reported.items()} == {
@@ -918,11 +919,12 @@ def test_claude_codes_reported_cost_is_recorded_beside_the_estimate():
     }
 
 
-def test_a_reported_cost_that_differs_from_a_complete_estimate_is_partial():
+def test_a_reported_cost_that_differs_from_a_complete_estimate_stays_complete_with_a_warning():
     result = reconciled(api_request("req_01", cost_usd=5.0), api_request("req_02", cost_usd=5.0))
     assert result["estimated_cost"]["completeness"] == "complete"
     assert result["reported_cost"]["value"] == "10.0"
-    assert result["reported_cost"]["reasons"] == ["reported_cost_disagrees_with_estimate"]
+    assert result["reported_cost"]["completeness"] == "complete", result["reported_cost"]
+    assert result["cost_warnings"] == ["reported_cost_disagrees_with_estimate"]
 
 
 def test_a_model_missing_from_the_price_table_still_has_its_reported_cost():

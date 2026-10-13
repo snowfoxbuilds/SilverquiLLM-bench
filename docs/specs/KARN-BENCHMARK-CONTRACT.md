@@ -158,7 +158,7 @@ Missing or incomplete observations remain explicitly missing or incomplete, rath
 A run's Run Cost prefers the native CLI's own figure, its Reported Cost, over the bench's Estimated Cost whenever the Reported Cost is at least as complete; the Estimated Cost stays recorded beside it (ADR-019).
 Claude Code reports an API-equivalent USD figure for every request it makes, compactions and subagents included, so a Claude run records that figure per request and in total; Codex reports none, so a Codex run's Reported Cost is missing and its Run Cost is the Estimated Cost.
 The Reported Cost shares the run's observation reasons but none of the price table's, so a model the table cannot price still has one.
-A Reported Cost that differs from a complete Estimated Cost is partial, flagged `reported_cost_disagrees_with_estimate`, because the two agree on every request the table prices fully.
+A Reported Cost that differs from a complete Estimated Cost stays complete and remains the Run Cost; the measurements record `reported_cost_disagrees_with_estimate` under `cost_warnings`, a signal to review the price table or the run, because the two agree on every request the table prices fully.
 
 The integration qualifies response, tool-call, and usage capture against the pinned native CLI.
 The current stock result file's usage:null and whole-request turn.completed events do not establish the required measurements.
