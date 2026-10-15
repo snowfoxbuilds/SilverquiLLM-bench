@@ -16,6 +16,13 @@ from typing import Any
 
 from silverquillm.karn.exclusions import ExclusionError, load_exclusions
 from silverquillm.karn.records import InvalidRunRecordError, KarnRunRecord
+from silverquillm.net_card_score import (
+    SCORING_FILES,
+    ScoringData,
+    benchmark_scoring_data,
+    derive,
+    record_grade,
+)
 from silverquillm.results_repo import suite_keys
 
 from ._read import MAX_USD, count, instant, mapping, number, read_json, timestamp_ms
@@ -83,6 +90,9 @@ class RunSummary:
     execution_run_id: str | None = None
     excluded: str | None = None
     """The Exclusion's reason code."""
+    net_card: dict | None = None
+    """The Net Card Score derived for the record, available or not, for a benchmark with
+    scoring data in the bench checkout; None for a benchmark without (SCORING.md)."""
 
     @property
     def execution_id(self) -> str:
@@ -327,9 +337,13 @@ def _state(path: Path) -> tuple[int, int] | None:
 class HistoryStore:
     """The Results Repo's records, re-read only where a record's files changed."""
 
-    def __init__(self, results_repo: Path | None):
+    def __init__(self, results_repo: Path | None, bench_root: Path | None = None):
         self.results_repo = Path(results_repo) if results_repo is not None else None
-        self._cache: dict[Path, tuple[tuple, RunSummary | None]] = {}
+        self.bench_root = Path(bench_root) if bench_root is not None else None
+        self._cache: dict[Path, tuple[tuple, tuple | None, RunSummary | None]] = {}
+        self._scoring: dict[str, tuple[tuple, ScoringData | None]] = {}
+        self._scoring_checked: set[str] = set()
+        """Benchmarks whose scoring files were already checked in this pass."""
         self._exclusions: dict[str, str] = {}
         self._exclusions_key: tuple | None = None
         self.exclusion_error: str | None = None
@@ -372,23 +386,56 @@ class HistoryStore:
         self.exclusion_error = None
         self._exclusions = {run_id: exclusion.reason for run_id, exclusion in loaded.items()}
 
+    def _scoring_for(self, summary: RunSummary | None) -> tuple[tuple | None, ScoringData | None]:
+        """The current scoring data of a record's benchmark, re-read only when its files
+        change, keyed by their file states."""
+        benchmark = summary.benchmark if summary is not None else None
+        if self.bench_root is None or benchmark is None:
+            return None, None
+        cached = self._scoring.get(benchmark)
+        if cached is not None and benchmark in self._scoring_checked:
+            return cached
+        self._scoring_checked.add(benchmark)
+        root = self.bench_root / "benchmarks" / benchmark
+        state = tuple(_state(root / name) for name in (*SCORING_FILES, "config.json"))
+        if cached is None or cached[0] != state:
+            try:
+                data = benchmark_scoring_data(self.bench_root, benchmark)
+            except Exception:  # noqa: BLE001 -- a broken checkout only hides the score.
+                data = None
+            cached = (state, data)
+            self._scoring[benchmark] = cached
+        return cached
+
+    def _summary(self, key: tuple, manifest: Path, scores: Path, run_dir: Path) -> tuple:
+        manifest_document, scores_document = read_json(manifest), read_json(scores)
+        summary = summarize(manifest_document, scores_document, run_dir)
+        state, data = self._scoring_for(summary)
+        if summary is not None and data is not None:
+            try:
+                net_card = derive(record_grade(manifest_document, scores_document), data)
+            except RECORD_ERRORS:
+                net_card = {"available": False, "reason": "unreadable_grade"}
+            summary = replace(summary, net_card=net_card)
+        return key, state, summary
+
     def runs(self) -> list[RunSummary]:
         """Every readable record, newest first, with its Exclusion's reason when excluded."""
         if self.results_repo is None:
             return []
         self._refresh_exclusions()
+        self._scoring_checked.clear()
         seen, summaries = set(), []
         for run_dir in self._record_dirs():
             manifest, scores = run_dir / "manifest.json", run_dir / "scores.json"
             key = (_state(manifest), _state(scores))
             seen.add(run_dir)
             cached = self._cache.get(run_dir)
-            if cached is None or cached[0] != key:
-                summary = summarize(read_json(manifest), read_json(scores), run_dir)
-                cached = (key, summary)
+            if cached is None or cached[0] != key or cached[1] != self._scoring_for(cached[2])[0]:
+                cached = self._summary(key, manifest, scores, run_dir)
                 self._cache[run_dir] = cached
-            if cached[1] is not None:
-                summaries.append(cached[1])
+            if cached[2] is not None:
+                summaries.append(cached[2])
         for gone in set(self._cache) - seen:
             del self._cache[gone]
         result = [

@@ -112,10 +112,22 @@ A single test can swing a whole card, but counting cards keeps a card with thirt
 
 The Net Card Score is derived when read, never stored (grilling 2026-10-14).
 It is a pure function of a grade's per-test outcomes and baseline comparison, from a Run Record or a re-grade, together with the benchmark's Known Defect manifest and its attribution data, so correcting an attribution changes the score without regrading.
-One package function derives it for `silverquillm top`, the regrade summaries, and a `silverquillm` command that prints it for the Results Repo's run table and analyses, which never compute it themselves.
-The grading-inputs digest leaves the manifest and attribution data out, so an attribution correction needs no re-score; instead every derived score names the digest of the scoring data it used, which an analysis states beside its cohort's grading digest.
-It is unavailable, with the baseline comparison's reason, when the baseline comparison is.
+One package function derives it for `silverquillm top`, the regrade summaries, and `silverquillm net-card-score PATH...`, which prints it as one JSON line per Run Record or re-grade for the Results Repo's run table and analyses, which never compute it themselves.
+The grading-inputs digest leaves the manifest and attribution data out, so an attribution correction needs no re-score; instead every derived score names the digest of the scoring data it used (`scoring_data_digest`, over `data/known_defects.json`, `data/attribution.json` and `data/target_attribution.json`), which an analysis states beside its cohort's grading digest.
+Beside the score, a derived line carries each count's cards, the denominator and the host cards in it, the failing tests per Attributed Card by class, and the Dependency Tests left out.
+A broken Audited Engine Test that no attribution key matches, such as one graded on older inputs whose file has since gone, still counts: as one broken card per test file, named `unattributed:<file>`.
 A candidate whose engine breaks every test it is graded on is still scored: its expected tests that did not run, through an import error, a timeout or an early exit, fail (see Tests that did not run), so it scores at or below 0.
+
+The score is unavailable, with a reason, when:
+
+| Reason | When |
+| --- | --- |
+| the baseline comparison's reason | The baseline comparison is unavailable |
+| `no_baseline_comparison` | The grade carries no baseline comparison |
+| `suite_not_evaluated` | The bench could not grade the target-card suite |
+| `no_scoring_data` | The benchmark has no attribution data or no schema version 2 Known Defect manifest (SOS, hob-medium, fra-hard v1) |
+| `scoring_data_invalid: <why>` | The benchmark's scoring data breaks its schema |
+| `unreadable_grade` | The record or re-grade cannot be read |
 
 ### Run Record results
 

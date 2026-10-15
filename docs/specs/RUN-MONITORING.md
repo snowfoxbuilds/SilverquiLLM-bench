@@ -72,6 +72,7 @@ A provider is named by its login plugin: `karn-codex-login` is `codex`, `karn-cl
 | A Login Profile's stored login (`secret.json`) | The values its login plugin redacts, so live lines can be redacted; nothing derived from it is shown |
 | A live Codex rollout under a busy Login Profile's `plugin/work/sessions/` | Codex subscription usage readings, the `rate_limits` field only |
 | Results Repo `results/` and `exclusions/` | History, Exclusions, past durations, recorded subscription usage readings, and whether a retained record is published |
+| The bench checkout's `benchmarks/<benchmark>/data/known_defects.json`, `attribution.json` and `target_attribution.json` | Each historic run's Net Card Score, derived again when those files change |
 
 The Results Repo has no index, so the monitor reads its records directly and caches each one by modification time (grilling 2026-10-07).
 A Login Profile's `plugin/work` directory sits beside its live credentials, so the monitor reads nothing there except the `rate_limits` field of Codex rollout lines.
@@ -247,8 +248,9 @@ A value from an unexpired reading reads like `41% · resets Thu 14:00 · read 12
 The historic view browses by benchmark, by Candidate display, or by run (grilling 2026-10-07).
 Selecting a benchmark or a Candidate display lists its runs; a Candidate display expands to its individual Candidate Hashes.
 
-A run occupies one line: run date, benchmark, Candidate display, execution status, container duration over budget, score, Run Cost, Agent Turns, total tokens, Login Profile, host label, and the short run id.
-For smoke, fra-hard-v2 and later benchmarks the score is the Net Card Score with Cards Implemented, Cards Fixed and Cards Broken; for older benchmarks it is the target-card pass rate with passed/total, then the FDN and engine suites' pass rates (grilling 2026-10-14).
+A run occupies one line: run date, benchmark, Candidate display, execution status, container duration over budget, scores, Run Cost, Agent Turns, total tokens, Login Profile, host label, and the short run id.
+The scores are the Net Card Score with Cards Implemented, Cards Fixed and Cards Broken over its denominator (`+0.62 7+1-0/13`), then the target-card pass rate with passed/total and the FDN and engine suites' pass rates (grilling 2026-10-14).
+The Net Card Score shows for smoke, fra-hard-v2 and later benchmarks, derived from the bench checkout's scoring data (`bench_root`), or why it is unavailable; older benchmarks show a dash there and are read by their pass rates.
 Every column sorts.
 Excluded runs are dimmed with their reason code, and a key hides them.
 A line is one Run Record, identified by where it is stored: two published records can share a run id under different Candidate Hashes, and both stay listed, each opening as itself.
@@ -256,7 +258,7 @@ Selecting a run opens its run details.
 
 ### Run details view
 
-The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the Candidate display and secondary labels, Login Profile, timings, scores with each suite's pass rate (grilling 2026-10-14), Run Cost with its source (`reported` or `estimated`) and the Estimated Cost's breakdown by token type, Agent Turns, and token usage, each as available (grilling 2026-10-07).
+The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the Candidate display and secondary labels, Login Profile, timings, the Net Card Score where it can be derived and each suite's pass rate (grilling 2026-10-14), Run Cost with its source (`reported` or `estimated`) and the Estimated Cost's breakdown by token type, Agent Turns, and token usage, each as available (grilling 2026-10-07).
 
 | Tab | Content |
 | --- | --- |

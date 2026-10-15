@@ -198,7 +198,9 @@ class Monitor:
             self.config = HostConfig(path=config_path(self.environ), loaded=False)
         self.locations = self._resolve()
         self.host_label = _local_host_label(self.environ, self.hostname, self.config)
-        self.history_store = HistoryStore(self.locations["results_repo"].path)
+        self.history_store = HistoryStore(
+            self.locations["results_repo"].path, self.locations["bench_root"].path
+        )
         self._history: list[RunSummary] = []
         self._history_at = float("-inf")
         self._live: dict[str, _Live] = {}

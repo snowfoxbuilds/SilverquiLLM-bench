@@ -422,16 +422,24 @@ def _regrade_table(summary):
             return "unknown " + row["run_id"][:8]
         return digest.removeprefix("sha256:")[:12]
 
+    def net_card(row):
+        value = row.get("net_card_score")
+        if value is None or value["mean_score"] is None:
+            return f"{'-':>11}"
+        return f"{value['mean_score']:+6.2f} ({value['scored_runs']:>2})"
+
     yield f"grading inputs {summary['grading_inputs_digest']}"
+    if "scoring_data_digest" in summary:
+        yield f"scoring data {summary['scoring_data_digest']}"
     yield (
-        f"{'candidate':12} {'name':28} {'graded on':16} {'runs':>4}  "
+        f"{'candidate':12} {'name':28} {'graded on':16} {'runs':>4}  {'net card':>11}  "
         f"{'target before':>13} {'after':>6} {'pairs':>5}  {'fdn':>6}  {'engine':>6}"
     )
     for row in summary["cohorts"]:
         target, fdn, engine = (row[name] for name in ("target", "fdn", "engine"))
         yield (
             f"{row['candidate_hash'][:12]:12} {str(row['name'])[:28]:28} {graded_on(row):16} "
-            f"{row['runs']:>4}  {percent(target['before_mean_pass_rate']):>13} "
+            f"{row['runs']:>4}  {net_card(row)}  {percent(target['before_mean_pass_rate']):>13} "
             f"{percent(target['after_mean_pass_rate'])} {target['paired_runs']:>5}  "
             f"{percent(fdn['after_mean_pass_rate'])}  {percent(engine['after_mean_pass_rate'])}"
         )
@@ -459,6 +467,30 @@ def grading_inputs_command(benchmark_id, bench_root):
             sort_keys=True,
         )
     )
+
+
+@click.command("net-card-score")
+@click.argument(
+    "paths",
+    nargs=-1,
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+    metavar="PATH...",
+)
+@BENCH_ROOT_OPTION
+def net_card_score_command(paths, bench_root):
+    """Print the Net Card Score of Run Records and regrade outputs, one JSON line each.
+
+    A PATH is a record directory (manifest.json and scores.json), a regrade output
+    (<candidate hash>/<run id>.json), or a directory holding either, such as the results
+    repo's results/ or a regrades/<hex>/. The score is derived from the bench checkout's
+    scoring data, never stored; each line names its scoring_data_digest, or says why the
+    score is unavailable (SCORING.md, Deriving the score).
+    """
+    from silverquillm.net_card_score import score_paths
+
+    for row in score_paths(paths, bench_root):
+        click.echo(json.dumps(row, sort_keys=True))
 
 
 @click.group()
@@ -721,6 +753,7 @@ COMMANDS = (
     recover,
     regrade,
     grading_inputs_command,
+    net_card_score_command,
     queue,
     top,
     grader,

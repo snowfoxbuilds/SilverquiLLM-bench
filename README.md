@@ -118,6 +118,7 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | `silverquillm grader build [--python X.Y]` | Build the pinned, network-less grader images, one per graded Python version; each run is graded on its candidate's version. |
 | `silverquillm results-init PATH` | Lay out an empty private results repository and, if none exists, a minimal host configuration. |
 | `silverquillm grading-inputs BENCHMARK` | Print a benchmark's current grading-inputs digest as JSON. |
+| `silverquillm net-card-score PATH...` | Print the Net Card Score of Run Records and re-grades, one JSON line each. |
 | `silverquillm validate …` | Validate 17lands replays against the engine. |
 | `silverquillm data fetch-hob-set\|fetch-fra-set\|card-id-map\|token-id-map\|download-replays` | Fetch and build the reference data under `data/`. |
 | `silverquillm build fra-hard\|port-from-known-best\|printed-classes\|fdn-specs\|audited-stubs` | Generate benchmark inputs. |
