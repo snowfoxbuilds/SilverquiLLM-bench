@@ -1303,8 +1303,6 @@ def test_a_pool_of_only_damaged_logins_starts_no_batch_entry(tmp_path):
 
 
 def test_serve_keeps_polling_while_a_pool_is_unusable(tmp_path, monkeypatch):
-    from silverquillm.karn import batching
-
     directory = tmp_path / "batches"
     directory.mkdir()
     opts = options(tmp_path / "fixture")
@@ -1328,7 +1326,7 @@ def test_serve_keeps_polling_while_a_pool_is_unusable(tmp_path, monkeypatch):
         else:
             raise StopIteration
 
-    monkeypatch.setattr(batching.time, "sleep", sleep)
+    monkeypatch.setattr(runner, "_pause", sleep)
     with pytest.raises(StopIteration):
         runner.serve(poll_seconds=0.01)
     pooled = json.loads((directory / "state/pooled.json").read_text())
