@@ -104,7 +104,7 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | Command | Purpose |
 | --- | --- |
 | `silverquillm run --build-output … --construct … --benchmark …` | Execute a prebuilt Karn construct, grade its work in the grader container, and retain implementation and efficiency observations. |
-| `silverquillm scheduler [--once] [--replay-without-state ID]` | Execute due Karn batches in `batches/*.toml` through the same run lifecycle. |
+| `silverquillm scheduler [--once] [--replay-without-state ID]` | Execute due Karn batches in the batch directory, in queue order, through the same run lifecycle. |
 | `silverquillm recover RUN_ID [--stop]` | Settle an interrupted or killed run from its retained evidence and write its record, without rerunning work. |
 | `silverquillm regrade --benchmark … --out DIR [--run ID] [--candidate HASH]` | Re-grade retained runs on the current Audited Tests and grading inputs, writing new scores to DIR; records are never changed. |
 | `silverquillm queue ls [--json]` | One-shot, read-only view of the batch queue, including interrupted, partially observed, and unsupported batches. |
@@ -123,7 +123,7 @@ A `--cards` filter is available for development and pipeline validation, but fil
 ## Batches
 
 A batch is a `batches/<id>.toml` file with `format = "karn-v5"` (earlier `karn-v4` files still run) and ordered `[[runs]]` of build output, construct, and benchmark.
-The scheduler serves every batch in its batch directory and records progress in `state/<id>.json` beside them; see [batches/README.md](batches/README.md) and [Karn benchmarking](docs/KARN-BENCHMARKING.md).
+The scheduler fills free login slots across batches in queue order, picks up a batch added while it runs, and keeps its progress in the batch directory's `state/<id>.json`; see [batches/README.md](batches/README.md) and [Karn benchmarking](docs/KARN-BENCHMARKING.md).
 Historical Candidate Bundle batches are shown as unsupported and never run.
 
 ---

@@ -283,7 +283,7 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, allow_dirty
     """Execute due batches across every available login slot."""
     from silverquillm.queue_state import SchedulerLockedError
 
-    from .batching import KarnScheduler, queue_rows
+    from .batching import KarnScheduler
     from .grader import ContainerGrader
 
     runner = KarnScheduler(
@@ -300,12 +300,6 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, allow_dirty
             with terminate_as_interrupt():
                 executed = runner.run_until_idle()
             click.echo(f"scheduler idle: {executed} run(s) executed")
-            for row in queue_rows(batches_dir):
-                if row["status"] == "missing_state":
-                    click.echo(
-                        f"{row['batch']}: restore state or pass --replay-without-state {row['batch']}",
-                        err=True,
-                    )
         else:
             with terminate_as_interrupt():
                 runner.serve(poll_seconds)

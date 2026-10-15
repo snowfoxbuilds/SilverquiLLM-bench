@@ -217,10 +217,12 @@ silverquillm top   # needs the monitor extra: pip install -e '.[monitor]'
 
 In `top`, every action has a key and `?` lists them; `--no-mouse` leaves the mouse to the terminal for selecting text.
 
-The first invocation acknowledges the missing state for that one new batch.
+On a host whose batch directory already has a queue ledger (`queue.json`), a new batch needs no flag: the scheduler, running or not, records it and starts it after every batch queued before it.
+The flag is needed only the first time a scheduler serves a directory (with no ledger yet, the scheduler cannot tell a new batch from one whose state was lost) and to restart a batch whose state file was lost from entry zero. The scheduler warns about each batch it skips and why.
 Subsequent invocations resume from the recorded cursor; omit the acknowledgement flag.
+Keep backups and drafts of batch files outside the batch directory: every `*.toml` file in it is a submission, and a renamed file is a new batch.
 The scheduler automatically fills every free eligible Login Pool slot, including multiple runs from the same batch, with no concurrency flag.
-It starts entries in file order and rereads later entries before starting them. Among batches whose next entry can claim a slot, filename order takes priority.
+It starts entries in file order and rereads later entries before starting them. Among batches whose next entry can claim a slot, queue order takes priority: the order the scheduler first recorded each batch, not the file names.
 A batch whose next unstarted entry cannot claim a slot stays pending while other batches can start; later entries in that same batch wait their turn.
 Released slots can take another entry while an earlier run is still grading, so runs can finish out of order.
 Candidates without a login plugin run at most one at a time within the scheduler.

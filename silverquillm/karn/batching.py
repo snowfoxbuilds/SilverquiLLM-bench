@@ -5,8 +5,10 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import os
 import re
 import signal
+import tempfile
 import time
 import tomllib
 import uuid
@@ -91,9 +93,71 @@ def read_state(path: Path, batch_id: str) -> dict | None:
         raise KarnError("batch_state_invalid:" + batch_id) from None
 
 
+# The queue ledger: every Batch the scheduler has seen in this directory, in queue order. It is
+# not a ``*.json`` file in ``state/`` so that no Batch id can collide with it.
+LEDGER_FILENAME = "queue.json"
+
+
+def read_ledger(directory: Path) -> list[dict] | None:
+    """The directory's queue ledger entries in queue order, or None when it has none yet."""
+    path = Path(directory) / LEDGER_FILENAME
+    if path.is_symlink():
+        raise KarnError("queue_ledger_symlink")
+    if not path.exists():
+        return None
+    if not path.is_file():
+        raise KarnError("queue_ledger_invalid")
+    try:
+        value = json.loads(path.read_text())
+        entries = value["batches"]
+        if value.get("schema_version") != 1 or not isinstance(entries, list):
+            raise ValueError
+        seen = set()
+        for entry in entries:
+            queued_at = entry.get("queued_at")
+            if (
+                not isinstance(entry["batch"], str)
+                or entry["batch"] in seen
+                or type(entry["acknowledged"]) is not bool
+                or not (queued_at is None or isinstance(queued_at, str))
+            ):
+                raise ValueError
+            seen.add(entry["batch"])
+        return entries
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError):
+        raise KarnError("queue_ledger_invalid") from None
+
+
+def queue_order(names, ledger: list[dict] | None) -> list[str]:
+    """Queue order: the ledger's order, then Batches it has not recorded yet in name order."""
+    rank = {entry["batch"]: index for index, entry in enumerate(ledger or ())}
+    return sorted(names, key=lambda name: (rank.get(name, len(rank)), name))
+
+
+def stateless_status(batch_id: str, ledger: list[dict] | None) -> str:
+    """``pending`` for a Batch the scheduler will acknowledge by itself, else ``missing_state``.
+
+    Only a Batch an existing ledger has never seen is new. Without a ledger nothing tells a
+    new Batch from one whose state was lost, so the operator acknowledges it.
+    """
+    if ledger is not None and all(entry["batch"] != batch_id for entry in ledger):
+        return "pending"
+    return "missing_state"
+
+
+def _readable_ledger(directory: Path) -> list[dict] | None:
+    """For read-only views: a damaged ledger reads as none, the cautious interpretation."""
+    try:
+        return read_ledger(directory)
+    except KarnError:
+        return None
+
+
 def queue_rows(directory: Path) -> list[dict]:
     rows = []
-    for path in sorted(Path(directory).glob("*.toml")):
+    ledger = _readable_ledger(Path(directory))
+    paths = {path.stem: path for path in Path(directory).glob("*.toml")}
+    for path in (paths[name] for name in queue_order(paths, ledger)):
         batch = None
         try:
             batch = load_batch(path)
@@ -105,7 +169,7 @@ def queue_rows(directory: Path) -> list[dict]:
             state = read_state(Path(directory) / "state" / (path.stem + ".json"), path.stem)
             started = len(state["runs"]) if state else 0
             status = (
-                "missing_state"
+                stateless_status(path.stem, ledger)
                 if state is None
                 else "running"
                 if any(r["status"] == "running" for r in state["runs"])
@@ -170,6 +234,10 @@ def _published(row: dict) -> None:
 
 
 class KarnScheduler:
+    # Serve's pause between passes, its own so a test can stop it without patching the
+    # process-wide time.sleep that a run's worker thread also calls.
+    _pause = staticmethod(time.sleep)
+
     def __init__(
         self,
         batches_dir: Path,
@@ -218,6 +286,79 @@ class KarnScheduler:
         _write_atomically(
             path, json.dumps(state, sort_keys=True, indent=2) + "\n", prefix=".karn-state-"
         )
+
+    def _save_ledger(self, entries: list[dict]) -> None:
+        _write_atomically(
+            self.directory / LEDGER_FILENAME,
+            json.dumps({"schema_version": 1, "batches": entries}, indent=2) + "\n",
+            prefix=".karn-ledger-",
+        )
+
+    def _start_state(self, state_path: Path, batch_id: str) -> dict:
+        """Write a Batch's empty state, never replacing a state file that appeared meanwhile."""
+        state = {"schema_version": 2, "batch": batch_id, "runs": []}
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".karn-state-", suffix=".tmp", dir=state_path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps(state, sort_keys=True, indent=2) + "\n")
+            os.link(tmp, state_path)
+        except FileExistsError:
+            return read_state(state_path, batch_id)
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+        return state
+
+    def _sync_ledger(self) -> list[dict]:
+        """Record every Batch file the ledger has not seen, and return the ledger.
+
+        Without a ledger, every Batch present is recorded, and one without state stays
+        unacknowledged: nothing then tells a new Batch from one whose state was lost. With a
+        ledger, a valid Batch it has never seen is new and is acknowledged here. Its empty
+        state is written before its entry, so a crash between the two leaves a Batch that
+        starts normally, never one that reads as lost.
+        """
+        state_dir = self.directory / "state"
+        entries = read_ledger(self.directory)
+        changed = entries is None
+        if entries is None:
+            names = {path.stem for path in self.directory.glob("*.toml")}
+            names |= {path.stem for path in state_dir.glob("*.json")}
+            entries = [
+                {
+                    "batch": name,
+                    "queued_at": None,
+                    "acknowledged": (state_dir / (name + ".json")).exists(),
+                }
+                for name in sorted(names)
+            ]
+        known = {entry["batch"] for entry in entries}
+        for path in sorted(self.directory.glob("*.toml")):
+            if path.stem in known:
+                continue
+            state_path = state_dir / (path.stem + ".json")
+            try:
+                if load_batch(path) is None:
+                    continue
+                if read_state(state_path, path.stem) is None:
+                    self._start_state(state_path, path.stem)
+            except KarnError as error:
+                # Not yet a valid Batch, perhaps still being written: it stays unrecorded.
+                self._warn(str(error))
+                continue
+            entries.append(
+                {
+                    "batch": path.stem,
+                    "queued_at": datetime.now(UTC).isoformat(),
+                    "acknowledged": True,
+                }
+            )
+            known.add(path.stem)
+            changed = True
+        if changed:
+            self._save_ledger(entries)
+        return entries
 
     def run_until_idle(self) -> int:
         """One pass; when nothing ran only because no login could serve it, that is an error."""
@@ -325,6 +466,11 @@ class KarnScheduler:
         count = 0
         interrupted = None
         draining = False
+        ledger: list[dict] = []
+
+        def queued_before(name, other):
+            order = queue_order((name, other), ledger)
+            return name != other and order[0] == name
 
         def unpooled_live():
             return any(
@@ -395,7 +541,8 @@ class KarnScheduler:
                         job["login"] = value
                         plugin = value.split("/", 1)[0] if value else "unpooled"
                         admitted = not any(
-                            name < job["name"] and pool == plugin for name, pool in deferred.items()
+                            queued_before(name, job["name"]) and pool == plugin
+                            for name, pool in deferred.items()
                         )
                         if value is None:
                             admitted = admitted and not unpooled_live()
@@ -441,11 +588,28 @@ class KarnScheduler:
                 retry_claimable()
             return changed
 
+        def acknowledge_replay(name):
+            """The operator's --replay-without-state: start the Batch from entry zero."""
+            for entry in ledger:
+                if entry["batch"] == name and not entry["acknowledged"]:
+                    entry["acknowledged"] = True
+                    self._save_ledger(ledger)
+
         def dispatch():
-            paths = set(self.directory.glob("*.toml")) | {
-                self.directory / (name + ".toml") for name in states
-            }
-            for path in sorted(paths):
+            nonlocal ledger
+            try:
+                ledger = self._sync_ledger()
+            except KarnError as error:
+                self._warn(
+                    f"{error}: nothing is dispatched until {LEDGER_FILENAME} is repaired, or removed"
+                    " (then every Batch without state needs --replay-without-state)"
+                )
+                return False
+            recorded = {entry["batch"] for entry in ledger} | set(states)
+            # A file that appeared since the sync is recorded by the next one.
+            names = {path.stem for path in self.directory.glob("*.toml")} & recorded | set(states)
+            for name in queue_order(names, ledger):
+                path = self.directory / (name + ".toml")
                 if path.stem in deferred:
                     continue
                 try:
@@ -458,9 +622,13 @@ class KarnScheduler:
                         state = read_state(state_path, path.stem)
                         if state is None:
                             if path.stem not in self.replay:
+                                self._warn(
+                                    f"{name}: state/{name}.json is missing; restore it, or pass"
+                                    f" --replay-without-state {name} to start from entry zero"
+                                )
                                 continue
-                            state = {"schema_version": 2, "batch": path.stem, "runs": []}
-                            self._save(state_path, state)
+                            state = self._start_state(state_path, path.stem)
+                            acknowledge_replay(name)
                         states[path.stem] = state
                     state = states[path.stem]
                     if len(state["runs"]) >= len(batch["runs"]):
@@ -555,4 +723,4 @@ class KarnScheduler:
         with SchedulerLock(self.directory):
             while True:
                 self._run_locked()
-                time.sleep(poll_seconds)
+                self._pause(poll_seconds)

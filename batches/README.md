@@ -3,11 +3,13 @@
 The file-backed queue `silverquillm scheduler` executes, found through `--batches-dir` or `batches_dir` in the host configuration file.
 Operator instructions live in [Karn benchmarking](../docs/KARN-BENCHMARKING.md).
 
-- **`<id>.toml`** — one Batch, authored in your editor and never written by the scheduler.
-  Batches are scanned in name order.
-  Batch ids are one-shot: the state file records what ran under that id, so write a new file instead of reusing one.
+- **`<id>.toml`** — one Batch, authored in your editor (or by a campaign top-up) and never written by the scheduler.
+  Every `*.toml` file here is a submission: keep backups and drafts elsewhere.
+  Batch ids are one-shot: the state file records what ran under that id, so write a new file instead of reusing one; a renamed file is a new Batch.
 - **`state/<id>.json`** — the scheduler's observed state for that Batch (schema 2), written atomically after every transition.
-  Batch files and their state are host-local operational files: back them up with the host's raw data, and never commit or publish them; the scheduler never runs git.
+- **`queue.json`** — the queue ledger: every Batch the scheduler has recorded here, in queue order, and whether it was acknowledged. Written only by the scheduler; never edit it.
+
+All of these are host-local operational files, backed up with the host's raw data and never published.
 
 ## Batch file
 
@@ -30,8 +32,11 @@ The file is reread before every not-yet-started entry, so appending entries to a
 ## Execution
 
 - The scheduler fills free eligible Login Pool slots automatically, through the same lifecycle as `silverquillm run`; no concurrency setting is needed.
-- Entries start in file order within a batch and can overlap. Batches with a slot available take priority in filename order; a blocked batch does not hold up another batch's pool. Completion order can differ from start order.
-- A batch without state is blocked until acknowledged once with `--replay-without-state <id>`, because starting from entry 0 could replay finished runs.
+- Entries start in file order within a batch and can overlap. Batches with a slot available take priority in queue order, the order the scheduler first recorded them in `queue.json` (name order among those recorded together); a blocked batch does not hold up another batch's pool. Completion order can differ from start order.
+- A running scheduler picks up a new batch file without a restart, and `queue ls` and `top` show it as pending. A batch is new when `queue.json` has never recorded it.
+- A batch that `queue.json` records but whose state file is missing has lost its state. It is refused until you restore the state, or acknowledge a restart from entry 0 with `--replay-without-state <id>`, because that could replay finished runs. The same acknowledgement is needed once for each stateless batch present when a directory gets its first ledger, since nothing then tells a new batch from a lost one.
+- If `queue.json` is damaged, nothing is dispatched until it is repaired or removed; a removed ledger is rebuilt, and every batch without state then needs the acknowledgement.
+- The scheduler warns, once per batch and in serve mode too, about every batch it skips and why.
 - A failed entry is recorded with its evidence and the batch continues.
 - An entry with no eligible slot stays pending, along with later entries in its batch. It counts as started only after claiming a slot.
 - All runs left `running` by a crashed or killed scheduler are checked for recovery; runs still owned by a live worker are deferred. An unowned run that never wrote its run input is recorded as failed with `interrupted_before_launch`.

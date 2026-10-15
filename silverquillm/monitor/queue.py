@@ -8,7 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from silverquillm.karn.batching import load_batch, read_state
+from silverquillm.karn.batching import (
+    LEDGER_FILENAME,
+    load_batch,
+    queue_order,
+    read_ledger,
+    read_state,
+    stateless_status,
+)
 from silverquillm.karn.definition import KarnError
 
 from ._read import read_json
@@ -31,7 +38,7 @@ class QueuedRun:
 class QueuedBatch:
     batch: str
     status: str
-    """``pending``, ``running``, ``done``, ``needs_ack`` (no committed state), ``legacy`` or ``error``."""
+    """``pending``, ``running``, ``done``, ``needs_ack`` (no state, and not new), ``legacy`` or ``error``."""
     not_before: datetime | None
     started: int
     total: int
@@ -61,14 +68,19 @@ def _unparseable(path: Path) -> bool:
 
 
 def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
-    """Batches in name order, each with the run specs its state has not started yet."""
+    """Batches in queue order, each with the run specs its state has not started yet."""
     if batches_dir is None:
         return []
     directory = Path(batches_dir)
     try:
-        paths = sorted(directory.glob("*.toml"))
+        found_paths = {path.stem: path for path in directory.glob("*.toml")}
     except OSError:
         return []
+    try:
+        ledger = None if _unparseable(directory / LEDGER_FILENAME) else read_ledger(directory)
+    except (KarnError, RecursionError):
+        ledger = None  # a damaged ledger reads as none: every stateless Batch needs an ack
+    paths = [found_paths[name] for name in queue_order(found_paths, ledger)]
     found = []
     for path in paths:
         batch_id = path.stem
@@ -107,7 +119,7 @@ def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
             if index >= started
         )
         if state is None:
-            status = "needs_ack"
+            status = "pending" if stateless_status(batch_id, ledger) == "pending" else "needs_ack"
         elif any(row["status"] == "running" for row in state["runs"]):
             status = "running"
         else:
