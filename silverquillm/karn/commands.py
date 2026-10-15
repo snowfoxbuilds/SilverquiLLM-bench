@@ -428,9 +428,7 @@ def _regrade_table(summary):
         f"{'target before':>13} {'after':>6} {'pairs':>5}  {'fdn':>6}  {'engine':>6}"
     )
     for row in summary["cohorts"]:
-        target, fdn, engine = (
-            row[name] for name in ("card_correctness", "fdn_regression", "engine_regression")
-        )
+        target, fdn, engine = (row[name] for name in ("target", "fdn", "engine"))
         yield (
             f"{row['candidate_hash'][:12]:12} {str(row['name'])[:28]:28} {graded_on(row):16} "
             f"{row['runs']:>4}  {percent(target['before_mean_pass_rate']):>13} "

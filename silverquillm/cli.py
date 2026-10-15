@@ -1536,7 +1536,7 @@ def rescore(run_id: str, cards: str | None) -> None:
     per-card cards/<cn>/result.json + postmortem.jsonl, and run_summary.json
     in place. The agent's workspace_final/engine and cards/ are reused — the
     agent is never rerun; grading runs in the grader container (ADR-013).
-    Engine regression now uses the authoritative test_utils in an isolated
+    The engine suite now uses the authoritative test_utils in an isolated
     copy, so scores can differ from the run's original grading.
     """
     run_dir = _resolve_prior_run(run_id)

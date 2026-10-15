@@ -1,4 +1,4 @@
-"""Regression tests for FDN 163 — Self-Reflection.
+"""Audited Tests for FDN 163 — Self-Reflection.
 
 "Create a token that's a copy of target creature you control." The token is a
 copy (rule 707.2): a distinct game object carrying only the copiable

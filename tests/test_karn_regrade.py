@@ -21,7 +21,7 @@ from silverquillm.karn.execution import run_benchmark
 from silverquillm.karn.grader import DockerRun, GraderError
 from silverquillm.karn.records import read_record, validate_scores
 from silverquillm.karn.regrade import LiveContainers, recorded_grader, regrade
-from silverquillm.results_repo import InvalidRunRecordError, iter_run_records
+from silverquillm.results_repo import RETIRED_SUITE_KEYS, InvalidRunRecordError, iter_run_records
 
 from . import retained_runs
 from .grader_fixtures import FIXTURE_IMAGE_ID, LocalDocker
@@ -287,6 +287,25 @@ def test_the_command_exits_non_zero_when_a_run_errors(retained, monkeypatch):
     assert "error run-b: exit_125" in result.output
 
 
+def test_a_schema_2_record_regrades_with_its_counts_under_the_current_suite_names(retained):
+    [published] = (retained.opts["results_repo"] / "results").glob("*/run-a")
+    manifest = json.loads((published / "manifest.json").read_text())
+    scores = json.loads((published / "scores.json").read_text())
+    manifest["schema_version"] = 2
+    manifest["run_metadata"].pop("baseline_comparison", None)
+    (published / "manifest.json").write_text(json.dumps(manifest))
+    (published / "scores.json").write_text(
+        json.dumps({RETIRED_SUITE_KEYS[suite]: score for suite, score in scores.items()})
+    )
+
+    summary = invoke(retained, runs=["run-a"])
+
+    assert summary["errors"] == [] and summary["skipped"] == []
+    result = output(retained, "run-a")
+    assert set(result["source"]["scores"]) == set(result["scores"]) == {"target", "fdn", "engine"}
+    assert result["source"]["scores"]["fdn"]["tests_total"] == scores["fdn"]["tests_total"]
+
+
 def test_graded_runs_are_reused_until_forced_or_the_grading_inputs_change(regraded):
     docker = LocalDocker()
     invoke(regraded, docker=docker)
@@ -302,7 +321,7 @@ def test_graded_runs_are_reused_until_forced_or_the_grading_inputs_change(regrad
     assert len(changed.runs) == 3
     result = output(regraded, "run-a")
     assert result["grading_inputs_digest"] != result["source"]["grading_inputs_digest"]
-    assert result["scores"]["fdn_regression"]["tests_total"] == 2
+    assert result["scores"]["fdn"]["tests_total"] == 2
     assert summary["grading_inputs_digest"] == result["grading_inputs_digest"]
 
 
@@ -643,38 +662,38 @@ def _drop_candidate_name(value):
     del value["candidate_name"]
 
 
-def _null_dimension(value):
-    value["scores"]["card_correctness"] = None
+def _null_suite(value):
+    value["scores"]["target"] = None
 
 
-def _empty_dimension(value):
-    value["scores"]["card_correctness"] = {}
+def _empty_suite(value):
+    value["scores"]["target"] = {}
 
 
 def _missing_field(value):
-    del value["scores"]["fdn_regression"]["tests_total"]
+    del value["scores"]["fdn"]["tests_total"]
 
 
 def _rate_out_of_range(value):
-    value["scores"]["card_correctness"]["pass_rate"] = 500
+    value["scores"]["target"]["pass_rate"] = 500
 
 
 def _rate_not_finite(value):
-    value["scores"]["card_correctness"]["pass_rate"] = float("nan")
+    value["scores"]["target"]["pass_rate"] = float("nan")
 
 
 def _inconsistent_counts(value):
-    score = value["scores"]["engine_regression"]
+    score = value["scores"]["engine"]
     score["tests_passed"] = score["tests_total"] + 1
 
 
 def _rate_disagrees_with_counts(value):
-    score = value["scores"]["fdn_regression"]
+    score = value["scores"]["fdn"]
     score["pass_rate"] = 0.5 if score["pass_rate"] != 0.5 else 0.25
 
 
 def _malformed_source_scores(value):
-    value["source"]["scores"]["card_correctness"]["pass_rate"] = 0.123
+    value["source"]["scores"]["target"]["pass_rate"] = 0.123
 
 
 def _wrong_source_digest(value):
@@ -693,8 +712,8 @@ def _bad_timestamp(value):
     "damage",
     [
         _drop_candidate_name,
-        _null_dimension,
-        _empty_dimension,
+        _null_suite,
+        _empty_suite,
         _missing_field,
         _rate_out_of_range,
         _rate_not_finite,
@@ -723,10 +742,10 @@ def test_a_damaged_cache_with_matching_digests_regrades_only_that_run(regraded, 
     assert json.loads((regraded.out / "summary.json").read_text()) == summary
 
 
-def test_a_valid_missing_observation_is_reused_and_left_out_of_that_dimensions_means(regraded):
+def test_a_valid_missing_observation_is_reused_and_left_out_of_that_suites_means(regraded):
     path = output_file(regraded, "run-a")
     value = json.loads(path.read_text())
-    value["scores"]["card_correctness"] = {
+    value["scores"]["target"] = {
         "evaluated": False,
         "complete": False,
         "tests_passed": None,
@@ -741,8 +760,8 @@ def test_a_valid_missing_observation_is_reused_and_left_out_of_that_dimensions_m
 
     assert docker.runs == []
     cohort = next(c for c in summary["cohorts"] if c["runs"] == 2)
-    assert cohort["card_correctness"]["paired_runs"] == 1
-    assert cohort["fdn_regression"]["paired_runs"] == 2
+    assert cohort["target"]["paired_runs"] == 1
+    assert cohort["fdn"]["paired_runs"] == 2
 
 
 def test_scores_that_break_the_record_invariants_are_an_error_not_an_output(retained, monkeypatch):
@@ -750,7 +769,7 @@ def test_scores_that_break_the_record_invariants_are_an_error_not_an_output(reta
 
     def impossible(evaluated, benchmark):
         scores = original(evaluated, benchmark)
-        scores["card_correctness"]["pass_rate"] = 2.0
+        scores["target"]["pass_rate"] = 2.0
         return scores
 
     monkeypatch.setattr(regrade_module, "_scores", impossible)
@@ -767,7 +786,7 @@ DIGEST_A, DIGEST_B = "sha256:" + "a" * 64, "sha256:" + "b" * 64
 
 
 def synthetic(run_id, source_digest, before, after, candidate="c" * 64):
-    def dimension(rate):
+    def suite_score(rate):
         return {"tests_passed": None, "tests_total": None, "pass_rate": rate}
 
     return {
@@ -777,15 +796,15 @@ def synthetic(run_id, source_digest, before, after, candidate="c" * 64):
         "source": {
             "grading_inputs_digest": source_digest,
             "scores": {
-                "card_correctness": dimension(before),
-                "fdn_regression": dimension(1.0),
-                "engine_regression": dimension(1.0),
+                "target": suite_score(before),
+                "fdn": suite_score(1.0),
+                "engine": suite_score(1.0),
             },
         },
         "scores": {
-            "card_correctness": dimension(after),
-            "fdn_regression": dimension(1.0),
-            "engine_regression": dimension(None),
+            "target": suite_score(after),
+            "fdn": suite_score(1.0),
+            "engine": suite_score(None),
         },
     }
 
@@ -797,25 +816,25 @@ def test_one_candidate_graded_on_two_input_digests_forms_two_cohorts():
 
     rows = {row["source_grading_inputs_digest"]: row for row in summary["cohorts"]}
     assert set(rows) == {DIGEST_A, DIGEST_B}
-    assert rows[DIGEST_A]["card_correctness"]["before_mean_pass_rate"] == 0.0
-    assert rows[DIGEST_B]["card_correctness"]["before_mean_pass_rate"] == 1.0
+    assert rows[DIGEST_A]["target"]["before_mean_pass_rate"] == 0.0
+    assert rows[DIGEST_B]["target"]["before_mean_pass_rate"] == 1.0
     assert all(row["runs"] == 1 for row in rows.values())
 
 
-def test_runs_on_one_digest_aggregate_with_paired_counts_per_dimension():
+def test_runs_on_one_digest_aggregate_with_paired_counts_per_suite():
     summary = regrade_module.summarize(
         [synthetic("r1", DIGEST_A, 0.5, 1.0), synthetic("r2", DIGEST_A, 1.0, None)], {}, "example"
     )
 
     (row,) = summary["cohorts"]
     assert row["runs"] == 2
-    assert row["card_correctness"] == {
+    assert row["target"] == {
         "before_mean_pass_rate": 0.5,
         "after_mean_pass_rate": 1.0,
         "paired_runs": 1,
     }
-    assert row["fdn_regression"]["paired_runs"] == 2
-    assert row["engine_regression"] == {
+    assert row["fdn"]["paired_runs"] == 2
+    assert row["engine"] == {
         "before_mean_pass_rate": None,
         "after_mean_pass_rate": None,
         "paired_runs": 0,
@@ -885,7 +904,7 @@ def test_a_huge_integer_rate_breaks_the_score_invariants_rather_than_overflowing
     retained_template,
 ):
     scores = json.loads(json.dumps(retained_template.records[0].scores))
-    scores["card_correctness"]["pass_rate"] = 10**400
+    scores["target"]["pass_rate"] = 10**400
     with pytest.raises(InvalidRunRecordError):
         validate_scores(scores)
 
@@ -893,7 +912,7 @@ def test_a_huge_integer_rate_breaks_the_score_invariants_rather_than_overflowing
 def test_caches_that_cannot_be_decoded_or_checked_regrade_only_their_runs(regraded):
     huge = output_file(regraded, "run-a")
     value = json.loads(huge.read_text())
-    value["scores"]["card_correctness"]["pass_rate"] = 10**400
+    value["scores"]["target"]["pass_rate"] = 10**400
     huge.write_text(json.dumps(value))
     output_file(regraded, "run-b").write_text("[" * 20000 + "]" * 20000)
     reused = output_file(regraded, "run-c").read_bytes()

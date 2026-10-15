@@ -465,7 +465,7 @@ def _engine(tmp_path: Path, files: dict[str, str], timeout: int = 60, *, support
     )
 
 
-def _dimensions(engine: EngineResult, tmp_path: Path, fdn: dict | None = None) -> dict:
+def _suite_scores(engine: EngineResult, tmp_path: Path, fdn: dict | None = None) -> dict:
     from types import SimpleNamespace
 
     from silverquillm.karn.execution import _scores
@@ -475,7 +475,7 @@ def _dimensions(engine: EngineResult, tmp_path: Path, fdn: dict | None = None) -
 
 
 def _engine_score(engine: EngineResult, tmp_path: Path) -> tuple:
-    score = _dimensions(engine, tmp_path)["engine_regression"]
+    score = _suite_scores(engine, tmp_path)["engine"]
     return score["tests_passed"], score["tests_total"], score["complete"]
 
 
@@ -564,9 +564,9 @@ def test_a_timed_out_engine_suite_scores_every_function_failed(tmp_path):
     assert _engine_score(engine, tmp_path) == (0, 2, False)
 
 
-def test_missing_engine_support_leaves_the_dimension_unevaluated(tmp_path):
+def test_missing_engine_support_leaves_the_suite_unevaluated(tmp_path):
     engine = _engine(tmp_path, {"test_e.py": "def test_a():\n    pass\n"}, support=False)
-    score = _dimensions(engine, tmp_path)["engine_regression"]
+    score = _suite_scores(engine, tmp_path)["engine"]
     assert not score["evaluated"] and score["tests_total"] is None
 
 
@@ -588,13 +588,13 @@ def test_a_result_without_node_reporting_falls_back_to_the_summary():
     assert _suite_counts(card) == (0, 1)
 
 
-def test_the_dimension_totals_reach_the_combined_regression_and_regrade(tmp_path):
+def test_the_suite_totals_reach_the_baseline_comparison_and_regrade(tmp_path):
     from silverquillm.karn import regrade as regrade_module
-    from silverquillm.karn.baseline import combined_regression
+    from silverquillm.karn.baseline import baseline_comparison
     from silverquillm.karn.execution import _scores
     from silverquillm.karn.records import validate_scores
 
-    from .test_karn_combined_regression import baseline
+    from .test_karn_baseline_comparison import baseline
 
     engine = _engine(tmp_path, {"test_e.py": """\
         import os
@@ -609,15 +609,15 @@ def test_the_dimension_totals_reach_the_combined_regression_and_regrade(tmp_path
             pass
     """})
     fdn = {"fdn_1": CardResult("fdn_1", test_nodes=[{"test_node": "tests.py::a", "outcome": "pass"}])}
-    scores = _dimensions(engine, tmp_path, fdn)
+    scores = _suite_scores(engine, tmp_path, fdn)
     validate_scores(scores)
     reference = baseline(
         {"fdn_1/tests.py::a": "pass"},
         {"test_e.py::test_first": "pass", "test_e.py::test_exits": "pass", "test_e.py::test_after": "pass"},
     )
-    block = combined_regression(scores, FullEvalResult(fdn_results=fdn, engine_result=engine), reference)
-    assert (block["tests_passed"], block["tests_total"]) == (2, 4)
-    assert block["regressed"]["test_nodes"]["engine_regression"] == [
+    block = baseline_comparison(scores, FullEvalResult(fdn_results=fdn, engine_result=engine), reference)
+    assert (scores["engine"]["tests_passed"], scores["engine"]["tests_total"]) == (1, 3)
+    assert block["broken"]["engine"] == [
         "test_e.py::test_after", "test_e.py::test_exits",
     ]
     # A regrade scores its evaluation with the same function a run does.
@@ -757,28 +757,28 @@ def test_a_suite_that_keeps_collecting_scores_its_unaffected_tests(tmp_path):
     )
     assert [row["test_node"] for row in engine.not_run] == ["test_e.py::TestBad::test_bad"]
     assert _suite_counts(engine) == (1, 2)
-    block = _class_collection_combined_regression(engine, tmp_path)
-    assert (block["tests_passed"], block["tests_total"]) == (2, 3)
+    block = _class_collection_comparison(engine, tmp_path)
+    assert block["broken"]["engine"] == ["test_e.py::TestBad::test_bad"]
 
 
-def _class_collection_combined_regression(engine: EngineResult, tmp_path: Path) -> dict:
-    from silverquillm.karn.baseline import combined_regression
+def _class_collection_comparison(engine: EngineResult, tmp_path: Path) -> dict:
+    from silverquillm.karn.baseline import baseline_comparison
 
-    from .test_karn_combined_regression import baseline
+    from .test_karn_baseline_comparison import baseline
 
     fdn = {"fdn_1": CardResult("fdn_1", test_nodes=[{"test_node": "tests.py::a", "outcome": "pass"}])}
-    scores = _dimensions(engine, tmp_path, fdn)
+    scores = _suite_scores(engine, tmp_path, fdn)
     reference = baseline(
         {"fdn_1/tests.py::a": "pass"},
         {"test_e.py::TestBad::test_bad": "pass", "test_e.py::test_good": "pass"},
     )
-    return combined_regression(scores, FullEvalResult(fdn_results=fdn, engine_result=engine), reference)
+    return baseline_comparison(scores, FullEvalResult(fdn_results=fdn, engine_result=engine), reference)
 
 
-def test_a_class_collection_error_reaches_the_combined_regression_once(tmp_path):
+def test_a_class_collection_error_reaches_the_baseline_comparison_once(tmp_path):
     engine = _engine(tmp_path, {"test_e.py": _CLASS_COLLECTION_ERROR})
-    block = _class_collection_combined_regression(engine, tmp_path)
-    assert (block["tests_passed"], block["tests_total"]) == (1, 3)
+    block = _class_collection_comparison(engine, tmp_path)
+    assert block["broken"]["engine"] == ["test_e.py::TestBad::test_bad", "test_e.py::test_good"]
 
 
 def _exiting(status: int, after_a_pass: bool) -> str:
@@ -954,9 +954,9 @@ def test_a_regrade_keeps_an_interrupted_suite_incomplete(tmp_path):
     from silverquillm.karn.records import validate_scores
 
     engine = _engine(tmp_path, {"test_e.py": _interrupting("pytest.exit('stop', returncode=0)", True)})
-    scores = _dimensions(engine, tmp_path)
+    scores = _suite_scores(engine, tmp_path)
     validate_scores(scores)
-    assert scores["engine_regression"]["complete"] is False
+    assert scores["engine"]["complete"] is False
 
 
 def test_pytests_own_stop_after_collection_errors_keeps_its_diagnosis(tmp_path):
@@ -973,10 +973,10 @@ def test_a_regrade_keeps_a_cut_short_suite_incomplete(tmp_path):
     from silverquillm.karn.records import validate_scores
 
     engine = _engine(tmp_path, {"test_e.py": _exiting(0, after_a_pass=True)})
-    scores = _dimensions(engine, tmp_path)
+    scores = _suite_scores(engine, tmp_path)
     validate_scores(scores)
-    assert scores["engine_regression"]["complete"] is False
-    assert "pytest_exited: exit status 0" in scores["engine_regression"]["missing_reasons"]
+    assert scores["engine"]["complete"] is False
+    assert "pytest_exited: exit status 0" in scores["engine"]["missing_reasons"]
     assert regrade_module._scores is _scores
 
 
@@ -1297,12 +1297,17 @@ def test_a_skip_in_a_subdirectory_conftest_labels_its_functions_skipped(tmp_path
     ]
 
 
-def test_a_regrade_source_keeps_the_record_completeness():
-    from silverquillm.karn.regrade import _dimensions as regrade_dimensions
+@pytest.mark.parametrize("schema_version", [2, 3])
+def test_a_regrade_source_keeps_the_record_completeness(schema_version):
+    from silverquillm.karn.records import KarnRunRecord
+    from silverquillm.karn.regrade import _suite_counts
+    from silverquillm.results_repo import suite_keys
 
     scores = {
-        name: {"tests_passed": 1, "tests_total": 3, "pass_rate": 1 / 3, "complete": False}
-        for name in ("card_correctness", "fdn_regression", "engine_regression")
+        key: {"tests_passed": 1, "tests_total": 3, "pass_rate": 1 / 3, "complete": False}
+        for key in suite_keys(schema_version).values()
     }
-    for value in regrade_dimensions(scores).values():
+    record = KarnRunRecord({"schema_version": schema_version}, scores)
+    assert set(_suite_counts(record)) == {"target", "fdn", "engine"}
+    for value in _suite_counts(record).values():
         assert value["complete"] is False

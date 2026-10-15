@@ -61,8 +61,8 @@ def test_mixed_grading_and_scores_preserve_set_identity(mixed, tmp_path):
     assert result.fdn_results["fdn_1"].tests_passed == 1
     assert result.engine_result.tests_passed == 1
     scores = _scores(result, mixed)
-    assert scores["card_correctness"]["complete"]
-    assert scores["card_correctness"]["tests_passed"] == 2
+    assert scores["target"]["complete"]
+    assert scores["target"]["tests_passed"] == 2
     (mixed.root / "workspace/cards/hob/hob_1/card_impl.py").write_text("value = 0\n")
     broken = evaluate_run(tmp_path, mixed, workspace_source=mixed.root / "workspace")
     assert broken.sos_results["fra_1"].tests_passed == 1
@@ -102,7 +102,7 @@ def test_legacy_padded_directory_fallback(mixed, tmp_path):
     result = evaluate_run(tmp_path, benchmark, workspace_source=mixed.root / "workspace")
     assert set(result.sos_results) == {"fra_001"}
     assert result.sos_results["fra_001"].tests_passed == 1
-    assert _scores(result, benchmark)["card_correctness"]["complete"]
+    assert _scores(result, benchmark)["target"]["complete"]
 
 
 @pytest.mark.parametrize("cards", [["fra:1", "FRA:001"], ["fra:../1"], ["fra:1:2"]])
@@ -121,14 +121,14 @@ def test_a_test_that_did_not_run_counts_as_a_failure(mixed, tmp_path):
     assert hob.test_nodes == [{"test_node": "tests.py", "outcome": "fail"}]
     assert [row["reason"] for row in hob.not_run] == ["import_error"]
     scores = _scores(result, mixed)
-    target = scores["card_correctness"]
+    target = scores["target"]
     assert (target["tests_passed"], target["tests_total"]) == (1, 2)
     assert target["pass_rate"] == 0.5
     assert target["coverage"]["evaluated_cards"] == ["fra_1", "hob_1"]
 
     engine = result.engine_result
     engine.not_run = [{"test_node": "test_engine.py::test_missing", "reason": "not_reported"}]
-    scored = _scores(result, mixed)["engine_regression"]
+    scored = _scores(result, mixed)["engine"]
     assert scored["tests_total"] == engine.tests_total + 1
     assert scored["tests_passed"] == engine.tests_passed
     assert scored["pass_rate"] == engine.tests_passed / (engine.tests_total + 1)

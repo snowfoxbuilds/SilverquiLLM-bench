@@ -1,9 +1,9 @@
-"""The baseline reference grade and the Combined Regression block reported against it.
+"""The baseline reference grade and the baseline comparison reported against it.
 
 The unmodified Workspace of a benchmark with a Known Defect manifest is graded through the
 same grader as a run, at most once per cache key, and its per-test outcomes are kept in a
-host-side store. Combined Regression pools the FDN and engine regression Audited Tests and
-reports a run against that grade (``docs/specs/KNOWN-BEST-ENGINE.md``, ``SCORING.md``).
+host-side store. The baseline comparison lists the FDN and engine Audited Tests whose
+outcome moved from that grade's (``docs/specs/KNOWN-BEST-ENGINE.md``, ``SCORING.md``).
 
 This module must not import ``execution`` or ``regrade``: both import it.
 """
@@ -33,18 +33,18 @@ from .grading_inputs import grading_inputs
 from .snapshots import copy_workspace
 
 PACKAGE = Path(__file__).resolve().parents[1]
-SCHEMA_VERSION = 1
-GRADE_KEYS = frozenset({"schema_version", "key", "graded_at", "dimensions"})
-DIMENSION_KEYS = frozenset(
-    {"complete", "tests_passed", "tests_total", "missing_reasons", "test_nodes"}
-)
+#: The suites the baseline comparison compares with the unmodified Workspace.
+SUITES = ("fdn", "engine")
+SCHEMA_VERSION = 2
+GRADE_KEYS = frozenset({"schema_version", "key", "graded_at", "suites"})
+SUITE_KEYS = frozenset({"complete", "tests_passed", "tests_total", "missing_reasons", "test_nodes"})
 # Only about a third of the FDN cards have Audited Tests, so this reason describes the
 # population a run and its baseline share, never a grading failure.
 COVERAGE_REASON = "some_cards_have_no_executed_audited_tests"
 INPUTS_CHANGED = "grading_inputs_changed_during_grading"
 # A comparison that is unavailable only for this reason reflects the candidate's own
 # grading, so a regrade may reuse it; every other unavailable comparison is retried.
-STABLE_UNAVAILABLE = frozenset({"regression_not_evaluated"})
+STABLE_UNAVAILABLE = frozenset({"suite_not_evaluated"})
 GRADE_LIMIT = 64 * 1024 * 1024
 
 
@@ -153,21 +153,21 @@ def _valid_grade(value, key: dict) -> bool:
         or value["schema_version"] != SCHEMA_VERSION
         or value["key"] != key
         or not isinstance(value["graded_at"], str)
-        or not isinstance(value["dimensions"], dict)
-        or set(value["dimensions"]) != set(REGRESSION_DIMENSIONS)
+        or not isinstance(value["suites"], dict)
+        or set(value["suites"]) != set(SUITES)
     ):
         return False
     datetime.fromisoformat(value["graded_at"])
-    for dimension in value["dimensions"].values():
-        if not isinstance(dimension, dict) or set(dimension) != DIMENSION_KEYS:
+    for suite in value["suites"].values():
+        if not isinstance(suite, dict) or set(suite) != SUITE_KEYS:
             return False
-        passed, total = dimension["tests_passed"], dimension["tests_total"]
+        passed, total = suite["tests_passed"], suite["tests_total"]
         counts = (passed is None and total is None) or (
             _count(passed) and _count(total) and passed <= total
         )
-        reasons, nodes = dimension["missing_reasons"], dimension["test_nodes"]
+        reasons, nodes = suite["missing_reasons"], suite["test_nodes"]
         if (
-            type(dimension["complete"]) is not bool
+            type(suite["complete"]) is not bool
             or not counts
             or not isinstance(reasons, list)
             or not all(isinstance(reason, str) for reason in reasons)
@@ -184,15 +184,15 @@ def _reusable(grade: dict) -> bool:
     Failing Audited Tests are what a baseline records; a timeout, collection error or
     unexecuted suite is a failed attempt and must not outlive it.
     """
-    return all(_baseline_complete(dimension) for dimension in grade["dimensions"].values())
+    return all(_baseline_complete(suite) for suite in grade["suites"].values())
 
 
 def _stored(key: dict, evaluated, scores: dict) -> dict:
-    outcomes = regression_outcomes(evaluated)
-    dimensions = {}
-    for name in REGRESSION_DIMENSIONS:
+    outcomes = suite_outcomes(evaluated)
+    suites = {}
+    for name in SUITES:
         score = scores[name]
-        dimensions[name] = {
+        suites[name] = {
             "complete": score["complete"],
             "tests_passed": score["tests_passed"],
             "tests_total": score["tests_total"],
@@ -203,8 +203,14 @@ def _stored(key: dict, evaluated, scores: dict) -> dict:
         "schema_version": SCHEMA_VERSION,
         "key": key,
         "graded_at": datetime.now(UTC).isoformat(),
-        "dimensions": dimensions,
+        "suites": suites,
     }
+
+
+def suite_outcomes(evaluated) -> dict:
+    """The FDN and engine suites' outcomes, by suite."""
+    outcomes = regression_outcomes(evaluated)
+    return {suite: outcomes[key] for suite, key in zip(SUITES, REGRESSION_DIMENSIONS, strict=True)}
 
 
 class GradingInputsChanged(KarnError):
@@ -276,59 +282,50 @@ def _unavailable(reason: str) -> dict:
     return {"available": False, "reason": reason}
 
 
-def _baseline_complete(dimension: dict) -> bool:
+def _baseline_complete(suite: dict) -> bool:
     """Complete but for the FDN coverage gap the run shares."""
-    return dimension["tests_total"] is not None and not (
-        set(dimension["missing_reasons"]) - {COVERAGE_REASON}
+    return suite["tests_total"] is not None and not (
+        set(suite["missing_reasons"]) - {COVERAGE_REASON}
     )
 
 
-def combined_regression(
+def baseline_comparison(
     scores: dict, evaluated, baseline: Baseline | None, *, inputs_changed: bool = False
 ) -> dict | None:
-    """The Combined Regression block for a graded run, or None without a manifest.
+    """The baseline comparison for a graded run, or None without a manifest.
 
-    ``scores`` is never changed: ``fdn_regression`` and ``engine_regression`` keep their own
-    raw pass/total for diagnosis.
+    ``scores`` is never changed: the ``fdn`` and ``engine`` suites keep their own raw
+    pass/total for diagnosis.
     """
     if baseline is None:
         return None
     if inputs_changed:
         return _unavailable(INPUTS_CHANGED)
-    if not all(scores[name]["evaluated"] for name in REGRESSION_DIMENSIONS):
-        return _unavailable("regression_not_evaluated")
+    if not all(scores[name]["evaluated"] for name in SUITES):
+        return _unavailable("suite_not_evaluated")
     if baseline.unavailable is not None:
         return _unavailable(baseline.unavailable)
-    reference = baseline.grade["dimensions"]
-    if not all(_baseline_complete(reference[name]) for name in REGRESSION_DIMENSIONS):
+    reference = baseline.grade["suites"]
+    if not all(_baseline_complete(reference[name]) for name in SUITES):
         return _unavailable("baseline_incomplete")
-    outcomes = regression_outcomes(evaluated)
-    fixed, regressed = {}, {}
-    for name in REGRESSION_DIMENSIONS:
+    outcomes = suite_outcomes(evaluated)
+    fixed, broken = {}, {}
+    for name in SUITES:
         before, after = reference[name]["test_nodes"], outcomes[name].nodes
         fixed[name] = sorted(
             node
             for node, outcome in before.items()
             if outcome == "fail" and after.get(node) == "pass"
         )
-        regressed[name] = sorted(
+        broken[name] = sorted(
             node
             for node, outcome in before.items()
             if outcome == "pass" and after.get(node) != "pass"
         )
-    passed = sum(scores[name]["tests_passed"] for name in REGRESSION_DIMENSIONS)
-    total = sum(scores[name]["tests_total"] for name in REGRESSION_DIMENSIONS)
-    baseline_passed = sum(reference[name]["tests_passed"] for name in REGRESSION_DIMENSIONS)
-    baseline_total = sum(reference[name]["tests_total"] for name in REGRESSION_DIMENSIONS)
     return {
         "available": True,
-        "tests_passed": passed,
-        "tests_total": total,
-        "pass_rate": passed / total,
-        "baseline_score": {"tests_passed": baseline_passed, "tests_total": baseline_total},
-        "known_best_score": {"tests_passed": baseline_total, "tests_total": baseline_total},
-        "fixed": {"count": sum(map(len, fixed.values())), "test_nodes": fixed},
-        "regressed": {"count": sum(map(len, regressed.values())), "test_nodes": regressed},
+        "fixed": fixed,
+        "broken": broken,
         "baseline": {
             name: value for name, value in baseline.grade["key"].items() if name != "benchmark"
         },

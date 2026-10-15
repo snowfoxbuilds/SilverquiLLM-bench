@@ -79,7 +79,7 @@ def invoke(*args):
 
 @pytest.mark.integration
 @pytest.mark.parametrize("benchmark", ["smoke", "hob-medium"])
-def test_direct_and_batch_cli_retain_all_three_dimensions(tmp_path, python_image, benchmark):
+def test_direct_and_batch_cli_retain_all_three_suites(tmp_path, python_image, benchmark):
     candidate = make_candidate(
         tmp_path,
         image=python_image,
@@ -159,18 +159,18 @@ def test_direct_and_batch_cli_retain_all_three_dimensions(tmp_path, python_image
             score["evaluated"] and score["tests_total"] > 0 for score in result.scores.values()
         ), result.scores
         # The benchmark retains known defects; direct and queued grades must agree.
-        for dimension in ("fdn_regression", "engine_regression"):
+        for suite in ("fdn", "engine"):
             assert (
-                result.scores[dimension]["tests_passed"],
-                result.scores[dimension]["tests_total"],
+                result.scores[suite]["tests_passed"],
+                result.scores[suite]["tests_total"],
             ) == (
-                reference_scores[dimension]["tests_passed"],
-                reference_scores[dimension]["tests_total"],
-            ), result.scores[dimension]
+                reference_scores[suite]["tests_passed"],
+                reference_scores[suite]["tests_total"],
+            ), result.scores[suite]
         assert result.run_metadata["measurements"]["estimated_cost"]["value"] is None
         assert (tmp_path / "runs" / result.run_id / "workspace_final/integration-marker").exists()
         config = json.loads((REPO / "benchmarks" / benchmark / "config.json").read_text())
-        assert len(result.scores["card_correctness"]["coverage"]["population_cards"]) == len(
+        assert len(result.scores["target"]["coverage"]["population_cards"]) == len(
             config["cards"]
         )
         source = REPO / "benchmarks" / benchmark
@@ -189,7 +189,7 @@ def test_direct_and_batch_cli_retain_all_three_dimensions(tmp_path, python_image
             targets = {f"fdn_{number}" for number in config["cards"]}
             population -= targets
             covered -= targets
-        coverage = result.scores["fdn_regression"]["coverage"]
+        coverage = result.scores["fdn"]["coverage"]
         assert set(coverage["population_cards"]) == population
         assert set(coverage["evaluated_cards"]) == covered
         assert set(coverage["uncovered_cards"]) == population - covered

@@ -1,4 +1,4 @@
-"""Regression tests for FDN 48 — Refute.
+"""Audited Tests for FDN 48 — Refute.
 
 "Counter target spell. Draw a card, then discard a card." Player 1 casts
 spells on their turn and player 0 answers with Refute. A countered spell goes

@@ -369,11 +369,11 @@ def history():
     ) in enumerate(plan):
         started = NOW - timedelta(days=index + 1, hours=index)
         scores = {
-            "card_correctness": _score(target, 30),
-            "fdn_regression": _score(fdn, 120)
+            "target": _score(target, 30),
+            "fdn": _score(fdn, 120)
             if fdn is not None
             else Score(False, None, None, None),
-            "engine_regression": _score(engine, 90)
+            "engine": _score(engine, 90)
             if engine is not None
             else Score(False, None, None, None),
         }
@@ -381,7 +381,7 @@ def history():
             RunSummary(
                 run_id=f"{index:02d}" + "e" * 30,
                 candidate_hash=candidate.hash8 * 8 if candidate.hash8 else "0" * 64,
-                schema_version=2,
+                schema_version=3,
                 benchmark=benchmark,
                 run_date=started,
                 status=status,

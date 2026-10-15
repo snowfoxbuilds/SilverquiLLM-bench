@@ -75,20 +75,21 @@ karn/                                       the Karn recipes that build the cand
    run always consumes the entire set. The retired "workload" (card-subset) term
    does not appear in this repo.
 
-## Schema 2: Karn observations
+## Schemas 2 and 3: Karn observations
 
-New Karn runs use `schema_version: 2` with a candidate scheme naming the Construct Definition version: `karn-v4` with `definition_version: 4`, or `karn-v5` with `definition_version: 5`.
+New Karn runs use `schema_version: 3`; records written before the regression names were retired (bench ADR-021) use `schema_version: 2` and differ only in naming, described below. Both use a candidate scheme naming the Construct Definition version: `karn-v4` with `definition_version: 4`, or `karn-v5` with `definition_version: 5`.
 The candidate object records the scheme, `definition_version`, `definition_id`, `definition_digest`, immutable `image`, and resolved `image_id`; a scheme that does not match its version is malformed.
 Its directory key is the SHA-256 hex digest of that whole candidate object's canonical UTF-8 JSON (sorted keys, minimal separators, non-ASCII preserved).
 The manifest contains `run_id`, `candidate`, `candidate_hash`, `benchmark`, `budget_seconds`, `run_metadata`, and `artifact_pointers`; it contains no mode, proposal, or leaderboard eligibility field.
 
 `run_metadata` preserves the full selected definition, benchmark input identity, execution outcome, measurement observations, and grading-source provenance.
 Measurements retain response/tool components, token usage, versioned API-equivalent pricing, and completeness reasons.
-The three existing score-dimension names remain; an absent dimension uses `evaluated: false`, null counts/pass rate, and `missing_reasons`.
+`scores.json` holds one key per graded suite: `target`, `fdn` and `engine` in schema 3, and `card_correctness`, `fdn_regression` and `engine_regression` in schema 2; read the keys by the manifest's `schema_version`. A suite with no grade uses `evaluated: false`, null counts/pass rate, and `missing_reasons`.
 Coverage distinguishes the complete reference population from cards with executed audited cases.
-Each card under `card_correctness.cards` and `fdn_regression.cards`, and `engine_regression` itself, also carries `expected_test_functions` (statically collected from the authoritative tests; null when unknown), `not_run` (`{"test_node", "reason"}` for each expected function none of whose nodes ran) and `failure_messages` (failing node → one bounded line).
-A card's own counts cover only the nodes that ran; each dimension's `tests_passed`, `tests_total` and `pass_rate` also count every `not_run` function as a failed test (except `grading_support_missing`, which leaves the suite unevaluated), so a dimension total is the nodes that ran plus the functions that did not. Cards and the engine count reported nodes the same way: a collection-error row (a module's, or a class's `<file>::<Class>::<collection-error>`) is not a node, and a node that failed in setup, call or teardown is one failed node; only a result with no node reporting uses pytest's summary counts. A suite whose pytest session did not run to its end (`pytest_exited: exit status N` among its errors, whatever the status; this includes an interruption such as `KeyboardInterrupt` or `pytest.exit`, and an internal error) is incomplete; such errors come from pytest's short test summary only, never from a test's captured log. A function whose whole module, class or directory was skipped at collection is `skipped`, and expected functions follow pytest's `__test__` as last set (false turns a function, class or module off; exactly `True` turns one on whatever its name). A regrade's `source.scores` keeps the record's own `complete`. Card results from the legacy SOS/FDN compatibility runner carry none of the three fields; its engine result carries them.
-Records graded before these fields existed lack them and remain valid; their dimension totals count only the nodes that ran.
+Each card under the target and FDN suites' `cards`, and the engine suite itself, also carries `expected_test_functions` (statically collected from the authoritative tests; null when unknown), `not_run` (`{"test_node", "reason"}` for each expected function none of whose nodes ran) and `failure_messages` (failing node → one bounded line).
+A card's own counts cover only the nodes that ran; each suite's `tests_passed`, `tests_total` and `pass_rate` also count every `not_run` function as a failed test (except `grading_support_missing`, which leaves the suite unevaluated), so a suite total is the nodes that ran plus the functions that did not. Cards and the engine count reported nodes the same way: a collection-error row (a module's, or a class's `<file>::<Class>::<collection-error>`) is not a node, and a node that failed in setup, call or teardown is one failed node; only a result with no node reporting uses pytest's summary counts. A suite whose pytest session did not run to its end (`pytest_exited: exit status N` among its errors, whatever the status; this includes an interruption such as `KeyboardInterrupt` or `pytest.exit`, and an internal error) is incomplete; such errors come from pytest's short test summary only, never from a test's captured log. A function whose whole module, class or directory was skipped at collection is `skipped`, and expected functions follow pytest's `__test__` as last set (false turns a function, class or module off; exactly `True` turns one on whatever its name). A regrade's `source.scores` keeps the record's own `complete`. Card results from the legacy SOS/FDN compatibility runner carry none of the three fields; its engine result carries them.
+Records graded before these fields existed lack them and remain valid; their suite totals count only the nodes that ran.
+A benchmark with a Known Defect manifest also records `run_metadata.baseline_comparison` (schema 3): `available`, then per suite (`fdn`, `engine`) the sorted Audited Test ids `fixed` and `broken` relative to the unmodified Workspace's grade, and the `baseline` grade's key; or `available: false` with a `reason`. Schema 2 records carry `run_metadata.combined_regression` instead, which also pooled the two suites' counts against a baseline and a Known-Best score, and listed `regressed` where schema 3 lists `broken`.
 A snapshot fallback names its selected source while retaining the final workspace separately.
 Host grading inputs have content fingerprints in `run_metadata.grading_inputs`.
 A later recovery observation can have its own record id while `recovery_of` and `execution_run_id` link it to the original model execution; the prior record remains unchanged, and a reader of the records sees that link in the recovery's own record.
@@ -182,7 +183,7 @@ sources:
 5. Use one subscription on one host at a time.
 
 The bench refuses a run that breaks 2 or 3 unless the operator passes
-`--allow-dirty`. Every new schema 2 record carries `run_metadata.provenance`:
+`--allow-dirty`. Every new Karn record carries `run_metadata.provenance`:
 `host_label` and its `host_label_source`, `bench` and `benchmark_root` (each
 `commit` and `dirty`), `recipe_revision`, `allow_dirty`, and the
 `dirty_reasons` that were overridden. The grader image is in
@@ -247,8 +248,9 @@ When false, migrated records explain why in `run_metadata.validity_note`.
 
 ## `scores.json`
 
-Exactly three keys — the audited dimensions under benchmark-neutral names, each
-holding the bench's `run_summary.json` block for that dimension unchanged:
+Exactly three keys — the graded suites under the benchmark-neutral names records
+used before schema 3, each holding the bench's `run_summary.json` block for that
+suite unchanged:
 
 ```json
 {
@@ -258,7 +260,7 @@ holding the bench's `run_summary.json` block for that dimension unchanged:
 }
 ```
 
-`card_correctness` is the target-set dimension (SOS card correctness for `sos`,
+`card_correctness` is the target-card suite (SOS card correctness for `sos`,
 HOB card correctness for the HOB benchmarks). A migrated SOS record, a smoke
 record and a HOB record all have this shape.
 
@@ -273,5 +275,5 @@ Records here are never edited by any bench command.
 Terms follow the bench repo's `CONTEXT.md`: **Benchmark Run** (one container
 session consuming a benchmark's entire problem set), **Candidate Bundle** (the
 self-contained artifact a candidate is exchanged as), **Resume Leg** (a run with
-`resumed_from` set), **Audited Eval** (the three dimensions above). "Workload"
+`resumed_from` set), **Audited Eval** (the three graded suites above). "Workload"
 is retired.
