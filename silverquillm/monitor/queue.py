@@ -23,6 +23,8 @@ from ._read import read_json
 from .candidates import CandidateDisplay, candidate_display
 
 MAX_BATCH_FILE = 16 * 1024 * 1024
+# State files read for run attribution; a batch directory never holds anywhere near this many.
+MAX_STATE_FILES = 10_000
 
 
 @dataclass(frozen=True)
@@ -101,6 +103,39 @@ def ledger_status(batches_dir: Path | None) -> tuple[str, str | None]:
     if damaged:
         return "damaged", damaged
     return ("none" if entries is None else "ok"), None
+
+
+def batch_runs(batches_dir: Path | None) -> dict[str, tuple[str, int] | None]:
+    """Each started run's batch and entry index, from the retained state files alone.
+
+    A state file outlives its Batch TOML (recovery still publishes and settles a run after
+    its batch file is removed), so this never depends on finding the submission. It reads
+    bounded regular files only, takes no lock and writes nothing; a missing, oversized or
+    invalid state file attributes nothing. A run id two entries claim maps to ``None``:
+    ambiguous, so unknown rather than an arbitrary pick.
+    """
+    if batches_dir is None:
+        return {}
+    try:
+        paths = sorted(Path(batches_dir, "state").glob("*.json"))[:MAX_STATE_FILES]
+    except OSError:
+        return {}
+    found: dict[str, tuple[str, int] | None] = {}
+    for path in paths:
+        batch_id = path.stem
+        if batch_id.startswith("."):
+            continue  # a scheduler temporary file, never a batch's state
+        try:
+            if path.is_symlink() or _unparseable(path):
+                continue
+            state = read_state(path, batch_id)
+        except (KarnError, OSError, AttributeError, RecursionError):
+            continue
+        for row in state["runs"] if state else ():
+            entry = (batch_id, row["index"])
+            claimed = found.get(row["run_id"], entry)
+            found[row["run_id"]] = entry if claimed == entry else None
+    return found
 
 
 def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:

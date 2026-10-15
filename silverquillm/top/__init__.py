@@ -80,8 +80,7 @@ def print_snapshot(
     stdout = stdout or sys.stdout
     monitor = Monitor(
         given={key: value for key, value in given.items() if value is not None},
-        follow_output=False,
-        **monitor_options,
+        **{"follow_output": False, "sample_usage": True, **monitor_options},
     )
     try:
         document = snapshot_document(monitor.snapshot())

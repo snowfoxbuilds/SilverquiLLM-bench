@@ -7,6 +7,7 @@ redacted when they were captured.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -294,6 +295,85 @@ class LogFollower:
                 self._process.kill()
         for thread in self._threads:
             thread.join(timeout=5)
+
+
+# One-shot reading of a run container's log for ``top --json``: bounded in time and bytes.
+SAMPLE_SECONDS = 5.0
+SAMPLE_MAX_BYTES = 8 * 1024 * 1024
+
+
+def sampled_claude_reading(
+    container: str,
+    *,
+    tail: int = DEFAULT_TAIL,
+    popen: Popen = subprocess.Popen,
+    timeout: float = SAMPLE_SECONDS,
+    max_bytes: int = SAMPLE_MAX_BYTES,
+) -> UsageReading | None:
+    """The newest Claude usage reading in a run container's recent stdout, read once.
+
+    ``docker logs --timestamps --tail`` without ``--follow``, through the same line and
+    reading parsers a ``LogFollower`` uses. Reading stops at ``max_bytes`` or ``timeout``,
+    and ``docker logs`` is always reaped before returning. Only the parsed reading leaves
+    this function, never a log line.
+    """
+    try:
+        process = popen(
+            ["docker", "logs", "--timestamps", "--tail", str(tail), container],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        return None
+    found: list[UsageReading] = []
+
+    def pump() -> None:
+        splitter = LineSplitter((), MAX_LINE + 64, join=join_partials)
+        read = 0
+        try:
+            while read < max_bytes and (
+                chunk := process.stdout.read1(min(READ_CHUNK, max_bytes - read))
+            ):
+                read += len(chunk)
+                _keep_readings(splitter.feed(chunk), found)
+            if read < max_bytes:
+                _keep_readings(splitter.flush(), found)
+        except (OSError, ValueError):
+            pass
+
+    reader = threading.Thread(target=pump, daemon=True)
+    reader.start()
+    reader.join(timeout)
+    _reap(process)
+    reader.join(1)
+    with contextlib.suppress(OSError, ValueError):
+        process.stdout.close()
+    return found[-1] if found else None
+
+
+def _keep_readings(rows, found: list[UsageReading]) -> None:
+    for raw, _, _ in rows:
+        if raw:
+            at, text = split_timestamp(raw)
+            reading = claude_line_reading(text, at)
+            if reading is not None:
+                found.append(reading)
+
+
+def _reap(process: subprocess.Popen) -> None:
+    """End ``docker logs`` if it is still running and wait for it, never indefinitely."""
+    if process.poll() is not None:
+        return
+    with contextlib.suppress(OSError):
+        process.terminate()
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(OSError):
+            process.kill()
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=2)
 
 
 def retained_lines(

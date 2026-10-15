@@ -42,17 +42,21 @@ def _login_state(status: ProfileStatus) -> str:
     return "free"
 
 
-def _batch_entries(queued: list[QueuedBatch]) -> dict[str, tuple[str, int]]:
-    return {
+def _batch_entries(snapshot: MonitorSnapshot) -> dict[str, tuple[str, int] | None]:
+    """Each run's batch and entry: from the retained state files first, so a run keeps its
+    batch after the Batch TOML is gone; an ambiguous run stays unknown (``None``)."""
+    entries: dict[str, tuple[str, int] | None] = {
         run_id: (batch.batch, index)
-        for batch in queued
+        for batch in snapshot.queued
         for index, run_id in enumerate(batch.run_ids)
     }
+    entries.update(snapshot.batch_runs)
+    return entries
 
 
-def _run(view: RunView, batches: dict[str, tuple[str, int]], now: datetime) -> dict:
+def _run(view: RunView, batches: dict[str, tuple[str, int] | None], now: datetime) -> dict:
     run = view.run
-    batch, entry = batches.get(run.run_id, (None, None))
+    batch, entry = batches.get(run.run_id) or (None, None)
     container = run.container
     return {
         "run_id": run.run_id,
@@ -126,7 +130,7 @@ def _login(view: ProfileView) -> dict:
 
 
 def snapshot_document(snapshot: MonitorSnapshot) -> dict:
-    batches = _batch_entries(snapshot.queued)
+    batches = _batch_entries(snapshot)
     return {
         "schema_version": SCHEMA_VERSION,
         "taken_at": _time(snapshot.taken_at),

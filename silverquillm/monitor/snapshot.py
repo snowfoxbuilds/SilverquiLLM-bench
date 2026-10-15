@@ -36,9 +36,16 @@ from .estimates import WEEK, WeeklyUsage, estimated_percent, weekly_usage
 from .history import HistoryStore, RepoFreshness, RunSummary, UsageReading, repo_freshness
 from .live import LiveRun, RecordCache, Stage, live_runs, run_candidate_hash
 from .locks import PROC_LOCKS, held_locks
-from .output import LogFollower, LogLine, live_codex_reading, profile_redactions, retained_lines
+from .output import (
+    LogFollower,
+    LogLine,
+    live_codex_reading,
+    profile_redactions,
+    retained_lines,
+    sampled_claude_reading,
+)
 from .pools import ProfileStatus, login_profiles
-from .queue import QueuedBatch, dispatch_mode, ledger_status, queued_batches
+from .queue import QueuedBatch, batch_runs, dispatch_mode, ledger_status, queued_batches
 
 CODEX_READING_SECONDS = 30.0
 HISTORY_SECONDS = 10.0
@@ -119,6 +126,9 @@ class MonitorSnapshot:
     """The queue ledger: ``none`` (not yet written), ``ok``, or ``damaged``."""
     ledger_error: str | None = None
     """Why a damaged ledger stops every dispatch."""
+    batch_runs: Mapping[str, tuple[str, int] | None] = field(default_factory=dict)
+    """Each started run's batch and entry from the retained state files, independent of the
+    Batch TOMLs; ``None`` when two entries claim the run."""
 
 
 @dataclass
@@ -170,6 +180,9 @@ class Monitor:
     popen: Callable[..., subprocess.Popen] = subprocess.Popen
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     follow_output: bool = True
+    # One-shot use (``top --json``) follows no log: it samples each running Claude
+    # container's recent log once per snapshot for a live usage reading instead.
+    sample_usage: bool = False
     hostname: Callable[[], str] | None = None
 
     def __post_init__(self):
@@ -342,6 +355,15 @@ class Monitor:
                 )
             if entry.follower is not None:
                 self._observe(login, entry.follower.reading)
+            elif (
+                self.sample_usage
+                and entry.run.provider == "claude"
+                and entry.run.stage is Stage.RUNNING
+                and entry.run.container is not None
+            ):
+                self._observe(
+                    login, sampled_claude_reading(RUN_CONTAINER_PREFIX + run_id, popen=self.popen)
+                )
             if entry.run.provider == "codex" and entry.run.stage is Stage.RUNNING:
                 self._observe(login, self._codex_reading(login))
         for login, reading in self._observed_readings(now).items():
@@ -434,6 +456,7 @@ class Monitor:
             dispatch=dispatch,
             ledger=ledger,
             ledger_error=ledger_error,
+            batch_runs=batch_runs(self.path("batches_dir")),
         )
 
     def output(self, run_id: str, stream: str | None = None, since: int = 0) -> list[LogLine]:

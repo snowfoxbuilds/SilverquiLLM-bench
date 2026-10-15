@@ -26,7 +26,11 @@ The document (`schema_version` 1) has the host label, each resolved location and
 `runs` lists every live run with its stage and needs-recover reasons, the Batch and entry that started it, benchmark, construct, Candidate Hash, model and effort, Login Profile, budget, start time and elapsed container time, its container, run directory, estimate and Estimated Cost.
 `queue` lists every Batch in queue order with its status, the run ids it has started and its unstarted entries; the status uses `queue ls`'s strings (`pending`, `running`, `done`, `missing_state`, `ledger_damaged`, `unsupported_legacy_batch`, `error`) (grilling 2026-10-14).
 `logins` lists every Login Profile with one state word (`pending`, `unknown`, `busy`, `cooldown` or `free`, most blocking first), the pending run, when a cooldown ends, the run holding it, and its Estimated Weekly Usage.
+A run's Batch and entry come from the retained Batch state files (`state/<batch>.json`), not from the Batch TOMLs, so a run keeps its Batch after the TOML is removed or stops parsing, as when recovery publishes a run whose Batch file is gone; a missing, oversized or invalid state file attributes nothing, and a run two entries claim has no Batch, never an arbitrary one (grilling 2026-10-15).
+Since it follows no log, the one-shot snapshot reads each running Claude container's recent log once, `docker logs --timestamps --tail` without `--follow`, through the same line and usage parsers a followed log uses, so the live weekly reading the dashboard would show feeds the same [Estimated Weekly Usage](#estimated-weekly-usage); the read is bounded in time (5 s) and bytes (8 MiB), its `docker logs` is always ended, and only the parsed reading is kept, never a log line (grilling 2026-10-15).
+When Docker cannot be read or the log holds no valid reading, the estimate rests on the records, as the dashboard's would without a reading.
 `queue ls --json` keeps its own row shape for scripts that read the queue alone.
+The operator procedure that uses this document is in the Results Repo runbook (`runbook/monitoring-and-recovery.md`, snowfoxbuilds/bench-results#20).
 
 The monitor is read-only with one exception (grilling 2026-10-07).
 It never takes a lock that a runner or the scheduler takes, stops or recovers a run, edits a Batch, or fetches or pulls the Results Repo.
