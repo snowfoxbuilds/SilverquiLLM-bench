@@ -747,7 +747,7 @@ def _suite_relative_nodeid(nodeid: str, suite_dir: str) -> str:
 
 def _bounded_message(value) -> str:
     """One printable line of at most ``FAILURE_MESSAGE_LIMIT`` characters, always valid UTF-8."""
-    text = value if isinstance(value, str) else ""
+    text = value[: FAILURE_MESSAGE_LIMIT * 4] if isinstance(value, str) else ""
     text = text.encode("utf-8", "replace").decode("utf-8")
     text = " ".join("".join(ch if ch.isprintable() else " " for ch in text).split())
     # Object addresses differ between gradings of the same workspace.
@@ -804,7 +804,7 @@ def _read_report(report_path: Path, suite_dir: str | None = None) -> _Report:
         if entry.get("when") == "collect":
             module = normalized.removesuffix("::<collection-error>")
             module = "" if module == "<collection-error>" else module
-            report.collection_errors.setdefault(module, report.messages[normalized])
+            report.collection_errors.setdefault(module, report.messages.get(normalized, ""))
         if normalized not in seen:
             seen.add(normalized)
             report.nodes.append({"test_node": normalized, "outcome": outcome})
@@ -1064,6 +1064,15 @@ def _base_node(test_node: str) -> str:
     return test_node.split("[", 1)[0]
 
 
+def ran_functions(test_nodes: Iterable[dict]) -> set[str]:
+    """The test functions with at least one reported node; worker and host share this rule."""
+    return {
+        _base_node(node["test_node"])
+        for node in test_nodes
+        if "::" in node["test_node"] and "<collection-error>" not in node["test_node"]
+    }
+
+
 def _not_run(expected: list[str] | None, run: _PytestRun | None, reason: str | None = None) -> list[dict]:
     """The expected test functions none of whose nodes ran, each with why.
 
@@ -1074,27 +1083,26 @@ def _not_run(expected: list[str] | None, run: _PytestRun | None, reason: str | N
     if run is None:
         return [{"test_node": node, "reason": reason or "not_reported"} for node in expected]
     report = run.report
-    ran = {
-        _base_node(node["test_node"])
-        for node in report.nodes
-        if "::" in node["test_node"] and "<collection-error>" not in node["test_node"]
-    }
+    ran = ran_functions(report.nodes)
     skipped = {_base_node(node) for node in report.skipped}
     missing = []
     for node in expected:
         if node in ran:
             continue
-        module = node.split("::", 1)[0]
+        # The most specific collection error covering the node: its class's, else its module's.
+        covering = max(
+            (key for key in report.collection_errors if key and (node == key or node.startswith(key + "::"))),
+            key=len,
+            default=None,
+        )
         if reason is not None:
             why = reason
         elif run.timed_out:
             why = "timeout"
         elif node in skipped:
             why = "skipped"
-        elif module in report.collection_errors or (
-            "" in report.collection_errors and len(report.collection_errors) == 1
-        ):
-            message = report.collection_errors.get(module, report.collection_errors.get(""))
+        elif covering is not None or set(report.collection_errors) == {""}:
+            message = report.collection_errors[covering if covering is not None else ""]
             why = (
                 "import_error"
                 if re.search(r"\b(ImportError|ModuleNotFoundError)\b", message or "")
@@ -1119,9 +1127,9 @@ def _failure_messages(run: _PytestRun) -> dict[str, str]:
     }
 
 
-def failure_message_cost(message: str) -> int:
-    """Bytes a message takes in the worker's ASCII-escaped JSON output."""
-    return len(json.dumps(message))
+def failure_message_cost(node: str, message: str) -> int:
+    """Bytes one ``node: message`` entry takes in the worker's ASCII-escaped JSON output."""
+    return len(json.dumps(node)) + len(json.dumps(message)) + 2
 
 
 def _apply_message_budget(result: FullEvalResult) -> None:
@@ -1136,7 +1144,7 @@ def _apply_message_budget(result: FullEvalResult) -> None:
         kept = {}
         for node in sorted(holder.failure_messages):
             message = _bounded_message(holder.failure_messages[node])
-            cost = failure_message_cost(message)
+            cost = failure_message_cost(node, message)
             if not message or cost > remaining:
                 remaining = 0
                 continue
@@ -1845,6 +1853,7 @@ def evaluate(
         if staging_dir is not None:
             shutil.rmtree(staging_dir, ignore_errors=True)
 
+    _apply_message_budget(result)
     # Compute aggregates
     result.compute_aggregates()
 

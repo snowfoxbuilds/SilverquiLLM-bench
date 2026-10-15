@@ -129,19 +129,19 @@ A parametrized function counts once, and it ran if any of its cases ran.
 
 | Reason | When |
 | --- | --- |
-| `import_error` | The function's test module failed to collect because an import failed |
-| `collection_error` | The function's test module failed to collect for another reason |
+| `import_error` | The function's test module or class failed to collect because an import failed |
+| `collection_error` | The function's test module or class failed to collect for another reason |
 | `collection_interrupted` | Another module's collection error stopped the suite before anything ran |
 | `timeout` | The suite hit its time limit; a timed-out suite keeps no results |
 | `skipped` | The function was skipped or marked xfail at run time |
-| `pytest_exited` | pytest ended abnormally (for example `os._exit`) before reporting the function |
+| `pytest_exited` | pytest ended with an abnormal exit status (a crash, or `os._exit` with a nonzero code) before reporting the function |
 | `not_reported` | pytest finished without reporting the function |
 | `grading_support_missing` | Authoritative grading support was absent, so the suite never ran |
 | `candidate_code_missing` | The candidate's engine or cards directory was absent, so the suite never ran |
 
 Scoring is unchanged: a raw pass/total counts only the nodes that ran, so a function that did not run lowers no pass rate.
 An analysis that wants it counted as a failure divides by the expected functions instead.
-Each failing node also keeps a failure message: one printable line of at most 240 characters with object addresses masked, and at most 128 KiB of messages per grade, later ones dropped.
+Each failing node also keeps a failure message: one printable line of at most 240 characters with object addresses masked, and at most 128 KiB of encoded messages, with their node ids, per grade, later ones dropped.
 Not-run reasons and failure messages are diagnostics and never enter a score.
 
 ### Complexity Weighting

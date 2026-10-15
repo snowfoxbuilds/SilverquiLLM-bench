@@ -20,7 +20,10 @@ from silverquillm.evaluator import (
     _failure_messages,
     _grade_audited_card,
     _not_run,
+    _PytestRun,
     _python_files,
+    _read_report,
+    _Report,
     _run_pytest,
     expected_suite_functions,
     expected_test_functions,
@@ -304,7 +307,7 @@ def test_messages_past_the_evaluation_budget_are_dropped():
     result = FullEvalResult(sos_results=cards)
     _apply_message_budget(result)
     kept = sum(
-        failure_message_cost(m) for card in cards.values() for m in card.failure_messages.values()
+        failure_message_cost(*entry) for card in cards.values() for entry in card.failure_messages.items()
     )
     assert kept <= FAILURE_MESSAGE_BUDGET
     assert cards["c0"].failure_messages and not cards["c2"].failure_messages
@@ -319,7 +322,7 @@ def test_the_budget_counts_escaped_bytes_not_characters():
     result = FullEvalResult(sos_results={"c": card})
     _apply_message_budget(result)
     assert len(json.dumps(card.failure_messages)) <= FAILURE_MESSAGE_BUDGET + 64 * len(card.failure_messages)
-    assert sum(map(failure_message_cost, card.failure_messages.values())) <= FAILURE_MESSAGE_BUDGET
+    assert sum(failure_message_cost(*e) for e in card.failure_messages.items()) <= FAILURE_MESSAGE_BUDGET
 
 
 # ---------------------------------------------------------------------------
@@ -394,3 +397,42 @@ def test_an_older_style_result_without_expected_functions_has_no_not_run():
         _evaluation(expected_test_functions=None, not_run=[])
     ).sos_results["hob_1"]
     assert card.expected_test_functions is None and card.not_run == []
+
+
+def test_a_forged_collect_row_without_a_failure_does_not_crash_grading(tmp_path):
+    report = tmp_path / "report.jsonl"
+    report.write_text(json.dumps({"nodeid": "x", "when": "collect", "outcome": "pass"}) + "\n")
+    assert _read_report(report).collection_errors == {"x": ""}
+
+
+def test_a_class_collection_error_is_that_class_functions_own_error():
+    report = _Report(collection_errors={"tests.py::TestA": "ImportError: no"})
+    run = _PytestRun(0, 1, 1, [], report, returncode=2)
+    assert _not_run(["tests.py::TestA::test_x", "tests.py::TestAB::test_y"], run) == [
+        {"test_node": "tests.py::TestA::test_x", "reason": "import_error"},
+        {"test_node": "tests.py::TestAB::test_y", "reason": "collection_interrupted"},
+    ]
+
+
+def test_worker_and_host_agree_on_which_functions_ran():
+    nodes = [{"test_node": "tests.py::test_a[<collection-error>]", "outcome": "pass"}]
+    run = _PytestRun(1, 0, 1, [], _Report(nodes=nodes), returncode=0)
+    not_run = _not_run(["tests.py::test_a"], run)
+    card = CardResult(
+        collector_number="hob_1", tests_passed=1, tests_total=1, pass_rate=1.0,
+        test_nodes=nodes, expected_test_functions=1, not_run=not_run,
+    )
+    value = asdict(FullEvalResult(sos_results={"hob_1": card}, engine_result=EngineResult()))
+    assert evaluation_from_json(json.dumps(value).encode()).sos_results["hob_1"].not_run == not_run
+
+
+def test_engine_messages_within_budget_are_accepted_by_the_host():
+    nodes = [{"test_node": f"test_e.py::test_{n}", "outcome": "fail"} for n in range(2000)]
+    engine = EngineResult(
+        tests_failed=2000, tests_total=2000, test_nodes=nodes, expected_test_functions=2000,
+        failure_messages={node["test_node"]: "m" * FAILURE_MESSAGE_LIMIT for node in nodes},
+    )
+    result = FullEvalResult(engine_result=engine)
+    _apply_message_budget(result)
+    assert engine.failure_messages
+    assert evaluation_from_json(json.dumps(asdict(result)).encode()).engine_result.failure_messages

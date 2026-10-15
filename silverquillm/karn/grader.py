@@ -37,6 +37,7 @@ from silverquillm.evaluator import (
     FullEvalResult,
     _prepare_engine_work,
     failure_message_cost,
+    ran_functions,
     resolve_eval_paths,
 )
 from silverquillm.grade_worker import EVALUATION_SENTINEL
@@ -633,8 +634,7 @@ def _gaps(value: dict, nodes: list[dict]) -> dict:
     names = [row["test_node"] for row in not_run]
     if len(set(names)) != len(names) or len(names) > (expected or 0):
         raise GraderError("evaluation_invalid_not_run")
-    ran = {node["test_node"].split("[", 1)[0] for node in nodes}
-    if ran.intersection(names):
+    if ran_functions(nodes).intersection(names):
         raise GraderError("evaluation_invalid_not_run")
     failed = {node["test_node"] for node in nodes if node["outcome"] == "fail"}
     if (
@@ -645,7 +645,7 @@ def _gaps(value: dict, nodes: list[dict]) -> dict:
             and 0 < len(message) <= FAILURE_MESSAGE_LIMIT
             for node, message in messages.items()
         )
-        or sum(map(failure_message_cost, messages.values())) > FAILURE_MESSAGE_BUDGET
+        or sum(failure_message_cost(*entry) for entry in messages.items()) > FAILURE_MESSAGE_BUDGET
     ):
         raise GraderError("evaluation_invalid_failure_messages")
     return {
@@ -719,7 +719,7 @@ def evaluation_from_json(raw: bytes) -> FullEvalResult:
                        result.engine_result)
     ]  # fmt: skip
     if (
-        sum(failure_message_cost(text) for mapping in messages for text in mapping.values())
+        sum(failure_message_cost(*entry) for mapping in messages for entry in mapping.items())
         > FAILURE_MESSAGE_BUDGET
     ):
         raise GraderError("evaluation_invalid_failure_messages")
