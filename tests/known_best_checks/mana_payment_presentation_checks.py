@@ -65,8 +65,10 @@ def _pytest(plugin: str, tmp_path: Path, *paths: Path) -> tuple[subprocess.Compl
 
 def _audited(plugin: str, tmp_path: Path) -> tuple[subprocess.CompletedProcess, ET.Element]:
     # Staged as a workspace stages them, beside the engine rather than inside it.
+    # test_registry_loader.py writes fixture card sets into the imported cards package,
+    # which here is the shared Known-Best checkout that other xdist workers read.
     staged = tmp_path / "engine_tests"
-    shutil.copytree(AUDITED / "engine", staged, ignore=shutil.ignore_patterns("test_card_impl_ast_guard.py"))
+    shutil.copytree(AUDITED / "engine", staged, ignore=shutil.ignore_patterns("test_card_impl_ast_guard.py", "test_registry_loader.py"))
     return _pytest(plugin, tmp_path, staged, AUDITED / "fdn")
 
 

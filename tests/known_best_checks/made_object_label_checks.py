@@ -424,8 +424,10 @@ def test_every_fdn_audited_case_holds_with_made_objects_renumbered():
 
 def test_every_engine_audited_case_holds_with_made_objects_renumbered(tmp_path):
     # Staged as a workspace stages them, beside the engine rather than inside it.
+    # test_registry_loader.py writes fixture card sets into the imported cards package,
+    # which here is the shared Known-Best checkout that other xdist workers read.
     staged = tmp_path / "engine_tests"
-    shutil.copytree(AUDITED / "engine", staged, ignore=shutil.ignore_patterns("test_card_impl_ast_guard.py"))
+    shutil.copytree(AUDITED / "engine", staged, ignore=shutil.ignore_patterns("test_card_impl_ast_guard.py", "test_registry_loader.py"))
     result = _audited(staged)
     assert result.returncode == 0, result.stdout[-6000:] + result.stderr[-2000:]
 
