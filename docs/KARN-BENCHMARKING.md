@@ -67,7 +67,7 @@ Claude recipes bake a managed-settings file that denies `Agent` and `Workflow`.
 Codex recipes bake `/etc/codex/config.toml` with `[agents] enabled = false` (and `multi_agent = false`). The `[agents]` switch is needed on Codex 0.157.1, where the GPT-6 model catalog keeps the collaboration tools whatever the `multi_agent` feature says.
 The Codex recipes request no service tier: the ChatGPT subscription backend refuses the Flex tier, so every Codex request records `requested_service_tier` as none.
 Each record's `subagent_threads` measurement counts the agent threads beyond the main one (Claude sidechain transcripts, Codex threads other than the first one observed), so a batch meant to run without subagents should show `0`.
-`subagents` lists each such thread with the models observed on its requests and its request count; a subagent's requested effort is not observable.
+`subagents` lists each such thread with the models observed on its requests and its request count, up to 1,000 rows (`subagents_truncated` counts the rest); a subagent's requested effort is not observable, and for Codex the main thread is a best guess.
 Both are observations, not incompleteness reasons, and neither excludes a run: whether subagent use disqualifies a run is the analysis's call (#230).
 The Codex recipes pin their CLI with their own `[image.native_cli]`; 0.157.1 needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
 The `gpt-6.1-sol` recipes (`bare-codex-sol61-<effort>`, `low` to `max`) pin Codex 0.159.0. That release's bundled catalog predates the model, so Codex takes its entry from the server's model list at sign-in.

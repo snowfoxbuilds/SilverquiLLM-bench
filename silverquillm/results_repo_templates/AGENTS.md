@@ -142,7 +142,12 @@ empty measurements, and a present but unknown turn count, leave the record in.
 Subagent use is never a rule: `run_metadata.measurements.subagent_threads` counts
 the agent threads beyond the main one, and `subagents` lists each such thread as
 `{"thread_id", "models", "requests"}` (the models observed on its requests; null
-when nothing was observed), so an analysis judges its own subagent policy. Records
+when nothing was observed), so an analysis judges its own subagent policy. The list
+holds at most 1,000 rows of at most 32 models each; `subagents_truncated` counts the
+subagent threads not listed, so `subagent_threads` is the rows plus that count. When
+the telemetry could not be read into rows, `subagents` is null and
+`subagents_reason` says why. For Codex the main thread is a best guess (the first
+thread observed, by timestamps the workload writes). Records
 written before #230 may carry rule exclusions for `subagents_used` or
 `subagents_uncounted`; those files stay, and an operator may still write either
 reason by hand. Operators add the rest with `silverquillm results exclude`. To include

@@ -687,3 +687,66 @@ def test_subagent_threads_are_missing_without_observations():
     result = summarize_events([], exit_kind="completed")
     assert result["subagent_threads"] is None
     assert result["subagents"] is None
+
+
+def _otlp_record(thread, **extra):
+    attributes = [
+        {"key": "event.name", "value": {"stringValue": "codex.sse_event"}},
+        {"key": "event.kind", "value": {"stringValue": "response.completed"}},
+        {"key": "conversation.id", "value": thread},
+        {"key": "input_token_count", "value": {"stringValue": "1"}},
+        {"key": "model", "value": {"stringValue": "gpt-5"}},
+        {"key": "event.timestamp", "value": {"stringValue": "2026-01-01T00:00:00Z"}},
+    ]
+    attributes += [{"key": k, "value": v} for k, v in extra.items()]
+    return {"attributes": attributes}
+
+
+def _otlp(*records):
+    return {"resourceLogs": [{"scopeLogs": [{"logRecords": list(records)}]}]}
+
+
+def test_a_boolean_thread_id_is_dropped_and_cannot_fail_collection():
+    events = normalize_otlp(
+        _otlp(
+            _otlp_record({"stringValue": "main"}),
+            _otlp_record({"stringValue": "sub"}),
+            _otlp_record({"boolValue": True}, model={"boolValue": True}),
+        )
+    )
+    assert [e["thread_id"] for e in events] == ["main", "sub", None]
+    assert events[2]["attributes"]["model"] == "gpt-5"  # the boolean duplicate is refused
+    result = summarize_events(events, exit_kind="completed")
+    assert result["subagent_threads"] == len(result["subagents"]) == 1
+    assert result["subagents_truncated"] == 0
+
+
+def test_subagent_derivation_failure_leaves_the_rows_out_with_a_reason(monkeypatch):
+    from silverquillm.karn import observations
+
+    def broken(requests, threads):
+        raise TypeError("forged")
+
+    monkeypatch.setattr(observations, "subagent_rows", broken)
+    events = normalize_otlp(_otlp(_otlp_record({"stringValue": "main"})))
+    result = summarize_events(events, exit_kind="completed")
+    assert result["subagents"] is None and result["subagent_threads"] is None
+    assert result["subagents_reason"] == "subagent_derivation_failed"
+    assert result["usage"]["value"] is not None
+
+
+def test_many_subagent_threads_are_capped_and_summarised_in_linear_time():
+    import time
+
+    from silverquillm.karn.observations import SUBAGENT_ROWS_MAX
+
+    events = normalize_otlp(
+        _otlp(*(_otlp_record({"stringValue": f"t{i:05d}"}) for i in range(8000)))
+    )
+    started = time.monotonic()
+    result = summarize_events(events, exit_kind="completed")
+    assert time.monotonic() - started < 5
+    assert len(result["subagents"]) == SUBAGENT_ROWS_MAX
+    assert result["subagent_threads"] == 7999
+    assert result["subagents_truncated"] == 7999 - SUBAGENT_ROWS_MAX
+    assert all(row["requests"] == 1 for row in result["subagents"])

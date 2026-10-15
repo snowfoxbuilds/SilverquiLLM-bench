@@ -897,3 +897,46 @@ def test_a_label_from_the_file_is_valid_provenance(checkout, monkeypatch, tmp_pa
     recorded = provenance.collect({provenance.RECIPE_LABEL: "a" * 40}, checkout, allow_dirty=False)
     assert (recorded["host_label"], recorded["host_label_source"]) == ("lab-1", "config")
     assert provenance.valid(recorded)
+
+
+@pytest.mark.parametrize(
+    "subagents, truncated",
+    [
+        ("main", 0),
+        ([{"thread_id": "a", "models": [], "requests": -1}], 0),
+        ([{"thread_id": "", "models": [], "requests": 0}], 0),
+        ([{"thread_id": "a" * 257, "models": [], "requests": 0}], 0),
+        ([{"thread_id": "a", "models": ["m"] * 33, "requests": 0}], 0),
+        ([{"thread_id": "a", "models": [True], "requests": 0}], 0),
+        ([{"thread_id": "a", "models": [], "requests": 0, "extra": 1}], 0),
+        ([{"thread_id": f"t{i}", "models": [], "requests": 0} for i in range(1001)], 0),
+        ([], -1),
+        ([], True),
+    ],
+)
+def test_malformed_subagent_rows_are_an_invalid_record(edited_template, subagents, truncated):
+    record = edited_template.record
+
+    def change(metadata):
+        metadata["measurements"]["subagents"] = subagents
+        metadata["measurements"]["subagents_truncated"] = truncated
+
+    with pytest.raises(InvalidRunRecordError, match="subagent"):
+        edit(record, change).validate()
+
+
+def test_bounded_subagent_rows_and_records_without_them_are_valid(edited_template):
+    record = edited_template.record
+
+    def rows(metadata):
+        metadata["measurements"]["subagents"] = [
+            {"thread_id": "a1b2c3d4", "models": ["claude-opus-5-5"], "requests": 3}
+        ]
+        metadata["measurements"]["subagents_truncated"] = 2
+
+    def older(metadata):
+        metadata["measurements"].pop("subagents", None)
+        metadata["measurements"].pop("subagents_truncated", None)
+
+    edit(record, rows).validate()
+    edit(record, older).validate()

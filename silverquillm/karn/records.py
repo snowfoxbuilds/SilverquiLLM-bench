@@ -21,6 +21,7 @@ from silverquillm.known_defects import REGRESSION_DIMENSIONS
 from silverquillm.results_repo import InvalidRunRecordError, RunRecordExistsError
 
 from .definition import DIGEST, SCHEMES, KarnError, canonical, decode_definition, digest
+from .observations import SUBAGENT_LABEL_MAX, SUBAGENT_MODELS_MAX, SUBAGENT_ROWS_MAX
 from .provenance import valid as provenance_valid
 
 SCHEMA_VERSION = 2
@@ -237,6 +238,7 @@ class KarnRunRecord:
             or not all(isinstance(value, str) for value in failure.values())
         ):
             raise InvalidRunRecordError("invalid grading failure")
+        validate_subagents(self.run_metadata["measurements"])
         for pointer in self.artifact_pointers:
             if (
                 not isinstance(pointer, dict)
@@ -247,6 +249,37 @@ class KarnRunRecord:
         if "combined_regression" in self.run_metadata:
             validate_combined_regression(self.run_metadata["combined_regression"])
         validate_scores(self.scores)
+
+
+def validate_subagents(measurements) -> None:
+    """Bound the subagent rows, which the workload's own telemetry shapes (#230). Records
+    written before them omit the keys."""
+    if not isinstance(measurements, dict):
+        return
+    rows = measurements.get("subagents")
+    unlisted = measurements.get("subagents_truncated")
+    if unlisted is not None and (type(unlisted) is not int or unlisted < 0):
+        raise InvalidRunRecordError("invalid subagent count")
+    if rows is None:
+        return
+    if not isinstance(rows, list) or len(rows) > SUBAGENT_ROWS_MAX:
+        raise InvalidRunRecordError("invalid subagent rows")
+    for row in rows:
+        if (
+            not isinstance(row, dict)
+            or set(row) != {"thread_id", "models", "requests"}
+            or not _bounded_label(row["thread_id"])
+            or not isinstance(row["models"], list)
+            or len(row["models"]) > SUBAGENT_MODELS_MAX
+            or not all(_bounded_label(model) for model in row["models"])
+            or type(row["requests"]) is not int
+            or row["requests"] < 0
+        ):
+            raise InvalidRunRecordError("invalid subagent rows")
+
+
+def _bounded_label(value) -> bool:
+    return isinstance(value, str) and 0 < len(value) <= SUBAGENT_LABEL_MAX
 
 
 def validate_scores(scores) -> None:

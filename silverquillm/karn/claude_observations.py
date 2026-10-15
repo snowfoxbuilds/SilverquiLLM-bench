@@ -28,7 +28,7 @@ from .observations import (
     _integer,
     _measurements,
     _stamp,
-    subagent_rows,
+    derive_subagents,
 )
 
 # Versions whose transcript and OTel streams were checked against each other on a real run.
@@ -545,12 +545,13 @@ def summarize_claude_events(
             "native_reported_cost_usd": format(native_cost, "f") if otel else None,
         },
         # A subagent's transcript is a sidechain, whose thread is its agent id.
-        subagent_threads=sum(
-            bool(SHAPES["agent"].fullmatch(e["thread_id"] or "")) for e in sessions
-        ),
-        subagents=subagent_rows(
+        **derive_subagents(
             requests,
-            {e["thread_id"] for e in sessions if SHAPES["agent"].fullmatch(e["thread_id"] or "")},
+            lambda: {
+                e["thread_id"]
+                for e in sessions
+                if isinstance(e["thread_id"], str) and SHAPES["agent"].fullmatch(e["thread_id"])
+            },
         ),
         reported_costs=reported if otel else None,
     )

@@ -79,6 +79,7 @@ _ATTRIBUTES = {
     "service_tier",
     *_OTLP_TOKENS.values(),
 }
+_BOOLEAN_ATTRIBUTES = {"success"}
 # The tier Codex put in its request (not the one the server applied, which it never reports).
 _SERVICE_TIERS = {"flex", "priority", "fast", "default", "auto", "scale", "standard"}
 _TOOL_TYPES = {
@@ -141,7 +142,12 @@ def normalize_otlp(payload: Any) -> list[dict[str, Any]]:
                     value = next(
                         (raw[k] for k in ("stringValue", "intValue", "boolValue") if k in raw), None
                     )
-                    if isinstance(value, bool) or _label(value) is not None:
+                    # Ids, names and models must be strings: a boolean thread id would mix
+                    # types in every set of threads downstream.
+                    if isinstance(value, bool):
+                        if key in _BOOLEAN_ATTRIBUTES:
+                            attrs[key] = value
+                    elif _label(value) is not None:
                         attrs[key] = value
                 if attrs.get("event.name") not in _EVENTS:
                     continue
@@ -436,31 +442,75 @@ def summarize_events(
             "exit_kind": exit_kind,
             "model_basis": "native_turn_context; observation, not provider attestation",
         },
-        subagent_threads=max(0, len(otel_threads | native_threads) - 1),
-        subagents=subagent_rows(requests, (otel_threads | native_threads) - {_main_thread(sessions, requests)}),
+        **derive_subagents(
+            requests,
+            lambda: (
+                (otel_threads | native_threads)
+                - {_main_thread(sessions, requests, [e for e in rows if e["source"] == "otel"])}
+            ),
+        ),
     )
 
 
-def _main_thread(sessions: list[dict[str, Any]], requests: list[dict[str, Any]]) -> str | None:
-    """Codex names no parent thread, so the task's own thread is the first one observed."""
-    if sessions:
-        return min(sessions, key=lambda e: e["timestamp_ms"])["thread_id"]
-    if requests:
-        return min(requests, key=lambda r: r["timestamp_ms"])["thread_id"]
+def _main_thread(*sources: list[dict[str, Any]]) -> str | None:
+    """Codex names no parent thread, so the task's own thread is the first one observed:
+    in its journals, else its usage, else its telemetry. A best guess, since the workload
+    controls these timestamps; it can only mislabel which thread is the subagent."""
+    for events in sources:
+        named = [e for e in events if isinstance(e.get("thread_id"), str) and e["thread_id"]]
+        if named:
+            return min(named, key=lambda e: (e["timestamp_ms"], e["thread_id"]))["thread_id"]
     return None
 
 
-def subagent_rows(requests: list[dict[str, Any]], threads: Iterable[str | None]) -> list[dict[str, Any]]:
-    """Per subagent thread, the models observed on its requests and how many it made.
+SUBAGENT_ROWS_MAX = 1000
+SUBAGENT_MODELS_MAX = 32
+SUBAGENT_LABEL_MAX = 256
+
+
+def subagent_rows(
+    requests: list[dict[str, Any]], threads: Iterable[Any]
+) -> tuple[list[dict[str, Any]], int]:
+    """Per subagent thread, the models observed on its requests and how many it made, and
+    how many subagent threads are not listed (beyond the row cap or without a usable id).
 
     Enough for an analysis to judge a subagent policy itself (#230); nothing is excluded here.
     """
+    own: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for request in requests:
+        if isinstance(request.get("thread_id"), str):
+            own[request["thread_id"]].append(request)
+    named = {t for t in threads if t is not None}
+    usable = sorted(t for t in named if isinstance(t, str) and 0 < len(t) <= SUBAGENT_LABEL_MAX)
     rows = []
-    for thread in sorted(t for t in threads if t):
-        own = [r for r in requests if r.get("thread_id") == thread]
-        models = sorted({r["model"] for r in own if isinstance(r.get("model"), str)})
-        rows.append({"thread_id": thread, "models": models, "requests": len(own)})
-    return rows
+    for thread in usable[:SUBAGENT_ROWS_MAX]:
+        models = sorted(
+            {
+                r["model"]
+                for r in own.get(thread, ())
+                if isinstance(r.get("model"), str) and len(r["model"]) <= SUBAGENT_LABEL_MAX
+            }
+        )[:SUBAGENT_MODELS_MAX]
+        rows.append({"thread_id": thread, "models": models, "requests": len(own.get(thread, ()))})
+    return rows, len(named) - len(rows)
+
+
+def derive_subagents(requests: list[dict[str, Any]], threads) -> dict[str, Any]:
+    """The subagent measurements, never raising on what the workload wrote: a failure leaves
+    them out with a reason rather than failing the run's whole collection."""
+    try:
+        rows, unlisted = subagent_rows(requests, threads())
+    except Exception:  # noqa: BLE001 - untrusted telemetry must not fail collection
+        return {
+            "subagent_threads": None,
+            "subagents": None,
+            "subagents_reason": "subagent_derivation_failed",
+        }
+    return {
+        "subagent_threads": len(rows) + unlisted,
+        "subagents": rows,
+        "subagents_truncated": unlisted,
+    }
 
 
 def _agrees(reported: Decimal, estimated: Decimal) -> bool:
@@ -479,6 +529,8 @@ def _measurements(
     *,
     subagent_threads: int | None = None,
     subagents: list[dict[str, Any]] | None = None,
+    subagents_truncated: int = 0,
+    subagents_reason: str | None = None,
     reported_costs: dict[str, Decimal] | None = None,
 ) -> dict[str, Any]:
     """``reported_costs`` maps a request's ``response_id`` to the native CLI's own USD figure
@@ -519,6 +571,8 @@ def _measurements(
         # It sits outside ``coverage`` so committed qualification proofs replay unchanged.
         "subagent_threads": subagent_threads if present else None,
         "subagents": subagents if present and subagents is not None else None,
+        "subagents_truncated": subagents_truncated if present and subagents is not None else None,
+        **({"subagents_reason": subagents_reason} if present and subagents_reason else {}),
         "agent_turns": {
             "responses": _measurement(response_count, turn_reasons, present=present),
             "tool_calls": _measurement(tool_count, turn_reasons, present=present),
