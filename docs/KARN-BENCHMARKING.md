@@ -256,7 +256,7 @@ silverquillm queue drain    # pause, and the scheduler exits 0 once no run is in
 silverquillm queue resume   # launch again (start the scheduler again after a drain)
 ```
 
-Both persist in the batch directory's `control.json` across scheduler restarts until `queue resume`, and `queue ls` and `top` show them. A finished drain leaves dispatch paused.
+Both persist in the batch directory's `control.json` across scheduler restarts until `queue resume`, and `queue ls` and `top` show them. A finished drain leaves dispatch paused. The operator procedure is in the Results Repo runbook, `runbook/operations.md` ("Pause, drain and resume"; snowfoxbuilds/bench-results#20).
 
 ### Recovery guarantees
 

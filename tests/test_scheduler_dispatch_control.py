@@ -409,3 +409,187 @@ def test_queue_commands_replace_a_bad_control_file_and_refuse_a_directory(tmp_pa
     assert result.exit_code != 0 and "remove the directory" in result.output
     result = runner.invoke(cli, ["queue", "ls", "--batches-dir", str(directory)])
     assert result.exit_code == 0 and result.output.startswith("dispatch: paused")
+
+
+def _draining_with_pending_work(tmp_path):
+    """A drain whose runs have all finished, with another Batch still queued."""
+    directory = tmp_path / "batches"
+    write_batch(directory, "b", ["b1"])
+    executed = []
+    make_scheduler(tmp_path, directory, executed, replay=["b"]).run_until_idle()
+    write_batch(directory, "c", ["c1"])
+    write_control(directory, "draining")
+    return directory, executed
+
+
+def _never_serves(scheduler):
+    scheduler._pause = lambda _seconds: (_ for _ in ()).throw(AssertionError("kept serving"))
+    return scheduler
+
+
+def _blocked_command(directory, mode):
+    """Start a `queue` command in a thread; return it with a holder of its result."""
+    result = {}
+    thread = threading.Thread(
+        target=lambda: result.setdefault("control", write_control(directory, mode)), daemon=True
+    )
+    thread.start()
+    return thread, result
+
+
+@pytest.mark.parametrize("command", ["running", "paused"])
+def test_a_command_given_while_a_drain_completes_wins(tmp_path, monkeypatch, command):
+    # The command arrives mid-replace; it waits for the control lock and is applied after it.
+    from silverquillm.karn import batching
+
+    directory = tmp_path / "batches"
+    directory.mkdir()
+    write_control(directory, "draining")
+    real = batching._write_atomically
+    concurrent = {}
+
+    def replace_then_race(path, payload, *, prefix):
+        concurrent["thread"], concurrent["result"] = _blocked_command(directory, command)
+        time.sleep(0.2)
+        assert concurrent["thread"].is_alive()  # serialized behind the drain's replace
+        real(path, payload, prefix=prefix)
+
+    executed = []
+    scheduler = make_scheduler(tmp_path, directory, executed)
+    with monkeypatch.context() as patch:
+        patch.setattr(batching, "_write_atomically", replace_then_race)
+        scheduler._finish_drain()
+    concurrent["thread"].join(5)
+    assert concurrent["result"]["control"]["mode"] == command
+    assert read_control(directory)["mode"] == command
+
+
+def test_a_resume_before_a_drain_completes_is_never_undone(tmp_path):
+    directory = tmp_path / "batches"
+    directory.mkdir()
+    write_control(directory, "draining")
+    write_control(directory, "running")
+    executed = []
+    make_scheduler(tmp_path, directory, executed)._finish_drain()
+    assert read_control(directory)["mode"] == "running"
+
+
+@pytest.mark.parametrize("fault", ["mkstemp", "write", "replace"])
+def test_a_failed_drain_completion_keeps_the_stop_and_launches_nothing(
+    tmp_path, monkeypatch, caplog, fault
+):
+    import errno
+    import tempfile
+
+    from silverquillm import queue_state
+
+    directory, executed = _draining_with_pending_work(tmp_path)
+    before = (directory / CONTROL_FILENAME).read_bytes()
+
+    def no_space(*_args, **_kwargs):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    scheduler = _never_serves(make_scheduler(tmp_path, directory, executed))
+    with monkeypatch.context() as patch:
+        if fault == "mkstemp":
+            patch.setattr(tempfile, "mkstemp", no_space)
+        elif fault == "write":
+            real_fdopen = os.fdopen
+
+            def full_disk(fd, mode="r", *args, **kwargs):
+                if "w" in mode:  # the new control file's write; reads still work
+                    os.close(fd)
+                    no_space()
+                return real_fdopen(fd, mode, *args, **kwargs)
+
+            patch.setattr(queue_state.os, "fdopen", full_disk)
+        else:
+            patch.setattr(queue_state.os, "replace", no_space)
+        scheduler._finish_drain()
+    assert (directory / CONTROL_FILENAME).read_bytes() == before
+    assert read_control(directory)["mode"] == "draining"
+    assert "dispatch stays draining" in caplog.text
+    assert not list(directory.glob(".karn-control-*"))
+    # A restart with work still queued launches nothing: the drain is still in force.
+    _never_serves(make_scheduler(tmp_path, directory, executed)).serve()
+    assert executed == ["b1"] and read_control(directory)["mode"] == "paused"
+
+
+@pytest.mark.parametrize("published", [False, True])
+def test_a_crash_while_a_drain_completes_launches_nothing_on_restart(
+    tmp_path, monkeypatch, published
+):
+    from silverquillm.karn import batching
+
+    directory, executed = _draining_with_pending_work(tmp_path)
+    real = batching._write_atomically
+
+    def crash(path, payload, *, prefix):
+        if published:
+            real(path, payload, prefix=prefix)
+        raise SystemExit("crashed")
+
+    with monkeypatch.context() as patch, pytest.raises(SystemExit):
+        patch.setattr(batching, "_write_atomically", crash)
+        make_scheduler(tmp_path, directory, executed)._finish_drain()
+    assert read_control(directory)["mode"] == ("paused" if published else "draining")
+    make_scheduler(tmp_path, directory, executed).run_until_idle()
+    assert executed == ["b1"] and read_control(directory)["mode"] == "paused"
+
+
+def _leave_claim(directory):
+    """What an earlier version's crash left: the draining file moved aside, none in place."""
+    write_control(directory, "draining")
+    claimed = directory / ".karn-control-claim-0123.json"
+    os.rename(directory / CONTROL_FILENAME, claimed)
+    return claimed
+
+
+def test_a_lone_moved_aside_control_file_keeps_dispatch_closed(tmp_path):
+    directory = tmp_path / "batches"
+    directory.mkdir()
+    _leave_claim(directory)
+    assert read_control(directory) == {
+        "mode": "paused",
+        "since": None,
+        "error": "dispatch_control_claim_unresolved",
+    }
+
+
+def test_a_resume_after_a_crash_is_not_undone_by_its_leftover_claim(tmp_path):
+    directory = tmp_path / "batches"
+    write_batch(directory, "b", ["b1"])
+    claimed = _leave_claim(directory)
+    assert write_control(directory, "running")["mode"] == "running"
+    assert not claimed.exists()
+    executed = []
+    make_scheduler(tmp_path, directory, executed, replay=["b"]).run_until_idle()
+    assert executed == ["b1"] and read_control(directory)["mode"] == "running"
+
+
+def test_a_failed_restore_never_discards_the_only_copy(tmp_path, monkeypatch, caplog):
+    import errno
+
+    from silverquillm.karn import batching
+
+    directory = tmp_path / "batches"
+    write_batch(directory, "b", ["b1"])
+    claimed = _leave_claim(directory)
+    copy = claimed.read_bytes()
+
+    def no_space(*_args, **_kwargs):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    executed = []
+    with monkeypatch.context() as patch:
+        patch.setattr(batching.os, "link", no_space)
+        make_scheduler(tmp_path, directory, executed, replay=["b"]).run_until_idle()
+        assert executed == [] and claimed.read_bytes() == copy
+        assert "dispatch stays paused" in caplog.text
+        with pytest.raises(OSError):
+            write_control(directory, "paused")  # an operator command refuses, never discards
+        assert claimed.read_bytes() == copy
+    make_scheduler(tmp_path, directory, executed, replay=["b"]).run_until_idle()
+    # Put back, the drain is in force again: nothing launches and it ends paused.
+    assert not claimed.exists() and read_control(directory)["mode"] == "paused"
+    assert executed == []
