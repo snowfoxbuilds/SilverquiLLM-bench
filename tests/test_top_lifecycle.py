@@ -337,3 +337,20 @@ async def test_stuck_runs_show_why_and_whether_their_container_runs():
         await _settle(app, pilot)
         header = _plain(app.query_one("#detail-head").content)
         assert "NEEDS RECOVER" in header and "container up" in header
+
+
+class Paused(FakeMonitor):
+    def snapshot(self):
+        return dataclasses.replace(super().snapshot(), dispatch="draining")
+
+
+@synchronous
+async def test_the_queued_pane_says_when_dispatch_is_paused_or_draining():
+    app = _app(Paused())
+    async with app.run_test(size=(160, 44)) as pilot:
+        await _settle(app, pilot)
+        assert str(app.query_one("#queued").border_title).endswith("QUEUED — DRAINING")
+    app = _app(FakeMonitor())
+    async with app.run_test(size=(160, 44)) as pilot:
+        await _settle(app, pilot)
+        assert str(app.query_one("#queued").border_title).endswith("QUEUED")
