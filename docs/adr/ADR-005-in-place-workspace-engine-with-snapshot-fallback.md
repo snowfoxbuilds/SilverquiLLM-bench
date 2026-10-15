@@ -30,10 +30,14 @@ Snapshot fallback is whole-Workspace fallback. The runner must not combine final
 - **Positive**: Git snapshots provide progress telemetry and historical inspection with deduplicated storage.
 - **Negative**: The runner must manage a host-side baseline engine and snapshot repo.
 - **Negative**: Fallback selection adds complexity to the evaluation pipeline.
-- **Neutral**: If no snapshot passes Engine Regression, the run is marked `no_viable_output_produced`.
+- **Neutral**: If no snapshot passes the engine suite, the run is marked `no_viable_output_produced`.
 ## Alternatives Considered
 
 - **Separate ****`engine_work/`**** copy**: Rejected. It adds an artificial distinction inside the Workspace and complicates the mental model for agents.
 - **Engine-only rollback**: Rejected. Combining final card implementations with an earlier engine snapshot creates a state the agent never produced.
 - **No snapshot fallback**: Rejected. Timeout cutoff can corrupt final files even when a recent coherent Workspace state existed.
-- **Use FDN/SOS correctness to select fallback**: Rejected. Fallback selection uses Engine Regression only; using card correctness would become score-shopping.
+- **Use FDN/SOS correctness to select fallback**: Rejected. Fallback selection uses the engine suite only; using card correctness would become score-shopping.
+
+## Amendments
+
+- **2026-10-14**: Evaluation-sense "regression" names swapped for the new terms; see the rename record ADR-021.

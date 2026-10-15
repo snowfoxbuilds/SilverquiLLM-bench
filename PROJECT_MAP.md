@@ -89,13 +89,13 @@ Agent Container
 
 │                                                                      │
 
-│  Evaluation                                                          │
+│  Evaluation (per suite; SOS is frozen)                               │
 
-│    ├── SOS Card Correctness                                          │
+│    ├── SOS card suite                                                │
 
-│    ├── FDN Card Regression                                           │
+│    ├── FDN suite                                                     │
 
-│    └── Engine Regression                                             │
+│    └── engine suite                                                  │
 
 └──────────────────────────────────────────────────────────────────────┘
 

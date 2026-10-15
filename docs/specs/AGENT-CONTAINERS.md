@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-09-26
+Last updated: 2026-10-14
 
 # Agent Container System
 
@@ -329,7 +329,7 @@ Card directory restructuring is normally a card-level failure. If one expected `
 
 Evaluation reads from `docker/<image-dir>/results/<run_name>/workspace_final/` as the official source. Any legacy per-card artifacts under the run's `cards/{card_id}/` directory are optional derived convenience outputs and are not a recovery mechanism for broken Workspace structure.
 
-Snapshot fallback selection uses Engine Regression only (`engine_tests/`) as the viability gate. FDN Card Regression and SOS Card Correctness are evaluated after selection, not used to choose the snapshot.
+Snapshot fallback selection uses the engine suite only (`engine_tests/`) as the viability gate. The FDN suite and SOS Card Correctness are evaluated after selection, not used to choose the snapshot.
 
 Snapshot fallback triggers when final `engine_tests/` fails, errors on import, times out, hangs, or cannot start because engine files are corrupted. A snapshot is viable only if `engine_tests/` completes and passes within the normal engine-test timeout.
 

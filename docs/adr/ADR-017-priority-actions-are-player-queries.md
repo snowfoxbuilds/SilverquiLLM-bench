@@ -31,7 +31,7 @@ fra-hard v1, the HOB tiers and SOS keep their directive-driven priority.
 
 - **Positive**: Audited tests no longer depend on the casting call's signature, so any rules-correct way of choosing a face, mode or alternative cost can pass.
 - **Positive**: Legality is judged by what the engine allows to take effect: an engine may offer and accept an illegal choice as long as it rejects it with `InvalidPlayerChoiceError`, so tests need not police how options are presented.
-- **Negative**: Every audited test, `test_utils` helper and regression suite that casts or activates must move to the priority query, and the Known-Best and fra-hard engines must offer and execute actions.
+- **Negative**: Every audited test, `test_utils` helper and FDN or engine suite that casts or activates must move to the priority query, and the Known-Best and fra-hard engines must offer and execute actions.
 - **Negative**: Runs graded before the change cannot pass tests that drive play through a priority query their engines lack; fra-hard-v2 is a separate benchmark, and fra-hard v1 runs keep their old grades instead of being regraded.
 - **Neutral**: Candidates still follow a documented interface — the action options — but the contract now sits at the player's choice instead of the engine's function signature.
 
@@ -45,3 +45,4 @@ fra-hard v1, the HOB tiers and SOS keep their directive-driven priority.
 ## Amendments
 
 - **2026-10-05**: Tests choose actions through the players' scripts rather than Intents, since ADR-018 makes the scripts the only source of answers from fra-hard-v2 onward.
+- **2026-10-14**: Evaluation-sense "regression" names swapped for the new terms; see the rename record ADR-021.

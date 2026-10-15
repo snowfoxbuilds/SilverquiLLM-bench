@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 # FRA Hard Benchmark
 
@@ -63,15 +63,15 @@ Candidate-authored tests do not replace these suites.
 
 ### Evaluation
 
-The three evaluation dimensions are target-card correctness across the four sets, FDN card regression, and engine regression.
+A run is scored by the Net Card Score over three suites: the target-card Audited Tests across the four sets, the FDN Audited Tests and the Audited Engine Tests (grilling 2026-10-14).
 Target results retain canonical IDs such as `fra_159` and `hob_33`.
-There is no extra weighting for a card's set or rarity.
+There is no extra weighting for a card's set or rarity: each target card counts once toward Cards Implemented.
 
 Audited Tests exercise observable gameplay through the public engine and test interfaces.
 The candidate and oracle Workspaces provide the byte-identical, benchmark-owned [Test Interface](TEST-INTERFACE.md), its documentation and `table.py`, the helpers the Audited Tests are written with (grilling 2026-10-07); `test_utils.py` is only the Reference Tests' helper module (grilling 2026-10-05).
 Each selected card has at most 30 tests, covering its positive behavior, restrictions, and relevant interactions.
 Validation must account for all eleven selected cards and fail on missing implementations, missing suites, or unsynchronized oracle test copies.
-The oracle must also pass FDN and engine regression checks.
+The oracle must also pass every FDN and engine Audited Test.
 
 The audited coverage includes target legality and zone changes, permission lifetimes, mana and life payment boundaries, copy characteristics, countered spells and abilities, and effects whose controller changes before resolution.
 Separate oracle regression tests exercise interactions between selected cards.
@@ -101,3 +101,4 @@ Its Workspace is now locked: Known-Best fixes reach its hidden Audited Tests and
 | [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Independent execution of prebuilt Karn candidates |
 | [ADR-017](../adr/ADR-017-priority-actions-are-player-queries.md) | Priority actions are Player Queries chosen through the players' answers |
 | [ADR-018](../adr/ADR-018-audited-tests-play-as-two-players-at-a-table.md) | Audited Tests build a position, play it and judge it only as players at the table would |
+| [ADR-020](../adr/ADR-020-net-card-score-is-the-headline.md) | The Net Card Score is the headline score |

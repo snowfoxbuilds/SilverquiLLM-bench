@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-13
+Last updated: 2026-10-15
 
 # Run Monitoring
 
@@ -247,16 +247,16 @@ A value from an unexpired reading reads like `41% · resets Thu 14:00 · read 12
 The historic view browses by benchmark, by Candidate display, or by run (grilling 2026-10-07).
 Selecting a benchmark or a Candidate display lists its runs; a Candidate display expands to its individual Candidate Hashes.
 
-A run occupies one line: run date, benchmark, Candidate display, execution status, container duration over budget, target-card pass rate with passed/total, FDN Card Regression pass rate, Engine Regression pass rate, Run Cost, Agent Turns, total tokens, Login Profile, host label, and the short run id.
+A run occupies one line: run date, benchmark, Candidate display, execution status, container duration over budget, score, Run Cost, Agent Turns, total tokens, Login Profile, host label, and the short run id.
+For smoke, fra-hard-v2 and later benchmarks the score is the Net Card Score with Cards Implemented, Cards Fixed and Cards Broken; for older benchmarks it is the target-card pass rate with passed/total, then the FDN and engine suites' pass rates (grilling 2026-10-14).
 Every column sorts.
 Excluded runs are dimmed with their reason code, and a key hides them.
-Combined Regression joins the line once records carry it.
 A line is one Run Record, identified by where it is stored: two published records can share a run id under different Candidate Hashes, and both stay listed, each opening as itself.
 Selecting a run opens its run details.
 
 ### Run details view
 
-The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the Candidate display and secondary labels, Login Profile, timings, scores, Run Cost with its source (`reported` or `estimated`) and the Estimated Cost's breakdown by token type, Agent Turns, and token usage, each as available (grilling 2026-10-07).
+The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the Candidate display and secondary labels, Login Profile, timings, scores with each suite's pass rate (grilling 2026-10-14), Run Cost with its source (`reported` or `estimated`) and the Estimated Cost's breakdown by token type, Agent Turns, and token usage, each as available (grilling 2026-10-07).
 
 | Tab | Content |
 | --- | --- |
@@ -328,3 +328,4 @@ Pass rates take a rarity colour: mythic from 90%, rare from 70%, uncommon from 4
 | [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Karn v4 execution and observations have an independent consumer contract |
 | [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | The Karn commands, `top` among them, own the top level |
 | [ADR-019](../adr/ADR-019-run-cost-prefers-the-native-clis-reported-cost.md) | The monitor shows and sums the Run Cost, which prefers the native CLI's Reported Cost |
+| [ADR-020](../adr/ADR-020-net-card-score-is-the-headline.md) | The Net Card Score is the headline score |

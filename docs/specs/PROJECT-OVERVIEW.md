@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 # Project Overview
 
@@ -55,11 +55,13 @@ Curate audited gold-standard tests for SOS cards. Run all agents across full SOS
 
 ### Evaluation Architecture
 
-Evaluation runs human-curated **audited tests** against every agent's implementation. There is no self-eval or N×N cross-eval — the current paradigm is audited tests plus cherry-picking (harvesting validated results and promoting strong cases into the audited suite); automated cross-eval and test-quality scoring remain a possible v2 Test Harvester. Three audited dimensions:
+Evaluation runs human-curated **audited tests** against every agent's implementation. There is no self-eval or N×N cross-eval — the current paradigm is audited tests plus cherry-picking (harvesting validated results and promoting strong cases into the audited suite); automated cross-eval and test-quality scoring remain a possible v2 Test Harvester. Three audited suites run against the agent's harvested Workspace:
 
-1. **SOS Card Correctness** — audited SOS tests vs. each agent's `card_impl.py`
-2. **FDN Card Regression** — audited FDN tests vs. the agent's engine
-3. **Engine Regression** — core engine tests vs. the agent's engine
+1. **Target-card suite** — audited tests of the target cards vs. each agent's `card_impl.py` (SOS Card Correctness for SOS)
+2. **FDN suite** — audited FDN tests vs. the pre-filled FDN implementations on the agent's engine
+3. **Engine suite** — Audited Engine Tests vs. the agent's engine
+
+From smoke and fra-hard-v2 on, the headline is the Net Card Score: target cards implemented, plus existing cards fixed, minus existing cards broken (grilling 2026-10-14). SOS, hob-medium and fra-hard v1 keep the per-suite results they reported. See [SCORING.md](SCORING.md).
 The audited SOS suite is continuously improved by cherry-picking — see [AUDITED-TEST-IMPROVEMENT-WORKFLOW.md](AUDITED-TEST-IMPROVEMENT-WORKFLOW.md) and [AUDITED-TEST-SUITE.md](AUDITED-TEST-SUITE.md).
 
 ### Related Work
@@ -71,3 +73,9 @@ The audited SOS suite is continuously improved by cherry-picking — see [AUDITE
 ### Work tracking
 
 Pending work is filed as GitHub issues (grilling 2026-09-02) — the HOB-generation tracking issue #67 and the candidate-contract master #39 — not in an in-repo work queue. The former `TODO.md` / `docs/TODO_COMPLETED.md` queue is retired and deleted; completed work is recorded as closed issues plus git history.
+
+## Relevant ADRs
+
+| ADR | Decision |
+| --- | --- |
+| [ADR-020](../adr/ADR-020-net-card-score-is-the-headline.md) | The Net Card Score is the headline score |

@@ -1,6 +1,6 @@
 Status: DRAFT (rewritten for container architecture)
 
-Last updated: 2026-09-26
+Last updated: 2026-10-14
 
 # Benchmark Runner
 
@@ -227,11 +227,11 @@ A card has output if its `card_impl.py` differs from the original template. Prog
 
 All evaluation is post-run — no evaluation happens during the agent's session. The evaluator runs audited tests only. Agent-written tests are harvested as artifacts but not used for v1 scoring.
 
-Three evaluation dimensions:
+Three suites are graded, each reported as its own pass rate:
 
 1. **SOS Card Correctness** — Run `tests/audited/sos/*/tests.py` against each agent's `card_impl.py` using the harvested agent engine
-2. **FDN Card Regression** — Run `tests/audited/fdn/*/tests.py` against pre-filled FDN `card_impl.py` using the harvested agent engine
-3. **Engine Regression** — Run `engine_tests/` against the harvested agent engine
+2. **FDN suite** — Run `tests/audited/fdn/*/tests.py` against pre-filled FDN `card_impl.py` using the harvested agent engine
+3. **Engine suite** — Run `engine_tests/` against the harvested agent engine
 The evaluator runs outside the container on the host. For each SOS card:
 
 1. Copy `card_impl.py` to a temp directory
@@ -246,7 +246,7 @@ If the final harvested Workspace has corrupted engine code, the runner may walk 
 
 Snapshot fallback is whole-Workspace fallback, not engine-only fallback. If the runner selects a snapshot commit, evaluation uses that snapshot's `engine/`, `cards/sos/*/card_impl.py`, and `cards/sos/*/tests.py` together. The runner must not combine a final card implementation with an earlier engine snapshot, because that creates an artificial state the agent never produced.
 
-Snapshot selection uses Engine Regression only (`engine_tests/`) as the viability gate. The runner does not require FDN Card Regression or SOS Card Correctness to pass before selecting a fallback snapshot, because that would turn recovery into score-shopping. FDN and SOS failures are evaluated normally after the coherent Workspace is selected.
+Snapshot selection uses the engine suite only (`engine_tests/`) as the viability gate. The runner does not require the FDN suite or SOS Card Correctness to pass before selecting a fallback snapshot, because that would turn recovery into score-shopping. FDN and SOS failures are evaluated normally after the coherent Workspace is selected.
 
 When snapshot fallback is used, `run_summary.json` records:
 
@@ -262,7 +262,7 @@ When snapshot fallback is used, `run_summary.json` records:
 
 After each snapshot, the runner emits progress telemetry summarizing modified SOS cards, for example: newly modified card directories, total changed implementations, and changed test files.
 
-If no snapshot passes Engine Regression, the run is marked `no_viable_output_produced`. This represents the edge case where the agent broke the engine before the first viable snapshot. The runner does not evaluate SOS or FDN card correctness for that run. Even then, the runner still preserves the broken final Workspace for debugging, though the run is not evaluatable.
+If no snapshot passes the engine suite, the run is marked `no_viable_output_produced`. This represents the edge case where the agent broke the engine before the first viable snapshot. The runner does not evaluate SOS or FDN card correctness for that run. Even then, the runner still preserves the broken final Workspace for debugging, though the run is not evaluatable.
 
 ### Implementation Compatibility
 
@@ -307,7 +307,7 @@ Status values:
 - `timeout` — a Hard or Hang Timeout stopped the container; partial results were harvested and evaluated. The companion `timeout_reason` records which fired (`hard_timeout` | `hang_timeout`).
 - `crashed` — container exited non-zero before finishing; whatever was written is harvested.
 - `launch_failed` — container never started; no results produced.
-- `no_viable_output_produced` — engine unusable and no snapshot passed Engine Regression; SOS/FDN correctness skipped. Run-level only — no per-card statuses are assigned.
+- `no_viable_output_produced` — engine unusable and no snapshot passed the engine suite; SOS/FDN correctness skipped. Run-level only — no per-card statuses are assigned.
 The model is **terminal status + reason**: `run_status` is always exactly one of the above, and `timeout_reason` (plus the captured exit code for `crashed`) carries the detail.
 
 ## Output Artifacts
