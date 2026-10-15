@@ -16,6 +16,8 @@ exactly these paths, which it replaces wholesale:
 - ``workspace/engine_tests/``: the Audited Engine Tests, seeding the Engine Reference Tests,
   less the files ``data/hidden_engine_tests.json`` lists, which stay hidden;
 - ``data/tests/audited/fdn/`` and ``data/tests/audited/engine/``;
+- ``data/attribution.json``, the host card of every Audited Engine Test and of
+  the FDN Audited Tests that do not count toward their own card;
 - the Test Oracle Workspace's mirrors of the Workspace's ``AGENTS.md`` and ``skills/``
   and of every ``data/tests/audited/**/tests.py``.
 
@@ -78,6 +80,7 @@ ORACLE = Path("data/test_oracle_workspace")
 DEFECT_PATCHES = Path("data/known_defects")
 HIDDEN_ENGINE_TESTS = Path("data/hidden_engine_tests.json")
 ORACLE_PATCHES = Path("data/oracle_patches")
+ATTRIBUTION = Path("data/attribution.json")
 WORKSPACE_ITEMS = (
     "engine", "cards/fdn", "conftest.py", "pytest.ini", "test_utils.py",
     "test_interface.py", "test_interface.md", "test_test_interface.py", "table.py", "RULEBOOK.txt",
@@ -359,6 +362,16 @@ def _replace(source: Path, destination: Path) -> None:
         shutil.copy2(source, destination)
 
 
+def _sync_file(source: Path, destination: Path) -> None:
+    """Copy ``source`` over ``destination``, or remove ``destination`` when the
+    Known-Best Workspace has no such file: an owned path is synchronized, not merged."""
+    if source.is_file():
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+    elif destination.exists():
+        destination.unlink()
+
+
 def _copy_known_best_workspace(known_best: Path, tree: Path) -> None:
     workspace = known_best / "workspace"
     for item in WORKSPACE_ITEMS:
@@ -417,6 +430,7 @@ def _build(benchmark_root: Path, known_best: Path) -> None:
     for suite in AUDITED_ITEMS:
         _replace(known_best / "data/tests/audited" / suite, benchmark_root / "data/tests/audited" / suite)
     _replace(known_best / "data/tests/audited/engine", workspace / "engine_tests")
+    _sync_file(known_best / ATTRIBUTION, benchmark_root / ATTRIBUTION)
     for relative in hidden:
         (workspace / "engine_tests" / relative).unlink()
 
