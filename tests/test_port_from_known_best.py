@@ -288,6 +288,24 @@ def test_a_removed_package_file_disappears_on_the_next_port(smoke_copy) -> None:
     assert (benchmark / "workspace/AGENTS.md").is_file()
 
 
+def test_the_attribution_data_follows_the_known_best_workspace(smoke_copy) -> None:
+    """``data/attribution.json`` is ported whole, and removed with the Known-Best copy."""
+    from silverquillm.tools.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    assert (benchmark / "data/attribution.json").read_bytes() == (known_best / "data/attribution.json").read_bytes()
+
+    (known_best / "data/attribution.json").write_text('{"schema_version": 1, "engine": {}, "fdn": {}}\n')
+    assert "data/attribution.json" in check(benchmark, known_best)
+    port(benchmark, known_best)
+    assert (benchmark / "data/attribution.json").read_bytes() == (known_best / "data/attribution.json").read_bytes()
+
+    (known_best / "data/attribution.json").unlink()
+    port(benchmark, known_best)
+    assert not (benchmark / "data/attribution.json").exists()
+    assert (benchmark / "data/target_attribution.json").is_file()  # the benchmark's own
+
+
 def test_a_hidden_engine_test_stays_out_of_the_engine_reference_tests(smoke_copy) -> None:
     """A listed Audited Engine Test is graded but never staged; the rest are."""
     from silverquillm.tools.port_from_known_best import port
