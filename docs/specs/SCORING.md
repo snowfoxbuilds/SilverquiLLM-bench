@@ -1,101 +1,136 @@
 Status: DRAFT
 
-Last updated: 2026-10-14
+Last updated: 2026-10-15
 
 # Scoring
 
-Three evaluation dimensions, scored independently with no composite score and raw scores only — no statistical significance tests or confidence intervals.
+How a Benchmark Run is scored: the Net Card Score headline, the test classes and Attributed Cards it counts, and the per-suite results kept for analysis.
 
 ## Context
 
-The evaluator runs audited tests against the agent's output after the container exits. Agent tests are harvested as artifacts but not used for scoring in v1. Blind vs. tested mode comparisons are made across separate runs (different images), not as separate scoring categories.
-
-This spec covers SOS (V1) scoring: the complexity-tier weighting here applies to SOS only, while the HOB-generation benchmarks (hob-easy/medium/hard) drop complexity tiers and score raw pass/total (see [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Evaluation).
+The grader runs a benchmark's Audited Tests against the agent's harvested Workspace after the container exits.
+Agent tests are harvested as artifacts but never scored, and comparisons between harnesses or guidance are made across separate runs, not as scoring categories.
+The headline answers one question in units of working cards: how many more cards work after the agent's changes than before (grilling 2026-10-14).
 
 ## Design
 
-### Dimension 1: SOS Card Correctness
+### Graded suites
 
-Measures how well the agent implemented the target cards.
+| Suite | Tests | Run against |
+| --- | --- | --- |
+| Target-card | `data/tests/audited/<set>/<card_id>/tests.py` | The agent's target `card_impl.py` files and harvested engine |
+| FDN | FDN Audited Tests, `data/tests/audited/fdn/` | The pre-filled FDN implementations and the harvested engine |
+| Engine | Audited Engine Tests, `data/tests/audited/engine/` | The harvested engine |
 
-| Metric | Definition |
+The engine suite grades `data/tests/audited/engine/` whenever that directory exists; hob-medium and SOS, frozen before the Audited Engine Tests existed, grade the host copy of their staged engine tests instead.
+A benchmark target card from the FDN set (smoke's targets) is graded only in the target-card suite and left out of the FDN suite, so a stub target never counts as broken (grilling 2026-10-02).
+
+From the HOB generation on, the Writable Engine is freely modifiable: there is no additive-only rule and no diff policing.
+Audited Tests judge card behavior by simulating gameplay (Implementation-Agnostic Testing), so any engine change, renames and refactors included, is judged only by its consequences on the graded suites.
+Engine churn (`engine_diff.patch`) is a diagnostic, never scored.
+
+### Net Card Score
+
+The headline of every Benchmark Run on smoke, fra-hard-v2 and later benchmarks is its Net Card Score (grilling 2026-10-14):
+
+```
+Net Card Score = (Cards Implemented + Cards Fixed − Cards Broken)
+                 / (target cards + cards hosting related Known Defects)
+```
+
+| Reference point | Score |
 | --- | --- |
-| Audited test pass rate | % of SOS audited tests passed by `card_impl.py` across all cards |
-| Card pass rate | % of SOS cards where `card_impl.py` passes ALL audited tests |
-| Weighted score | Card pass rate weighted by complexity tier |
+| Unmodified Workspace | 0 |
+| Known-Best Workspace with the Test Oracle Impls | 1 |
 
-### Dimension 2: FDN Card Regression
+There is no floor: a run that breaks more existing cards than it makes work scores below 0, and a run that wrecks the engine shows it (grilling 2026-10-14).
+A candidate's leaderboard score is the mean Net Card Score over the runs its analysis counts, from one Cohort graded on one grading-inputs digest, shown with the run count; there are no significance tests or confidence intervals.
+Which runs count is the analysis's call, made from run attributes in the Results Repo, and a low score never leaves a run out.
 
-Measures whether the agent's engine extensions broke existing card behavior. FDN audited tests (`tests/audited/fdn/`) are run against the pre-filled FDN `card_impl.py` files using the agent's final engine.
-A benchmark target card from the FDN set (smoke's targets) is graded by target-card correctness only and is left out of FDN Card Regression, so a stub target never counts as a regression (grilling 2026-10-02).
+### Test classes
 
-| Metric | Definition |
+Every Audited Test is exactly one of three classes (grilling 2026-10-14):
+
+| Class | Which tests | Counts toward |
+| --- | --- | --- |
+| Implementation Test | A target-card test that depends on no Known Defect | Cards Implemented |
+| Dependency Test | An FDN or engine Audited Test the unmodified Workspace fails because of a Known Defect, or a target-card test that fails once a Known Defect is put back into the Test Oracle Workspace | Cards Fixed, when its Known Defect is related |
+| Collateral Test | An FDN or engine Audited Test the unmodified Workspace passes | Cards Broken |
+
+- Only Known Defects are dependencies.
+  An engine mechanic a target card needs but the baseline lacks is part of that card's implementation, because engine work is what the harder benchmarks measure.
+- A Known Defect is related when at least one target-card test depends on it.
+  The Dependency Tests of a Known Defect that is not related are left out of the score, and so is a Dependency Test that also depends on such a defect: fixing what the targets do not need earns nothing.
+- A card-local workaround for a Known Defect earns nothing over fixing the engine: the target card's Dependency Tests do not count toward it, and no existing card is fixed.
+- Collateral Tests are one group across the FDN and engine suites, so every engine breakage shows up as a broken existing card.
+
+Which target-card tests depend on which Known Defect is found by putting each defect back into the Test Oracle Workspace and running the target-card suites, and is recorded in the benchmark's Known Defect manifest (see [KNOWN-BEST-ENGINE.md](KNOWN-BEST-ENGINE.md) → Known Defects).
+
+### Attributed Cards
+
+Every test the score counts has exactly one Attributed Card, so that one broken mechanic is roughly one broken card (grilling 2026-10-14):
+
+| Test | Attributed Card |
 | --- | --- |
-| FDN test pass rate | % of FDN audited tests that still pass against the agent's final engine |
-| FDN card pass rate | % of FDN cards where ALL audited tests still pass |
+| Target-card Implementation Test | The target card doing most of the work in it, even when the test sits in another card's suite |
+| Dependency Test | The card hosting its Known Defect |
+| FDN Collateral Test | Normally its own card |
+| Engine Collateral Test | The base Workspace card hosting its mechanic |
 
-### Dimension 3: Engine Regression
+- A mechanic is roughly one keyword or one rules subsection, such as trample, the legend rule or flashback; the grouping is best-effort.
+- No card hosts two mechanics.
+  A mechanic's Collateral Tests and the Dependency Tests of its own Known Defect are one mechanic and share its card, which can then be fixed and broken at once.
+- Each related Known Defect has its own host card; two related defects share one only when no other card fits, and that card is fixed only when both are.
+- A test that exercises several mechanics counts toward the mechanic its assertion checks.
+  A test involving several target cards counts toward the main card it tests, or is split into separate tests.
+- Rules that no card's text names, such as turn structure, game start and end, playing lands and the mana pool, are hosted on the basic lands, one rule per land.
+- Audited Engine Tests that check engine internals rather than a rules mechanic, such as the decision data layer, the card registry, the `card_impl.py` lint and the zone containers, are grouped by file onto cards that host nothing else, basic lands first, so their failures count too.
+- Host cards are base Workspace cards other than the benchmark's targets.
 
-Measures whether the agent's engine extensions broke fundamental game mechanics. Engine tests are run against the agent's final engine.
+The attribution is host-only benchmark data (see [KNOWN-BEST-ENGINE.md](KNOWN-BEST-ENGINE.md) → Attribution data).
 
-| Metric | Definition |
+### Counting
+
+| Count | Cards |
 | --- | --- |
-| Engine test pass rate | % of core engine tests that still pass against the agent's final engine |
-| Engine churn | Total lines changed in `engine_diff.patch` |
+| Cards Implemented | Target cards all of whose attributed Implementation Tests pass |
+| Cards Fixed | Cards hosting a related Known Defect all of whose attributed Dependency Tests pass |
+| Cards Broken | Cards with at least one attributed Collateral Test failing, or no longer executed |
 
-FDN Card Regression and Engine Regression are intertwined (both test the engine at different levels) but measure different things: Dimension 2 catches broken card behavior, Dimension 3 catches broken rules mechanics. An agent could pass all FDN card tests but fail engine tests if it hacked card-level workarounds that corrupt internal state.
+Each count is all-or-nothing per card (grilling 2026-10-14).
+A single test can swing a whole card, but counting cards keeps a card with thirty tests from outweighing one with ten, and separates candidates that per-test rates compress: fra-hard-v2's completed calibration runs passed 92–100% of their target-card tests but 2 to 11 of 11 cards.
 
-These three dimensions were simplified from an earlier four-category scheme (grilling 2026-05-13): the former blind and tested categories merged into the single SOS Card Correctness dimension, the former test-quality category was deferred (see Future Work), and the former engine-extension category was split into FDN Card Regression and Engine Regression.
+### Deriving the score
 
-### Agent envelope (HOB-generation benchmarks)
+The Net Card Score is derived when read, never stored (grilling 2026-10-14).
+It is a pure function of a grade's per-test outcomes and baseline comparison, from a Run Record or a re-grade, together with the benchmark's Known Defect manifest and its attribution data, so correcting an attribution changes the score without regrading.
+One package function derives it for `silverquillm top`, the regrade summaries, and a `silverquillm` command that prints it for the Results Repo's run table and analyses, which never compute it themselves.
+The grading-inputs digest leaves the manifest and attribution data out, so an attribution correction needs no re-score; instead every derived score names the digest of the scoring data it used, which an analysis states beside its cohort's grading digest.
+It is unavailable, with the baseline comparison's reason, when the baseline comparison is.
 
-For the HOB-generation benchmarks (hob-easy/medium/hard), the Writable Engine is **freely modifiable** — there is no additive-only rule and no diff policing (a departure from the SOS V1 contract; see [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) and [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Engine rules). The entire judgment is the same three audited dimensions, all run against the harvested engine, with **HOB Card Correctness** replacing SOS Card Correctness for this generation:
+### Run Record results
 
-1. **HOB Card Correctness** — audited HOB tests against the agent's `card_impl.py` + harvested `/workspace/engine/`.
-2. **FDN Card Regression** — audited FDN tests against the pre-filled FDN impls + harvested `/workspace/engine/`.
-3. **Engine Regression** — core engine tests against the harvested `/workspace/engine/`.
+A Run Record keeps every Audited Test's raw outcome, per suite, so that later analysis can reclassify without regrading (grilling 2026-10-14):
 
-Audited tests judge card behavior by simulating gameplay (Implementation-Agnostic Testing), so **any** engine change — including renames and refactors — is permitted; it is judged solely by its observable consequences on these three dimensions. Engine churn (`engine_diff.patch`) stays a **diagnostic** metric only: it is never scored and never policed. HOB-generation benchmarks score raw pass/total — the complexity weighting below is SOS-only.
-
-### Regression reference scores
-
-For benchmarks built from the Known-Best Workspace (smoke, fra-hard, and later), the FDN Card Regression and Engine Regression Audited Tests are pooled into one Combined Regression, reported as its raw pass/total next to two reference points (grilling 2026-10-02).
-Each regression dimension keeps its own raw pass/total for diagnosis.
-
-| Metric | Definition |
+| Key | Content |
 | --- | --- |
-| Raw score | Audited Tests passed / total against the agent's final engine — the score itself |
-| Baseline Score | The unmodified Workspace's pass/total, from the baseline reference grade for the same grading inputs and Workspace |
-| Known-Best Score | Always total/total: the Test Oracle Workspace passes every regression Audited Test |
-| Fixed | Audited Tests that fail on the baseline and pass for the agent |
-| Regressed | Audited Tests that pass on the baseline and fail for the agent |
+| `target` | Per target card: passed/total and each test node's outcome |
+| `fdn` | Per FDN card: passed/total and each test node's outcome |
+| `engine` | Passed/total and each test node's outcome |
+| `run_metadata["baseline_comparison"]` | The FDN and engine Audited Tests whose outcome moved from the unmodified Workspace's |
 
-There is no normalized score: an agent can land below its Baseline Score, and fixing three Known Defects while breaking three cards is reported as exactly that, not as no change.
-The Baseline Score and the per-test baseline outcomes come from [KNOWN-BEST-ENGINE.md](KNOWN-BEST-ENGINE.md) → Baseline reference grade.
-Engine Regression grades the hidden Audited Engine Tests, never the Workspace's Engine Reference Tests; hob-medium and SOS, frozen before that split, grade from the host copy of their staged engine tests.
+Records written before the rename keep `card_correctness`, `fdn_regression`, `engine_regression` and `combined_regression`; Run Records are immutable, and readers choose the keys by record schema version.
 
-Combined Regression is a report pooled over two dimensions, not a fourth dimension, so it sits beside the scores rather than in them: at `run_metadata["combined_regression"]` in a Run Record, and as a top-level `combined_regression` in each regrade output.
-A Run Record carries it only for a benchmark with a Known Defect manifest whose grading ran; every regrade output of such a benchmark carries it.
+The baseline comparison is carried by every Run Record and regrade output of a benchmark with a Known Defect manifest whose grading ran; a regrade output carries it top-level.
 
 ```json
 {
   "available": true,
-  "tests_passed": 1821,
-  "tests_total": 1831,
-  "pass_rate": 0.99454,
-  "baseline_score":   {"tests_passed": 1820, "tests_total": 1831},
-  "known_best_score": {"tests_passed": 1831, "tests_total": 1831},
   "fixed": {
-    "count": 2,
-    "test_nodes": {
-      "fdn_regression": ["fdn_66/tests.py::test_dies_returns_with_one_fewer_revival"],
-      "engine_regression": ["zone_change/test_lki.py::test_counters_reset"]
-    }
+    "fdn": ["fdn_66/tests.py::test_dies_returns_with_one_fewer_revival"],
+    "engine": ["test_zone_change.py::test_counters_do_not_survive_leaving_the_battlefield"]
   },
-  "regressed": {
-    "count": 1,
-    "test_nodes": {"fdn_regression": [], "engine_regression": ["test_combat.py::test_first_strike_damage"]}
-  },
+  "broken": {"fdn": [], "engine": ["test_combat.py::test_first_strike_damage"]},
   "baseline": {
     "grading_inputs_digest": "sha256:…",
     "grading_code_digest": "sha256:…",
@@ -105,21 +140,20 @@ A Run Record carries it only for a benchmark with a Known Defect manifest whose 
 }
 ```
 
-- `tests_passed` and `tests_total` are the sums of the two dimensions' raw counts; `baseline_score` sums the baseline reference grade's, and `known_best_score` is its total over its total.
-- `fixed` and `regressed` list, per suite and sorted, the Audited Tests whose outcome moved from the baseline's; a baseline-passing test the run no longer executes counts as Regressed, and a test the baseline never ran is ignored.
-- `baseline` names the baseline reference grade's key.
+- `fixed` and `broken` list, per suite and sorted, the Audited Tests whose outcome moved from the baseline reference grade's; a baseline-passing test the run no longer executes counts as broken, and a test the baseline never ran is ignored.
+- `baseline` names the baseline reference grade's key (see [KNOWN-BEST-ENGINE.md](KNOWN-BEST-ENGINE.md) → Baseline reference grade).
 
-When the block cannot be computed it is `{"available": false, "reason": "<reason>"}`, with the first reason that applies:
+When the comparison cannot be computed it is `{"available": false, "reason": "<reason>"}`, with the first reason that applies:
 
 | Reason | When |
 | --- | --- |
 | `grading_inputs_changed_during_grading` | The grading inputs changed while the run or the baseline was graded |
-| `regression_not_evaluated` | Either regression dimension executed no test for the run |
+| `suite_not_evaluated` | The FDN or engine suite executed no test for the run |
 | `baseline_workspace_incomplete` | The unmodified Workspace could not be copied in full |
 | `baseline_grading_failed:<reason>` | Grading the unmodified Workspace failed |
 | `baseline_incomplete` | The baseline reference grade is incomplete for any reason but the FDN coverage gap every run shares |
 
-A regrade reuses an earlier output's block only when it is available or unavailable as `regression_not_evaluated`, which depends on the candidate's own grading; any other unavailable block is graded again on the next regrade, with no `--force` needed.
+A regrade reuses an earlier output's comparison only when it is available or unavailable as `suite_not_evaluated`, which depends on the candidate's own grading; any other unavailable comparison is graded again on the next regrade, with no `--force` needed.
 
 ### Tests that did not run
 
@@ -141,20 +175,49 @@ A parametrized function counts once, and it ran if any of its cases ran.
 | `grading_support_missing` | Authoritative grading support was absent, so the suite never ran |
 | `candidate_code_missing` | The candidate's engine or cards directory was absent, so the suite never ran |
 
-Every expected function that did not run counts as one failed test in its dimension's score: the dimension's `tests_total` is the nodes that ran plus the functions that did not, so a candidate cannot raise a pass rate by skipping a test or breaking its collection (grilling 2026-10-15).
+Every expected function that did not run counts as one failed test in its suite's score: the suite's `tests_total` is the nodes that ran plus the functions that did not, so a candidate cannot raise a pass rate by skipping a test or breaking its collection (grilling 2026-10-15).
+In the Net Card Score it is a failing test of its class, so it keeps its card from being implemented or fixed, and a Collateral Test that did not run breaks its card.
 Cards and the engine are counted the same way, from the reported nodes: a collection error is never a node of its own, whether a module or a class (`<file>::<Class>::<collection-error>`) failed to collect, and a node that failed in its setup, call or teardown is one failed node.
 Only a result with no node reporting at all, such as an older one, falls back to pytest's summary counts.
 A parametrized function that did not run counts once, since its case ids are not known statically.
 `grading_support_missing` is the exception: a suite the bench could not grade stays unevaluated, because an absent evaluation is different from an evaluated implementation scoring zero.
-A card whose tests all failed to run is therefore scored, at zero, rather than left uncovered; the Combined Regression already counts a baseline-passing node that did not run as regressed.
-Each card's own `tests_passed`, `tests_failed` and `tests_total` stay pytest's raw counts of the nodes that ran; the dimension totals and pass rates apply this rule.
+A card whose tests all failed to run is therefore scored, at zero, rather than left uncovered; the baseline comparison already counts a baseline-passing node that did not run as broken.
+Each card's own `tests_passed`, `tests_failed` and `tests_total` stay pytest's raw counts of the nodes that ran; the suite totals and pass rates apply this rule.
 A grade whose suite reported errors other than test failures is incomplete; those errors are read from pytest's short test summary only, so a failing test's captured log line such as `ERROR    engine.game:…` is no grading error. That includes pytest not running its session to the end (a crash, `os._exit`, an interruption such as `KeyboardInterrupt` or `pytest.exit`, or an internal error), recorded as the error `pytest_exited: exit status N`; the nodes that ran before it keep their outcomes.
 The grader's reporter records the end of each session with a value generated for that grading, so an exit status alone never makes a suite look finished: a candidate that calls `os._exit(0)`, `os._exit(1)` or `os._exit(5)`, or `pytest.exit` with any status, mid-suite still leaves it incomplete. The reporter withholds that record after an interruption or an internal error, seeing both before pytest's own terminal reporter (whose handler can fail again, for instance once candidate code has closed stdout), and writes it only for an orderly exit status; an exit status other than 0, 1 or 5 also makes a suite incomplete even with the record present. pytest's own stop after collection errors (status 2) keeps its collection-error diagnosis instead.
 Each failing node also keeps a failure message: one printable line of at most 240 characters with object addresses masked, and at most 128 KiB per grade of message mappings as they encode in JSON, node ids and separators included, later ones dropped.
 Not-run reasons and failure messages are diagnostics; only the not-run count enters a score.
 Grades written before this rule count only the nodes that ran, so compare scores only across grades on the same grading code; a regrade applies the rule to an older record, and its `source.scores` keeps that record's own `complete` beside its counts.
 
-### Complexity Weighting
+### Diagnostics
+
+The Net Card Score sits above a breakdown kept for diagnosis:
+
+- each count's cards, and the failing tests per Attributed Card;
+- each class's tests passed/total, and the Dependency Tests left out;
+- each suite's tests passed/total, with failure messages;
+- engine churn, the total lines changed in `engine_diff.patch`;
+- efficiency: tokens, Run Cost and time per card, and score per dollar.
+
+### Leaderboard format
+
+```
+| Rank | Candidate              | Runs | Net Card Score | Implemented | Fixed | Broken |
+|------|------------------------|------|----------------|-------------|-------|--------|
+| 1    | claude-opus-5-5/max    | 10   | 0.81           | 8.9         | 0.9   | 0.0    |
+| 2    | gpt-6.1-sol/high       | 10   | 0.74           | 8.1         | 0.8   | 0.0    |
+```
+
+(Example format — not real results.)
+
+### Earlier benchmarks
+
+SOS, hob-medium and fra-hard v1 predate the Net Card Score and keep the results they reported (grilling 2026-10-14).
+They report each suite's raw pass rate separately: target-card correctness (the test pass rate, and the card pass rate of cards passing every test), the FDN suite and the engine suite.
+fra-hard v1 also reported the FDN and engine suites pooled, against the unmodified Workspace's grade.
+hob-medium has no Known Defect manifest, and its graded suites carry no Dependency Tests for existing cards, so a Net Card Score cannot be derived for it.
+
+SOS weights its card pass rate by Complexity Tier:
 
 | Tier | Criteria | Weight |
 | --- | --- | --- |
@@ -164,43 +227,8 @@ Grades written before this rule count only the nodes that ran, so compare scores
 | Complex | Multi-step abilities, replacement effects, modal spells | 4x |
 | Expert | Planeswalkers, complex state machines, unusual mechanics | 5x |
 
-Weighted Score = Σ(w_c × pass(c)) / Σ(w_c), where pass(c) = 1 if all audited tests pass, 0 otherwise. Applied to Dimension 1 only; FDN and engine regression are pass/fail and need no weighting.
-
-Tiers assigned via automated heuristics: rules text length, keyword count, ability count, target requirements, zone interactions, card type. Thresholds calibrated from target set distribution.
-
-### Secondary Metrics
-
-**Per-category breakdown**: Pass rates by test category (basic, ability, edge, interaction, rules).
-
-**Complexity tier breakdown**: Card pass rates per tier per model.
-
-**Error classification**: Syntax errors, import errors, logic errors, missing implementation, rules misunderstanding.
-
-**Efficiency metrics**: Tokens per card, cost per card, time per card, pass rate per dollar.
-
-**FDN regression details**: List of FDN audited tests that fail against the agent's final engine, with failure messages.
-
-**Engine regression details**: List of core engine tests that fail against the agent's final engine, with failure messages.
-
-### Leaderboard Format
-
-```javascript
-SOS Card Correctness
-| Rank | Image                          | Audited | Card Pass | Weighted |
-|------|--------------------------------|---------|-----------|----------|
-| 1    | opencode-tested (opus-4)       | 72.3%   | 48.1%     | 44.2%    |
-| 2    | opencode-blind (opus-4)        | 65.1%   | 40.0%     | 36.8%    |
-| 3    | claude-code-tested (opus-4)    | 69.8%   | 44.0%     | 40.8%    |
-
-Regression Summary
-| Image                          | FDN Card Pass | Engine Pass | Engine Churn |
-|--------------------------------|---------------|-------------|-------------|
-| opencode-tested (opus-4)       | 100%          | 98.5%       | 342 lines   |
-| opencode-blind (opus-4)        | 100%          | 100%        | 128 lines   |
-| claude-code-tested (opus-4)    | 97.2%         | 95.0%       | 891 lines   |
-```
-
-(Example format — not real results)
+Weighted Score = Σ(w_c × pass(c)) / Σ(w_c), where pass(c) = 1 if all of the card's Audited Tests pass.
+Tiers are assigned by automated heuristics: rules text length, keyword count, ability count, target requirements, zone interactions and card type.
 
 ### Future Work
 
@@ -214,4 +242,6 @@ Regression Summary
 
 | ADR | Decision |
 | --- | --- |
-| [ADR-016](../adr/ADR-016-baseline-engines-may-carry-known-defects.md) | Baseline engines may carry Known Defects, scored against a separate Known-Best Engine |
+| [ADR-016](../adr/ADR-016-baseline-engines-may-carry-known-defects.md) | Baseline engines may carry Known Defects, graded against a separate Known-Best Engine |
+| [ADR-020](../adr/ADR-020-net-card-score-is-the-headline.md) | The Net Card Score is the headline score |
+| [ADR-021](../tombstone/ADR-021-rename-regression-to-collateral.md) | Rename record: evaluation-sense "regression" names retired or renamed |

@@ -305,6 +305,7 @@ The batch state row is not rewritten and still reads `failed`; the published rec
 
 - The stub workspace already passes 14 of hob-medium's 69 target cases, so read card correctness against that floor.
 - `fdn_regression.complete` is always false on hob-medium because the coverage ledger lists uncovered FDN cards; filter on the coverage fields instead.
+- For smoke, fra-hard-v2 and later benchmarks, read the Net Card Score, derived from a record's per-test outcomes; new records name their suites `target`, `fdn` and `engine`, while older records keep `card_correctness`, `fdn_regression` and `engine_regression` (grilling 2026-10-14).
 - The Test Harvester reads only records that point into the historical `docker/` tree, so Karn records do not yet feed agent-test promotion.
 
 ## Historical records

@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 # HOB Benchmarks
 
@@ -102,7 +102,7 @@ Deliberately excluded from every pool: Sagas and Vehicles (each a whole new subs
 ## Engine rules
 
 - **Freeze**: the agent-visible workspace engine locks when a tier enters Benchmarking (the tier-locking machinery). Within a lock tier, every candidate sees the identical engine — this is what makes "requires some engine changes" a stable property of the benchmark. Oracle iteration touches HOB card implementations, audited tests, and instruction docs only — never the FDN implementations or the staged workspace engine *(grilling 2026-08-27)*.
-- **Agent envelope**: agents may modify the workspace engine freely — no additive-only rule, no diff policing. The three audited dimensions are the entire judgment, all run against the harvested engine: HOB card correctness, FDN card regression, engine regression *(grilling 2026-08-27)*. Audited tests judge card behavior by simulating gameplay (implementation-agnostic testing); this mechanism is already implemented.
+- **Agent envelope**: agents may modify the workspace engine freely — no additive-only rule, no diff policing. The three audited suites are the entire judgment, all run against the harvested engine: HOB card correctness, the FDN suite and the engine suite *(grilling 2026-08-27)*. Audited tests judge card behavior by simulating gameplay (implementation-agnostic testing); this mechanism is already implemented.
 - **Hidden and missing coverage**: grading suites may hold tests the workspace does not stage, and the staged tests may cover less than grading does; knowing that an engine change can break existing cards is the agent's job *(grilling 2026-09-28)*.
   Every scored test checks behavior the rules define. Tests of the replay tool (`test_replay_simulate.py`, `test_replay_limitations.py`) are neither staged nor scored in `hob-medium` or `smoke`: they pin exact divergence counts against recorded games and read host-only code and private engine fields, so a more correct engine can fail them.
 
@@ -132,7 +132,7 @@ Each card has at most 30 Audited Tests, following the project testing convention
 
 Benchmark validation accounts for every selected card and reports missing or stub oracle implementations and missing tests; silently skipping them does not establish completeness.
 The target card set is hob, while the benchmark is hob-medium; validation and promotion resolve those identities separately.
-All three evaluation dimensions have explicit test coverage, including an FDN regression suite validated against the V2 baseline.
+All three audited suites have explicit test coverage, including an FDN suite validated against the V2 baseline.
 Existing SOS tests can supply source material, but copying them alone does not establish V2 compatibility.
 Medium's instructions and pitfalls are derived from the oracle work and follow the existing Benchmark Tier locking rules.
 
@@ -144,7 +144,8 @@ Its graded `fdn_126` asserts that counters survive a zone change, contradicting 
 
 ## Evaluation
 
-Oracle-first audited tests are the sole scored method for all three tiers (Audited Eval, unchanged pipeline): oracle implementation → audited tests drafted against it → human failure-review → agent runs scored on the three dimensions.
+Oracle-first audited tests are the sole scored method for all three tiers (Audited Eval, unchanged pipeline): oracle implementation → audited tests drafted against it → human failure-review → agent runs scored on the three suites.
+hob-medium reports each suite's pass rate; a HOB tier built from the Known-Best Workspace is scored by the Net Card Score, as every benchmark from fra-hard-v2 on is (grilling 2026-10-14).
 
 ## Relevant ADRs
 
@@ -156,3 +157,4 @@ Oracle-first audited tests are the sole scored method for all three tiers (Audit
 | [ADR-011](../adr/ADR-011-three-tier-benchmark-locking.md) | Three-Tier Benchmark Locking |
 | [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Independent execution of prebuilt Karn candidates |
 | [ADR-016](../adr/ADR-016-baseline-engines-may-carry-known-defects.md) | Baseline engines may carry Known Defects, scored against a separate Known-Best Engine |
+| [ADR-020](../adr/ADR-020-net-card-score-is-the-headline.md) | The Net Card Score is the headline score |

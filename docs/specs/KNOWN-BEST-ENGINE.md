@@ -1,14 +1,14 @@
 Status: DRAFT
 
-Last updated: 2026-10-07
+Last updated: 2026-10-14
 
 # Known-Best Engine
 
-How the Known-Best Workspace, Known Defects, and the regression reference scores fit together, so that an agent fixing a real engine defect gains score instead of losing it.
+How the Known-Best Workspace, Known Defects, and the Dependency Tests and Attributed Cards of the Net Card Score fit together, so that an agent fixing an engine defect the target cards depend on gains score instead of losing it.
 
 ## Context
 
-No benchmark's baseline engine is flawless, and regression suites written against a defective engine punished agents for fixing it (#123).
+No benchmark's baseline engine is flawless, and FDN and engine suites written against a defective engine punished agents for fixing it (#123).
 Benchmarks now ship a baseline that may carry Known Defects, graded by rules-correct Audited Tests that a separate, defect-free Known-Best Engine passes in full.
 
 ## Design
@@ -27,13 +27,14 @@ It holds:
 | Content | Role |
 | --- | --- |
 | Known-Best Engine | The engine with every Known Defect fixed |
-| FDN implementations | The card implementations the FDN regression suite runs against, with every Known Defect fixed |
-| FDN Audited Tests | The full FDN Card Regression suite |
-| Audited Engine Tests | The full Engine Regression suite |
+| FDN implementations | The card implementations the FDN suite runs against, with every Known Defect fixed |
+| FDN Audited Tests | The full FDN suite |
+| Audited Engine Tests | The full engine suite |
+| Attribution data | The Attributed Card of every FDN and engine Audited Test that does not count toward its own card |
 
 It is seeded from hob-medium's Workspace without any oracle extensions, then has the already-identified Known Defects fixed: the zone-change reset that preserves last-known information (CR 400.7, 110.5, 111.7, 603.10a) and the engine or FDN-implementation defects behind the eight FDN cases hob-medium cut from its graded suite as baseline gaps.
-Those eight cases and dedicated zone-change Audited Engine Tests join its suites; seeding is complete when every regression Audited Test passes on it.
-A Platform Test grades a throwaway copy of it through the benchmark grading code and requires every regression Audited Test to pass.
+Those eight cases and dedicated zone-change Audited Engine Tests join its suites; seeding is complete when every FDN and engine Audited Test passes on it.
+A Platform Test grades a throwaway copy of it through the benchmark grading code and requires every FDN and engine Audited Test to pass.
 Checks of the engine's internals, and of positions no FDN card reaches through play, are Platform Tests beside it rather than Audited Engine Tests, and a Platform Test requires that no Audited Engine Test writes the turn's lifecycle or calls the engine's stepping (grilling 2026-10-05).
 
 #### Layout
@@ -54,9 +55,11 @@ known_best/
 │   ├── test_test_interface.py       tests that demonstrate it (not graded)
 │   ├── table.py                     Audited Tests' helpers (benchmark-owned)
 │   └── test_utils.py                Reference Tests' helpers
-└── data/tests/audited/
-    ├── fdn/<card_id>/tests.py       FDN Audited Tests
-    └── engine/                      Audited Engine Tests
+└── data/
+    ├── attribution.json             Attributed Cards of FDN and engine Audited Tests
+    └── tests/audited/
+        ├── fdn/<card_id>/tests.py   FDN Audited Tests
+        └── engine/                  Audited Engine Tests
 ```
 
 | From `known_best/` | To a benchmark |
@@ -65,10 +68,11 @@ known_best/
 | `workspace/test_interface.py`, `workspace/test_interface.md`, `workspace/test_test_interface.py`, `workspace/table.py`, `workspace/test_utils.py` | `workspace/` and the Test Oracle Workspace |
 | `workspace/RULEBOOK.txt` | `workspace/` and the Test Oracle Workspace |
 | `data/tests/audited/fdn/`, `data/tests/audited/engine/` | `data/tests/audited/` |
+| `data/attribution.json` | `data/attribution.json` |
 | `data/tests/audited/engine/` | `workspace/engine_tests/`, seeding the Engine Reference Tests, less the files the benchmark lists as hidden |
 
 It deliberately holds no `config.json` (it is not a benchmark), no target-set cards or stubs, no agent-facing documents beyond the Test Interface's own and the rulebook, no Test Oracle Workspace or oracle extension, and no Engine Reference Tests.
-Engine Regression grades a benchmark's `data/tests/audited/engine/` whenever that directory exists and otherwise the host copy of `workspace/engine_tests/`, so `known_best/` is graded by exactly the code that grades benchmarks.
+The engine suite grades a benchmark's `data/tests/audited/engine/` whenever that directory exists and otherwise the host copy of `workspace/engine_tests/`, so `known_best/` is graded by exactly the code that grades benchmarks.
 
 `RULEBOOK.txt` is the newest Comprehensive Rules Wizards of the Coast publishes, as plain text unchanged from their download; it is replaced when a new edition takes effect and re-ported, so every ported benchmark judges its targets by the same, current rules (grilling 2026-10-06).
 
@@ -95,10 +99,13 @@ The port builds the whole result in a staged copy and publishes only what differ
 
 ### Known Defects
 
-A Known Defect may sit in the baseline engine or in an FDN implementation; agents may fix either, and FDN Card Regression rewards an FDN fix the way Engine Regression rewards an engine fix (grilling 2026-10-02).
+A Known Defect may sit in the baseline engine or in an FDN implementation; agents may fix either, and an FDN fix earns score the way an engine fix does (grilling 2026-10-02).
 Each benchmark lists its Known Defects in a host-only `data/known_defects.json` (grilling 2026-10-02).
 An entry names the defect, its rule citation, whether it is `inherited` or `seeded`, and the Audited Tests it makes fail.
-Reference scores pool the FDN and engine Audited Tests into one Combined Regression, so an entry needs no component and its failing tests may sit in either suite (grilling 2026-10-02).
+An entry needs no component: its failing tests may sit in either suite (grilling 2026-10-02).
+An entry also lists the target-card tests that fail once the defect is put back into the Test Oracle Workspace; a Known Defect with any such test is related, and only related Known Defects earn Cards Fixed in the Net Card Score (grilling 2026-10-14).
+A related Known Defect names the card hosting its Dependency Tests, chosen as the Attributed Cards are (see [SCORING.md](SCORING.md) → Attributed Cards).
+A defect whose patch does not apply to the Test Oracle Workspace, because an oracle extension rewrote the same code, is also recorded as `data/known_defects/oracle/<id>.patch` against it (grilling 2026-10-14).
 Seeded Defects are fixed per benchmark version: they are part of the Workspace and freeze with it, so every run on that version sees the same engine.
 
 Nothing constrains what the Reference Tests say about a Known Defect: they may reveal it, miss it, or encode it, because tests are not instructions.
@@ -106,27 +113,31 @@ The Workspace's conventions document says the engine may have deficiencies and b
 
 CI checks, for every benchmark in scope:
 
-1. The Test Oracle Workspace passes every Audited Test of all three dimensions.
-2. The unmodified Workspace fails exactly the Audited Tests the manifest lists, and passes the rest of the regression suites.
+1. The Test Oracle Workspace passes every Audited Test of all three suites.
+2. The unmodified Workspace fails exactly the FDN and engine Audited Tests the manifest lists, and passes the rest of the FDN and engine suites.
+3. Putting each Known Defect back into the Test Oracle Workspace fails exactly the target-card tests its entry lists (grilling 2026-10-14).
+4. Every FDN, engine and target-card Audited Test resolves to exactly one Attributed Card, a base Workspace card other than a target, and every related Known Defect names a host card (grilling 2026-10-14).
 
-Both checks are Platform Tests, one call per dimension so each stays within the test timeout: `tests/known_defect_checks.py` provides `oracle_problems` and `workspace_problems`, which return the problems found and `[]` when the check passes.
+Each check is a Platform Test, making one call per suite so each stays within the test timeout: `tests/known_defect_checks.py` provides `oracle_problems` and `workspace_problems` for the first two, which return the problems found and `[]` when the check passes.
 
 #### Manifest
 
 ```json
 {
-  "schema_version": 1,
-  "benchmark": "fra-hard",
+  "schema_version": 2,
+  "benchmark": "fra-hard-v2",
   "defects": [
     {
-      "id": "zone-change-keeps-status",
-      "description": "A permanent that changes zones stays the same object and keeps its counters, tapped status and marked damage.",
+      "id": "zone-change-keeps-object-state",
+      "description": "A permanent that leaves the battlefield keeps its counters, status and the effects locked onto it.",
       "rules": ["CR 400.7", "CR 603.10a"],
       "kind": "inherited",
       "failing_tests": {
-        "engine_regression": ["zone_change/test_lki.py::test_counters_reset"],
-        "fdn_regression": ["fdn_66/tests.py::test_dies_returns_with_one_fewer_revival"]
-      }
+        "engine": ["test_zone_change.py::test_counters_do_not_survive_leaving_the_battlefield"],
+        "fdn": ["fdn_122/tests.py::TestKykarFlicker::test_flicker_exiles_then_returns_as_a_new_object"]
+      },
+      "target_tests": ["hob_86/tests.py::test_a_sacrificed_food_is_a_creature_card_again"],
+      "host_card": "fdn_122"
     }
   ]
 }
@@ -135,27 +146,58 @@ Both checks are Platform Tests, one call per dimension so each stays within the 
 - The file is a regular UTF-8 JSON file of at most 1 MiB with no duplicate keys, and every object has exactly the keys shown.
 - `benchmark` is the benchmark's directory name; a benchmark with no Known Defects ships `"defects": []`.
 - `id` is unique, lowercase letters, digits and hyphens, at most 64 characters; `description` is non-empty; `rules` is a non-empty list of distinct citations like `CR 400.7` or `CR 603.10a`; `kind` is `inherited` or `seeded`.
-- `failing_tests` maps `fdn_regression`, `engine_regression` or both to a non-empty list of distinct Audited Test ids. The same test may be listed under two defects; the unmodified Workspace is expected to fail their union.
+- `failing_tests` maps `fdn`, `engine` or both to a non-empty list of distinct Audited Test ids. The same test may be listed under two defects; the unmodified Workspace is expected to fail their union.
+- `target_tests` is a list, possibly empty, of the distinct target-card tests that fail once the defect is put back into the Test Oracle Workspace; the defect is related when it is non-empty.
+- `host_card` is a base Workspace card id other than a target when the defect is related, and `null` otherwise.
+- A benchmark frozen with schema version 1 (fra-hard v1) keeps it, with `fdn_regression` and `engine_regression` keys and no `target_tests` or `host_card` (grilling 2026-10-14).
 
 An Audited Test id is the pytest node id relative to its suite's graded root:
 
 | Suite | Id | Example |
 | --- | --- | --- |
-| Audited Engine Tests | the node id under `data/tests/audited/engine/` | `zone_change/test_lki.py::test_counters_reset` |
+| Audited Engine Tests | the node id under `data/tests/audited/engine/` | `test_zone_change.py::test_counters_do_not_survive_leaving_the_battlefield` |
 | FDN Audited Tests | `<card_id>/` plus the card suite's node id | `fdn_126/tests.py::TestZimoneDoubleAbility::test_leave_and_return_target_rejected` |
+| Target-card Audited Tests | `<card_id>/` plus the card suite's node id | `hob_86/tests.py::test_a_sacrificed_food_can_be_returned_again` |
 
-The baseline reference grade and Combined Regression name tests the same way.
+The baseline reference grade, the baseline comparison and the attribution data name tests the same way.
+
+### Attribution data
+
+Each Collateral Test and target-card Implementation Test counts toward one Attributed Card (see [SCORING.md](SCORING.md) → Attributed Cards), recorded host-only (grilling 2026-10-14):
+
+| File | Owner | Holds |
+| --- | --- | --- |
+| `data/attribution.json` | Ported from the Known-Best Workspace | The host card of every Audited Engine Test, and of each FDN Audited Test that does not count toward its own card |
+| `data/target_attribution.json` | The benchmark | The card each target-card test counts toward when that is not the card whose suite holds it |
+
+```json
+{
+  "schema_version": 1,
+  "engine": {
+    "test_extra_turns.py": "spg_82",
+    "test_combat.py::TestCombatDamage::test_trample_assigns_excess_to_the_player": "fdn_246",
+    "test_zones.py": "fdn_272"
+  },
+  "fdn": {}
+}
+```
+
+- A key is an Audited Test id, or a prefix of one ending at a file or class boundary; the longest matching key wins.
+- Every Audited Engine Test must match a key; an FDN or target-card test that matches none counts toward the card whose suite holds it.
+- A value is a base Workspace card id; a benchmark's targets are never a value.
+- Dependency Tests are not listed: they count toward their Known Defect's `host_card`.
+- `data/target_attribution.json` has the same shape with one `target` map; a benchmark with no overrides ships an empty map.
 
 ### Baseline reference grade
 
-The Baseline Score is produced, never hand-written: the grader grades the unmodified Workspace once per grading-inputs digest and Workspace content, and that baseline reference grade records the per-test outcomes (grilling 2026-10-02).
+The baseline reference grade is produced, never hand-written: the grader grades the unmodified Workspace once per grading-inputs digest and Workspace content, and that baseline reference grade records the per-test outcomes (grilling 2026-10-02).
 The grading-inputs digest alone does not cover the Workspace's engine or FDN implementations, so a defect fixed in a Beta Workspace must still produce a new baseline reference grade.
-A benchmark reports reference scores only once it has a Known Defect manifest; hob-medium and SOS have none.
-Every run graded under the same digest reports against it (see [SCORING.md](SCORING.md) → Regression reference scores).
+A benchmark has a baseline comparison only once it has a Known Defect manifest; hob-medium and SOS have none.
+Every run graded under the same digest is compared against it (see [SCORING.md](SCORING.md) → Run Record results).
 
 The grade's key also covers the grading-code digest and the grader image, since either can change an outcome, so it is the benchmark identity plus those four: grading inputs, grading code, Workspace content and grader image.
 The grade is computed on demand, by the first run, recovery or regrade that needs it, through that caller's own grader, and cached host-side at `<state_root>/baseline-grades/<benchmark>/<sha256 of the key>.json`.
-It records each regression dimension's raw pass/total, missing reasons and per-test outcomes.
+It records the FDN and engine suites' raw pass/total, missing reasons and per-test outcomes.
 Only a complete grade is cached: failing Audited Tests are what it records, and the FDN coverage gap every run shares does not count against it, but a grading that raised, timed out, failed to collect a suite or executed none is reported for that attempt only and graded again by the next request; a damaged, mismatched or incomplete cached file is graded again too.
 The grading inputs are checked against the requested digest before and after the grading, and a grade whose inputs changed meanwhile is reported as `grading_inputs_changed_during_grading` and never cached, so a cached grade always belongs to the digest it is filed under.
 
@@ -165,7 +207,7 @@ When review of a run turns up a new defect (grilling 2026-10-02):
 
 1. Fix it in the Known-Best Workspace's engine or FDN implementation and add any Audited Test that pins it.
 2. Port the fix into the Test Oracle Workspace of every non-Released benchmark that carries the defect: by re-running the port for a Beta benchmark, by hand for a Benchmarking one.
-3. Add an `inherited` entry to each such benchmark's manifest and update its Audited Tests.
+3. Add an `inherited` entry to each such benchmark's manifest, with the target-card tests it makes fail and, when it is related, its host card, and update its Audited Tests.
 4. Recompute the baseline reference grade and regrade every run of those benchmarks.
 
 Porting the fix into a benchmark's Workspace as well is optional in Beta and impossible from Benchmarking on; a defect fixed in the Workspace leaves the manifest.
@@ -173,7 +215,7 @@ Released benchmarks never take the fix.
 
 ### Wrong Audited Tests
 
-A regression Audited Test found to be wrong is fixed in the benchmark's graded copy while the benchmark is in Beta or Benchmarking, then the baseline reference grade is recomputed and every run regraded (grilling 2026-10-02).
+An FDN or engine Audited Test found to be wrong is fixed in the benchmark's graded copy while the benchmark is in Beta or Benchmarking, then the baseline reference grade is recomputed and every run regraded (grilling 2026-10-02).
 The Workspace's Reference Test copy stays as it is once the Workspace locks.
 There is no per-run dispute or pending state; agents' edits to Reference Tests, visible in each Workspace Archive diff, are evidence for that review and never grading input.
 
@@ -187,3 +229,5 @@ There is no per-run dispute or pending state; agents' edits to Reference Tests, 
 | [ADR-016](../adr/ADR-016-baseline-engines-may-carry-known-defects.md) | Baseline engines may carry Known Defects, scored against a separate Known-Best Engine |
 | [ADR-017](../adr/ADR-017-priority-actions-are-player-queries.md) | Priority actions are Player Queries chosen through the players' answers |
 | [ADR-018](../adr/ADR-018-audited-tests-play-as-two-players-at-a-table.md) | Audited Tests build a position, play it and judge it only as players at the table would |
+| [ADR-020](../adr/ADR-020-net-card-score-is-the-headline.md) | The Net Card Score is the headline score |
+| [ADR-021](../tombstone/ADR-021-rename-regression-to-collateral.md) | Rename record: evaluation-sense "regression" names retired or renamed |
