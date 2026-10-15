@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import signal
+import stat
 import tempfile
 import time
 import tomllib
@@ -134,19 +135,41 @@ CONTROL_FILENAME = "control.json"
 DISPATCH_MODES = ("running", "paused", "draining")
 
 
+CONTROL_LIMIT = 4096
+"""A control file is a few dozen bytes; anything larger is not one."""
+
+
 def read_control(directory: Path) -> dict:
     """The directory's dispatch mode: ``running`` without a control file.
 
     A control file that cannot be read means someone meant to stop dispatch, so it reads as
-    ``paused`` with an ``error``; it never reads as ``running``.
+    ``paused`` with an ``error``; it never reads as ``running``. It never raises: this runs in
+    the scheduler's loop, where an exception would interrupt every run in flight.
     """
-    path = Path(directory) / CONTROL_FILENAME
-    if not path.exists() and not path.is_symlink():
-        return {"mode": "running", "since": None}
+    return _read_control_path(Path(directory) / CONTROL_FILENAME)
+
+
+def _read_control_path(path: Path) -> dict:
     try:
-        if path.is_symlink() or not path.is_file():
+        # O_NONBLOCK: a FIFO put in its place opens at once instead of blocking the loop.
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return {"mode": "running", "since": None}
+    except Exception as error:  # noqa: BLE001 - a symlink (ELOOP), EACCES, anything: paused
+        return {
+            "mode": "paused",
+            "since": None,
+            "error": "dispatch_control_unreadable:" + type(error).__name__,
+        }
+    try:
+        with os.fdopen(fd, "rb") as handle:
+            info = os.fstat(handle.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > CONTROL_LIMIT:
+                raise ValueError
+            data = handle.read(CONTROL_LIMIT + 1)
+        if len(data) > CONTROL_LIMIT:
             raise ValueError
-        value = json.loads(path.read_text())
+        value = json.loads(data)
         if (
             value.get("schema_version") != 1
             or value.get("mode") not in ("paused", "draining")
@@ -154,34 +177,76 @@ def read_control(directory: Path) -> dict:
         ):
             raise ValueError
         return {"mode": value["mode"], "since": value["since"]}
-    except (OSError, ValueError, AttributeError, RecursionError):
+    except Exception:  # noqa: BLE001 - never interrupt the scheduler over this file
         return {"mode": "paused", "since": None, "error": "dispatch_control_invalid"}
 
 
-def write_control(directory: Path, mode: str) -> dict:
-    """Set the dispatch mode; ``running`` removes the control file."""
+def _control_not_a_file(path: Path) -> KarnError:
+    return KarnError(f"dispatch_control_not_a_file: remove the directory {path} by hand")
+
+
+def write_control(directory: Path, mode: str, *, only_if: str | None = None) -> dict:
+    """Set the dispatch mode; ``running`` removes the control file.
+
+    A symlink, FIFO, oversized or garbled file in its place is replaced without being read
+    through; only a directory there is refused. With ``only_if``, the file is replaced only
+    while it still holds that mode, so a concurrent ``queue`` command is never overwritten.
+    """
     if mode not in DISPATCH_MODES:
         raise KarnError("dispatch_mode_invalid:" + mode)
     directory = Path(directory)
     path = directory / CONTROL_FILENAME
+    if os.path.isdir(path) and not os.path.islink(path):
+        raise _control_not_a_file(path)
     if mode == "running":
         with contextlib.suppress(FileNotFoundError):
             path.unlink()
         return read_control(directory)
     if not directory.is_dir():
         raise KarnError("batches_dir_missing")
-    if path.is_symlink():
-        path.unlink()
     current = read_control(directory)
     # Pausing a drain, or draining again, keeps the time dispatch first stopped.
     since = current["since"] if current["mode"] != "running" and current["since"] else None
-    value = {
-        "schema_version": 1,
-        "mode": mode,
-        "since": since or datetime.now(UTC).isoformat(),
-    }
-    _write_atomically(path, json.dumps(value, indent=2) + "\n", prefix=".karn-control-")
+    payload = json.dumps(
+        {"schema_version": 1, "mode": mode, "since": since or datetime.now(UTC).isoformat()},
+        indent=2,
+    )
+    if only_if is None:
+        _write_atomically(path, payload + "\n", prefix=".karn-control-")
+    else:
+        _swap_control(path, payload + "\n", only_if)
     return read_control(directory)
+
+
+def _swap_control(path: Path, payload: str, only_if: str) -> None:
+    """Replace the control file only while it holds ``only_if``.
+
+    The file is first moved aside under a unique name, so a ``queue resume`` that deleted it,
+    or a ``queue`` command that rewrote it, is seen; the new file is then linked into place,
+    which never replaces a file another command wrote meanwhile.
+    """
+    claimed = path.with_name(f".karn-control-claim-{uuid.uuid4().hex}.json")
+    try:
+        os.rename(path, claimed)
+    except FileNotFoundError:
+        return  # resumed meanwhile
+    try:
+        if _read_control_path(claimed)["mode"] != only_if:
+            with contextlib.suppress(FileExistsError):
+                os.link(claimed, path, follow_symlinks=False)  # restore what was there
+            return
+        fd, tmp = tempfile.mkstemp(prefix=".karn-control-", suffix=".json", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+            with contextlib.suppress(FileExistsError):
+                os.link(tmp, path)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(tmp)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(claimed)
 
 
 def queue_order(names, ledger: list[dict] | None) -> list[str]:
@@ -394,6 +459,7 @@ class KarnScheduler:
         """
         state_dir = self.directory / "state"
         self._remove_stale_ledger_temps()
+        self._restore_control_claims()
         entries = read_ledger(self.directory)
         changed = entries is None
         if entries is None:
@@ -451,12 +517,37 @@ class KarnScheduler:
         return control["mode"] == "running"
 
     def _finish_drain(self) -> None:
-        """A drain whose in-flight runs have all finished stays paused across restarts."""
-        if read_control(self.directory)["mode"] == "draining":
-            write_control(self.directory, "paused")
-            logging.getLogger(__name__).warning(
-                "drain finished: no run is in flight; dispatch stays paused until `queue resume`"
+        """A drain whose in-flight runs have all finished stays paused across restarts.
+
+        Only a control file still saying ``draining`` becomes ``paused``: a ``queue resume``
+        or another ``queue`` command given meanwhile wins. Nothing is in flight, so a control
+        file that cannot be written is only reported.
+        """
+        log = logging.getLogger(__name__)
+        try:
+            control = write_control(self.directory, "paused", only_if="draining")
+        except (KarnError, OSError) as error:
+            log.warning(
+                "drain finished: no run is in flight, but %s could not be set to paused (%s);"
+                " it still says draining",
+                CONTROL_FILENAME,
+                error,
             )
+            return
+        log.warning(
+            "drain finished: no run is in flight; dispatch is %s%s",
+            control["mode"],
+            " until `queue resume`" if control["mode"] != "running" else "",
+        )
+
+    def _restore_control_claims(self) -> None:
+        """A control file this scheduler moved aside and then crashed before replacing."""
+        path = self.directory / CONTROL_FILENAME
+        for claimed in self.directory.glob(".karn-control-claim-*.json"):
+            with contextlib.suppress(OSError):
+                os.link(claimed, path, follow_symlinks=False)
+            with contextlib.suppress(OSError):
+                claimed.unlink()
 
     def run_until_idle(self) -> int:
         """One pass; when nothing ran only because no login could serve it, that is an error."""
@@ -735,8 +826,7 @@ class KarnScheduler:
 
         def dispatch():
             nonlocal ledger
-            if not self._dispatch_open():
-                return False
+            # The ledger is synced even while paused, so a damaged one is never hidden.
             try:
                 ledger = self._sync_ledger()
             except (KarnError, OSError) as error:
@@ -748,6 +838,8 @@ class KarnScheduler:
             if not save_acknowledgements():
                 return False
             self.dispatch_blocked = None
+            if not self._dispatch_open():
+                return False
             recorded = {entry["batch"] for entry in ledger} | set(states)
             # A file that appeared since the sync is recorded by the next one.
             names = {path.stem for path in self.directory.glob("*.toml")} & recorded | set(states)

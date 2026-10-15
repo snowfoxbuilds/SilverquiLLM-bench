@@ -9,7 +9,6 @@ from datetime import datetime
 from pathlib import Path
 
 from silverquillm.karn.batching import (
-    CONTROL_FILENAME,
     LEDGER_FILENAME,
     load_batch,
     queue_order,
@@ -74,13 +73,7 @@ def dispatch_mode(batches_dir: Path | None) -> str:
     """The queue's dispatch mode; an unreadable control file reads as paused, never running."""
     if batches_dir is None:
         return "running"
-    directory = Path(batches_dir)
-    try:
-        if _unparseable(directory / CONTROL_FILENAME):
-            return "paused"
-        return read_control(directory)["mode"]
-    except OSError:
-        return "running"
+    return read_control(Path(batches_dir))["mode"]
 
 
 def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:

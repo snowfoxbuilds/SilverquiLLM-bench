@@ -57,7 +57,8 @@ The file is reread before every not-yet-started entry, so appending entries to a
 
 Pause and drain work from any shell or agent, whether or not a scheduler is running, and persist across restarts; `queue ls` and `top` show them.
 A run already past its login selection when a pause lands is refused at launch and its entry stays pending.
-An unreadable `control.json` reads as paused, never as running.
+An unreadable `control.json` (garbled, oversized, a link, a FIFO, a directory, or a directory the scheduler cannot search) reads as paused, never as running, and never interrupts a run; `queue pause`, `queue drain` or `queue resume` replaces it, except a directory, which is removed by hand. A finished drain turns `draining` into `paused` only if no `queue` command changed it meanwhile; if the batch directory is read-only, the scheduler still exits and the file keeps saying `draining`.
+The scheduler checks the queue ledger before the dispatch mode, so a damaged ledger is reported, and fails `--once`, even while dispatch is paused.
 Interrupting one worker process interrupts the whole scheduler: a run that ends `interrupted`, or a worker reporting an interrupt, stops dispatch and interrupts the other runs too, because a service stop or terminal hangup reaches workers and scheduler in no fixed order. To stop launching, use `queue pause` or `queue drain`, never a signal.
 
 The [Karn Benchmark Contract](../docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records) defines dispatch, recovery, and shutdown behavior, including the single concurrent run allowed for candidates without a login plugin.

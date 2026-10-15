@@ -492,7 +492,7 @@ def _dispatch_line(control: dict) -> str:
     if control.get("since"):
         line += f" since {control['since']}"
     if control.get("error"):
-        line += f" ({control['error']}; `queue resume` or `queue pause` rewrites it)"
+        line += f" ({control['error']}; `queue pause`, `queue drain` or `queue resume` replaces it)"
     return line
 
 
