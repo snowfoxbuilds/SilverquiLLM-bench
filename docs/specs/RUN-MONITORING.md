@@ -187,7 +187,7 @@ A recorded figure drops the `~`, carries `*` when its record calls it incomplete
 The queued pane lists the not-yet-started run specs in queue priority order, under one header line per Batch (grilling 2026-10-07).
 The scheduler may start a later Batch when an earlier Batch has no eligible Login Profile; dispatch follows the [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records).
 Each run takes one line with its benchmark, budget and Candidate display; a queued run has no Login Profile until it launches.
-A Batch's header line shows its countdown to `not_before`, or `⚠ needs ack` for a stateless Batch the scheduler will not start by itself (lost state, or present before the queue ledger existed), and how many of its runs have started; a new Batch shows as pending (grilling 2026-10-13).
+A Batch's header line shows its countdown to `not_before`, or `⚠ needs ack` for a stateless Batch the scheduler will not start by itself (lost state, or present before the queue ledger existed), and how many of its runs have started; a new Batch shows as pending, and every unstarted Batch shows the ledger error while a damaged queue ledger stops dispatch (grilling 2026-10-13).
 
 ### Estimated Weekly Usage
 

@@ -35,7 +35,9 @@ The file is reread before every not-yet-started entry, so appending entries to a
 - Entries start in file order within a batch and can overlap. Batches with a slot available take priority in queue order, the order the scheduler first recorded them in `queue.json` (name order among those recorded together); a blocked batch does not hold up another batch's pool. Completion order can differ from start order.
 - A running scheduler picks up a new batch file without a restart, and `queue ls` and `top` show it as pending. A batch is new when `queue.json` has never recorded it.
 - A batch that `queue.json` records but whose state file is missing has lost its state. It is refused until you restore the state, or acknowledge a restart from entry 0 with `--replay-without-state <id>`, because that could replay finished runs. The same acknowledgement is needed once for each stateless batch present when a directory gets its first ledger, since nothing then tells a new batch from a lost one.
-- If `queue.json` is damaged, nothing is dispatched until it is repaired or removed; a removed ledger is rebuilt, and every batch without state then needs the acknowledgement.
+- `--replay-without-state <id>` acknowledges one start from entry 0. If that batch's state is lost again, even under the same scheduler, it needs a new acknowledgement, which means a scheduler restart.
+- If `queue.json` is damaged, nothing is dispatched until it is repaired or removed; a removed ledger is rebuilt, and every batch without state then needs the acknowledgement. While it is damaged, `queue ls` and `top` show `ledger_damaged`, the scheduler warns on every pass, and `scheduler --once` exits non-zero.
+- The batch directory itself must be writable: the scheduler writes `queue.json` there. If it cannot, dispatch stops the same way, with `queue_ledger_unwritable`.
 - The scheduler warns, once per batch and in serve mode too, about every batch it skips and why.
 - A failed entry is recorded with its evidence and the batch continues.
 - An entry with no eligible slot stays pending, along with later entries in its batch. It counts as started only after claiming a slot.

@@ -145,17 +145,17 @@ def stateless_status(batch_id: str, ledger: list[dict] | None) -> str:
     return "missing_state"
 
 
-def _readable_ledger(directory: Path) -> list[dict] | None:
-    """For read-only views: a damaged ledger reads as none, the cautious interpretation."""
+def _readable_ledger(directory: Path) -> tuple[list[dict] | None, str | None]:
+    """For read-only views: the ledger, or none and the reason it is damaged."""
     try:
-        return read_ledger(directory)
-    except KarnError:
-        return None
+        return read_ledger(directory), None
+    except KarnError as error:
+        return None, str(error)
 
 
 def queue_rows(directory: Path) -> list[dict]:
     rows = []
-    ledger = _readable_ledger(Path(directory))
+    ledger, damaged = _readable_ledger(Path(directory))
     paths = {path.stem: path for path in Path(directory).glob("*.toml")}
     for path in (paths[name] for name in queue_order(paths, ledger)):
         batch = None
@@ -177,6 +177,9 @@ def queue_rows(directory: Path) -> list[dict]:
                 if started < len(batch["runs"])
                 else "done"
             )
+            if damaged and status != "done" and status != "running":
+                # A damaged ledger stops all dispatch, not only stateless Batches.
+                status = "ledger_damaged"
             rows.append(
                 {
                     "batch": path.stem,
@@ -185,6 +188,7 @@ def queue_rows(directory: Path) -> list[dict]:
                     "started": started,
                     "total": len(batch["runs"]),
                     "runs": state["runs"] if state else [],
+                    **({"error": damaged} if status == "ledger_damaged" else {}),
                 }
             )
         except KarnError as error:
@@ -272,6 +276,8 @@ class KarnScheduler:
         self.worker_factory = worker_factory
         self.slot_poll_seconds = slot_poll_seconds
         self.warnings = []
+        # Why the latest pass could dispatch nothing at all, when its queue ledger failed.
+        self.dispatch_blocked: str | None = None
         # Login pools that could serve no entry during the latest pass, by batch.
         self.unavailable_logins: dict[str, str] = {}
 
@@ -310,6 +316,12 @@ class KarnScheduler:
                 os.unlink(tmp)
         return state
 
+    def _remove_stale_ledger_temps(self) -> None:
+        """Temporary ledger files left by a crash; only the lock holder writes them."""
+        for path in self.directory.glob(".karn-ledger-*.json"):
+            with contextlib.suppress(OSError):
+                path.unlink()
+
     def _sync_ledger(self) -> list[dict]:
         """Record every Batch file the ledger has not seen, and return the ledger.
 
@@ -320,6 +332,7 @@ class KarnScheduler:
         starts normally, never one that reads as lost.
         """
         state_dir = self.directory / "state"
+        self._remove_stale_ledger_temps()
         entries = read_ledger(self.directory)
         changed = entries is None
         if entries is None:
@@ -365,6 +378,9 @@ class KarnScheduler:
         self._require_package()
         with SchedulerLock(self.directory):
             count = self._run_locked()
+        if self.dispatch_blocked:
+            # Idle because the ledger stopped every dispatch is not idle: --once must fail.
+            raise KarnError(self.dispatch_blocked)
         if not count and self.unavailable_logins:
             raise LoginPoolUnavailableError(min(self.unavailable_logins.values()))
         return count
@@ -460,7 +476,10 @@ class KarnScheduler:
     def _run_locked(self) -> int:
         self._require_package()
         states = self._recover_running_states()
+        # --replay-without-state acknowledges one start from entry zero: never a later loss.
+        self.replay -= set(states)
         self.unavailable_logins = {}
+        self.dispatch_blocked = None
         active = {}
         deferred = {}
         count = 0
@@ -599,12 +618,24 @@ class KarnScheduler:
             nonlocal ledger
             try:
                 ledger = self._sync_ledger()
-            except KarnError as error:
-                self._warn(
-                    f"{error}: nothing is dispatched until {LEDGER_FILENAME} is repaired, or removed"
-                    " (then every Batch without state needs --replay-without-state)"
+            except (KarnError, OSError) as error:
+                reason = (
+                    str(error)
+                    if isinstance(error, KarnError)
+                    else "queue_ledger_unwritable:" + type(error).__name__
                 )
+                if self.dispatch_blocked != reason:
+                    # Logged every pass it persists, unlike other warnings: dispatch is stopped.
+                    self.dispatch_blocked = reason
+                    logging.getLogger(__name__).warning(
+                        "%s: nothing is dispatched until %s is repaired, or removed (then every"
+                        " Batch without state needs --replay-without-state); an unwritable batch"
+                        " directory must be made writable",
+                        reason,
+                        LEDGER_FILENAME,
+                    )
                 return False
+            self.dispatch_blocked = None
             recorded = {entry["batch"] for entry in ledger} | set(states)
             # A file that appeared since the sync is recorded by the next one.
             names = {path.stem for path in self.directory.glob("*.toml")} & recorded | set(states)
@@ -628,6 +659,7 @@ class KarnScheduler:
                                 )
                                 continue
                             state = self._start_state(state_path, path.stem)
+                            self.replay.discard(name)
                             acknowledge_replay(name)
                         states[path.stem] = state
                     state = states[path.stem]

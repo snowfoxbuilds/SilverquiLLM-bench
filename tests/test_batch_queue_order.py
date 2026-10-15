@@ -205,12 +205,14 @@ def test_a_damaged_ledger_dispatches_nothing(tmp_path, caplog):
     write_state(directory, "a")
     (directory / LEDGER_FILENAME).write_text("{")
     executed = []
-    with caplog.at_level("WARNING"):
-        assert make_scheduler(tmp_path, directory, executed).run_until_idle() == 0
+    with caplog.at_level("WARNING"), pytest.raises(KarnError, match="queue_ledger_invalid"):
+        make_scheduler(tmp_path, directory, executed).run_until_idle()
     assert executed == []
     assert "queue_ledger_invalid" in caplog.text
     write_batch(directory, "b", ["b1"])
-    assert {row["batch"]: row["status"] for row in queue_rows(directory)}["b"] == "missing_state"
+    rows = {row["batch"]: row for row in queue_rows(directory)}
+    assert rows["b"]["status"] == rows["a"]["status"] == "ledger_damaged"
+    assert rows["b"]["error"] == "queue_ledger_invalid"
 
 
 def test_serve_mode_warns_about_a_skipped_batch(tmp_path, caplog, monkeypatch):
@@ -245,10 +247,11 @@ def test_a_ledger_that_is_not_a_regular_file_is_refused_without_blocking(tmp_pat
     with pytest.raises(KarnError, match="queue_ledger_invalid"):
         read_ledger(directory)
     write_batch(directory, "a", ["a1"])
-    assert queue_rows(directory)[0]["status"] == "missing_state"
-    assert queued_batches(directory)[0].needs_ack
+    assert queue_rows(directory)[0]["status"] == "ledger_damaged"
+    assert queued_batches(directory)[0].status == "ledger_damaged"
     executed = []
-    assert make_scheduler(tmp_path, directory, executed, replay=["a"]).run_until_idle() == 0
+    with pytest.raises(KarnError, match="queue_ledger_invalid"):
+        make_scheduler(tmp_path, directory, executed, replay=["a"]).run_until_idle()
     assert executed == []
 
 
@@ -269,3 +272,76 @@ def test_a_batch_written_during_a_pass_draws_no_missing_state_warning(tmp_path, 
         assert scheduler.run_until_idle() == 2
     assert executed == ["a1", "l1"]
     assert "missing" not in caplog.text
+
+
+def test_a_replay_acknowledgement_starts_a_batch_from_zero_only_once(tmp_path):
+    directory = tmp_path / "batches"
+    write_batch(directory, "a", ["a1"])
+    executed = []
+    scheduler = make_scheduler(tmp_path, directory, executed, replay=["a"])
+    assert scheduler.run_until_idle() == 1
+    (directory / "state" / "a.json").unlink()  # the state is lost again
+    assert scheduler.run_until_idle() == 0
+    assert executed == ["a1"]
+
+
+def test_a_replay_flag_for_a_batch_that_has_state_is_never_used(tmp_path):
+    directory = tmp_path / "batches"
+    write_batch(directory, "a", ["a1", "a2"])
+    write_ledger(directory, ("a", True))
+    write_state(directory, "a", done=1)
+    executed = []
+    scheduler = make_scheduler(tmp_path, directory, executed, replay=["a"])
+    assert scheduler.run_until_idle() == 1
+    (directory / "state" / "a.json").unlink()
+    assert scheduler.run_until_idle() == 0
+    assert executed == ["a2"]
+
+
+def test_a_damaged_ledger_warns_every_pass_and_fails_once(tmp_path, caplog):
+    import logging
+
+    directory = tmp_path / "batches"
+    write_batch(directory, "a", ["a1", "a2"])
+    write_ledger(directory, ("a", True))
+    write_state(directory, "a")
+    good = (directory / LEDGER_FILENAME).read_text()
+    executed = []
+    scheduler = make_scheduler(tmp_path, directory, executed)
+    for _ in range(2):
+        (directory / LEDGER_FILENAME).write_text("{")
+        caplog.clear()
+        with caplog.at_level(logging.WARNING), pytest.raises(KarnError, match="queue_ledger"):
+            scheduler.run_until_idle()
+        assert any("queue_ledger_invalid" in record.message for record in caplog.records)
+        assert [row["status"] for row in queue_rows(directory)] == ["ledger_damaged"]
+        assert [batch.status for batch in queued_batches(directory)] == ["ledger_damaged"]
+        (directory / LEDGER_FILENAME).write_text(good)
+    assert executed == []
+    assert scheduler.run_until_idle() == 2 and scheduler.dispatch_blocked is None
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_an_unwritable_batch_directory_stops_dispatch_without_crashing(tmp_path):
+    directory = tmp_path / "batches"
+    write_batch(directory, "a", ["a1"])
+    write_state(directory, "a")
+    (directory / ".scheduler.lock").touch()
+    executed = []
+    os.chmod(directory, 0o555)
+    try:
+        scheduler = make_scheduler(tmp_path, directory, executed)
+        with pytest.raises(KarnError, match="queue_ledger_unwritable:PermissionError"):
+            scheduler.run_until_idle()
+    finally:
+        os.chmod(directory, 0o755)
+    assert executed == []
+
+
+def test_a_crash_s_temporary_ledger_files_are_removed(tmp_path):
+    directory = tmp_path / "batches"
+    write_batch(directory, "a", ["a1"])
+    stale = directory / ".karn-ledger-abcd1234.json"
+    stale.write_text("{}")
+    make_scheduler(tmp_path, directory, [], replay=["a"]).run_until_idle()
+    assert not stale.exists() and read_ledger(directory)

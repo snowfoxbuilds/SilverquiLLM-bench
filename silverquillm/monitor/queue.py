@@ -38,7 +38,8 @@ class QueuedRun:
 class QueuedBatch:
     batch: str
     status: str
-    """``pending``, ``running``, ``done``, ``needs_ack`` (no state, and not new), ``legacy`` or ``error``."""
+    """``pending``, ``running``, ``done``, ``needs_ack`` (no state, and not new),
+    ``ledger_damaged`` (the queue ledger stops every dispatch), ``legacy`` or ``error``."""
     not_before: datetime | None
     started: int
     total: int
@@ -76,10 +77,17 @@ def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
         found_paths = {path.stem: path for path in directory.glob("*.toml")}
     except OSError:
         return []
+    damaged = None
     try:
-        ledger = None if _unparseable(directory / LEDGER_FILENAME) else read_ledger(directory)
-    except (KarnError, RecursionError):
-        ledger = None  # a damaged ledger reads as none: every stateless Batch needs an ack
+        if _unparseable(directory / LEDGER_FILENAME):
+            raise KarnError("queue_ledger_invalid")
+        ledger = read_ledger(directory)
+    except (KarnError, RecursionError) as error:
+        # A damaged ledger reads as none, and stops every dispatch until it is repaired.
+        ledger, damaged = (
+            None,
+            str(error) if isinstance(error, KarnError) else "queue_ledger_invalid",
+        )
     paths = [found_paths[name] for name in queue_order(found_paths, ledger)]
     found = []
     for path in paths:
@@ -124,7 +132,10 @@ def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
             status = "running"
         else:
             status = "pending" if runs else "done"
+        error = None
+        if damaged and status in ("pending", "needs_ack"):
+            status, error = "ledger_damaged", damaged
         found.append(
-            QueuedBatch(batch_id, status, batch.get("not_before"), started, len(specs), runs)
+            QueuedBatch(batch_id, status, batch.get("not_before"), started, len(specs), runs, error)
         )
     return found

@@ -16,5 +16,6 @@ def render_rows(rows: list[dict]) -> list[str]:
             lines.append(
                 f"{row['batch']} [{row['format']}]: {row['status']}"
                 f" ({row.get('started', 0)}/{row.get('total', 0)})"
+                + (f" ({row['error']})" if row.get("error") else "")
             )
     return lines
