@@ -25,7 +25,7 @@ TARGET_STUB = "def effect():\n    raise NotImplementedError\n"
 TARGET = "def effect():\n    return 'done'\n"
 
 MANIFEST = {
-    "schema_version": 1,
+    "schema_version": 2,
     "benchmark": BENCHMARK,
     "defects": [
         {
@@ -33,14 +33,18 @@ MANIFEST = {
             "description": "Gaining life gains one less than the amount.",
             "rules": ["CR 119.3"],
             "kind": "seeded",
-            "failing_tests": {"engine_regression": [ENGINE_DEFECT]},
+            "failing_tests": {"engine": [ENGINE_DEFECT]},
+            "target_tests": [],
+            "host_card": None,
         },
         {
             "id": "fdn-1-toughness",
             "description": "fdn_1 has toughness 1 instead of 2.",
             "rules": ["CR 208.1"],
             "kind": "inherited",
-            "failing_tests": {"fdn_regression": [FDN_DEFECT]},
+            "failing_tests": {"fdn": [FDN_DEFECT]},
+            "target_tests": [],
+            "host_card": None,
         },
     ],
 }
@@ -110,6 +114,19 @@ def build(bench_root: Path, *, manifest: bool = True) -> Path:
 
 def write_manifest(root: Path, value) -> None:
     (root / "data/known_defects.json").write_text(json.dumps(value, indent=2))
+
+
+DEFECT_PATCHES = {
+    "lifegain-loses-one": "--- a/engine/rules.py\n+++ b/engine/rules.py\n@@ -4,2 +4,2 @@\n"
+    " def lifegain(amount):\n-    return amount\n+    return amount - 1\n",
+    "fdn-1-toughness": "--- a/cards/fdn/fdn_1/card_impl.py\n+++ b/cards/fdn/fdn_1/card_impl.py\n"
+    "@@ -1,2 +1,2 @@\n POWER = 2\n-TOUGHNESS = 2\n+TOUGHNESS = 1\n",
+}
+
+
+def write_defect_patches(root: Path) -> None:
+    """Each Known Defect as a patch against the Test Oracle Workspace, as a port records it."""
+    write_tree(root / "data/known_defects", {f"{key}.patch": text for key, text in DEFECT_PATCHES.items()})
 
 
 def candidate_edits(workspace: Path) -> None:

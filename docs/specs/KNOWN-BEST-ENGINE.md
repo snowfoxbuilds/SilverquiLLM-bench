@@ -118,7 +118,7 @@ CI checks, for every benchmark in scope:
 3. Putting each Known Defect back into the Test Oracle Workspace fails exactly the target-card tests its entry lists (grilling 2026-10-14).
 4. Every FDN, engine and target-card Audited Test resolves to exactly one Attributed Card, a base Workspace card other than a target, and every related Known Defect names a host card (grilling 2026-10-14).
 
-Each check is a Platform Test, making one call per suite so each stays within the test timeout: `tests/known_defect_checks.py` provides `oracle_problems` and `workspace_problems` for the first two, which return the problems found and `[]` when the check passes.
+Each check is a Platform Test, making one call per suite so each stays within the test timeout: `tests/known_defect_checks.py` provides `oracle_problems`, `workspace_problems` and `defect_problems` for the first three, which return the problems found and `[]` when the check passes; `defect_problems` grades one Known Defect's target-card suite per call.
 
 #### Manifest
 
