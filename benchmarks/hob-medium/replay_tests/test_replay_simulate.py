@@ -4439,7 +4439,7 @@ class TestTriageSmoke:
         report.source = "golden/fdn_equipment_funding.json"
         summary = _aggregate_reports([report], {}, simulate=True)
 
-        script = REPO_ROOT / "scripts" / "triage_divergences.py"
+        script = REPO_ROOT / "silverquillm" / "triage_divergences.py"
         spec = importlib.util.spec_from_file_location("triage_divergences", script)
         mod = importlib.util.module_from_spec(spec)
         sys.modules["triage_divergences"] = mod

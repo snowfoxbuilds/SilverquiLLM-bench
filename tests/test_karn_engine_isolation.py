@@ -92,7 +92,8 @@ def test_external_replay_root_and_relative_fixtures():
     )
     _write(root / "data/replays/token_id_map.json", '{"tokens": {}}')
     _write(root / "data/replays/golden/example.json", '{"host": true}')
-    _write(root / "scripts/triage_divergences.py", "MARKER = 'authoritative triage'\n")
+    # Staged from the package into the grading root at its old scripts/ path.
+    _write(root / "silverquillm/triage_divergences.py", "MARKER = 'authoritative triage'\n")
     for relative in (
         "conftest.py",
         "test_utils.py",

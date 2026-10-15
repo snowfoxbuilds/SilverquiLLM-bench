@@ -67,6 +67,18 @@ logger = logging.getLogger(__name__)
 # Repo root — resolved once at import time
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _BENCHMARK_DATA_ROOT: ContextVar[Path | None] = ContextVar("benchmark_data_root", default=None)
+
+# Replay support staged into an engine grading root: grading-root path -> source path under
+# the bench root. The triage tool keeps its old grading-root path, which is also the path its
+# grading-inputs fingerprint is keyed by, so moving its source into the package (#222) left
+# every grading-inputs digest unchanged.
+TRIAGE_GRADING_PATH = "scripts/triage_divergences.py"
+REPLAY_SUPPORT = {
+    "data/replays/golden": "data/replays/golden",
+    "data/replays/card_id_map.json": "data/replays/card_id_map.json",
+    "data/replays/token_id_map.json": "data/replays/token_id_map.json",
+    TRIAGE_GRADING_PATH: "silverquillm/triage_divergences.py",
+}
 _PYTEST_ENVIRONMENT = (
     "PATH",
     "HOME",
@@ -1464,13 +1476,8 @@ def _eval_engine(
                 "[pytest]\npython_files = test_*.py tests.py\naddopts = --import-mode=importlib\n"
             )
 
-        for relative in (
-            "data/replays/golden",
-            "data/replays/card_id_map.json",
-            "data/replays/token_id_map.json",
-            "scripts/triage_divergences.py",
-        ):
-            source, destination = data_root / relative, root / relative
+        for relative, source_relative in REPLAY_SUPPORT.items():
+            source, destination = data_root / source_relative, root / relative
             if source.is_dir():
                 shutil.copytree(source, destination, ignore=_GRADING_IGNORE)
             elif source.is_file():

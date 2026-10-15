@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from silverquillm.benchmark_targets import target_cards
-from silverquillm.evaluator import _target_card_id, resolve_eval_paths
+from silverquillm.evaluator import (
+    REPLAY_SUPPORT,
+    TRIAGE_GRADING_PATH,
+    _target_card_id,
+    resolve_eval_paths,
+)
 
 from .definition import KarnError, canonical, digest, read_regular, strict_json
 
@@ -53,9 +58,10 @@ def grading_inputs(benchmark) -> dict:
                 source.parts
             ):
                 sources.append(("replay_fixture", source))
-    triage = repository / "scripts/triage_divergences.py"
+    triage = repository / REPLAY_SUPPORT[TRIAGE_GRADING_PATH]
     if triage.is_file():
-        sources.append(("replay_support", triage))
+        # Keyed by where the grader sees it, not where its source lives.
+        sources.append(("replay_support", triage, TRIAGE_GRADING_PATH))
     sources.append(
         ("replay_token_map", benchmark.root.parent.parent / "data/replays/token_id_map.json")
     )
@@ -71,9 +77,9 @@ def grading_inputs(benchmark) -> dict:
         except KarnError:
             declared_coverage = {"observation_error": "coverage_metadata_unavailable"}
     files, problems = [], []
-    for kind, source in sources:
+    for kind, source, *recorded in sources:
         try:
-            relative = str(source.relative_to(benchmark.root.parent.parent))
+            relative = recorded[0] if recorded else str(source.relative_to(benchmark.root.parent.parent))
         except ValueError:
             relative = str(source)
         item = {"kind": kind, "path": relative, "sha256": None}

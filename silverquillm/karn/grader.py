@@ -78,11 +78,11 @@ ENVIRONMENT = {
     "PYTHONDONTWRITEBYTECODE": "1",
     "SILVERQUILLM_BENCH_ROOT": PACKAGE_ROOT,
 }
+# The triage tool needs no mount of its own: it lives in the mounted package (REPLAY_SUPPORT).
 REPLAY_INPUTS = (
     "data/replays/golden",
     "data/replays/card_id_map.json",
     "data/replays/token_id_map.json",
-    "scripts/triage_divergences.py",
 )
 WORKER = (
     "import sys; sys.path.insert(0, sys.argv[1]); "

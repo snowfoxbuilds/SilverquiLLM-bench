@@ -1,4 +1,4 @@
-"""Tests for scripts/triage_divergences.py and the report attribution fields.
+"""Tests for silverquillm/triage_divergences.py and the report attribution fields.
 
 Pins the two contracts issue #40's Tier 0 rests on:
 
@@ -32,7 +32,7 @@ from silverquillm.replay.validation import (
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-_SCRIPT_PATH = REPO_ROOT / "scripts" / "triage_divergences.py"
+_SCRIPT_PATH = REPO_ROOT / "silverquillm" / "triage_divergences.py"
 
 _spec = importlib.util.spec_from_file_location("triage_divergences", _SCRIPT_PATH)
 _mod = importlib.util.module_from_spec(_spec)
@@ -538,3 +538,20 @@ class TestAggregateReportsSerializer:
         report.source = ""
         summary = _aggregate_reports([report], {}, simulate=True)
         assert summary["divergences"][0]["game"] is None
+
+
+def test_the_tool_runs_as_silverquillm_replay_triage():
+    from click.testing import CliRunner
+
+    from silverquillm.cli import main
+
+    result = CliRunner().invoke(main, ["replay", "triage", "--help"])
+    assert result.exit_code == 0
+    assert "usage: silverquillm replay triage" in result.output
+
+
+def test_the_grader_stages_the_tool_at_its_fingerprinted_path():
+    from silverquillm.evaluator import REPLAY_SUPPORT, TRIAGE_GRADING_PATH
+
+    assert TRIAGE_GRADING_PATH == "scripts/triage_divergences.py"
+    assert (REPO_ROOT / REPLAY_SUPPORT[TRIAGE_GRADING_PATH]) == _SCRIPT_PATH

@@ -15,11 +15,11 @@ import click
 _PASSTHROUGH = {"ignore_unknown_options": True, "allow_extra_args": True, "help_option_names": []}
 
 
-def _tool(group: click.Group, name: str, module: str, summary: str) -> None:
+def _tool(group: click.Group, name: str, module: str, summary: str, package: str = "silverquillm.tools") -> None:
     @group.command(name, help=summary, short_help=summary, context_settings=_PASSTHROUGH, add_help_option=False)
     @click.argument("args", nargs=-1, type=click.UNPROCESSED)
     def command(args: tuple[str, ...]) -> None:
-        tool = importlib.import_module(f"silverquillm.tools.{module}")
+        tool = importlib.import_module(f"{package}.{module}")
         # argparse names itself after argv[0]; show the full command in usage lines.
         program = sys.argv[0]
         sys.argv[0] = f"silverquillm {group.name} {name}"
@@ -50,6 +50,11 @@ def qualify() -> None:
     """Qualify an agent CLI version's telemetry before its accounting is trusted."""
 
 
+@click.group("replay")
+def replay() -> None:
+    """Analyse replay-validation reports."""
+
+
 _tool(data, "fetch-hob-set", "fetch_hob_set", "Fetch raw HOB print data into data/sets/hob.json.")
 _tool(data, "fetch-fra-set", "fetch_fra_set", "Fetch raw FRA print data into data/sets/fra.json.")
 _tool(data, "card-id-map", "build_card_id_map", "Build data/replays/card_id_map.json from Scryfall.")
@@ -68,4 +73,7 @@ _tool(audit, "printed-identity", "printed_identity_codemod", "Rewrite name-strin
 _tool(qualify, "claude-telemetry", "qualify_claude_telemetry", "Qualify a Claude Code version from a real run.")
 _tool(qualify, "codex-telemetry", "qualify_codex_telemetry", "Qualify a Codex version against scripted ground truth.")
 
-COMMANDS = (data, build, audit, qualify)
+# A grading input staged at its old scripts/ path; see evaluator.REPLAY_SUPPORT.
+_tool(replay, "triage", "triage_divergences", "Cluster a replay-validation report's divergences by root cause.", "silverquillm")
+
+COMMANDS = (data, build, audit, qualify, replay)
