@@ -62,7 +62,9 @@ def require_package_from(bench_root: Path) -> None:
             f"package_source_mismatch: silverquillm is imported from {PACKAGE.resolve()}, "
             f"but the bench root's package is {expected}. Install silverquillm from the bench "
             f"root (pip install -e {Path(bench_root).resolve()}) or run with "
-            f"PYTHONPATH={Path(bench_root).resolve()}."
+            f"PYTHONPATH={Path(bench_root).resolve()}, or point the bench root at the checkout "
+            f"you run from (--bench-root, else bench_root in the host configuration, else the "
+            f"working directory)."
         )
 
 

@@ -672,8 +672,11 @@ def regrade(
         raise KarnError("regrade_output_overlaps_results_dir")
     provenance.require_package_from(bench_root)
     benchmark = load_benchmark(bench_root, benchmark_id)
+    # One reading checks the output directory and tags every output, so a publication in
+    # regrades/<hex>/ always carries that hex's digest.
+    inputs = grading_inputs(benchmark)
     if out.is_relative_to(repo) and not out.is_relative_to(
-        published_regrades(repo, grading_inputs(benchmark)["digest"])
+        published_regrades(repo, inputs["digest"])
     ):
         raise KarnError("regrade_output_overlaps_results_repo")
     records, unreadable = select_records(
@@ -696,7 +699,6 @@ def regrade(
                     tempfile.TemporaryDirectory(prefix="sq-regrade-baseline-")
                 )
                 staged = stage_baseline(benchmark, Path(scratch))
-            inputs = grading_inputs(benchmark)
             digests = {
                 "grading_inputs_digest": inputs["digest"],
                 "grading_code_digest": grading_code_digest(),

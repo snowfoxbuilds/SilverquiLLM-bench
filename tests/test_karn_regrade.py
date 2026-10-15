@@ -369,6 +369,23 @@ def test_any_other_output_in_the_results_repo_is_refused(retained, inside):
     assert tree_digest(retained.opts["results_repo"]) == before
 
 
+def test_a_publication_is_tagged_with_the_digest_its_directory_names(retained, monkeypatch):
+    out = published(retained)
+    real = regrade_module.grading_inputs
+    calls = []
+
+    def changing(benchmark):
+        calls.append(benchmark)
+        inputs = real(benchmark)
+        return inputs if len(calls) == 1 else {**inputs, "digest": "sha256:" + "c" * 64}
+
+    monkeypatch.setattr(regrade_module, "grading_inputs", changing)
+    with building():
+        summary = invoke(retained, out=out)
+    assert summary["grading_inputs_digest"] == "sha256:" + out.name
+    assert summary["grading_inputs_changed_during_regrade"] is True
+
+
 def test_a_link_planted_at_regrades_cannot_redirect_output_into_records(retained):
     repo = retained.opts["results_repo"]
     hex_digest = published(retained).name

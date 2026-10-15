@@ -91,7 +91,7 @@ def load_host_config(
             document = tomllib.load(handle)
     except FileNotFoundError:
         return HostConfig(path=path, loaded=False)
-    except (OSError, tomllib.TOMLDecodeError) as error:
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
         raise HostConfigError(f"{path}: {error}") from None
     unknown = sorted(set(document) - set(LOCATIONS) - {"usage_rates", "monitor", "host_label"})
     if unknown:
@@ -121,6 +121,11 @@ def load_host_config(
 RAW_ROOT = "~/raw-bench-results"
 
 
+def _toml_string(path: Path) -> str:
+    # JSON's escapes are TOML's, but its ASCII-only surrogate pairs are not valid TOML.
+    return json.dumps(str(path), ensure_ascii=False)
+
+
 def write_minimal_config(path: Path, results_repo: Path, bench_root: Path) -> bool:
     """Write a minimal configuration file at *path* unless one exists; True if written.
 
@@ -128,8 +133,8 @@ def write_minimal_config(path: Path, results_repo: Path, bench_root: Path) -> bo
     """
     lines = [
         "# Written by `silverquillm results-init`. See the Results Repo's AGENTS.md.",
-        f"results_repo = {json.dumps(str(Path(results_repo).expanduser().resolve()))}",
-        f"bench_root = {json.dumps(str(Path(bench_root).expanduser().resolve()))}",
+        f"results_repo = {_toml_string(Path(results_repo).expanduser().resolve())}",
+        f"bench_root = {_toml_string(Path(bench_root).expanduser().resolve())}",
         f'batches_dir = "{RAW_ROOT}/batches"',
         f'runs_dir = "{RAW_ROOT}/runs"',
         '# host_label = "<label>"  # defaults to the hostname\'s first label',

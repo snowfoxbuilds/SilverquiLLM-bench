@@ -201,3 +201,17 @@ def test_grading_inputs_finds_the_bench_root_in_the_file(tmp_path, config_file, 
     assert payload["problems"] == []
     elsewhere = CliRunner().invoke(main, ["grading-inputs", "smoke", "--bench-root", str(tmp_path)])
     assert elsewhere.exit_code != 0
+
+
+def test_a_config_that_is_not_utf8_is_refused_with_its_path(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_bytes(b'results_repo = "\xff"\n')
+    with pytest.raises(hc.HostConfigError, match=str(path)):
+        hc.load_host_config(path)
+
+
+def test_a_minimal_config_round_trips_any_path(tmp_path):
+    repo = tmp_path / 'r "quoted" \\ x😀y'
+    path = tmp_path / "config.toml"
+    assert hc.write_minimal_config(path, repo, tmp_path)
+    assert hc.load_host_config(path).locations["results_repo"] == repo.resolve()
