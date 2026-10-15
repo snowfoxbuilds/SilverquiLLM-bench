@@ -23,6 +23,10 @@ def engine_dir(repo_root: Path) -> Path:
     return repo_root / "benchmarks" / "sos" / "workspace" / "engine"
 
 
+def _first_card(set_dir: Path) -> Path:
+    return next(d for d in sorted(set_dir.iterdir()) if (d / "card_spec.json").is_file())
+
+
 @pytest.fixture()
 def staged(staged_sos_workspace):
     """The session's staged SOS Workspace as (workspace, output) paths; read-only."""
@@ -187,7 +191,7 @@ class TestFdnCards:
 
     def test_fdn_spec_is_valid_json(self, staged):
         workspace, _ = staged
-        some_card = next((workspace / "cards" / "fdn").iterdir())
+        some_card = _first_card(workspace / "cards" / "fdn")
         data = json.loads((some_card / "card_spec.json").read_text())
         assert "name" in data
 
@@ -241,7 +245,7 @@ class TestSosCards:
 
     def test_sos_spec_is_valid_json(self, staged):
         workspace, _ = staged
-        some_card = next((workspace / "cards" / "sos").iterdir())
+        some_card = _first_card(workspace / "cards" / "sos")
         data = json.loads((some_card / "card_spec.json").read_text())
         assert "name" in data
 
