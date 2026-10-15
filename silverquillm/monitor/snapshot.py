@@ -411,7 +411,7 @@ class Monitor:
         recent = now - FINISHED_WINDOW
         counts = Counts(
             queued=sum(
-                len(batch.runs) for batch in queued if batch.status not in ("legacy", "error")
+                len(batch.runs) for batch in queued if batch.status not in ("unsupported_legacy_batch", "error")
             ),
             live=len(runs),
             finished_recent=sum(1 for run in history if run.run_date and run.run_date >= recent),

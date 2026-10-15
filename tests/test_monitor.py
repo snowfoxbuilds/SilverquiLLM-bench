@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from silverquillm.karn import subscription_usage as subscription_usage_module
+from silverquillm.karn.batching import queue_rows
 from silverquillm.karn.definition import KarnError, canonical, decode_definition, digest
 from silverquillm.karn.exclusions import Exclusion, write_exclusion
 from silverquillm.karn.execution import run_lock
@@ -579,8 +580,11 @@ def test_queued_runs_are_the_specs_a_batch_has_not_started(tmp_path):
     ]
     assert started.runs[0].candidate.label == "bare-claude-opus · claude-opus-5-5 · max"
     assert found["b-unacknowledged"].needs_ack
-    assert found["c-legacy"].status == "legacy"
+    assert found["c-legacy"].status == "unsupported_legacy_batch"
     assert not (batches / "state/b-unacknowledged.json").exists()
+    # The monitor and `queue ls` name every status alike.
+    listed = {row["batch"]: row["status"] for row in queue_rows(batches)}
+    assert {name: batch.status for name, batch in found.items()} == listed
 
 
 def test_multiple_running_batch_rows_leave_only_unstarted_entries_queued(tmp_path):

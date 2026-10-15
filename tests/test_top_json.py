@@ -75,7 +75,7 @@ def test_the_queue_lists_every_batch_in_queue_order_with_its_unstarted_entries()
     assert (sweep["status"], sweep["started"], sweep["total"]) == ("pending", 2, 5)
     assert [entry["index"] for entry in sweep["pending"]] == [2, 3, 4]
     assert document["queue"][1]["not_before"] == "2026-10-07T23:00:00Z"
-    assert document["queue"][2]["status"] == "needs_ack"
+    assert document["queue"][2]["status"] == "missing_state"
 
 
 def test_each_login_profile_has_one_state_word_most_blocking_first():

@@ -39,8 +39,9 @@ class QueuedRun:
 class QueuedBatch:
     batch: str
     status: str
-    """``pending``, ``running``, ``done``, ``needs_ack`` (no state, and not new),
-    ``ledger_damaged`` (the queue ledger stops every dispatch), ``legacy`` or ``error``."""
+    """The ``queue ls`` vocabulary: ``pending``, ``running``, ``done``, ``missing_state`` (no state,
+    and not new), ``ledger_damaged`` (the queue ledger stops every dispatch),
+    ``unsupported_legacy_batch`` or ``error``."""
     not_before: datetime | None
     started: int
     total: int
@@ -51,7 +52,7 @@ class QueuedBatch:
 
     @property
     def needs_ack(self) -> bool:
-        return self.status == "needs_ack"
+        return self.status == "missing_state"
 
 
 def _candidate(build_output: str, construct: str) -> CandidateDisplay:
@@ -122,7 +123,7 @@ def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
                 raise KarnError("batch_unreadable:" + path.name)
             batch = load_batch(path)
             if batch is None:
-                found.append(QueuedBatch(batch_id, "legacy", None, 0, 0, ()))
+                found.append(QueuedBatch(batch_id, "unsupported_legacy_batch", None, 0, 0, ()))
                 continue
             if _unparseable(state_path):
                 raise KarnError("batch_state_invalid:" + batch_id)
@@ -151,13 +152,13 @@ def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
             if index >= started
         )
         if state is None:
-            status = "pending" if stateless_status(batch_id, ledger) == "pending" else "needs_ack"
+            status = "pending" if stateless_status(batch_id, ledger) == "pending" else "missing_state"
         elif any(row["status"] == "running" for row in state["runs"]):
             status = "running"
         else:
             status = "pending" if runs else "done"
         error = None
-        if damaged and status in ("pending", "needs_ack"):
+        if damaged and status in ("pending", "missing_state"):
             status, error = "ledger_damaged", damaged
         run_ids = tuple(row["run_id"] for row in state["runs"]) if state else ()
         found.append(

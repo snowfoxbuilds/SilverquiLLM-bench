@@ -180,7 +180,7 @@ def queued():
         ),
         QueuedBatch(
             "2026-10-09-new",
-            "needs_ack",
+            "missing_state",
             None,
             0,
             1,
