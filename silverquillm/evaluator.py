@@ -199,20 +199,33 @@ _SUMMARY_RE = re.compile(
 )
 
 
+# A short-summary entry: the word, one space, then the node or file (never more spaces,
+# as in a captured log's ``ERROR    logger:file:line``).
+_SUMMARY_ERROR_LINE = re.compile(r"^(?:FAILED|ERROR) \S")
+
+
 def _parse_pytest_output(output: str) -> tuple[int, int, int, list[str]]:
     """Parse pytest ``-q`` output and return (passed, failed, total, errors).
 
-    Looks for the summary line (e.g. ``3 passed, 1 failed``) and collects
-    any FAILED / ERROR lines as error messages.
+    Looks for the summary line (e.g. ``3 passed, 1 failed``) and collects the
+    FAILED / ERROR lines of pytest's short test summary as error messages.  Only
+    that section is read when pytest printed it: a captured log or stdout section
+    can hold lines such as ``ERROR    engine.game:…`` that are no grading error.
     """
     passed = 0
     failed = 0
     errors: list[str] = []
 
-    # Collect individual failure/error lines
-    for line in output.splitlines():
+    lines = output.splitlines()
+    starts = [
+        index
+        for index, line in enumerate(lines)
+        if "short test summary info" in line and line.startswith("=")
+    ]
+    summary = lines[starts[-1] + 1 :] if starts else lines
+    for line in summary:
         stripped = line.strip()
-        if stripped.startswith(("FAILED ", "ERROR ")):
+        if _SUMMARY_ERROR_LINE.match(stripped):
             errors.append(stripped)
 
     # Find the short summary line produced by ``pytest -q``
@@ -670,7 +683,11 @@ def _generate_report_plugin(report_jsonl_path: str, session_token: str = "") -> 
     interruption (``KeyboardInterrupt``, ``pytest.exit``) or an internal error, so
     the plugin withholds the row once ``pytest_keyboard_interrupt`` or
     ``pytest_internalerror`` has fired — except for pytest's own orderly stop
-    after collection errors, which keeps its more specific diagnosis.
+    after collection errors, which keeps its more specific diagnosis.  Those two
+    hooks run first, ahead of pytest's terminal reporter, whose own handler can
+    raise again (a closed stdout) and stop later implementations; and the row is
+    written only for an orderly exit status, so an internal error no hook saw
+    still leaves it out.
 
     The JSONL file path is baked into the source as a literal string so no
     env-var plumbing is needed.
@@ -679,6 +696,8 @@ def _generate_report_plugin(report_jsonl_path: str, session_token: str = "") -> 
     safe_path = report_jsonl_path.replace("\\", "\\\\").replace('"', '\\"')
     return f'''
 import json as _json
+
+import pytest as _pytest
 
 _REPORT_PATH = "{safe_path}"
 _SESSION_TOKEN = "{session_token}"
@@ -733,13 +752,16 @@ def pytest_runtest_logreport(report):
         _write({{"nodeid": nodeid, "when": "teardown", "outcome": "fail", "message": _message(report)}})
 
 def pytest_collectreport(report):
-    """Record collection errors."""
+    """Record collection errors, and collectors skipped as a whole (a module-level skip)."""
     global _collection_failed
     if report.failed:
         _collection_failed = True
         nodeid = report.nodeid or "<collection-error>"
         _write({{"nodeid": nodeid, "when": "collect", "outcome": "fail", "message": _message(report)}})
+    elif report.skipped and report.nodeid:
+        _write({{"nodeid": report.nodeid, "when": "collect", "outcome": "skip"}})
 
+@_pytest.hookimpl(tryfirst=True)
 def pytest_keyboard_interrupt(excinfo):
     """An interruption (KeyboardInterrupt, pytest.exit) means the session did not finish."""
     global _interrupted
@@ -749,6 +771,7 @@ def pytest_keyboard_interrupt(excinfo):
         return
     _interrupted = True
 
+@_pytest.hookimpl(tryfirst=True)
 def pytest_internalerror(excrepr, excinfo):
     """An internal error means the session did not finish."""
     global _interrupted
@@ -757,6 +780,9 @@ def pytest_internalerror(excrepr, excinfo):
 def pytest_sessionfinish(session, exitstatus):
     """Record that the session ran to its end; never a test node."""
     if _interrupted:
+        return
+    status = int(exitstatus)
+    if status not in (0, 1, 5) and not (status == 2 and _collection_failed):
         return
     _write({{"when": "session", "outcome": "complete", "token": _SESSION_TOKEN}})
 '''
@@ -808,6 +834,8 @@ class _Report:
     collection_errors: dict[str, str] = field(default_factory=dict)
     # The reporter's session-completion row was read: pytest ran the session to its end.
     completed: bool = False
+    # Collectors (a module, or a class in it) skipped as a whole, e.g. a module-level skip.
+    skipped_collectors: set[str] = field(default_factory=set)
 
 
 def _read_report(
@@ -846,7 +874,10 @@ def _read_report(
             normalized = "tests.py::<collection-error>"
 
         if outcome == "skip":
-            report.skipped.add(normalized)
+            if entry.get("when") == "collect":
+                report.skipped_collectors.add(normalized)
+            else:
+                report.skipped.add(normalized)
             continue
         # Only accept the explicit values the conftest writes ('pass' / 'fail').
         # Any other or missing outcome is ignored — must not be silently coerced.
@@ -1071,12 +1102,47 @@ def _is_test_class(node: ast.AST) -> bool:
     )
 
 
+def _test_flag(value: ast.AST) -> bool | None:
+    """The truth of a ``__test__ = <constant>`` value; ``None`` when not a plain constant."""
+    return bool(value.value) if isinstance(value, ast.Constant) else None
+
+
+def _disabled_names(body: list[ast.stmt]) -> set[str]:
+    """Names in *body* given ``<name>.__test__ = False`` (pytest then skips them)."""
+    names = set()
+    for statement in body:
+        if not isinstance(statement, ast.Assign):
+            continue
+        for target in statement.targets:
+            if (
+                isinstance(target, ast.Attribute)
+                and target.attr == "__test__"
+                and isinstance(target.value, ast.Name)
+                and _test_flag(statement.value) is False
+            ):
+                names.add(target.value.id)
+    return names
+
+
+def _own_test_flag(body: list[ast.stmt]) -> bool | None:
+    """The ``__test__ = <constant>`` set directly in a module or class body, if any."""
+    flag = None
+    for statement in body:
+        if isinstance(statement, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "__test__" for target in statement.targets
+        ):
+            flag = _test_flag(statement.value)
+    return flag
+
+
 def expected_test_functions(source: str, module_id: str) -> list[str] | None:
     """The test functions pytest collects from one authoritative test module, statically.
 
     Mirrors pytest's default discovery: module-level ``test*`` functions and the
     ``test*`` methods of ``Test*`` classes without ``__init__`` (nested ones too,
-    and methods inherited from classes defined in the same module).  A
+    and methods inherited from classes defined in the same module), leaving out
+    what ``__test__ = False`` turns off: the module, a class (and classes that
+    inherit it without setting it back), or a function.  A
     parametrized function is one entry, without its ``[...]`` ids.  This reads
     host-side files only, never the candidate's code, so a candidate cannot
     change what is expected.  ``None`` when the module does not parse.
@@ -1085,29 +1151,48 @@ def expected_test_functions(source: str, module_id: str) -> list[str] | None:
         tree = ast.parse(source)
     except (SyntaxError, ValueError):
         return None
+    if _own_test_flag(tree.body) is False:
+        return []
     classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+    disabled = _disabled_names(tree.body)
     found: list[str] = []
+
+    def collected(cls: ast.ClassDef, visiting: frozenset[str]) -> bool:
+        # A class's own __test__ wins; otherwise it inherits the first module-local base's.
+        own = _own_test_flag(cls.body)
+        if own is not None:
+            return own
+        for base in cls.bases:
+            if isinstance(base, ast.Name) and base.id in classes and base.id not in visiting:
+                return collected(classes[base.id], visiting | {base.id})
+        return True
 
     def methods(cls: ast.ClassDef, visiting: frozenset[str]) -> dict[str, None]:
         names: dict[str, None] = {}
         for base in cls.bases:
             if isinstance(base, ast.Name) and base.id in classes and base.id not in visiting:
                 names.update(methods(classes[base.id], visiting | {base.id}))
+        off = _disabled_names(cls.body)
         for item in cls.body:
             if _is_test_function(item):
-                names[item.name] = None
+                if item.name in off:
+                    names.pop(item.name, None)
+                else:
+                    names[item.name] = None
         return names
 
     def visit_class(cls: ast.ClassDef, prefix: str, visiting: frozenset[str]) -> None:
+        if not collected(cls, visiting):
+            return
         found.extend(f"{prefix}::{name}" for name in methods(cls, visiting))
         for item in cls.body:
             if _is_test_class(item):
                 visit_class(item, f"{prefix}::{item.name}", visiting | {item.name})
 
     for node in tree.body:
-        if _is_test_function(node):
+        if _is_test_function(node) and node.name not in disabled:
             found.append(f"{module_id}::{node.name}")
-        elif _is_test_class(node):
+        elif _is_test_class(node) and node.name not in disabled:
             visit_class(node, f"{module_id}::{node.name}", frozenset({node.name}))
     return list(dict.fromkeys(found))
 
@@ -1186,7 +1271,9 @@ def _not_run(expected: list[str] | None, run: _PytestRun | None, reason: str | N
             why = reason
         elif run.timed_out:
             why = "timeout"
-        elif node in skipped:
+        elif node in skipped or any(
+            node.startswith(collector + "::") for collector in report.skipped_collectors
+        ):
             why = "skipped"
         elif covering is not None or set(report.collection_errors) == {""}:
             message = report.collection_errors[covering if covering is not None else ""]
