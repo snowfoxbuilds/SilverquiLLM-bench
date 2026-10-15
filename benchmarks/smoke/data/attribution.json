@@ -13,8 +13,8 @@
     "test_activation_shared_helpers.py::TestControllerSemantics": "fdn_709",
     "test_activation_shared_helpers.py::TestLeaveAndReturn": "fdn_122",
     "test_activation_shared_helpers.py::TestStintCapture": "fdn_122",
-    "test_card.py": "fdn_260",
-    "test_card_impl_ast_guard.py": "fdn_261",
+    "test_card.py": "fdn_186",
+    "test_card_impl_ast_guard.py": "fdn_171",
     "test_card_queries.py": "fdn_280",
     "test_cast_spell_free.py": "fdn_161",
     "test_cast_spell_free.py::TestCastSpellFreeCounterable": "fdn_153",
@@ -108,7 +108,7 @@
     "test_game.py::TestRunGame": "fdn_274",
     "test_game.py::TestSacrifice": "fdn_62",
     "test_game.py::TestTapUntap": "fdn_38",
-    "test_game_state.py": "fdn_263",
+    "test_game_state.py": "fdn_206",
     "test_game_state.py::TestAdvancePhaseSequence": "fdn_272",
     "test_game_state.py::TestEmptyManaPools": "fdn_278",
     "test_game_state.py::TestGameStatePlayerProperties": "fdn_272",
@@ -147,8 +147,8 @@
     "test_protocol_targeting.py": "fdn_175",
     "test_protocol_targeting.py::TestQuerySpellTargetProtection": "spg_81",
     "test_queries.py": "fdn_280",
-    "test_refs_registry.py": "fdn_263",
-    "test_registry_loader.py": "fdn_261",
+    "test_refs_registry.py": "fdn_206",
+    "test_registry_loader.py": "fdn_171",
     "test_replacement_effects.py": "fdn_244",
     "test_stack.py": "fdn_110",
     "test_stack.py::TestCheckStateBasedActions": "fdn_150",
@@ -195,10 +195,10 @@
     "test_turn_history.py::test_creature_dying_records_creature_died_this_turn": "fdn_108",
     "test_turn_history.py::test_declaring_an_attacker_records_attacked_this_turn": "fdn_87",
     "test_turn_history.py::test_permanent_that_does_not_untap_stays_tapped": "fdn_94",
-    "test_types.py": "fdn_260",
+    "test_types.py": "fdn_186",
     "test_x_costs.py": "fdn_236",
     "test_zone_change.py": "fdn_122",
-    "test_zones.py": "fdn_263"
+    "test_zones.py": "fdn_206"
   },
   "fdn": {}
 }
