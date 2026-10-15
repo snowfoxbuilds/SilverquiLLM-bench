@@ -135,7 +135,7 @@ A parametrized function counts once, and it ran if any of its cases ran.
 | `collection_interrupted` | Another module's collection error stopped the suite before anything ran |
 | `timeout` | The suite hit its time limit; a timed-out suite keeps no results |
 | `skipped` | The function was skipped or marked xfail at run time |
-| `pytest_exited` | pytest did not run its session to the end (a crash, or `os._exit` with any exit status) before reporting the function |
+| `pytest_exited` | pytest did not run its session to the end (a crash, `os._exit` with any exit status, an interruption such as `KeyboardInterrupt` or `pytest.exit`, or an internal error) before reporting the function |
 | `not_reported` | pytest ran its session to the end without reporting the function |
 | `grading_support_missing` | Authoritative grading support was absent, so the suite never ran |
 | `candidate_code_missing` | The candidate's engine or cards directory was absent, so the suite never ran |
@@ -147,8 +147,8 @@ A parametrized function that did not run counts once, since its case ids are not
 `grading_support_missing` is the exception: a suite the bench could not grade stays unevaluated, because an absent evaluation is different from an evaluated implementation scoring zero.
 A card whose tests all failed to run is therefore scored, at zero, rather than left uncovered; the Combined Regression already counts a baseline-passing node that did not run as regressed.
 Each card's own `tests_passed`, `tests_failed` and `tests_total` stay pytest's raw counts of the nodes that ran; the dimension totals and pass rates apply this rule.
-A grade whose suite reported errors other than test failures is incomplete, and that includes pytest not running its session to the end (a crash, or `os._exit`), recorded as the error `pytest_exited: exit status N`; the nodes that ran before it keep their outcomes.
-The grader's reporter records the end of each session with a value generated for that grading, so an exit status alone never makes a suite look finished: a candidate that calls `os._exit(0)`, `os._exit(1)` or `os._exit(5)` mid-suite still leaves it incomplete.
+A grade whose suite reported errors other than test failures is incomplete, and that includes pytest not running its session to the end (a crash, `os._exit`, an interruption such as `KeyboardInterrupt` or `pytest.exit`, or an internal error), recorded as the error `pytest_exited: exit status N`; the nodes that ran before it keep their outcomes.
+The grader's reporter records the end of each session with a value generated for that grading, so an exit status alone never makes a suite look finished: a candidate that calls `os._exit(0)`, `os._exit(1)` or `os._exit(5)`, or `pytest.exit` with any status, mid-suite still leaves it incomplete. The reporter withholds that record after an interruption or an internal error, and an exit status other than 0, 1 or 5 makes a suite incomplete even with the record present; pytest's own stop after collection errors (status 2) keeps its collection-error diagnosis instead.
 Each failing node also keeps a failure message: one printable line of at most 240 characters with object addresses masked, and at most 128 KiB per grade of message mappings as they encode in JSON, node ids and separators included, later ones dropped.
 Not-run reasons and failure messages are diagnostics; only the not-run count enters a score.
 Grades written before this rule count only the nodes that ran, so compare scores only across grades on the same grading code; a regrade applies the rule to an older record.

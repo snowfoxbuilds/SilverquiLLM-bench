@@ -666,7 +666,11 @@ def _generate_report_plugin(report_jsonl_path: str, session_token: str = "") -> 
     At session finish it writes one completion row carrying *session_token*, a
     per-run random value; a session cut short (``os._exit``, a crash) never
     reaches that hook, so the missing row marks the suite as ended early whatever
-    exit status the process reported.
+    exit status the process reported.  pytest also runs that hook after an
+    interruption (``KeyboardInterrupt``, ``pytest.exit``) or an internal error, so
+    the plugin withholds the row once ``pytest_keyboard_interrupt`` or
+    ``pytest_internalerror`` has fired — except for pytest's own orderly stop
+    after collection errors, which keeps its more specific diagnosis.
 
     The JSONL file path is baked into the source as a literal string so no
     env-var plumbing is needed.
@@ -680,6 +684,8 @@ _REPORT_PATH = "{safe_path}"
 _SESSION_TOKEN = "{session_token}"
 _LIMIT = {FAILURE_MESSAGE_LIMIT * 4}
 _seen_nodes = set()
+_collection_failed = False
+_interrupted = False
 
 def _message(report):
     text = None
@@ -728,12 +734,30 @@ def pytest_runtest_logreport(report):
 
 def pytest_collectreport(report):
     """Record collection errors."""
+    global _collection_failed
     if report.failed:
+        _collection_failed = True
         nodeid = report.nodeid or "<collection-error>"
         _write({{"nodeid": nodeid, "when": "collect", "outcome": "fail", "message": _message(report)}})
 
+def pytest_keyboard_interrupt(excinfo):
+    """An interruption (KeyboardInterrupt, pytest.exit) means the session did not finish."""
+    global _interrupted
+    value = excinfo.value
+    # pytest itself stops with Session.Interrupted after collection errors: an orderly end.
+    if _collection_failed and type(value).__name__ == "Interrupted" and "during collection" in str(value):
+        return
+    _interrupted = True
+
+def pytest_internalerror(excrepr, excinfo):
+    """An internal error means the session did not finish."""
+    global _interrupted
+    _interrupted = True
+
 def pytest_sessionfinish(session, exitstatus):
     """Record that the session ran to its end; never a test node."""
+    if _interrupted:
+        return
     _write({{"when": "session", "outcome": "complete", "token": _SESSION_TOKEN}})
 '''
 
@@ -955,13 +979,19 @@ def _run_pytest(
             else _Report()
         )
         if report_jsonl_path is not None:
-            ended_early = not report.completed
+            # A completion row never overrides an abnormal exit; pytest's orderly stop after
+            # collection errors (status 2 with collection errors recorded) is not one.
+            abnormal = result.returncode not in _PYTEST_ORDERLY_EXITS and not (
+                result.returncode == 2 and report.collection_errors
+            )
+            ended_early = not report.completed or abnormal
         else:
             ended_early = result.returncode not in _PYTEST_ORDERLY_EXITS and all(
                 error.startswith("FAILED ") for error in errors
             )
         if ended_early:
-            # pytest did not finish its session (a crash, os._exit): the grade must not look complete.
+            # pytest did not finish its session (a crash, os._exit, an interruption or an
+            # internal error): the grade must not look complete.
             errors.append(f"pytest_exited: exit status {result.returncode}")
         # test_nodes enumerates only executed pass/fail nodes.  Skipped and
         # xfail tests are intentionally omitted, so len(test_nodes) may be

@@ -835,6 +835,137 @@ def test_a_card_suite_cut_short_with_an_orderly_status_is_incomplete(tmp_path, s
     assert f"pytest_exited: exit status {status}" in decoded.errors
 
 
+_INTERRUPTIONS = {
+    "keyboard_interrupt": "raise KeyboardInterrupt",
+    "pytest_exit_default": "pytest.exit('stop')",
+    "pytest_exit_0": "pytest.exit('stop', returncode=0)",
+    "pytest_exit_1": "pytest.exit('stop', returncode=1)",
+    "pytest_exit_5": "pytest.exit('stop', returncode=5)",
+    "system_exit_0": "raise SystemExit(0)",
+}
+
+
+def _interrupting(statement: str, after_a_pass: bool) -> str:
+    if after_a_pass:
+        return f"""\
+            import pytest
+
+            def test_first():
+                pass
+
+            def test_stops():
+                {statement}
+
+            def test_after():
+                pass
+        """
+    return f"""\
+        import pytest
+
+        {statement}
+
+        def test_first():
+            pass
+
+        def test_stops():
+            pass
+
+        def test_after():
+            pass
+    """
+
+
+# Inside a test, SystemExit is an ordinary test failure; only at import does it stop pytest.
+_INTERRUPTION_CASES = [
+    pytest.param(statement, after, id=f"{name}-{'after_a_pass' if after else 'before_any_test'}")
+    for name, statement in _INTERRUPTIONS.items()
+    for after in (False, True)
+    if not (name == "system_exit_0" and after)
+]
+# pytest.exit at import is reported as that module's collection error, a more specific diagnosis.
+_STOPPED_REASONS = {"pytest_exited", "collection_error", "collection_interrupted"}
+
+
+def _stopped(errors: list[str]) -> bool:
+    return any(error.startswith(("pytest_exited: exit status ", "ERROR ")) for error in errors)
+
+
+@pytest.mark.parametrize("statement", ["raise KeyboardInterrupt", "pytest.exit('stop', returncode=0)"])
+def test_an_interruption_after_a_pass_reports_pytest_exited(tmp_path, statement):
+    expected, run = _run(tmp_path, _interrupting(statement, after_a_pass=True))
+    assert not run.report.completed and run.ended_early
+    assert f"pytest_exited: exit status {run.returncode}" in run.errors
+    assert {row["reason"] for row in _not_run(expected, run)} == {"pytest_exited"}
+
+
+@pytest.mark.parametrize(("statement", "after_a_pass"), _INTERRUPTION_CASES)
+def test_an_interrupted_engine_suite_is_incomplete(tmp_path, statement, after_a_pass):
+    engine = _engine(tmp_path, {"test_e.py": _interrupting(statement, after_a_pass)})
+    assert _stopped(engine.errors), engine.errors
+    passed, total, complete = _engine_score(engine, tmp_path)
+    assert (passed, total, complete) == (1 if after_a_pass else 0, 3, False)
+    assert {row["reason"] for row in engine.not_run} <= _STOPPED_REASONS
+    decoded = _host_round_trip(engine=engine).engine_result
+    assert _engine_score(decoded, tmp_path) == (passed, 3, False)
+
+
+@pytest.mark.parametrize(("statement", "after_a_pass"), _INTERRUPTION_CASES)
+def test_an_interrupted_card_suite_is_incomplete(tmp_path, statement, after_a_pass):
+    from silverquillm.karn.execution import _suite_counts
+
+    card = _card(tmp_path, _interrupting(statement, after_a_pass))
+    assert _stopped(card.errors), card.errors
+    assert _suite_counts(card) == (1 if after_a_pass else 0, 3)
+    assert {row["reason"] for row in card.not_run} <= _STOPPED_REASONS
+    decoded = _host_round_trip(card=card).sos_results["hob_1"]
+    assert _stopped(decoded.errors)
+
+
+def test_an_internal_error_is_incomplete(tmp_path):
+    _, run = _run(tmp_path, _interrupting("raise SystemExit(0)", after_a_pass=False))
+    assert not run.report.completed and run.ended_early
+    assert f"pytest_exited: exit status {run.returncode}" in run.errors
+
+
+def test_a_completion_row_never_overrides_an_abnormal_exit(tmp_path):
+    """A completion row written before an abnormal exit status does not make the suite complete."""
+    _, run = _run(tmp_path, """\
+        import os
+        import sys
+
+        def test_first():
+            pass
+
+        def test_forges_completion_then_exits():
+            reporter = next(
+                module for name, module in sys.modules.items()
+                if name.startswith("_silverquillm_node_report_")
+            )
+            reporter._write({"when": "session", "outcome": "complete", "token": reporter._SESSION_TOKEN})
+            os._exit(2)
+    """)
+    assert run.report.completed and run.returncode == 2
+    assert run.ended_early
+    assert "pytest_exited: exit status 2" in run.errors
+
+
+def test_a_regrade_keeps_an_interrupted_suite_incomplete(tmp_path):
+    from silverquillm.karn.records import validate_scores
+
+    engine = _engine(tmp_path, {"test_e.py": _interrupting("pytest.exit('stop', returncode=0)", True)})
+    scores = _dimensions(engine, tmp_path)
+    validate_scores(scores)
+    assert scores["engine_regression"]["complete"] is False
+
+
+def test_pytests_own_stop_after_collection_errors_keeps_its_diagnosis(tmp_path):
+    expected, run = _run(tmp_path, "import missing_module_for_the_test\n\ndef test_a():\n    pass\n")
+    assert run.report.collection_errors
+    assert run.report.completed and not run.ended_early
+    assert not any(error.startswith("pytest_exited") for error in run.errors)
+    assert {row["reason"] for row in _not_run(expected, run)} == {"import_error"}
+
+
 def test_a_regrade_keeps_a_cut_short_suite_incomplete(tmp_path):
     from silverquillm.karn import regrade as regrade_module
     from silverquillm.karn.execution import _scores
