@@ -24,6 +24,7 @@ from silverquillm.evaluator import (
     _run_pytest,
     expected_suite_functions,
     expected_test_functions,
+    failure_message_cost,
 )
 from silverquillm.karn.grader import GraderError, evaluation_from_json
 
@@ -302,9 +303,23 @@ def test_messages_past_the_evaluation_budget_are_dropped():
     }
     result = FullEvalResult(sos_results=cards)
     _apply_message_budget(result)
-    kept = sum(len(m) for card in cards.values() for m in card.failure_messages.values())
+    kept = sum(
+        failure_message_cost(m) for card in cards.values() for m in card.failure_messages.values()
+    )
     assert kept <= FAILURE_MESSAGE_BUDGET
     assert cards["c0"].failure_messages and not cards["c2"].failure_messages
+
+
+def test_the_budget_counts_escaped_bytes_not_characters():
+    wide = "\u00e9" * FAILURE_MESSAGE_LIMIT
+    card = CardResult(
+        collector_number="c",
+        failure_messages={f"tests.py::t{n}": wide for n in range(FAILURE_MESSAGE_BUDGET // FAILURE_MESSAGE_LIMIT)},
+    )
+    result = FullEvalResult(sos_results={"c": card})
+    _apply_message_budget(result)
+    assert len(json.dumps(card.failure_messages)) <= FAILURE_MESSAGE_BUDGET + 64 * len(card.failure_messages)
+    assert sum(map(failure_message_cost, card.failure_messages.values())) <= FAILURE_MESSAGE_BUDGET
 
 
 # ---------------------------------------------------------------------------

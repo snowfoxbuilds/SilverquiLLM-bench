@@ -630,7 +630,7 @@ def _prepare_engine_work(
 
 
 # A failure message is a short diagnostic, never part of a score: candidate code shapes
-# it, so it is bounded per node here and per evaluation by ``_apply_message_budget``.
+# it, so it is bounded per node in characters and per evaluation in encoded bytes.
 FAILURE_MESSAGE_LIMIT = 240
 FAILURE_MESSAGE_BUDGET = 128 * 1024
 NOT_RUN_REASONS = frozenset({
@@ -1119,8 +1119,13 @@ def _failure_messages(run: _PytestRun) -> dict[str, str]:
     }
 
 
+def failure_message_cost(message: str) -> int:
+    """Bytes a message takes in the worker's ASCII-escaped JSON output."""
+    return len(json.dumps(message))
+
+
 def _apply_message_budget(result: FullEvalResult) -> None:
-    """Drop failure messages past ``FAILURE_MESSAGE_BUDGET`` characters per evaluation."""
+    """Drop failure messages past ``FAILURE_MESSAGE_BUDGET`` encoded bytes per evaluation."""
     remaining = FAILURE_MESSAGE_BUDGET
     holders = [
         *(result.sos_results[key] for key in sorted(result.sos_results)),
@@ -1131,10 +1136,11 @@ def _apply_message_budget(result: FullEvalResult) -> None:
         kept = {}
         for node in sorted(holder.failure_messages):
             message = _bounded_message(holder.failure_messages[node])
-            if len(message) > remaining:
+            cost = failure_message_cost(message)
+            if not message or cost > remaining:
                 remaining = 0
                 continue
-            remaining -= len(message)
+            remaining -= cost
             kept[node] = message
         holder.failure_messages = kept
 

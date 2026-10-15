@@ -36,6 +36,7 @@ from silverquillm.evaluator import (
     EngineResult,
     FullEvalResult,
     _prepare_engine_work,
+    failure_message_cost,
     resolve_eval_paths,
 )
 from silverquillm.grade_worker import EVALUATION_SENTINEL
@@ -644,7 +645,7 @@ def _gaps(value: dict, nodes: list[dict]) -> dict:
             and 0 < len(message) <= FAILURE_MESSAGE_LIMIT
             for node, message in messages.items()
         )
-        or sum(map(len, messages.values())) > FAILURE_MESSAGE_BUDGET
+        or sum(map(failure_message_cost, messages.values())) > FAILURE_MESSAGE_BUDGET
     ):
         raise GraderError("evaluation_invalid_failure_messages")
     return {
@@ -717,7 +718,10 @@ def evaluation_from_json(raw: bytes) -> FullEvalResult:
         for holder in (*result.sos_results.values(), *result.fdn_results.values(),
                        result.engine_result)
     ]  # fmt: skip
-    if sum(len(text) for mapping in messages for text in mapping.values()) > FAILURE_MESSAGE_BUDGET:
+    if (
+        sum(failure_message_cost(text) for mapping in messages for text in mapping.values())
+        > FAILURE_MESSAGE_BUDGET
+    ):
         raise GraderError("evaluation_invalid_failure_messages")
     result.compute_aggregates()
     return result
