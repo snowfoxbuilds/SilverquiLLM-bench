@@ -19,6 +19,7 @@ from silverquillm.attribution import (
     load_attribution,
 )
 from silverquillm.evaluator import expected_suite_functions, expected_test_functions
+from silverquillm.known_defects import load_known_defects
 from silverquillm.tools.oracle_support import load_layout
 
 REPO = Path(__file__).resolve().parents[1]
@@ -166,12 +167,24 @@ def test_every_attribution_key_names_an_audited_test(benchmark: str) -> None:
 
 @pytest.mark.parametrize("benchmark", SCORED)
 def test_every_related_known_defect_names_a_host_card(benchmark: str) -> None:
-    root = REPO / "benchmarks" / benchmark
-    manifest = json.loads((root / "data/known_defects.json").read_text())
+    manifest = load_known_defects(REPO / "benchmarks" / benchmark)
+    assert manifest is not None and manifest.schema_version == 2
     _, hosts, _ = _audited(benchmark)
-    unhosted = [
-        defect["id"]
-        for defect in manifest["defects"]
-        if defect.get("target_tests") and defect.get("host_card") not in hosts
+    assert [defect.id for defect in manifest.defects if defect.related and defect.host_card not in hosts] == []
+    assert [defect.id for defect in manifest.defects if not defect.related and defect.host_card is not None] == []
+
+
+@pytest.mark.parametrize("benchmark", SCORED)
+def test_a_related_defects_mechanic_shares_its_host_card(benchmark: str) -> None:
+    """A mechanic's Collateral Tests and its own Known Defect's Dependency Tests are one
+    mechanic on one card, so the defect's engine tests are attributed to its host card."""
+    root = REPO / "benchmarks" / benchmark
+    attribution, manifest = load_attribution(root), load_known_defects(root)
+    elsewhere = [
+        f"{defect.id}: {test_id} -> {attribution.card('engine', test_id)}, not {defect.host_card}"
+        for defect in manifest.defects
+        if defect.related
+        for test_id in defect.failing_tests.get("engine", ())
+        if attribution.card("engine", test_id) != defect.host_card
     ]
-    assert unhosted == []
+    assert elsewhere == []
