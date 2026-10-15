@@ -246,6 +246,17 @@ It refuses a run whose container is still running unless `--stop` is given, and 
 Recovering an already recovered run returns the existing record.
 SIGTERM and SIGHUP interrupt `run`, `scheduler`, and `recover` like Ctrl-C, so the workload is stopped and the interrupted outcome recorded; a grading or probe container in progress is killed and removed rather than left running.
 The scheduler stops dispatching, interrupts its active workers, and waits for them to finish cleanup and state updates before releasing the queue lock.
+One worker that is interrupted, or one run that ends `interrupted`, stops the whole scheduler the same way.
+
+To stop launching without interrupting anything, pause or drain instead of signalling:
+
+```bash
+silverquillm queue pause    # no new runs; runs in flight finish; the scheduler keeps serving
+silverquillm queue drain    # pause, and the scheduler exits 0 once no run is in flight
+silverquillm queue resume   # launch again (start the scheduler again after a drain)
+```
+
+Both persist in the batch directory's `control.json` across scheduler restarts until `queue resume`, and `queue ls` and `top` show them. A finished drain leaves dispatch paused.
 
 ### Recovery guarantees
 

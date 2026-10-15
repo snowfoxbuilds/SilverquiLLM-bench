@@ -128,6 +128,62 @@ def read_ledger(directory: Path) -> list[dict] | None:
         raise KarnError("queue_ledger_invalid") from None
 
 
+# The dispatch control: whether the scheduler may launch new runs. Written by the operator's
+# ``queue pause|drain|resume``; the scheduler only turns a finished drain into a pause.
+CONTROL_FILENAME = "control.json"
+DISPATCH_MODES = ("running", "paused", "draining")
+
+
+def read_control(directory: Path) -> dict:
+    """The directory's dispatch mode: ``running`` without a control file.
+
+    A control file that cannot be read means someone meant to stop dispatch, so it reads as
+    ``paused`` with an ``error``; it never reads as ``running``.
+    """
+    path = Path(directory) / CONTROL_FILENAME
+    if not path.exists() and not path.is_symlink():
+        return {"mode": "running", "since": None}
+    try:
+        if path.is_symlink() or not path.is_file():
+            raise ValueError
+        value = json.loads(path.read_text())
+        if (
+            value.get("schema_version") != 1
+            or value.get("mode") not in ("paused", "draining")
+            or not isinstance(value.get("since"), str)
+        ):
+            raise ValueError
+        return {"mode": value["mode"], "since": value["since"]}
+    except (OSError, ValueError, AttributeError, RecursionError):
+        return {"mode": "paused", "since": None, "error": "dispatch_control_invalid"}
+
+
+def write_control(directory: Path, mode: str) -> dict:
+    """Set the dispatch mode; ``running`` removes the control file."""
+    if mode not in DISPATCH_MODES:
+        raise KarnError("dispatch_mode_invalid:" + mode)
+    directory = Path(directory)
+    path = directory / CONTROL_FILENAME
+    if mode == "running":
+        with contextlib.suppress(FileNotFoundError):
+            path.unlink()
+        return read_control(directory)
+    if not directory.is_dir():
+        raise KarnError("batches_dir_missing")
+    if path.is_symlink():
+        path.unlink()
+    current = read_control(directory)
+    # Pausing a drain, or draining again, keeps the time dispatch first stopped.
+    since = current["since"] if current["mode"] != "running" and current["since"] else None
+    value = {
+        "schema_version": 1,
+        "mode": mode,
+        "since": since or datetime.now(UTC).isoformat(),
+    }
+    _write_atomically(path, json.dumps(value, indent=2) + "\n", prefix=".karn-control-")
+    return read_control(directory)
+
+
 def queue_order(names, ledger: list[dict] | None) -> list[str]:
     """Queue order: the ledger's order, then Batches it has not recorded yet in name order."""
     rank = {entry["batch"]: index for index, entry in enumerate(ledger or ())}
@@ -280,6 +336,9 @@ class KarnScheduler:
         self.dispatch_blocked: str | None = None
         # Replay acknowledgements whose ledger write failed; dispatch stays blocked until saved.
         self.unsaved_acknowledgements: set[str] = set()
+        # Set when a pass ends because a drain finished: no run is in flight any more.
+        self.drained = False
+        self.dispatch_mode = "running"
         # Login pools that could serve no entry during the latest pass, by batch.
         self.unavailable_logins: dict[str, str] = {}
 
@@ -377,11 +436,35 @@ class KarnScheduler:
             self._save_ledger(entries)
         return entries
 
+    def _dispatch_open(self) -> bool:
+        """Whether new runs may launch; each change of dispatch mode is logged once."""
+        control = read_control(self.directory)
+        mode = control["mode"] + (f" ({control['error']})" if control.get("error") else "")
+        if mode != self.dispatch_mode:
+            self.dispatch_mode = mode
+            if control["mode"] != "running" or control.get("error"):
+                logging.getLogger(__name__).warning(
+                    "dispatch %s: no new run is launched until `queue resume`", mode
+                )
+            else:
+                logging.getLogger(__name__).info("dispatch running")
+        return control["mode"] == "running"
+
+    def _finish_drain(self) -> None:
+        """A drain whose in-flight runs have all finished stays paused across restarts."""
+        if read_control(self.directory)["mode"] == "draining":
+            write_control(self.directory, "paused")
+            logging.getLogger(__name__).warning(
+                "drain finished: no run is in flight; dispatch stays paused until `queue resume`"
+            )
+
     def run_until_idle(self) -> int:
         """One pass; when nothing ran only because no login could serve it, that is an error."""
         self._require_package()
         with SchedulerLock(self.directory):
             count = self._run_locked()
+            if self.drained:
+                self._finish_drain()
         if self.dispatch_blocked:
             # Idle because the ledger stopped every dispatch is not idle: --once must fail.
             raise KarnError(self.dispatch_blocked)
@@ -484,6 +567,7 @@ class KarnScheduler:
         self.replay -= set(states)
         self.unavailable_logins = {}
         self.dispatch_blocked = None
+        self.drained = False
         active = {}
         deferred = {}
         count = 0
@@ -569,14 +653,24 @@ class KarnScheduler:
                         )
                         if value is None:
                             admitted = admitted and not unpooled_live()
+                        if admitted and interrupted is None and not self._dispatch_open():
+                            # A paused entry stays pending: it retries once dispatch reopens.
+                            job["held"] = True
+                            admitted = False
                         acknowledge(worker, admitted and interrupted is None)
                     elif kind == "launch":
-                        if interrupted is None:
+                        admitted = interrupted is None and self._dispatch_open()
+                        if admitted:
                             launch(job)
-                        acknowledge(worker, interrupted is None)
+                        elif interrupted is None:
+                            job["held"] = True
+                        acknowledge(worker, admitted)
                         job["probing"] = False
                     elif kind in ("busy", "unavailable"):
-                        deferred[job["name"]] = value.rsplit(":", 1)[-1]
+                        # A refusal for a closed dispatch is no pool's fault: retry on the timer.
+                        deferred[job["name"]] = (
+                            None if job.get("held") else value.rsplit(":", 1)[-1]
+                        )
                         if kind == "unavailable":
                             self.unavailable_logins[job["name"]] = value
                             self._warn(f"{job['name']}: {value}; entries stay pending")
@@ -641,6 +735,8 @@ class KarnScheduler:
 
         def dispatch():
             nonlocal ledger
+            if not self._dispatch_open():
+                return False
             try:
                 ledger = self._sync_ledger()
             except (KarnError, OSError) as error:
@@ -745,6 +841,7 @@ class KarnScheduler:
                     if dispatch():
                         continue
                 if not active:
+                    self.drained = read_control(self.directory)["mode"] == "draining"
                     break
                 wait(
                     [job["worker"].connection for job in active.values()],
@@ -777,4 +874,7 @@ class KarnScheduler:
         with SchedulerLock(self.directory):
             while True:
                 self._run_locked()
+                if self.drained:
+                    self._finish_drain()
+                    return
                 self._pause(poll_seconds)

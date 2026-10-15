@@ -8,6 +8,7 @@ Operator instructions live in [Karn benchmarking](../docs/KARN-BENCHMARKING.md).
   Batch ids are one-shot: the state file records what ran under that id, so write a new file instead of reusing one; a renamed file is a new Batch.
 - **`state/<id>.json`** — the scheduler's observed state for that Batch (schema 2), written atomically after every transition.
 - **`queue.json`** — the queue ledger: every Batch the scheduler has recorded here, in queue order, and whether it was acknowledged. Written only by the scheduler; never edit it.
+- **`control.json`** — present only while dispatch is paused or draining. Written by `silverquillm queue pause|drain|resume`; never edit it by hand.
 
 All of these are host-local operational files, backed up with the host's raw data and never published.
 
@@ -44,6 +45,20 @@ The file is reread before every not-yet-started entry, so appending entries to a
 - An entry with no eligible slot stays pending, along with later entries in its batch. It counts as started only after claiming a slot.
 - All runs left `running` by a crashed or killed scheduler are checked for recovery; runs still owned by a live worker are deferred. An unowned run that never wrote its run input is recorded as failed with `interrupted_before_launch`.
 - A record that could not be written in time is marked `record_write_pending` and written on the scheduler's next start or by `silverquillm recover`.
+
+## Pause, drain, resume and interrupt
+
+| Command | New runs | Runs in flight | Scheduler |
+| --- | --- | --- | --- |
+| `silverquillm queue pause` | none launch | finish normally | keeps serving; recovery and pending publications continue |
+| `silverquillm queue drain` | none launch | finish grading and recording | exits 0 once none is in flight, and leaves dispatch paused |
+| `silverquillm queue resume` | launch again | — | a paused scheduler resumes; a drained one must be started again |
+| Ctrl-C, SIGTERM, SIGHUP | none launch | interrupted and recorded as `interrupted` | exits after their cleanup |
+
+Pause and drain work from any shell or agent, whether or not a scheduler is running, and persist across restarts; `queue ls` and `top` show them.
+A run already past its login selection when a pause lands is refused at launch and its entry stays pending.
+An unreadable `control.json` reads as paused, never as running.
+Interrupting one worker process interrupts the whole scheduler: a run that ends `interrupted`, or a worker reporting an interrupt, stops dispatch and interrupts the other runs too, because a service stop or terminal hangup reaches workers and scheduler in no fixed order. To stop launching, use `queue pause` or `queue drain`, never a signal.
 
 The [Karn Benchmark Contract](../docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records) defines dispatch, recovery, and shutdown behavior, including the single concurrent run allowed for candidates without a login plugin.
 

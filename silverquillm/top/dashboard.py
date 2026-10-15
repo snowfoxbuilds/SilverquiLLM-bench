@@ -569,6 +569,10 @@ class QueuedPane(VerticalScroll):
         if not lines:
             lines.append(Text("nothing queued", style=muted))
         self.border_subtitle = f"{total} runs"
+        title = f"{theme.glyph('queued')} QUEUED"
+        if snapshot.dispatch != "running":
+            title += f" — {snapshot.dispatch.upper()}"
+        self.border_title = title
         # One line per entry: a long candidate is cut at the pane's edge rather than wrapped,
         # at whatever width the pane has when drawn.
         body = Text("\n").join(lines)

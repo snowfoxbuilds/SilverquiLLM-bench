@@ -38,7 +38,7 @@ from .live import LiveRun, RecordCache, Stage, live_runs, run_candidate_hash
 from .locks import PROC_LOCKS, held_locks
 from .output import LogFollower, LogLine, live_codex_reading, profile_redactions, retained_lines
 from .pools import ProfileStatus, login_profiles
-from .queue import QueuedBatch, queued_batches
+from .queue import QueuedBatch, dispatch_mode, queued_batches
 
 CODEX_READING_SECONDS = 30.0
 HISTORY_SECONDS = 10.0
@@ -113,6 +113,8 @@ class MonitorSnapshot:
     records: Mapping[str, RunSummary] = field(default_factory=dict)
     """The validated record that applies to each local execution this pass, Finished or not,
     keyed by the execution's run id: the record a run details view takes its facts from."""
+    dispatch: str = "running"
+    """The queue's dispatch mode: ``running``, ``paused`` or ``draining``."""
 
 
 @dataclass
@@ -400,6 +402,7 @@ class Monitor:
         history = self.history()
         views = [self._view(run, history, now) for run in runs]
         queued = queued_batches(self.path("batches_dir"))
+        dispatch = dispatch_mode(self.path("batches_dir"))
         recent = now - FINISHED_WINDOW
         counts = Counts(
             queued=sum(
@@ -423,6 +426,7 @@ class Monitor:
             exclusion_error=self.history_store.exclusion_error,
             host_label=self.host_label,
             records=self._records.applicable_by_run(),
+            dispatch=dispatch,
         )
 
     def output(self, run_id: str, stream: str | None = None, since: int = 0) -> list[LogLine]:

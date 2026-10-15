@@ -465,7 +465,7 @@ def grading_inputs_command(benchmark_id, bench_root):
 
 @click.group()
 def queue():
-    """Inspect the batch queue."""
+    """Inspect the batch queue, and pause, drain or resume its dispatch."""
 
 
 @queue.command("ls")
@@ -473,15 +473,64 @@ def queue():
 @click.option("--json", "as_json", is_flag=True, help="Print the raw queue rows as JSON.")
 def queue_ls(batches_dir, as_json):
     """Show every batch, including interrupted, partially observed and unsupported ones."""
-    from .batching import queue_rows
+    from .batching import queue_rows, read_control
     from .queue_view import render_rows
 
     rows = queue_rows(batches_dir)
     if as_json:
         click.echo(json.dumps(rows, sort_keys=True))
         return
+    control = read_control(batches_dir)
+    if control["mode"] != "running":
+        click.echo(_dispatch_line(control))
     for line in render_rows(rows):
         click.echo(line)
+
+
+def _dispatch_line(control: dict) -> str:
+    line = "dispatch: " + control["mode"]
+    if control.get("since"):
+        line += f" since {control['since']}"
+    if control.get("error"):
+        line += f" ({control['error']}; `queue resume` or `queue pause` rewrites it)"
+    return line
+
+
+def _set_dispatch(batches_dir, mode: str) -> None:
+    from .batching import write_control
+
+    try:
+        control = write_control(batches_dir, mode)
+    except (KarnError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+    click.echo(_dispatch_line(control))
+
+
+@queue.command("pause")
+@BATCHES_DIR_OPTION
+def queue_pause(batches_dir):
+    """Stop launching new runs; runs in flight continue, and the scheduler keeps serving.
+
+    The pause persists across scheduler restarts until `queue resume`.
+    """
+    _set_dispatch(batches_dir, "paused")
+
+
+@queue.command("drain")
+@BATCHES_DIR_OPTION
+def queue_drain(batches_dir):
+    """Pause, then stop the scheduler once every run in flight is graded and recorded.
+
+    The scheduler exits 0 when the drain finishes and leaves dispatch paused.
+    """
+    _set_dispatch(batches_dir, "draining")
+
+
+@queue.command("resume")
+@BATCHES_DIR_OPTION
+def queue_resume(batches_dir):
+    """Let a paused scheduler launch new runs again; a drained one must be started again."""
+    _set_dispatch(batches_dir, "running")
 
 
 def _monitor_location(key: str, help: str):
