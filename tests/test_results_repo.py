@@ -362,7 +362,7 @@ class TestWriteRunRecord:
         assert manifest["mode"] == "legacy"
         assert manifest["proposal_status"] is None
         assert manifest["artifact_pointers"] == record.artifact_pointers
-        assert set(scores) == set(rr.SCORE_DIMENSIONS)
+        assert set(scores) == set(rr.SCHEMA_1_SCORE_KEYS)
         assert scores["card_correctness"] == _scores()["card_correctness"]
 
     def test_refuses_overwrite_and_keeps_the_original(self, tmp_path: Path) -> None:
@@ -421,7 +421,7 @@ class TestWriteRunRecord:
         smoke_dir = rr.write_run_record(tmp_path, smoke)
         sos_scores = json.loads((sos_dir / "scores.json").read_text())
         smoke_scores = json.loads((smoke_dir / "scores.json").read_text())
-        assert set(sos_scores) == set(smoke_scores) == set(rr.SCORE_DIMENSIONS)
+        assert set(sos_scores) == set(smoke_scores) == set(rr.SCHEMA_1_SCORE_KEYS)
         manifest = json.loads((smoke_dir / "manifest.json").read_text())
         assert manifest["benchmark"] == "smoke"
         assert manifest["proposal_status"] == "applied"

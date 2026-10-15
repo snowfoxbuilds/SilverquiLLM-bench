@@ -1,4 +1,10 @@
-"""Schema 2 run observations; historical schema 1 remains unchanged."""
+"""Karn run observations, schema 3 and the schema 2 records before it; historical schema 1
+remains unchanged.
+
+Schema 3 differs from schema 2 only in naming (ADR-021): its scores name the suites
+``target``, ``fdn`` and ``engine``, and its run metadata carries the ``baseline_comparison``
+where schema 2 carried ``combined_regression``. Readers dispatch on the schema version.
+"""
 
 from __future__ import annotations
 
@@ -17,8 +23,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from silverquillm.known_defects import REGRESSION_DIMENSIONS
-from silverquillm.results_repo import InvalidRunRecordError, RunRecordExistsError
+from silverquillm.results_repo import (
+    RETIRED_SUITE_KEYS,
+    SUITES,
+    InvalidRunRecordError,
+    RunRecordExistsError,
+    suite_keys,
+)
 
 from .definition import DIGEST, SCHEMES, KarnError, canonical, decode_definition, digest
 from .observations import (
@@ -29,8 +40,10 @@ from .observations import (
 )
 from .provenance import valid as provenance_valid
 
-SCHEMA_VERSION = 2
-DIMENSIONS = ("card_correctness", "fdn_regression", "engine_regression")
+SCHEMA_VERSION = 3
+SCHEMA_VERSIONS = (2, 3)
+#: The suites the baseline comparison compares with the unmodified Workspace.
+COMPARED_SUITES = ("fdn", "engine")
 RECORD_LOCK_SECONDS = 120
 # Records from before grading followed the candidate's Python carry no versions.
 ISOLATION_FIELDS = (
@@ -141,6 +154,14 @@ class KarnRunRecord:
     def artifact_pointers(self):
         return self.manifest["artifact_pointers"]
 
+    @property
+    def suites(self) -> dict:
+        """Each suite's score by its current name, whatever the record's schema version."""
+        return {
+            suite: self.scores[key]
+            for suite, key in suite_keys(self.manifest["schema_version"]).items()
+        }
+
     def validate(self):
         required = {
             "schema_version",
@@ -155,9 +176,9 @@ class KarnRunRecord:
         if (
             set(self.manifest) != required
             or type(self.manifest["schema_version"]) is not int
-            or self.manifest["schema_version"] != 2
+            or self.manifest["schema_version"] not in SCHEMA_VERSIONS
         ):
-            raise InvalidRunRecordError("invalid schema 2 run manifest")
+            raise InvalidRunRecordError("invalid Karn run manifest")
         if not isinstance(self.run_id, str) or not re.fullmatch(
             r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", self.run_id
         ):
@@ -251,9 +272,20 @@ class KarnRunRecord:
                 or not all(isinstance(value, str) for value in pointer.values())
             ):
                 raise InvalidRunRecordError("invalid artifact pointer")
-        if "combined_regression" in self.run_metadata:
-            validate_combined_regression(self.run_metadata["combined_regression"])
-        validate_scores(self.scores)
+        version = self.manifest["schema_version"]
+        current, retired = (
+            ("baseline_comparison", "combined_regression")
+            if version >= 3
+            else ("combined_regression", "baseline_comparison")
+        )
+        if retired in self.run_metadata:
+            raise InvalidRunRecordError(f"schema {version} records carry no {retired}")
+        if current in self.run_metadata:
+            if version >= 3:
+                validate_baseline_comparison(self.run_metadata[current])
+            else:
+                _validate_schema_2_comparison(self.run_metadata[current])
+        validate_scores(self.scores, version)
 
 
 def validate_subagents(measurements) -> None:
@@ -297,17 +329,17 @@ def _bounded_label(value) -> bool:
     return isinstance(value, str) and 0 < len(value) <= SUBAGENT_LABEL_MAX
 
 
-def validate_scores(scores) -> None:
+def validate_scores(scores, schema_version: int = SCHEMA_VERSION) -> None:
     """Enforce the record score invariants on a ``scores.json``-shaped value."""
-    if not isinstance(scores, dict) or set(scores) != set(DIMENSIONS):
-        raise InvalidRunRecordError("invalid Karn score dimensions")
+    if not isinstance(scores, dict) or set(scores) != set(suite_keys(schema_version).values()):
+        raise InvalidRunRecordError("invalid Karn score suites")
     for score in scores.values():
         if (
             not isinstance(score, dict)
             or type(score.get("evaluated")) is not bool
             or type(score.get("complete")) is not bool
         ):
-            raise InvalidRunRecordError("invalid Karn dimension observation")
+            raise InvalidRunRecordError("invalid Karn suite observation")
         reasons = score.get("missing_reasons")
         if not isinstance(reasons, list) or not all(
             isinstance(reason, str) and reason for reason in reasons
@@ -337,7 +369,63 @@ def validate_scores(scores) -> None:
             raise InvalidRunRecordError("impossible grading counts or rate")
 
 
-COMBINED_REGRESSION_KEYS = frozenset(
+BASELINE_COMPARISON_KEYS = frozenset({"available", "fixed", "broken", "baseline"})
+BASELINE_KEY_FIELDS = frozenset(
+    {"grading_inputs_digest", "grading_code_digest", "workspace_digest", "grader_image_id"}
+)
+
+
+def _valid_baseline_key(baseline) -> bool:
+    return (
+        isinstance(baseline, dict)
+        and set(baseline) == BASELINE_KEY_FIELDS
+        and all(
+            isinstance(baseline[name], str) and DIGEST.fullmatch(baseline[name])
+            for name in ("grading_inputs_digest", "grading_code_digest", "workspace_digest")
+        )
+        and isinstance(baseline["grader_image_id"], str)
+        and bool(baseline["grader_image_id"])
+    )
+
+
+def _sorted_ids(listed) -> bool:
+    return (
+        isinstance(listed, list)
+        and all(isinstance(node, str) and node for node in listed)
+        and listed == sorted(set(listed))
+    )
+
+
+def _moved(value, suites) -> dict:
+    if not isinstance(value, dict) or set(value) != set(suites):
+        raise InvalidRunRecordError("invalid baseline comparison")
+    if not all(_sorted_ids(listed) for listed in value.values()):
+        raise InvalidRunRecordError("invalid baseline comparison")
+    return value
+
+
+def validate_baseline_comparison(value) -> None:
+    """Enforce the baseline comparison's shape (``SCORING.md`` → Run Record results)."""
+    if not isinstance(value, dict) or type(value.get("available")) is not bool:
+        raise InvalidRunRecordError("invalid baseline comparison")
+    if value["available"] is False:
+        if set(value) != {"available", "reason"} or not (
+            isinstance(value["reason"], str) and value["reason"]
+        ):
+            raise InvalidRunRecordError("invalid baseline comparison")
+        return
+    if set(value) != BASELINE_COMPARISON_KEYS:
+        raise InvalidRunRecordError("invalid baseline comparison")
+    fixed = _moved(value["fixed"], COMPARED_SUITES)
+    broken = _moved(value["broken"], COMPARED_SUITES)
+    if any(set(fixed[suite]) & set(broken[suite]) for suite in COMPARED_SUITES):
+        raise InvalidRunRecordError("invalid baseline comparison")
+    if not _valid_baseline_key(value["baseline"]):
+        raise InvalidRunRecordError("invalid baseline comparison")
+
+
+#: The block schema 2 records carried in place of the baseline comparison.
+SCHEMA_2_COMPARISON_KEYS = frozenset(
     {
         "available",
         "tests_passed",
@@ -350,52 +438,44 @@ COMBINED_REGRESSION_KEYS = frozenset(
         "baseline",
     }
 )
-COMBINED_REGRESSION_BASELINE = frozenset(
-    {"grading_inputs_digest", "grading_code_digest", "workspace_digest", "grader_image_id"}
-)
+SCHEMA_2_COMPARED_KEYS = tuple(RETIRED_SUITE_KEYS[suite] for suite in COMPARED_SUITES)
 
 
-def _score_counts(value) -> tuple[int, int]:
+def _schema_2_counts(value) -> tuple[int, int]:
     if not isinstance(value, dict) or set(value) != {"tests_passed", "tests_total"}:
-        raise InvalidRunRecordError("invalid combined regression")
+        raise InvalidRunRecordError("invalid schema 2 comparison")
     passed, total = value["tests_passed"], value["tests_total"]
     if type(passed) is not int or type(total) is not int or total <= 0 or not 0 <= passed <= total:
-        raise InvalidRunRecordError("invalid combined regression")
+        raise InvalidRunRecordError("invalid schema 2 comparison")
     return passed, total
 
 
-def _changed_tests(value) -> int:
+def _schema_2_changed(value) -> int:
     if not isinstance(value, dict) or set(value) != {"count", "test_nodes"}:
-        raise InvalidRunRecordError("invalid combined regression")
-    nodes = value["test_nodes"]
-    if not isinstance(nodes, dict) or set(nodes) != set(REGRESSION_DIMENSIONS):
-        raise InvalidRunRecordError("invalid combined regression")
-    for listed in nodes.values():
-        if (
-            not isinstance(listed, list)
-            or not all(isinstance(node, str) and node for node in listed)
-            or listed != sorted(set(listed))
-        ):
-            raise InvalidRunRecordError("invalid combined regression")
+        raise InvalidRunRecordError("invalid schema 2 comparison")
+    try:
+        nodes = _moved(value["test_nodes"], SCHEMA_2_COMPARED_KEYS)
+    except InvalidRunRecordError:
+        raise InvalidRunRecordError("invalid schema 2 comparison") from None
     count = value["count"]
     if type(count) is not int or count != sum(len(listed) for listed in nodes.values()):
-        raise InvalidRunRecordError("invalid combined regression")
+        raise InvalidRunRecordError("invalid schema 2 comparison")
     return count
 
 
-def validate_combined_regression(value) -> None:
-    """Enforce the Combined Regression block's shape (``SCORING.md``)."""
+def _validate_schema_2_comparison(value) -> None:
+    """Enforce the shape of the block a schema 2 record carries under its retired name."""
     if not isinstance(value, dict) or type(value.get("available")) is not bool:
-        raise InvalidRunRecordError("invalid combined regression")
+        raise InvalidRunRecordError("invalid schema 2 comparison")
     if value["available"] is False:
         if set(value) != {"available", "reason"} or not (
             isinstance(value["reason"], str) and value["reason"]
         ):
-            raise InvalidRunRecordError("invalid combined regression")
+            raise InvalidRunRecordError("invalid schema 2 comparison")
         return
-    if set(value) != COMBINED_REGRESSION_KEYS:
-        raise InvalidRunRecordError("invalid combined regression")
-    passed, total = _score_counts(
+    if set(value) != SCHEMA_2_COMPARISON_KEYS:
+        raise InvalidRunRecordError("invalid schema 2 comparison")
+    passed, total = _schema_2_counts(
         {"tests_passed": value["tests_passed"], "tests_total": value["tests_total"]}
     )
     rate = value["pass_rate"]
@@ -406,26 +486,17 @@ def validate_combined_regression(value) -> None:
         or not math.isfinite(rate)
         or not math.isclose(rate, passed / total, rel_tol=1e-9, abs_tol=1e-12)
     ):
-        raise InvalidRunRecordError("invalid combined regression")
-    baseline_passed, baseline_total = _score_counts(value["baseline_score"])
-    best_passed, best_total = _score_counts(value["known_best_score"])
+        raise InvalidRunRecordError("invalid schema 2 comparison")
+    baseline_passed, baseline_total = _schema_2_counts(value["baseline_score"])
+    best_passed, best_total = _schema_2_counts(value["known_best_score"])
     if not best_passed == best_total == baseline_total:
-        raise InvalidRunRecordError("invalid combined regression")
-    if _changed_tests(value["fixed"]) > baseline_total - baseline_passed:
-        raise InvalidRunRecordError("invalid combined regression")
-    if _changed_tests(value["regressed"]) > baseline_passed:
-        raise InvalidRunRecordError("invalid combined regression")
-    baseline = value["baseline"]
-    if (
-        not isinstance(baseline, dict)
-        or set(baseline) != COMBINED_REGRESSION_BASELINE
-        or not all(
-            isinstance(baseline[name], str) and DIGEST.fullmatch(baseline[name])
-            for name in ("grading_inputs_digest", "grading_code_digest", "workspace_digest")
-        )
-        or not (isinstance(baseline["grader_image_id"], str) and baseline["grader_image_id"])
-    ):
-        raise InvalidRunRecordError("invalid combined regression")
+        raise InvalidRunRecordError("invalid schema 2 comparison")
+    if _schema_2_changed(value["fixed"]) > baseline_total - baseline_passed:
+        raise InvalidRunRecordError("invalid schema 2 comparison")
+    if _schema_2_changed(value["regressed"]) > baseline_passed:
+        raise InvalidRunRecordError("invalid schema 2 comparison")
+    if not _valid_baseline_key(value["baseline"]):
+        raise InvalidRunRecordError("invalid schema 2 comparison")
 
 
 def missing_scores(reason: str) -> dict:
@@ -438,7 +509,7 @@ def missing_scores(reason: str) -> dict:
             "tests_total": None,
             "missing_reasons": [reason],
         }
-        for name in DIMENSIONS
+        for name in SUITES
     }
 
 
@@ -491,7 +562,7 @@ def read_record(run_dir: Path) -> KarnRunRecord:
         )
         record.validate()
     except (ValueError, TypeError, OSError, KeyError):
-        raise InvalidRunRecordError("invalid schema 2 run record") from None
+        raise InvalidRunRecordError("invalid Karn run record") from None
     if record.run_id != run_dir.name or record.candidate.hash != run_dir.parent.name:
-        raise InvalidRunRecordError("schema 2 identity does not match record location")
+        raise InvalidRunRecordError("Karn record identity does not match its location")
     return record

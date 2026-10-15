@@ -16,11 +16,11 @@ from typing import Any
 
 from silverquillm.karn.exclusions import ExclusionError, load_exclusions
 from silverquillm.karn.records import InvalidRunRecordError, KarnRunRecord
+from silverquillm.results_repo import suite_keys
 
 from ._read import MAX_USD, count, instant, mapping, number, read_json, timestamp_ms
 from .candidates import CandidateDisplay, candidate_display
 
-DIMENSIONS = ("card_correctness", "fdn_regression", "engine_regression")
 GIT_TIMEOUT = 5
 
 
@@ -97,7 +97,7 @@ class RunSummary:
 
     @property
     def target(self) -> Score | None:
-        return self.scores.get("card_correctness")
+        return self.scores.get("target")
 
 
 def _value(measurement: Any) -> Any:
@@ -260,7 +260,10 @@ def summarize(manifest: Any, scores: Any, path: Path) -> RunSummary | None:
         started_at=instant(execution.get("started_at")),
         stopped_at=stopped_at,
         budget_seconds=count(manifest.get("budget_seconds")),
-        scores={name: _score(mapping(scores).get(name)) for name in DIMENSIONS},
+        scores={
+            suite: _score(mapping(scores).get(key))
+            for suite, key in suite_keys(manifest.get("schema_version")).items()
+        },
         cost=_decimal(cost.get("value")),
         cost_complete=cost.get("completeness") == "complete",
         cost_completeness=_text(cost.get("completeness")),
@@ -301,7 +304,7 @@ RECORD_ERRORS = (
 
 
 def validated_summary(manifest: Any, scores: Any, path: Path) -> RunSummary | None:
-    """A summary of a schema 2 Run Record that passes the record's own validation, else None.
+    """A summary of a Karn Run Record that passes the record's own validation, else None.
 
     Only a validated record may establish that a run is finished (RUN-MONITORING.md, Run
     stages); history itself shows every readable record.

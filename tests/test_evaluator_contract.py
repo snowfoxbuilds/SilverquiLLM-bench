@@ -2,7 +2,7 @@
 
 Pins that SOS path resolution is byte-for-byte the set of paths the legacy
 ``evaluate`` hardcoded (the no-behavior-change guarantee), that ``evaluate_run``
-computes all three dimensions, and — the security property — that grading tests
+computes all three suites, and — the security property — that grading tests
 and grading support code are host-authoritative and candidate-immutable: a
 candidate cannot influence its score by tampering with its own ``test_utils``,
 and missing authoritative support fails visibly rather than scoring as zero.
@@ -78,9 +78,9 @@ class TestFdnTargetExclusion:
         audited = benchmark.root / "data/tests/audited"
         assert fdn_target_card_ids(benchmark.target_set, benchmark.cards, audited) == frozenset()
 
-    def test_fdn_regression_population_excludes_smoke_targets(self) -> None:
+    def test_fdn_suite_population_excludes_smoke_targets(self) -> None:
         scores = _scores(FullEvalResult(), load_benchmark(REPO, "smoke"))
-        population = set(scores["fdn_regression"]["coverage"]["population_cards"])
+        population = set(scores["fdn"]["coverage"]["population_cards"])
         assert population
         assert not population & SMOKE_TARGETS
 
@@ -137,7 +137,7 @@ class TestEvaluateRun:
             )
         return run_dir
 
-    def test_three_dimensions_computed(self, tmp_path: Path) -> None:
+    def test_three_suites_computed(self, tmp_path: Path) -> None:
         run_dir = self._harvest(tmp_path, implement=["fdn_129"])
         result = evaluate_run(run_dir, load_benchmark(REPO, "smoke"), timeout=120)
         assert set(result.sos_results) == {"fdn_129", "fdn_205", "fdn_232"}

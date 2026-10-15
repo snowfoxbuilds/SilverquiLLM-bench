@@ -1,4 +1,4 @@
-"""The baseline reference grade and Combined Regression, from the store to runs, recovery and regrade."""
+"""The baseline reference grade and the baseline comparison, from the store to runs, recovery and regrade."""
 
 from __future__ import annotations
 
@@ -18,9 +18,9 @@ from silverquillm.karn import regrade as regrade_module
 from silverquillm.karn.baseline import (
     Baseline,
     BaselineStore,
+    baseline_comparison,
     baseline_key,
     baseline_reference_grade,
-    combined_regression,
     stage_baseline,
 )
 from silverquillm.karn.benchmark import load_benchmark, stage_benchmark
@@ -28,9 +28,9 @@ from silverquillm.karn.definition import KarnError
 from silverquillm.karn.execution import _scores, run_benchmark
 from silverquillm.karn.grader import DockerRun, GraderError
 from silverquillm.karn.grading_inputs import grading_inputs
-from silverquillm.karn.records import read_record, validate_combined_regression, validate_scores
+from silverquillm.karn.records import read_record, validate_baseline_comparison, validate_scores
 from silverquillm.karn.regrade import regrade
-from silverquillm.results_repo import InvalidRunRecordError
+from silverquillm.results_repo import RETIRED_SUITE_KEYS, InvalidRunRecordError
 
 from . import known_defect_fixture as fixture
 from . import retained_runs
@@ -42,7 +42,7 @@ from .test_karn_lifecycle import ContainerDocker
 DIGEST_A, DIGEST_B, DIGEST_C = ("sha256:" + digit * 64 for digit in "abc")
 
 
-# --- Combined Regression from scores, outcomes and a baseline ---------------------------
+# --- The baseline comparison from scores, outcomes and a baseline ---------------------------
 
 
 def nodes(pairs):
@@ -62,7 +62,7 @@ def evaluation(fdn: dict[str, str], engine: dict[str, str]) -> FullEvalResult:
     )
 
 
-def dimension(test_nodes: dict, *, reasons=(), evaluated=True):
+def suite_grade(test_nodes: dict, *, reasons=(), evaluated=True):
     passed = sum(outcome == "pass" for outcome in test_nodes.values())
     return {
         "complete": evaluated and not reasons,
@@ -73,10 +73,10 @@ def dimension(test_nodes: dict, *, reasons=(), evaluated=True):
     }
 
 
-def baseline(fdn: dict, engine: dict, **changes) -> Baseline:
-    dimensions = {"fdn_regression": dimension(fdn), "engine_regression": dimension(engine)}
+def baseline(fdn_nodes: dict, engine_nodes: dict, **changes) -> Baseline:
+    suites = {"fdn": suite_grade(fdn_nodes), "engine": suite_grade(engine_nodes)}
     for name, value in changes.items():
-        dimensions[name] = value
+        suites[name] = value
     key = {
         "benchmark": {"id": "kd"},
         "grading_inputs_digest": DIGEST_A,
@@ -85,15 +85,15 @@ def baseline(fdn: dict, engine: dict, **changes) -> Baseline:
         "grader_image_id": FIXTURE_IMAGE_ID,
     }
     return Baseline(
-        {"schema_version": 1, "key": key, "graded_at": "", "dimensions": dimensions}, None
+        {"schema_version": 2, "key": key, "graded_at": "", "suites": suites}, None
     )
 
 
 def scores_of(evaluated: FullEvalResult) -> dict:
     scores = {}
     for name, outcomes in (
-        ("fdn_regression", [n for r in evaluated.fdn_results.values() for n in r.test_nodes]),
-        ("engine_regression", evaluated.engine_result.test_nodes),
+        ("fdn", [n for r in evaluated.fdn_results.values() for n in r.test_nodes]),
+        ("engine", evaluated.engine_result.test_nodes),
     ):
         passed = sum(node["outcome"] == "pass" for node in outcomes)
         total = len(outcomes)
@@ -105,7 +105,7 @@ def scores_of(evaluated: FullEvalResult) -> dict:
             "pass_rate": passed / total if total else None,
             "missing_reasons": [] if total else ["no_executed_tests"],
         }
-    scores["card_correctness"] = copy.deepcopy(scores["fdn_regression"])
+    scores["target"] = copy.deepcopy(scores["fdn"])
     return scores
 
 
@@ -113,38 +113,21 @@ BASE_FDN = {"fdn_1/tests.py::a": "pass", "fdn_1/tests.py::b": "fail", "fdn_2/tes
 BASE_ENGINE = {"test_x.py::d": "fail", "sub/test_y.py::e": "pass", "test_x.py::f": "pass"}
 
 
-def test_the_block_pools_raw_and_baseline_scores_and_lists_fixed_and_regressed():
+def test_the_comparison_lists_fixed_and_broken_tests_per_suite():
     run = evaluation(
-        # b fixed; c no longer executes, so it regressed; z is new and ignored.
+        # b fixed; c no longer executes, so it is broken; z is new and ignored.
         {"fdn_1/tests.py::a": "pass", "fdn_1/tests.py::b": "pass", "fdn_1/tests.py::z": "fail"},
-        # d fixed; e regressed.
+        # d fixed; e broken.
         {"test_x.py::d": "pass", "sub/test_y.py::e": "fail", "test_x.py::f": "pass"},
     )
     scores = scores_of(run)
     before = copy.deepcopy(scores)
-    block = combined_regression(scores, run, baseline(BASE_FDN, BASE_ENGINE))
+    block = baseline_comparison(scores, run, baseline(BASE_FDN, BASE_ENGINE))
     assert scores == before
     assert block == {
         "available": True,
-        "tests_passed": 4,
-        "tests_total": 6,
-        "pass_rate": 4 / 6,
-        "baseline_score": {"tests_passed": 4, "tests_total": 6},
-        "known_best_score": {"tests_passed": 6, "tests_total": 6},
-        "fixed": {
-            "count": 2,
-            "test_nodes": {
-                "fdn_regression": ["fdn_1/tests.py::b"],
-                "engine_regression": ["test_x.py::d"],
-            },
-        },
-        "regressed": {
-            "count": 2,
-            "test_nodes": {
-                "fdn_regression": ["fdn_2/tests.py::c"],
-                "engine_regression": ["sub/test_y.py::e"],
-            },
-        },
+        "fixed": {"fdn": ["fdn_1/tests.py::b"], "engine": ["test_x.py::d"]},
+        "broken": {"fdn": ["fdn_2/tests.py::c"], "engine": ["sub/test_y.py::e"]},
         "baseline": {
             "grading_inputs_digest": DIGEST_A,
             "grading_code_digest": DIGEST_B,
@@ -152,19 +135,19 @@ def test_the_block_pools_raw_and_baseline_scores_and_lists_fixed_and_regressed()
             "grader_image_id": FIXTURE_IMAGE_ID,
         },
     }
-    validate_combined_regression(block)
+    validate_baseline_comparison(block)
 
 
 def test_without_a_manifest_there_is_no_block():
     run = evaluation(BASE_FDN, BASE_ENGINE)
-    assert combined_regression(scores_of(run), run, None) is None
+    assert baseline_comparison(scores_of(run), run, None) is None
 
 
 def test_a_coverage_gap_shared_with_the_run_keeps_the_block_available():
     run = evaluation(BASE_FDN, BASE_ENGINE)
-    covered = dimension(BASE_FDN, reasons=["some_cards_have_no_executed_audited_tests"])
-    block = combined_regression(
-        scores_of(run), run, baseline(BASE_FDN, BASE_ENGINE, fdn_regression=covered)
+    covered = suite_grade(BASE_FDN, reasons=["some_cards_have_no_executed_audited_tests"])
+    block = baseline_comparison(
+        scores_of(run), run, baseline(BASE_FDN, BASE_ENGINE, fdn=covered)
     )
     assert block["available"] is True
 
@@ -176,7 +159,7 @@ def test_a_coverage_gap_shared_with_the_run_keeps_the_block_available():
             lambda s, b: {"inputs_changed": True, "unevaluated": True},
             "grading_inputs_changed_during_grading",
         ),
-        (lambda s, b: {"unevaluated": True, "unavailable": True}, "regression_not_evaluated"),
+        (lambda s, b: {"unevaluated": True, "unavailable": True}, "suite_not_evaluated"),
         (lambda s, b: {"unavailable": True, "incomplete": True}, "baseline_grading_failed:timeout"),
         (lambda s, b: {"incomplete": True}, "baseline_incomplete"),
     ],
@@ -187,22 +170,22 @@ def test_unavailable_reasons_apply_in_order(arrange, reason):
     reference = baseline(BASE_FDN, BASE_ENGINE)
     case = arrange(scores, reference)
     if case.get("unevaluated"):
-        scores["engine_regression"].update(evaluated=False, tests_passed=None, tests_total=None)
+        scores["engine"].update(evaluated=False, tests_passed=None, tests_total=None)
     if case.get("incomplete"):
-        reference.grade["dimensions"]["engine_regression"]["missing_reasons"] = ["ImportError"]
+        reference.grade["suites"]["engine"]["missing_reasons"] = ["ImportError"]
     if case.get("unavailable"):
         reference = Baseline(None, "baseline_grading_failed:timeout")
-    block = combined_regression(
+    block = baseline_comparison(
         scores, run, reference, inputs_changed=case.get("inputs_changed", False)
     )
     assert block == {"available": False, "reason": reason}
-    validate_combined_regression(block)
+    validate_baseline_comparison(block)
 
 
-def test_an_unevaluated_baseline_dimension_is_incomplete():
+def test_an_unevaluated_baseline_suite_is_incomplete():
     run = evaluation(BASE_FDN, BASE_ENGINE)
-    reference = baseline(BASE_FDN, BASE_ENGINE, engine_regression=dimension({}, evaluated=False))
-    assert combined_regression(scores_of(run), run, reference)["reason"] == "baseline_incomplete"
+    reference = baseline(BASE_FDN, BASE_ENGINE, engine=suite_grade({}, evaluated=False))
+    assert baseline_comparison(scores_of(run), run, reference)["reason"] == "baseline_incomplete"
 
 
 # --- Validating the block -------------------------------------------------------------
@@ -213,7 +196,7 @@ def available_block():
         {"fdn_1/tests.py::a": "pass", "fdn_1/tests.py::b": "pass", "fdn_2/tests.py::c": "fail"},
         BASE_ENGINE,
     )
-    return combined_regression(scores_of(run), run, baseline(BASE_FDN, BASE_ENGINE))
+    return baseline_comparison(scores_of(run), run, baseline(BASE_FDN, BASE_ENGINE))
 
 
 def _set(path, value):
@@ -235,25 +218,17 @@ def _drop(name):
     "damage",
     [
         _set(("available",), 1),
-        _drop("pass_rate"),
         _set(("extra",), 1),
-        _set(("tests_passed",), True),
-        _set(("tests_passed",), 7),
-        _set(("tests_total",), 0),
-        _set(("pass_rate",), 0.9),
-        _set(("pass_rate",), float("nan")),
-        _set(("pass_rate",), 10**400),
-        _set(("baseline_score",), {"tests_passed": 4}),
-        _set(("baseline_score", "tests_passed"), 9),
-        _set(("known_best_score", "tests_passed"), 5),
-        _set(("known_best_score",), {"tests_passed": 7, "tests_total": 7}),
-        _set(("fixed", "count"), 5),
-        _set(("fixed", "test_nodes", "fdn_regression"), ["z", "a"]),
-        _set(("fixed", "test_nodes", "fdn_regression"), ["a", "a"]),
-        _set(("fixed", "test_nodes", "fdn_regression"), [""]),
-        _set(("fixed", "test_nodes"), {"fdn_regression": []}),
-        _drop("regressed"),
-        _set(("regressed", "count"), True),
+        _set(("tests_passed",), 4),
+        _drop("fixed"),
+        _set(("fixed", "fdn"), ["z", "a"]),
+        _set(("fixed", "fdn"), ["a", "a"]),
+        _set(("fixed", "fdn"), [""]),
+        _set(("fixed",), {"fdn": []}),
+        _set(("fixed",), {"fdn": [], "engine": [], "target": []}),
+        _drop("broken"),
+        _set(("broken", "engine"), "test_x.py::d"),
+        _set(("broken", "fdn"), ["fdn_1/tests.py::b"]),
         _set(("baseline", "workspace_digest"), "sha256:short"),
         _set(("baseline", "grader_image_id"), ""),
         _set(("baseline", "extra"), DIGEST_A),
@@ -261,27 +236,17 @@ def _drop(name):
 )
 def test_a_malformed_available_block_is_rejected(damage):
     block = available_block()
-    validate_combined_regression(block)
+    validate_baseline_comparison(block)
     damage(block)
-    with pytest.raises(InvalidRunRecordError, match="invalid combined regression"):
-        validate_combined_regression(block)
+    with pytest.raises(InvalidRunRecordError, match="invalid baseline comparison"):
+        validate_baseline_comparison(block)
 
 
-def test_more_fixed_or_regressed_than_the_baseline_allows_is_rejected():
+def test_a_test_both_fixed_and_broken_is_rejected():
     block = available_block()
-    block["fixed"] = {
-        "count": 3,
-        "test_nodes": {"fdn_regression": ["x", "y"], "engine_regression": ["z"]},
-    }
+    block["broken"]["fdn"] = list(block["fixed"]["fdn"])
     with pytest.raises(InvalidRunRecordError):
-        validate_combined_regression(block)
-    block = available_block()
-    block["regressed"] = {
-        "count": 5,
-        "test_nodes": {"fdn_regression": ["a", "b", "c"], "engine_regression": ["d", "e"]},
-    }
-    with pytest.raises(InvalidRunRecordError):
-        validate_combined_regression(block)
+        validate_baseline_comparison(block)
 
 
 @pytest.mark.parametrize(
@@ -296,7 +261,7 @@ def test_more_fixed_or_regressed_than_the_baseline_allows_is_rejected():
 )
 def test_a_malformed_unavailable_block_is_rejected(block):
     with pytest.raises(InvalidRunRecordError):
-        validate_combined_regression(block)
+        validate_baseline_comparison(block)
 
 
 # --- The store ------------------------------------------------------------------------
@@ -304,12 +269,12 @@ def test_a_malformed_unavailable_block_is_rejected(block):
 
 def grade_for(key):
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "key": key,
         "graded_at": "2026-10-02T12:00:00+00:00",
-        "dimensions": {
-            "fdn_regression": dimension({"fdn_1/tests.py::a": "pass"}),
-            "engine_regression": dimension({"test_x.py::d": "fail"}),
+        "suites": {
+            "fdn": suite_grade({"fdn_1/tests.py::a": "pass"}),
+            "engine": suite_grade({"test_x.py::d": "fail"}),
         },
     }
 
@@ -381,22 +346,22 @@ def test_any_key_field_change_grades_again(tmp_path, change):
     "damage",
     [
         lambda path, key: path.write_text("{not json"),
-        lambda path, key: path.write_text(json.dumps({**grade_for(key), "schema_version": 2})),
+        lambda path, key: path.write_text(json.dumps({**grade_for(key), "schema_version": 1})),
         lambda path, key: path.write_text(
             json.dumps({**grade_for(key), "key": store_key(grader_image_id="x")})
         ),
         lambda path, key: path.write_text(json.dumps({**grade_for(key), "extra": 1})),
         lambda path, key: path.write_text(
-            json.dumps({**grade_for(key), "dimensions": {"fdn_regression": {}}})
+            json.dumps({**grade_for(key), "suites": {"fdn": {}}})
         ),
         lambda path, key: path.write_text(
             json.dumps(
                 {
                     **grade_for(key),
-                    "dimensions": {
-                        **grade_for(key)["dimensions"],
-                        "engine_regression": {
-                            **dimension({"t.py::x": "fail"}),
+                    "suites": {
+                        **grade_for(key)["suites"],
+                        "engine": {
+                            **suite_grade({"t.py::x": "fail"}),
                             "test_nodes": {"t.py::x": "skipped"},
                         },
                     },
@@ -535,19 +500,19 @@ def stored_grades(store, benchmark):
 def test_a_timed_out_baseline_is_reported_but_graded_again_next_time(kd, tmp_path):
     store, evaluate = BaselineStore(tmp_path / "store"), Scripted(after=[timed_out])
     first = request(kd, store, evaluate)
-    assert first.grade["dimensions"]["engine_regression"]["tests_total"] is None
+    assert first.grade["suites"]["engine"]["tests_total"] is None
     run = evaluation(BASE_FDN, BASE_ENGINE)
-    assert combined_regression(scores_of(run), run, first)["reason"] == "baseline_incomplete"
+    assert baseline_comparison(scores_of(run), run, first)["reason"] == "baseline_incomplete"
     assert stored_grades(store, kd) == []
 
     healthy = request(kd, store, evaluate)
     assert evaluate.calls == 2
-    assert healthy.grade["dimensions"]["engine_regression"]["test_nodes"] == {
+    assert healthy.grade["suites"]["engine"]["test_nodes"] == {
         fixture.ENGINE_NODES[0]: "pass",
         fixture.ENGINE_DEFECT: "fail",
     }
     # Failing Known Defect tests and the shared FDN coverage gap are reference data.
-    assert healthy.grade["dimensions"]["fdn_regression"]["missing_reasons"] == [
+    assert healthy.grade["suites"]["fdn"]["missing_reasons"] == [
         "some_cards_have_no_executed_audited_tests"
     ]
     assert request(kd, store, evaluate) == healthy
@@ -560,7 +525,7 @@ def test_an_incomplete_stored_grade_is_graded_again(kd, tmp_path):
     healthy = request(kd, store, evaluate)
     [path] = stored_grades(store, kd)
     damaged = copy.deepcopy(healthy.grade)
-    damaged["dimensions"]["engine_regression"].update(
+    damaged["suites"]["engine"].update(
         complete=False,
         tests_passed=None,
         tests_total=None,
@@ -568,9 +533,9 @@ def test_an_incomplete_stored_grade_is_graded_again(kd, tmp_path):
         test_nodes={},
     )
     path.write_text(json.dumps(damaged))
-    assert request(kd, store, evaluate).grade["dimensions"] == healthy.grade["dimensions"]
+    assert request(kd, store, evaluate).grade["suites"] == healthy.grade["suites"]
     assert evaluate.calls == 2
-    assert json.loads(path.read_text())["dimensions"] == healthy.grade["dimensions"]
+    assert json.loads(path.read_text())["suites"] == healthy.grade["suites"]
 
 
 def engine_suite_edit(benchmark):
@@ -607,7 +572,7 @@ def test_inputs_changed_during_baseline_grading_store_nothing(kd, tmp_path):
     restore()
     assert grading_inputs(kd)["digest"] == requested
     restored = request(kd, store, evaluate, requested)
-    assert restored.grade["dimensions"]["engine_regression"]["tests_passed"] == 1
+    assert restored.grade["suites"]["engine"]["tests_passed"] == 1
     assert len(stored_grades(store, kd)) == 1
 
 
@@ -647,11 +612,11 @@ def run_options(tmp_path, *, manifest=True, **changes):
     }
 
 
-EXPECTED_FIXED = {"fdn_regression": [], "engine_regression": [fixture.ENGINE_DEFECT]}
-EXPECTED_REGRESSED = {"fdn_regression": [fixture.FDN_NODES[0]], "engine_regression": []}
+EXPECTED_FIXED = {"fdn": [], "engine": [fixture.ENGINE_DEFECT]}
+EXPECTED_BROKEN = {"fdn": [fixture.FDN_NODES[0]], "engine": []}
 
 
-def test_runs_and_recovery_report_combined_regression_against_one_cached_baseline(
+def test_runs_and_recovery_report_the_baseline_comparison_against_one_cached_baseline(
     tmp_path, monkeypatch
 ):
     """End to end: a run, a second run reusing its cached baseline, a recovered run, and the
@@ -660,20 +625,18 @@ def test_runs_and_recovery_report_combined_regression_against_one_cached_baselin
 
     opts = run_options(tmp_path)
     record = run_benchmark(**opts, run_id="first")
-    combined = record.run_metadata["combined_regression"]
-    assert combined["available"] is True, combined
-    assert combined["baseline_score"] == {"tests_passed": 2, "tests_total": 4}
-    assert combined["known_best_score"] == {"tests_passed": 4, "tests_total": 4}
-    assert (combined["tests_passed"], combined["tests_total"]) == (2, 4)
-    assert combined["fixed"] == {"count": 1, "test_nodes": EXPECTED_FIXED}
-    assert combined["regressed"] == {"count": 1, "test_nodes": EXPECTED_REGRESSED}
-    assert combined["baseline"]["grader_image_id"] == FIXTURE_IMAGE_ID
+    comparison = record.run_metadata["baseline_comparison"]
+    assert comparison["available"] is True, comparison
+    assert set(comparison) == {"available", "fixed", "broken", "baseline"}
+    assert comparison["fixed"] == EXPECTED_FIXED
+    assert comparison["broken"] == EXPECTED_BROKEN
+    assert comparison["baseline"]["grader_image_id"] == FIXTURE_IMAGE_ID
     assert (
-        combined["baseline"]["grading_inputs_digest"]
+        comparison["baseline"]["grading_inputs_digest"]
         == record.run_metadata["grading_inputs"]["digest"]
     )
     assert (
-        combined["baseline"]["workspace_digest"]
+        comparison["baseline"]["workspace_digest"]
         == record.run_metadata["benchmark_input"]["workspace_digest"]
     )
     counts = {
@@ -684,22 +647,22 @@ def test_runs_and_recovery_report_combined_regression_against_one_cached_baselin
         "tests_total",
         "missing_reasons",
     }
-    assert set(record.scores["fdn_regression"]) == counts | {"coverage", "cards"}
-    assert set(record.scores["engine_regression"]) == counts | {
+    assert set(record.scores["fdn"]) == counts | {"coverage", "cards"}
+    assert set(record.scores["engine"]) == counts | {
         "diagnostics",
         "test_nodes",
         "expected_test_functions",
         "not_run",
         "failure_messages",
     }
-    assert record.scores["card_correctness"]["tests_passed"] == 1
+    assert record.scores["target"]["tests_passed"] == 1
     assert opts["evaluator"].calls == 2
     published = opts["results_repo"] / "results" / record.candidate.hash / record.run_id
-    assert read_record(published).run_metadata["combined_regression"] == combined
+    assert read_record(published).run_metadata["baseline_comparison"] == comparison
 
     again = run_benchmark(**opts, run_id="second")
     assert opts["evaluator"].calls == 3
-    assert again.run_metadata["combined_regression"] == combined
+    assert again.run_metadata["baseline_comparison"] == comparison
 
     # Recovery reports the same block as the run path.
     class Killed(EditingHost):
@@ -721,15 +684,66 @@ def test_runs_and_recovery_report_combined_regression_against_one_cached_baselin
             for key in ("bench_root", "results_dir", "results_repo", "state_root", "grader")
         },
     )
-    assert recovered.run_metadata["combined_regression"] == combined
+    assert recovered.run_metadata["baseline_comparison"] == comparison
     recovered.validate()
 
     # A published record whose block is malformed does not read.
     manifest = json.loads((published / "manifest.json").read_text())
-    manifest["run_metadata"]["combined_regression"]["fixed"]["count"] = 7
+    manifest["run_metadata"]["baseline_comparison"]["fixed"]["fdn"] = ["b", "a"]
     (published / "manifest.json").write_text(json.dumps(manifest))
     with pytest.raises(InvalidRunRecordError):
         read_record(published)
+
+
+def schema_2(record):
+    """The record as a bench before the rename wrote it, retired keys and all (ADR-021)."""
+    old = copy.deepcopy(record)
+    old.manifest["schema_version"] = 2
+    old.scores = {RETIRED_SUITE_KEYS[suite]: score for suite, score in old.scores.items()}
+    comparison = old.run_metadata.pop("baseline_comparison")
+    old.run_metadata["combined_regression"] = {
+        "available": True,
+        "tests_passed": 4,
+        "tests_total": 6,
+        "pass_rate": 4 / 6,
+        "baseline_score": {"tests_passed": 4, "tests_total": 6},
+        "known_best_score": {"tests_passed": 6, "tests_total": 6},
+        "fixed": {
+            "count": 1,
+            "test_nodes": {"fdn_regression": [], "engine_regression": ["test_x.py::d"]},
+        },
+        "regressed": {
+            "count": 1,
+            "test_nodes": {"fdn_regression": ["fdn_2/tests.py::c"], "engine_regression": []},
+        },
+        "baseline": comparison["baseline"],
+    }
+    return old
+
+
+def test_a_schema_2_record_reads_by_its_version_and_never_mixes_names(tmp_path):
+    record = run_benchmark(**run_options(tmp_path), run_id="first")
+    assert record.manifest["schema_version"] == 3
+    old = schema_2(record)
+    old.validate()
+    assert old.suites == record.suites
+    for damage in (
+        lambda r: r.manifest.update(schema_version=3),
+        lambda r: r.run_metadata.update(baseline_comparison=record.run_metadata["baseline_comparison"]),
+        lambda r: r.run_metadata["combined_regression"]["regressed"].update(count=0),
+    ):
+        damaged = copy.deepcopy(old)
+        damage(damaged)
+        with pytest.raises(InvalidRunRecordError):
+            damaged.validate()
+    current = copy.deepcopy(record)
+    current.run_metadata["combined_regression"] = old.run_metadata["combined_regression"]
+    with pytest.raises(InvalidRunRecordError):
+        current.validate()
+    current = copy.deepcopy(record)
+    current.scores = copy.deepcopy(old.scores)
+    with pytest.raises(InvalidRunRecordError):
+        current.validate()
 
 
 def test_a_failed_baseline_grade_leaves_the_runs_scores_alone(tmp_path):
@@ -745,7 +759,7 @@ def test_a_failed_baseline_grade_leaves_the_runs_scores_alone(tmp_path):
 
     failed = run_benchmark(**{**opts, "evaluator": evaluator}, run_id="failed")
     graded = run_benchmark(**{**opts, "evaluator": Counting(grader)}, run_id="graded")
-    assert failed.run_metadata["combined_regression"] == {
+    assert failed.run_metadata["baseline_comparison"] == {
         "available": False,
         "reason": "baseline_grading_failed:timeout",
     }
@@ -823,9 +837,9 @@ def test_regrade_outputs_carry_the_block_beside_scores_and_reuse_it(regraded):
     for record in regraded.records:
         result = output(regraded, record.run_id)
         assert result["baseline_workspace_digest"] == staged
-        assert result["combined_regression"] == record.run_metadata["combined_regression"]
+        assert result["baseline_comparison"] == record.run_metadata["baseline_comparison"]
         validate_scores(result["scores"])
-        assert "combined_regression" not in result["scores"]
+        assert "baseline_comparison" not in result["scores"]
     docker = LocalDocker()
     invoke(regraded, docker=docker)
     assert docker.runs == []
@@ -846,7 +860,7 @@ def test_a_failed_regrade_baseline_is_retried_on_the_next_invocation(retained):
         path.unlink()
     invoke(retained, docker=BaselineDown())
     failed = output(retained, "run-a")
-    assert failed["combined_regression"] == {
+    assert failed["baseline_comparison"] == {
         "available": False,
         "reason": "baseline_grading_failed:exit_125",
     }
@@ -858,8 +872,8 @@ def test_a_failed_regrade_baseline_is_retried_on_the_next_invocation(retained):
     # One baseline grade, then both runs again.
     assert len(docker.runs) == 3
     assert (
-        output(retained, "run-a")["combined_regression"]
-        == (retained.records[0].run_metadata["combined_regression"])
+        output(retained, "run-a")["baseline_comparison"]
+        == (retained.records[0].run_metadata["baseline_comparison"])
     )
     docker = LocalDocker()
     invoke(retained, docker=docker)
@@ -887,7 +901,7 @@ def test_inputs_changed_during_a_regrade_make_the_comparison_unavailable_and_ret
     edit, restore = engine_suite_edit(benchmark)
     invoke(retained, docker=SuiteEditing(edit), workers=1)
     for record in retained.records:
-        assert output(retained, record.run_id)["combined_regression"] == {
+        assert output(retained, record.run_id)["baseline_comparison"] == {
             "available": False,
             "reason": "grading_inputs_changed_during_grading",
         }
@@ -899,8 +913,8 @@ def test_inputs_changed_during_a_regrade_make_the_comparison_unavailable_and_ret
     assert len(docker.runs) == 2
     for record in retained.records:
         assert (
-            output(retained, record.run_id)["combined_regression"]
-            == (record.run_metadata["combined_regression"])
+            output(retained, record.run_id)["baseline_comparison"]
+            == (record.run_metadata["baseline_comparison"])
         )
 
 
@@ -915,7 +929,7 @@ def test_a_changed_workspace_misses_the_regrade_cache_and_regrades_the_baseline(
     result = output(regraded, "run-a")
     assert result["baseline_workspace_digest"] == summary["baseline_workspace_digest"]
     assert (
-        result["combined_regression"]["baseline"]["workspace_digest"]
+        result["baseline_comparison"]["baseline"]["workspace_digest"]
         != result["source"]["workspace_digest"]
     )
 
@@ -925,14 +939,14 @@ def test_a_cached_output_with_a_missing_or_malformed_block_is_a_miss(regraded, d
     path = next(regraded.out.glob("*/run-a.json"))
     value = json.loads(path.read_text())
     if damage == "missing":
-        del value["combined_regression"]
+        del value["baseline_comparison"]
     else:
-        value["combined_regression"]["known_best_score"]["tests_passed"] = 1
+        value["baseline_comparison"]["broken"] = {"fdn": []}
     path.write_text(json.dumps(value))
     docker = LocalDocker()
     invoke(regraded, docker=docker)
     assert len(docker.runs) == 1
-    assert output(regraded, "run-a")["combined_regression"]["available"] is True
+    assert output(regraded, "run-a")["baseline_comparison"]["available"] is True
 
 
 def test_without_a_manifest_a_run_grades_once_and_adding_one_makes_its_outputs_misses(
@@ -940,19 +954,19 @@ def test_without_a_manifest_a_run_grades_once_and_adding_one_makes_its_outputs_m
 ):
     opts = run_options(tmp_path, manifest=False)
     record = run_benchmark(**opts, run_id="run-a")
-    assert "combined_regression" not in record.run_metadata
+    assert "baseline_comparison" not in record.run_metadata
     assert opts["evaluator"].calls == 1
     assert not (tmp_path / "state/baseline-grades").exists()
     retained = SimpleNamespace(opts=opts, records=[record], out=tmp_path / "regrade")
     summary = invoke(retained)
     assert summary["baseline_workspace_digest"] is None
     assert output(retained, "run-a")["baseline_workspace_digest"] is None
-    assert "combined_regression" not in output(retained, "run-a")
+    assert "baseline_comparison" not in output(retained, "run-a")
     fixture.write_manifest(opts["bench_root"] / "benchmarks/kd", fixture.MANIFEST)
     docker = LocalDocker()
     invoke(retained, docker=docker)
     assert len(docker.runs) == 2
-    assert output(retained, "run-a")["combined_regression"]["available"] is True
+    assert output(retained, "run-a")["baseline_comparison"]["available"] is True
 
 
 def test_regrade_accepts_a_state_root_and_keeps_the_digest_helper_importable(tmp_path, monkeypatch):

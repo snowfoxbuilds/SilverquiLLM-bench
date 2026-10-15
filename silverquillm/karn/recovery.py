@@ -12,7 +12,7 @@ from pathlib import Path
 from silverquillm.queue_state import _write_atomically
 
 from . import provenance
-from .baseline import BaselineStore, baseline_reference_grade, combined_regression
+from .baseline import BaselineStore, baseline_comparison, baseline_reference_grade
 from .benchmark import load_benchmark
 from .definition import KarnError, canonical, load_candidate
 from .execution import (
@@ -43,6 +43,7 @@ from .login import (
     recover_login,
 )
 from .records import (
+    SCHEMA_VERSION,
     KarnIdentity,
     KarnRunRecord,
     RecordWritePendingError,
@@ -568,9 +569,9 @@ def _recover(
             )
             scores = _scores(evaluated, benchmark)
             changed = grading_inputs(benchmark)["digest"] != metadata["grading_inputs"]["digest"]
-            combined = combined_regression(scores, evaluated, baseline, inputs_changed=changed)
-            if combined is not None:
-                metadata["combined_regression"] = combined
+            comparison = baseline_comparison(scores, evaluated, baseline, inputs_changed=changed)
+            if comparison is not None:
+                metadata["baseline_comparison"] = comparison
         except GraderError as error:
             grading_failure = error
             scores = missing_scores("grading_container_failed:" + error.reason)
@@ -586,7 +587,7 @@ def _recover(
         pointers.append({"kind": "prior-run-record", "location": str(previous_path)})
     record = KarnRunRecord(
         {
-            "schema_version": 2,
+            "schema_version": SCHEMA_VERSION,
             "run_id": record_id,
             "candidate": identity.to_dict(),
             "candidate_hash": identity.hash,
