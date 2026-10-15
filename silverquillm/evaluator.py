@@ -211,20 +211,33 @@ _SUMMARY_RE = re.compile(
 )
 
 
+# A short-summary entry: the word, one space, then the node or file (never more spaces,
+# as in a captured log's ``ERROR    logger:file:line``).
+_SUMMARY_ERROR_LINE = re.compile(r"^(?:FAILED|ERROR) \S")
+
+
 def _parse_pytest_output(output: str) -> tuple[int, int, int, list[str]]:
     """Parse pytest ``-q`` output and return (passed, failed, total, errors).
 
-    Looks for the summary line (e.g. ``3 passed, 1 failed``) and collects
-    any FAILED / ERROR lines as error messages.
+    Looks for the summary line (e.g. ``3 passed, 1 failed``) and collects the
+    FAILED / ERROR lines of pytest's short test summary as error messages.  Only
+    that section is read when pytest printed it: a captured log or stdout section
+    can hold lines such as ``ERROR    engine.game:…`` that are no grading error.
     """
     passed = 0
     failed = 0
     errors: list[str] = []
 
-    # Collect individual failure/error lines
-    for line in output.splitlines():
+    lines = output.splitlines()
+    starts = [
+        index
+        for index, line in enumerate(lines)
+        if "short test summary info" in line and line.startswith("=")
+    ]
+    summary = lines[starts[-1] + 1 :] if starts else lines
+    for line in summary:
         stripped = line.strip()
-        if stripped.startswith(("FAILED ", "ERROR ")):
+        if _SUMMARY_ERROR_LINE.match(stripped):
             errors.append(stripped)
 
     # Find the short summary line produced by ``pytest -q``
@@ -678,7 +691,15 @@ def _generate_report_plugin(report_jsonl_path: str, session_token: str = "") -> 
     At session finish it writes one completion row carrying *session_token*, a
     per-run random value; a session cut short (``os._exit``, a crash) never
     reaches that hook, so the missing row marks the suite as ended early whatever
-    exit status the process reported.
+    exit status the process reported.  pytest also runs that hook after an
+    interruption (``KeyboardInterrupt``, ``pytest.exit``) or an internal error, so
+    the plugin withholds the row once ``pytest_keyboard_interrupt`` or
+    ``pytest_internalerror`` has fired — except for pytest's own orderly stop
+    after collection errors, which keeps its more specific diagnosis.  Those two
+    hooks run first, ahead of pytest's terminal reporter, whose own handler can
+    raise again (a closed stdout) and stop later implementations; and the row is
+    written only for an orderly exit status, so an internal error no hook saw
+    still leaves it out.
 
     The JSONL file path is baked into the source as a literal string so no
     env-var plumbing is needed.
@@ -688,10 +709,14 @@ def _generate_report_plugin(report_jsonl_path: str, session_token: str = "") -> 
     return f'''
 import json as _json
 
+import pytest as _pytest
+
 _REPORT_PATH = "{safe_path}"
 _SESSION_TOKEN = "{session_token}"
 _LIMIT = {FAILURE_MESSAGE_LIMIT * 4}
 _seen_nodes = set()
+_collection_failed = False
+_interrupted = False
 
 def _message(report):
     text = None
@@ -739,13 +764,38 @@ def pytest_runtest_logreport(report):
         _write({{"nodeid": nodeid, "when": "teardown", "outcome": "fail", "message": _message(report)}})
 
 def pytest_collectreport(report):
-    """Record collection errors."""
+    """Record collection errors, and collectors skipped as a whole (a module-level skip)."""
+    global _collection_failed
     if report.failed:
+        _collection_failed = True
         nodeid = report.nodeid or "<collection-error>"
         _write({{"nodeid": nodeid, "when": "collect", "outcome": "fail", "message": _message(report)}})
+    elif report.skipped and report.nodeid:
+        _write({{"nodeid": report.nodeid, "when": "collect", "outcome": "skip"}})
+
+@_pytest.hookimpl(tryfirst=True)
+def pytest_keyboard_interrupt(excinfo):
+    """An interruption (KeyboardInterrupt, pytest.exit) means the session did not finish."""
+    global _interrupted
+    value = excinfo.value
+    # pytest itself stops with Session.Interrupted after collection errors: an orderly end.
+    if _collection_failed and type(value).__name__ == "Interrupted" and "during collection" in str(value):
+        return
+    _interrupted = True
+
+@_pytest.hookimpl(tryfirst=True)
+def pytest_internalerror(excrepr, excinfo):
+    """An internal error means the session did not finish."""
+    global _interrupted
+    _interrupted = True
 
 def pytest_sessionfinish(session, exitstatus):
     """Record that the session ran to its end; never a test node."""
+    if _interrupted:
+        return
+    status = int(exitstatus)
+    if status not in (0, 1, 5) and not (status == 2 and _collection_failed):
+        return
     _write({{"when": "session", "outcome": "complete", "token": _SESSION_TOKEN}})
 '''
 
@@ -796,6 +846,8 @@ class _Report:
     collection_errors: dict[str, str] = field(default_factory=dict)
     # The reporter's session-completion row was read: pytest ran the session to its end.
     completed: bool = False
+    # Collectors (a module, or a class in it) skipped as a whole, e.g. a module-level skip.
+    skipped_collectors: set[str] = field(default_factory=set)
 
 
 def _read_report(
@@ -834,7 +886,10 @@ def _read_report(
             normalized = "tests.py::<collection-error>"
 
         if outcome == "skip":
-            report.skipped.add(normalized)
+            if entry.get("when") == "collect":
+                report.skipped_collectors.add(normalized)
+            else:
+                report.skipped.add(normalized)
             continue
         # Only accept the explicit values the conftest writes ('pass' / 'fail').
         # Any other or missing outcome is ignored — must not be silently coerced.
@@ -967,13 +1022,19 @@ def _run_pytest(
             else _Report()
         )
         if report_jsonl_path is not None:
-            ended_early = not report.completed
+            # A completion row never overrides an abnormal exit; pytest's orderly stop after
+            # collection errors (status 2 with collection errors recorded) is not one.
+            abnormal = result.returncode not in _PYTEST_ORDERLY_EXITS and not (
+                result.returncode == 2 and report.collection_errors
+            )
+            ended_early = not report.completed or abnormal
         else:
             ended_early = result.returncode not in _PYTEST_ORDERLY_EXITS and all(
                 error.startswith("FAILED ") for error in errors
             )
         if ended_early:
-            # pytest did not finish its session (a crash, os._exit): the grade must not look complete.
+            # pytest did not finish its session (a crash, os._exit, an interruption or an
+            # internal error): the grade must not look complete.
             errors.append(f"pytest_exited: exit status {result.returncode}")
         # test_nodes enumerates only executed pass/fail nodes.  Skipped and
         # xfail tests are intentionally omitted, so len(test_nodes) may be
@@ -1034,63 +1095,146 @@ def _decorator_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> list[s
     return names
 
 
-def _is_test_function(node: ast.AST) -> bool:
-    return (
-        isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-        and node.name.startswith("test")
-        and not any(name.rsplit(".", 1)[-1] == "fixture" for name in _decorator_names(node))
+_UNSET = object()
+
+
+def _is_fixture(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any(name.rsplit(".", 1)[-1] == "fixture" for name in _decorator_names(node))
+
+
+def _has_init(cls: ast.ClassDef) -> bool:
+    return any(
+        isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef) and item.name == "__init__"
+        for item in cls.body
     )
 
 
-def _is_test_class(node: ast.AST) -> bool:
-    return (
-        isinstance(node, ast.ClassDef)
-        and node.name.startswith("Test")
-        and not any(
-            isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef) and item.name == "__init__"
-            for item in node.body
-        )
-    )
+def _test_value(value: ast.AST) -> object:
+    """The constant assigned to ``__test__``; ``_UNSET`` when not a plain constant."""
+    return value.value if isinstance(value, ast.Constant) else _UNSET
+
+
+def _final_bindings(body: list[ast.stmt]) -> dict[str, tuple[ast.AST, object]]:
+    """Each function and class *body* defines, with the ``__test__`` last set on it.
+
+    Read in order, as the body runs: a redefinition replaces the object and drops
+    any ``__test__`` set on the old one, and a later ``<name>.__test__ = <constant>``
+    overrides an earlier one.  Order is first definition, as in ``__dict__``.
+    """
+    bindings: dict[str, tuple[ast.AST, object]] = {}
+    for statement in body:
+        if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            bindings[statement.name] = (statement, _UNSET)
+        elif isinstance(statement, ast.Assign):
+            value = _test_value(statement.value)
+            for target in statement.targets:
+                if (
+                    value is not _UNSET
+                    and isinstance(target, ast.Attribute)
+                    and target.attr == "__test__"
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id in bindings
+                ):
+                    bindings[target.value.id] = (bindings[target.value.id][0], value)
+    return bindings
+
+
+def _own_test_value(body: list[ast.stmt]) -> object:
+    """The ``__test__ = <constant>`` set directly in a module or class body; the last wins."""
+    value = _UNSET
+    for statement in body:
+        if isinstance(statement, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "__test__" for target in statement.targets
+        ):
+            value = _test_value(statement.value)
+    return value
+
+
+def _turned_on(value: object) -> bool:
+    return value is _UNSET or bool(value)
+
+
+def _collects_function(node: ast.AST, name: str, value: object) -> bool:
+    """pytest's function rule: a ``test`` name, or ``__test__`` exactly ``True``; never a fixture."""
+    if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) or _is_fixture(node):
+        return False
+    return (name.startswith("test") or value is True) and _turned_on(value)
 
 
 def expected_test_functions(source: str, module_id: str) -> list[str] | None:
     """The test functions pytest collects from one authoritative test module, statically.
 
-    Mirrors pytest's default discovery: module-level ``test*`` functions and the
-    ``test*`` methods of ``Test*`` classes without ``__init__`` (nested ones too,
-    and methods inherited from classes defined in the same module).  A
-    parametrized function is one entry, without its ``[...]`` ids.  This reads
-    host-side files only, never the candidate's code, so a candidate cannot
-    change what is expected.  ``None`` when the module does not parse.
+    Mirrors pytest's default discovery: ``test*`` functions and the ``test*``
+    methods of ``Test*`` classes without ``__init__`` (nested ones too, and
+    methods inherited from classes defined in the same module).  ``__test__``
+    follows pytest: a false value turns off the module, a class (and classes
+    that inherit it without setting it back), or a function, and exactly
+    ``True`` collects a function or class whatever its name.  The value that
+    counts is the last one set before collection, so a later assignment or a
+    redefinition overrides an earlier one.  A parametrized function is one
+    entry, without its ``[...]`` ids.  This reads host-side files only, never
+    the candidate's code, so a candidate cannot change what is expected.
+    ``None`` when the module does not parse.
     """
     try:
         tree = ast.parse(source)
     except (SyntaxError, ValueError):
         return None
-    classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+    if not _turned_on(_own_test_value(tree.body)):
+        return []
+    bindings = _final_bindings(tree.body)
+    classes = {
+        name: entry for name, entry in bindings.items() if isinstance(entry[0], ast.ClassDef)
+    }
     found: list[str] = []
+
+    def class_value(cls: ast.ClassDef, assigned: object, visiting: frozenset[str]) -> object:
+        # Set after the class wins, then its own body; otherwise the first module-local base's.
+        if assigned is not _UNSET:
+            return assigned
+        own = _own_test_value(cls.body)
+        if own is not _UNSET:
+            return own
+        for base in cls.bases:
+            if isinstance(base, ast.Name) and base.id in classes and base.id not in visiting:
+                node, base_assigned = classes[base.id]
+                return class_value(node, base_assigned, visiting | {base.id})
+        return _UNSET
 
     def methods(cls: ast.ClassDef, visiting: frozenset[str]) -> dict[str, None]:
         names: dict[str, None] = {}
         for base in cls.bases:
             if isinstance(base, ast.Name) and base.id in classes and base.id not in visiting:
-                names.update(methods(classes[base.id], visiting | {base.id}))
-        for item in cls.body:
-            if _is_test_function(item):
-                names[item.name] = None
+                names.update(methods(classes[base.id][0], visiting | {base.id}))
+        for name, (item, value) in _final_bindings(cls.body).items():
+            if not isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if _collects_function(item, name, value):
+                names[name] = None
+            else:
+                names.pop(name, None)
         return names
 
-    def visit_class(cls: ast.ClassDef, prefix: str, visiting: frozenset[str]) -> None:
-        found.extend(f"{prefix}::{name}" for name in methods(cls, visiting))
-        for item in cls.body:
-            if _is_test_class(item):
-                visit_class(item, f"{prefix}::{item.name}", visiting | {item.name})
+    def visit_class(
+        name: str, cls: ast.ClassDef, assigned: object, prefix: str, visiting: frozenset[str]
+    ) -> None:
+        visiting = visiting | {name}
+        value = class_value(cls, assigned, visiting)
+        if not (
+            (name.startswith("Test") or value is True) and not _has_init(cls) and _turned_on(value)
+        ):
+            return
+        prefix = f"{prefix}::{name}"
+        found.extend(f"{prefix}::{method}" for method in methods(cls, visiting))
+        for nested, (item, nested_assigned) in _final_bindings(cls.body).items():
+            if isinstance(item, ast.ClassDef):
+                visit_class(nested, item, nested_assigned, prefix, visiting)
 
-    for node in tree.body:
-        if _is_test_function(node):
-            found.append(f"{module_id}::{node.name}")
-        elif _is_test_class(node):
-            visit_class(node, f"{module_id}::{node.name}", frozenset({node.name}))
+    for name, (node, assigned) in bindings.items():
+        if _collects_function(node, name, assigned):
+            found.append(f"{module_id}::{name}")
+        elif isinstance(node, ast.ClassDef):
+            visit_class(name, node, assigned, module_id, frozenset())
     return list(dict.fromkeys(found))
 
 
@@ -1168,7 +1312,12 @@ def _not_run(expected: list[str] | None, run: _PytestRun | None, reason: str | N
             why = reason
         elif run.timed_out:
             why = "timeout"
-        elif node in skipped:
+        elif node in skipped or any(
+            # A skipped module or class covers its "::" children; a skipped directory
+            # (a conftest skip there) covers the "/" paths beneath it.
+            node.startswith((collector + "::", collector + "/"))
+            for collector in report.skipped_collectors
+        ):
             why = "skipped"
         elif covering is not None or set(report.collection_errors) == {""}:
             message = report.collection_errors[covering if covering is not None else ""]

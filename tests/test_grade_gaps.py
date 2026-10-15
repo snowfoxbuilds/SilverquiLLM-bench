@@ -457,6 +457,7 @@ def _engine(tmp_path: Path, files: dict[str, str], timeout: int = 60, *, support
     suite = tmp_path / "engine_tests"
     suite.mkdir()
     for name, source in files.items():
+        (suite / name).parent.mkdir(parents=True, exist_ok=True)
         (suite / name).write_text(_module(source))
     return _eval_engine(
         workspace / "engine", suite, timeout,
@@ -835,6 +836,137 @@ def test_a_card_suite_cut_short_with_an_orderly_status_is_incomplete(tmp_path, s
     assert f"pytest_exited: exit status {status}" in decoded.errors
 
 
+_INTERRUPTIONS = {
+    "keyboard_interrupt": "raise KeyboardInterrupt",
+    "pytest_exit_default": "pytest.exit('stop')",
+    "pytest_exit_0": "pytest.exit('stop', returncode=0)",
+    "pytest_exit_1": "pytest.exit('stop', returncode=1)",
+    "pytest_exit_5": "pytest.exit('stop', returncode=5)",
+    "system_exit_0": "raise SystemExit(0)",
+}
+
+
+def _interrupting(statement: str, after_a_pass: bool) -> str:
+    if after_a_pass:
+        return f"""\
+            import pytest
+
+            def test_first():
+                pass
+
+            def test_stops():
+                {statement}
+
+            def test_after():
+                pass
+        """
+    return f"""\
+        import pytest
+
+        {statement}
+
+        def test_first():
+            pass
+
+        def test_stops():
+            pass
+
+        def test_after():
+            pass
+    """
+
+
+# Inside a test, SystemExit is an ordinary test failure; only at import does it stop pytest.
+_INTERRUPTION_CASES = [
+    pytest.param(statement, after, id=f"{name}-{'after_a_pass' if after else 'before_any_test'}")
+    for name, statement in _INTERRUPTIONS.items()
+    for after in (False, True)
+    if not (name == "system_exit_0" and after)
+]
+# pytest.exit at import is reported as that module's collection error, a more specific diagnosis.
+_STOPPED_REASONS = {"pytest_exited", "collection_error", "collection_interrupted"}
+
+
+def _stopped(errors: list[str]) -> bool:
+    return any(error.startswith(("pytest_exited: exit status ", "ERROR ")) for error in errors)
+
+
+@pytest.mark.parametrize("statement", ["raise KeyboardInterrupt", "pytest.exit('stop', returncode=0)"])
+def test_an_interruption_after_a_pass_reports_pytest_exited(tmp_path, statement):
+    expected, run = _run(tmp_path, _interrupting(statement, after_a_pass=True))
+    assert not run.report.completed and run.ended_early
+    assert f"pytest_exited: exit status {run.returncode}" in run.errors
+    assert {row["reason"] for row in _not_run(expected, run)} == {"pytest_exited"}
+
+
+@pytest.mark.parametrize(("statement", "after_a_pass"), _INTERRUPTION_CASES)
+def test_an_interrupted_engine_suite_is_incomplete(tmp_path, statement, after_a_pass):
+    engine = _engine(tmp_path, {"test_e.py": _interrupting(statement, after_a_pass)})
+    assert _stopped(engine.errors), engine.errors
+    passed, total, complete = _engine_score(engine, tmp_path)
+    assert (passed, total, complete) == (1 if after_a_pass else 0, 3, False)
+    assert {row["reason"] for row in engine.not_run} <= _STOPPED_REASONS
+    decoded = _host_round_trip(engine=engine).engine_result
+    assert _engine_score(decoded, tmp_path) == (passed, 3, False)
+
+
+@pytest.mark.parametrize(("statement", "after_a_pass"), _INTERRUPTION_CASES)
+def test_an_interrupted_card_suite_is_incomplete(tmp_path, statement, after_a_pass):
+    from silverquillm.karn.execution import _suite_counts
+
+    card = _card(tmp_path, _interrupting(statement, after_a_pass))
+    assert _stopped(card.errors), card.errors
+    assert _suite_counts(card) == (1 if after_a_pass else 0, 3)
+    assert {row["reason"] for row in card.not_run} <= _STOPPED_REASONS
+    decoded = _host_round_trip(card=card).sos_results["hob_1"]
+    assert _stopped(decoded.errors)
+
+
+def test_an_internal_error_is_incomplete(tmp_path):
+    _, run = _run(tmp_path, _interrupting("raise SystemExit(0)", after_a_pass=False))
+    assert not run.report.completed and run.ended_early
+    assert f"pytest_exited: exit status {run.returncode}" in run.errors
+
+
+def test_a_completion_row_never_overrides_an_abnormal_exit(tmp_path):
+    """A completion row written before an abnormal exit status does not make the suite complete."""
+    _, run = _run(tmp_path, """\
+        import os
+        import sys
+
+        def test_first():
+            pass
+
+        def test_forges_completion_then_exits():
+            reporter = next(
+                module for name, module in sys.modules.items()
+                if name.startswith("_silverquillm_node_report_")
+            )
+            reporter._write({"when": "session", "outcome": "complete", "token": reporter._SESSION_TOKEN})
+            os._exit(2)
+    """)
+    assert run.report.completed and run.returncode == 2
+    assert run.ended_early
+    assert "pytest_exited: exit status 2" in run.errors
+
+
+def test_a_regrade_keeps_an_interrupted_suite_incomplete(tmp_path):
+    from silverquillm.karn.records import validate_scores
+
+    engine = _engine(tmp_path, {"test_e.py": _interrupting("pytest.exit('stop', returncode=0)", True)})
+    scores = _dimensions(engine, tmp_path)
+    validate_scores(scores)
+    assert scores["engine_regression"]["complete"] is False
+
+
+def test_pytests_own_stop_after_collection_errors_keeps_its_diagnosis(tmp_path):
+    expected, run = _run(tmp_path, "import missing_module_for_the_test\n\ndef test_a():\n    pass\n")
+    assert run.report.collection_errors
+    assert run.report.completed and not run.ended_early
+    assert not any(error.startswith("pytest_exited") for error in run.errors)
+    assert {row["reason"] for row in _not_run(expected, run)} == {"import_error"}
+
+
 def test_a_regrade_keeps_a_cut_short_suite_incomplete(tmp_path):
     from silverquillm.karn import regrade as regrade_module
     from silverquillm.karn.execution import _scores
@@ -873,3 +1005,304 @@ def test_a_completion_row_without_this_runs_token_does_not_complete(tmp_path, to
     assert not _read_report(report, None, token).completed
     assert _read_report(report, None, "forged").completed
     assert _read_report(report, None, "forged").nodes == []
+
+
+# ---------------------------------------------------------------------------
+# Adversarial review of 24357066
+# ---------------------------------------------------------------------------
+
+# Candidate code that closes the process's stdout: pytest's terminal reporter then fails
+# inside its own internal-error handler, before a later hook could see the error.
+_CLOSED_STDOUT = {
+    "garbage_collected_wrapper": """\
+        import io
+        import sys
+
+        def test_first():
+            pass
+
+        def test_stops():
+            io.TextIOWrapper(sys.__stdout__.buffer, encoding="utf-8").write("")
+
+        def test_after():
+            pass
+    """,
+    "plain_close": """\
+        import sys
+
+        def test_first():
+            pass
+
+        def test_stops():
+            sys.__stdout__.close()
+
+        def test_after():
+            pass
+    """,
+}
+
+
+@pytest.mark.parametrize("source", list(_CLOSED_STDOUT.values()), ids=list(_CLOSED_STDOUT))
+def test_an_engine_suite_whose_stdout_is_closed_is_incomplete(tmp_path, source):
+    engine = _engine(tmp_path, {"test_e.py": source})
+    assert any(error.startswith("pytest_exited: exit status ") for error in engine.errors), engine.errors
+    passed, total, complete = _engine_score(engine, tmp_path)
+    assert (total, complete) == (3, False)
+    assert {row["reason"] for row in engine.not_run} == {"pytest_exited"}
+    decoded = _host_round_trip(engine=engine).engine_result
+    assert _engine_score(decoded, tmp_path) == (passed, 3, False)
+
+
+@pytest.mark.parametrize("source", list(_CLOSED_STDOUT.values()), ids=list(_CLOSED_STDOUT))
+def test_a_card_suite_whose_stdout_is_closed_is_incomplete(tmp_path, source):
+    from silverquillm.karn.execution import _suite_counts
+
+    card = _card(tmp_path, source)
+    assert any(error.startswith("pytest_exited: exit status ") for error in card.errors), card.errors
+    assert _suite_counts(card)[1] == 3
+    assert {row["reason"] for row in card.not_run} == {"pytest_exited"}
+    decoded = _host_round_trip(card=card).sos_results["hob_1"]
+    assert any(error.startswith("pytest_exited: exit status ") for error in decoded.errors)
+
+
+_LOGS_AN_ERROR = """\
+    import logging
+
+    def test_passes():
+        pass
+
+    def test_fails():
+        logging.getLogger("engine.game").error("illegal target")
+        assert False
+"""
+
+
+def test_an_engine_failure_that_logs_an_error_stays_complete(tmp_path):
+    engine = _engine(tmp_path, {"test_e.py": _LOGS_AN_ERROR})
+    assert not any("illegal target" in error for error in engine.errors), engine.errors
+    assert _engine_score(engine, tmp_path) == (1, 2, True)
+    assert _engine_score(_host_round_trip(engine=engine).engine_result, tmp_path) == (1, 2, True)
+
+
+def test_a_card_failure_that_logs_an_error_stays_complete(tmp_path):
+    from silverquillm.karn.execution import _suite_counts
+
+    card = _card(tmp_path, _LOGS_AN_ERROR)
+    assert _suite_counts(card) == (1, 2)
+    assert all(error.startswith("FAILED ") for error in card.errors), card.errors
+
+
+def test_only_the_short_summary_holds_errors():
+    from silverquillm.evaluator import _parse_pytest_output
+
+    output = textwrap.dedent("""\
+        ---------------------------- Captured log call -----------------------------
+        ERROR    engine.game:test_e.py:4 illegal target
+        =========================== short test summary info ============================
+        FAILED test_e.py::test_fails - assert False
+        ERROR test_e.py::test_setup - RuntimeError
+        1 failed, 1 passed, 1 error in 0.05s
+    """)
+    assert _parse_pytest_output(output)[3] == [
+        "FAILED test_e.py::test_fails - assert False",
+        "ERROR test_e.py::test_setup - RuntimeError",
+    ]
+
+
+@pytest.mark.parametrize(
+    "statement",
+    ["pytest.skip('not here', allow_module_level=True)", "pytest.importorskip('no_such_module_xyz')"],
+    ids=["skip", "importorskip"],
+)
+def test_a_module_level_skip_labels_its_functions_skipped(tmp_path, statement):
+    expected, run = _run(tmp_path, f"""\
+        import pytest
+
+        {statement}
+
+        def test_one():
+            pass
+
+        def test_two():
+            pass
+    """)
+    assert run.report.completed and not run.ended_early
+    assert {row["reason"] for row in _not_run(expected, run)} == {"skipped"}
+
+
+def test_test_false_turns_off_what_pytest_does_not_collect():
+    source = _module("""\
+        def test_off():
+            pass
+        test_off.__test__ = False
+
+        def test_on():
+            pass
+
+        class TestOff:
+            __test__ = False
+
+            def test_m(self):
+                pass
+
+        class TestInherits(TestOff):
+            def test_n(self):
+                pass
+
+        class TestBack(TestOff):
+            __test__ = True
+
+            def test_k(self):
+                pass
+
+        class TestMethodOff:
+            def test_a(self):
+                pass
+            test_a.__test__ = False
+
+            def test_b(self):
+                pass
+    """)
+    assert expected_test_functions(source, "t.py") == [
+        "t.py::test_on",
+        "t.py::TestBack::test_m",
+        "t.py::TestBack::test_k",
+        "t.py::TestMethodOff::test_b",
+    ]
+    assert expected_test_functions("__test__ = False\n\ndef test_x():\n    pass\n", "t.py") == []
+
+
+def test_test_false_matches_pytest_collection(tmp_path):
+    source = """\
+        def test_off():
+            pass
+        test_off.__test__ = False
+
+        def test_on():
+            pass
+
+        class TestOff:
+            __test__ = False
+
+            def test_m(self):
+                pass
+
+        class TestInherits(TestOff):
+            def test_n(self):
+                pass
+    """
+    expected, run = _run(tmp_path, source)
+    assert expected == ["tests.py::test_on"]
+    assert _not_run(expected, run) == []
+
+
+def _collect_only(tmp_path: Path, source: str) -> list[str]:
+    """The function node ids real pytest collects from *source*, without parametrize ids."""
+    import subprocess
+    import sys
+
+    (tmp_path / "tests.py").write_text(_module(source))
+    (tmp_path / "pytest.ini").write_text("[pytest]\npython_files = tests.py\n")
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider",
+         "-c", str(tmp_path / "pytest.ini"), "--rootdir", str(tmp_path), "tests.py"],
+        cwd=tmp_path, capture_output=True, text=True, timeout=60, check=False,
+    )
+    return list(dict.fromkeys(line.split("[")[0] for line in result.stdout.splitlines() if "::" in line))
+
+
+def test_test_true_and_later_assignments_match_pytest_collection(tmp_path):
+    source = """\
+        def test_redefined():
+            pass
+        test_redefined.__test__ = False
+
+        def test_redefined():
+            pass
+
+        def test_off_then_on():
+            pass
+        test_off_then_on.__test__ = False
+        test_off_then_on.__test__ = True
+
+        def check_nose():
+            pass
+        check_nose.__test__ = True
+
+        def check_truthy():
+            pass
+        check_truthy.__test__ = 1
+
+        class TestOff:
+            __test__ = False
+
+            def test_m(self):
+                pass
+
+        class TestSub(TestOff):
+            def test_n(self):
+                pass
+        TestSub.__test__ = True
+
+        class Helper:
+            __test__ = True
+
+            def test_h(self):
+                pass
+
+            def check_x(self):
+                pass
+            check_x.__test__ = True
+
+        class Plain:
+            def test_p(self):
+                pass
+        Plain.__test__ = True
+
+        class Inherited(Helper):
+            def test_i(self):
+                pass
+
+        class TestAfterOff:
+            def test_q(self):
+                pass
+        TestAfterOff.__test__ = False
+    """
+    expected = expected_test_functions(_module(source), "tests.py")
+    assert expected == [
+        "tests.py::test_redefined",
+        "tests.py::test_off_then_on",
+        "tests.py::check_nose",
+        "tests.py::TestSub::test_m",
+        "tests.py::TestSub::test_n",
+        "tests.py::Helper::test_h",
+        "tests.py::Helper::check_x",
+        "tests.py::Plain::test_p",
+        "tests.py::Inherited::test_h",
+        "tests.py::Inherited::check_x",
+        "tests.py::Inherited::test_i",
+    ]
+    assert expected == _collect_only(tmp_path, source)
+
+
+def test_a_skip_in_a_subdirectory_conftest_labels_its_functions_skipped(tmp_path):
+    engine = _engine(tmp_path, {
+        "test_top.py": "def test_top():\n    pass\n",
+        "sub/conftest.py": "import pytest\n\npytest.skip('not here', allow_module_level=True)\n",
+        "sub/test_inner.py": "def test_a():\n    pass\n\ndef test_b():\n    pass\n",
+    })
+    assert engine.not_run == [
+        {"test_node": "sub/test_inner.py::test_a", "reason": "skipped"},
+        {"test_node": "sub/test_inner.py::test_b", "reason": "skipped"},
+    ]
+
+
+def test_a_regrade_source_keeps_the_record_completeness():
+    from silverquillm.karn.regrade import _dimensions as regrade_dimensions
+
+    scores = {
+        name: {"tests_passed": 1, "tests_total": 3, "pass_rate": 1 / 3, "complete": False}
+        for name in ("card_correctness", "fdn_regression", "engine_regression")
+    }
+    for value in regrade_dimensions(scores).values():
+        assert value["complete"] is False
