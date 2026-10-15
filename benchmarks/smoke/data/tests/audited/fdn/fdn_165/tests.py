@@ -1,4 +1,4 @@
-"""Regression tests for FDN 165 — Think Twice.
+"""Audited Tests for FDN 165 — Think Twice.
 
 Think Twice is an instant with Flashback {2}{U}. The behavioural surface
 Phase G (cadence alignment) fixes is its post-resolution zone: when cast
