@@ -3,7 +3,8 @@ name: test-investigation
 description: >
   Invoke when you need to triage failing audited tests or discover promotion
   candidates from agent-written tests.  Operates on Harvested Results produced
-  by the Results Repo's `scripts/legacy/harvest_validated_results.py` and the
+  by the Results Repo's `scripts/legacy/harvest_validated_results.py` (a
+  deprecated legacy tool, for the legacy SOS results) and the
   cross-impl breadth summary.
   Two modes: (a) Investigation — rank failing (card, test_node) pairs by breadth
   and present a test-fault vs impl-fault hypothesis for human decision;

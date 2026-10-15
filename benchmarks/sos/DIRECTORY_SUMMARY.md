@@ -22,7 +22,7 @@ Benchmark data and artifacts for the **Secrets of Strixhaven (SOS)** Draft Set �
 | `data/` | Raw and processed data files, plus `tests/audited/` (FDN/SOS audited test suites). |
 | `cards/` | Per-card directories (`1/`–`271/` for SOS, `soa_1/`–`soa_65/` for SOA, `spg_149/`–`spg_158/` for SPG), each containing `card_spec.json`. |
 | `results/` | **Deprecated.** Benchmark results are now stored under `docker/<image_dir>/results/`. |
-| `analysis/` | Output directory for Phase 19 harvest pipeline. Created by the Results Repo's `scripts/legacy/harvest_validated_results.py`. Default output: `analysis/harvested_results.jsonl`. Currently contains `.gitkeep` only; JSONL row emission added in item 4. |
+| `analysis/` | Output directory for Phase 19 harvest pipeline. Created by the Results Repo's deprecated legacy `scripts/legacy/harvest_validated_results.py`. Default output: `analysis/harvested_results.jsonl`. Currently contains `.gitkeep` only; JSONL row emission added in item 4. |
 
 ## Data Files (`data/`)
 

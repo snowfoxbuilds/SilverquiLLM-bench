@@ -77,10 +77,6 @@ git add -f docker/local-pi-blind/results/sos-2026-05-12T01-59/
 
 rm -rf docker/*/validated_results/*/workspace_final/.git
 
-# Aggregate results
-# (the legacy analyses live in the Results Repo's scripts/legacy/; run them from this checkout)
-python3 "$SILVERQUILLM_RESULTS_REPO"/scripts/legacy/validated_results_to_csv.py   --output aggregated_results.csv
-
 # Rerun results
 silverquillm legacy rescore docker/copilot-sonnet-single/results/sos-copilot-sonnet-single-2026-05-26T19-33
 
@@ -89,7 +85,8 @@ ls -d docker/*/validated_results/*/ \
     'silverquillm legacy rescore "{}" >"{}/rescore.log" 2>&1 || echo "FAILED: {}"'
 
 
-# Test Validation
+# Test Validation (deprecated legacy tool in the Results Repo's scripts/legacy/; kept only to
+# reproduce the legacy SOS analyses, run from this checkout)
 # Full harvest → benchmarks/sos/analysis/harvested_results.jsonl
 python "$SILVERQUILLM_RESULTS_REPO"/scripts/legacy/harvest_validated_results.py --bench sos
 # Cross-impl breadth summary → benchmarks/sos/analysis/harvested_summary.json
