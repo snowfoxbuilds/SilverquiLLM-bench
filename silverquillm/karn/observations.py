@@ -15,7 +15,7 @@ import secrets
 import stat
 import threading
 from collections import defaultdict, deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -339,6 +339,8 @@ def summarize_events(
     starts = []
     otel_usage = []
     versions = {e.get("native_version") for e in sessions}
+    # The reasoning effort each thread asked for: its conversation start and each response.
+    efforts: dict[str, set[str]] = defaultdict(set)
     for event in rows:
         if event["source"] != "otel":
             continue
@@ -346,6 +348,9 @@ def summarize_events(
         owner = event.get("thread_id")
         if owner:
             otel_threads.add(owner)
+        for key in ("reasoning_effort", "model_reasoning_effort"):
+            if isinstance(owner, str) and isinstance(attrs.get(key), str):
+                efforts[owner].add(attrs[key])
         if attrs.get("app.version"):
             versions.add(attrs["app.version"])
         if (
@@ -448,6 +453,7 @@ def summarize_events(
                 (otel_threads | native_threads)
                 - {_main_thread(sessions, requests, [e for e in rows if e["source"] == "otel"])}
             ),
+            efforts,
         ),
     )
 
@@ -466,14 +472,22 @@ def _main_thread(*sources: list[dict[str, Any]]) -> str | None:
 SUBAGENT_ROWS_MAX = 1000
 SUBAGENT_MODELS_MAX = 32
 SUBAGENT_LABEL_MAX = 256
+SUBAGENT_EFFORTS_MAX = 8
+# A reasoning effort is a level's name (low, medium, xhigh, ...), never a number or free text.
+_EFFORT = re.compile(r"[a-z][a-z0-9_-]{0,31}\Z")
 
 
 def subagent_rows(
-    requests: list[dict[str, Any]], threads: Iterable[Any]
+    requests: list[dict[str, Any]],
+    threads: Iterable[Any],
+    efforts: Mapping[Any, Iterable[Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Per subagent thread, the models observed on its requests and how many it made, and
-    how many subagent threads are not listed (beyond the row cap or without a usable id).
+    """Per subagent thread, the models observed on its requests, how many it made and the
+    reasoning efforts its telemetry says were requested, and how many subagent threads are
+    not listed (beyond the row cap or without a usable id).
 
+    ``requested_efforts`` keeps every level observed on the thread, sorted, never one chosen
+    and never the parent's; it is null when the telemetry shows none, as Claude's never does.
     Enough for an analysis to judge a subagent policy itself (#230); nothing is excluded here.
     """
     own: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -491,15 +505,29 @@ def subagent_rows(
                 if isinstance(r.get("model"), str) and len(r["model"]) <= SUBAGENT_LABEL_MAX
             }
         )[:SUBAGENT_MODELS_MAX]
-        rows.append({"thread_id": thread, "models": models, "requests": len(own.get(thread, ()))})
+        observed = sorted(
+            {
+                effort
+                for effort in (efforts or {}).get(thread, ())
+                if isinstance(effort, str) and _EFFORT.match(effort)
+            }
+        )[:SUBAGENT_EFFORTS_MAX]
+        rows.append(
+            {
+                "thread_id": thread,
+                "models": models,
+                "requests": len(own.get(thread, ())),
+                "requested_efforts": observed or None,
+            }
+        )
     return rows, len(named) - len(rows)
 
 
-def derive_subagents(requests: list[dict[str, Any]], threads) -> dict[str, Any]:
+def derive_subagents(requests: list[dict[str, Any]], threads, efforts=None) -> dict[str, Any]:
     """The subagent measurements, never raising on what the workload wrote: a failure leaves
     them out with a reason rather than failing the run's whole collection."""
     try:
-        rows, unlisted = subagent_rows(requests, threads())
+        rows, unlisted = subagent_rows(requests, threads(), efforts)
     except Exception:  # noqa: BLE001 - untrusted telemetry must not fail collection
         return {
             "subagent_threads": None,

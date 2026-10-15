@@ -900,6 +900,8 @@ def test_subagent_threads_count_sidechain_transcripts_only():
     own = [r for r in both["requests"] if r["thread_id"] == row["thread_id"]]
     assert row["requests"] == len(own) == 1
     assert row["models"] == sorted({r["model"] for r in own if r["model"]})
+    # Claude's telemetry shows no subagent's requested effort.
+    assert row["requested_efforts"] is None
     # An observation, not a reason: the child adds no incompleteness of its own.
     assert set(both["usage"]["reasons"]) == set(main["usage"]["reasons"])
 

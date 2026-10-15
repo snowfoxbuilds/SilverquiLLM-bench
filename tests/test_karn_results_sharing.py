@@ -909,6 +909,10 @@ def test_a_label_from_the_file_is_valid_provenance(checkout, monkeypatch, tmp_pa
         ([{"thread_id": "a", "models": ["m"] * 33, "requests": 0}], 0),
         ([{"thread_id": "a", "models": [True], "requests": 0}], 0),
         ([{"thread_id": "a", "models": [], "requests": 0, "extra": 1}], 0),
+        ([{"thread_id": "a", "models": [], "requests": 0, "requested_efforts": []}], 0),
+        ([{"thread_id": "a", "models": [], "requests": 0, "requested_efforts": "low"}], 0),
+        ([{"thread_id": "a", "models": [], "requests": 0, "requested_efforts": [3]}], 0),
+        ([{"thread_id": "a", "models": [], "requests": 0, "requested_efforts": ["e"] * 9}], 0),
         ([{"thread_id": f"t{i}", "models": [], "requests": 0} for i in range(1001)], 0),
         ([], -1),
         ([], True),
@@ -930,7 +934,9 @@ def test_bounded_subagent_rows_and_records_without_them_are_valid(edited_templat
 
     def rows(metadata):
         metadata["measurements"]["subagents"] = [
-            {"thread_id": "a1b2c3d4", "models": ["claude-opus-5-5"], "requests": 3}
+            {"thread_id": "a1b2c3d4", "models": ["claude-opus-5-5"], "requests": 3},
+            {"thread_id": "t2", "models": [], "requests": 1, "requested_efforts": None},
+            {"thread_id": "t3", "models": [], "requests": 1, "requested_efforts": ["low", "xhigh"]},
         ]
         metadata["measurements"]["subagents_truncated"] = 2
 

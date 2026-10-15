@@ -242,9 +242,9 @@ _Avoid_: "quota", "credits", "credential slot usage"
 
 **Exclusion**
 
-A Results Repo entry that leaves one Run Record out of analyses, naming a reason code and a note, without changing the record.
+A write-once Results Repo entry that leaves one Run Record out of every analysis, naming a reason code and a note, without changing the record.
 A rule excludes a run on an observed fact, such as a host failure or zero Agent Turns; an operator excludes anything a rule cannot see, and a superseded run names the record that replaces it.
-Subagent use is a run attribute each analysis judges, never a rule (#230).
+Subagent use is a run attribute each analysis judges, never a rule (#230); an analysis's own selection by run attributes, stated with its results, is not an Exclusion (grilling 2026-10-15).
 
 _Avoid_: "rejected run", "invalid run" (the record stays valid evidence), "filtered out" for an ad hoc analysis choice
 

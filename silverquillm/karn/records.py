@@ -21,7 +21,12 @@ from silverquillm.known_defects import REGRESSION_DIMENSIONS
 from silverquillm.results_repo import InvalidRunRecordError, RunRecordExistsError
 
 from .definition import DIGEST, SCHEMES, KarnError, canonical, decode_definition, digest
-from .observations import SUBAGENT_LABEL_MAX, SUBAGENT_MODELS_MAX, SUBAGENT_ROWS_MAX
+from .observations import (
+    SUBAGENT_EFFORTS_MAX,
+    SUBAGENT_LABEL_MAX,
+    SUBAGENT_MODELS_MAX,
+    SUBAGENT_ROWS_MAX,
+)
 from .provenance import valid as provenance_valid
 
 SCHEMA_VERSION = 2
@@ -267,15 +272,25 @@ def validate_subagents(measurements) -> None:
     for row in rows:
         if (
             not isinstance(row, dict)
-            or set(row) != {"thread_id", "models", "requests"}
+            # Rows written before requested efforts were kept omit that key.
+            or set(row) - {"requested_efforts"} != {"thread_id", "models", "requests"}
             or not _bounded_label(row["thread_id"])
             or not isinstance(row["models"], list)
             or len(row["models"]) > SUBAGENT_MODELS_MAX
             or not all(_bounded_label(model) for model in row["models"])
             or type(row["requests"]) is not int
             or row["requests"] < 0
+            or not _efforts(row.get("requested_efforts"))
         ):
             raise InvalidRunRecordError("invalid subagent rows")
+
+
+def _efforts(value) -> bool:
+    return value is None or (
+        isinstance(value, list)
+        and 0 < len(value) <= SUBAGENT_EFFORTS_MAX
+        and all(_bounded_label(effort) for effort in value)
+    )
 
 
 def _bounded_label(value) -> bool:

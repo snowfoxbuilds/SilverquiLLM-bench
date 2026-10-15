@@ -67,7 +67,7 @@ Claude recipes bake a managed-settings file that denies `Agent` and `Workflow`.
 Codex recipes bake `/etc/codex/config.toml` with `[agents] enabled = false` (and `multi_agent = false`). The `[agents]` switch is needed on Codex 0.157.1, where the GPT-6 model catalog keeps the collaboration tools whatever the `multi_agent` feature says.
 The Codex recipes request no service tier: the ChatGPT subscription backend refuses the Flex tier, so every Codex request records `requested_service_tier` as none.
 Each record's `subagent_threads` measurement counts the agent threads beyond the main one (Claude sidechain transcripts, Codex threads other than the first one observed), so a batch meant to run without subagents should show `0`.
-`subagents` lists each such thread with the models observed on its requests and its request count, up to 1,000 rows (`subagents_truncated` counts the rest); a subagent's requested effort is not observable, and for Codex the main thread is a best guess.
+`subagents` lists each such thread with the models observed on its requests, its request count and `requested_efforts`, the reasoning-effort levels its own telemetry requested (Codex reports them on the thread's conversation start and responses; null when none was observed, always for Claude), up to 1,000 rows (`subagents_truncated` counts the rest); for Codex the main thread is a best guess.
 Both are observations, not incompleteness reasons, and neither excludes a run: whether subagent use disqualifies a run is the analysis's call (#230).
 The Codex recipes pin their CLI with their own `[image.native_cli]`; 0.157.1 needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
 The `gpt-6.1-sol` recipes (`bare-codex-sol61-<effort>`, `low` to `max`) pin Codex 0.159.0. That release's bundled catalog predates the model, so Codex takes its entry from the server's model list at sign-in.
@@ -359,14 +359,15 @@ Commit `baselines/` and `workspaces/` with the records.
 
 ### Exclusions
 
-A run is left out of analyses only by an exclusion file, `exclusions/<candidate-hash>/<run-id>.json`, never by editing its record or by a private filter.
+An exclusion file, `exclusions/<candidate-hash>/<run-id>.json`, leaves a run out of every analysis; nothing edits its record.
+An analysis may also select runs by their recorded attributes, such as a subagent policy over `subagents`, under criteria it states and publishes with its own results (the Results Repo runbook, snowfoxbuilds/bench-results#20); that selection is the analysis's alone and is never written as an exclusion file, so two analyses can decide differently about the same run while an excluded run stays out of both.
 The run writer adds one when a rule fires on an observed fact: `host_failed` or `never_executed` (zero agent turns).
 Subagent use is a run attribute, not a rule (#230); records from before that change may carry `subagents_used` or `subagents_uncounted` rule exclusions, which stay.
 An unknown measurement never excludes a run: absent, null or empty measurements, or an unknown turn count, leave it in.
 Exclude anything else yourself, with a note a later reader can check:
 
 ```sh
-silverquillm results exclude RUN_ID --reason subagents_used --note "Sonnet delegated to Opus subagents"
+silverquillm results exclude RUN_ID --reason pilot --note "predates the #92 workspace fixes"
 silverquillm results exclude RUN_ID --reason superseded --superseded-by RETRY_ID --note "rerun after the host outage"
 ```
 

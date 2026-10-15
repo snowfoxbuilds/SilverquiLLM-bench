@@ -724,7 +724,7 @@ def test_a_boolean_thread_id_is_dropped_and_cannot_fail_collection():
 def test_subagent_derivation_failure_leaves_the_rows_out_with_a_reason(monkeypatch):
     from silverquillm.karn import observations
 
-    def broken(requests, threads):
+    def broken(*arguments):
         raise TypeError("forged")
 
     monkeypatch.setattr(observations, "subagent_rows", broken)
@@ -750,3 +750,57 @@ def test_many_subagent_threads_are_capped_and_summarised_in_linear_time():
     assert result["subagent_threads"] == 7999
     assert result["subagents_truncated"] == 7999 - SUBAGENT_ROWS_MAX
     assert all(row["requests"] == 1 for row in result["subagents"])
+
+
+@pytest.mark.parametrize(
+    ("version", "child"),
+    [
+        ("0.157.1", "01a0e3b8-301a-70a0-aaed-0df7042feaad"),
+        ("0.159.0", "01a0ee48-3315-7401-b286-80247bea480f"),
+    ],
+)
+def test_a_codex_subagent_row_keeps_the_effort_its_telemetry_requested(version, child):
+    from pathlib import Path
+
+    fixture = Path(__file__).parent / "fixtures" / f"karn_observations_codex_{version}"
+    events = [json.loads(line) for line in (fixture / "descendant.jsonl").read_bytes().splitlines()]
+    result = summarize_events(events, exit_kind="completed")
+    assert result["subagents"] == [
+        {"thread_id": child, "models": ["gpt-5.4"], "requests": 2, "requested_efforts": ["low"]}
+    ]
+
+
+def _effort_events(**efforts_by_thread):
+    records = []
+    for thread, efforts in efforts_by_thread.items():
+        for effort in efforts:
+            records.append(
+                _otlp_record({"stringValue": thread}, model_reasoning_effort=effort)
+            )
+    return normalize_otlp(_otlp(*records))
+
+
+def test_subagent_efforts_are_the_childs_own_every_level_kept_and_none_when_unseen():
+    events = _effort_events(
+        a_main=[{"stringValue": "high"}],
+        b_child=[{"stringValue": "medium"}, {"stringValue": "low"}, {"stringValue": "low"}],
+        c_quiet=[{"intValue": "3"}, {"boolValue": True}, {"stringValue": "bad effort!"}],
+    )
+    # The parent is the first thread seen; put it first in time.
+    for event in events:
+        if event["thread_id"] == "a_main":
+            event["timestamp_ms"] -= 1000
+    rows = {row["thread_id"]: row for row in summarize_events(events, exit_kind="completed")["subagents"]}
+    assert set(rows) == {"b_child", "c_quiet"}
+    assert rows["b_child"]["requested_efforts"] == ["low", "medium"]  # never the parent's high
+    assert rows["c_quiet"]["requested_efforts"] is None  # malformed values are not efforts
+
+
+def test_subagent_efforts_are_bounded():
+    from silverquillm.karn.observations import SUBAGENT_EFFORTS_MAX, subagent_rows
+
+    rows, unlisted = subagent_rows(
+        [], ["t"], {"t": [f"e{i:02d}" for i in range(40)] + [3, None, "x" * 300, "3", "High"]}
+    )
+    assert unlisted == 0
+    assert rows[0]["requested_efforts"] == [f"e{i:02d}" for i in range(SUBAGENT_EFFORTS_MAX)]

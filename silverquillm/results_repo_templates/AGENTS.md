@@ -141,8 +141,11 @@ Rules exclude a record for `host_failed` (execution status) and `never_executed`
 empty measurements, and a present but unknown turn count, leave the record in.
 Subagent use is never a rule: `run_metadata.measurements.subagent_threads` counts
 the agent threads beyond the main one, and `subagents` lists each such thread as
-`{"thread_id", "models", "requests"}` (the models observed on its requests; null
-when nothing was observed), so an analysis judges its own subagent policy. The list
+`{"thread_id", "models", "requests", "requested_efforts"}` (the models observed on
+its requests; `requested_efforts` is the sorted set of reasoning-effort levels the
+thread's own telemetry requested, from Codex's conversation start and responses, and
+null when none was observed, which is always so for Claude; rows written before it
+omit the key), so an analysis judges its own subagent policy. The list
 holds at most 1,000 rows of at most 32 models each; `subagents_truncated` counts the
 subagent threads not listed, so `subagent_threads` is the rows plus that count. When
 the telemetry could not be read into rows, `subagents` is null and
@@ -153,9 +156,13 @@ written before #230 may carry rule exclusions for `subagents_used` or
 reason by hand. Operators add the rest with `silverquillm results exclude`. To include
 a record again, delete its file.
 
-Every analysis applies these files and no private filter: aggregate the records
-without an exclusion, and list the excluded ones with their reasons beneath the
-table (`silverquillm results exclusions`). `silverquillm regrade` does the same:
+These files are repository-wide: every analysis applies them, aggregates only
+records without one, and lists the excluded ones with their reasons beneath the
+table (`silverquillm results exclusions`). Beyond them, an analysis may select runs
+by their recorded attributes, such as a subagent policy over `subagents`, under
+criteria it states and publishes with its own results; that selection belongs to
+that analysis alone and is never written as an exclusion file, so two analyses may
+decide differently about the same run while an excluded run stays out of both. `silverquillm regrade` does the same:
 it grades excluded records too, but leaves them out of its comparison and lists
 them under `excluded` in its summary. `silverquillm results check` reports
 records a rule excludes that have no file, and files without a record.
