@@ -670,8 +670,20 @@ def test_codex_subagent_threads_count_threads_beyond_the_main_one(scenario, expe
     fixture = Path(__file__).parent / "fixtures" / "karn_observations_codex_0.157.1"
     raw = (fixture / (scenario + ".jsonl")).read_bytes()
     events = [json.loads(line) for line in raw.splitlines()]
-    assert summarize_events(events, exit_kind="completed")["subagent_threads"] == expected
+    result = summarize_events(events, exit_kind="completed")
+    assert result["subagent_threads"] == expected
+    assert len(result["subagents"]) == expected
+    main = {r["thread_id"] for r in result["requests"]} - {
+        row["thread_id"] for row in result["subagents"]
+    }
+    for row in result["subagents"]:
+        own = [r for r in result["requests"] if r["thread_id"] == row["thread_id"]]
+        assert row["requests"] == len(own)
+        assert row["models"] == sorted({r["model"] for r in own if r["model"]})
+    assert len(main) <= 1
 
 
 def test_subagent_threads_are_missing_without_observations():
-    assert summarize_events([], exit_kind="completed")["subagent_threads"] is None
+    result = summarize_events([], exit_kind="completed")
+    assert result["subagent_threads"] is None
+    assert result["subagents"] is None

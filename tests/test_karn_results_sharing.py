@@ -550,8 +550,8 @@ def measured(turns, threads="absent"):
         (measured(40, 0), None),
         (measured(None, None), None),
         (measured(0, 0), "never_executed"),
-        (measured(40, 2), "subagents_used"),
-        (measured(40), "subagents_uncounted"),
+        (measured(40, 2), None),
+        (measured(40), None),
         (lambda m: m["execution"].update(status="host_failed"), "host_failed"),
     ],
 )
@@ -598,13 +598,13 @@ def test_a_run_meeting_a_rule_is_excluded_when_its_record_is_written(tmp_path, m
 def test_operator_exclusions_check_and_rule_backfill(edited):
     opts, record = edited
     repo = opts["results_repo"]
-    record_as(opts, record, "old", measured(40))
+    record_as(opts, record, "old", measured(0, 0))
     record_as(opts, record, "retry", measured(40, 0))
 
     report = check(repo)
     assert report["unexcluded_rule_matches"] == [
         {"run_id": "old", "candidate_hash": report["unexcluded_rule_matches"][0]["candidate_hash"],
-         "rule": "subagents_uncounted"},
+         "rule": "never_executed"},
     ]  # fmt: skip
 
     with pytest.raises(ExclusionError, match="superseded_by_required"):
@@ -626,7 +626,7 @@ def test_operator_exclusions_check_and_rule_backfill(edited):
     }
     assert {e.run_id: e.reason for e in load_exclusions(repo).values()} == {
         "edited": "superseded",
-        "old": "subagents_uncounted",
+        "old": "never_executed",
     }
 
 
@@ -764,9 +764,10 @@ def test_absent_or_empty_measurements_never_exclude(edited, blank):
     ).exists()
 
 
-def test_historical_measurements_without_a_thread_count_are_still_uncounted(edited_template):
+def test_subagent_use_is_an_attribute_and_never_excludes_a_run(edited_template):
     record = edited_template.record
-    assert rule_exclusion(edit(record, measured(40)))[0] == "subagents_uncounted"
+    assert rule_exclusion(edit(record, measured(40, 3))) is None
+    assert rule_exclusion(edit(record, measured(40))) is None
 
 
 # ---- regrade summaries apply exclusions ------------------------------------------------------
@@ -790,7 +791,7 @@ def cohort_runs(summary):
 
 def test_regrade_summaries_leave_out_excluded_runs_and_list_them(edited, tmp_path):
     opts, _ = edited
-    write_record_with(opts, "old", measured(40))
+    write_record_with(opts, "old", measured(0, 0))
     run_benchmark(**opts, run_id="kept")
     repo = opts["results_repo"]
     exclude(repo, "edited", reason="pilot", note="pipeline validation", excluded_by="op")
@@ -801,7 +802,7 @@ def test_regrade_summaries_leave_out_excluded_runs_and_list_them(edited, tmp_pat
     assert cohort_runs(summary) == 1
     assert {(row["run_id"], row["reason"]) for row in summary["excluded"]} == {
         ("edited", "pilot"),
-        ("old", "subagents_uncounted"),
+        ("old", "never_executed"),
     }
     assert {row["note"] for row in summary["excluded"]} >= {"pipeline validation"}
     assert len(list((tmp_path / "regrade").glob("*/*.json"))) == 3

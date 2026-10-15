@@ -66,8 +66,9 @@ The current batch (2026-09-28) runs every model at effort `medium` with subagent
 Claude recipes bake a managed-settings file that denies `Agent` and `Workflow`.
 Codex recipes bake `/etc/codex/config.toml` with `[agents] enabled = false` (and `multi_agent = false`). The `[agents]` switch is needed on Codex 0.157.1, where the GPT-6 model catalog keeps the collaboration tools whatever the `multi_agent` feature says.
 The Codex recipes request no service tier: the ChatGPT subscription backend refuses the Flex tier, so every Codex request records `requested_service_tier` as none.
-Each record's `subagent_threads` measurement counts the agent threads beyond the main one (Claude sidechain transcripts, Codex threads other than the task's), so a batch meant to run without subagents should show `0`.
-The count is an observation, not an incompleteness reason.
+Each record's `subagent_threads` measurement counts the agent threads beyond the main one (Claude sidechain transcripts, Codex threads other than the first one observed), so a batch meant to run without subagents should show `0`.
+`subagents` lists each such thread with the models observed on its requests and its request count; a subagent's requested effort is not observable.
+Both are observations, not incompleteness reasons, and neither excludes a run: whether subagent use disqualifies a run is the analysis's call (#230).
 The Codex recipes pin their CLI with their own `[image.native_cli]`; 0.157.1 needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
 The `gpt-6.1-sol` recipes (`bare-codex-sol61-<effort>`, `low` to `max`) pin Codex 0.159.0. That release's bundled catalog predates the model, so Codex takes its entry from the server's model list at sign-in.
 Each construct carries no custom skills or polling controller.
@@ -359,8 +360,9 @@ Commit `baselines/` and `workspaces/` with the records.
 ### Exclusions
 
 A run is left out of analyses only by an exclusion file, `exclusions/<candidate-hash>/<run-id>.json`, never by editing its record or by a private filter.
-The run writer adds one when a rule fires on an observed fact: `host_failed`, `never_executed` (zero agent turns), `subagents_used` (subagent threads observed), or `subagents_uncounted` (measurements from before subagent threads were counted).
-An unknown measurement never excludes a run: absent, null or empty measurements, or an unknown turn or thread count, leave it in.
+The run writer adds one when a rule fires on an observed fact: `host_failed` or `never_executed` (zero agent turns).
+Subagent use is a run attribute, not a rule (#230); records from before that change may carry `subagents_used` or `subagents_uncounted` rule exclusions, which stay.
+An unknown measurement never excludes a run: absent, null or empty measurements, or an unknown turn count, leave it in.
 Exclude anything else yourself, with a note a later reader can check:
 
 ```sh

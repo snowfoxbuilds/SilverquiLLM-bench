@@ -136,12 +136,16 @@ the record:
 | `superseded_by` | The replacing record's run id, only for `superseded` |
 | `excluded_by`, `excluded_at` | Who and when |
 
-Rules exclude a record for `host_failed` (execution status), `never_executed`
-(zero observed agent turns), `subagents_used` (subagent threads observed) and
-`subagents_uncounted` (a populated measurement object without a
-`subagent_threads` count). An unknown measurement never excludes: absent, null or
-empty measurements, and a present but unknown turn or thread count, leave the
-record in. Operators add the rest with `silverquillm results exclude`. To include
+Rules exclude a record for `host_failed` (execution status) and `never_executed`
+(zero observed agent turns). An unknown measurement never excludes: absent, null or
+empty measurements, and a present but unknown turn count, leave the record in.
+Subagent use is never a rule: `run_metadata.measurements.subagent_threads` counts
+the agent threads beyond the main one, and `subagents` lists each such thread as
+`{"thread_id", "models", "requests"}` (the models observed on its requests; null
+when nothing was observed), so an analysis judges its own subagent policy. Records
+written before #230 may carry rule exclusions for `subagents_used` or
+`subagents_uncounted`; those files stay, and an operator may still write either
+reason by hand. Operators add the rest with `silverquillm results exclude`. To include
 a record again, delete its file.
 
 Every analysis applies these files and no private filter: aggregate the records
