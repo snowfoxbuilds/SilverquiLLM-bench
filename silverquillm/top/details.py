@@ -144,6 +144,8 @@ def header(shown: Shown, now: datetime, theme: Theme) -> Table:
     right.add_column(style=theme.style("muted"))
     right.add_column()
     if summary is not None:
+        if summary.net_card is not None:
+            right.add_row("net card", fmt.net_card(summary.net_card, theme))
         for suite in ("target", "fdn", "engine"):
             right.add_row(suite, fmt.score(summary.scores.get(suite), theme))
         cost = fmt.money(summary.cost, theme)

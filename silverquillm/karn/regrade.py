@@ -26,6 +26,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from silverquillm.known_defects import has_known_defects_manifest
+from silverquillm.net_card_score import (
+    ScoringData,
+    ScoringDataError,
+    benchmark_scoring_data,
+    derive,
+    regrade_grade,
+)
 from silverquillm.results_repo import InvalidRunRecordError, iter_run_dirs
 
 from . import provenance
@@ -562,18 +569,40 @@ def _excluded(result: dict, exclusions: dict[str, Exclusion]) -> Exclusion | Non
     return None
 
 
+def _net_card_means(rows: list[dict], scoring: ScoringData) -> dict:
+    """The mean Net Card Score after the regrade, over the runs it could be derived for."""
+    scored = [
+        result
+        for row in rows
+        if (result := derive(regrade_grade(row), scoring))["available"] is True
+    ]
+
+    def mean(key: str) -> float | None:
+        return statistics.fmean(result[key] for result in scored) if scored else None
+
+    return {
+        "mean_score": mean("score"),
+        "mean_implemented": mean("implemented"),
+        "mean_fixed": mean("fixed"),
+        "mean_broken": mean("broken"),
+        "scored_runs": len(scored),
+    }
+
+
 def summarize(
     results: list[dict],
     digests: dict,
     benchmark_id: str,
     exclusions: dict[str, Exclusion] | None = None,
+    scoring: ScoringData | None = None,
 ) -> dict:
     """Before/after means per cohort: one candidate graded originally on one inputs digest.
 
     Original scores from different grading-inputs digests are never averaged together, and
     a run whose original digest is unknown forms a cohort of its own. A run excluded in the
     results repository is graded like any other but left out of every cohort and listed,
-    with its reason, under ``excluded``.
+    with its reason, under ``excluded``. With the benchmark's scoring data, each cohort
+    also reports its mean Net Card Score after the regrade.
     """
     exclusions = exclusions or {}
     excluded = sorted(
@@ -616,10 +645,13 @@ def summarize(
                 "after_mean_pass_rate": after,
                 "paired_runs": paired,
             }
+        if scoring is not None:
+            entry["net_card_score"] = _net_card_means(rows, scoring)
         cohorts.append(entry)
     return {
         "benchmark": benchmark_id,
         **digests,
+        **({"scoring_data_digest": scoring.digest} if scoring is not None else {}),
         "cohorts": cohorts,
         "excluded": excluded,
         "skipped": sorted(
@@ -631,6 +663,13 @@ def summarize(
             key=lambda row: row["run_id"],
         ),
     }
+
+
+def _scoring_data(bench_root: Path, benchmark_id: str) -> ScoringData | None:
+    try:
+        return benchmark_scoring_data(bench_root, benchmark_id)
+    except ScoringDataError as error:
+        raise KarnError("scoring_data_invalid:" + str(error)) from None
 
 
 def published_regrades(results_repo: Path, grading_inputs_digest: str) -> Path:
@@ -724,7 +763,9 @@ def regrade(
                 staged=staged,
             )
         results += [{**row, "skipped": row["reason"]} for row in unreadable]
-        summary = summarize(results, digests, benchmark_id, exclusions)
+        summary = summarize(
+            results, digests, benchmark_id, exclusions, _scoring_data(bench_root, benchmark_id)
+        )
         if inputs["problems"]:
             summary["grading_inputs_problems"] = inputs["problems"]
         if grading_inputs(benchmark)["digest"] != inputs["digest"]:

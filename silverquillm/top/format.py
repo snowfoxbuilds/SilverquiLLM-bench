@@ -227,6 +227,30 @@ def score(value: Score | None, theme: Theme, *, counts: bool = True) -> Text:
     return text
 
 
+NET_CARD_REASONS = {
+    "no_baseline_comparison": "no baseline",
+    "suite_not_evaluated": "suite not graded",
+    "unreadable_grade": "grade unreadable",
+}
+
+
+def net_card(value: dict | None, theme: Theme, *, counts: bool = True) -> Text:
+    """The Net Card Score, coloured by rarity, then Cards Implemented, Fixed and Broken."""
+    if value is None:
+        return Text(DASH, style=theme.style("muted"))
+    if value.get("available") is not True:
+        reason = str(value.get("reason"))
+        return Text(f"{DASH} {NET_CARD_REASONS.get(reason, reason)}", style=theme.style("muted"))
+    score = value["score"]
+    text = Text(f"{score:+.2f}", style=theme.style(theme.rarity_role(score), bold=True))
+    if counts:
+        text.append(
+            f" {value['implemented']}+{value['fixed']}-{value['broken']}/{value['denominator']}",
+            style=theme.style("muted"),
+        )
+    return text
+
+
 STAGE_ROLES = {
     Stage.RUNNING: "running",
     Stage.GRADING: "grading",
