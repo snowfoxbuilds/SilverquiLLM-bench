@@ -278,6 +278,8 @@ class KarnScheduler:
         self.warnings = []
         # Why the latest pass could dispatch nothing at all, when its queue ledger failed.
         self.dispatch_blocked: str | None = None
+        # Replay acknowledgements whose ledger write failed; dispatch stays blocked until saved.
+        self.unsaved_acknowledgements: set[str] = set()
         # Login pools that could serve no entry during the latest pass, by batch.
         self.unavailable_logins: dict[str, str] = {}
 
@@ -353,6 +355,8 @@ class KarnScheduler:
             state_path = state_dir / (path.stem + ".json")
             try:
                 if load_batch(path) is None:
+                    # Left unrecorded, so correcting it to a Karn Batch admits it then.
+                    self._warn("unsupported_legacy_batch:" + path.name)
                     continue
                 if read_state(state_path, path.stem) is None:
                     self._start_state(state_path, path.stem)
@@ -607,33 +611,45 @@ class KarnScheduler:
                 retry_claimable()
             return changed
 
-        def acknowledge_replay(name):
-            """The operator's --replay-without-state: start the Batch from entry zero."""
+        def block(reason):
+            """Stop admitting runs; live workers finish, and the next pass retries."""
+            if self.dispatch_blocked != reason:
+                # Logged every pass it persists, unlike other warnings: dispatch is stopped.
+                self.dispatch_blocked = reason
+                logging.getLogger(__name__).warning(
+                    "%s: nothing is dispatched until %s is repaired, or removed (then every"
+                    " Batch without state needs --replay-without-state); an unwritable batch"
+                    " directory or state/ must be made writable",
+                    reason,
+                    LEDGER_FILENAME,
+                )
+            return False
+
+        def save_acknowledgements():
+            """Persist --replay-without-state starts; False (and blocked) if the write fails."""
+            if not self.unsaved_acknowledgements:
+                return True
             for entry in ledger:
-                if entry["batch"] == name and not entry["acknowledged"]:
+                if entry["batch"] in self.unsaved_acknowledgements:
                     entry["acknowledged"] = True
-                    self._save_ledger(ledger)
+            try:
+                self._save_ledger(ledger)
+            except OSError as error:
+                return block("queue_ledger_unwritable:" + type(error).__name__)
+            self.unsaved_acknowledgements.clear()
+            return True
 
         def dispatch():
             nonlocal ledger
             try:
                 ledger = self._sync_ledger()
             except (KarnError, OSError) as error:
-                reason = (
+                return block(
                     str(error)
                     if isinstance(error, KarnError)
                     else "queue_ledger_unwritable:" + type(error).__name__
                 )
-                if self.dispatch_blocked != reason:
-                    # Logged every pass it persists, unlike other warnings: dispatch is stopped.
-                    self.dispatch_blocked = reason
-                    logging.getLogger(__name__).warning(
-                        "%s: nothing is dispatched until %s is repaired, or removed (then every"
-                        " Batch without state needs --replay-without-state); an unwritable batch"
-                        " directory must be made writable",
-                        reason,
-                        LEDGER_FILENAME,
-                    )
+            if not save_acknowledgements():
                 return False
             self.dispatch_blocked = None
             recorded = {entry["batch"] for entry in ledger} | set(states)
@@ -658,9 +674,15 @@ class KarnScheduler:
                                     f" --replay-without-state {name} to start from entry zero"
                                 )
                                 continue
-                            state = self._start_state(state_path, path.stem)
-                            self.replay.discard(name)
-                            acknowledge_replay(name)
+                            try:
+                                state = self._start_state(state_path, path.stem)
+                            except OSError as error:
+                                return block("queue_state_unwritable:" + type(error).__name__)
+                            self.unsaved_acknowledgements.add(name)
+                            if not save_acknowledgements():
+                                return False
+                        # Usable state, written or restored: the acknowledgement is spent.
+                        self.replay.discard(name)
                         states[path.stem] = state
                     state = states[path.stem]
                     if len(state["runs"]) >= len(batch["runs"]):

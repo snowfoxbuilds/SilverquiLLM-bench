@@ -643,3 +643,27 @@ def _plain(renderable) -> str:
     )
     console.print(renderable)
     return console.export_text()
+
+
+def test_a_batch_error_shows_ahead_of_its_countdown(monkeypatch):
+    import dataclasses
+
+    from silverquillm.monitor import QueuedBatch
+    from silverquillm.top.dashboard import QueuedPane
+
+    batch = QueuedBatch(
+        "tomorrow", "ledger_damaged", NOW + timedelta(hours=24), 0, 1, (), "queue_ledger_invalid"
+    )
+    shown = []
+
+    class Body:
+        def update(self, body):
+            shown.append(body)
+
+    pane = QueuedPane(MTG)
+    monkeypatch.setattr(pane, "query_one", lambda *args: Body())
+    snapshot = dataclasses.replace(FakeMonitor().snapshot(), queued=[batch])
+    pane.show(snapshot)
+    text = shown[0].plain if isinstance(shown[0], Text) else str(shown[0])
+    assert "queue_ledger_invalid" in text
+    assert "24h" not in text

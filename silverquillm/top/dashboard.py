@@ -547,12 +547,13 @@ class QueuedPane(VerticalScroll):
             )
             if batch.needs_ack:
                 state.append(theme.glyph("needs_ack"), style=theme.style("warn", bold=True))
+            elif batch.error:
+                # An error such as a damaged ledger blocks the batch before any countdown ends.
+                state.append(batch.error, style=theme.style("bad"))
             elif batch.not_before is not None and batch.not_before > snapshot.taken_at:
                 state.append(
                     fmt.until(batch.not_before, snapshot.taken_at), style=theme.style("accent")
                 )
-            elif batch.error:
-                state.append(batch.error, style=theme.style("bad"))
             else:
                 state.append(batch.status, style=muted)
             state.append(f"{theme.glyph('sep')}{batch.started}/{batch.total} started", style=muted)

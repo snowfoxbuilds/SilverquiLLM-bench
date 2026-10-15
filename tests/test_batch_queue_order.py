@@ -345,3 +345,104 @@ def test_a_crash_s_temporary_ledger_files_are_removed(tmp_path):
     stale.write_text("{}")
     make_scheduler(tmp_path, directory, [], replay=["a"]).run_until_idle()
     assert not stale.exists() and read_ledger(directory)
+
+
+def test_a_replay_flag_for_a_new_batch_is_spent_by_its_automatic_start(tmp_path):
+    directory = tmp_path / "batches"
+    write_ledger(directory)
+    write_batch(directory, "new", ["n1"])
+    executed = []
+    scheduler = make_scheduler(tmp_path, directory, executed, replay=["new"])
+    assert scheduler.run_until_idle() == 1
+    (directory / "state" / "new.json").unlink()  # its state is lost after the first start
+    assert scheduler.run_until_idle() == 0
+    assert scheduler.run_until_idle() == 0
+    assert executed == ["n1"]
+
+
+def test_a_replay_flag_is_spent_by_a_restored_state(tmp_path):
+    directory = tmp_path / "batches"
+    write_batch(directory, "a", ["a1", "a2"])
+    write_ledger(directory, ("a", True))
+    executed = []
+    scheduler = make_scheduler(tmp_path, directory, executed, replay=["a"])
+    write_state(directory, "a", done=1)  # restored before the first pass
+    assert scheduler.run_until_idle() == 1
+    (directory / "state" / "a.json").unlink()
+    assert scheduler.run_until_idle() == 0
+    assert executed == ["a2"]
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_an_acknowledgement_that_cannot_be_saved_blocks_dispatch_until_saved(tmp_path):
+    directory = tmp_path / "batches"
+    write_batch(directory, "lost", ["l1"])
+    write_ledger(directory, ("lost", False))
+    (directory / "state").mkdir()
+    (directory / ".scheduler.lock").touch()
+    executed = []
+    scheduler = make_scheduler(tmp_path, directory, executed, replay=["lost"])
+    os.chmod(directory, 0o555)
+    try:
+        for _ in range(2):
+            with pytest.raises(KarnError, match="queue_ledger_unwritable:PermissionError"):
+                scheduler.run_until_idle()
+        assert (directory / "state" / "lost.json").exists()  # kept, never recreated
+    finally:
+        os.chmod(directory, 0o755)
+    assert executed == []
+    assert scheduler.run_until_idle() == 1
+    assert read_ledger(directory) == [{"batch": "lost", "queued_at": None, "acknowledged": True}]
+    assert scheduler.run_until_idle() == 0
+    assert executed == ["l1"]
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+def test_a_state_that_cannot_be_started_blocks_dispatch_without_crashing(tmp_path):
+    directory = tmp_path / "batches"
+    write_batch(directory, "lost", ["l1"])
+    write_ledger(directory, ("lost", False))
+    (directory / "state").mkdir()
+    executed = []
+    scheduler = make_scheduler(tmp_path, directory, executed, replay=["lost"])
+    os.chmod(directory / "state", 0o555)
+    try:
+        with pytest.raises(KarnError, match="queue_state_unwritable:PermissionError"):
+            scheduler.run_until_idle()
+    finally:
+        os.chmod(directory / "state", 0o755)
+    assert scheduler.run_until_idle() == 1
+    assert executed == ["l1"]
+
+
+@pytest.mark.parametrize("first_line", ['format = "legacy"\n', ""])
+def test_a_new_unsupported_batch_is_reported_and_admitted_once_corrected(
+    tmp_path, caplog, monkeypatch, first_line
+):
+    import logging
+
+    directory = tmp_path / "batches"
+    write_ledger(directory)
+    body = '[[runs]]\nbuild_output = "fixture"\nconstruct = "o1"\nbenchmark = "example"\n'
+    original = first_line + body
+    (directory / "old.toml").write_text(original)
+    passes = []
+
+    def stop(seconds):
+        passes.append(seconds)
+        if len(passes) == 2:
+            raise KeyboardInterrupt
+
+    executed = []
+    runner = make_scheduler(tmp_path, directory, executed)
+    monkeypatch.setattr(runner, "_pause", stop)
+    with caplog.at_level(logging.WARNING), pytest.raises(KeyboardInterrupt):
+        runner.serve(poll_seconds=1)
+    warnings = [r.message for r in caplog.records if "old.toml" in r.message or "old" in r.message]
+    assert warnings, caplog.text
+    assert len(warnings) == len(set(warnings))  # each distinct warning once
+    assert (directory / "old.toml").read_text() == original
+    assert [entry["batch"] for entry in read_ledger(directory)] == []
+    (directory / "old.toml").write_text('format = "karn-v5"\n' + body)
+    assert runner.run_until_idle() == 1
+    assert executed == ["o1"]
