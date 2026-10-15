@@ -24,13 +24,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SPEC = REPO_ROOT / "docs" / "specs" / "HOB-BENCHMARKS.md"
 HOB_GENERATION_WORKSPACES = ["hob-medium", "smoke", "fra-hard-v2"]
 
-# Vocabulary the spec's envelope ruling and the staged instructions must share.
+# Vocabulary the spec's envelope ruling must carry. The staged instructions are
+# not held to it: they never describe evaluation, and a workspace keeps its
+# agent-visible bytes when the spec's suite names change (ADR-021).
 ENVELOPE_TERMS = [
     "additive-only",
     "diff policing",
     "harvested engine",
-    "FDN card regression",
-    "engine regression",
+    "FDN suite",
+    "engine suite",
 ]
 
 # The SOS-era prohibition, in every form it appeared in the staged docs.
