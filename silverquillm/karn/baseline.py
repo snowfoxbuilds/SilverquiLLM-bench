@@ -21,11 +21,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from silverquillm.known_defects import (
-    REGRESSION_DIMENSIONS,
-    has_known_defects_manifest,
-    regression_outcomes,
-)
+from silverquillm.known_defects import SUITES, has_known_defects_manifest, suite_outcomes
 
 from .definition import KarnError, canonical
 from .grader import GraderError
@@ -33,8 +29,6 @@ from .grading_inputs import grading_inputs
 from .snapshots import copy_workspace
 
 PACKAGE = Path(__file__).resolve().parents[1]
-#: The suites the baseline comparison compares with the unmodified Workspace.
-SUITES = ("fdn", "engine")
 SCHEMA_VERSION = 2
 GRADE_KEYS = frozenset({"schema_version", "key", "graded_at", "suites"})
 SUITE_KEYS = frozenset({"complete", "tests_passed", "tests_total", "missing_reasons", "test_nodes"})
@@ -205,12 +199,6 @@ def _stored(key: dict, evaluated, scores: dict) -> dict:
         "graded_at": datetime.now(UTC).isoformat(),
         "suites": suites,
     }
-
-
-def suite_outcomes(evaluated) -> dict:
-    """The FDN and engine suites' outcomes, by suite."""
-    outcomes = regression_outcomes(evaluated)
-    return {suite: outcomes[key] for suite, key in zip(SUITES, REGRESSION_DIMENSIONS, strict=True)}
 
 
 class GradingInputsChanged(KarnError):
