@@ -21,6 +21,7 @@ from click.testing import CliRunner
 
 from silverquillm import results_repo as rr
 from silverquillm.cli import main as cli_main
+from silverquillm.host_config import load_host_config
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -747,25 +748,52 @@ class TestIterRunDirs:
 # ---------------------------------------------------------------------------
 
 
+SKELETON = ["campaigns", "cohorts", "exclusions", "regrades", "results"]
+
+
 class TestResultsInit:
-    def test_cli_lays_out_an_empty_repo(self, tmp_path: Path) -> None:
+    def test_cli_lays_out_an_empty_repo_and_a_minimal_host_config(self, tmp_path: Path) -> None:
         target = tmp_path / "results-clone"
-        result = CliRunner().invoke(cli_main, ["results-init", str(target)])
+        xdg = tmp_path / "xdg"
+        result = CliRunner().invoke(
+            cli_main, ["results-init", str(target)], env={"XDG_CONFIG_HOME": str(xdg)}
+        )
         assert result.exit_code == 0, result.output
-        assert (target / "AGENTS.md").is_file()
-        assert (target / "results" / ".gitkeep").is_file()
-        assert not (target / "runs.jsonl").exists()
-        assert result.output.count("wrote ") == 2
+        assert sorted(p.name for p in target.iterdir()) == SKELETON
+        for name in SKELETON:
+            assert (target / name / ".gitkeep").is_file()
+        assert not (target / "AGENTS.md").exists()
+        config = load_host_config(xdg / "silverquillm" / "config.toml")
+        assert config.locations["results_repo"] == target.resolve()
+        assert config.locations["bench_root"] == REPO_ROOT.resolve()
+        assert config.locations["runs_dir"] == Path.home() / "raw-bench-results" / "runs"
+        assert config.locations["batches_dir"] == Path.home() / "raw-bench-results" / "batches"
+        assert result.output.count("wrote ") == len(SKELETON) + 1
+
+    def test_cli_keeps_an_existing_host_config(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "xdg" / "silverquillm" / "config.toml"
+        config_file.parent.mkdir(parents=True)
+        config_file.write_text('state_root = "/elsewhere"\n')
+        result = CliRunner().invoke(
+            cli_main,
+            ["results-init", str(tmp_path / "clone")],
+            env={"XDG_CONFIG_HOME": str(tmp_path / "xdg")},
+        )
+        assert result.exit_code == 0, result.output
+        assert config_file.read_text() == 'state_root = "/elsewhere"\n'
+        assert "kept existing" in result.output
 
     def test_cli_refuses_a_non_empty_repo(self, tmp_path: Path) -> None:
         rr.init_results_repo(tmp_path)
-        result = CliRunner().invoke(cli_main, ["results-init", str(tmp_path)])
+        result = CliRunner().invoke(
+            cli_main, ["results-init", str(tmp_path)], env={"XDG_CONFIG_HOME": str(tmp_path / "x")}
+        )
         assert result.exit_code != 0
-        assert "AGENTS.md exists" in result.output
+        assert "not empty" in result.output
+        assert not (tmp_path / "x").exists()
 
-    def test_agents_md_documents_the_schema(self, tmp_path: Path) -> None:
-        rr.init_results_repo(tmp_path)
-        text = (tmp_path / "AGENTS.md").read_text()
+    def test_the_schema_stays_in_the_package(self) -> None:
+        text = (rr.TEMPLATE_DIR / "AGENTS.md").read_text()
         for needle in (
             "results/<candidate-hash>/<run-id>/manifest.json",
             "scores.json",
@@ -802,8 +830,8 @@ class TestResultsInit:
         (clone / ".git").mkdir(parents=True)
         (clone / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
         written = rr.init_results_repo(clone)
-        assert len(written) == 2
-        assert (clone / "AGENTS.md").is_file()
+        assert len(written) == len(SKELETON)
+        assert sorted(p.name for p in clone.iterdir()) == [".git", *SKELETON]
         assert (clone / ".git" / "HEAD").read_text() == "ref: refs/heads/main\n"
 
     def test_a_failed_init_rolls_back_and_is_retryable(
@@ -824,7 +852,6 @@ class TestResultsInit:
 
         monkeypatch.undo()
         rr.init_results_repo(target)
-        assert (target / "AGENTS.md").is_file()
         assert (target / "results" / ".gitkeep").is_file()
 
     def test_a_failed_init_leaves_a_preexisting_clone_as_it_was(

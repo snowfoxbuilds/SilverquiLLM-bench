@@ -1,21 +1,27 @@
 # SilverquiLLM results repo
 
-This repository is the **private, git-as-truth home for SilverquiLLM benchmark
+The results repo is the **private, git-as-truth home for SilverquiLLM benchmark
 results**. It is self-contained: an analysis agent needs nothing outside this
 repo to read, filter, and aggregate runs. The bench repo
 (`snowfoxbuilds/SilverquiLLM-bench`) writes records here through
-`silverquillm.results_repo`; nothing else writes.
+`silverquillm.results_repo`; nothing else writes records.
+
+This file is the record schema. It stays in the bench repo at
+`silverquillm/results_repo_templates/AGENTS.md` and is never copied into the
+results repo, whose own `AGENTS.md` is its operator runbook and refers here.
 
 ## Layout
 
 ```
-AGENTS.md                                   this file — the schema
+AGENTS.md                                   the operator runbook (not this schema)
 results/<candidate-hash>/candidate/         the vendored Candidate Bundle (ozolith-v1 only)
 results/<candidate-hash>/<run-id>/manifest.json
 results/<candidate-hash>/<run-id>/scores.json
 baselines/<tree-id>.bundle                  a benchmark input's staged workspace, stored once
 workspaces/<candidate-hash>/<run-id>/       a record's graded workspace, as a diff from its baseline
 exclusions/<candidate-hash>/<run-id>.json   why an analysis leaves a record out
+regrades/<digest hex>/<candidate-hash>/<run-id>.json  a published re-grade on those grading inputs
+cohorts/  campaigns/                        written by operators and the runbook's scripts
 karn/                                       the Karn recipes that build the candidates
 ```
 
@@ -153,7 +159,7 @@ sources:
    label then names the recipe commit.
 3. Run bench code from a pushed `main` commit with no uncommitted tracked
    change and no untracked file under `silverquillm/` or `benchmarks/`.
-4. Set `SILVERQUILLM_HOST_LABEL` on each host.
+4. Set `host_label` in each host's configuration (or `SILVERQUILLM_HOST_LABEL`).
 5. Use one subscription on one host at a time.
 
 The bench refuses a run that breaks 2 or 3 unless the operator passes

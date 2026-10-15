@@ -122,10 +122,10 @@ class _Live:
     follower: LogFollower | None = None
 
 
-def _local_host_label(environ, hostname) -> str | None:
+def _local_host_label(environ, hostname, config) -> str | None:
     """This host's label as run provenance records it; None when it is invalid."""
     try:
-        return resolve_host_label(environ, hostname)[0]
+        return resolve_host_label(environ, hostname, config)[0]
     except KarnError:
         return None
 
@@ -175,7 +175,7 @@ class Monitor:
             self._config_error = _config_message(error)
             self.config = HostConfig(path=config_path(self.environ), loaded=False)
         self.locations = self._resolve()
-        self.host_label = _local_host_label(self.environ, self.hostname)
+        self.host_label = _local_host_label(self.environ, self.hostname, self.config)
         self.history_store = HistoryStore(self.locations["results_repo"].path)
         self._history: list[RunSummary] = []
         self._history_at = float("-inf")

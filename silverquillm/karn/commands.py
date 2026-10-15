@@ -23,8 +23,9 @@ from .interruption import terminate_as_interrupt
 BATCHES_DIR_OPTION = location_option("batches_dir", help="The batch queue directory.")
 
 
-BENCH_ROOT_OPTION = click.option(
-    "--bench-root", type=click.Path(file_okay=False, path_type=Path), default=Path.cwd
+BENCH_ROOT_OPTION = location_option(
+    "bench_root",
+    help="The SilverquiLLM-bench checkout; else bench_root in the host config, else the current directory.",
 )
 RESULTS_DIR_OPTION = location_option("runs_dir", help="The run directory.")
 RESULTS_REPO_OPTION = location_option("results_repo", help="The results repo clone.")
@@ -351,7 +352,10 @@ def recover(run_id, stop, **options):
     "--out",
     required=True,
     type=click.Path(file_okay=False, path_type=Path),
-    help="Directory for one JSON file per run plus summary.json; never the results repo.",
+    help=(
+        "Directory for one JSON file per run plus summary.json; inside the results repo only "
+        "regrades/<grading-inputs digest hex>/, for publishing."
+    ),
 )
 @click.option(
     "--run", "runs", multiple=True, metavar="RUN_ID", help="Run id or prefix; repeatable."
@@ -385,7 +389,8 @@ def regrade(**options):
 
     Each run is graded again from the workspace it was graded from, on its recorded grader
     image. The workspace comes from the local run artifacts, else from the results repo's
-    workspace archive. Records stay untouched; the new scores are written under --out.
+    workspace archive. Records stay untouched; the new scores are written under --out, which
+    may be the results repo's regrades/<digest hex>/ for the inputs being graded on.
     """
     from .regrade import regrade as run_regrade
 
@@ -438,6 +443,30 @@ def _regrade_table(summary):
             f"{percent(target['after_mean_pass_rate'])} {target['paired_runs']:>5}  "
             f"{percent(fdn['after_mean_pass_rate'])}  {percent(engine['after_mean_pass_rate'])}"
         )
+
+
+@click.command("grading-inputs")
+@click.argument("benchmark_id", metavar="BENCHMARK")
+@BENCH_ROOT_OPTION
+def grading_inputs_command(benchmark_id, bench_root):
+    """Print BENCHMARK's current grading-inputs digest as JSON.
+
+    The digest a run graded now, or a regrade, would record; Results Repo scripts compare it
+    with a cohort's to tell whether the cohort needs re-scoring.
+    """
+    from .benchmark import load_benchmark
+    from .grading_inputs import grading_inputs
+
+    try:
+        inputs = grading_inputs(load_benchmark(bench_root, benchmark_id))
+    except (KarnError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+    click.echo(
+        json.dumps(
+            {"benchmark": benchmark_id, "digest": inputs["digest"], "problems": inputs["problems"]},
+            sort_keys=True,
+        )
+    )
 
 
 @click.group()
@@ -634,4 +663,15 @@ def results_exclusions(as_json, results_repo):
             click.echo(f"{exclusion.run_id[:8]}  {exclusion.reason:20} {exclusion.note}")
 
 
-COMMANDS = (run, enroll, scheduler, recover, regrade, queue, top, grader, results)
+COMMANDS = (
+    run,
+    enroll,
+    scheduler,
+    recover,
+    regrade,
+    grading_inputs_command,
+    queue,
+    top,
+    grader,
+    results,
+)

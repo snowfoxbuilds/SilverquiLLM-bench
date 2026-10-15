@@ -97,7 +97,8 @@ python scripts/harvest_validated_results.py --bench sos --summary
 
 # Private results repo (#39 §3 / #63) — a local clone of the private results repo
 export SILVERQUILLM_RESULTS_REPO=~/src/silverquillm-results   # or pass --results-repo everywhere
-# Lay out an empty clone: schema AGENTS.md + results/
+# Lay out an empty clone (results/, exclusions/, cohorts/, campaigns/, regrades/) and,
+# if this host has none, a minimal ~/.config/silverquillm/config.toml
 # (refuses any non-empty target except a bare .git; a failed init rolls itself back)
 silverquillm results-init "$SILVERQUILLM_RESULTS_REPO"
 # Harvest from the results repo instead of the docker/ walk (identical rows)

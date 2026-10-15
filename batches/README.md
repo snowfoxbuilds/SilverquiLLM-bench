@@ -16,7 +16,7 @@ format = "karn-v5"
 not_before = 2026-10-01T09:00:00Z   # optional, timezone-aware, applies to the whole batch
 
 [[runs]]
-build_output = "/tmp/bench-codex-build"   # completed `karn build` output; relative paths resolve from --bench-root
+build_output = "/tmp/bench-codex-build"   # completed `karn build` output; relative paths resolve from the bench root
 construct = "bare-codex"
 benchmark = "hob-medium"
 budget_seconds = 86400                     # optional, default 86400

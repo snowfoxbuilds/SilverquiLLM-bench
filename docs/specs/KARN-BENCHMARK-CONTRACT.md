@@ -42,7 +42,7 @@ A run's sources must all be committed (#116).
 Its image must carry Karn's `karn.config.revision` label naming a recipe commit, which a build from the committed tree records and a `--worktree` build does not; the bench checkout that runs and grades, and the one holding the benchmark data, must have no change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`.
 Ignored files and untracked files elsewhere, such as scratch notes, worktrees and run artifacts, do not count.
 `run` and `scheduler` refuse a run that breaks this before any evidence exists, unless the operator passes `--allow-dirty`.
-Every new record carries its provenance: the host label (`SILVERQUILLM_HOST_LABEL`, else the hostname), the commit and dirty state of both checkouts, the recipe revision, and any overridden reasons; the grader image is already recorded under `grading_isolation`.
+Every new record carries its provenance: the host label (`SILVERQUILLM_HOST_LABEL`, else the host configuration's `host_label`, else the hostname; grilling 2026-10-14), the commit and dirty state of both checkouts, the recipe revision, and any overridden reasons; the grader image is already recorded under `grading_isolation`.
 
 ### Independent execution
 
@@ -223,7 +223,7 @@ SilverquiLLM runs a completed Karn build by itself; the vendored v4 and v5 const
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
 [Run Monitoring](RUN-MONITORING.md) defines `top`, the read-only monitor over live runs, the queue, Login Pools, and history.
 
-Every Karn command resolves four host locations the same way: its flag, else its environment variable, else the host configuration file `~/.config/silverquillm/config.toml` (grilling 2026-10-07).
+Every Karn command resolves five host locations the same way: its flag, else its environment variable, else the host configuration file `~/.config/silverquillm/config.toml` (grilling 2026-10-07).
 
 | Location | Flag | Configuration key |
 | --- | --- | --- |
@@ -231,8 +231,13 @@ Every Karn command resolves four host locations the same way: its flag, else its
 | Batch queue directory | `--batches-dir` | `batches_dir` |
 | Run directory | `--results-dir` | `runs_dir` |
 | State root (Login Pools) | `--state-root` | `state_root` |
+| Bench repo checkout | `--bench-root` | `bench_root` |
 
-A location none of the three sources sets is an error naming all three, rather than a path relative to the working directory; the state root alone keeps its `~/.local/state/silverquillm` default.
+A location none of the three sources sets is an error naming all three, rather than a path relative to the working directory; the state root keeps its `~/.local/state/silverquillm` default, and the bench root falls back to the working directory.
+Operational agents work from the Results Repo, whose `AGENTS.md` is the operator runbook, so each host names its one bench checkout in `bench_root`; `SILVERQUILLM_BENCH_ROOT` is not a source, because it already names the benchmark data root inside grading (grilling 2026-10-14).
+The file also carries the host's `host_label`.
+`silverquillm results-init PATH` lays out an empty Results Repo (`results/`, `exclusions/`, `cohorts/`, `campaigns/`, `regrades/`) and, when the host has no configuration file, writes a minimal one naming PATH and this checkout; it never writes `AGENTS.md`, and the record schema stays in the package at `silverquillm/results_repo_templates/AGENTS.md` (grilling 2026-10-14).
+`silverquillm grading-inputs BENCHMARK` prints the benchmark's current grading-inputs digest, which Results Repo scripts compare with a cohort's.
 
 New immutable Run Records use schema 2 and an identity scheme that names the definition version: `karn-v4` for a v4 definition, `karn-v5` for a v5 one.
 An identity whose scheme does not match its `definition_version` is invalid, and records of either scheme stay valid side by side.
@@ -249,6 +254,7 @@ Each record fingerprints the host-owned grading inputs it was graded against (`g
 `silverquillm regrade` re-grades retained runs on the checkout's current inputs, from the workspace each run was graded from and on its recorded grader image, with the same container isolation; a record's own paths never choose what is mounted.
 The workspace comes from the local run artifacts, else from the run's workspace archive in the results repository, so any host can re-grade any archived run; grader images are built per host, so `--substitute-grader` grades on this host's grader for the recorded Python and names both images.
 A re-grade never replaces or edits a record: its scores go to a separate output directory, tagged with the new digest, and a run whose workspace or grader image is unavailable is skipped with a reason.
+The output directory may not overlap the records or the run artifacts, except that it may be the Results Repo's `regrades/<digest hex>/` for the grading inputs being graded on, where re-grades are published (grilling 2026-10-14).
 The output directory is written only through descriptors that never follow a link, so no link inside it can redirect a write into the records or run artifacts.
 A re-grade summary compares before and after within a cohort of one candidate and one original grading-inputs digest, never across digests, leaves out excluded runs and lists them separately, and reuses an earlier output only when it is a complete, invariant-satisfying success on the same inputs, grading code and grader image; any unusable earlier output is a miss that re-grades only that run.
 

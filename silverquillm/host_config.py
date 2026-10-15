@@ -2,12 +2,14 @@
 
 Every Karn command resolves each location as its flag, else its environment variable,
 else the configuration file (KARN-BENCHMARK-CONTRACT.md, Operator entrypoints); only the
-state root has a built-in default. The file also carries the monitor's settings
-(RUN-MONITORING.md, Locations and host configuration).
+state root and the bench root have built-in defaults. The file also carries this host's
+label for run provenance and the monitor's settings (RUN-MONITORING.md, Locations and
+host configuration).
 """
 
 from __future__ import annotations
 
+import json
 import os
 import tomllib
 from collections.abc import Callable, Mapping
@@ -43,6 +45,9 @@ LOCATIONS: dict[str, LocationSpec] = {
             "--state-root",
             default=lambda: Path.home() / ".local/state/silverquillm",
         ),
+        # No environment variable: SILVERQUILLM_BENCH_ROOT already names the benchmark data
+        # root inside grading, and a stale host value must not redirect it.
+        LocationSpec("bench_root", "bench repo checkout", "--bench-root", default=Path.cwd),
     )
 }
 
@@ -57,6 +62,8 @@ class HostConfig:
     usage_rates: Mapping[str, Decimal] = field(default_factory=lambda: dict(DEFAULT_USAGE_RATES))
     """Estimated Cost in USD that counts as 1% of a provider's weekly allowance."""
     theme: str | None = None
+    host_label: str | None = None
+    """Validated where run provenance reads it (``karn.provenance.host_label``)."""
 
 
 @dataclass(frozen=True)
@@ -86,7 +93,7 @@ def load_host_config(
         return HostConfig(path=path, loaded=False)
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise HostConfigError(f"{path}: {error}") from None
-    unknown = sorted(set(document) - set(LOCATIONS) - {"usage_rates", "monitor"})
+    unknown = sorted(set(document) - set(LOCATIONS) - {"usage_rates", "monitor", "host_label"})
     if unknown:
         raise HostConfigError(f"{path}: unknown key(s) {', '.join(unknown)}")
     locations = {}
@@ -98,13 +105,43 @@ def load_host_config(
             location = Path(value).expanduser()
             # A relative path is relative to the file, never to whichever directory a command runs in.
             locations[key] = location if location.is_absolute() else path.parent / location
+    host_label = document.get("host_label")
+    if host_label is not None and (not isinstance(host_label, str) or not host_label.strip()):
+        raise HostConfigError(f"{path}: host_label must be a non-empty string")
     return HostConfig(
         path=path,
         loaded=True,
         locations=locations,
         usage_rates=_usage_rates(path, document.get("usage_rates", {})),
         theme=_theme(path, document.get("monitor", {})),
+        host_label=host_label,
     )
+
+
+RAW_ROOT = "~/raw-bench-results"
+
+
+def write_minimal_config(path: Path, results_repo: Path, bench_root: Path) -> bool:
+    """Write a minimal configuration file at *path* unless one exists; True if written.
+
+    Raw run data and the batch queue default to the host's ``~/raw-bench-results``.
+    """
+    lines = [
+        "# Written by `silverquillm results-init`. See the Results Repo's AGENTS.md.",
+        f"results_repo = {json.dumps(str(Path(results_repo).expanduser().resolve()))}",
+        f"bench_root = {json.dumps(str(Path(bench_root).expanduser().resolve()))}",
+        f'batches_dir = "{RAW_ROOT}/batches"',
+        f'runs_dir = "{RAW_ROOT}/runs"',
+        '# host_label = "<label>"  # defaults to the hostname\'s first label',
+        "",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write("\n".join(lines))
+    except FileExistsError:
+        return False
+    return True
 
 
 def _usage_rates(path: Path, table: object) -> dict[str, Decimal]:

@@ -76,11 +76,12 @@ Install the benchmark with `pip install -e .`.
 SilverquiLLM-bench runs a completed Karn build by itself; it needs no Ozolith package.
 
 The candidate recipes live in the results repository at `karn/constructs/<label>`. Build them from its committed tree, then build the grader image, before running.
-Commands find the results repository, batch queue, run directory, and login state through their flags or `~/.config/silverquillm/config.toml` (see [Karn benchmarking](docs/KARN-BENCHMARKING.md#host-configuration)):
+Commands find the results repository, batch queue, run directory, login state and this checkout through their flags or `~/.config/silverquillm/config.toml` (see [Karn benchmarking](docs/KARN-BENCHMARKING.md#host-configuration)).
+The operator runbook — how to queue, monitor, publish, re-score and analyse — lives in the results repository's `AGENTS.md`, and operational agents work from that checkout:
 
 ```bash
 mkdir -p ~/.config/silverquillm
-printf 'results_repo = "~/bench-results"\nbatches_dir = "~/bench-batches"\nruns_dir = "~/bench-runs"\n' > ~/.config/silverquillm/config.toml
+printf 'results_repo = "~/bench-results"\nbench_root = "~/SilverquiLLM-bench"\nbatches_dir = "~/raw-bench-results/batches"\nruns_dir = "~/raw-bench-results/runs"\n' > ~/.config/silverquillm/config.toml
 karn build ~/bench-results/karn --out ~/bench-builds/roster-1
 silverquillm grader build
 silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-codex
@@ -110,7 +111,8 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | `silverquillm top` | Read-only monitor: live runs, the queue, Login Profiles with Estimated Weekly Usage, history, and run details with live output (`q` quits; needs the `monitor` extra). |
 | `silverquillm login --build-output … --construct …` | Enroll the construct's own subscription login through its login plugin. |
 | `silverquillm grader build [--python X.Y]` | Build the pinned, network-less grader images, one per graded Python version; each run is graded on its candidate's version. |
-| `silverquillm results-init PATH` | Lay out an empty private results repository. |
+| `silverquillm results-init PATH` | Lay out an empty private results repository and, if none exists, a minimal host configuration. |
+| `silverquillm grading-inputs BENCHMARK` | Print a benchmark's current grading-inputs digest as JSON. |
 | `silverquillm validate …` | Validate 17lands replays against the engine. |
 | `silverquillm legacy run-image\|smoke\|resume\|chain\|rescore\|logs …` | The historical `--image` entrypoint lineage and its run directories. |
 

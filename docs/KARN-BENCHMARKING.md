@@ -12,15 +12,20 @@ source .venv/bin/activate
 
 ## Host configuration
 
-Every command finds the results repository, the batch queue, the run directory, and the state root the same way: its flag (`--results-repo`, `--batches-dir`, `--results-dir`, `--state-root`), else its environment variable (only `SILVERQUILLM_RESULTS_REPO` has one), else the host configuration file.
-Only the state root has a default; any other location left unset is an error naming all three sources, never a path relative to the working directory.
+The operator runbook lives in the results repository's `AGENTS.md`; operational agents work from that checkout.
+
+Every command finds the results repository, the batch queue, the run directory, the state root and the bench checkout the same way: its flag (`--results-repo`, `--batches-dir`, `--results-dir`, `--state-root`, `--bench-root`), else its environment variable (only `SILVERQUILLM_RESULTS_REPO` has one), else the host configuration file.
+The state root defaults to `~/.local/state/silverquillm` and the bench root to the working directory; any other location left unset is an error naming all three sources, never a path relative to the working directory.
+`silverquillm results-init PATH` lays out an empty results repository and, if the host has no configuration file yet, writes a minimal one.
 Relative paths in the file resolve from the file's own directory.
 
 ```toml
 # ~/.config/silverquillm/config.toml ($XDG_CONFIG_HOME/silverquillm/config.toml when set)
 results_repo = "~/bench-results"
-batches_dir = "~/bench-batches"
-runs_dir = "~/SilverquiLLM-bench/runs/karn"
+bench_root = "~/SilverquiLLM-bench"          # this host's bench checkout
+batches_dir = "~/raw-bench-results/batches"
+runs_dir = "~/raw-bench-results/runs"
+host_label = "dota-pc"                        # else SILVERQUILLM_HOST_LABEL, else the hostname
 # state_root = "~/.local/state/silverquillm"   # the default
 ```
 
@@ -39,7 +44,7 @@ Every host builds and runs candidates the same way, so any record can be traced 
 1. Commit and push a recipe change to bench-results before building it, and pull before building someone else's.
 2. Build from the committed tree, `karn build ~/bench-results/karn/constructs/<label> --out <dir>` or the whole `karn` directory, never with `--worktree`.
 3. Run bench code from a pushed `main` commit, with no uncommitted change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`; a detached worktree per batch keeps runs off the checkout you edit. The imported `silverquillm` must be that worktree's own, since the grader mounts it: install it there (`uv pip install -e .` in the worktree's environment) or set `PYTHONPATH` to the worktree; an environment linked from another checkout grades with that checkout's code.
-4. Set `SILVERQUILLM_HOST_LABEL` to a short name for the host (otherwise its hostname is recorded).
+4. Set `host_label` in the host configuration, or `SILVERQUILLM_HOST_LABEL`, to a short name for the host (otherwise its hostname is recorded).
 5. Use a subscription on one host at a time; enroll each host's slots with its own logins where you can.
 
 `run` and `scheduler` refuse a run that breaks steps 2 or 3 before creating anything, with `dirty_source_refused:` and each reason: `recipe_revision_unrecorded` or `recipe_revision_dirty` for the image, and `bench_checkout_dirty` or `benchmark_root_dirty` (or `_not_a_git_checkout`) for the checkouts.
@@ -153,7 +158,7 @@ silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex -
 silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark hob-medium
 ```
 
-Use `--bench-root` when launching outside the benchmark checkout.
+Outside the benchmark checkout, set `bench_root` in the host configuration or pass `--bench-root`.
 `--budget-seconds` defaults to 86400; the supplied definition must allow at least that much time.
 The budget begins at container start, including initialization.
 There is no `basic`/`planned` option: benchmark files supply task and planning guidance.
@@ -302,7 +307,7 @@ silverquillm regrade --benchmark hob-medium --out regrades/hob-medium
 ```
 
 - Each run is graded again from the workspace it was graded from (`grading_source.selected`), found under `--results-dir/<run-id>`, on the grader image its record names, with the same container isolation as a run. A record's artifact pointers are not followed, so a record from another host never chooses what is mounted.
-- Nothing in the results repository or the run artifacts is written; an `--out` that overlaps either is refused. `--out` holds `<candidate-hash>/<run-id>.json` per run, with the new scores in the record's `scores.json` shape, the record's own counts and grading-inputs digest, the new digest, and a digest of the grading code.
+- Nothing in the results repository or the run artifacts is written; an `--out` that overlaps either is refused, except the results repository's `regrades/<digest hex>/` for the grading inputs being graded on (`silverquillm grading-inputs BENCHMARK` prints that digest), where re-grades are published. `--out` holds `<candidate-hash>/<run-id>.json` per run, with the new scores in the record's `scores.json` shape, the record's own counts and grading-inputs digest, the new digest, and a digest of the grading code.
 - Every read and write under `--out` goes through directory descriptors that never follow a link. A candidate directory that is a link, or that is replaced while a run grades, fails that run with `regrade_output_unsafe:…` and nothing is written through it; an existing output file that is a link is replaced, never followed.
 - `summary.json` and the table compare mean pass rates before and after per cohort: one candidate whose runs were originally graded on one grading-inputs digest. Original scores from different digests are never averaged together, and a run whose original digest is unknown is its own cohort, named by run id. Each dimension reports `paired_runs`, the runs observed both before and after, which both means cover. The table's `graded on` column shows the cohort's original digest.
 - `--run` narrows by run-id prefix and `--candidate` by candidate-hash prefix; a prefix that matches nothing is an error. `--workers` grades runs concurrently (default 2).

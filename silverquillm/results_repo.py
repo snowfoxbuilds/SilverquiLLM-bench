@@ -87,6 +87,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "SCORES_FILENAME",
     "SCORE_DIMENSIONS",
+    "SKELETON_DIRNAMES",
     "TEMPLATE_DIR",
     "CandidateIdentity",
     "InvalidRunRecordError",
@@ -121,6 +122,9 @@ RESULTS_DIRNAME = "results"
 MANIFEST_FILENAME = "manifest.json"
 SCORES_FILENAME = "scores.json"
 AGENTS_FILENAME = "AGENTS.md"
+# The skeleton results-init lays out; the Results Repo's own runbook (its AGENTS.md) says what
+# each holds. The schema stays in this package at TEMPLATE_DIR and is never copied.
+SKELETON_DIRNAMES = (RESULTS_DIRNAME, "exclusions", "cohorts", "campaigns", "regrades")
 
 #: Identity scheme of runs migrated from the legacy image lineage
 #: (``docker/<image>/``).  The image dir name is the whole identity.
@@ -778,8 +782,9 @@ def iter_run_records(repo_root: Path) -> Iterator[tuple[Path, RunRecord]]:
 def init_results_repo(path: Path) -> list[Path]:
     """Lay out an empty results repo at *path*; return the files written.
 
-    Writes the schema ``AGENTS.md`` (from :data:`TEMPLATE_DIR`) and an empty
-    ``results/`` directory (kept with ``.gitkeep``).
+    Writes one ``.gitkeep`` in each of :data:`SKELETON_DIRNAMES`. The schema stays in
+    this package (:data:`TEMPLATE_DIR`); the repo's ``AGENTS.md`` is its operator
+    runbook, which this never writes.
     The whole target is preflighted before the first write: *path* may not
     exist yet, be an empty directory, or be an empty git clone (nothing but
     ``.git`` inside).  Anything else — including a lone ``results/`` tree or
@@ -788,16 +793,11 @@ def init_results_repo(path: Path) -> list[Path]:
     removed again so the operator can simply retry.
     """
     path = Path(path)
-    template = TEMPLATE_DIR / AGENTS_FILENAME
-    if not template.is_file():
-        raise ResultsRepoError(f"missing packaged template: {template}")
     create_root = not path.exists()
     if not create_root:
         if not path.is_dir():
             raise ResultsRepoError(f"{path} is not a directory")
         entries = sorted(p.name for p in path.iterdir() if p.name != ".git")
-        if AGENTS_FILENAME in entries:
-            raise ResultsRepoError(f"{path} is not an empty results repo: {AGENTS_FILENAME} exists")
         if entries:
             raise ResultsRepoError(
                 f"{path} is not empty; refusing to initialize over: {', '.join(entries)}"
@@ -808,17 +808,14 @@ def init_results_repo(path: Path) -> list[Path]:
         if create_root:
             path.mkdir(parents=True)
             created.append(path)
-        agents_md = path / AGENTS_FILENAME
-        agents_md.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
-        created.append(agents_md)
-        written.append(agents_md)
-        results_dir = path / RESULTS_DIRNAME
-        results_dir.mkdir()
-        created.append(results_dir)
-        gitkeep = results_dir / ".gitkeep"
-        gitkeep.write_text("", encoding="utf-8")
-        created.append(gitkeep)
-        written.append(gitkeep)
+        for name in SKELETON_DIRNAMES:
+            directory = path / name
+            directory.mkdir()
+            created.append(directory)
+            gitkeep = directory / ".gitkeep"
+            gitkeep.write_text("", encoding="utf-8")
+            created.append(gitkeep)
+            written.append(gitkeep)
     except BaseException:
         for created_path in reversed(created):
             with contextlib.suppress(OSError):

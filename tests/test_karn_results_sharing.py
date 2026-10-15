@@ -16,6 +16,7 @@ from click.testing import CliRunner
 
 from silverquillm.cli import main
 from silverquillm.karn import execution, provenance
+from silverquillm.karn.definition import KarnError
 from silverquillm.karn.exclusions import (
     ExclusionError,
     check,
@@ -866,3 +867,32 @@ def test_the_regrade_command_lists_excluded_runs_beneath_the_table(edited, tmp_p
     assert result.exit_code == 0, result.output
     _, _, excluded = result.output.partition("excluded from the comparison:")
     assert "pilot" in excluded and "pipeline check" in excluded
+
+
+def test_the_host_label_comes_from_the_environment_else_the_file_else_the_hostname(tmp_path):
+    config = tmp_path / "silverquillm" / "config.toml"
+    config.parent.mkdir()
+    environ = {"XDG_CONFIG_HOME": str(tmp_path)}
+    assert provenance.host_label(environ, lambda: "box.lan") == ("box", "hostname")
+    config.write_text('host_label = "lab-1"\n')
+    assert provenance.host_label(environ, lambda: "box.lan") == ("lab-1", "config")
+    assert provenance.host_label(
+        {**environ, provenance.HOST_LABEL_ENV: "env-1"}, lambda: "box.lan"
+    ) == ("env-1", "env")
+    config.write_text('host_label = "not a label"\n')
+    with pytest.raises(KarnError, match="invalid_host_label"):
+        provenance.host_label(environ, lambda: "box.lan")
+    config.write_text("host_label = [\n")
+    with pytest.raises(KarnError, match="invalid_host_config"):
+        provenance.host_label(environ, lambda: "box.lan")
+
+
+def test_a_label_from_the_file_is_valid_provenance(checkout, monkeypatch, tmp_path):
+    monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
+    monkeypatch.delenv(provenance.HOST_LABEL_ENV, raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    (tmp_path / "xdg" / "silverquillm").mkdir(parents=True)
+    (tmp_path / "xdg" / "silverquillm" / "config.toml").write_text('host_label = "lab-1"\n')
+    recorded = provenance.collect({provenance.RECIPE_LABEL: "a" * 40}, checkout, allow_dirty=False)
+    assert (recorded["host_label"], recorded["host_label_source"]) == ("lab-1", "config")
+    assert provenance.valid(recorded)
