@@ -1,4 +1,4 @@
-"""Regression tests for FDN 160 — An Offer You Can't Refuse.
+"""Audited Tests for FDN 160 — An Offer You Can't Refuse.
 
 "Counter target noncreature spell. Its controller creates two Treasure
 tokens." Player 1 casts spells on their turn and player 0 answers with An

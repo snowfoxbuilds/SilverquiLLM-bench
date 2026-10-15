@@ -1,4 +1,4 @@
-"""Regression tests for FDN 153 — Essence Scatter.
+"""Audited Tests for FDN 153 — Essence Scatter.
 
 "Counter target creature spell." Player 1 casts spells on their turn and
 player 0 answers with Essence Scatter. Only creature spells are targets — a
