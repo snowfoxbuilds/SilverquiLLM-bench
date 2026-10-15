@@ -116,7 +116,7 @@ CI checks, for every benchmark in scope:
 1. The Test Oracle Workspace passes every Audited Test of all three suites.
 2. The unmodified Workspace fails exactly the FDN and engine Audited Tests the manifest lists, and passes the rest of the FDN and engine suites.
 3. Putting each Known Defect back into the Test Oracle Workspace fails exactly the target-card tests its entry lists (grilling 2026-10-14).
-4. Every FDN, engine and target-card Audited Test resolves to exactly one Attributed Card, a base Workspace card other than a target, and every related Known Defect names a host card (grilling 2026-10-14).
+4. Every FDN and engine Audited Test resolves to exactly one Attributed Card, a base Workspace card other than a target, every target-card test to a target, every attribution key names an Audited Test, and every related Known Defect names a host card (grilling 2026-10-14).
 
 Each check is a Platform Test, making one call per suite so each stays within the test timeout: `tests/known_defect_checks.py` provides `oracle_problems`, `workspace_problems` and `defect_problems` for the first three, which return the problems found and `[]` when the check passes; `defect_problems` grades one Known Defect's target-card suite per call.
 
@@ -184,7 +184,7 @@ Each Collateral Test and target-card Implementation Test counts toward one Attri
 
 - A key is an Audited Test id, or a prefix of one ending at a file or class boundary; the longest matching key wins.
 - Every Audited Engine Test must match a key; an FDN or target-card test that matches none counts toward the card whose suite holds it.
-- A value is a base Workspace card id; a benchmark's targets are never a value.
+- A value of `data/attribution.json` is a base Workspace card id, never one of the benchmark's targets; a value of `data/target_attribution.json` is a target.
 - Dependency Tests are not listed: they count toward their Known Defect's `host_card`.
 - `data/target_attribution.json` has the same shape with one `target` map; a benchmark with no overrides ships an empty map.
 
