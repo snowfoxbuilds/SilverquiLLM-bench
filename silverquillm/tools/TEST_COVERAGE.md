@@ -12,5 +12,6 @@
 - `main()` — REJECTED verdict printed to stdout when any check fails (`test_check_promotion_candidate_gaps.py`)
 - `main()` — exit code == 1 (non-zero) when only canonical-API check fails (tier=pass, oracle=pass) (`test_check_promotion_candidate_gaps.py`)
 - `main()` — exit code == 1 (non-zero) when only oracle check fails (tier=pass, canonical=pass) (`test_check_promotion_candidate_gaps.py`)
+- `silverquillm audit check-promotion` — public command with the checkout root taken from the imported package: a valid candidate passes all three checks from an unrelated working directory and edits nothing; a missing benchmark, a failing candidate and a Released benchmark exit non-zero (`test_check_promotion_command.py`)
 
 The harvest and miner coverage moved to the Results Repo with those scripts (`scripts/legacy/TEST_COVERAGE.md`, #222).
