@@ -24,9 +24,11 @@ from .test_monitor import (
 from .test_monitor import (
     RUN_SPEC,
     container,
+    cost_measurements,
     enroll_slot,
     make_run,
     publish,
+    summary_of,
     tree_state,
     write_batch,
 )
@@ -220,3 +222,23 @@ def test_top_json_on_the_command_line(tmp_path, monkeypatch):
     document = json.loads(result.output)
     assert document["locations"]["batches_dir"]["source"] == "flag"
     assert document["dispatch"] == "running"
+
+
+def test_a_runs_cost_is_its_run_cost_with_its_source_not_the_estimate():
+    # Claude Code reported 2.10 where the price table estimated 2.00 (ADR-019).
+    record = summary_of(cost_measurements(("2.10", "complete")))
+    snapshot = FakeMonitor().snapshot()
+    view = replace(
+        snapshot.running[0],
+        cost=record.cost,
+        cost_source=record.cost_source,
+        cost_recorded=True,
+        cost_completeness=record.cost_completeness,
+    )
+    run = _document(replace(snapshot, running=[view, *snapshot.running[1:]]))["runs"][0]
+    assert (run["run_cost_usd"], run["run_cost_source"], run["cost_recorded"]) == (
+        "2.10",
+        "reported",
+        True,
+    )
+    assert "estimated_cost_usd" not in run

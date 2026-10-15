@@ -66,7 +66,9 @@ def record_detail(record: Path) -> RecordDetail | None:
     measurements = mapping(metadata.get("measurements"))
     execution = mapping(metadata.get("execution"))
     _, source = run_cost(measurements)
-    rows = "request_reported_costs" if source == "reported" else "request_prices"
+    # A record written before ADR-019 has no reported per-request figures (see _request_costs).
+    reported = source == "reported" and "request_reported_costs" in measurements
+    rows = "request_reported_costs" if reported else "request_prices"
     prices = {
         row["response_id"]: _usd(row.get("usd"))
         for row in _rows(measurements.get(rows))
