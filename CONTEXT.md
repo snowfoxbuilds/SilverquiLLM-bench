@@ -394,7 +394,7 @@ _Avoid_: "test run" (ambiguous), "dry run" (has a different meaning — `--dry-r
 
 **Platform Tests**
 
-Maintainer-authored tests for the SilverquiLLM repository's own tooling — runner, harvester, evaluator, telemetry, and `scripts/` — living under the repository's top-level `tests/` (the grading suites live elsewhere: Audited Tests under `benchmarks/<benchmark>/data/tests/audited/`, Reference Tests in the benchmark's `workspace/`). They verify that the benchmark *software* works; they do not grade agent output. E.g. `tests/test_harvest_rows.py`, `tests/test_check_promotion_candidate.py`, `tests/test_evaluator.py`. Distinct from Audited Tests, Reference Tests, and Agent Tests.
+Maintainer-authored tests for the SilverquiLLM repository's own tooling — runner, evaluator, telemetry, and the `silverquillm/tools/` commands — living under the repository's top-level `tests/` (the grading suites live elsewhere: Audited Tests under `benchmarks/<benchmark>/data/tests/audited/`, Reference Tests in the benchmark's `workspace/`). They verify that the benchmark *software* works; they do not grade agent output. E.g. `tests/test_check_promotion_candidate.py`, `tests/test_evaluator.py`. Distinct from Audited Tests, Reference Tests, and Agent Tests.
 
 _Avoid_: "repository tests" (ambiguous — Audited Tests and Reference Tests also live in the repo), "unit tests" alone (some are integration-level), "harness tests" (collides with the audited validation harness)
 

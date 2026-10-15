@@ -3,7 +3,8 @@ name: test-investigation
 description: >
   Invoke when you need to triage failing audited tests or discover promotion
   candidates from agent-written tests.  Operates on Harvested Results produced
-  by `scripts/harvest_validated_results.py` and the cross-impl breadth summary.
+  by the Results Repo's `scripts/legacy/harvest_validated_results.py` and the
+  cross-impl breadth summary.
   Two modes: (a) Investigation — rank failing (card, test_node) pairs by breadth
   and present a test-fault vs impl-fault hypothesis for human decision;
   (b) Discovery — surface promotion candidates from agent-written tests for
@@ -13,9 +14,9 @@ allowed-tools:
   - Read
   - Grep
   - Bash
-  - scripts/harvest_validated_results.py
-  - scripts/mine_promotion_candidates.py
-  - scripts/check_promotion_candidate.py
+  - <results_repo>/scripts/legacy/harvest_validated_results.py
+  - <results_repo>/scripts/legacy/mine_promotion_candidates.py
+  - silverquillm audit check-promotion
 ---
 
 # Test Investigation Skill
@@ -33,7 +34,7 @@ audited-test standard that governs the tests this skill examines.
 | Input | Source | Required |
 |---|---|---|
 | Harvested Results dataset | `benchmarks/<bench>/analysis/harvested_results.jsonl` | Yes |
-| Cross-impl breadth summary | `benchmarks/<bench>/analysis/harvested_summary.json` (produced by `python scripts/harvest_validated_results.py --summary`) | Yes |
+| Cross-impl breadth summary | `benchmarks/<bench>/analysis/harvested_summary.json` (produced by `python <results_repo>/scripts/legacy/harvest_validated_results.py --summary`, run from this checkout) | Yes |
 | Benchmark Tier | `benchmarks/<bench>/config.json` field `tier` | Yes |
 | Card filter | Optional card ID(s) to restrict scope | No |
 | Test-node filter | Optional test-node pattern(s) to restrict scope | No |
@@ -61,7 +62,7 @@ agent implementations.
 
 1. **Load the breadth view.**  Read
    `benchmarks/<bench>/analysis/harvested_summary.json` (produced by
-   `python scripts/harvest_validated_results.py --summary`).  Each entry ranks
+   `python <results_repo>/scripts/legacy/harvest_validated_results.py --summary`, run from this checkout).  Each entry ranks
    a `(card, test_node)` pair by how many *independent* implementations fail it.
 
 2. **Rank by cross-impl breadth.**  The more independent implementations that
@@ -100,12 +101,12 @@ by agents during Tested Mode runs that could be promoted into the audited suite.
 
 ### Procedure
 
-1. **Run the discovery miner.**  Invoke `scripts/mine_promotion_candidates.py`
+1. **Run the discovery miner.**  Invoke the Results Repo's `scripts/legacy/mine_promotion_candidates.py`
    (item 8) to scan agent-written `tests.py` files in Validated Results and
    identify candidates worth reviewing.
 
 2. **Gate each candidate.**  Before presenting a candidate for human review, run
-   `scripts/check_promotion_candidate.py` (item 9).  The gate runs three checks
+   `silverquillm audit check-promotion` (item 9).  The gate runs three checks
    and a candidate MUST NOT be surfaced unless all pass:
    - **Tier lock** (ADR-011) — only Beta/Benchmarking tiers permit promotion.
    - **Canonical-API check** — rejects a candidate that references an engine
@@ -141,7 +142,7 @@ All of these apply in both Investigation and Discovery modes:
    benchmark.  Only Beta and Benchmarking tiers permit test investigation and
    discovery.
 5. **Promotion candidates must pass the Test Oracle Impl gate** (ADR-010) via
-   `scripts/check_promotion_candidate.py` before being surfaced for human
+   `silverquillm audit check-promotion` before being surfaced for human
    review.
 6. **Outputs are a human-reviewable report only** — no committed test edits.
    The audited suite at `benchmarks/sos/data/tests/audited/` is modified only
