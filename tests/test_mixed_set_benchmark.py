@@ -111,3 +111,24 @@ def test_invalid_or_duplicate_targets_rejected(mixed, cards):
     (mixed.root / "config.json").write_text(json.dumps(config))
     with pytest.raises(KarnError, match="benchmark_unavailable"):
         load_benchmark(mixed.root.parent.parent, mixed.id)
+
+
+def test_a_test_that_did_not_run_counts_as_a_failure(mixed, tmp_path):
+    (mixed.root / "workspace/cards/hob/hob_1/card_impl.py").write_text("raise ImportError('gone')\n")
+    result = evaluate_run(tmp_path, mixed, workspace_source=mixed.root / "workspace")
+    hob = result.sos_results["hob_1"]
+    # pytest's raw count holds only the collection error, which no score counts as a test.
+    assert hob.test_nodes == [{"test_node": "tests.py", "outcome": "fail"}]
+    assert [row["reason"] for row in hob.not_run] == ["import_error"]
+    scores = _scores(result, mixed)
+    target = scores["card_correctness"]
+    assert (target["tests_passed"], target["tests_total"]) == (1, 2)
+    assert target["pass_rate"] == 0.5
+    assert target["coverage"]["evaluated_cards"] == ["fra_1", "hob_1"]
+
+    engine = result.engine_result
+    engine.not_run = [{"test_node": "test_engine.py::test_missing", "reason": "not_reported"}]
+    scored = _scores(result, mixed)["engine_regression"]
+    assert scored["tests_total"] == engine.tests_total + 1
+    assert scored["tests_passed"] == engine.tests_passed
+    assert scored["pass_rate"] == engine.tests_passed / (engine.tests_total + 1)

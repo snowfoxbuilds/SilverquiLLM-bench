@@ -139,10 +139,14 @@ A parametrized function counts once, and it ran if any of its cases ran.
 | `grading_support_missing` | Authoritative grading support was absent, so the suite never ran |
 | `candidate_code_missing` | The candidate's engine or cards directory was absent, so the suite never ran |
 
-Scoring is unchanged: a raw pass/total counts only the nodes that ran, so a function that did not run lowers no pass rate.
-An analysis that wants it counted as a failure divides by the expected functions instead.
+Every expected function that did not run counts as one failed test in its dimension's score: the dimension's `tests_total` is the nodes that ran plus the functions that did not, so a candidate cannot raise a pass rate by skipping a test or breaking its collection (grilling 2026-10-15).
+A parametrized function that did not run counts once, since its case ids are not known statically.
+A card whose tests all failed to run is therefore scored, at zero, rather than left uncovered; the Combined Regression already counts a baseline-passing node that did not run as regressed.
+Each card's own `tests_passed`, `tests_failed` and `tests_total` stay pytest's raw counts of the nodes that ran; the dimension totals and pass rates apply this rule.
+`complete` is unchanged: a grade whose suite reported errors other than test failures is still incomplete.
 Each failing node also keeps a failure message: one printable line of at most 240 characters with object addresses masked, and at most 128 KiB of encoded messages, with their node ids, per grade, later ones dropped.
-Not-run reasons and failure messages are diagnostics and never enter a score.
+Not-run reasons and failure messages are diagnostics; only the not-run count enters a score.
+Grades written before this rule count only the nodes that ran, so compare scores only across grades on the same grading code; a regrade applies the rule to an older record.
 
 ### Complexity Weighting
 

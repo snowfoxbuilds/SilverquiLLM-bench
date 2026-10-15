@@ -207,14 +207,17 @@ def _scores(evaluated, benchmark) -> dict:
             )
 
         def case_counts(value):
+            # An expected test that did not run counts as a failed test (SCORING.md).
             if value.test_nodes:
                 executed = [
                     node
                     for node in value.test_nodes
                     if "::" in node["test_node"] and "<collection-error>" not in node["test_node"]
                 ]
-                return sum(node["outcome"] == "pass" for node in executed), len(executed)
-            return value.tests_passed, value.tests_total
+                passed, total = sum(node["outcome"] == "pass" for node in executed), len(executed)
+            else:
+                passed, total = value.tests_passed, value.tests_total
+            return passed, total + len(value.not_run)
 
         counts = {key: case_counts(value) for key, value in cards.items()}
         observed = {key for key, (_, total) in counts.items() if total > 0}
@@ -246,15 +249,16 @@ def _scores(evaluated, benchmark) -> dict:
             "cards": {key: dataclasses.asdict(value) for key, value in cards.items()},
         }
     engine = evaluated.engine_result
+    engine_total = engine.tests_total + len(engine.not_run)
     result["engine_regression"] = {
-        "evaluated": engine.tests_total > 0,
-        "complete": engine.tests_total > 0
+        "evaluated": engine_total > 0,
+        "complete": engine_total > 0
         and not any(not error.startswith("FAILED ") for error in engine.errors),
-        "pass_rate": engine.pass_rate if engine.tests_total else None,
-        "tests_passed": engine.tests_passed if engine.tests_total else None,
-        "tests_total": engine.tests_total or None,
+        "pass_rate": engine.tests_passed / engine_total if engine_total else None,
+        "tests_passed": engine.tests_passed if engine_total else None,
+        "tests_total": engine_total or None,
         "missing_reasons": [error for error in engine.errors if not error.startswith("FAILED ")]
-        or ([] if engine.tests_total else ["no_executed_engine_tests"]),
+        or ([] if engine_total else ["no_executed_engine_tests"]),
         "diagnostics": engine.errors,
         "test_nodes": [dict(node) for node in engine.test_nodes],
         "expected_test_functions": engine.expected_test_functions,
