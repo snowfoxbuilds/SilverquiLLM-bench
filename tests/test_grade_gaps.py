@@ -436,3 +436,210 @@ def test_engine_messages_within_budget_are_accepted_by_the_host():
     _apply_message_budget(result)
     assert engine.failure_messages
     assert evaluation_from_json(json.dumps(asdict(result)).encode()).engine_result.failure_messages
+
+
+# ---------------------------------------------------------------------------
+# Dimension totals: nodes that ran plus each scored function that did not (SCORING.md)
+# ---------------------------------------------------------------------------
+
+
+def _engine(tmp_path: Path, files: dict[str, str], timeout: int = 60, *, support: bool = True):
+    from silverquillm.evaluator import _eval_engine
+
+    workspace = tmp_path / "workspace"
+    (workspace / "engine").mkdir(parents=True)
+    (workspace / "cards").mkdir()
+    (workspace / "pytest.ini").write_text(
+        "[pytest]\npython_files = test_*.py\naddopts = --import-mode=importlib\n"
+    )
+    if support:
+        (workspace / "test_utils.py").write_text("")
+    suite = tmp_path / "engine_tests"
+    suite.mkdir()
+    for name, source in files.items():
+        (suite / name).write_text(_module(source))
+    return _eval_engine(
+        workspace / "engine", suite, timeout,
+        support_dir=workspace, test_utils=workspace / "test_utils.py",
+    )
+
+
+def _dimensions(engine: EngineResult, tmp_path: Path, fdn: dict | None = None) -> dict:
+    from types import SimpleNamespace
+
+    from silverquillm.karn.execution import _scores
+
+    benchmark = SimpleNamespace(target_set="hob", cards=[], root=tmp_path)
+    return _scores(FullEvalResult(fdn_results=fdn or {}, engine_result=engine), benchmark)
+
+
+def _engine_score(engine: EngineResult, tmp_path: Path) -> tuple:
+    score = _dimensions(engine, tmp_path)["engine_regression"]
+    return score["tests_passed"], score["tests_total"], score["complete"]
+
+
+def test_a_collection_error_is_not_a_scored_test(tmp_path):
+    engine = _engine(tmp_path, {
+        "test_good.py": "def test_good():\n    pass\n",
+        "test_bad.py": "import nowhere\n\ndef test_bad():\n    pass\n",
+    })
+    assert engine.tests_total == 1  # pytest's raw summary counts the collection error
+    assert _engine_score(engine, tmp_path) == (0, 2, False)
+
+
+def test_a_pass_then_an_abrupt_exit_keeps_the_pass_and_is_incomplete(tmp_path):
+    engine = _engine(tmp_path, {"test_e.py": """\
+        import os
+
+        def test_first():
+            pass
+
+        def test_exits():
+            os._exit(3)
+
+        def test_after():
+            pass
+    """})
+    assert engine.tests_total == 0  # no summary was printed
+    assert _engine_score(engine, tmp_path) == (1, 3, False)
+    assert any(error.startswith("pytest_exited") for error in engine.errors)
+
+
+def test_setup_and_teardown_failures_fail_their_nodes(tmp_path):
+    engine = _engine(tmp_path, {"test_e.py": """\
+        import pytest
+
+        @pytest.fixture
+        def broken_setup():
+            raise RuntimeError("setup broke")
+
+        @pytest.fixture
+        def broken_teardown():
+            yield
+            raise RuntimeError("teardown broke")
+
+        def test_setup(broken_setup):
+            pass
+
+        def test_teardown(broken_teardown):
+            pass
+
+        def test_ok():
+            pass
+    """})
+    outcomes = {node["test_node"]: node["outcome"] for node in engine.test_nodes}
+    assert outcomes == {
+        "test_e.py::test_setup": "fail",
+        "test_e.py::test_teardown": "fail",
+        "test_e.py::test_ok": "pass",
+    }
+    assert "teardown broke" in engine.failure_messages["test_e.py::test_teardown"]
+    assert _engine_score(engine, tmp_path) == (1, 3, False)
+
+
+def test_a_skipped_function_counts_as_failed_without_making_the_grade_incomplete(tmp_path):
+    engine = _engine(tmp_path, {"test_e.py": """\
+        import pytest
+
+        def test_skips():
+            pytest.skip("not today")
+
+        def test_ok():
+            pass
+    """})
+    assert _engine_score(engine, tmp_path) == (1, 2, True)
+
+
+def test_a_timed_out_engine_suite_scores_every_function_failed(tmp_path):
+    engine = _engine(tmp_path, {"test_e.py": """\
+        import time
+
+        def test_slow():
+            time.sleep(30)
+
+        def test_quick():
+            pass
+    """}, timeout=3)
+    assert _engine_score(engine, tmp_path) == (0, 2, False)
+
+
+def test_missing_engine_support_leaves_the_dimension_unevaluated(tmp_path):
+    engine = _engine(tmp_path, {"test_e.py": "def test_a():\n    pass\n"}, support=False)
+    score = _dimensions(engine, tmp_path)["engine_regression"]
+    assert not score["evaluated"] and score["tests_total"] is None
+
+
+def test_a_result_without_node_reporting_falls_back_to_the_summary():
+    from silverquillm.karn.execution import _suite_counts
+
+    assert _suite_counts(EngineResult(tests_passed=2, tests_failed=1, tests_total=3)) == (2, 3)
+    card = CardResult(
+        collector_number="c",
+        tests_failed=1,
+        tests_total=1,
+        test_nodes=[
+            {"test_node": "tests.py", "outcome": "fail"},
+            {"test_node": "tests.py::<collection-error>", "outcome": "fail"},
+        ],
+        expected_test_functions=1,
+        not_run=[{"test_node": "tests.py::test_a", "reason": "import_error"}],
+    )
+    assert _suite_counts(card) == (0, 1)
+
+
+def test_the_dimension_totals_reach_the_combined_regression_and_regrade(tmp_path):
+    from silverquillm.karn import regrade as regrade_module
+    from silverquillm.karn.baseline import combined_regression
+    from silverquillm.karn.execution import _scores
+    from silverquillm.karn.records import validate_scores
+
+    from .test_karn_combined_regression import baseline
+
+    engine = _engine(tmp_path, {"test_e.py": """\
+        import os
+
+        def test_first():
+            pass
+
+        def test_exits():
+            os._exit(3)
+
+        def test_after():
+            pass
+    """})
+    fdn = {"fdn_1": CardResult("fdn_1", test_nodes=[{"test_node": "tests.py::a", "outcome": "pass"}])}
+    scores = _dimensions(engine, tmp_path, fdn)
+    validate_scores(scores)
+    reference = baseline(
+        {"fdn_1/tests.py::a": "pass"},
+        {"test_e.py::test_first": "pass", "test_e.py::test_exits": "pass", "test_e.py::test_after": "pass"},
+    )
+    block = combined_regression(scores, FullEvalResult(fdn_results=fdn, engine_result=engine), reference)
+    assert (block["tests_passed"], block["tests_total"]) == (2, 4)
+    assert block["regressed"]["test_nodes"]["engine_regression"] == [
+        "test_e.py::test_after", "test_e.py::test_exits",
+    ]
+    # A regrade scores its evaluation with the same function a run does.
+    assert regrade_module._scores is _scores
+
+
+@pytest.mark.parametrize("reason", [["skipped"], {"skipped": 1}, None])
+def test_the_host_refuses_a_not_run_reason_that_is_not_a_string(reason):
+    with pytest.raises(GraderError, match="evaluation_invalid_not_run"):
+        evaluation_from_json(_evaluation(not_run=[{"test_node": "tests.py::test_c", "reason": reason}]))
+
+
+def test_the_kept_messages_encode_within_the_budget():
+    holders = [
+        CardResult(
+            collector_number=f"c{index}",
+            failure_messages={f"tests.py::t{n}": "m" * FAILURE_MESSAGE_LIMIT for n in range(250)},
+        )
+        for index in range(4)
+    ]
+    result = FullEvalResult(sos_results={card.collector_number: card for card in holders})
+    _apply_message_budget(result)
+    kept = [card.failure_messages for card in holders if card.failure_messages]
+    assert sum(len(json.dumps(mapping).encode()) for mapping in kept) <= FAILURE_MESSAGE_BUDGET
+    for mapping in kept:
+        assert len(json.dumps(mapping)) == sum(failure_message_cost(*entry) for entry in mapping.items())

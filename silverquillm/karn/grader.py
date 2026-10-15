@@ -627,6 +627,7 @@ def _gaps(value: dict, nodes: list[dict]) -> dict:
         and set(row) == {"test_node", "reason"}
         and isinstance(row["test_node"], str)
         and "::" in row["test_node"]
+        and isinstance(row["reason"], str)
         and row["reason"] in NOT_RUN_REASONS
         for row in not_run
     ):

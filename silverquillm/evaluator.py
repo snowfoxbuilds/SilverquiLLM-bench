@@ -645,6 +645,9 @@ NOT_RUN_REASONS = frozenset({
     "candidate_code_missing",  # the candidate's engine or cards directory was absent
 })  # fmt: skip
 _DEFAULT_PYTHON_FILES = ("test_*.py", "tests.py")
+# pytest's own exit statuses for a session that ran to its end: all passed, some failed,
+# nothing collected.  Any other status ended the session early.
+_PYTEST_ORDERLY_EXITS = (0, 1, 5)
 
 
 def _generate_report_plugin(report_jsonl_path: str) -> str:
@@ -653,7 +656,8 @@ def _generate_report_plugin(report_jsonl_path: str) -> str:
     The generated plugin uses the ``pytest_runtest_logreport`` hook to capture
     per-test outcomes.  ``when == "call"`` reports give pass/fail, and a failure
     keeps a short message.  ``when == "setup"`` failures are also captured since
-    those tests never reach ``call``.  Skipped and xfail outcomes, and collection
+    those tests never reach ``call``, and ``when == "teardown"`` failures since
+    they fail a node whose call passed.  Skipped and xfail outcomes, and collection
     errors, are recorded so that a node that did not run can say why; only pass
     and fail rows ever become ``test_nodes``.
 
@@ -710,6 +714,9 @@ def pytest_runtest_logreport(report):
                 _write({{"nodeid": nodeid, "when": "setup", "outcome": "fail", "message": _message(report)}})
             else:
                 _write({{"nodeid": nodeid, "when": "setup", "outcome": "skip"}})
+    elif report.when == "teardown" and report.failed:
+        # A teardown error fails a node whose call passed; the reader lets failure win.
+        _write({{"nodeid": nodeid, "when": "teardown", "outcome": "fail", "message": _message(report)}})
 
 def pytest_collectreport(report):
     """Record collection errors."""
@@ -769,7 +776,7 @@ def _read_report(report_path: Path, suite_dir: str | None = None) -> _Report:
     if not report_path.exists():
         return report
 
-    seen: set[str] = set()
+    seen: dict[str, int] = {}
     for line in report_path.read_text(errors="replace").splitlines():
         line = line.strip()
         if not line:
@@ -806,8 +813,11 @@ def _read_report(report_path: Path, suite_dir: str | None = None) -> _Report:
             module = "" if module == "<collection-error>" else module
             report.collection_errors.setdefault(module, report.messages.get(normalized, ""))
         if normalized not in seen:
-            seen.add(normalized)
+            seen[normalized] = len(report.nodes)
             report.nodes.append({"test_node": normalized, "outcome": outcome})
+        elif outcome == "fail":
+            # One node, several phases (call, then teardown): a failure in any phase fails it.
+            report.nodes[seen[normalized]]["outcome"] = "fail"
     return report
 
 
@@ -908,6 +918,11 @@ def _run_pytest(
             return _PytestRun(0, 0, 0, [f"Timeout after {timeout}s"], _Report(), timed_out=True)
 
         passed, failed, total, errors = _parse_pytest_output(combined)
+        if result.returncode not in _PYTEST_ORDERLY_EXITS and all(
+            error.startswith("FAILED ") for error in errors
+        ):
+            # pytest died without a summary (a crash, os._exit): the grade must not look complete.
+            errors.append(f"pytest_exited: exit status {result.returncode}")
         # test_nodes enumerates only executed pass/fail nodes.  Skipped and
         # xfail tests are intentionally omitted, so len(test_nodes) may be
         # less than tests_total when skips exist.  The authoritative counts
@@ -1128,8 +1143,13 @@ def _failure_messages(run: _PytestRun) -> dict[str, str]:
 
 
 def failure_message_cost(node: str, message: str) -> int:
-    """Bytes one ``node: message`` entry takes in the worker's ASCII-escaped JSON output."""
-    return len(json.dumps(node)) + len(json.dumps(message)) + 2
+    """Bytes one ``node: message`` entry takes in the worker's ASCII-escaped JSON output.
+
+    Counts the ``": "`` after the key and a ``", "`` separator, so the costs of a non-empty
+    mapping's entries sum to exactly ``len(json.dumps(mapping))``: the two braces take the
+    place of the one separator the last entry does not need.
+    """
+    return len(json.dumps(node)) + len(json.dumps(message)) + 4
 
 
 def _apply_message_budget(result: FullEvalResult) -> None:
