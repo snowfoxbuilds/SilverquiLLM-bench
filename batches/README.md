@@ -3,11 +3,14 @@
 The file-backed queue `silverquillm scheduler` executes, found through `--batches-dir` or `batches_dir` in the host configuration file.
 Operator instructions live in [Karn benchmarking](../docs/KARN-BENCHMARKING.md).
 
-- **`<id>.toml`** — one Batch, authored in your editor and never written by the scheduler.
-  Batches are scanned in name order.
-  Batch ids are one-shot: the state file records what ran under that id, so write a new file instead of reusing one.
+- **`<id>.toml`** — one Batch, authored in your editor (or by a campaign top-up) and never written by the scheduler.
+  Every `*.toml` file here is a submission: keep backups and drafts elsewhere.
+  Batch ids are one-shot: the state file records what ran under that id, so write a new file instead of reusing one; a renamed file is a new Batch.
 - **`state/<id>.json`** — the scheduler's observed state for that Batch (schema 2), written atomically after every transition.
-  Commit it as runs finish; the scheduler never runs git.
+- **`queue.json`** — the queue ledger: every Batch the scheduler has recorded here, in queue order, and whether it was acknowledged. Written only by the scheduler; never edit it.
+- **`control.json`** — present only while dispatch is paused or draining. Written by `silverquillm queue pause|drain|resume`; never edit it by hand.
+
+All of these are host-local operational files, backed up with the host's raw data and never published.
 
 ## Batch file
 
@@ -16,7 +19,7 @@ format = "karn-v5"
 not_before = 2026-10-01T09:00:00Z   # optional, timezone-aware, applies to the whole batch
 
 [[runs]]
-build_output = "/tmp/bench-codex-build"   # completed `karn build` output; relative paths resolve from --bench-root
+build_output = "/tmp/bench-codex-build"   # completed `karn build` output; relative paths resolve from the bench root
 construct = "bare-codex"
 benchmark = "hob-medium"
 budget_seconds = 86400                     # optional, default 86400
@@ -30,12 +33,33 @@ The file is reread before every not-yet-started entry, so appending entries to a
 ## Execution
 
 - The scheduler fills free eligible Login Pool slots automatically, through the same lifecycle as `silverquillm run`; no concurrency setting is needed.
-- Entries start in file order within a batch and can overlap. Batches with a slot available take priority in filename order; a blocked batch does not hold up another batch's pool. Completion order can differ from start order.
-- A batch without committed state is blocked until acknowledged once with `--replay-without-state <id>`, because starting from entry 0 could replay finished runs.
+- Entries start in file order within a batch and can overlap. Batches with a slot available take priority in queue order, the order the scheduler first recorded them in `queue.json` (name order among those recorded together); a blocked batch does not hold up another batch's pool. Completion order can differ from start order.
+- A running scheduler picks up a new batch file without a restart, and `queue ls` and `top` show it as pending. A batch is new when `queue.json` has never recorded it.
+- A batch that `queue.json` records but whose state file is missing has lost its state. It is refused until you restore the state, or acknowledge a restart from entry 0 with `--replay-without-state <id>`, because that could replay finished runs. The same acknowledgement is needed once for each stateless batch present when a directory gets its first ledger, since nothing then tells a new batch from a lost one.
+- `--replay-without-state <id>` acknowledges one start from entry 0. If that batch's state is lost again, even under the same scheduler, it needs a new acknowledgement, which means a scheduler restart.
+- If `queue.json` is damaged, nothing is dispatched until it is repaired or removed; a removed ledger is rebuilt, and every batch without state then needs the acknowledgement. While it is damaged, `queue ls` and `top` show `ledger_damaged`, the scheduler warns on every pass, and `scheduler --once` exits non-zero.
+- The batch directory and `state/` must be writable: the scheduler writes `queue.json` and each new batch's state there. If it cannot, new dispatch stops the same way, with `queue_ledger_unwritable` or `queue_state_unwritable`, while runs already in flight finish; the scheduler reports it on every pass, but `queue ls` and `top` cannot see a failed write and may still show the batch pending. An acknowledgement given with `--replay-without-state` is spent once the batch has usable state, and is saved to `queue.json` before anything else starts.
+- A new file in an unsupported format is reported (`unsupported_legacy_batch:<file>`) and left unrecorded, so correcting it to a `karn-v5` batch queues it then.
+- The scheduler warns, once per batch and in serve mode too, about every batch it skips and why.
 - A failed entry is recorded with its evidence and the batch continues.
 - An entry with no eligible slot stays pending, along with later entries in its batch. It counts as started only after claiming a slot.
 - All runs left `running` by a crashed or killed scheduler are checked for recovery; runs still owned by a live worker are deferred. An unowned run that never wrote its run input is recorded as failed with `interrupted_before_launch`.
 - A record that could not be written in time is marked `record_write_pending` and written on the scheduler's next start or by `silverquillm recover`.
+
+## Pause, drain, resume and interrupt
+
+| Command | New runs | Runs in flight | Scheduler |
+| --- | --- | --- | --- |
+| `silverquillm queue pause` | none launch | finish normally | keeps serving; recovery and pending publications continue |
+| `silverquillm queue drain` | none launch | finish grading and recording | exits 0 once none is in flight, and leaves dispatch paused |
+| `silverquillm queue resume` | launch again | — | a paused scheduler resumes; a drained one must be started again |
+| Ctrl-C, SIGTERM, SIGHUP | none launch | interrupted and recorded as `interrupted` | exits after their cleanup |
+
+Pause and drain work from any shell or agent, whether or not a scheduler is running, and persist across restarts; `queue ls` and `top` show them.
+A run already past its login selection when a pause lands is refused at launch and its entry stays pending.
+An unreadable `control.json` (garbled, oversized, a link, a FIFO, a directory, or a directory the scheduler cannot search) reads as paused, never as running, and never interrupts a run; `queue pause`, `queue drain` or `queue resume` replaces it, except a directory, which is removed by hand. Every change of mode — a `queue` command or a finished drain — takes the short-lived `.control.lock` beside it and replaces the whole file in one rename, never deleting it first, so a failed change leaves the previous mode in force. A finished drain turns `draining` into `paused` only if no `queue` command changed it meanwhile; if that change fails (a read-only batch directory, a full disk), the scheduler still exits and the file keeps saying `draining`, so a restart launches nothing.
+The scheduler checks the queue ledger before the dispatch mode, so a damaged ledger is reported, and fails `--once`, even while dispatch is paused.
+Interrupting one worker process interrupts the whole scheduler: a run that ends `interrupted`, or a worker reporting an interrupt, stops dispatch and interrupts the other runs too, because a service stop or terminal hangup reaches workers and scheduler in no fixed order. To stop launching, use `queue pause` or `queue drain`, never a signal.
 
 The [Karn Benchmark Contract](../docs/specs/KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records) defines dispatch, recovery, and shutdown behavior, including the single concurrent run allowed for candidates without a login plugin.
 

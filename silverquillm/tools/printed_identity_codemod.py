@@ -61,7 +61,7 @@ alone; the helpers themselves reject a string at runtime.
 
 Usage::
 
-    python3 scripts/printed_identity_codemod.py --workspace known_best/workspace \
+    silverquillm audit printed-identity --workspace known_best/workspace \
         [--check] FILE_OR_DIR...
 """
 

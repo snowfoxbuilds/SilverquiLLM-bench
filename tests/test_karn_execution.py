@@ -744,7 +744,7 @@ def test_fingerprint_includes_authoritative_engine_configuration_and_replay_supp
         "benchmarks/example/workspace/conftest.py": "# authoritative fixtures\n",
         "benchmarks/example/workspace/pytest.ini": "[pytest]\n",
         "data/replays/golden/example.json": "{}",
-        "scripts/triage_divergences.py": "# authoritative replay support\n",
+        "silverquillm/triage_divergences.py": "# authoritative replay support\n",
     }
     for relative, contents in support.items():
         path = root / relative
@@ -752,8 +752,13 @@ def test_fingerprint_includes_authoritative_engine_configuration_and_replay_supp
         path.write_text(contents)
     observed = grading_inputs(load_benchmark(root, "example"))
     by_path = {row["path"]: row for row in observed["files"]}
-    assert all(by_path[path]["sha256"] for path in support)
-    assert {by_path[path]["kind"] for path in support} == {
+    # The triage tool is fingerprinted at the path the grader stages it to.
+    recorded = [
+        "scripts/triage_divergences.py" if path.endswith("triage_divergences.py") else path
+        for path in support
+    ]
+    assert all(by_path[path]["sha256"] for path in recorded)
+    assert {by_path[path]["kind"] for path in recorded} == {
         "engine_support",
         "replay_fixture",
         "replay_support",

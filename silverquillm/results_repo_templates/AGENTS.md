@@ -1,21 +1,27 @@
 # SilverquiLLM results repo
 
-This repository is the **private, git-as-truth home for SilverquiLLM benchmark
+The results repo is the **private, git-as-truth home for SilverquiLLM benchmark
 results**. It is self-contained: an analysis agent needs nothing outside this
 repo to read, filter, and aggregate runs. The bench repo
 (`snowfoxbuilds/SilverquiLLM-bench`) writes records here through
-`silverquillm.results_repo`; nothing else writes.
+`silverquillm.results_repo`; nothing else writes records.
+
+This file is the record schema. It stays in the bench repo at
+`silverquillm/results_repo_templates/AGENTS.md` and is never copied into the
+results repo, whose own `AGENTS.md` is its operator runbook and refers here.
 
 ## Layout
 
 ```
-AGENTS.md                                   this file — the schema
+AGENTS.md                                   the operator runbook (not this schema)
 results/<candidate-hash>/candidate/         the vendored Candidate Bundle (ozolith-v1 only)
 results/<candidate-hash>/<run-id>/manifest.json
 results/<candidate-hash>/<run-id>/scores.json
 baselines/<tree-id>.bundle                  a benchmark input's staged workspace, stored once
 workspaces/<candidate-hash>/<run-id>/       a record's graded workspace, as a diff from its baseline
 exclusions/<candidate-hash>/<run-id>.json   why an analysis leaves a record out
+regrades/<digest hex>/<candidate-hash>/<run-id>.json  a published re-grade on those grading inputs
+cohorts/  campaigns/                        written by operators and the runbook's scripts
 karn/                                       the Karn recipes that build the candidates
 ```
 
@@ -80,6 +86,9 @@ The manifest contains `run_id`, `candidate`, `candidate_hash`, `benchmark`, `bud
 Measurements retain response/tool components, token usage, versioned API-equivalent pricing, and completeness reasons.
 The three existing score-dimension names remain; an absent dimension uses `evaluated: false`, null counts/pass rate, and `missing_reasons`.
 Coverage distinguishes the complete reference population from cards with executed audited cases.
+Each card under `card_correctness.cards` and `fdn_regression.cards`, and `engine_regression` itself, also carries `expected_test_functions` (statically collected from the authoritative tests; null when unknown), `not_run` (`{"test_node", "reason"}` for each expected function none of whose nodes ran) and `failure_messages` (failing node → one bounded line).
+A card's own counts cover only the nodes that ran; each dimension's `tests_passed`, `tests_total` and `pass_rate` also count every `not_run` function as a failed test (except `grading_support_missing`, which leaves the suite unevaluated), so a dimension total is the nodes that ran plus the functions that did not. Cards and the engine count reported nodes the same way: a collection-error row (a module's, or a class's `<file>::<Class>::<collection-error>`) is not a node, and a node that failed in setup, call or teardown is one failed node; only a result with no node reporting uses pytest's summary counts. A suite whose pytest session did not run to its end (`pytest_exited: exit status N` among its errors, whatever the status; this includes an interruption such as `KeyboardInterrupt` or `pytest.exit`, and an internal error) is incomplete; such errors come from pytest's short test summary only, never from a test's captured log. A function whose whole module, class or directory was skipped at collection is `skipped`, and expected functions follow pytest's `__test__` as last set (false turns a function, class or module off; exactly `True` turns one on whatever its name). A regrade's `source.scores` keeps the record's own `complete`. Card results from the legacy SOS/FDN compatibility runner carry none of the three fields; its engine result carries them.
+Records graded before these fields existed lack them and remain valid; their dimension totals count only the nodes that ran.
 A snapshot fallback names its selected source while retaining the final workspace separately.
 Host grading inputs have content fingerprints in `run_metadata.grading_inputs`.
 A later recovery observation can have its own record id while `recovery_of` and `execution_run_id` link it to the original model execution; the prior record remains unchanged, and a reader of the records sees that link in the recovery's own record.
@@ -127,17 +136,33 @@ the record:
 | `superseded_by` | The replacing record's run id, only for `superseded` |
 | `excluded_by`, `excluded_at` | Who and when |
 
-Rules exclude a record for `host_failed` (execution status), `never_executed`
-(zero observed agent turns), `subagents_used` (subagent threads observed) and
-`subagents_uncounted` (a populated measurement object without a
-`subagent_threads` count). An unknown measurement never excludes: absent, null or
-empty measurements, and a present but unknown turn or thread count, leave the
-record in. Operators add the rest with `silverquillm results exclude`. To include
+Rules exclude a record for `host_failed` (execution status) and `never_executed`
+(zero observed agent turns). An unknown measurement never excludes: absent, null or
+empty measurements, and a present but unknown turn count, leave the record in.
+Subagent use is never a rule: `run_metadata.measurements.subagent_threads` counts
+the agent threads beyond the main one, and `subagents` lists each such thread as
+`{"thread_id", "models", "requests", "requested_efforts"}` (the models observed on
+its requests; `requested_efforts` is the sorted set of reasoning-effort levels the
+thread's own telemetry requested, from Codex's conversation start and responses, and
+null when none was observed, which is always so for Claude; rows written before it
+omit the key), so an analysis judges its own subagent policy. The list
+holds at most 1,000 rows of at most 32 models each; `subagents_truncated` counts the
+subagent threads not listed, so `subagent_threads` is the rows plus that count. When
+the telemetry could not be read into rows, `subagents` is null and
+`subagents_reason` says why. For Codex the main thread is a best guess (the first
+thread observed, by timestamps the workload writes). Records
+written before #230 may carry rule exclusions for `subagents_used` or
+`subagents_uncounted`; those files stay, and an operator may still write either
+reason by hand. Operators add the rest with `silverquillm results exclude`. To include
 a record again, delete its file.
 
-Every analysis applies these files and no private filter: aggregate the records
-without an exclusion, and list the excluded ones with their reasons beneath the
-table (`silverquillm results exclusions`). `silverquillm regrade` does the same:
+These files are repository-wide: every analysis applies them, aggregates only
+records without one, and lists the excluded ones with their reasons beneath the
+table (`silverquillm results exclusions`). Beyond them, an analysis may select runs
+by their recorded attributes, such as a subagent policy over `subagents`, under
+criteria it states and publishes with its own results; that selection belongs to
+that analysis alone and is never written as an exclusion file, so two analyses may
+decide differently about the same run while an excluded run stays out of both. `silverquillm regrade` does the same:
 it grades excluded records too, but leaves them out of its comparison and lists
 them under `excluded` in its summary. `silverquillm results check` reports
 records a rule excludes that have no file, and files without a record.
@@ -153,7 +178,7 @@ sources:
    label then names the recipe commit.
 3. Run bench code from a pushed `main` commit with no uncommitted tracked
    change and no untracked file under `silverquillm/` or `benchmarks/`.
-4. Set `SILVERQUILLM_HOST_LABEL` on each host.
+4. Set `host_label` in each host's configuration (or `SILVERQUILLM_HOST_LABEL`).
 5. Use one subscription on one host at a time.
 
 The bench refuses a run that breaks 2 or 3 unless the operator passes

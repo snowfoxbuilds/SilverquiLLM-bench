@@ -326,7 +326,7 @@ def test_the_top_command_needs_no_configured_location():
 
     result = CliRunner().invoke(main, ["top"])
     assert result.exit_code == 1
-    assert "queue ls" in result.output
+    assert "top --json" in result.output
 
 
 # Pilot-driven views ------------------------------------------------------------
@@ -428,7 +428,7 @@ async def test_history_sorts_and_hides_excluded_runs():
         assert len(view.shown) == len(history()) - 1
         view.sort_key, view.sort_reverse = "cost", True
         view.action_reverse_sort()
-        costs = [run.estimated_cost for run in view.shown]
+        costs = [run.cost for run in view.shown]
         assert costs == sorted(costs)
         await pilot.press("s")
         assert view.sort_key == "duration"
@@ -643,3 +643,27 @@ def _plain(renderable) -> str:
     )
     console.print(renderable)
     return console.export_text()
+
+
+def test_a_batch_error_shows_ahead_of_its_countdown(monkeypatch):
+    import dataclasses
+
+    from silverquillm.monitor import QueuedBatch
+    from silverquillm.top.dashboard import QueuedPane
+
+    batch = QueuedBatch(
+        "tomorrow", "ledger_damaged", NOW + timedelta(hours=24), 0, 1, (), "queue_ledger_invalid"
+    )
+    shown = []
+
+    class Body:
+        def update(self, body):
+            shown.append(body)
+
+    pane = QueuedPane(MTG)
+    monkeypatch.setattr(pane, "query_one", lambda *args: Body())
+    snapshot = dataclasses.replace(FakeMonitor().snapshot(), queued=[batch])
+    pane.show(snapshot)
+    text = shown[0].plain if isinstance(shown[0], Text) else str(shown[0])
+    assert "queue_ledger_invalid" in text
+    assert "24h" not in text

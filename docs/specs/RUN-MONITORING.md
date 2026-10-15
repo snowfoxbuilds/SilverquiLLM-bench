@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-08
+Last updated: 2026-10-13
 
 # Run Monitoring
 
@@ -18,7 +18,19 @@ This page replaces the historical image-run artifact and telemetry spec; that la
 
 `silverquillm top` opens the monitor; `silverquillm queue ls` stays the scriptable one-shot queue listing (grilling 2026-10-07).
 The monitor is a Textual application shipped as the optional `monitor` extra (`silverquillm-bench[monitor]`), so grader and candidate environments never install it; without the extra, `top` prints a one-line install hint.
-Without a terminal, `top` draws nothing and points to `queue ls`.
+Without a terminal, `top` draws nothing and points to `top --json`.
+
+`silverquillm top --json` prints one snapshot of what the dashboard shows as a JSON document and exits; it needs no terminal and no `monitor` extra, so an operating agent without a TTY sees the same facts (grilling 2026-10-14, #225).
+It is built from the same poll as the dashboard, so its stages follow [Run stages](#run-stages) exactly, and it is read-only like the monitor.
+The document (`schema_version` 1) has the host label, each resolved location and its source, the configuration, Docker and exclusion errors, the dispatch mode, the queue ledger's status (`none`, `ok` or `damaged`, with the error), and the dashboard counts.
+`runs` lists every live run with its stage and needs-recover reasons, the Batch and entry that started it, benchmark, construct, Candidate Hash, model and effort, Login Profile, budget, start time and elapsed container time, its container, run directory, estimate, and Run Cost with its source (`run_cost_usd`, `run_cost_source`: `reported` or `estimated`, provisional until `cost_recorded`).
+`queue` lists every Batch in queue order with its status, the run ids it has started and its unstarted entries; the status uses `queue ls`'s strings (`pending`, `running`, `done`, `missing_state`, `ledger_damaged`, `unsupported_legacy_batch`, `error`) (grilling 2026-10-14).
+`logins` lists every Login Profile with one state word (`pending`, `unknown`, `busy`, `cooldown` or `free`, most blocking first), the pending run, when a cooldown ends, the run holding it, and its Estimated Weekly Usage.
+A run's Batch and entry come from the retained Batch state files (`state/<batch>.json`), not from the Batch TOMLs, so a run keeps its Batch after the TOML is removed or stops parsing, as when recovery publishes a run whose Batch file is gone; a missing, oversized or invalid state file attributes nothing, and a run two entries claim has no Batch, never an arbitrary one (grilling 2026-10-15).
+Since it follows no log, the one-shot snapshot reads each running Claude container's recent log once, `docker logs --timestamps --tail` without `--follow`, through the same line and usage parsers a followed log uses, so the live weekly reading the dashboard would show feeds the same [Estimated Weekly Usage](#estimated-weekly-usage); the read is bounded in time (5 s) and bytes (8 MiB), its `docker logs` is always ended, and only the parsed reading is kept, never a log line (grilling 2026-10-15).
+When Docker cannot be read or the log holds no valid reading, the estimate rests on the records, as the dashboard's would without a reading.
+`queue ls --json` keeps its own row shape for scripts that read the queue alone.
+The operator procedure that uses this document is in the Results Repo runbook (`runbook/monitoring-and-recovery.md`, snowfoxbuilds/bench-results#20).
 
 The monitor is read-only with one exception (grilling 2026-10-07).
 It never takes a lock that a runner or the scheduler takes, stops or recovers a run, edits a Batch, or fetches or pulls the Results Repo.
@@ -37,8 +49,8 @@ The configuration file also carries the monitor's own settings (grilling 2026-10
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `[usage_rates] codex` | `5` | Estimated Cost in USD that counts as 1% of a Codex Login Profile's weekly allowance |
-| `[usage_rates] claude` | `25` | Estimated Cost in USD that counts as 1% of a Claude Login Profile's weekly allowance |
+| `[usage_rates] codex` | `5` | Run Cost in USD that counts as 1% of a Codex Login Profile's weekly allowance |
+| `[usage_rates] claude` | `25` | Run Cost in USD that counts as 1% of a Claude Login Profile's weekly allowance |
 | `[monitor] theme` | the built-in theme | Theme name, see Look and feel |
 
 A provider is named by its login plugin: `karn-codex-login` is `codex`, `karn-claude-login` is `claude`.
@@ -52,7 +64,7 @@ A provider is named by its login plugin: `karn-codex-login` is `codex`, `karn-cl
 | `<run-dir>/candidate/constructs/<construct>/definition.json` | Candidate display of a live run |
 | The kernel's lock table (`/proc/locks`) for `<run-dir>/.runner.lock` and each Login Profile's `runner.lock` | Whether a runner or recovery still owns a run, and whether a Login Profile is busy, without taking or creating any lock |
 | `<run-dir>/run-record.json` and `<run-dir>/recovery-N/run-record.json` | Whether a run's record is retained, whether its workspace writers were confirmed stopped, and its linked recovery |
-| `<run-dir>/observations.events.jsonl` | Live request rows, provisional Estimated Cost |
+| `<run-dir>/observations.events.jsonl` | Live request rows, provisional Run Cost |
 | `docker logs -f`, then `<run-dir>/host/stdout.log` and `stderr.log` | Activity, stderr and raw tabs; Claude subscription usage readings |
 | `<run-dir>/snapshots.json`, workspace git history | Workspace tab |
 | `batches/<id>.toml` and `batches/state/<id>.json` | Queued runs and Batch status |
@@ -166,7 +178,7 @@ Each pool takes the keyboard focus in turn, and the focused pool marks its selec
 `c` ends the selected profile's cooldown ten seconds from now rather than at once, and does nothing but say so when it has none.
 Each write refreshes the view at once and says what it set; a write that fails says why and changes nothing.
 
-Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, a progress bar with its Estimated %, elapsed container time with the budget beside it, Estimated Cost, and a cost sparkline.
+Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, a progress bar with its Estimated %, elapsed container time with the budget beside it, Run Cost, and a cost sparkline.
 The progress bar is the Estimated %, not the share of the budget used: a run is measured against how long past runs took, and the budget is only the limit it stops at (grilling 2026-10-08).
 With no past runs to measure against there is no bar, only the elapsed time and budget.
 A Needs recover or Unknown row shows whether its container is up or stopped, then its reasons, in place of the progress bar.
@@ -176,18 +188,20 @@ Selecting a row opens its run details.
 Those runs are the same Candidate Hash's when it has any, and otherwise the same Candidate display's.
 The figure stays at most 99% while the run is live and is blank when no such run exists.
 
-**Estimated Cost** is provisional until the run has a record, then the record's own (grilling 2026-10-07).
+**Run Cost** is provisional until the run has a record, then the record's own (grilling 2026-10-07).
 The provisional figure comes from the run's live telemetry events and is marked `~`; with native telemetry off it is blank.
 Codex request events are priced with the bench's price table, as at the end of a run.
 Claude request events lack the cache-write duration split that the price table needs, so Claude runs sum Claude Code's own per-request `cost_usd`, charging one logical request (`request_id`) once even when it is observed again; a repeat that disagrees is counted as a conflict, and an event without a request id stands alone.
-Once a valid record applies to the run, the row shows that record's Estimated Cost, its completeness, and its priced requests, without waiting for publication or for history to refresh.
+Once a valid record applies to the run, the row shows that record's Run Cost, its completeness, and the requests its source gives a figure, without waiting for publication or for history to refresh.
+A record's Run Cost is its Reported Cost when that is at least as complete as its Estimated Cost, otherwise its Estimated Cost; a record written before the Reported Cost was recorded falls back to the reported total in its coverage, complete unless its Estimated Cost had a reason beyond pricing, and has no per-request reported figures, so its weekly spend counts its per-request Estimated Cost instead. That coverage total started at zero whenever any OTel event arrived, so a zero total beside a cost gap (`otel_cost_malformed` or `otel_missing_native_request`) is treated as no Reported Cost at all and the Estimated Cost is used, or the cost stays missing; the old record cannot tell that from genuine zero figures summed beside a gap, so both fall back conservatively.
 The applicable record is a linked recovery before the original, and a locally retained copy before a published one; a missing recorded cost stays missing rather than falling back to the live figure.
 A recorded figure drops the `~`, carries `*` when its record calls it incomplete, and shows `≠N` for N conflicting request observations.
 
 The queued pane lists the not-yet-started run specs in queue priority order, under one header line per Batch (grilling 2026-10-07).
+While dispatch is paused or draining, the pane's title says so (grilling 2026-10-13).
 The scheduler may start a later Batch when an earlier Batch has no eligible Login Profile; dispatch follows the [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records).
 Each run takes one line with its benchmark, budget and Candidate display; a queued run has no Login Profile until it launches.
-A Batch's header line shows its countdown to `not_before`, or `⚠ needs ack` for a Batch with no committed state, and how many of its runs have started.
+A Batch's header line shows its countdown to `not_before`, or `⚠ needs ack` for a stateless Batch the scheduler will not start by itself (lost state, or present before the queue ledger existed), and how many of its runs have started; a new Batch shows as pending, and every unstarted Batch shows the ledger error while a damaged queue ledger stops dispatch (grilling 2026-10-13).
 
 ### Estimated Weekly Usage
 
@@ -202,9 +216,9 @@ A reading speaks for its own weekly window, and for one window after that at mos
 
 | Situation | Shown value |
 | --- | --- |
-| The newest reading's reset time has not passed | The reading's utilization, plus the Estimated Cost observed on the Login Profile after the reading divided by the provider's rate, marked `≈` when that addition is nonzero |
-| The newest reading's reset time has passed, less than seven days ago | The Estimated Cost observed on the Login Profile since that reset, divided by the provider's rate, marked `≈` |
-| The newest reading's reset time passed seven days ago or more, or no reading exists | The Estimated Cost observed on the Login Profile over the last seven days, divided by the provider's rate, marked `≈` |
+| The newest reading's reset time has not passed | The reading's utilization, plus the Run Cost observed on the Login Profile after the reading divided by the provider's rate, marked `≈` when that addition is nonzero |
+| The newest reading's reset time has passed, less than seven days ago | The Run Cost observed on the Login Profile since that reset, divided by the provider's rate, marked `≈` |
+| The newest reading's reset time passed seven days ago or more, or no reading exists | The Run Cost observed on the Login Profile over the last seven days, divided by the provider's rate, marked `≈` |
 
 A newer reading always replaces whatever an older one implied.
 Only a value from an unexpired reading shows a reset time; after the reset, the provider's next reset is unknown, so none is shown.
@@ -215,10 +229,12 @@ A record without host provenance stays in history but never counts toward local 
 
 A record supplies a reading or spend only when it passes the Run Record's own validation and, when published, is filed under its own identity; history still lists the rest.
 
+A record's spend is the per-request figures of its Run Cost's source, each at its request's time; a record written before the Reported Cost was recorded counts its per-request Estimated Cost, since it has no reported ones.
+
 Each execution's spend counts once.
 A linked recovery reconciles its original's execution without running the model again, so of an execution's records only one counts.
 For a run with a directory on this host that is the record its own row applies, Finished or not, so the row and its Login Profile agree; otherwise a stopped linked recovery counts before its original.
-A live run counts its applicable record once it has one, and its provisional Estimated Cost before that.
+A live run counts its applicable record once it has one, and its provisional Run Cost before that.
 Excluded runs count too, since an Exclusion does not undo spend.
 
 A Claude reading retained in a record has no time of its own; the run's container stop bounds it.
@@ -231,7 +247,7 @@ A value from an unexpired reading reads like `41% · resets Thu 14:00 · read 12
 The historic view browses by benchmark, by Candidate display, or by run (grilling 2026-10-07).
 Selecting a benchmark or a Candidate display lists its runs; a Candidate display expands to its individual Candidate Hashes.
 
-A run occupies one line: run date, benchmark, Candidate display, execution status, container duration over budget, target-card pass rate with passed/total, FDN Card Regression pass rate, Engine Regression pass rate, Estimated Cost, Agent Turns, total tokens, Login Profile, host label, and the short run id.
+A run occupies one line: run date, benchmark, Candidate display, execution status, container duration over budget, target-card pass rate with passed/total, FDN Card Regression pass rate, Engine Regression pass rate, Run Cost, Agent Turns, total tokens, Login Profile, host label, and the short run id.
 Every column sorts.
 Excluded runs are dimmed with their reason code, and a key hides them.
 Combined Regression joins the line once records carry it.
@@ -240,7 +256,7 @@ Selecting a run opens its run details.
 
 ### Run details view
 
-The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the Candidate display and secondary labels, Login Profile, timings, scores, Estimated Cost with its breakdown, Agent Turns, and token usage, each as available (grilling 2026-10-07).
+The header carries `◉ LIVE` or `◼ HISTORICAL`, the stage for a live run, the Candidate display and secondary labels, Login Profile, timings, scores, Run Cost with its source (`reported` or `estimated`) and the Estimated Cost's breakdown by token type, Agent Turns, and token usage, each as available (grilling 2026-10-07).
 
 | Tab | Content |
 | --- | --- |
@@ -311,3 +327,4 @@ Pass rates take a rarity colour: mythic from 90%, rare from 70%, uncommon from 4
 | --- | --- |
 | [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Karn v4 execution and observations have an independent consumer contract |
 | [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | The Karn commands, `top` among them, own the top level |
+| [ADR-019](../adr/ADR-019-run-cost-prefers-the-native-clis-reported-cost.md) | The monitor shows and sums the Run Cost, which prefers the native CLI's Reported Cost |

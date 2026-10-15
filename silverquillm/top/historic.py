@@ -49,9 +49,7 @@ COLUMNS = (
     Column("target", "target", _rate("card_correctness")),
     Column("fdn", "fdn", _rate("fdn_regression")),
     Column("engine", "engine", _rate("engine_regression")),
-    Column(
-        "cost", "cost", lambda run: run.estimated_cost if run.estimated_cost is not None else -1
-    ),
+    Column("cost", "cost", lambda run: run.cost if run.cost is not None else -1),
     Column("duration", "time", lambda run: run.duration_seconds or -1.0),
     Column("turns", "turns", lambda run: run.agent_turns or -1),
     Column("tokens", "tokens", lambda run: run.total_tokens or -1),
@@ -71,8 +69,8 @@ def run_cells(run: RunSummary, theme: Theme) -> tuple[Text, ...]:
     duration = fmt.short_duration(run.duration_seconds)
     if run.budget_seconds:
         duration += f"/{fmt.short_duration(run.budget_seconds)}"
-    cost = fmt.money(run.estimated_cost, theme)
-    if run.estimated_cost is not None and not run.cost_complete:
+    cost = fmt.money(run.cost, theme)
+    if run.cost is not None and not run.cost_complete:
         cost.append("*", style=theme.style("muted"))
     login = (run.login_profile or fmt.DASH).rpartition("/")[2]
     excluded = Text(
@@ -170,8 +168,7 @@ class HistoryView(Horizontal):
     def show(self, runs: list[RunSummary]) -> None:
         """Rebuild only when a record or Exclusion changed, so browsing is not reset."""
         signature = tuple(
-            (str(run.path), run.excluded, run.status, run.estimated_cost, run.candidate_hash)
-            for run in runs
+            (str(run.path), run.excluded, run.status, run.cost, run.candidate_hash) for run in runs
         )
         if self._loaded and signature == self._signature:
             return

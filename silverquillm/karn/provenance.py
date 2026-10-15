@@ -19,6 +19,8 @@ import subprocess
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+from silverquillm.host_config import HostConfig, HostConfigError, load_host_config
+
 from .definition import KarnError
 
 HOST_LABEL_ENV = "SILVERQUILLM_HOST_LABEL"
@@ -60,18 +62,35 @@ def require_package_from(bench_root: Path) -> None:
             f"package_source_mismatch: silverquillm is imported from {PACKAGE.resolve()}, "
             f"but the bench root's package is {expected}. Install silverquillm from the bench "
             f"root (pip install -e {Path(bench_root).resolve()}) or run with "
-            f"PYTHONPATH={Path(bench_root).resolve()}."
+            f"PYTHONPATH={Path(bench_root).resolve()}, or point the bench root at the checkout "
+            f"you run from (--bench-root, else bench_root in the host configuration, else the "
+            f"working directory)."
         )
 
 
 def host_label(
-    environ: Mapping[str, str] | None = None, hostname: Callable[[], str] | None = None
+    environ: Mapping[str, str] | None = None,
+    hostname: Callable[[], str] | None = None,
+    config: HostConfig | None = None,
 ) -> tuple[str, str]:
-    configured = (os.environ if environ is None else environ).get(HOST_LABEL_ENV)
-    if configured is not None:
-        if not LABEL.fullmatch(configured):
+    """This host's label and where it came from: the environment, else the host
+    configuration file's ``host_label``, else the hostname's first label. *config* is the
+    already-loaded file; when omitted it is read."""
+    environ = os.environ if environ is None else environ
+    label = environ.get(HOST_LABEL_ENV)
+    if label is not None:
+        if not LABEL.fullmatch(label):
             raise KarnError("invalid_host_label")
-        return configured, "env"
+        return label, "env"
+    if config is None:
+        try:
+            config = load_host_config(environ=environ)
+        except (HostConfigError, RecursionError, RuntimeError, ValueError, OSError) as error:
+            raise KarnError(f"invalid_host_config: {error}") from None
+    if config.host_label is not None:
+        if not LABEL.fullmatch(config.host_label):
+            raise KarnError("invalid_host_label")
+        return config.host_label, "config"
     name = (hostname or socket.gethostname)().split(".")[0]
     return (name if LABEL.fullmatch(name) else "unknown"), "hostname"
 
@@ -167,7 +186,7 @@ def valid(value) -> bool:
         and set(value) == FIELDS
         and isinstance(value["host_label"], str)
         and bool(LABEL.fullmatch(value["host_label"]))
-        and value["host_label_source"] in ("env", "hostname")
+        and value["host_label_source"] in ("env", "config", "hostname")
         and state(value["bench"])
         and state(value["benchmark_root"])
         and (value["recipe_revision"] is None or isinstance(value["recipe_revision"], str))

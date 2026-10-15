@@ -56,6 +56,7 @@ def mark_observation_problems(measurements: dict, problems: list[str]) -> None:
     fields = [
         *measurements.get("agent_turns", {}).values(),
         measurements.get("usage"),
+        measurements.get("reported_cost"),
         measurements.get("estimated_cost"),
         measurements.get("cost_breakdown"),
     ]
@@ -185,6 +186,31 @@ def attach_to_record(results_repo: Path, record: KarnRunRecord, run_dir: Path) -
     return outcome
 
 
+def _scored_not_run(value) -> int:
+    """Expected functions that did not run and count as failed tests."""
+    return sum(row["reason"] != "grading_support_missing" for row in value.not_run)
+
+
+def _suite_counts(value) -> tuple[int, int]:
+    """A graded suite's passed and total for its dimension's score, the same for cards and engine.
+
+    The total is the nodes that ran plus each scored function that did not (SCORING.md).
+    A suite graded with node reporting counts its reported nodes, never a collection-error
+    row; only a result with no node reporting at all falls back to pytest's summary counts,
+    which the evaluator result keeps unchanged either way.
+    """
+    if value.test_nodes or value.expected_test_functions is not None:
+        executed = [
+            node
+            for node in value.test_nodes
+            if "::" in node["test_node"] and "<collection-error>" not in node["test_node"]
+        ]
+        passed, total = sum(node["outcome"] == "pass" for node in executed), len(executed)
+    else:
+        passed, total = value.tests_passed, value.tests_total
+    return passed, total + _scored_not_run(value)
+
+
 def _scores(evaluated, benchmark) -> dict:
     result = missing_scores("grading_did_not_execute")
     for name, cards in (
@@ -206,17 +232,7 @@ def _scores(evaluated, benchmark) -> dict:
                 benchmark.target_set, benchmark.cards, benchmark.root / "data/tests/audited"
             )
 
-        def case_counts(value):
-            if value.test_nodes:
-                executed = [
-                    node
-                    for node in value.test_nodes
-                    if "::" in node["test_node"] and "<collection-error>" not in node["test_node"]
-                ]
-                return sum(node["outcome"] == "pass" for node in executed), len(executed)
-            return value.tests_passed, value.tests_total
-
-        counts = {key: case_counts(value) for key, value in cards.items()}
+        counts = {key: _suite_counts(value) for key, value in cards.items()}
         observed = {key for key, (_, total) in counts.items() if total > 0}
         total = sum(total for _, total in counts.values())
         passed = sum(passed for passed, _ in counts.values())
@@ -246,17 +262,21 @@ def _scores(evaluated, benchmark) -> dict:
             "cards": {key: dataclasses.asdict(value) for key, value in cards.items()},
         }
     engine = evaluated.engine_result
+    engine_passed, engine_total = _suite_counts(engine)
     result["engine_regression"] = {
-        "evaluated": engine.tests_total > 0,
-        "complete": engine.tests_total > 0
+        "evaluated": engine_total > 0,
+        "complete": engine_total > 0
         and not any(not error.startswith("FAILED ") for error in engine.errors),
-        "pass_rate": engine.pass_rate if engine.tests_total else None,
-        "tests_passed": engine.tests_passed if engine.tests_total else None,
-        "tests_total": engine.tests_total or None,
+        "pass_rate": engine_passed / engine_total if engine_total else None,
+        "tests_passed": engine_passed if engine_total else None,
+        "tests_total": engine_total or None,
         "missing_reasons": [error for error in engine.errors if not error.startswith("FAILED ")]
-        or ([] if engine.tests_total else ["no_executed_engine_tests"]),
+        or ([] if engine_total else ["no_executed_engine_tests"]),
         "diagnostics": engine.errors,
         "test_nodes": [dict(node) for node in engine.test_nodes],
+        "expected_test_functions": engine.expected_test_functions,
+        "not_run": [dict(row) for row in engine.not_run],
+        "failure_messages": dict(engine.failure_messages),
     }
     # Fail here, inside the caller's grading guard, rather than when the record is written.
     canonical(result)

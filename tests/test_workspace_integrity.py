@@ -7,7 +7,7 @@ tools — no repository root, no ``silverquillm``. Grading runs Audited Tests
 beside host support, so nothing else in the repository exercises this view.
 
 The Known-Best Workspace, assembled into a benchmark the way the port
-assembles one (``scripts/port_from_known_best.py``) but with no stubs and no
+assembles one (``silverquillm/tools/port_from_known_best.py``) but with no stubs and no
 Known Defects, is a candidate that has solved everything: every test it ships
 must pass. smoke and fra-hard-v2 are staged as they are; their tests may fail
 by design, but every one must collect.
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts import port_from_known_best as port
+from silverquillm.tools import port_from_known_best as port
 from silverquillm.karn.benchmark import load_benchmark, stage_benchmark
 
 REPO = Path(__file__).resolve().parents[1]

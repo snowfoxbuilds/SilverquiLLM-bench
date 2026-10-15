@@ -14,23 +14,20 @@ Directory key rules (per KEY_DECISIONS.md):
   - SPG cards:  spg_{collector_number}
 
 Usage:
-    python3 scripts/generate_fdn_specs.py [--dry-run] [--force]
+    silverquillm build fdn-specs [--dry-run] [--force]
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 from silverquillm.card_spec import card_name_to_class_name
+from silverquillm.tools import REPO_ROOT as PROJECT_ROOT
 
 OUTPUT_DIR = PROJECT_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "fdn"
 CACHE_DIR = PROJECT_ROOT / "data" / "sets"
@@ -225,7 +222,7 @@ def _extract_fields(card: dict[str, Any]) -> dict[str, Any]:
 # Main
 # ---------------------------------------------------------------------------
 
-def main(dry_run: bool = False, force: bool = False) -> None:
+def generate(dry_run: bool = False, force: bool = False) -> None:
     # 1. Fetch Scryfall data
     fdn_cards = _fetch_fdn_base(force=force)
     spg_cards = _fetch_fdn_spg(force=force)
@@ -300,9 +297,13 @@ def main(dry_run: bool = False, force: bool = False) -> None:
         print(f"Wrote {written} card directories under {OUTPUT_DIR}/")
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="Print plan without writing files")
     parser.add_argument("--force", action="store_true", help="Re-fetch from Scryfall (ignore cache)")
-    args = parser.parse_args()
-    main(dry_run=args.dry_run, force=args.force)
+    args = parser.parse_args(argv)
+    generate(dry_run=args.dry_run, force=args.force)
+
+
+if __name__ == "__main__":
+    main()

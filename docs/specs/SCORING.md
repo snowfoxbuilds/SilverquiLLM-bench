@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-02
+Last updated: 2026-10-14
 
 # Scoring
 
@@ -120,6 +120,39 @@ When the block cannot be computed it is `{"available": false, "reason": "<reason
 | `baseline_incomplete` | The baseline reference grade is incomplete for any reason but the FDN coverage gap every run shares |
 
 A regrade reuses an earlier output's block only when it is available or unavailable as `regression_not_evaluated`, which depends on the candidate's own grading; any other unavailable block is graded again on the next regrade, with no `--force` needed.
+
+### Tests that did not run
+
+Every suite the benchmark-parameterized grading path grades (each target card's, each FDN card's and the engine's, for Karn runs and their regrades) states how many test functions it expected and which of them did not run, with why (grilling 2026-10-13, #221).
+The legacy SOS/FDN `evaluate` path, the historical `--image` lineage's compatibility runner, records none of these fields for its card results, which carry `expected_test_functions: null`, an empty `not_run` and no failure messages; its engine result comes from the same engine grading as Karn runs and carries all three.
+The expected functions are collected statically from the authoritative test files, outside the process that runs the candidate's code, so a candidate cannot change what is expected.
+Static collection follows pytest's `__test__`: a false value turns off a module, a class (and a subclass that does not set it back) or a function, and exactly `True` makes a function or class expected whatever its name; the value set last counts, so a later `X.__test__ = ...` or a redefinition overrides an earlier one. A function in a module, class or directory skipped at collection (including by a `conftest.py` skip) is `skipped`. A `Test*` class pytest skips for defining `__new__` is still expected, a known limitation no audited test meets.
+A parametrized function counts once, and it ran if any of its cases ran.
+
+| Reason | When |
+| --- | --- |
+| `import_error` | The function's test module or class failed to collect because an import failed |
+| `collection_error` | The function's test module or class failed to collect for another reason |
+| `collection_interrupted` | Another module's collection error stopped the suite before anything ran |
+| `timeout` | The suite hit its time limit; a timed-out suite keeps no results |
+| `skipped` | The function was skipped or marked xfail at run time, or its whole module or class was skipped during collection (a module-level `pytest.skip` or `pytest.importorskip`) |
+| `pytest_exited` | pytest did not run its session to the end (a crash, `os._exit` with any exit status, an interruption such as `KeyboardInterrupt` or `pytest.exit`, or an internal error) before reporting the function |
+| `not_reported` | pytest ran its session to the end without reporting the function |
+| `grading_support_missing` | Authoritative grading support was absent, so the suite never ran |
+| `candidate_code_missing` | The candidate's engine or cards directory was absent, so the suite never ran |
+
+Every expected function that did not run counts as one failed test in its dimension's score: the dimension's `tests_total` is the nodes that ran plus the functions that did not, so a candidate cannot raise a pass rate by skipping a test or breaking its collection (grilling 2026-10-15).
+Cards and the engine are counted the same way, from the reported nodes: a collection error is never a node of its own, whether a module or a class (`<file>::<Class>::<collection-error>`) failed to collect, and a node that failed in its setup, call or teardown is one failed node.
+Only a result with no node reporting at all, such as an older one, falls back to pytest's summary counts.
+A parametrized function that did not run counts once, since its case ids are not known statically.
+`grading_support_missing` is the exception: a suite the bench could not grade stays unevaluated, because an absent evaluation is different from an evaluated implementation scoring zero.
+A card whose tests all failed to run is therefore scored, at zero, rather than left uncovered; the Combined Regression already counts a baseline-passing node that did not run as regressed.
+Each card's own `tests_passed`, `tests_failed` and `tests_total` stay pytest's raw counts of the nodes that ran; the dimension totals and pass rates apply this rule.
+A grade whose suite reported errors other than test failures is incomplete; those errors are read from pytest's short test summary only, so a failing test's captured log line such as `ERROR    engine.game:…` is no grading error. That includes pytest not running its session to the end (a crash, `os._exit`, an interruption such as `KeyboardInterrupt` or `pytest.exit`, or an internal error), recorded as the error `pytest_exited: exit status N`; the nodes that ran before it keep their outcomes.
+The grader's reporter records the end of each session with a value generated for that grading, so an exit status alone never makes a suite look finished: a candidate that calls `os._exit(0)`, `os._exit(1)` or `os._exit(5)`, or `pytest.exit` with any status, mid-suite still leaves it incomplete. The reporter withholds that record after an interruption or an internal error, seeing both before pytest's own terminal reporter (whose handler can fail again, for instance once candidate code has closed stdout), and writes it only for an orderly exit status; an exit status other than 0, 1 or 5 also makes a suite incomplete even with the record present. pytest's own stop after collection errors (status 2) keeps its collection-error diagnosis instead.
+Each failing node also keeps a failure message: one printable line of at most 240 characters with object addresses masked, and at most 128 KiB per grade of message mappings as they encode in JSON, node ids and separators included, later ones dropped.
+Not-run reasons and failure messages are diagnostics; only the not-run count enters a score.
+Grades written before this rule count only the nodes that ran, so compare scores only across grades on the same grading code; a regrade applies the rule to an older record, and its `source.scores` keeps that record's own `complete` beside its counts.
 
 ### Complexity Weighting
 

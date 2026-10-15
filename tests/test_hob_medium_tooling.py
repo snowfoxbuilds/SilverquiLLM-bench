@@ -4,11 +4,11 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from scripts.oracle_support import load_layout, readiness_errors
+from silverquillm.tools.oracle_support import load_layout, readiness_errors
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
-    "promotion_hob_test", ROOT / "scripts/check_promotion_candidate.py"
+    "promotion_hob_test", ROOT / "silverquillm/tools/check_promotion_candidate.py"
 )
 PROMOTION = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = PROMOTION

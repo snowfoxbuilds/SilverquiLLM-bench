@@ -71,7 +71,13 @@ _Avoid_: "zero point", "floor" (an agent can score below it by regressing)
 
 **Batch**
 
-One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (Karn build output + construct + benchmark, with an optional Login Profile and budget). Historical Candidate Bundle batches (candidate ref + mode) are unsupported and never run. Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
+A group of runs queued together: one Batch TOML in the host's batch directory, holding an optional `not_before` (RFC 3339 with an offset) and an ordered list of run specs (Karn build output + construct + benchmark, with an optional budget).
+Historical Candidate Bundle batches (candidate ref + mode) are unsupported and never run.
+Desired state, authored by the operator or a campaign top-up, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `state/`.
+Both are host-local operational files, backed up with the host's raw data and never published; a Batch has no analytical meaning (grilling 2026-10-14).
+The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused).
+One batch directory and one scheduler serve each host; a later Batch's runs dispatch after an earlier one's, and a Batch added to a running scheduler is picked up without a restart (grilling 2026-10-13, #219).
+Edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
 
 _Avoid_: "job" (the substrate's job dir is a different concept), "queue entry" for the file (a Batch holds several runs)
 
@@ -109,6 +115,12 @@ Benchmark mode (`MODE=blind`) where the prompt does not instruct the agent to wr
 
 _Avoid_: "blind implementation" as a noun (deprecated — was `blind_impl.py`)
 
+**Campaign**
+
+A group of Benchmark Runs with exactly the same settings: the same Candidate Hash, benchmark workspace and budget, each run one more data point (grilling 2026-10-14).
+Membership follows from the Run Records; a campaign file in the Results Repo states its target and the run attributes a run needs to count.
+_Avoid_: "batch" for this (a Batch is only what was queued together), "sweep" (a sweep is several campaigns)
+
 **Candidate Bundle** *(legacy interchange format)*
 
 The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling (`theozolith candidate export`: `candidate.json` + generated `Dockerfile` + compiled knowledge tree + baked policy tree; `docs/specs/BENCH-CONTRACT.md`, `bundle_format_version` 2); historically the only thing the removed Candidate Bundle run path accepted. Candidate Bundles are no longer executed; each historical `ozolith-v1` Run Record carries its vendored bundle. Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle by TheOzolith's verifier (`silverquillm.candidate` consumes `verify_bundle`; the bench never reimplements the hash) — never trusted from a recorded value: a bundle whose recorded identity, or whose directory-name suffix, disagrees with the recomputed one is a hard refusal, as is a bundle carrying a secret value (#65). Adapter-agnostic by contract: the format never hardcodes the adapter set, and neither does the bench.
@@ -138,6 +150,13 @@ _Avoid_: "card data", "card definition"
 Retired with the MSH benchmark: the checkpoint/capability-DAG design served bounded-context sequential implementation over a ~281-card pool; HOB problem sets (5–23 cards, one run) don't have that problem. Was: a frozen, reference-validated snapshot of the whole MSH benchmark workspace taken after a card group — the unit of resume, regression attribution, and bounded per-step agent context.
 
 _Avoid_: "Output Snapshot" (runner-owned 60-second Git commits), "snapshot" alone
+
+**Cohort**
+
+A named group of Benchmark Runs that are comparable analytically, kept in the Results Repo as a member list, its acceptance criteria and its current grading inputs (grilling 2026-10-14).
+A label that makes querying easier, never the ground truth of any run attribute: whether a run counts is decided by each analysis.
+Every run is in exactly one default cohort (same benchmark and benchmark workspace); ad hoc cohorts may overlap it.
+_Avoid_: "cohort" for the regrade summary's candidate × grading-inputs groups
 
 **Combined Regression**
 
@@ -206,24 +225,26 @@ _Avoid_: "Engine Tests" alone (formerly named both the visible and the graded su
 
 **Estimated Cost**
 
-The API-equivalent USD estimate of a Benchmark Run's observed model usage under a recorded pricing basis.
+The bench's own API-equivalent USD estimate of a Benchmark Run's observed model usage, priced from a versioned model-price table.
 It supports resource-use comparisons and does not represent the actual subscription charge attributable to the run (grilling 2026-09-26).
+It stands beside the Reported Cost as a cross-check, and is the Run Cost when no as-complete Reported Cost exists (ADR-019).
 
 _Avoid_: "billed cost", "subscription cost" for this estimate
 
 **Estimated Weekly Usage**
 
 The share of one Login Profile's weekly subscription allowance that is used up, as the operator monitor estimates it (grilling 2026-10-07).
-It starts from the provider's own newest usage reading for that Login Profile while that reading's weekly window lasts, and adds Estimated Cost observed since, converted at a host-configured provider rate.
-For one week after the reading's reset it counts Estimated Cost from the reset; past that, or with no reading, it counts the last seven days' Estimated Cost.
+It starts from the provider's own newest usage reading for that Login Profile while that reading's weekly window lasts, and adds Run Cost observed since, converted at a host-configured provider rate.
+For one week after the reading's reset it counts Run Cost from the reset; past that, or with no reading, it counts the last seven days' Run Cost.
 It is an operating aid, not a measurement of any Benchmark Run.
 
 _Avoid_: "quota", "credits", "credential slot usage"
 
 **Exclusion**
 
-A Results Repo entry that leaves one Run Record out of analyses, naming a reason code and a note, without changing the record.
-A rule excludes a run on an observed fact, such as zero Agent Turns or subagent use; an operator excludes anything a rule cannot see, and a superseded run names the record that replaces it.
+A write-once Results Repo entry that leaves one Run Record out of every analysis, naming a reason code and a note, without changing the record.
+A rule excludes a run on an observed fact, such as a host failure or zero Agent Turns; an operator excludes anything a rule cannot see, and a superseded run names the record that replaces it.
+Subagent use is a run attribute each analysis judges, never a rule (#230); an analysis's own selection by run attributes, stated with its results, is not an Exclusion (grilling 2026-10-15).
 
 _Avoid_: "rejected run", "invalid run" (the record stays valid evidence), "filtered out" for an ad hoc analysis choice
 
@@ -375,7 +396,7 @@ _Avoid_: "test run" (ambiguous), "dry run" (has a different meaning — `--dry-r
 
 **Platform Tests**
 
-Maintainer-authored tests for the SilverquiLLM repository's own tooling — runner, harvester, evaluator, telemetry, and `scripts/` — living under the repository's top-level `tests/` (the grading suites live elsewhere: Audited Tests under `benchmarks/<benchmark>/data/tests/audited/`, Reference Tests in the benchmark's `workspace/`). They verify that the benchmark *software* works; they do not grade agent output. E.g. `tests/test_harvest_rows.py`, `tests/test_check_promotion_candidate.py`, `tests/test_evaluator.py`. Distinct from Audited Tests, Reference Tests, and Agent Tests.
+Maintainer-authored tests for the SilverquiLLM repository's own tooling — runner, evaluator, telemetry, and the `silverquillm/tools/` commands — living under the repository's top-level `tests/` (the grading suites live elsewhere: Audited Tests under `benchmarks/<benchmark>/data/tests/audited/`, Reference Tests in the benchmark's `workspace/`). They verify that the benchmark *software* works; they do not grade agent output. E.g. `tests/test_check_promotion_candidate.py`, `tests/test_evaluator.py`. Distinct from Audited Tests, Reference Tests, and Agent Tests.
 
 _Avoid_: "repository tests" (ambiguous — Audited Tests and Reference Tests also live in the repo), "unit tests" alone (some are integration-level), "harness tests" (collides with the audited validation harness)
 
@@ -436,10 +457,19 @@ Engine correctness check that replays 17lands GRE (Game Rules Engine) state stre
 
 _Avoid_: "differential testing" (deprecated XMage approach), "checkpoint validation" (we do full state comparison, not just EOT checkpoints), "aggregate CSV" (that's a different 17lands dataset)
 
+**Reported Cost**
+
+The API-equivalent USD figure a Benchmark Run's native agent CLI reports for its own model requests, such as Claude Code's per-request cost.
+Like the Estimated Cost it is not the subscription charge; unlike it, the bench does not compute it, so it covers pricing the bench's table lacks (ADR-019).
+Codex reports none.
+
+_Avoid_: "actual cost", "billed cost"
+
 **Results Repo**
 
-The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: one Run Record per Benchmark Run, filed under its Candidate Hash, with Exclusions and each record's Workspace Archive beside the records.
-It carries its own schema so analysis needs nothing else, keeps pointers rather than heavy artifacts such as transcripts and snapshots, and has no derived index: its records are read directly (grilling 2026-10-07).
+The dedicated private git repository `bench-results` that is the home of benchmark results (#39 §3), git-as-truth: one Run Record per Benchmark Run, filed under its Candidate Hash, with Exclusions and each record's Workspace Archive beside the records.
+It also holds the operator runbook (its `AGENTS.md`), Cohorts, Campaigns, published regrades and analyses, and is the working directory of operational agents (grilling 2026-10-14).
+It keeps pointers rather than heavy artifacts such as transcripts and snapshots, which stay in each host's raw data, and has no derived index: its records are read directly (grilling 2026-10-07).
 Historical `ozolith-v1` candidates keep their vendored Candidate Bundle beside their records.
 
 _Avoid_: "results dir" (the per-run `docker/<image>/results/` working output), "leaderboard repo" (publishing is the separate port into the bench repo's `published/` — see Published Result)
@@ -462,6 +492,12 @@ Extra lines the runner appends to the User Prompt when staging a Resume Leg. Alw
 
 _Avoid_: "resume notice", "resume header"
 
+**Run Cost**
+
+The cost the bench shows and sums for a Benchmark Run: its Reported Cost when that is at least as complete as its Estimated Cost, otherwise its Estimated Cost (ADR-019).
+
+_Avoid_: "cost" for either component alone when the distinction matters
+
 **Run Manifest** *(historical image runs)*
 
 Minimal runtime facts written by the runner to `/workspace/run_manifest.json` immediately before container launch. Contains only `timeout_seconds` and `deadline_utc`; it is advisory to the Agent Container and does not configure agent behavior.
@@ -471,7 +507,7 @@ _Avoid_: "config.json" (implies agent configuration), "agent config"
 **Run Record**
 
 An immutable account of a Benchmark Run's selected candidate, benchmark, conditions, observed outcomes, and available evidence.
-It retains grading, Estimated Cost, Agent Turns, and diagnostics when available, explaining missing or partial observations instead of discarding an unsuccessful run (grilling 2026-09-26).
+It retains grading, Reported and Estimated Cost, Agent Turns, and diagnostics when available, explaining missing or partial observations instead of discarding an unsuccessful run (grilling 2026-09-26).
 Historical records retain their original schemas, identities, and interpretation.
 
 _Avoid_: "run summary" (`run_summary.json` is the legacy per-run aggregate the record's scores are mapped from), "result" alone
@@ -604,7 +640,8 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - The existing publication pipeline requires a Promoted Candidate that verifies by recomputation and permits its knowledge to be published; these publication rules do not gate collection or analysis of Karn run data.
 - Each Login Profile has one Estimated Weekly Usage, fed by every Benchmark Run that used it, excluded runs included.
 - A Login Profile is under at most one Login Cooldown at a time; setting another replaces it.
-- A Batch holds ordered run specs; the scheduler executes one run at a time, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
+- A Batch holds ordered run specs; the scheduler dispatches them across free login slots, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
+- A Benchmark Run belongs to exactly one Campaign and one default Cohort; a Campaign's runs all fall in one default Cohort.
 - Filesystem checks (does the file exist, does it differ from the template?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only.
 - `run_summary.json` is automatically generated after evaluation by aggregating per-card `result.json` files. The aggregator is a pure, idempotent function.
 - The runner does NOT orchestrate test iteration — the agent self-manages. The runner stages, launches, harvests, evaluates.

@@ -10,7 +10,7 @@ name the same tool calls. A version need not be qualified already to qualify. Th
 ``observations.events.jsonl`` holds only sanitized accounting fields, so it is the proof
 fixture itself.
 
-    scripts/qualify_claude_telemetry.py runs/karn/<run-id> --out proof.json
+    silverquillm qualify claude-telemetry runs/karn/<run-id> --out proof.json
 
 A qualifying proof is committed with its events under
 ``tests/fixtures/karn_observations_claude_<version>/`` and the version is added to
@@ -22,10 +22,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from silverquillm.karn.claude_observations import reconcile_streams, summarize_claude_events
 
 
@@ -98,11 +96,11 @@ def qualify(raw: bytes) -> dict:
     }
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--out", type=Path)
-    options = parser.parse_args()
+    options = parser.parse_args(argv)
     raw = (options.run_dir / "observations.events.jsonl").read_bytes()
     proof = qualify(raw)
     text = json.dumps(proof, indent=2, sort_keys=True) + "\n"

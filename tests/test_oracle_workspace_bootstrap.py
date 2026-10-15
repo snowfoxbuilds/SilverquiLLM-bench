@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.oracle_support import OracleLayout, is_stub_impl, load_layout, readiness_errors
+from silverquillm.tools.oracle_support import OracleLayout, is_stub_impl, load_layout, readiness_errors
 
 ROOT = Path(__file__).resolve().parents[1]
 SOS_CARDS = (

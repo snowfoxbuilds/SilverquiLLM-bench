@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from scripts.check_promotion_candidate import check_oracle_gate
+from silverquillm.tools.check_promotion_candidate import check_oracle_gate
 
 
 @pytest.mark.parametrize(

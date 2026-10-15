@@ -685,7 +685,13 @@ def test_runs_and_recovery_report_combined_regression_against_one_cached_baselin
         "missing_reasons",
     }
     assert set(record.scores["fdn_regression"]) == counts | {"coverage", "cards"}
-    assert set(record.scores["engine_regression"]) == counts | {"diagnostics", "test_nodes"}
+    assert set(record.scores["engine_regression"]) == counts | {
+        "diagnostics",
+        "test_nodes",
+        "expected_test_functions",
+        "not_run",
+        "failure_messages",
+    }
     assert record.scores["card_correctness"]["tests_passed"] == 1
     assert opts["evaluator"].calls == 2
     published = opts["results_repo"] / "results" / record.candidate.hash / record.run_id

@@ -15,7 +15,7 @@ import secrets
 import stat
 import threading
 from collections import defaultdict, deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -79,6 +79,7 @@ _ATTRIBUTES = {
     "service_tier",
     *_OTLP_TOKENS.values(),
 }
+_BOOLEAN_ATTRIBUTES = {"success"}
 # The tier Codex put in its request (not the one the server applied, which it never reports).
 _SERVICE_TIERS = {"flex", "priority", "fast", "default", "auto", "scale", "standard"}
 _TOOL_TYPES = {
@@ -141,7 +142,12 @@ def normalize_otlp(payload: Any) -> list[dict[str, Any]]:
                     value = next(
                         (raw[k] for k in ("stringValue", "intValue", "boolValue") if k in raw), None
                     )
-                    if isinstance(value, bool) or _label(value) is not None:
+                    # Ids, names and models must be strings: a boolean thread id would mix
+                    # types in every set of threads downstream.
+                    if isinstance(value, bool):
+                        if key in _BOOLEAN_ATTRIBUTES:
+                            attrs[key] = value
+                    elif _label(value) is not None:
                         attrs[key] = value
                 if attrs.get("event.name") not in _EVENTS:
                     continue
@@ -333,6 +339,8 @@ def summarize_events(
     starts = []
     otel_usage = []
     versions = {e.get("native_version") for e in sessions}
+    # The reasoning effort each thread asked for: its conversation start and each response.
+    efforts: dict[str, set[str]] = defaultdict(set)
     for event in rows:
         if event["source"] != "otel":
             continue
@@ -340,6 +348,9 @@ def summarize_events(
         owner = event.get("thread_id")
         if owner:
             otel_threads.add(owner)
+        for key in ("reasoning_effort", "model_reasoning_effort"):
+            if isinstance(owner, str) and isinstance(attrs.get(key), str):
+                efforts[owner].add(attrs[key])
         if attrs.get("app.version"):
             versions.add(attrs["app.version"])
         if (
@@ -436,8 +447,104 @@ def summarize_events(
             "exit_kind": exit_kind,
             "model_basis": "native_turn_context; observation, not provider attestation",
         },
-        subagent_threads=max(0, len(otel_threads | native_threads) - 1),
+        **derive_subagents(
+            requests,
+            lambda: (
+                (otel_threads | native_threads)
+                - {_main_thread(sessions, requests, [e for e in rows if e["source"] == "otel"])}
+            ),
+            efforts,
+        ),
     )
+
+
+def _main_thread(*sources: list[dict[str, Any]]) -> str | None:
+    """Codex names no parent thread, so the task's own thread is the first one observed:
+    in its journals, else its usage, else its telemetry. A best guess, since the workload
+    controls these timestamps; it can only mislabel which thread is the subagent."""
+    for events in sources:
+        named = [e for e in events if isinstance(e.get("thread_id"), str) and e["thread_id"]]
+        if named:
+            return min(named, key=lambda e: (e["timestamp_ms"], e["thread_id"]))["thread_id"]
+    return None
+
+
+SUBAGENT_ROWS_MAX = 1000
+SUBAGENT_MODELS_MAX = 32
+SUBAGENT_LABEL_MAX = 256
+SUBAGENT_EFFORTS_MAX = 8
+# A reasoning effort is a level's name (low, medium, xhigh, ...), never a number or free text.
+_EFFORT = re.compile(r"[a-z][a-z0-9_-]{0,31}\Z")
+
+
+def subagent_rows(
+    requests: list[dict[str, Any]],
+    threads: Iterable[Any],
+    efforts: Mapping[Any, Iterable[Any]] | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Per subagent thread, the models observed on its requests, how many it made and the
+    reasoning efforts its telemetry says were requested, and how many subagent threads are
+    not listed (beyond the row cap or without a usable id).
+
+    ``requested_efforts`` keeps every level observed on the thread, sorted, never one chosen
+    and never the parent's; it is null when the telemetry shows none, as Claude's never does.
+    Enough for an analysis to judge a subagent policy itself (#230); nothing is excluded here.
+    """
+    own: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for request in requests:
+        if isinstance(request.get("thread_id"), str):
+            own[request["thread_id"]].append(request)
+    named = {t for t in threads if t is not None}
+    usable = sorted(t for t in named if isinstance(t, str) and 0 < len(t) <= SUBAGENT_LABEL_MAX)
+    rows = []
+    for thread in usable[:SUBAGENT_ROWS_MAX]:
+        models = sorted(
+            {
+                r["model"]
+                for r in own.get(thread, ())
+                if isinstance(r.get("model"), str) and len(r["model"]) <= SUBAGENT_LABEL_MAX
+            }
+        )[:SUBAGENT_MODELS_MAX]
+        observed = sorted(
+            {
+                effort
+                for effort in (efforts or {}).get(thread, ())
+                if isinstance(effort, str) and _EFFORT.match(effort)
+            }
+        )[:SUBAGENT_EFFORTS_MAX]
+        rows.append(
+            {
+                "thread_id": thread,
+                "models": models,
+                "requests": len(own.get(thread, ())),
+                "requested_efforts": observed or None,
+            }
+        )
+    return rows, len(named) - len(rows)
+
+
+def derive_subagents(requests: list[dict[str, Any]], threads, efforts=None) -> dict[str, Any]:
+    """The subagent measurements, never raising on what the workload wrote: a failure leaves
+    them out with a reason rather than failing the run's whole collection."""
+    try:
+        rows, unlisted = subagent_rows(requests, threads(), efforts)
+    except Exception:  # noqa: BLE001 - untrusted telemetry must not fail collection
+        return {
+            "subagent_threads": None,
+            "subagents": None,
+            "subagents_reason": "subagent_derivation_failed",
+        }
+    return {
+        "subagent_threads": len(rows) + unlisted,
+        "subagents": rows,
+        "subagents_truncated": unlisted,
+    }
+
+
+def _agrees(reported: Decimal, estimated: Decimal) -> bool:
+    """Whether a reported total matches a complete estimate, beyond the float noise of the
+    CLI's per-request figures."""
+    return abs(reported - estimated) <= max(reported, estimated) * Decimal("1e-6")
 
 
 def _measurements(
@@ -449,7 +556,13 @@ def _measurements(
     coverage: dict[str, Any],
     *,
     subagent_threads: int | None = None,
+    subagents: list[dict[str, Any]] | None = None,
+    subagents_truncated: int = 0,
+    subagents_reason: str | None = None,
+    reported_costs: dict[str, Decimal] | None = None,
 ) -> dict[str, Any]:
+    """``reported_costs`` maps a request's ``response_id`` to the native CLI's own USD figure
+    for it; None means the CLI reported no cost at all, as Codex does not."""
     observed_zero = present and not response_count and not reasons
     turn_reasons = list(reasons)
     usage_reasons = list(reasons)
@@ -467,26 +580,47 @@ def _measurements(
         usage_reasons.append("per_response_usage_unavailable")
         cost_reasons.append("per_response_usage_unavailable")
     costs_present = bool(priced_values) or observed_zero
+    estimated = format(sum(priced_values, Decimal(0)), "f")
+    reported, reported_reasons, cost_warnings = None, list(reasons), []
+    # Only a valid figure, or a run with no requests at all, is a Reported Cost; an empty
+    # mapping beside requests is a missing one, never a zero.
+    reported_present = reported_costs is not None and (bool(reported_costs) or observed_zero)
+    if not reported_present:
+        reported_reasons.append("native_cost_not_reported")
+    else:
+        total = sum(reported_costs.values(), Decimal(0))
+        reported = format(total, "f")
+        # A warning, not a reason: the Reported Cost stays the Run Cost (ADR-019).
+        if costs_present and not cost_reasons and not _agrees(total, Decimal(estimated)):
+            cost_warnings.append("reported_cost_disagrees_with_estimate")
     return {
         "schema_version": 1,
         # Agent threads beyond the main one: an observation, never an incompleteness reason.
         # It sits outside ``coverage`` so committed qualification proofs replay unchanged.
         "subagent_threads": subagent_threads if present else None,
+        "subagents": subagents if present and subagents is not None else None,
+        "subagents_truncated": subagents_truncated if present and subagents is not None else None,
+        **({"subagents_reason": subagents_reason} if present and subagents_reason else {}),
         "agent_turns": {
             "responses": _measurement(response_count, turn_reasons, present=present),
             "tool_calls": _measurement(tool_count, turn_reasons, present=present),
             "total": _measurement(response_count + tool_count, turn_reasons, present=present),
         },
         "usage": _measurement(totals, usage_reasons, present=bool(requests) or observed_zero),
-        "estimated_cost": _measurement(
-            format(sum(priced_values, Decimal(0)), "f"), cost_reasons, present=costs_present
-        ),
+        # The native CLI's own figure, preferred over the price-table estimate (ADR-019).
+        "reported_cost": _measurement(reported, reported_reasons, present=reported_present),
+        "estimated_cost": _measurement(estimated, cost_reasons, present=costs_present),
+        "cost_warnings": cost_warnings,
         # Input by type (uncached, cache read, 5-minute and 1-hour write) beside output.
         "cost_breakdown": _measurement(
             total_breakdown(priced), cost_reasons, present=costs_present
         ),
         "requests": requests,
         "request_prices": priced,
+        "request_reported_costs": [
+            {"response_id": response, "usd": format(usd, "f")}
+            for response, usd in (reported_costs or {}).items()
+        ],
         "price_table": price_table_metadata(),
         "coverage": coverage,
     }

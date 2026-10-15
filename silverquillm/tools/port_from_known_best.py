@@ -2,8 +2,8 @@
 
 Usage::
 
-    python3 scripts/port_from_known_best.py BENCHMARK            # rewrite the ported paths
-    python3 scripts/port_from_known_best.py --check BENCHMARK    # exit 1 if porting would change anything
+    silverquillm build port-from-known-best BENCHMARK            # rewrite the ported paths
+    silverquillm build port-from-known-best --check BENCHMARK    # exit 1 if porting would change anything
 
 Porting hard-copies ``known_best/`` into ``benchmarks/<BENCHMARK>/`` and owns
 exactly these paths, which it replaces wholesale:
@@ -32,7 +32,7 @@ Known-Best fix reaches its hidden Audited Tests or Test Oracle Workspace only by
 hand. ``--check`` skips such a benchmark and exits 0.
 
 Each target card (``config.json``) becomes a behavior-free stub in the Workspace,
-generated from its Card Spec by ``scripts/generate_printed_classes.py``; an FDN
+generated from its Card Spec by ``silverquillm build printed-classes``; an FDN
 target also loses its FDN Reference Test there and keeps its Known-Best
 implementation in the Test Oracle Workspace.
 
@@ -69,11 +69,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-from scripts.generate_printed_classes import render
-from scripts.oracle_support import load_layout
+from silverquillm.tools import REPO_ROOT as ROOT
+from silverquillm.tools.generate_printed_classes import render
+from silverquillm.tools.oracle_support import load_layout
 
 KNOWN_BEST = ROOT / "known_best"
 ORACLE = Path("data/test_oracle_workspace")
@@ -512,11 +510,11 @@ def check(benchmark_root: Path, known_best: Path = KNOWN_BEST) -> list[str]:
         return sorted(_differences(benchmark_root, staged))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--check", action="store_true", help="report what porting would change, change nothing")
     parser.add_argument("benchmark", help="directory name under benchmarks/")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     benchmark_root = ROOT / "benchmarks" / args.benchmark
     if not (benchmark_root / "config.json").is_file():
         parser.error(f"no benchmark at {benchmark_root}")

@@ -36,9 +36,16 @@ from .estimates import WEEK, WeeklyUsage, estimated_percent, weekly_usage
 from .history import HistoryStore, RepoFreshness, RunSummary, UsageReading, repo_freshness
 from .live import LiveRun, RecordCache, Stage, live_runs, run_candidate_hash
 from .locks import PROC_LOCKS, held_locks
-from .output import LogFollower, LogLine, live_codex_reading, profile_redactions, retained_lines
+from .output import (
+    LogFollower,
+    LogLine,
+    live_codex_reading,
+    profile_redactions,
+    retained_lines,
+    sampled_claude_reading,
+)
 from .pools import ProfileStatus, login_profiles
-from .queue import QueuedBatch, queued_batches
+from .queue import QueuedBatch, batch_runs, dispatch_mode, ledger_status, queued_batches
 
 CODEX_READING_SECONDS = 30.0
 HISTORY_SECONDS = 10.0
@@ -61,14 +68,17 @@ class RunView:
     estimated_percent: float | None
     """None without comparable history (RUN-MONITORING.md, Dashboard)."""
     cost: Decimal | None
-    """The record's Estimated Cost once the run has one (``cost_recorded``), else the
-    provisional one shown with ``~``; None when neither is known."""
+    """The record's Run Cost once the run has one (``cost_recorded``), else the provisional
+    one shown with ``~``; None when neither is known."""
     unpriced_requests: int
     request_costs: tuple[tuple[int, Decimal], ...]
     """``(timestamp_ms, usd)`` per priced request, oldest first, for a sparkline."""
     cost_recorded: bool = False
     cost_completeness: str | None = None
     """The recorded measurement's completeness; None while the cost is provisional."""
+    cost_source: str | None = None
+    """``reported`` (the native CLI's figure) or ``estimated`` (the price table), recorded or
+    provisional alike (ADR-019); None when no cost is known."""
     conflicting_requests: int = 0
     """Live observations of one request that disagree, each charged once."""
 
@@ -113,6 +123,15 @@ class MonitorSnapshot:
     records: Mapping[str, RunSummary] = field(default_factory=dict)
     """The validated record that applies to each local execution this pass, Finished or not,
     keyed by the execution's run id: the record a run details view takes its facts from."""
+    dispatch: str = "running"
+    """The queue's dispatch mode: ``running``, ``paused`` or ``draining``."""
+    ledger: str = "none"
+    """The queue ledger: ``none`` (not yet written), ``ok``, or ``damaged``."""
+    ledger_error: str | None = None
+    """Why a damaged ledger stops every dispatch."""
+    batch_runs: Mapping[str, tuple[str, int] | None] = field(default_factory=dict)
+    """Each started run's batch and entry from the retained state files, independent of the
+    Batch TOMLs; ``None`` when two entries claim the run."""
 
 
 @dataclass
@@ -122,10 +141,10 @@ class _Live:
     follower: LogFollower | None = None
 
 
-def _local_host_label(environ, hostname) -> str | None:
+def _local_host_label(environ, hostname, config) -> str | None:
     """This host's label as run provenance records it; None when it is invalid."""
     try:
-        return resolve_host_label(environ, hostname)[0]
+        return resolve_host_label(environ, hostname, config)[0]
     except KarnError:
         return None
 
@@ -164,6 +183,9 @@ class Monitor:
     popen: Callable[..., subprocess.Popen] = subprocess.Popen
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     follow_output: bool = True
+    # One-shot use (``top --json``) follows no log: it samples each running Claude
+    # container's recent log once per snapshot for a live usage reading instead.
+    sample_usage: bool = False
     hostname: Callable[[], str] | None = None
 
     def __post_init__(self):
@@ -175,7 +197,7 @@ class Monitor:
             self._config_error = _config_message(error)
             self.config = HostConfig(path=config_path(self.environ), loaded=False)
         self.locations = self._resolve()
-        self.host_label = _local_host_label(self.environ, self.hostname)
+        self.host_label = _local_host_label(self.environ, self.hostname, self.config)
         self.history_store = HistoryStore(self.locations["results_repo"].path)
         self._history: list[RunSummary] = []
         self._history_at = float("-inf")
@@ -336,6 +358,15 @@ class Monitor:
                 )
             if entry.follower is not None:
                 self._observe(login, entry.follower.reading)
+            elif (
+                self.sample_usage
+                and entry.run.provider == "claude"
+                and entry.run.stage is Stage.RUNNING
+                and entry.run.container is not None
+            ):
+                self._observe(
+                    login, sampled_claude_reading(RUN_CONTAINER_PREFIX + run_id, popen=self.popen)
+                )
             if entry.run.provider == "codex" and entry.run.stage is Stage.RUNNING:
                 self._observe(login, self._codex_reading(login))
         for login, reading in self._observed_readings(now).items():
@@ -368,19 +399,22 @@ class Monitor:
             return RunView(
                 run,
                 percent,
-                record.estimated_cost,
+                record.cost,
                 record.unpriced_requests,
                 record.request_costs,
                 cost_recorded=True,
                 cost_completeness=record.cost_completeness or "missing",
+                cost_source=record.cost_source if record.cost is not None else None,
             )
+        total = cost.total if run.native_telemetry else None
         return RunView(
             run,
             percent,
-            cost.total if run.native_telemetry else None,
+            total,
             cost.unpriced,
             tuple((row.timestamp_ms, row.usd) for row in cost.requests if row.usd is not None),
             conflicting_requests=cost.conflicts,
+            cost_source=None if total is None else cost.source,
         )
 
     def snapshot(self) -> MonitorSnapshot:
@@ -400,10 +434,14 @@ class Monitor:
         history = self.history()
         views = [self._view(run, history, now) for run in runs]
         queued = queued_batches(self.path("batches_dir"))
+        dispatch = dispatch_mode(self.path("batches_dir"))
+        ledger, ledger_error = ledger_status(self.path("batches_dir"))
         recent = now - FINISHED_WINDOW
         counts = Counts(
             queued=sum(
-                len(batch.runs) for batch in queued if batch.status not in ("legacy", "error")
+                len(batch.runs)
+                for batch in queued
+                if batch.status not in ("unsupported_legacy_batch", "error")
             ),
             live=len(runs),
             finished_recent=sum(1 for run in history if run.run_date and run.run_date >= recent),
@@ -423,6 +461,10 @@ class Monitor:
             exclusion_error=self.history_store.exclusion_error,
             host_label=self.host_label,
             records=self._records.applicable_by_run(),
+            dispatch=dispatch,
+            ledger=ledger,
+            ledger_error=ledger_error,
+            batch_runs=batch_runs(self.path("batches_dir")),
         )
 
     def output(self, run_id: str, stream: str | None = None, since: int = 0) -> list[LogLine]:

@@ -16,6 +16,7 @@ from click.testing import CliRunner
 
 from silverquillm.cli import main
 from silverquillm.karn import execution, provenance
+from silverquillm.karn.definition import KarnError
 from silverquillm.karn.exclusions import (
     ExclusionError,
     check,
@@ -549,8 +550,8 @@ def measured(turns, threads="absent"):
         (measured(40, 0), None),
         (measured(None, None), None),
         (measured(0, 0), "never_executed"),
-        (measured(40, 2), "subagents_used"),
-        (measured(40), "subagents_uncounted"),
+        (measured(40, 2), None),
+        (measured(40), None),
         (lambda m: m["execution"].update(status="host_failed"), "host_failed"),
     ],
 )
@@ -597,13 +598,13 @@ def test_a_run_meeting_a_rule_is_excluded_when_its_record_is_written(tmp_path, m
 def test_operator_exclusions_check_and_rule_backfill(edited):
     opts, record = edited
     repo = opts["results_repo"]
-    record_as(opts, record, "old", measured(40))
+    record_as(opts, record, "old", measured(0, 0))
     record_as(opts, record, "retry", measured(40, 0))
 
     report = check(repo)
     assert report["unexcluded_rule_matches"] == [
         {"run_id": "old", "candidate_hash": report["unexcluded_rule_matches"][0]["candidate_hash"],
-         "rule": "subagents_uncounted"},
+         "rule": "never_executed"},
     ]  # fmt: skip
 
     with pytest.raises(ExclusionError, match="superseded_by_required"):
@@ -625,7 +626,7 @@ def test_operator_exclusions_check_and_rule_backfill(edited):
     }
     assert {e.run_id: e.reason for e in load_exclusions(repo).values()} == {
         "edited": "superseded",
-        "old": "subagents_uncounted",
+        "old": "never_executed",
     }
 
 
@@ -763,9 +764,10 @@ def test_absent_or_empty_measurements_never_exclude(edited, blank):
     ).exists()
 
 
-def test_historical_measurements_without_a_thread_count_are_still_uncounted(edited_template):
+def test_subagent_use_is_an_attribute_and_never_excludes_a_run(edited_template):
     record = edited_template.record
-    assert rule_exclusion(edit(record, measured(40)))[0] == "subagents_uncounted"
+    assert rule_exclusion(edit(record, measured(40, 3))) is None
+    assert rule_exclusion(edit(record, measured(40))) is None
 
 
 # ---- regrade summaries apply exclusions ------------------------------------------------------
@@ -789,7 +791,7 @@ def cohort_runs(summary):
 
 def test_regrade_summaries_leave_out_excluded_runs_and_list_them(edited, tmp_path):
     opts, _ = edited
-    write_record_with(opts, "old", measured(40))
+    write_record_with(opts, "old", measured(0, 0))
     run_benchmark(**opts, run_id="kept")
     repo = opts["results_repo"]
     exclude(repo, "edited", reason="pilot", note="pipeline validation", excluded_by="op")
@@ -800,7 +802,7 @@ def test_regrade_summaries_leave_out_excluded_runs_and_list_them(edited, tmp_pat
     assert cohort_runs(summary) == 1
     assert {(row["run_id"], row["reason"]) for row in summary["excluded"]} == {
         ("edited", "pilot"),
-        ("old", "subagents_uncounted"),
+        ("old", "never_executed"),
     }
     assert {row["note"] for row in summary["excluded"]} >= {"pipeline validation"}
     assert len(list((tmp_path / "regrade").glob("*/*.json"))) == 3
@@ -866,3 +868,81 @@ def test_the_regrade_command_lists_excluded_runs_beneath_the_table(edited, tmp_p
     assert result.exit_code == 0, result.output
     _, _, excluded = result.output.partition("excluded from the comparison:")
     assert "pilot" in excluded and "pipeline check" in excluded
+
+
+def test_the_host_label_comes_from_the_environment_else_the_file_else_the_hostname(tmp_path):
+    config = tmp_path / "silverquillm" / "config.toml"
+    config.parent.mkdir()
+    environ = {"XDG_CONFIG_HOME": str(tmp_path)}
+    assert provenance.host_label(environ, lambda: "box.lan") == ("box", "hostname")
+    config.write_text('host_label = "lab-1"\n')
+    assert provenance.host_label(environ, lambda: "box.lan") == ("lab-1", "config")
+    assert provenance.host_label(
+        {**environ, provenance.HOST_LABEL_ENV: "env-1"}, lambda: "box.lan"
+    ) == ("env-1", "env")
+    config.write_text('host_label = "not a label"\n')
+    with pytest.raises(KarnError, match="invalid_host_label"):
+        provenance.host_label(environ, lambda: "box.lan")
+    config.write_text("host_label = [\n")
+    with pytest.raises(KarnError, match="invalid_host_config"):
+        provenance.host_label(environ, lambda: "box.lan")
+
+
+def test_a_label_from_the_file_is_valid_provenance(checkout, monkeypatch, tmp_path):
+    monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
+    monkeypatch.delenv(provenance.HOST_LABEL_ENV, raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    (tmp_path / "xdg" / "silverquillm").mkdir(parents=True)
+    (tmp_path / "xdg" / "silverquillm" / "config.toml").write_text('host_label = "lab-1"\n')
+    recorded = provenance.collect({provenance.RECIPE_LABEL: "a" * 40}, checkout, allow_dirty=False)
+    assert (recorded["host_label"], recorded["host_label_source"]) == ("lab-1", "config")
+    assert provenance.valid(recorded)
+
+
+@pytest.mark.parametrize(
+    "subagents, truncated",
+    [
+        ("main", 0),
+        ([{"thread_id": "a", "models": [], "requests": -1}], 0),
+        ([{"thread_id": "", "models": [], "requests": 0}], 0),
+        ([{"thread_id": "a" * 257, "models": [], "requests": 0}], 0),
+        ([{"thread_id": "a", "models": ["m"] * 33, "requests": 0}], 0),
+        ([{"thread_id": "a", "models": [True], "requests": 0}], 0),
+        ([{"thread_id": "a", "models": [], "requests": 0, "extra": 1}], 0),
+        ([{"thread_id": "a", "models": [], "requests": 0, "requested_efforts": []}], 0),
+        ([{"thread_id": "a", "models": [], "requests": 0, "requested_efforts": "low"}], 0),
+        ([{"thread_id": "a", "models": [], "requests": 0, "requested_efforts": [3]}], 0),
+        ([{"thread_id": "a", "models": [], "requests": 0, "requested_efforts": ["e"] * 9}], 0),
+        ([{"thread_id": f"t{i}", "models": [], "requests": 0} for i in range(1001)], 0),
+        ([], -1),
+        ([], True),
+    ],
+)
+def test_malformed_subagent_rows_are_an_invalid_record(edited_template, subagents, truncated):
+    record = edited_template.record
+
+    def change(metadata):
+        metadata["measurements"]["subagents"] = subagents
+        metadata["measurements"]["subagents_truncated"] = truncated
+
+    with pytest.raises(InvalidRunRecordError, match="subagent"):
+        edit(record, change).validate()
+
+
+def test_bounded_subagent_rows_and_records_without_them_are_valid(edited_template):
+    record = edited_template.record
+
+    def rows(metadata):
+        metadata["measurements"]["subagents"] = [
+            {"thread_id": "a1b2c3d4", "models": ["claude-opus-5-5"], "requests": 3},
+            {"thread_id": "t2", "models": [], "requests": 1, "requested_efforts": None},
+            {"thread_id": "t3", "models": [], "requests": 1, "requested_efforts": ["low", "xhigh"]},
+        ]
+        metadata["measurements"]["subagents_truncated"] = 2
+
+    def older(metadata):
+        metadata["measurements"].pop("subagents", None)
+        metadata["measurements"].pop("subagents_truncated", None)
+
+    edit(record, rows).validate()
+    edit(record, older).validate()

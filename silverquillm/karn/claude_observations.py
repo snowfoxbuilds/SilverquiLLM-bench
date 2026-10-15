@@ -28,10 +28,11 @@ from .observations import (
     _integer,
     _measurements,
     _stamp,
+    derive_subagents,
 )
 
 # Versions whose transcript and OTel streams were checked against each other on a real run.
-QUALIFIED_CLAUDE_VERSIONS: frozenset[str] = frozenset({"2.1.284"})
+QUALIFIED_CLAUDE_VERSIONS: frozenset[str] = frozenset({"2.1.284", "2.1.293"})
 MAX_TRANSCRIPT_BYTES = 128 * 1024 * 1024
 MAX_TRANSCRIPT_FILES = 10_000
 MAX_REQUEST_COST_USD = Decimal(1_000_000)
@@ -447,6 +448,8 @@ def summarize_claude_events(
     versions = {e.get("native_version") for e in sessions}
     otel = [e for e in rows if e["source"] == "otel"]
     otel_requests, otel_compactions, native_cost = set(), 0, Decimal(0)
+    reported: dict[str, Decimal] = {}  # by the response_id of the request each figure prices
+    by_request: dict[str, Decimal] = {}
     for event in otel:
         attrs = event["attributes"]
         if attrs.get("app.version"):
@@ -473,8 +476,13 @@ def summarize_claude_events(
             native_cost += cost
         except InvalidOperation:
             reasons.append("otel_cost_malformed")
+            cost = None
         if request in native_requests:
+            if cost is not None:
+                by_request[request] = cost
             continue
+        if cost is not None:
+            reported[event["id"]] = cost
         compaction = attrs.get("query_source") == "compact"
         otel_compactions += compaction
         if not compaction:
@@ -491,6 +499,11 @@ def summarize_claude_events(
                 "response_identity": "otel_observation",
             }
         )
+    # Each request's figure goes to its first response only; a later response reusing the
+    # request id is left unpriced, so the CLI's figure is never counted twice.
+    for response in (e for e in rows if e["kind"] == "response"):
+        if response.get("request_id") in by_request:
+            reported[response["response_id"]] = by_request.pop(response["request_id"])
     if otel and native_requests - otel_requests:
         reasons.append("otel_missing_native_request")
     unresolved = max(0, len(compactions) - otel_compactions)
@@ -528,13 +541,19 @@ def summarize_claude_events(
             "deduplicated_events": len(rows),
             "exit_kind": exit_kind,
             "model_basis": "native_message_model; observation, not provider attestation",
-            # Claude Code's own client-side estimate, kept only to cross-check the bench's.
+            # The Reported Cost's total, kept here too so committed proofs replay unchanged.
             "native_reported_cost_usd": format(native_cost, "f") if otel else None,
         },
         # A subagent's transcript is a sidechain, whose thread is its agent id.
-        subagent_threads=sum(
-            bool(SHAPES["agent"].fullmatch(e["thread_id"] or "")) for e in sessions
+        **derive_subagents(
+            requests,
+            lambda: {
+                e["thread_id"]
+                for e in sessions
+                if isinstance(e["thread_id"], str) and SHAPES["agent"].fullmatch(e["thread_id"])
+            },
         ),
+        reported_costs=reported if otel else None,
     )
 
 

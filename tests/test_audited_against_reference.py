@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.oracle_support import load_layout, readiness_errors
+from silverquillm.tools.oracle_support import load_layout, readiness_errors
 
 # Paths relative to repo root
 _REPO_ROOT = Path(__file__).resolve().parent.parent

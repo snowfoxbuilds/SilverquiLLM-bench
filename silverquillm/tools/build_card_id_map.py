@@ -6,7 +6,7 @@ builds a JSON mapping file at ``data/replays/card_id_map.json``.
 
 Usage::
 
-    python scripts/build_card_id_map.py
+    silverquillm data card-id-map
 
 The output JSON has the structure::
 
@@ -53,17 +53,19 @@ Akroma's Memorial, Temporal Manipulation, Fiend Artisan) do not have
 
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import time
-from pathlib import Path
+
+from silverquillm.tools import REPO_ROOT
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 SETS = ["fdn", "spg"]
-OUTPUT_PATH = Path(__file__).resolve().parent.parent / "data" / "replays" / "card_id_map.json"
+OUTPUT_PATH = REPO_ROOT / "data" / "replays" / "card_id_map.json"
 
 # SPG #74-83 don't have arena_ids on Scryfall — assign synthetic ones.
 # ENGINE LIMITATION: Replace with real grpIds from 17lands when available.
@@ -213,7 +215,8 @@ def build_card_id_map() -> dict:
 # Main
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    argparse.ArgumentParser(description=__doc__.split("\n\n")[0]).parse_args(argv)
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     mapping = build_card_id_map()
     with open(OUTPUT_PATH, "w") as f:

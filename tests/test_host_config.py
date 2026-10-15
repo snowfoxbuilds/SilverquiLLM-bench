@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from decimal import Decimal
 from pathlib import Path
@@ -11,6 +12,8 @@ from click.testing import CliRunner
 
 from silverquillm import host_config as hc
 from silverquillm.cli import main
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture
@@ -93,7 +96,10 @@ def test_a_flag_beats_the_environment_which_beats_the_file(tmp_path):
     assert resolved(None, {}) == (Path("/from/config"), "config")
 
 
-def test_unset_locations_are_reported_and_only_the_state_root_has_a_default(tmp_path):
+def test_unset_locations_are_reported_and_only_the_state_and_bench_roots_have_defaults(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
     config = hc.load_host_config(tmp_path / "absent.toml")
     locations = hc.resolve_locations(environ={}, config=config)
     assert {key: location.source for key, location in locations.items()} == {
@@ -101,8 +107,10 @@ def test_unset_locations_are_reported_and_only_the_state_root_has_a_default(tmp_
         "batches_dir": "unset",
         "runs_dir": "unset",
         "state_root": "default",
+        "bench_root": "default",
     }
     assert locations["state_root"].path == Path.home() / ".local/state/silverquillm"
+    assert locations["bench_root"].path == tmp_path
     with pytest.raises(hc.HostConfigError) as error:
         hc.require(locations["results_repo"], Path("/c/config.toml"))
     assert str(error.value) == (
@@ -150,3 +158,60 @@ def test_a_malformed_file_does_not_block_a_fully_flagged_command(tmp_path, confi
     result = CliRunner().invoke(main, ["queue", "ls"])
     assert result.exit_code == 2
     assert str(config_file) in result.output
+
+
+def test_the_file_carries_the_bench_root_and_this_hosts_label(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('bench_root = "bench"\nhost_label = "lab-1"\n')
+    config = hc.load_host_config(path)
+    assert config.locations["bench_root"] == tmp_path / "bench"
+    assert config.host_label == "lab-1"
+    assert hc.resolve_location("bench_root", environ={}, config=config).source == "config"
+    assert hc.resolve_location("bench_root", tmp_path, environ={}, config=config).path == tmp_path
+
+
+@pytest.mark.parametrize("value", ['host_label = ""', "host_label = 3"])
+def test_a_malformed_host_label_is_refused(tmp_path, value):
+    path = tmp_path / "config.toml"
+    path.write_text(value + "\n")
+    with pytest.raises(hc.HostConfigError, match="host_label must be a non-empty string"):
+        hc.load_host_config(path)
+
+
+def test_the_bench_root_has_no_environment_variable(tmp_path, monkeypatch):
+    # SILVERQUILLM_BENCH_ROOT names the benchmark data root inside grading; it never moves
+    # the host's bench root.
+    monkeypatch.chdir(tmp_path)
+    resolved = hc.resolve_location(
+        "bench_root",
+        environ={"SILVERQUILLM_BENCH_ROOT": "/elsewhere"},
+        config=hc.load_host_config(tmp_path / "absent.toml"),
+    )
+    assert (resolved.path, resolved.source) == (tmp_path, "default")
+
+
+def test_grading_inputs_finds_the_bench_root_in_the_file(tmp_path, config_file, monkeypatch):
+    config_file.write_text(f'bench_root = "{REPO_ROOT}"\n')
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(main, ["grading-inputs", "smoke"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["benchmark"] == "smoke"
+    assert payload["digest"].startswith("sha256:") and len(payload["digest"]) == 71
+    assert payload["problems"] == []
+    elsewhere = CliRunner().invoke(main, ["grading-inputs", "smoke", "--bench-root", str(tmp_path)])
+    assert elsewhere.exit_code != 0
+
+
+def test_a_config_that_is_not_utf8_is_refused_with_its_path(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_bytes(b'results_repo = "\xff"\n')
+    with pytest.raises(hc.HostConfigError, match=str(path)):
+        hc.load_host_config(path)
+
+
+def test_a_minimal_config_round_trips_any_path(tmp_path):
+    repo = tmp_path / 'r "quoted" \\ x😀y'
+    path = tmp_path / "config.toml"
+    assert hc.write_minimal_config(path, repo, tmp_path)
+    assert hc.load_host_config(path).locations["results_repo"] == repo.resolve()

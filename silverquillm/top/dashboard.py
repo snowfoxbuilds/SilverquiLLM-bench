@@ -547,12 +547,13 @@ class QueuedPane(VerticalScroll):
             )
             if batch.needs_ack:
                 state.append(theme.glyph("needs_ack"), style=theme.style("warn", bold=True))
+            elif batch.error:
+                # An error such as a damaged ledger blocks the batch before any countdown ends.
+                state.append(batch.error, style=theme.style("bad"))
             elif batch.not_before is not None and batch.not_before > snapshot.taken_at:
                 state.append(
                     fmt.until(batch.not_before, snapshot.taken_at), style=theme.style("accent")
                 )
-            elif batch.error:
-                state.append(batch.error, style=theme.style("bad"))
             else:
                 state.append(batch.status, style=muted)
             state.append(f"{theme.glyph('sep')}{batch.started}/{batch.total} started", style=muted)
@@ -568,6 +569,10 @@ class QueuedPane(VerticalScroll):
         if not lines:
             lines.append(Text("nothing queued", style=muted))
         self.border_subtitle = f"{total} runs"
+        title = f"{theme.glyph('queued')} QUEUED"
+        if snapshot.dispatch != "running":
+            title += f" — {snapshot.dispatch.upper()}"
+        self.border_title = title
         # One line per entry: a long candidate is cut at the pane's edge rather than wrapped,
         # at whatever width the pane has when drawn.
         body = Text("\n").join(lines)

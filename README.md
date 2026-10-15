@@ -76,11 +76,12 @@ Install the benchmark with `pip install -e .`.
 SilverquiLLM-bench runs a completed Karn build by itself; it needs no Ozolith package.
 
 The candidate recipes live in the results repository at `karn/constructs/<label>`. Build them from its committed tree, then build the grader image, before running.
-Commands find the results repository, batch queue, run directory, and login state through their flags or `~/.config/silverquillm/config.toml` (see [Karn benchmarking](docs/KARN-BENCHMARKING.md#host-configuration)):
+Commands find the results repository, batch queue, run directory, login state and this checkout through their flags or `~/.config/silverquillm/config.toml` (see [Karn benchmarking](docs/KARN-BENCHMARKING.md#host-configuration)).
+The operator runbook — how to queue, monitor, publish, re-score and analyse — lives in the results repository's `AGENTS.md`, and operational agents work from that checkout:
 
 ```bash
 mkdir -p ~/.config/silverquillm
-printf 'results_repo = "~/bench-results"\nbatches_dir = "~/bench-batches"\nruns_dir = "~/bench-runs"\n' > ~/.config/silverquillm/config.toml
+printf 'results_repo = "~/bench-results"\nbench_root = "~/SilverquiLLM-bench"\nbatches_dir = "~/raw-bench-results/batches"\nruns_dir = "~/raw-bench-results/runs"\n' > ~/.config/silverquillm/config.toml
 karn build ~/bench-results/karn --out ~/bench-builds/roster-1
 silverquillm grader build
 silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-codex
@@ -103,15 +104,22 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | Command | Purpose |
 | --- | --- |
 | `silverquillm run --build-output … --construct … --benchmark …` | Execute a prebuilt Karn construct, grade its work in the grader container, and retain implementation and efficiency observations. |
-| `silverquillm scheduler [--once] [--replay-without-state ID]` | Execute due Karn batches in `batches/*.toml` through the same run lifecycle. |
+| `silverquillm scheduler [--once] [--replay-without-state ID]` | Execute due Karn batches in the batch directory, in queue order, through the same run lifecycle. |
 | `silverquillm recover RUN_ID [--stop]` | Settle an interrupted or killed run from its retained evidence and write its record, without rerunning work. |
 | `silverquillm regrade --benchmark … --out DIR [--run ID] [--candidate HASH]` | Re-grade retained runs on the current Audited Tests and grading inputs, writing new scores to DIR; records are never changed. |
 | `silverquillm queue ls [--json]` | One-shot, read-only view of the batch queue, including interrupted, partially observed, and unsupported batches. |
-| `silverquillm top` | Read-only monitor: live runs, the queue, Login Profiles with Estimated Weekly Usage, history, and run details with live output (`q` quits; needs the `monitor` extra). |
+| `silverquillm queue pause\|drain\|resume` | Stop launching new runs (drain also stops the scheduler once nothing is in flight), or launch again; runs in flight are never interrupted. |
+| `silverquillm top` | Read-only monitor: live runs, the queue, Login Profiles with Estimated Weekly Usage, history, and run details with live output (`q` quits; needs the `monitor` extra). `--json` prints one snapshot for scripts and agents without a terminal. |
 | `silverquillm login --build-output … --construct …` | Enroll the construct's own subscription login through its login plugin. |
 | `silverquillm grader build [--python X.Y]` | Build the pinned, network-less grader images, one per graded Python version; each run is graded on its candidate's version. |
-| `silverquillm results-init PATH` | Lay out an empty private results repository. |
+| `silverquillm results-init PATH` | Lay out an empty private results repository and, if none exists, a minimal host configuration. |
+| `silverquillm grading-inputs BENCHMARK` | Print a benchmark's current grading-inputs digest as JSON. |
 | `silverquillm validate …` | Validate 17lands replays against the engine. |
+| `silverquillm data fetch-hob-set\|fetch-fra-set\|card-id-map\|token-id-map\|download-replays` | Fetch and build the reference data under `data/`. |
+| `silverquillm build fra-hard\|port-from-known-best\|printed-classes\|fdn-specs\|audited-stubs` | Generate benchmark inputs. |
+| `silverquillm audit check-promotion\|printed-identity` | Gate a candidate Audited Test for promotion; rewrite name-string card identification in tests. |
+| `silverquillm qualify claude-telemetry\|codex-telemetry` | Qualify an agent CLI version's telemetry before its accounting is trusted. |
+| `silverquillm replay triage REPORT.json` | Cluster a replay-validation report's divergences by root cause and check every one is tagged. |
 | `silverquillm legacy run-image\|smoke\|resume\|chain\|rescore\|logs …` | The historical `--image` entrypoint lineage and its run directories. |
 
 A `--cards` filter is available for development and pipeline validation, but filtered runs are **not** leaderboard-valid.
@@ -121,7 +129,7 @@ A `--cards` filter is available for development and pipeline validation, but fil
 ## Batches
 
 A batch is a `batches/<id>.toml` file with `format = "karn-v5"` (earlier `karn-v4` files still run) and ordered `[[runs]]` of build output, construct, and benchmark.
-The scheduler runs batches serially and commits progress to `batches/state/<id>.json`; see [batches/README.md](batches/README.md) and [Karn benchmarking](docs/KARN-BENCHMARKING.md).
+The scheduler fills free login slots across batches in queue order, picks up a batch added while it runs, and keeps its progress in the batch directory's `state/<id>.json`; see [batches/README.md](batches/README.md) and [Karn benchmarking](docs/KARN-BENCHMARKING.md).
 Historical Candidate Bundle batches are shown as unsupported and never run.
 
 ---

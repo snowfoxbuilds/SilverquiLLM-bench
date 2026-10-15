@@ -47,13 +47,7 @@ for script in sorted((repo / "scripts").glob("*.py")):
     spec = importlib.util.spec_from_file_location(f"retained_{script.stem}", script)
     loaded = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = loaded
-    try:
-        spec.loader.exec_module(loaded)
-    except ModuleNotFoundError as error:
-        # A data tool's own optional dependency (download_replays: curl_cffi)
-        # is not the default install's concern; an Ozolith import still fails.
-        if "blocked import" in str(error):
-            raise
+    spec.loader.exec_module(loaded)
 
 
 def invoke(*args):
@@ -88,7 +82,7 @@ listed = invoke("queue", "ls", "--batches-dir", str(mixed))
 assert "trial [karn-v5]" in listed and "old [legacy]: unsupported legacy batch" in listed, listed
 assert '"unsupported_legacy_batch"' in invoke("queue", "ls", "--json", "--batches-dir", str(mixed))
 refused = CliRunner().invoke(main, ["top", "--batches-dir", str(mixed)])
-assert refused.exit_code == 1 and "queue ls" in refused.output, refused.output
+assert refused.exit_code == 1 and "top --json" in refused.output, refused.output
 
 # The scheduler and recovery refuse a bench root whose package is not the one imported.
 options = ["--bench-root", str(Path(silverquillm.__file__).resolve().parents[1])]

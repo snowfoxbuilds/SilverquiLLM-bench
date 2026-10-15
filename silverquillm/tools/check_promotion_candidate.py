@@ -24,10 +24,11 @@ not yet exist, please create it as a separate task.
 
 Usage::
 
-    python scripts/check_promotion_candidate.py path/to/candidate/tests.py --card sos_245
-    python scripts/check_promotion_candidate.py path/to/tests.py --card sos_1 --bench sos
+    silverquillm audit check-promotion path/to/candidate/tests.py --card sos_245
+    silverquillm audit check-promotion path/to/tests.py --card sos_1 --bench sos
 
-Stdlib only: ast, pathlib, argparse, json, subprocess, dataclasses, os, sys.
+The checkout it checks is the one the ``silverquillm`` package is imported from
+(``silverquillm.tools.REPO_ROOT``); ``main(repo_root=...)`` overrides it for tests.
 """
 
 from __future__ import annotations
@@ -44,13 +45,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Repo root (when run as a script)
-# ---------------------------------------------------------------------------
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+from silverquillm.tools import REPO_ROOT
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -311,7 +306,7 @@ def check_canonical_api(
         )
 
     if bench.startswith("hob-"):
-        from scripts.oracle_support import check_v2_api, load_layout
+        from silverquillm.tools.oracle_support import check_v2_api, load_layout
 
         try:
             layout = load_layout(repo_root, bench)
@@ -525,13 +520,13 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(*, repo_root: Path | None = None) -> None:
+def main(argv: list[str] | None = None, *, repo_root: Path | None = None) -> None:
     """Entry point for CLI invocation."""
     if repo_root is None:
         repo_root = REPO_ROOT
 
     parser = _build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     candidate_path = Path(args.candidate).resolve()
 

@@ -332,6 +332,71 @@ def test_output_overlapping_the_records_or_run_artifacts_is_refused(retained, ke
     assert tree_digest(retained.opts["results_dir"]) == runs_before
 
 
+def published(retained) -> Path:
+    from silverquillm.karn.benchmark import load_benchmark
+    from silverquillm.karn.grading_inputs import grading_inputs
+
+    inputs = grading_inputs(load_benchmark(retained.opts["bench_root"], "example"))
+    return retained.opts["results_repo"] / "regrades" / inputs["digest"].removeprefix("sha256:")
+
+
+def test_output_may_be_the_results_repos_published_regrades_for_the_inputs(retained):
+    records = retained.opts["results_repo"] / "results"
+    records_before = tree_digest(records)
+    out = published(retained)
+    with building():
+        invoke(retained, out=out)
+    assert (out / "summary.json").is_file()
+    assert sorted(path.stem for path in out.glob("*/*.json")) == ["run-a", "run-b", "run-c"]
+    assert tree_digest(records) == records_before
+
+
+@pytest.mark.parametrize(
+    "inside",
+    [
+        lambda hex: "regrades/" + "0" * 64,
+        lambda hex: "regrades",
+        lambda hex: "regrades-x/" + hex,
+        lambda hex: "regrades/" + hex + "/../../results/x",
+        lambda hex: "results/" + hex,
+    ],
+)
+def test_any_other_output_in_the_results_repo_is_refused(retained, inside):
+    hex_digest = published(retained).name
+    before = tree_digest(retained.opts["results_repo"])
+    with pytest.raises(KarnError, match="regrade_output_overlaps_results_repo"):
+        invoke(retained, out=retained.opts["results_repo"] / inside(hex_digest))
+    assert tree_digest(retained.opts["results_repo"]) == before
+
+
+def test_a_publication_is_tagged_with_the_digest_its_directory_names(retained, monkeypatch):
+    out = published(retained)
+    real = regrade_module.grading_inputs
+    calls = []
+
+    def changing(benchmark):
+        calls.append(benchmark)
+        inputs = real(benchmark)
+        return inputs if len(calls) == 1 else {**inputs, "digest": "sha256:" + "c" * 64}
+
+    monkeypatch.setattr(regrade_module, "grading_inputs", changing)
+    with building():
+        summary = invoke(retained, out=out)
+    assert summary["grading_inputs_digest"] == "sha256:" + out.name
+    assert summary["grading_inputs_changed_during_regrade"] is True
+
+
+def test_a_link_planted_at_regrades_cannot_redirect_output_into_records(retained):
+    repo = retained.opts["results_repo"]
+    hex_digest = published(retained).name
+    (repo / "results" / hex_digest).mkdir()
+    (repo / "regrades").symlink_to(repo / "results")
+    before = tree_digest(repo / "results")
+    with pytest.raises(KarnError, match="regrade_output_overlaps_results_repo"):
+        invoke(retained, out=repo / "regrades" / hex_digest)
+    assert tree_digest(repo / "results") == before
+
+
 def edit_manifest(retained, run_id, change):
     path = next((retained.opts["results_repo"] / "results").glob(f"*/{run_id}/manifest.json"))
     value = json.loads(path.read_text())

@@ -6,6 +6,7 @@ Textual is the optional ``monitor`` extra, so nothing here imports it until the 
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from collections.abc import Mapping
 from pathlib import Path
@@ -13,8 +14,8 @@ from typing import TextIO
 
 INSTALL_HINT = "silverquillm top needs the monitor extra: pip install 'silverquillm-bench[monitor]'"
 NO_TERMINAL = (
-    "silverquillm top needs a terminal; for a one-shot listing use `silverquillm queue ls`"
-    " (add --json for scripts)"
+    "silverquillm top needs a terminal; for one machine-readable snapshot use"
+    " `silverquillm top --json`"
 )
 
 
@@ -66,4 +67,25 @@ def launch(
             monitor.close()
         else:
             app.release_monitor()
+    return 0
+
+
+def print_snapshot(
+    given: Mapping[str, Path | None], *, stdout: TextIO | None = None, **monitor_options
+) -> int:
+    """Write one snapshot of what the monitor shows as JSON; needs no terminal or extra."""
+    from silverquillm.monitor import Monitor
+    from silverquillm.monitor.headless import snapshot_document
+
+    stdout = stdout or sys.stdout
+    monitor = Monitor(
+        given={key: value for key, value in given.items() if value is not None},
+        **{"follow_output": False, "sample_usage": True, **monitor_options},
+    )
+    try:
+        document = snapshot_document(monitor.snapshot())
+    finally:
+        monitor.close()
+    json.dump(document, stdout, indent=2)
+    stdout.write("\n")
     return 0

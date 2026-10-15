@@ -20,7 +20,7 @@ Runtime data directory for cached API responses and replay validation data.
 
 ## Dependencies
 
-- **Upstream**: `scripts/build_card_id_map.py` generates `card_id_map.json`. `cards/scryfall.py` populates `sets/`.
+- **Upstream**: `silverquillm data card-id-map` generates `card_id_map.json`. `cards/scryfall.py` populates `sets/`.
 - **Downstream**: `silverquillm/replay/parser.py` and `silverquillm/replay/executor.py` load `card_id_map.json`.
 
 ## Directory Structure

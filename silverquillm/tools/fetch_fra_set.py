@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
-from fetch_hob_set import _atomic_write, _cn_int, _fetch_all_prints
+from silverquillm.tools import REPO_ROOT
+from silverquillm.tools.fetch_hob_set import _atomic_write, _cn_int, _fetch_all_prints
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--force", action="store_true")
-    args = parser.parse_args()
-    path = Path(__file__).resolve().parents[1] / "data/sets/fra.json"
+    args = parser.parse_args(argv)
+    path = REPO_ROOT / "data/sets/fra.json"
     if path.exists() and not args.force:
         print(f"Reusing pinned {path}")
         return

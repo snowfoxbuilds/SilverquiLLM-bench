@@ -119,9 +119,9 @@ def rule_exclusion(record: KarnRunRecord) -> tuple[str, str] | None:
     """The first mechanical rule the record meets, as ``(reason, note)``, else None.
 
     Only observed facts count. A host failure is an observed status, whatever the
-    measurements hold. Absent, null or empty measurements are unknown and never exclude;
-    only a populated measurement object that lacks ``subagent_threads`` shows the run was
-    measured before threads were counted.
+    measurements hold. Absent, null or empty measurements are unknown and never exclude.
+    Subagent use is a run attribute an analysis judges, never a rule (#230); an operator
+    may still record ``subagents_used`` or ``subagents_uncounted`` by hand.
     """
     metadata = record.run_metadata
     if metadata["execution"]["status"] == "host_failed":
@@ -132,11 +132,6 @@ def rule_exclusion(record: KarnRunRecord) -> tuple[str, str] | None:
     turns = ((measurements.get("agent_turns") or {}).get("total") or {}).get("value")
     if turns == 0:
         return "never_executed", "observed zero agent turns"
-    threads = measurements.get("subagent_threads")
-    if isinstance(threads, int) and threads > 0:
-        return "subagents_used", f"observed {threads} subagent thread(s)"
-    if "subagent_threads" not in measurements:
-        return "subagents_uncounted", "measurements predate subagent thread counting"
     return None
 
 

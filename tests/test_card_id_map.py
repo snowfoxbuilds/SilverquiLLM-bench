@@ -1,7 +1,7 @@
 """Tests for card ID mapping (grpId → card name).
 
 Validates the data/replays/card_id_map.json mapping file and the
-scripts/build_card_id_map.py builder module.
+silverquillm/tools/build_card_id_map.py builder module.
 """
 
 from __future__ import annotations
@@ -212,14 +212,14 @@ class TestBuildScript:
     """The build script should be importable and expose expected functions."""
 
     def test_script_file_exists(self):
-        script_path = REPO_ROOT / "scripts" / "build_card_id_map.py"
+        script_path = REPO_ROOT / "silverquillm" / "tools" / "build_card_id_map.py"
         assert script_path.exists()
 
     def test_build_card_id_map_function_exists(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "build_card_id_map",
-            REPO_ROOT / "scripts" / "build_card_id_map.py",
+            REPO_ROOT / "silverquillm" / "tools" / "build_card_id_map.py",
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -230,7 +230,7 @@ class TestBuildScript:
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "build_card_id_map",
-            REPO_ROOT / "scripts" / "build_card_id_map.py",
+            REPO_ROOT / "silverquillm" / "tools" / "build_card_id_map.py",
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -241,7 +241,7 @@ class TestBuildScript:
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "build_card_id_map",
-            REPO_ROOT / "scripts" / "build_card_id_map.py",
+            REPO_ROOT / "silverquillm" / "tools" / "build_card_id_map.py",
         )
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

@@ -181,6 +181,16 @@ def test_missing_observations_are_not_zero_but_confirmed_no_requests_are_zero():
     assert zero["estimated_cost"]["value"] == "0"
 
 
+def test_codex_reports_no_cost_so_its_cost_is_the_estimate():
+    events, _ = normalize_rollout(journal())
+    result = summarize_events(events, exit_kind="completed")
+    assert result["reported_cost"]["value"] is None
+    assert result["reported_cost"]["completeness"] == "missing"
+    assert "native_cost_not_reported" in result["reported_cost"]["reasons"]
+    assert result["request_reported_costs"] == []
+    assert result["estimated_cost"]["value"] is not None
+
+
 def test_interrupted_model_response_retains_lower_bound_and_missing_usage():
     events, _ = normalize_rollout(journal(response=None, closed=False))
     events += normalize_otlp(otlp())
@@ -660,8 +670,137 @@ def test_codex_subagent_threads_count_threads_beyond_the_main_one(scenario, expe
     fixture = Path(__file__).parent / "fixtures" / "karn_observations_codex_0.157.1"
     raw = (fixture / (scenario + ".jsonl")).read_bytes()
     events = [json.loads(line) for line in raw.splitlines()]
-    assert summarize_events(events, exit_kind="completed")["subagent_threads"] == expected
+    result = summarize_events(events, exit_kind="completed")
+    assert result["subagent_threads"] == expected
+    assert len(result["subagents"]) == expected
+    main = {r["thread_id"] for r in result["requests"]} - {
+        row["thread_id"] for row in result["subagents"]
+    }
+    for row in result["subagents"]:
+        own = [r for r in result["requests"] if r["thread_id"] == row["thread_id"]]
+        assert row["requests"] == len(own)
+        assert row["models"] == sorted({r["model"] for r in own if r["model"]})
+    assert len(main) <= 1
 
 
 def test_subagent_threads_are_missing_without_observations():
-    assert summarize_events([], exit_kind="completed")["subagent_threads"] is None
+    result = summarize_events([], exit_kind="completed")
+    assert result["subagent_threads"] is None
+    assert result["subagents"] is None
+
+
+def _otlp_record(thread, **extra):
+    attributes = [
+        {"key": "event.name", "value": {"stringValue": "codex.sse_event"}},
+        {"key": "event.kind", "value": {"stringValue": "response.completed"}},
+        {"key": "conversation.id", "value": thread},
+        {"key": "input_token_count", "value": {"stringValue": "1"}},
+        {"key": "model", "value": {"stringValue": "gpt-5"}},
+        {"key": "event.timestamp", "value": {"stringValue": "2026-01-01T00:00:00Z"}},
+    ]
+    attributes += [{"key": k, "value": v} for k, v in extra.items()]
+    return {"attributes": attributes}
+
+
+def _otlp(*records):
+    return {"resourceLogs": [{"scopeLogs": [{"logRecords": list(records)}]}]}
+
+
+def test_a_boolean_thread_id_is_dropped_and_cannot_fail_collection():
+    events = normalize_otlp(
+        _otlp(
+            _otlp_record({"stringValue": "main"}),
+            _otlp_record({"stringValue": "sub"}),
+            _otlp_record({"boolValue": True}, model={"boolValue": True}),
+        )
+    )
+    assert [e["thread_id"] for e in events] == ["main", "sub", None]
+    assert events[2]["attributes"]["model"] == "gpt-5"  # the boolean duplicate is refused
+    result = summarize_events(events, exit_kind="completed")
+    assert result["subagent_threads"] == len(result["subagents"]) == 1
+    assert result["subagents_truncated"] == 0
+
+
+def test_subagent_derivation_failure_leaves_the_rows_out_with_a_reason(monkeypatch):
+    from silverquillm.karn import observations
+
+    def broken(*arguments):
+        raise TypeError("forged")
+
+    monkeypatch.setattr(observations, "subagent_rows", broken)
+    events = normalize_otlp(_otlp(_otlp_record({"stringValue": "main"})))
+    result = summarize_events(events, exit_kind="completed")
+    assert result["subagents"] is None and result["subagent_threads"] is None
+    assert result["subagents_reason"] == "subagent_derivation_failed"
+    assert result["usage"]["value"] is not None
+
+
+def test_many_subagent_threads_are_capped_and_summarised_in_linear_time():
+    import time
+
+    from silverquillm.karn.observations import SUBAGENT_ROWS_MAX
+
+    events = normalize_otlp(
+        _otlp(*(_otlp_record({"stringValue": f"t{i:05d}"}) for i in range(8000)))
+    )
+    started = time.monotonic()
+    result = summarize_events(events, exit_kind="completed")
+    assert time.monotonic() - started < 5
+    assert len(result["subagents"]) == SUBAGENT_ROWS_MAX
+    assert result["subagent_threads"] == 7999
+    assert result["subagents_truncated"] == 7999 - SUBAGENT_ROWS_MAX
+    assert all(row["requests"] == 1 for row in result["subagents"])
+
+
+@pytest.mark.parametrize(
+    ("version", "child"),
+    [
+        ("0.157.1", "01a0e3b8-301a-70a0-aaed-0df7042feaad"),
+        ("0.159.0", "01a0ee48-3315-7401-b286-80247bea480f"),
+    ],
+)
+def test_a_codex_subagent_row_keeps_the_effort_its_telemetry_requested(version, child):
+    from pathlib import Path
+
+    fixture = Path(__file__).parent / "fixtures" / f"karn_observations_codex_{version}"
+    events = [json.loads(line) for line in (fixture / "descendant.jsonl").read_bytes().splitlines()]
+    result = summarize_events(events, exit_kind="completed")
+    assert result["subagents"] == [
+        {"thread_id": child, "models": ["gpt-5.4"], "requests": 2, "requested_efforts": ["low"]}
+    ]
+
+
+def _effort_events(**efforts_by_thread):
+    records = []
+    for thread, efforts in efforts_by_thread.items():
+        for effort in efforts:
+            records.append(
+                _otlp_record({"stringValue": thread}, model_reasoning_effort=effort)
+            )
+    return normalize_otlp(_otlp(*records))
+
+
+def test_subagent_efforts_are_the_childs_own_every_level_kept_and_none_when_unseen():
+    events = _effort_events(
+        a_main=[{"stringValue": "high"}],
+        b_child=[{"stringValue": "medium"}, {"stringValue": "low"}, {"stringValue": "low"}],
+        c_quiet=[{"intValue": "3"}, {"boolValue": True}, {"stringValue": "bad effort!"}],
+    )
+    # The parent is the first thread seen; put it first in time.
+    for event in events:
+        if event["thread_id"] == "a_main":
+            event["timestamp_ms"] -= 1000
+    rows = {row["thread_id"]: row for row in summarize_events(events, exit_kind="completed")["subagents"]}
+    assert set(rows) == {"b_child", "c_quiet"}
+    assert rows["b_child"]["requested_efforts"] == ["low", "medium"]  # never the parent's high
+    assert rows["c_quiet"]["requested_efforts"] is None  # malformed values are not efforts
+
+
+def test_subagent_efforts_are_bounded():
+    from silverquillm.karn.observations import SUBAGENT_EFFORTS_MAX, subagent_rows
+
+    rows, unlisted = subagent_rows(
+        [], ["t"], {"t": [f"e{i:02d}" for i in range(40)] + [3, None, "x" * 300, "3", "High"]}
+    )
+    assert unlisted == 0
+    assert rows[0]["requested_efforts"] == [f"e{i:02d}" for i in range(SUBAGENT_EFFORTS_MAX)]

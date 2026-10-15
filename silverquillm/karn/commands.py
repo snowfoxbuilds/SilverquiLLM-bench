@@ -23,8 +23,9 @@ from .interruption import terminate_as_interrupt
 BATCHES_DIR_OPTION = location_option("batches_dir", help="The batch queue directory.")
 
 
-BENCH_ROOT_OPTION = click.option(
-    "--bench-root", type=click.Path(file_okay=False, path_type=Path), default=Path.cwd
+BENCH_ROOT_OPTION = location_option(
+    "bench_root",
+    help="The SilverquiLLM-bench checkout; else bench_root in the host config, else the current directory.",
 )
 RESULTS_DIR_OPTION = location_option("runs_dir", help="The run directory.")
 RESULTS_REPO_OPTION = location_option("results_repo", help="The results repo clone.")
@@ -282,7 +283,7 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, allow_dirty
     """Execute due batches across every available login slot."""
     from silverquillm.queue_state import SchedulerLockedError
 
-    from .batching import KarnScheduler, queue_rows
+    from .batching import KarnScheduler
     from .grader import ContainerGrader
 
     runner = KarnScheduler(
@@ -299,12 +300,6 @@ def scheduler(batches_dir, once, poll_seconds, replay_without_state, allow_dirty
             with terminate_as_interrupt():
                 executed = runner.run_until_idle()
             click.echo(f"scheduler idle: {executed} run(s) executed")
-            for row in queue_rows(batches_dir):
-                if row["status"] == "missing_state":
-                    click.echo(
-                        f"{row['batch']}: restore state or pass --replay-without-state {row['batch']}",
-                        err=True,
-                    )
         else:
             with terminate_as_interrupt():
                 runner.serve(poll_seconds)
@@ -351,7 +346,10 @@ def recover(run_id, stop, **options):
     "--out",
     required=True,
     type=click.Path(file_okay=False, path_type=Path),
-    help="Directory for one JSON file per run plus summary.json; never the results repo.",
+    help=(
+        "Directory for one JSON file per run plus summary.json; inside the results repo only "
+        "regrades/<grading-inputs digest hex>/, for publishing."
+    ),
 )
 @click.option(
     "--run", "runs", multiple=True, metavar="RUN_ID", help="Run id or prefix; repeatable."
@@ -385,7 +383,8 @@ def regrade(**options):
 
     Each run is graded again from the workspace it was graded from, on its recorded grader
     image. The workspace comes from the local run artifacts, else from the results repo's
-    workspace archive. Records stay untouched; the new scores are written under --out.
+    workspace archive. Records stay untouched; the new scores are written under --out, which
+    may be the results repo's regrades/<digest hex>/ for the inputs being graded on.
     """
     from .regrade import regrade as run_regrade
 
@@ -440,9 +439,33 @@ def _regrade_table(summary):
         )
 
 
+@click.command("grading-inputs")
+@click.argument("benchmark_id", metavar="BENCHMARK")
+@BENCH_ROOT_OPTION
+def grading_inputs_command(benchmark_id, bench_root):
+    """Print BENCHMARK's current grading-inputs digest as JSON.
+
+    The digest a run graded now, or a regrade, would record; Results Repo scripts compare it
+    with a cohort's to tell whether the cohort needs re-scoring.
+    """
+    from .benchmark import load_benchmark
+    from .grading_inputs import grading_inputs
+
+    try:
+        inputs = grading_inputs(load_benchmark(bench_root, benchmark_id))
+    except (KarnError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+    click.echo(
+        json.dumps(
+            {"benchmark": benchmark_id, "digest": inputs["digest"], "problems": inputs["problems"]},
+            sort_keys=True,
+        )
+    )
+
+
 @click.group()
 def queue():
-    """Inspect the batch queue."""
+    """Inspect the batch queue, and pause, drain or resume its dispatch."""
 
 
 @queue.command("ls")
@@ -450,15 +473,64 @@ def queue():
 @click.option("--json", "as_json", is_flag=True, help="Print the raw queue rows as JSON.")
 def queue_ls(batches_dir, as_json):
     """Show every batch, including interrupted, partially observed and unsupported ones."""
-    from .batching import queue_rows
+    from .batching import queue_rows, read_control
     from .queue_view import render_rows
 
     rows = queue_rows(batches_dir)
     if as_json:
         click.echo(json.dumps(rows, sort_keys=True))
         return
+    control = read_control(batches_dir)
+    if control["mode"] != "running":
+        click.echo(_dispatch_line(control))
     for line in render_rows(rows):
         click.echo(line)
+
+
+def _dispatch_line(control: dict) -> str:
+    line = "dispatch: " + control["mode"]
+    if control.get("since"):
+        line += f" since {control['since']}"
+    if control.get("error"):
+        line += f" ({control['error']}; `queue pause`, `queue drain` or `queue resume` replaces it)"
+    return line
+
+
+def _set_dispatch(batches_dir, mode: str) -> None:
+    from .batching import write_control
+
+    try:
+        control = write_control(batches_dir, mode)
+    except (KarnError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+    click.echo(_dispatch_line(control))
+
+
+@queue.command("pause")
+@BATCHES_DIR_OPTION
+def queue_pause(batches_dir):
+    """Stop launching new runs; runs in flight continue, and the scheduler keeps serving.
+
+    The pause persists across scheduler restarts until `queue resume`.
+    """
+    _set_dispatch(batches_dir, "paused")
+
+
+@queue.command("drain")
+@BATCHES_DIR_OPTION
+def queue_drain(batches_dir):
+    """Pause, then stop the scheduler once every run in flight is graded and recorded.
+
+    The scheduler exits 0 when the drain finishes and leaves dispatch paused.
+    """
+    _set_dispatch(batches_dir, "draining")
+
+
+@queue.command("resume")
+@BATCHES_DIR_OPTION
+def queue_resume(batches_dir):
+    """Let a paused scheduler launch new runs again; a drained one must be started again."""
+    _set_dispatch(batches_dir, "running")
 
 
 def _monitor_location(key: str, help: str):
@@ -480,16 +552,26 @@ def _monitor_location(key: str, help: str):
 @click.option(
     "--no-mouse", is_flag=True, help="Leave the mouse to the terminal; every action has a key."
 )
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Print one snapshot of what the monitor shows as JSON and exit; needs no terminal.",
+)
 @_monitor_location("results_repo", "The results repo clone.")
 @_monitor_location("batches_dir", "The batch queue directory.")
 @_monitor_location("runs_dir", "The run directory.")
 @_monitor_location("state_root", "The state root holding the Login Pools.")
-def top(interval, no_flair, no_mouse, **locations):
+def top(interval, no_flair, no_mouse, as_json, **locations):
     """Read-only monitor: live runs, queue, Login Profiles, history and run details.
 
-    Every action has a key; press ? in the monitor for the list. q quits.
+    Every action has a key; press ? in the monitor for the list. q quits. With --json, one
+    snapshot of the same facts is printed for scripts and agents without a terminal.
     """
-    from silverquillm.top import launch
+    from silverquillm.top import launch, print_snapshot
+
+    if as_json:
+        raise SystemExit(print_snapshot(locations))
 
     raise SystemExit(launch(locations, interval=interval, no_flair=no_flair, mouse=not no_mouse))
 
@@ -634,4 +716,15 @@ def results_exclusions(as_json, results_repo):
             click.echo(f"{exclusion.run_id[:8]}  {exclusion.reason:20} {exclusion.note}")
 
 
-COMMANDS = (run, enroll, scheduler, recover, regrade, queue, top, grader, results)
+COMMANDS = (
+    run,
+    enroll,
+    scheduler,
+    recover,
+    regrade,
+    grading_inputs_command,
+    queue,
+    top,
+    grader,
+    results,
+)

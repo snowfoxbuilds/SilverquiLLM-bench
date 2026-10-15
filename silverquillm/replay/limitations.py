@@ -148,7 +148,7 @@ class LimitationContext:
 
 
 # ---------------------------------------------------------------------------
-# Minimal parsers (independent of scripts/triage_divergences.py so the report
+# Minimal parsers (independent of silverquillm/triage_divergences.py so the report
 # serializer carries no script dependency; kept deliberately small).
 # ---------------------------------------------------------------------------
 

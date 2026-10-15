@@ -254,7 +254,10 @@ def expected_grader(record: KarnRunRecord, docker, *, substitute: bool) -> tuple
 
 def _dimensions(scores: dict) -> dict:
     return {
-        name: {key: scores[name].get(key) for key in ("tests_passed", "tests_total", "pass_rate")}
+        name: {
+            key: scores[name].get(key)
+            for key in ("tests_passed", "tests_total", "pass_rate", "complete")
+        }
         for name in DIMENSIONS
     }
 
@@ -629,6 +632,17 @@ def summarize(
     }
 
 
+def published_regrades(results_repo: Path, grading_inputs_digest: str) -> Path:
+    """``<results_repo>/regrades/<hex>``: the only place in the Results Repo a regrade may
+    write, one directory per grading-inputs digest. *results_repo* must already be resolved;
+    nothing under it is resolved again, so a link planted at ``regrades`` cannot redirect
+    the allowance into records."""
+    hex_digest = grading_inputs_digest.removeprefix("sha256:")
+    if not re.fullmatch(r"[0-9a-f]{64}", hex_digest):
+        raise KarnError("regrade_grading_inputs_digest_invalid")
+    return results_repo / "regrades" / hex_digest
+
+
 def regrade(
     *,
     bench_root: Path,
@@ -653,12 +667,21 @@ def regrade(
     """
     state_root = Path(state_root or Path.home() / ".local/state/silverquillm")
     out = Path(out).resolve()
-    for name, kept in (("results_repo", results_repo), ("results_dir", results_dir)):
-        kept = Path(kept).resolve()
-        if out.is_relative_to(kept) or kept.is_relative_to(out):
-            raise KarnError(f"regrade_output_overlaps_{name}")
+    repo = Path(results_repo).resolve()
+    if repo.is_relative_to(out):
+        raise KarnError("regrade_output_overlaps_results_repo")
+    kept = Path(results_dir).resolve()
+    if out.is_relative_to(kept) or kept.is_relative_to(out):
+        raise KarnError("regrade_output_overlaps_results_dir")
     provenance.require_package_from(bench_root)
     benchmark = load_benchmark(bench_root, benchmark_id)
+    # One reading checks the output directory and tags every output, so a publication in
+    # regrades/<hex>/ always carries that hex's digest.
+    inputs = grading_inputs(benchmark)
+    if out.is_relative_to(repo) and not out.is_relative_to(
+        published_regrades(repo, inputs["digest"])
+    ):
+        raise KarnError("regrade_output_overlaps_results_repo")
     records, unreadable = select_records(
         Path(results_repo).resolve(), benchmark_id, runs, candidates
     )
@@ -679,7 +702,6 @@ def regrade(
                     tempfile.TemporaryDirectory(prefix="sq-regrade-baseline-")
                 )
                 staged = stage_baseline(benchmark, Path(scratch))
-            inputs = grading_inputs(benchmark)
             digests = {
                 "grading_inputs_digest": inputs["digest"],
                 "grading_code_digest": grading_code_digest(),

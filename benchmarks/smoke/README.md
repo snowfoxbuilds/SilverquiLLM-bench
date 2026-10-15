@@ -71,7 +71,7 @@ Smoke follows the Known-Best Workspace. After the Known-Best Workspace changes,
 re-port it with:
 
 ```bash
-python3 scripts/port_from_known_best.py smoke
+silverquillm build port-from-known-best smoke
 ```
 
 This rewrites the copied engine, FDN cards, Test Interface, test helpers and Audited Tests,

@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from silverquillm.karn import subscription_usage as subscription_usage_module
+from silverquillm.karn.batching import queue_rows
 from silverquillm.karn.definition import KarnError, canonical, decode_definition, digest
 from silverquillm.karn.exclusions import Exclusion, write_exclusion
 from silverquillm.karn.execution import run_lock
@@ -28,7 +29,7 @@ from silverquillm.monitor.candidates import candidate_display
 from silverquillm.monitor.containers import RunContainer, run_containers
 from silverquillm.monitor.costs import ProvisionalCost
 from silverquillm.monitor.estimates import estimated_percent, weekly_usage
-from silverquillm.monitor.history import HistoryStore, UsageReading, summarize
+from silverquillm.monitor.history import HistoryStore, UsageReading, run_cost, summarize
 from silverquillm.monitor.live import live_runs
 from silverquillm.monitor.locks import held_locks, lock_held
 from silverquillm.monitor.output import (
@@ -579,8 +580,11 @@ def test_queued_runs_are_the_specs_a_batch_has_not_started(tmp_path):
     ]
     assert started.runs[0].candidate.label == "bare-claude-opus · claude-opus-5-5 · max"
     assert found["b-unacknowledged"].needs_ack
-    assert found["c-legacy"].status == "legacy"
+    assert found["c-legacy"].status == "unsupported_legacy_batch"
     assert not (batches / "state/b-unacknowledged.json").exists()
+    # The monitor and `queue ls` name every status alike.
+    listed = {row["batch"]: row["status"] for row in queue_rows(batches)}
+    assert {name: batch.status for name, batch in found.items()} == listed
 
 
 def test_multiple_running_batch_rows_leave_only_unstarted_entries_queued(tmp_path):
@@ -761,10 +765,86 @@ def test_history_summarizes_records_and_marks_exclusions(tmp_path):
     assert run.duration_seconds == 1200
     assert run.target.pass_rate == 0.5 and run.target.passed == 5
     assert run.scores["fdn_regression"].evaluated is False
-    assert (run.estimated_cost, run.agent_turns, run.total_tokens) == (Decimal("1.50"), 42, 1000)
+    assert (run.cost, run.agent_turns, run.total_tokens) == (Decimal("1.50"), 42, 1000)
     assert run.request_costs == (
         (int(datetime(2026, 10, 6, 10, 1, tzinfo=UTC).timestamp() * 1000), Decimal("1.50")),
     )
+
+
+def cost_measurements(reported=None, *, estimated="2.00", estimated_completeness="complete"):
+    """Measurements with a priced request ``m1`` and, given ``reported``, Claude Code's figure."""
+    measurements = {
+        "estimated_cost": {
+            "completeness": estimated_completeness,
+            "reasons": [] if estimated_completeness == "complete" else ["something"],
+            "value": estimated,
+        },
+        "requests": [{"response_id": "m1", "timestamp_ms": 1_790_000_000_000}],
+        "request_prices": [{"response_id": "m1", "usd": estimated}],
+    }
+    if reported is not None:
+        value, completeness = reported
+        measurements["reported_cost"] = {
+            "completeness": completeness,
+            "reasons": [] if completeness == "complete" else ["something"],
+            "value": value,
+        }
+        measurements["request_reported_costs"] = [{"response_id": "m1", "usd": value}]
+    return measurements
+
+
+def summary_of(measurements):
+    manifest = {"run_id": "run-a", "run_metadata": {"measurements": measurements}}
+    return summarize(manifest, {}, Path("results/hash/run-a"))
+
+
+def test_a_runs_cost_is_the_clis_reported_figure_when_it_has_one():
+    run = summary_of(cost_measurements(("2.10", "complete")))
+    assert (run.cost, run.cost_source, run.cost_complete) == (Decimal("2.10"), "reported", True)
+    assert run.request_costs == ((1_790_000_000_000, Decimal("2.10")),)
+
+
+def test_a_less_complete_reported_figure_gives_way_to_the_estimate():
+    run = summary_of(cost_measurements(("2.10", "partial")))
+    assert (run.cost, run.cost_source) == (Decimal("2.00"), "estimated")
+    assert run.request_costs == ((1_790_000_000_000, Decimal("2.00")),)
+    unpriced = summary_of(
+        cost_measurements(("2.10", "partial"), estimated=None, estimated_completeness="missing")
+    )
+    assert (unpriced.cost, unpriced.cost_source, unpriced.cost_completeness) == (
+        Decimal("2.10"),
+        "reported",
+        "partial",
+    )
+
+
+def test_a_run_without_a_reported_figure_keeps_the_estimate():
+    for measurements in (cost_measurements(), cost_measurements((None, "missing"))):
+        run = summary_of(measurements)
+        assert (run.cost, run.cost_source) == (Decimal("2.00"), "estimated")
+
+
+def test_a_record_written_before_reported_cost_uses_its_coverage_total():
+    measurements = cost_measurements(estimated=None, estimated_completeness="missing")
+    measurements["estimated_cost"]["reasons"] = ["model_price_unavailable"]
+    measurements["request_prices"] = [
+        {"response_id": "m1", "usd": None, "reasons": ["model_price_unavailable"]}
+    ]
+    measurements["coverage"] = {"native_reported_cost_usd": "5.37"}
+    cost, source = run_cost(measurements)
+    assert (cost, source) == ({"value": "5.37", "completeness": "complete"}, "reported")
+    measurements["estimated_cost"]["reasons"].append("native_version_not_qualified")
+    assert run_cost(measurements)[0]["completeness"] == "partial"
+    # Neither figure was recorded per request, so none count toward weekly usage.
+    assert summary_of(measurements).request_costs == ()
+
+
+def test_a_record_written_before_reported_cost_keeps_its_estimated_weekly_spend():
+    measurements = cost_measurements(estimated="25.00")
+    measurements["coverage"] = {"native_reported_cost_usd": "25.00"}
+    run = summary_of(measurements)
+    assert (run.cost, run.cost_source) == (Decimal("25.00"), "reported")
+    assert run.request_costs == ((1_790_000_000_000, Decimal("25.00")),)
 
 
 def test_history_rereads_only_changed_records(tmp_path, monkeypatch):
@@ -787,7 +867,7 @@ def test_history_rereads_only_changed_records(tmp_path, monkeypatch):
     os.utime(manifest, ns=(1, 1))
     runs = {run.run_id: run for run in store.runs()}
     assert {path.parent.name for path in reads} == {"run-a"}
-    assert runs["run-a"].estimated_cost == Decimal("2.50")
+    assert runs["run-a"].cost == Decimal("2.50")
 
 
 def test_hostile_record_values_are_dropped_not_fatal(tmp_path):
@@ -824,6 +904,22 @@ def test_hostile_record_values_are_dropped_not_fatal(tmp_path):
     for run in runs:
         assert (run.request_costs, run.usage_reading, run.stopped_at) == ((), None, None)
         assert run.target.pass_rate is None
+
+
+@pytest.mark.parametrize("cost", ["estimated_cost", "reported_cost"])
+@pytest.mark.parametrize("completeness", [[], {}])
+def test_an_unhashable_cost_completeness_ranks_as_unknown(tmp_path, cost, completeness):
+    repo = tmp_path / "repo"
+    directory = write_record(repo, "hostile")
+    manifest = json.loads((directory / "manifest.json").read_text())
+    measurements = manifest["run_metadata"]["measurements"]
+    measurements["reported_cost"] = {"completeness": "complete", "reasons": [], "value": "1.50"}
+    measurements[cost]["completeness"] = completeness
+    (directory / "manifest.json").write_text(json.dumps(manifest))
+    write_record(repo, "run-a")
+    runs = {run.run_id: run for run in HistoryStore(repo).runs()}
+    assert runs.keys() == {"hostile", "run-a"}
+    assert runs["hostile"].cost == Decimal("1.50")
 
 
 def test_a_malformed_record_is_skipped(tmp_path):

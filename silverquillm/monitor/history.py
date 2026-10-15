@@ -61,10 +61,12 @@ class RunSummary:
     stopped_at: datetime | None
     budget_seconds: int | None
     scores: dict[str, Score]
-    estimated_cost: Decimal | None
+    cost: Decimal | None
     cost_complete: bool
     cost_completeness: str | None
     """The measurement's own completeness: ``complete``, ``partial``, ``missing``, or None."""
+    cost_source: str
+    """``reported``, the native CLI's own figure, or ``estimated``, the price table's."""
     unpriced_requests: int
     agent_turns: int | None
     total_tokens: int | None
@@ -72,7 +74,7 @@ class RunSummary:
     host_label: str | None
     candidate: CandidateDisplay
     request_costs: tuple[tuple[int, Decimal], ...]
-    """``(timestamp_ms, usd)`` of each priced request."""
+    """``(timestamp_ms, usd)`` of each request the cost's source gives a figure."""
     usage_reading: UsageReading | None
     path: Path
     workspace_stopped: bool | None = None
@@ -120,11 +122,78 @@ def _rows(value: Any) -> list[dict]:
     return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
 
 
-def _request_costs(measurements: dict) -> tuple[tuple[tuple[int, Decimal], ...], int]:
-    """``(timestamp_ms, usd)`` of each priced request, and how many requests are unpriced."""
+_COMPLETENESS_RANK = {"complete": 2, "partial": 1}
+# Reasons that only the price table gives, which a native CLI's figure never shares.
+_PRICING_ONLY = {"per_response_usage_unavailable"}
+# Observation reasons meaning a pre-ADR-019 coverage total left out some request's figure:
+# one was malformed or absent, or a request never reached OTel at all.
+_LEGACY_COST_GAPS = {"otel_cost_malformed", "otel_missing_native_request"}
+
+
+def _legacy_reported_cost(measurements: dict) -> dict:
+    """A Reported Cost for a record written before it was a measurement.
+
+    Such a record keeps the native CLI's total in its coverage, and the estimate's reasons
+    without the ones its pricing alone added are the reasons the CLI's figure shares.
+
+    That total started at zero whenever any OTel event arrived, so a zero beside a cost gap
+    may sum no figure at all; it is treated as unavailable, never as a reported zero. The old
+    schema cannot tell that from a partial sum of genuine zero figures, so both fall back to
+    the estimate. A zero with no gap (a run with no requests, or genuine zero figures) stays.
+    """
+    total = mapping(measurements.get("coverage")).get("native_reported_cost_usd")
+    value = _decimal(total)
+    if value is None:
+        return {}
+    observed = set()
+    for name in ("estimated_cost", "usage"):
+        observed.update(_rows_of_text(mapping(measurements.get(name)).get("reasons")))
+    if value == 0 and observed & _LEGACY_COST_GAPS:
+        return {}
+    estimated = mapping(measurements.get("estimated_cost"))
+    pricing = set(_PRICING_ONLY)
+    for row in _rows(measurements.get("request_prices")):
+        pricing.update(_rows_of_text(row.get("reasons")))
+    reasons = set(_rows_of_text(estimated.get("reasons"))) - pricing
+    return {"value": total, "completeness": "partial" if reasons else "complete"}
+
+
+def _rows_of_text(value: Any) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def run_cost(measurements: dict) -> tuple[dict, str]:
+    """A run's cost measurement and its source (ADR-019).
+
+    The native CLI's Reported Cost is preferred whenever it is at least as complete as the
+    price table's Estimated Cost; Codex reports none, so a Codex run's cost is the estimate.
+    """
+    estimated = mapping(measurements.get("estimated_cost"))
+    if "reported_cost" in measurements:
+        reported = mapping(measurements.get("reported_cost"))
+    else:
+        reported = _legacy_reported_cost(measurements)
+    if _decimal(reported.get("value")) is not None and _rank(reported) >= _rank(estimated):
+        return reported, "reported"
+    return estimated, "estimated"
+
+
+def _rank(measurement: dict) -> int:
+    completeness = measurement.get("completeness")
+    return _COMPLETENESS_RANK.get(completeness, 0) if isinstance(completeness, str) else 0
+
+
+def _request_costs(measurements: dict, source: str) -> tuple[tuple[tuple[int, Decimal], ...], int]:
+    """``(timestamp_ms, usd)`` of each request ``source`` gives a figure, and how many requests
+    it leaves without one.
+
+    A record written before ADR-019 has no reported per-request figures, so its weekly spend
+    still comes from the price table's request prices even when its total is reported."""
+    reported = source == "reported" and "request_reported_costs" in measurements
+    rows = "request_reported_costs" if reported else "request_prices"
     prices = {
         row["response_id"]: _decimal(row.get("usd"))
-        for row in _rows(measurements.get("request_prices"))
+        for row in _rows(measurements.get(rows))
         if isinstance(row.get("response_id"), str)
     }
     costs, unpriced = [], 0
@@ -176,10 +245,10 @@ def summarize(manifest: Any, scores: Any, path: Path) -> RunSummary | None:
     candidate_hash = manifest.get("candidate_hash") or path.parent.name
     stopped_at = instant(execution.get("stopped_at"))
     usage = _value(measurements.get("usage"))
-    cost = mapping(measurements.get("estimated_cost"))
+    cost, cost_source = run_cost(measurements)
     login = metadata.get("login_profile")
     host_label = provenance.get("host_label")
-    request_costs, unpriced = _request_costs(measurements)
+    request_costs, unpriced = _request_costs(measurements, cost_source)
     stopped = execution.get("workspace_stopped")
     return RunSummary(
         run_id=manifest["run_id"],
@@ -192,9 +261,10 @@ def summarize(manifest: Any, scores: Any, path: Path) -> RunSummary | None:
         stopped_at=stopped_at,
         budget_seconds=count(manifest.get("budget_seconds")),
         scores={name: _score(mapping(scores).get(name)) for name in DIMENSIONS},
-        estimated_cost=_decimal(cost.get("value")),
+        cost=_decimal(cost.get("value")),
         cost_complete=cost.get("completeness") == "complete",
         cost_completeness=_text(cost.get("completeness")),
+        cost_source=cost_source,
         unpriced_requests=unpriced,
         agent_turns=count(_value(mapping(measurements.get("agent_turns")).get("total"))),
         total_tokens=count(mapping(usage).get("total_tokens")),

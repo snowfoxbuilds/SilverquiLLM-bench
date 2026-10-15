@@ -1,4 +1,4 @@
-"""A live run's provisional Estimated Cost from its telemetry events (RUN-MONITORING.md, Dashboard).
+"""A live run's provisional Run Cost from its telemetry events (RUN-MONITORING.md, Dashboard).
 
 Codex request events are priced with the bench's price table, as the end of a run prices
 them when native journals are missing. Claude's events lack the cache-write duration
@@ -183,6 +183,12 @@ class ProvisionalCost:
             )
             for request, price in zip(self._codex, self._priced, strict=False)
         ]
+
+    @property
+    def source(self) -> str:
+        """``reported`` while Claude Code's own per-request figures are summed, otherwise
+        ``estimated`` from the price table (ADR-019)."""
+        return "reported" if self._claude else "estimated"
 
     @property
     def total(self) -> Decimal | None:

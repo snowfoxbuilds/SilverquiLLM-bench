@@ -9,6 +9,7 @@ Entry point registered in pyproject.toml: ``benchmark = "silverquillm.cli:main"`
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import secrets
@@ -1571,27 +1572,61 @@ def rescore(run_id: str, cards: str | None) -> None:
 @main.command("results-init")
 @click.argument("path", type=click.Path(file_okay=False, path_type=Path))
 def results_init(path: Path) -> None:
-    """Lay out an empty private results repo at PATH.
+    """Lay out an empty Results Repo at PATH and a minimal host configuration.
 
-    Writes the schema AGENTS.md (the results repo must be self-contained for
-    analysis agents) and an empty results/ tree. PATH is typically a fresh
-    clone of the private results repo; the command refuses if AGENTS.md
-    already exists there. Records are then written by the bench (see
-    silverquillm.results_repo).
+    PATH is typically a fresh clone of the private Results Repo; the command
+    refuses anything but an empty directory or a bare clone. It writes the
+    skeleton (results/, exclusions/, cohorts/, campaigns/, regrades/) and, if
+    this host has no configuration file yet, one naming PATH as results_repo and
+    this checkout as bench_root. It never writes AGENTS.md: that is the Results
+    Repo's runbook, and the record schema stays in this package
+    (silverquillm/results_repo_templates/AGENTS.md).
     """
-    from silverquillm.results_repo import ResultsRepoError, init_results_repo
+    from silverquillm.host_config import config_path, write_minimal_config
+    from silverquillm.results_repo import (
+        ResultsRepoError,
+        check_results_repo_target,
+        init_results_repo,
+    )
 
+    # One transaction: check the target, publish the configuration, lay out the
+    # skeleton; a failure at any step leaves neither behind, so a retry starts clean.
     try:
-        written = init_results_repo(path)
+        check_results_repo_target(path)
     except ResultsRepoError as exc:
         raise click.ClickException(str(exc)) from exc
+    config_file = config_path()
+    try:
+        config_written = write_minimal_config(config_file, path, _REPO_ROOT)
+    except OSError as exc:
+        raise click.ClickException(f"cannot write {config_file}: {exc}") from exc
+    try:
+        written = init_results_repo(path)
+    except BaseException as exc:
+        if config_written:
+            with contextlib.suppress(OSError):
+                config_file.unlink()
+        if isinstance(exc, ResultsRepoError | OSError):
+            raise click.ClickException(f"cannot lay out {path}: {exc}") from exc
+        raise
     for file_path in written:
         click.echo(f"wrote {file_path}")
+    if config_written:
+        click.echo(f"wrote {config_file} (results_repo, bench_root, batches_dir, runs_dir)")
+    else:
+        click.echo(
+            f"kept existing {config_file}; set results_repo = {path.resolve()} there if needed"
+        )
 
 
 from silverquillm.karn.commands import COMMANDS as _KARN_COMMANDS
 
 for _command in _KARN_COMMANDS:
+    main.add_command(_command)
+
+from silverquillm.tools.cli import COMMANDS as _TOOL_COMMANDS
+
+for _command in _TOOL_COMMANDS:
     main.add_command(_command)
 
 if __name__ == "__main__":

@@ -77,9 +77,6 @@ git add -f docker/local-pi-blind/results/sos-2026-05-12T01-59/
 
 rm -rf docker/*/validated_results/*/workspace_final/.git
 
-# Aggregate results
-python3 scripts/validated_results_to_csv.py   --output aggregated_results.csv
-
 # Rerun results
 silverquillm legacy rescore docker/copilot-sonnet-single/results/sos-copilot-sonnet-single-2026-05-26T19-33
 
@@ -88,18 +85,21 @@ ls -d docker/*/validated_results/*/ \
     'silverquillm legacy rescore "{}" >"{}/rescore.log" 2>&1 || echo "FAILED: {}"'
 
 
-# Test Validation
+# Test Validation (deprecated legacy tool in the Results Repo's scripts/legacy/; kept only to
+# reproduce the legacy SOS analyses, run from this checkout)
 # Full harvest → benchmarks/sos/analysis/harvested_results.jsonl
-python scripts/harvest_validated_results.py --bench sos
+python "$SILVERQUILLM_RESULTS_REPO"/scripts/legacy/harvest_validated_results.py --bench sos
 # Cross-impl breadth summary → benchmarks/sos/analysis/harvested_summary.json
-python scripts/harvest_validated_results.py --bench sos --summary
+python "$SILVERQUILLM_RESULTS_REPO"/scripts/legacy/harvest_validated_results.py --bench sos --summary
 
 
 # Private results repo (#39 §3 / #63) — a local clone of the private results repo
 export SILVERQUILLM_RESULTS_REPO=~/src/silverquillm-results   # or pass --results-repo everywhere
-# Lay out an empty clone: schema AGENTS.md + results/
-# (refuses any non-empty target except a bare .git; a failed init rolls itself back)
+# Lay out an empty clone (results/, exclusions/, cohorts/, campaigns/, regrades/) and,
+# if this host has none, a minimal ~/.config/silverquillm/config.toml
+# (refuses any non-empty target except a bare .git; a failed init — skeleton or config —
+# leaves neither behind, so rerunning it after fixing the cause succeeds)
 silverquillm results-init "$SILVERQUILLM_RESULTS_REPO"
 # Harvest from the results repo instead of the docker/ walk (identical rows)
-python scripts/harvest_validated_results.py --bench sos --results-repo "$SILVERQUILLM_RESULTS_REPO"
+python "$SILVERQUILLM_RESULTS_REPO"/scripts/legacy/harvest_validated_results.py --bench sos --results-repo "$SILVERQUILLM_RESULTS_REPO"
 # Then commit in the results repo clone — the writer never runs git

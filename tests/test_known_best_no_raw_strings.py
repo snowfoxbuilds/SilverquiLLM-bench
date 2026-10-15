@@ -1,7 +1,7 @@
 """Known-Best tests place, choose, route and assert by predefined classes, never by
 a name string (DECISION-MODEL.md › Printed identity › No raw strings; ADR-017).
 
-``scripts/printed_identity_codemod.py --check`` is the enforcement: it fails while
+``silverquillm audit printed-identity --check`` is the enforcement: it fails while
 any Known-Best test still passes a card name to a test_utils helper, matches a
 ``name`` attr in a Decision or GameRef pattern, chooses a mode by name, or
 compares an object's name with a predefined card's name. The behavioural checks
@@ -18,7 +18,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 WORKSPACE = REPO / "known_best/workspace"
-CODEMOD = REPO / "scripts/printed_identity_codemod.py"
+CODEMOD = REPO / "silverquillm/tools/printed_identity_codemod.py"
 CHECKS = Path(__file__).resolve().parent / "known_best_checks/printed_identity_routing_checks.py"
 KNOWN_BEST_TESTS = (
     REPO / "known_best/data/tests/audited",

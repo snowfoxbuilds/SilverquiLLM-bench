@@ -2,7 +2,7 @@
 
 Usage::
 
-    python3 scripts/fetch_hob_set.py [--force]
+    silverquillm data fetch-hob-set [--force]
 
 Fetches every HOB print from the Scryfall search API (paginated), keeps the
 raw Scryfall card JSON **unmodified**, sorts deterministically by collector
@@ -35,10 +35,12 @@ from pathlib import Path
 from typing import Any
 from urllib.request import Request, urlopen
 
+from silverquillm.tools import REPO_ROOT
+
 logger = logging.getLogger(__name__)
 
 #: Bench repo root; the shared raw-data cache lives under it.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 
 #: Scryfall set code for The Hobbit.
 SET_CODE = "hob"
@@ -189,7 +191,7 @@ def fetch_hob_set(*, force: bool = False) -> list[dict[str, Any]]:
     return cards
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -197,7 +199,7 @@ def main() -> int:
         action="store_true",
         help="Re-fetch from Scryfall even if data/sets/hob.json already exists.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:

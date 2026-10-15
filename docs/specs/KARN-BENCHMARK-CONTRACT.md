@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-10-08
+Last updated: 2026-10-13
 
 # Karn Benchmark Contract
 
@@ -18,7 +18,7 @@ This page defines the bench's consumer contract; Karn's [Construct Contract](htt
 The goal of this integration is to collect data, learn from it, and improve candidates and benchmark tooling (grilling 2026-09-26).
 It does not build a leaderboard eligibility system.
 Completed, unsuccessful, interrupted, and partially observed runs remain useful evidence.
-Record what ran, the available implementation and grades, Estimated Cost, Agent Turns, execution outcome, and observation completeness without reducing those facts to a single eligibility verdict.
+Record what ran, the available implementation and grades, Reported and Estimated Cost, Agent Turns, execution outcome, and observation completeness without reducing those facts to a single eligibility verdict.
 Missing measurements are explained; they do not become zero and do not cause the available data to be discarded.
 
 The analyst chooses comparisons and filters appropriate to the question being investigated.
@@ -42,7 +42,7 @@ A run's sources must all be committed (#116).
 Its image must carry Karn's `karn.config.revision` label naming a recipe commit, which a build from the committed tree records and a `--worktree` build does not; the bench checkout that runs and grades, and the one holding the benchmark data, must have no change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`.
 Ignored files and untracked files elsewhere, such as scratch notes, worktrees and run artifacts, do not count.
 `run` and `scheduler` refuse a run that breaks this before any evidence exists, unless the operator passes `--allow-dirty`.
-Every new record carries its provenance: the host label (`SILVERQUILLM_HOST_LABEL`, else the hostname), the commit and dirty state of both checkouts, the recipe revision, and any overridden reasons; the grader image is already recorded under `grading_isolation`.
+Every new record carries its provenance: the host label (`SILVERQUILLM_HOST_LABEL`, else the host configuration's `host_label`, else the hostname; grilling 2026-10-14), the commit and dirty state of both checkouts, the recipe revision, and any overridden reasons; the grader image is already recorded under `grading_isolation`.
 
 ### Independent execution
 
@@ -136,7 +136,7 @@ A definition timeout shorter than the requested Benchmark Run budget is refused 
 The host enforces the requested run deadline when the definition permits a longer run.
 
 Wall-clock observations support deadline enforcement and diagnosis, but are secondary comparison metrics (grilling 2026-09-26).
-Estimated Cost and Agent Turns are primary efficiency measurements and are recorded rather than used as stopping limits in the first integration (grilling 2026-09-26).
+Run Cost and Agent Turns are primary efficiency measurements and are recorded rather than used as stopping limits in the first integration (grilling 2026-09-26).
 
 ### Efficiency measurements
 
@@ -154,6 +154,12 @@ Usage is normalized into these types from each provider's own convention: OpenAI
 The estimate is a comparison of resource usage and does not claim to allocate the actual subscription charge to the run.
 Every request is priced at standard-tier rates, whatever speed or service tier served it (grilling 2026-09-28): a flex, fast-mode or priority request counts as its standard-rate equivalent, so estimates compare token usage rather than billing tier. Each request records the tier observed for it, the tier Claude Code's transcript reports or the tier Codex requested in its telemetry, and a request for an unpriced model stays unpriced.
 Missing or incomplete observations remain explicitly missing or incomplete, rather than becoming zero.
+
+A run's Run Cost prefers the native CLI's own figure, its Reported Cost, over the bench's Estimated Cost whenever the Reported Cost is at least as complete; the Estimated Cost stays recorded beside it (ADR-019).
+Claude Code reports an API-equivalent USD figure for every request it makes, compactions and subagents included, so a Claude run records that figure per request and in total; Codex reports none, so a Codex run's Reported Cost is missing and its Run Cost is the Estimated Cost.
+The Reported Cost shares the run's observation reasons but none of the price table's, so a model the table cannot price still has one.
+It is the sum of the CLI's valid figures, each request's charged to one response only; a run with requests but no valid figure has no Reported Cost, never a zero one.
+A Reported Cost that differs from a complete Estimated Cost stays complete and remains the Run Cost; the measurements record `reported_cost_disagrees_with_estimate` under `cost_warnings`, a signal to review the price table or the run, because the two agree on every request the table prices fully.
 
 The integration qualifies response, tool-call, and usage capture against the pinned native CLI.
 The current stock result file's usage:null and whole-request turn.completed events do not establish the required measurements.
@@ -193,6 +199,7 @@ Retain the final Workspace and existing Output Snapshot/fallback provenance so a
 
 An unknown failure cause remains unknown instead of receiving a guessed attribution.
 If grading could not run, record why; an absent evaluation is different from an evaluated implementation scoring zero.
+A Karn grade also lists, per suite, the expected test functions that did not run and why, and a bounded failure message for each failing node; each function that did not run counts as a failed test in its dimension's score, cards and the engine count their reported nodes the same way, a suite whose pytest session did not run to its end (including an interruption or an internal error) is incomplete whatever its exit status (and so is one that reported errors in pytest's short test summary other than test failures, never a test's captured log), and the messages change no score ([SCORING.md](SCORING.md) → Tests that did not run; grilling 2026-10-15). The legacy SOS/FDN compatibility runner records none of these fields for its card results; its engine result carries them.
 Incomplete cost or turn measurements are labeled as such alongside the available values.
 No eligible/ineligible decision is required to retain or analyze these observations.
 A missing result file after a forced stop does not prevent partial grading.
@@ -212,18 +219,21 @@ The workstream also covers the CLI and batch paths that retain those observation
 
 `silverquillm run` and `silverquillm scheduler` share the same staging, execution, observation, harvesting, and grading lifecycle, and `silverquillm recover` settles an interrupted run from its retained evidence without rerunning work.
 The scheduler dispatches concurrently into every free eligible Login Profile, with no fixed worker limit. Busy, unusable, or cooling-down profiles cannot increase available capacity; pending profiles retain the settlement requirements above.
-Batches take priority in filename order among those whose next unstarted entry can start. Entries within a Batch start in file order: a blocked unstarted entry defers later entries in that Batch, but not another Batch with available capacity. Multiple entries of one Batch may run concurrently and finish out of order.
+Batches take priority in queue order among those whose next unstarted entry can start: a later Batch's entries follow an earlier one's. Queue order is the order in which the scheduler first recorded each Batch in its batch directory's queue ledger (`queue.json`), whatever the file names; Batches recorded together, and those present when a ledger is first created, are ordered by name (grilling 2026-10-13). Entries within a Batch start in file order: a blocked unstarted entry defers later entries in that Batch, but not another Batch with available capacity. Multiple entries of one Batch may run concurrently and finish out of order.
+A running scheduler picks up a Batch file added to its directory without a restart. A valid Batch the ledger has never recorded is new: the scheduler writes its empty state and records it, in that order. A Batch the ledger already records but whose state file is missing has lost its state, and is refused until the operator restores the state or acknowledges a restart from entry zero with `--replay-without-state`. An acknowledgement is consumed by the one start it allows, and by any usable state the scheduler adopts for that Batch, whether written automatically for a new Batch or restored: a Batch whose state is lost again needs a new one. Without a ledger, nothing tells a new Batch from a lost one, so the first ledger records every stateless Batch present as needing that acknowledgement; a damaged ledger, or a ledger or Batch state the scheduler cannot write (including the acknowledgement of a replayed start, which is retried before anything else is admitted), stops all new dispatch until it is repaired, removed or made writable, while runs already in flight finish. The scheduler reports every such stop on every pass; the queue views show `ledger_damaged` only for damage visible in `queue.json` itself, since they never write and cannot see a failed write (grilling 2026-10-13). The scheduler warns, in serve mode too, about every Batch it skips and why, including a new file in an unsupported format, which stays unrecorded until it is a valid Batch. A renamed Batch file is a new Batch, and every `*.toml` file in the directory is a submission (grilling 2026-10-13).
 An entry is recorded as started only once its worker holds a Login Profile. When execution and authentication harvest release a profile, another entry may claim it while the earlier worker grades or publishes its record.
 Candidates without a login plugin have no pool to bound concurrency, so the scheduler runs at most one such candidate at a time.
 With `--once`, the scheduler fills currently eligible slots and drains its own workers, continuing to dispatch as slots become available. It returns when no workers of its own remain and no queued entry is currently eligible; it does not wait for externally busy slots, cooldown expiry, or future `not_before` times. Continuous serving retries deferred entries on later passes.
 On restart, recovery checks every running state row; a row still owned by a live worker is deferred without interrupting that worker. Other eligible work may proceed.
 Ctrl-C, SIGTERM, and SIGHUP stop new dispatch, interrupt the scheduler's own workers, and drain their cleanup and state updates before releasing the exclusive queue lock.
+A worker reporting an interrupt, or a run ending `interrupted`, is treated the same way and stops the whole scheduler: a service stop or terminal hangup reaches the workers and the scheduler in no fixed order, and no new run may start in between (grilling 2026-10-13).
+Dispatch has three modes, set by the operator from any process and kept in the batch directory across restarts: running; paused, where no new run launches, runs in flight finish normally and the scheduler keeps serving recovery and pending publications; and draining, which is paused until no run of the scheduler's own is in flight, when the scheduler exits successfully and leaves dispatch paused. A run already past login selection when dispatch closes is refused at launch and its entry stays pending. A control setting that cannot be read counts as paused, never as running, and no fault in it ever interrupts a run in flight; every change of mode, the operator's and a finished drain's, is serialized and replaces the setting whole, so a drain's change to paused never overwrites an operator's later change and a failed change keeps the previous stopped mode. Pause and drain never interrupt a run; interruption is only by signal (grilling 2026-10-13).
 The `login` command enrolls one Login Profile into the pool of the selected existing plugin, or re-enrolls a named one; `login cooldown` sets or lifts a Login Cooldown on named profiles, or every profile, of one provider's pool.
 SilverquiLLM runs a completed Karn build by itself; the vendored v4 and v5 construct definition schemas are the only thing it takes from Karn, and no Ozolith package is involved.
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
 [Run Monitoring](RUN-MONITORING.md) defines `top`, the read-only monitor over live runs, the queue, Login Pools, and history.
 
-Every Karn command resolves four host locations the same way: its flag, else its environment variable, else the host configuration file `~/.config/silverquillm/config.toml` (grilling 2026-10-07).
+Every Karn command resolves five host locations the same way: its flag, else its environment variable, else the host configuration file `~/.config/silverquillm/config.toml` (grilling 2026-10-07).
 
 | Location | Flag | Configuration key |
 | --- | --- | --- |
@@ -231,8 +241,13 @@ Every Karn command resolves four host locations the same way: its flag, else its
 | Batch queue directory | `--batches-dir` | `batches_dir` |
 | Run directory | `--results-dir` | `runs_dir` |
 | State root (Login Pools) | `--state-root` | `state_root` |
+| Bench repo checkout | `--bench-root` | `bench_root` |
 
-A location none of the three sources sets is an error naming all three, rather than a path relative to the working directory; the state root alone keeps its `~/.local/state/silverquillm` default.
+A location none of the three sources sets is an error naming all three, rather than a path relative to the working directory; the state root keeps its `~/.local/state/silverquillm` default, and the bench root falls back to the working directory.
+Operational agents work from the Results Repo, whose `AGENTS.md` is the operator runbook, so each host names its one bench checkout in `bench_root`; `SILVERQUILLM_BENCH_ROOT` is not a source, because it already names the benchmark data root inside grading (grilling 2026-10-14).
+The file also carries the host's `host_label`.
+`silverquillm results-init PATH` lays out an empty Results Repo (`results/`, `exclusions/`, `cohorts/`, `campaigns/`, `regrades/`) and, when the host has no configuration file, writes a minimal one naming PATH and this checkout; it never writes `AGENTS.md`, and the record schema stays in the package at `silverquillm/results_repo_templates/AGENTS.md` (grilling 2026-10-14).
+`silverquillm grading-inputs BENCHMARK` prints the benchmark's current grading-inputs digest, which Results Repo scripts compare with a cohort's.
 
 New immutable Run Records use schema 2 and an identity scheme that names the definition version: `karn-v4` for a v4 definition, `karn-v5` for a v5 one.
 An identity whose scheme does not match its `definition_version` is invalid, and records of either scheme stay valid side by side.
@@ -249,6 +264,7 @@ Each record fingerprints the host-owned grading inputs it was graded against (`g
 `silverquillm regrade` re-grades retained runs on the checkout's current inputs, from the workspace each run was graded from and on its recorded grader image, with the same container isolation; a record's own paths never choose what is mounted.
 The workspace comes from the local run artifacts, else from the run's workspace archive in the results repository, so any host can re-grade any archived run; grader images are built per host, so `--substitute-grader` grades on this host's grader for the recorded Python and names both images.
 A re-grade never replaces or edits a record: its scores go to a separate output directory, tagged with the new digest, and a run whose workspace or grader image is unavailable is skipped with a reason.
+The output directory may not overlap the records or the run artifacts, except that it may be the Results Repo's `regrades/<digest hex>/` for the grading inputs being graded on, where re-grades are published (grilling 2026-10-14).
 The output directory is written only through descriptors that never follow a link, so no link inside it can redirect a write into the records or run artifacts.
 A re-grade summary compares before and after within a cohort of one candidate and one original grading-inputs digest, never across digests, leaves out excluded runs and lists them separately, and reuses an earlier output only when it is a complete, invariant-satisfying success on the same inputs, grading code and grader image; any unusable earlier output is a miss that re-grades only that run.
 
@@ -258,8 +274,10 @@ Hosts share one results repository, and everything an analysis needs lives there
 Each record's graded workspace is archived as a binary diff from its benchmark input's staged baseline, which is stored once (see ADR-015).
 The run writer archives a workspace and verifies it rebuilds to the graded copy's recorded digest before writing; `silverquillm results archive` backfills records from before archives existed, on the host that holds their run artifacts.
 
-An analysis leaves a run out only through an Exclusion: a write-once file under `exclusions/<candidate-hash>/<run-id>.json` naming a reason code and a note, never an edit to the record.
-The run writer excludes a run when a rule fires on an observed fact (a host failure, zero agent turns, subagent threads, or a populated measurement object from before subagent threads were counted); absent, empty or unknown measurements never exclude.
+An Exclusion, a write-once file under `exclusions/<candidate-hash>/<run-id>.json` naming a reason code and a note, leaves a run out of every analysis; nothing edits the record.
+An analysis may also select runs by their recorded attributes under criteria it states and publishes with its own results, such as a subagent policy; that selection is the analysis's alone and is never an Exclusion, so analyses may decide differently about the same run while an excluded run stays out of all of them (grilling 2026-10-15, #230; the operator procedure is the Results Repo runbook).
+The run writer excludes a run when a rule fires on an observed fact (a host failure or zero agent turns); absent, empty or unknown measurements never exclude.
+Subagent use is a run attribute, not a rule: measurements record `subagent_threads` and, per subagent thread, the models observed on its requests and the reasoning-effort levels its own telemetry requested (`subagents`, with `requested_efforts` null when none was observed, as for every Claude subagent), so each analysis judges its own subagent policy. The rows are bounded (1,000 rows, 32 models each, with `subagents_truncated` counting the rest), and telemetry that cannot be read into rows leaves them out with `subagents_reason` rather than failing the run's collection; Codex names no parent thread, so its main thread is a best guess from timestamps the workload controls, which can mislabel only which thread is the subagent; an operator may still record `subagents_used` or `subagents_uncounted` by hand (grilling 2026-10-15, #230).
 An operator excludes anything a rule cannot see with `silverquillm results exclude`, a superseded run naming the record that replaces it, and `silverquillm results check` lists records a rule excludes without an Exclusion and Exclusions without a record.
 Tables list the excluded runs with their reasons beneath the included ones.
 
@@ -281,3 +299,4 @@ This consumer contract governs Karn v4 and v5 execution.
 | [ADR-013](../adr/ADR-013-grading-runs-in-a-network-less-grader-container.md) | Candidate code executes only in a network-less grader container |
 | [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | SilverquiLLM runs Karn constructs without Ozolith; Candidate Bundle execution is removed |
 | [ADR-015](../adr/ADR-015-results-repo-keeps-graded-workspaces-as-diffs.md) | The results repo keeps each graded workspace as a diff from one shared baseline |
+| [ADR-019](../adr/ADR-019-run-cost-prefers-the-native-clis-reported-cost.md) | A run's cost prefers the native CLI's Reported Cost over the bench's Estimated Cost |

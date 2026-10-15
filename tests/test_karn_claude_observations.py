@@ -18,6 +18,8 @@ from silverquillm.karn.claude_observations import (
 )
 from silverquillm.karn.host import NATIVE_TELEMETRY_ENVIRONMENT
 from silverquillm.karn.observations import summarize_events
+from silverquillm.monitor.details import record_detail
+from silverquillm.monitor.history import run_cost, summarize
 
 SESSION = "0b9c7f6e-1111-4222-8333-944455556666"
 
@@ -636,7 +638,7 @@ def qualification():
     import importlib.util
     from pathlib import Path
 
-    path = Path(__file__).parents[1] / "scripts/qualify_claude_telemetry.py"
+    path = Path(__file__).parents[1] / "silverquillm/tools/qualify_claude_telemetry.py"
     spec = importlib.util.spec_from_file_location("qualify_claude_telemetry", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -821,7 +823,7 @@ def test_the_cli_exits_nonzero_for_evidence_that_does_not_qualify(tmp_path, vali
     if not valid:
         first(events, "claude_code.api_request")["attributes"]["model"] = "claude-opus-5-5"
     (tmp_path / "observations.events.jsonl").write_bytes(raw_events(events))
-    script = Path(__file__).parents[1] / "scripts/qualify_claude_telemetry.py"
+    script = Path(__file__).parents[1] / "silverquillm/tools/qualify_claude_telemetry.py"
     result = subprocess.run(
         [sys.executable, str(script), str(tmp_path), "--out", str(tmp_path / "proof.json")],
         capture_output=True,
@@ -894,5 +896,223 @@ def test_subagent_threads_count_sidechain_transcripts_only():
     )
     both = summarize_claude_events(events_of(main_transcript(), child), exit_kind="completed")
     assert both["subagent_threads"] == 1
+    assert main["subagents"] == []
+    [row] = both["subagents"]
+    own = [r for r in both["requests"] if r["thread_id"] == row["thread_id"]]
+    assert row["requests"] == len(own) == 1
+    assert row["models"] == sorted({r["model"] for r in own if r["model"]})
+    # Claude's telemetry shows no subagent's requested effort.
+    assert row["requested_efforts"] is None
     # An observation, not a reason: the child adds no incompleteness of its own.
     assert set(both["usage"]["reasons"]) == set(main["usage"]["reasons"])
+
+
+def table_priced(*requests):
+    """``api_request`` events each reporting the price table's own figure for its request."""
+    native = summarize_claude_events(qualified(events_of(main_transcript())), exit_kind="completed")
+    prices = {row["response_id"]: row["usd"] for row in native["request_prices"]}
+    by_request = {"req_01": prices["msg_01"], "req_02": prices["msg_02"]}
+    return [api_request(request, cost_usd=float(by_request[request])) for request in requests]
+
+
+def test_claude_codes_reported_cost_is_recorded_beside_the_estimate():
+    result = reconciled(*table_priced("req_01", "req_02"))
+    assert result["reported_cost"]["completeness"] == "complete", result["reported_cost"]
+    assert Decimal(result["reported_cost"]["value"]) == Decimal(result["estimated_cost"]["value"])
+    assert result["reported_cost"]["value"] == result["coverage"]["native_reported_cost_usd"]
+    assert result["cost_warnings"] == []
+    reported = {row["response_id"]: row["usd"] for row in result["request_reported_costs"]}
+    priced = {row["response_id"]: row["usd"] for row in result["request_prices"]}
+    assert {k: Decimal(v) for k, v in reported.items()} == {
+        k: Decimal(v) for k, v in priced.items()
+    }
+
+
+def test_a_reported_cost_that_differs_from_a_complete_estimate_stays_complete_with_a_warning():
+    result = reconciled(api_request("req_01", cost_usd=5.0), api_request("req_02", cost_usd=5.0))
+    assert result["estimated_cost"]["completeness"] == "complete"
+    assert result["reported_cost"]["value"] == "10.0"
+    assert result["reported_cost"]["completeness"] == "complete", result["reported_cost"]
+    assert result["cost_warnings"] == ["reported_cost_disagrees_with_estimate"]
+
+
+def test_a_model_missing_from_the_price_table_still_has_its_reported_cost():
+    events = qualified(events_of(main_transcript()) + api_request("req_01") + api_request("req_02"))
+    for event in events:
+        if event["kind"] == "response":
+            event["model"] = "claude-unpriced-9"
+        if event["source"] == "otel":
+            event["attributes"]["model"] = "claude-unpriced-9"
+    result = summarize_claude_events(events, exit_kind="completed")
+    assert result["estimated_cost"]["value"] is None
+    assert "model_price_unavailable" in result["estimated_cost"]["reasons"]
+    assert result["reported_cost"] == {
+        "value": "0.0246",
+        "completeness": "complete",
+        "reasons": [],
+    }
+
+
+def test_a_compaction_and_every_session_add_their_reported_costs():
+    other = "1c2d3e4f-1111-4222-8333-944455556666"
+    second = [
+        row.replace(SESSION, other).replace("msg_0", "msg_1").replace("req_0", "req_1")
+        for row in main_transcript()
+    ]
+    transcripts = main_transcript() + [
+        line("system", second=4, subtype="compact_boundary", compactMetadata={"preTokens": 9})
+    ]
+    otel = [
+        *api_request("req_01"),
+        *api_request("req_02"),
+        *api_request("req_c", "compact", cache_creation_tokens="0"),
+        *api_request("req_11", **{"session.id": other}),
+        *api_request("req_12", **{"session.id": other}),
+    ]
+    result = summarize_claude_events(
+        qualified(events_of(transcripts, second) + otel), exit_kind="completed"
+    )
+    assert result["coverage"]["native_threads"] == 2
+    assert result["reported_cost"]["value"] == "0.0615"
+    assert len(result["request_reported_costs"]) == len(result["requests"]) == 5
+
+
+def test_without_otel_there_is_no_reported_cost():
+    result = summarize_claude_events(qualified(events_of(main_transcript())), exit_kind="completed")
+    assert result["reported_cost"]["value"] is None
+    assert result["reported_cost"]["completeness"] == "missing"
+    assert "native_cost_not_reported" in result["reported_cost"]["reasons"]
+    assert result["request_reported_costs"] == []
+
+
+def test_a_request_whose_reported_cost_is_malformed_leaves_the_total_partial():
+    result = reconciled(api_request("req_01", cost_usd="NaN"), api_request("req_02"))
+    assert result["reported_cost"]["value"] == "0.0123"
+    assert "otel_cost_malformed" in result["reported_cost"]["reasons"]
+    assert [row["response_id"] for row in result["request_reported_costs"]] == ["msg_02"]
+
+
+def test_no_valid_reported_cost_is_missing_and_the_run_cost_is_the_estimate():
+    result = reconciled(
+        api_request("req_01", cost_usd="NaN"), api_request("req_02", cost_usd="NaN")
+    )
+    assert result["reported_cost"]["value"] is None
+    assert result["reported_cost"]["completeness"] == "missing"
+    assert {"otel_cost_malformed", "native_cost_not_reported"} <= set(
+        result["reported_cost"]["reasons"]
+    )
+    cost, source = run_cost(result)
+    assert (cost["value"], source) == (result["estimated_cost"]["value"], "estimated")
+
+
+@pytest.mark.parametrize("first", [True, False])
+def test_a_reused_request_id_does_not_charge_the_clis_cost_twice(first):
+    extra = assistant("msg_00", "req_01", [{"type": "text"}])
+    body = main_transcript()
+    transcript = [body[0], *extra, *body[1:]] if first else [*body, *extra]
+    events = qualified(events_of(transcript) + api_request("req_01") + api_request("req_02"))
+    result = summarize_claude_events(events, exit_kind="completed")
+    assert result["reported_cost"]["value"] == "0.0246"
+    assert result["coverage"]["native_reported_cost_usd"] == "0.0246"
+    assert len(result["request_reported_costs"]) == 2
+
+
+# Records written before ADR-019 carry only coverage.native_reported_cost_usd, which started
+# at zero whenever any OTel event arrived, so a zero there may sum no figure at all.
+_ADDED_BY_ADR_019 = ("reported_cost", "request_reported_costs", "cost_warnings")
+
+
+def legacy(result, *, estimate=True):
+    measurements = {k: v for k, v in result.items() if k not in _ADDED_BY_ADR_019}
+    if not estimate:
+        measurements["estimated_cost"] = {
+            "value": None,
+            "completeness": "missing",
+            "reasons": [*measurements["estimated_cost"]["reasons"], "model_price_unavailable"],
+        }
+        measurements["request_prices"] = [
+            {**row, "usd": None} for row in measurements["request_prices"]
+        ]
+    return measurements
+
+
+def legacy_run_cost(measurements, tmp_path):
+    """The Run Cost and its source through run_cost(), summarize() and record_detail()."""
+    cost, source = run_cost(measurements)
+    manifest = {"run_id": "run-a", "run_metadata": {"measurements": measurements}}
+    run = summarize(manifest, {}, tmp_path / "results" / "hash" / "run-a")
+    assert (run.cost, run.cost_source) == (
+        Decimal(cost["value"]) if cost.get("value") is not None else None,
+        source,
+    )
+    record = tmp_path / "record"
+    record.mkdir(parents=True)
+    (record / "manifest.json").write_text(json.dumps(manifest))
+    detail = record_detail(record)
+    priced = {row["response_id"]: row["usd"] for row in measurements["request_prices"]}
+    assert [request.usd for request in detail.requests] == [
+        Decimal(priced[r["response_id"]]) if priced.get(r["response_id"]) else None
+        for r in sorted(measurements["requests"], key=lambda r: r["timestamp_ms"])
+    ]
+    return cost, source
+
+
+def tool_only_otel():
+    return normalize_claude_otlp(
+        otlp(name="claude_code.tool_result", tool_use_id="toolu_01", tool_name="Bash")
+    )
+
+
+LEGACY_FALSE_ZEROS = {
+    "all_invalid": lambda: reconciled(
+        api_request("req_01", cost_usd="NaN"), api_request("req_02", cost_usd="NaN")
+    ),
+    "all_absent": lambda: reconciled(
+        api_request("req_01", cost_usd=None), api_request("req_02", cost_usd=None)
+    ),
+    "tool_only": lambda: reconciled(tool_only_otel()),
+}
+
+
+@pytest.mark.parametrize("case", sorted(LEGACY_FALSE_ZEROS))
+def test_a_legacy_zero_beside_a_cost_gap_is_not_a_reported_zero(case, tmp_path):
+    result = LEGACY_FALSE_ZEROS[case]()
+    measurements = legacy(result)
+    assert measurements["coverage"]["native_reported_cost_usd"] == "0"
+    assert measurements["estimated_cost"]["value"] not in (None, "0")
+    cost, source = legacy_run_cost(measurements, tmp_path)
+    assert (cost["value"], source) == (measurements["estimated_cost"]["value"], "estimated")
+
+
+@pytest.mark.parametrize("case", sorted(LEGACY_FALSE_ZEROS))
+def test_a_legacy_zero_beside_a_cost_gap_without_an_estimate_stays_missing(case, tmp_path):
+    measurements = legacy(LEGACY_FALSE_ZEROS[case](), estimate=False)
+    cost, source = legacy_run_cost(measurements, tmp_path)
+    assert (cost["value"], cost["completeness"], source) == (None, "missing", "estimated")
+
+
+def test_a_legacy_genuine_zero_and_a_positive_total_stay_reported(tmp_path):
+    zero = legacy(
+        reconciled(api_request("req_01", cost_usd=0.0), api_request("req_02", cost_usd=0.0))
+    )
+    cost, source = legacy_run_cost(zero, tmp_path / "zero")
+    assert (Decimal(cost["value"]), source) == (0, "reported")
+    positive = legacy(reconciled(api_request("req_01"), api_request("req_02")))
+    cost, source = legacy_run_cost(positive, tmp_path / "positive")
+    assert (cost["value"], source) == ("0.0246", "reported")
+    # A partial positive sum still says what the CLI reported.
+    partial = legacy(reconciled(api_request("req_01", cost_usd="NaN"), api_request("req_02")))
+    cost, source = legacy_run_cost(partial, tmp_path / "partial")
+    assert (cost["value"], cost["completeness"]) == ("0.0123", "partial")
+
+
+def test_a_legacy_run_with_no_requests_keeps_its_reported_zero():
+    measurements = {
+        "estimated_cost": {"value": "0", "completeness": "complete", "reasons": []},
+        "usage": {"value": {}, "completeness": "complete", "reasons": []},
+        "requests": [],
+        "request_prices": [],
+        "coverage": {"native_reported_cost_usd": "0"},
+    }
+    cost, source = run_cost(measurements)
+    assert (cost["value"], cost["completeness"], source) == ("0", "complete", "reported")

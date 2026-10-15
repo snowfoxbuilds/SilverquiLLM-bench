@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.oracle_support import check_v2_api, load_layout, readiness_errors
+from silverquillm.tools.oracle_support import check_v2_api, load_layout, readiness_errors
 
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "benchmarks/fra-hard"

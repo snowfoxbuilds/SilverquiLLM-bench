@@ -29,7 +29,7 @@ burn-down phases.
 - **Total divergences: 5,222** — simulate report md5
   `5b6b691d3d3ae94905708d2109213d62` (two runs md5-identical).
 - **Triage completeness gate**: records 5,222, tagged **5,222/5,222**,
-  **complete=True, untagged=0** (`scripts/triage_divergences.py` exits non-zero
+  **complete=True, untagged=0** (`silverquillm replay triage` exits non-zero
   on any untagged/unknown tag).
 - **Floor: 564** — the genuine stream limitations the corpus cannot overcome:
 
@@ -153,7 +153,7 @@ benchmark validate /mnt/data/benchmark-replays/fdn \
 
 # 2. Triage + completeness gate (tags every divergence; non-zero on any
 #    untagged/unknown tag, i.e. proves complete=True / untagged=0).
-python3 scripts/triage_divergences.py benchmarks/hob-medium/analysis/report.json \
+silverquillm replay triage benchmarks/hob-medium/analysis/report.json \
     --corpus /mnt/data/benchmark-replays/fdn \
     --out-dir benchmarks/hob-medium/analysis
 ```

@@ -2,7 +2,7 @@
 """Build the corpus-derived token identity map for FDN replays.
 
 Scryfall carries no ``arena_id`` for FDN token objects (all TFDN tokens have
-``arena_id: null``), so ``scripts/build_card_id_map.py`` cannot source them.
+``arena_id: null``), so ``silverquillm data card-id-map`` cannot source them.
 The replay stream itself is the only viable source: every
 ``GameObjectType_Token`` object carries ``objectSourceGrpId`` (the card that
 minted it), ``cardTypes``, ``subtypes``, ``color``, ``power`` and
@@ -14,7 +14,7 @@ of treating them as anonymous id-0 shells.
 
 Usage::
 
-    python scripts/build_token_id_map.py [CORPUS_DIR]
+    silverquillm data token-id-map [CORPUS_DIR]
 
 CORPUS_DIR defaults to ``/mnt/data/benchmark-replays/fdn`` (the gitignored FDN
 replay corpus, 271 games). The output is deterministic: re-running over the
@@ -42,19 +42,20 @@ so it stops being anonymous either way.
 
 from __future__ import annotations
 
+import argparse
 import glob
 import json
-import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
+
+from silverquillm.tools import REPO_ROOT
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
 DEFAULT_CORPUS = Path("/mnt/data/benchmark-replays/fdn")
-REPO_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_PATH = REPO_ROOT / "data" / "replays" / "token_id_map.json"
 CARD_ID_MAP_PATH = REPO_ROOT / "data" / "replays" / "card_id_map.json"
 
@@ -308,8 +309,10 @@ def build_token_map(corpus: Path) -> dict:
     }
 
 
-def main() -> None:
-    corpus = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_CORPUS
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("corpus", nargs="?", type=Path, default=DEFAULT_CORPUS)
+    corpus = parser.parse_args(argv).corpus
     if not corpus.exists():
         raise SystemExit(f"corpus directory not found: {corpus}")
     mapping = build_token_map(corpus)

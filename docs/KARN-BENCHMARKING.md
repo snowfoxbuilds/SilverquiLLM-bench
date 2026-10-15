@@ -12,15 +12,20 @@ source .venv/bin/activate
 
 ## Host configuration
 
-Every command finds the results repository, the batch queue, the run directory, and the state root the same way: its flag (`--results-repo`, `--batches-dir`, `--results-dir`, `--state-root`), else its environment variable (only `SILVERQUILLM_RESULTS_REPO` has one), else the host configuration file.
-Only the state root has a default; any other location left unset is an error naming all three sources, never a path relative to the working directory.
+The operator runbook lives in the results repository's `AGENTS.md`; operational agents work from that checkout.
+
+Every command finds the results repository, the batch queue, the run directory, the state root and the bench checkout the same way: its flag (`--results-repo`, `--batches-dir`, `--results-dir`, `--state-root`, `--bench-root`), else its environment variable (only `SILVERQUILLM_RESULTS_REPO` has one), else the host configuration file.
+The state root defaults to `~/.local/state/silverquillm` and the bench root to the working directory; any other location left unset is an error naming all three sources, never a path relative to the working directory.
+`silverquillm results-init PATH` lays out an empty results repository and, if the host has no configuration file yet, writes a minimal one. It publishes the configuration whole or not at all and never replaces an existing one; if either step fails, neither the skeleton nor a configuration it wrote is left behind, so rerunning it after fixing the cause succeeds.
 Relative paths in the file resolve from the file's own directory.
 
 ```toml
 # ~/.config/silverquillm/config.toml ($XDG_CONFIG_HOME/silverquillm/config.toml when set)
 results_repo = "~/bench-results"
-batches_dir = "~/bench-batches"
-runs_dir = "~/SilverquiLLM-bench/runs/karn"
+bench_root = "~/SilverquiLLM-bench"          # this host's bench checkout
+batches_dir = "~/raw-bench-results/batches"
+runs_dir = "~/raw-bench-results/runs"
+host_label = "dota-pc"                        # else SILVERQUILLM_HOST_LABEL, else the hostname
 # state_root = "~/.local/state/silverquillm"   # the default
 ```
 
@@ -39,7 +44,7 @@ Every host builds and runs candidates the same way, so any record can be traced 
 1. Commit and push a recipe change to bench-results before building it, and pull before building someone else's.
 2. Build from the committed tree, `karn build ~/bench-results/karn/constructs/<label> --out <dir>` or the whole `karn` directory, never with `--worktree`.
 3. Run bench code from a pushed `main` commit, with no uncommitted change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`; a detached worktree per batch keeps runs off the checkout you edit. The imported `silverquillm` must be that worktree's own, since the grader mounts it: install it there (`uv pip install -e .` in the worktree's environment) or set `PYTHONPATH` to the worktree; an environment linked from another checkout grades with that checkout's code.
-4. Set `SILVERQUILLM_HOST_LABEL` to a short name for the host (otherwise its hostname is recorded).
+4. Set `host_label` in the host configuration, or `SILVERQUILLM_HOST_LABEL`, to a short name for the host (otherwise its hostname is recorded).
 5. Use a subscription on one host at a time; enroll each host's slots with its own logins where you can.
 
 `run` and `scheduler` refuse a run that breaks steps 2 or 3 before creating anything, with `dirty_source_refused:` and each reason: `recipe_revision_unrecorded` or `recipe_revision_dirty` for the image, and `bench_checkout_dirty` or `benchmark_root_dirty` (or `_not_a_git_checkout`) for the checkouts.
@@ -61,8 +66,9 @@ The current batch (2026-09-28) runs every model at effort `medium` with subagent
 Claude recipes bake a managed-settings file that denies `Agent` and `Workflow`.
 Codex recipes bake `/etc/codex/config.toml` with `[agents] enabled = false` (and `multi_agent = false`). The `[agents]` switch is needed on Codex 0.157.1, where the GPT-6 model catalog keeps the collaboration tools whatever the `multi_agent` feature says.
 The Codex recipes request no service tier: the ChatGPT subscription backend refuses the Flex tier, so every Codex request records `requested_service_tier` as none.
-Each record's `subagent_threads` measurement counts the agent threads beyond the main one (Claude sidechain transcripts, Codex threads other than the task's), so a batch meant to run without subagents should show `0`.
-The count is an observation, not an incompleteness reason.
+Each record's `subagent_threads` measurement counts the agent threads beyond the main one (Claude sidechain transcripts, Codex threads other than the first one observed), so a batch meant to run without subagents should show `0`.
+`subagents` lists each such thread with the models observed on its requests, its request count and `requested_efforts`, the reasoning-effort levels its own telemetry requested (Codex reports them on the thread's conversation start and responses; null when none was observed, always for Claude), up to 1,000 rows (`subagents_truncated` counts the rest); for Codex the main thread is a best guess.
+Both are observations, not incompleteness reasons, and neither excludes a run: whether subagent use disqualifies a run is the analysis's call (#230).
 The Codex recipes pin their CLI with their own `[image.native_cli]`; 0.157.1 needs a Karn that accepts that release's extra resource files (snowfoxbuilds/ozolith#515).
 The `gpt-6.1-sol` recipes (`bare-codex-sol61-<effort>`, `low` to `max`) pin Codex 0.159.0. That release's bundled catalog predates the model, so Codex takes its entry from the server's model list at sign-in.
 Each construct carries no custom skills or polling controller.
@@ -153,7 +159,7 @@ silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex -
 silverquillm run --build-output ~/bench-builds/roster-1 --construct bare-codex --benchmark hob-medium
 ```
 
-Use `--bench-root` when launching outside the benchmark checkout.
+Outside the benchmark checkout, set `bench_root` in the host configuration or pass `--bench-root`.
 `--budget-seconds` defaults to 86400; the supplied definition must allow at least that much time.
 The budget begins at container start, including initialization.
 There is no `basic`/`planned` option: benchmark files supply task and planning guidance.
@@ -165,15 +171,18 @@ A `restricted` network runs its egress proxy with the candidate image's own `pyt
 
 Each run retains its workspace, snapshots, stopped final workspace, grading-source decision, selected definition and plugin artifacts, sanitized observations, and independent grades under `<runs_dir>/<run-id>/`.
 The immutable schema 2 record lives under `<results_repo>/results/<candidate-hash>/<run-id>/`.
-Estimated cost is API-equivalent USD, not the subscription bill.
+Cost is API-equivalent USD, not the subscription bill.
+A run's cost is its `reported_cost`, the native CLI's own figure, whenever that is at least as complete as `estimated_cost`, the bench's price-table estimate; otherwise it is the estimate.
+Claude Code reports a figure for every request (its OTel `cost_usd`, the same total as its final `result` line), listed per request in `request_reported_costs` beside the table's `request_prices`; Codex reports none, so a Codex run's `reported_cost` is missing with `native_cost_not_reported` and its cost is the estimate.
+A `reported_cost` that differs from a complete estimate stays complete; `cost_warnings` then lists `reported_cost_disagrees_with_estimate`.
 `cost_breakdown` beside it tallies tokens and USD by type: uncached input, cache reads, cache writes, 1-hour cache writes (Anthropic prices them above the 5-minute ones), and output.
 Every cost is a standard-tier equivalent, whatever tier served the request: each priced request carries `rate_basis: "standard"`, Claude requests keep their transcript `speed` and `service_tier`, and Codex requests keep `requested_service_tier`, the tier Codex put in its request (`mixed` when a thread used several). Codex never reports the tier the server applied.
 Agent turns count model responses plus tool calls; missing measurements remain null with an explanation.
-Turns, usage, and cost are complete only for a Codex version whose journal and telemetry were qualified against scripted ground truth (0.153.4, 0.157.1 and 0.159.0); qualify another offline, without credentials, with `scripts/qualify_codex_telemetry.py --image IMAGE --native-version VERSION --output DIR`.
+Turns, usage, and cost are complete only for a Codex version whose journal and telemetry were qualified against scripted ground truth (0.153.4, 0.157.1 and 0.159.0); qualify another offline, without credentials, with `silverquillm qualify codex-telemetry --image IMAGE --native-version VERSION --output DIR`.
 Claude Code runs are read from its session transcripts, subagents included, with the OTel stream as a cross-check; a compaction's own request appears only in OTel.
 Each OTel request is reconciled with its transcript response on uncached, cache-read, cache-write, and output tokens and on the model; a disagreement or a missing field keeps the transcript's values and marks the measurements partial (`otel_usage_conflicts_with_native`, `otel_model_conflicts_with_native`, or a `…_comparison_unavailable` reason); two transcript responses claiming one request id are flagged `native_request_identity_reused`, and repeated OTel reports of one request count once, flagged `otel_request_observations_conflict` if they disagree in tokens, model, speed, query source, or cost.
-Claude Code 2.1.284 is qualified, from smoke run 93ffaa74 on `bare-claude-haiku`; measurements from any other version are marked partial with `native_version_not_qualified`.
-Qualify a version from a real run whose relay was on: `scripts/qualify_claude_telemetry.py <runs_dir>/RUN_ID --out proof.json` checks that both streams agree request by request, and rejects every disagreement the runtime reconciliation flags; it exits nonzero unless the run qualifies; commit a qualifying proof with that run's `observations.events.jsonl` under `tests/fixtures/karn_observations_claude_<version>/` and add the version to `QUALIFIED_CLAUDE_VERSIONS`.
+Claude Code 2.1.284 is qualified, from smoke run 93ffaa74 on `bare-claude-haiku`, and 2.1.293, from fra-hard-v2 run 713711cb on `bare-claude-haiku55-medium`; measurements from any other version are marked partial with `native_version_not_qualified`.
+Qualify a version from a real run whose relay was on: `silverquillm qualify claude-telemetry <runs_dir>/RUN_ID --out proof.json` checks that both streams agree request by request, and rejects every disagreement the runtime reconciliation flags; it exits nonzero unless the run qualifies; commit a qualifying proof with that run's `observations.events.jsonl` under `tests/fixtures/karn_observations_claude_<version>/` and add the version to `QUALIFIED_CLAUDE_VERSIONS`.
 FDN coverage lists tested and uncovered cards explicitly.
 Run metadata fingerprints the actual host grading suites, test helpers, and replay identity maps; unavailable hashes remain explicit observations.
 
@@ -211,11 +220,14 @@ silverquillm top   # needs the monitor extra: pip install -e '.[monitor]'
 ```
 
 In `top`, every action has a key and `?` lists them; `--no-mouse` leaves the mouse to the terminal for selecting text.
+Without a terminal (an agent's shell, cron), `silverquillm top --json` prints one snapshot of the same facts: each live run's stage, needs-recover reasons and Batch, the queue, every Login Profile's state and cooldown, the dispatch mode and the queue ledger's status.
 
-The first invocation acknowledges the missing state for that one new batch.
+On a host whose batch directory already has a queue ledger (`queue.json`), a new batch needs no flag: the scheduler, running or not, records it and starts it after every batch queued before it.
+The flag is needed only the first time a scheduler serves a directory (with no ledger yet, the scheduler cannot tell a new batch from one whose state was lost) and to restart a batch whose state file was lost from entry zero. The scheduler warns about each batch it skips and why.
 Subsequent invocations resume from the recorded cursor; omit the acknowledgement flag.
+Keep backups and drafts of batch files outside the batch directory: every `*.toml` file in it is a submission, and a renamed file is a new batch.
 The scheduler automatically fills every free eligible Login Pool slot, including multiple runs from the same batch, with no concurrency flag.
-It starts entries in file order and rereads later entries before starting them. Among batches whose next entry can claim a slot, filename order takes priority.
+It starts entries in file order and rereads later entries before starting them. Among batches whose next entry can claim a slot, queue order takes priority: the order the scheduler first recorded each batch, not the file names.
 A batch whose next unstarted entry cannot claim a slot stays pending while other batches can start; later entries in that same batch wait their turn.
 Released slots can take another entry while an earlier run is still grading, so runs can finish out of order.
 Candidates without a login plugin run at most one at a time within the scheduler.
@@ -239,6 +251,17 @@ It refuses a run whose container is still running unless `--stop` is given, and 
 Recovering an already recovered run returns the existing record.
 SIGTERM and SIGHUP interrupt `run`, `scheduler`, and `recover` like Ctrl-C, so the workload is stopped and the interrupted outcome recorded; a grading or probe container in progress is killed and removed rather than left running.
 The scheduler stops dispatching, interrupts its active workers, and waits for them to finish cleanup and state updates before releasing the queue lock.
+One worker that is interrupted, or one run that ends `interrupted`, stops the whole scheduler the same way.
+
+To stop launching without interrupting anything, pause or drain instead of signalling:
+
+```bash
+silverquillm queue pause    # no new runs; runs in flight finish; the scheduler keeps serving
+silverquillm queue drain    # pause, and the scheduler exits 0 once no run is in flight
+silverquillm queue resume   # launch again (start the scheduler again after a drain)
+```
+
+Both persist in the batch directory's `control.json` across scheduler restarts until `queue resume`, and `queue ls` and `top` show them. A finished drain leaves dispatch paused. The operator procedure is in the Results Repo runbook, `runbook/operations.md` ("Pause, drain and resume"; snowfoxbuilds/bench-results#20).
 
 ### Recovery guarantees
 
@@ -295,14 +318,18 @@ The historical `--image` lineage remains under `silverquillm legacy`; `legacy re
 
 ## Re-grade retained runs
 
-After Audited Tests or other grading inputs change, re-grade the runs already recorded instead of rerunning them:
+After Audited Tests or other grading inputs change, re-grade the runs already recorded instead of rerunning them. From the results repository, publish into the directory named by the digest being graded on:
 
 ```sh
-silverquillm regrade --benchmark hob-medium --out regrades/hob-medium
+cd ~/bench-results   # the results repository checkout (results_repo in the host configuration)
+hex=$(silverquillm grading-inputs hob-medium | python3 -c 'import json, sys; print(json.load(sys.stdin)["digest"].removeprefix("sha256:"))')
+silverquillm regrade --benchmark hob-medium --out "regrades/$hex"
 ```
 
+Any other `--out` inside the results repository is refused; outside it, any directory works as scratch output.
+
 - Each run is graded again from the workspace it was graded from (`grading_source.selected`), found under `--results-dir/<run-id>`, on the grader image its record names, with the same container isolation as a run. A record's artifact pointers are not followed, so a record from another host never chooses what is mounted.
-- Nothing in the results repository or the run artifacts is written; an `--out` that overlaps either is refused. `--out` holds `<candidate-hash>/<run-id>.json` per run, with the new scores in the record's `scores.json` shape, the record's own counts and grading-inputs digest, the new digest, and a digest of the grading code.
+- Nothing in the results repository or the run artifacts is written; an `--out` that overlaps either is refused, except the results repository's `regrades/<digest hex>/` for the grading inputs being graded on (`silverquillm grading-inputs BENCHMARK` prints that digest), where re-grades are published. `--out` holds `<candidate-hash>/<run-id>.json` per run, with the new scores in the record's `scores.json` shape, the record's own counts and grading-inputs digest, the new digest, and a digest of the grading code.
 - Every read and write under `--out` goes through directory descriptors that never follow a link. A candidate directory that is a link, or that is replaced while a run grades, fails that run with `regrade_output_unsafe:…` and nothing is written through it; an existing output file that is a link is replaced, never followed.
 - `summary.json` and the table compare mean pass rates before and after per cohort: one candidate whose runs were originally graded on one grading-inputs digest. Original scores from different digests are never averaged together, and a run whose original digest is unknown is its own cohort, named by run id. Each dimension reports `paired_runs`, the runs observed both before and after, which both means cover. The table's `graded on` column shows the cohort's original digest.
 - `--run` narrows by run-id prefix and `--candidate` by candidate-hash prefix; a prefix that matches nothing is an error. `--workers` grades runs concurrently (default 2).
@@ -314,7 +341,7 @@ silverquillm regrade --benchmark hob-medium --out regrades/hob-medium
 
 ## Shared results repository
 
-Several hosts write to the same bench-results repository. Records never collide, since each has its own path, so pull before a batch and push its records after; every file the bench writes there is write-once.
+Several hosts write to the same bench-results repository. Records never collide, since each has its own path, so pull before a batch and push its records after. Every record, workspace archive and exclusion the bench writes there is write-once; a published re-grade under `regrades/<digest hex>/` is the exception, rewritten when that run is graded again (a cache miss or `--force`).
 
 ### Workspace archives
 
@@ -332,13 +359,15 @@ Commit `baselines/` and `workspaces/` with the records.
 
 ### Exclusions
 
-A run is left out of analyses only by an exclusion file, `exclusions/<candidate-hash>/<run-id>.json`, never by editing its record or by a private filter.
-The run writer adds one when a rule fires on an observed fact: `host_failed`, `never_executed` (zero agent turns), `subagents_used` (subagent threads observed), or `subagents_uncounted` (measurements from before subagent threads were counted).
-An unknown measurement never excludes a run: absent, null or empty measurements, or an unknown turn or thread count, leave it in.
+An exclusion file, `exclusions/<candidate-hash>/<run-id>.json`, leaves a run out of every analysis; nothing edits its record.
+An analysis may also select runs by their recorded attributes, such as a subagent policy over `subagents`, under criteria it states and publishes with its own results (the Results Repo runbook, snowfoxbuilds/bench-results#20); that selection is the analysis's alone and is never written as an exclusion file, so two analyses can decide differently about the same run while an excluded run stays out of both.
+The run writer adds one when a rule fires on an observed fact: `host_failed` or `never_executed` (zero agent turns).
+Subagent use is a run attribute, not a rule (#230); records from before that change may carry `subagents_used` or `subagents_uncounted` rule exclusions, which stay.
+An unknown measurement never excludes a run: absent, null or empty measurements, or an unknown turn count, leave it in.
 Exclude anything else yourself, with a note a later reader can check:
 
 ```sh
-silverquillm results exclude RUN_ID --reason subagents_used --note "Sonnet delegated to Opus subagents"
+silverquillm results exclude RUN_ID --reason pilot --note "predates the #92 workspace fixes"
 silverquillm results exclude RUN_ID --reason superseded --superseded-by RETRY_ID --note "rerun after the host outage"
 ```
 

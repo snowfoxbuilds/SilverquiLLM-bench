@@ -22,7 +22,7 @@ numbered in printed order per face. Re-running on an unchanged spec is a no-op.
 
 Usage::
 
-    python3 scripts/generate_printed_classes.py [--stub] CARD_DIR [CARD_DIR ...]
+    silverquillm build printed-classes [--stub] CARD_DIR [CARD_DIR ...]
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ import json
 import re
 from pathlib import Path
 
+# The markers are part of every generated card_impl.py; changing them rewrites committed Workspaces.
 BLOCK_START = (
     "# region Printed abilities — generated from card_spec.json by "
     "scripts/generate_printed_classes.py; do not edit"
@@ -238,12 +239,12 @@ def generate(card_dir: Path, *, make_stub: bool = False) -> bool:
     return True
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--stub", action="store_true",
                         help="overwrite card_impl.py with a behavior-free stub first")
     parser.add_argument("card_dirs", nargs="+", type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     changed = [d for d in args.card_dirs if generate(d, make_stub=args.stub)]
     print(f"{len(changed)} of {len(args.card_dirs)} card_impl.py files changed")
 
