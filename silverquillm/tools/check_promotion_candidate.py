@@ -24,8 +24,8 @@ not yet exist, please create it as a separate task.
 
 Usage::
 
-    python scripts/check_promotion_candidate.py path/to/candidate/tests.py --card sos_245
-    python scripts/check_promotion_candidate.py path/to/tests.py --card sos_1 --bench sos
+    silverquillm audit check-promotion path/to/candidate/tests.py --card sos_245
+    silverquillm audit check-promotion path/to/tests.py --card sos_1 --bench sos
 
 Stdlib only: ast, pathlib, argparse, json, subprocess, dataclasses, os, sys.
 """
@@ -311,7 +311,7 @@ def check_canonical_api(
         )
 
     if bench.startswith("hob-"):
-        from scripts.oracle_support import check_v2_api, load_layout
+        from silverquillm.tools.oracle_support import check_v2_api, load_layout
 
         try:
             layout = load_layout(repo_root, bench)
@@ -525,13 +525,13 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(*, repo_root: Path | None = None) -> None:
+def main(argv: list[str] | None = None, *, repo_root: Path | None = None) -> None:
     """Entry point for CLI invocation."""
     if repo_root is None:
         repo_root = REPO_ROOT
 
     parser = _build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     candidate_path = Path(args.candidate).resolve()
 

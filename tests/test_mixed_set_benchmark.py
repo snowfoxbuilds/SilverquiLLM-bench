@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from scripts.oracle_support import load_layout
+from silverquillm.tools.oracle_support import load_layout
 from silverquillm.benchmark_targets import target_cards
 from silverquillm.evaluator import evaluate_run
 from silverquillm.karn.benchmark import load_benchmark, stage_benchmark

@@ -45,7 +45,7 @@ TARGET_CLASSES = {
     "fdn_205": "SeismicRupture",
     "fdn_232": "ScavengingOoze",
 }
-# The docstring scripts/generate_printed_classes.py gives a face stub.
+# The docstring silverquillm/tools/generate_printed_classes.py gives a face stub.
 STUB_MARKER = "Implementation task: see card_spec.json."
 
 

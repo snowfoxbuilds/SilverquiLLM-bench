@@ -47,13 +47,7 @@ for script in sorted((repo / "scripts").glob("*.py")):
     spec = importlib.util.spec_from_file_location(f"retained_{script.stem}", script)
     loaded = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = loaded
-    try:
-        spec.loader.exec_module(loaded)
-    except ModuleNotFoundError as error:
-        # A data tool's own optional dependency (download_replays: curl_cffi)
-        # is not the default install's concern; an Ozolith import still fails.
-        if "blocked import" in str(error):
-            raise
+    spec.loader.exec_module(loaded)
 
 
 def invoke(*args):

@@ -1624,5 +1624,10 @@ from silverquillm.karn.commands import COMMANDS as _KARN_COMMANDS
 for _command in _KARN_COMMANDS:
     main.add_command(_command)
 
+from silverquillm.tools.cli import COMMANDS as _TOOL_COMMANDS
+
+for _command in _TOOL_COMMANDS:
+    main.add_command(_command)
+
 if __name__ == "__main__":
     main()

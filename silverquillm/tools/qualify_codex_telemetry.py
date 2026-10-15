@@ -21,12 +21,15 @@ from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-# The candidate image lacks the bench's dependencies, so load only the stdlib-only
-# observations module without running silverquillm.karn's package imports.
-_karn = types.ModuleType("silverquillm.karn")
-_karn.__path__ = [str(Path(__file__).resolve().parents[1] / "silverquillm/karn")]
-sys.modules.setdefault("silverquillm.karn", _karn)
+_PACKAGE = Path(__file__).resolve().parents[1]
+if __name__ == "__main__":
+    # Inside the candidate image this file runs by path from the mounted checkout,
+    # which lacks the bench's dependencies: put the checkout on the path and load only
+    # the stdlib-only observations module without silverquillm.karn's package imports.
+    sys.path.insert(0, str(_PACKAGE.parent))
+    _karn = types.ModuleType("silverquillm.karn")
+    _karn.__path__ = [str(_PACKAGE / "karn")]
+    sys.modules.setdefault("silverquillm.karn", _karn)
 from silverquillm.karn.observations import CodexTelemetryCollector
 
 IMAGE = "sha256:a8b10ff219d5d81870c1b17eae9dbe0eb7494db1c8bd08adcb174b927b569cd6"
@@ -412,17 +415,17 @@ def qualify_one(scenario: str, output: Path) -> dict:
             server_thread.join(timeout=5)
 
 
-def main():
+def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--scenario", choices=SCENARIOS, action="append")
     parser.add_argument("--image", default=IMAGE)
     parser.add_argument("--native-version", default="0.153.4")
     parser.add_argument("--inside", action="store_true", help=argparse.SUPPRESS)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     scenarios = args.scenario or list(SCENARIOS)
     if not args.inside:
-        root = Path(__file__).resolve().parents[1]
+        root = _PACKAGE.parent
         args.output.mkdir(parents=True, exist_ok=True)
         command = [
             "docker",
@@ -439,7 +442,7 @@ def main():
             "--entrypoint",
             "python3",
             args.image,
-            "/qualification/scripts/qualify_codex_telemetry.py",
+            "/qualification/silverquillm/tools/qualify_codex_telemetry.py",
             "--inside",
             "--output",
             "/evidence",

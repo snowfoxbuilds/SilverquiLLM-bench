@@ -1,7 +1,7 @@
 """Download all replay data from a 17lands replay page HTML file.
 
 Usage:
-    python scripts/download_replays.py <replay_page.html> <output_dir> [--session <cookie>]
+    silverquillm data download-replays <replay_page.html> <output_dir> [--session <cookie>]
 
 Steps per the extraction guide (data/replays/extration_steps.md):
   1. Extract draft IDs from /details/<id> links in the HTML.
@@ -9,6 +9,8 @@ Steps per the extraction guide (data/replays/extration_steps.md):
   3. Fetch history_info for each (draft, match, game) to get the history path.
   4. Fetch the full replay JSON from /data/history.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -18,7 +20,10 @@ import sys
 import time
 from pathlib import Path
 
-from curl_cffi import requests
+try:
+    from curl_cffi import requests
+except ModuleNotFoundError:  # an optional dependency of this one command
+    requests = None
 
 BASE_URL = "https://www.17lands.com"
 
@@ -173,7 +178,7 @@ def download_all(
     print(f"\nDone. {total_games} game replay(s) saved to {output_dir}/")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Download 17lands replay data from a replay page.")
     parser.add_argument("replay_page", type=Path, help="Path to replay page HTML file")
     parser.add_argument("output_dir", type=Path, help="Directory to write replay JSON files")
@@ -187,7 +192,9 @@ def main() -> None:
         action="store_true",
         help="Re-download files even if they already exist",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if requests is None:
+        parser.error("needs curl_cffi: pip install curl_cffi")
 
     if not args.replay_page.exists():
         print(f"ERROR: {args.replay_page} not found", file=sys.stderr)

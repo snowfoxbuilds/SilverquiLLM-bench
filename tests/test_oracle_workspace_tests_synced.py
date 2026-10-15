@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.oracle_support import load_layout
+from silverquillm.tools.oracle_support import load_layout
 
 ROOT = Path(__file__).resolve().parents[1]
 BENCHMARKS = ("sos", "hob-medium", "fra-hard", "fra-hard-v2", "smoke")

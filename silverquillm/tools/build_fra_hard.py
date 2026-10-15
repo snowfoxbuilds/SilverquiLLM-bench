@@ -1,6 +1,6 @@
 """Build candidate assets from pinned raw sets; seed the oracle only once.
 
-Run ``python3 scripts/build_fra_hard.py`` from any directory. Existing oracle
+Run ``silverquillm build fra-hard`` from any directory. Existing oracle
 implementations and hidden tests are never overwritten.
 
 The Workspace is hob-medium's; the Test Oracle Workspace and the hidden FDN
@@ -12,6 +12,7 @@ git, not regenerated, so a re-run on the committed tree is a no-op.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import re
@@ -19,7 +20,9 @@ import shutil
 from pathlib import Path
 from urllib.request import urlopen
 
-ROOT = Path(__file__).resolve().parents[1]
+from silverquillm.tools import REPO_ROOT
+
+ROOT = REPO_ROOT
 DEST = ROOT / "benchmarks/fra-hard"
 BASE = ROOT / "benchmarks/hob-medium"
 KNOWN_BEST = ROOT / "known_best"
@@ -121,7 +124,8 @@ def stub(spec: dict) -> str:
             f"{defaults}\n        }}\n        defaults.update(kwargs)\n        super().__init__(**defaults)\n")
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    argparse.ArgumentParser(description=__doc__.split("\n\n")[0]).parse_args(argv)
     workspace = DEST / "workspace"
     workspace.mkdir(parents=True, exist_ok=True)
     if not (workspace / "RULEBOOK.txt").exists():

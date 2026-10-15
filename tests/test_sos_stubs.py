@@ -318,8 +318,8 @@ class TestGeneratorScript:
     """Tests for the generator script itself."""
 
     def test_generator_script_exists(self):
-        """scripts/generate_audited_stubs.py must exist."""
-        script_path = PROJECT_ROOT / "scripts" / "generate_audited_stubs.py"
+        """silverquillm/tools/generate_audited_stubs.py must exist."""
+        script_path = PROJECT_ROOT / "silverquillm" / "tools" / "generate_audited_stubs.py"
         assert script_path.exists()
 
     def test_generated_output_exists(self):
@@ -341,7 +341,7 @@ class TestGeneratorScript:
         """Running the generator twice should produce identical output."""
         import subprocess
 
-        script_path = PROJECT_ROOT / "scripts" / "generate_audited_stubs.py"
+        script_path = PROJECT_ROOT / "silverquillm" / "tools" / "generate_audited_stubs.py"
         output_path = PROJECT_ROOT / "benchmarks" / "sos" / "workspace" / "cards" / "stubs" / "sos_stubs.py"
 
         # Read current output

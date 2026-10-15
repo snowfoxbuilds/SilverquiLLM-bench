@@ -636,7 +636,7 @@ def qualification():
     import importlib.util
     from pathlib import Path
 
-    path = Path(__file__).parents[1] / "scripts/qualify_claude_telemetry.py"
+    path = Path(__file__).parents[1] / "silverquillm/tools/qualify_claude_telemetry.py"
     spec = importlib.util.spec_from_file_location("qualify_claude_telemetry", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -821,7 +821,7 @@ def test_the_cli_exits_nonzero_for_evidence_that_does_not_qualify(tmp_path, vali
     if not valid:
         first(events, "claude_code.api_request")["attributes"]["model"] = "claude-opus-5-5"
     (tmp_path / "observations.events.jsonl").write_bytes(raw_events(events))
-    script = Path(__file__).parents[1] / "scripts/qualify_claude_telemetry.py"
+    script = Path(__file__).parents[1] / "silverquillm/tools/qualify_claude_telemetry.py"
     result = subprocess.run(
         [sys.executable, str(script), str(tmp_path), "--out", str(tmp_path / "proof.json")],
         capture_output=True,

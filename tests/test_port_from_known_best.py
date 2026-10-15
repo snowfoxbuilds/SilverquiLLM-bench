@@ -1,4 +1,4 @@
-"""Platform Tests for ``scripts/port_from_known_best.py`` (KNOWN-BEST-ENGINE.md › Building a benchmark from it)."""
+"""Platform Tests for ``silverquillm/tools/port_from_known_best.py`` (KNOWN-BEST-ENGINE.md › Building a benchmark from it)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.port_from_known_best import (
+from silverquillm.tools.port_from_known_best import (
     PortError,
     apply_patch,
     benchmark_tier,
@@ -106,7 +106,7 @@ def test_benchmark_is_ported_from_the_known_best_workspace(benchmark: str) -> No
 @pytest.mark.parametrize("tier", ["Benchmarking", "Released"])
 def test_a_benchmark_past_beta_is_refused_whole(smoke_copy, tier) -> None:
     """Neither a port nor a check touches a locked benchmark, Workspace or not."""
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     config = json.loads((benchmark / "config.json").read_text())
@@ -125,7 +125,7 @@ def test_a_benchmark_past_beta_is_refused_whole(smoke_copy, tier) -> None:
 
 
 def test_the_command_line_check_skips_a_benchmark_past_beta(monkeypatch, tmp_path, capsys) -> None:
-    import scripts.port_from_known_best as script
+    import silverquillm.tools.port_from_known_best as script
 
     root = tmp_path / "benchmarks/locked"
     root.mkdir(parents=True)
@@ -251,7 +251,7 @@ def smoke_copy(tmp_path: Path) -> tuple[Path, Path]:
     """A throwaway copy of the Known-Best Workspace and of smoke, ported."""
     import shutil
 
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best = tmp_path / "known_best"
     shutil.copytree(REPO / "known_best", known_best,
@@ -265,7 +265,7 @@ def smoke_copy(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def test_a_removed_package_file_disappears_on_the_next_port(smoke_copy) -> None:
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     (known_best / "workspace/cards/old_helper.py").write_text("OLD = 1\n")
@@ -290,7 +290,7 @@ def test_a_removed_package_file_disappears_on_the_next_port(smoke_copy) -> None:
 
 def test_a_hidden_engine_test_stays_out_of_the_engine_reference_tests(smoke_copy) -> None:
     """A listed Audited Engine Test is graded but never staged; the rest are."""
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     (benchmark / "data/hidden_engine_tests.json").write_text(json.dumps(["test_zones.py"]))
@@ -306,7 +306,7 @@ def test_a_hidden_engine_test_stays_out_of_the_engine_reference_tests(smoke_copy
     '["../engine/test_zones.py"]', '["/abs/test_zones.py"]', '[1]', "not json",
 ])
 def test_a_malformed_hidden_engine_test_listing_fails_the_port(smoke_copy, listing) -> None:
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     (benchmark / "data/hidden_engine_tests.json").write_text(listing)
@@ -317,7 +317,7 @@ def test_a_malformed_hidden_engine_test_listing_fails_the_port(smoke_copy, listi
 def test_a_removed_workspace_document_disappears_from_the_oracle_mirror(smoke_copy) -> None:
     import shutil
 
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     assert (benchmark / "data/test_oracle_workspace/AGENTS.md").is_file()
@@ -359,7 +359,7 @@ _STALE = "--- a/engine/__init__.py\n+++ b/engine/__init__.py\n@@ -1 +1 @@\n-this
 def test_a_port_whose_last_defect_patch_no_longer_applies_changes_nothing(smoke_copy) -> None:
     """Earlier steps — copying the Known-Best trees, stubbing targets, the
     earlier patches — are not published when a later patch fails."""
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     (known_best / "workspace/engine/__init__.py").write_text(
@@ -374,7 +374,7 @@ def test_a_port_whose_last_defect_patch_no_longer_applies_changes_nothing(smoke_
 
 
 def test_a_port_whose_oracle_patch_no_longer_applies_changes_nothing(smoke_copy) -> None:
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     (known_best / "workspace/engine/__init__.py").write_text(
@@ -403,7 +403,7 @@ def _relink(tree: Path, relative: str, outside: Path) -> None:
 
 @pytest.mark.parametrize("relative", ["workspace/engine", "data/test_oracle_workspace/engine"])
 def test_a_linked_destination_directory_is_refused_and_nothing_outside_changes(smoke_copy, relative) -> None:
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     outside = benchmark.parents[2] / "elsewhere"
@@ -419,7 +419,7 @@ def test_a_linked_destination_directory_is_refused_and_nothing_outside_changes(s
 
 
 def test_a_linked_defect_patch_is_refused(smoke_copy) -> None:
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     patch = defect_patches(benchmark)[0]
@@ -441,7 +441,7 @@ def test_a_link_in_the_known_best_input_is_refused(smoke_copy) -> None:
 
 def test_a_late_destination_through_a_link_publishes_nothing(smoke_copy, monkeypatch) -> None:
     """The publication list is checked whole before anything is replaced."""
-    import scripts.port_from_known_best as porting
+    import silverquillm.tools.port_from_known_best as porting
 
     known_best, benchmark = smoke_copy
     outside = benchmark.parents[2] / "late"
@@ -468,7 +468,7 @@ def test_a_late_destination_through_a_link_publishes_nothing(smoke_copy, monkeyp
 
 
 def test_a_file_that_becomes_a_directory_is_ported_whole(smoke_copy) -> None:
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     helper = known_best / "workspace/engine/review_helper"
@@ -493,7 +493,7 @@ def test_a_file_that_becomes_a_directory_is_ported_whole(smoke_copy) -> None:
 def test_a_directory_that_becomes_a_file_is_ported_whole(smoke_copy) -> None:
     import shutil
 
-    from scripts.port_from_known_best import port
+    from silverquillm.tools.port_from_known_best import port
 
     known_best, benchmark = smoke_copy
     helper = known_best / "workspace/engine/review_helper"

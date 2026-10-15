@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.oracle_support import load_layout
+from silverquillm.tools.oracle_support import load_layout
 from tests.test_audited_against_reference import _run_audited_tests_against_oracle
 
 ROOT = Path(__file__).resolve().parents[1]

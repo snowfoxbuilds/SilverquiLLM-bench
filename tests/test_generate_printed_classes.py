@@ -13,7 +13,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 FDN = REPO / "known_best/workspace/cards/fdn"
 _SPEC = importlib.util.spec_from_file_location(
-    "generate_printed_classes", REPO / "scripts/generate_printed_classes.py"
+    "generate_printed_classes", REPO / "silverquillm/tools/generate_printed_classes.py"
 )
 gen = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(gen)

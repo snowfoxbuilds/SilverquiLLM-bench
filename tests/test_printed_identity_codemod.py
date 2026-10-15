@@ -1,4 +1,4 @@
-"""The printed-identity codemod (scripts/printed_identity_codemod.py).
+"""The printed-identity codemod (silverquillm/tools/printed_identity_codemod.py).
 
 The codemod rewrites only sites that need no inference — a string literal at
 a helper argument, a ``Decision`` name or mode, or a GameRef name pair,
@@ -22,7 +22,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 WORKSPACE = REPO / "known_best/workspace"
-CODEMOD = REPO / "scripts/printed_identity_codemod.py"
+CODEMOD = REPO / "silverquillm/tools/printed_identity_codemod.py"
 
 
 def _run(args: list[str], *, path: tuple[Path, ...] = ()) -> subprocess.CompletedProcess[str]:

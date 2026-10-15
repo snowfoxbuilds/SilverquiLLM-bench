@@ -1,4 +1,4 @@
-"""Additional gap tests for scripts/check_promotion_candidate.py.
+"""Additional gap tests for silverquillm/tools/check_promotion_candidate.py.
 
 Covers genuine gaps NOT addressed by test_check_promotion_candidate.py:
 
@@ -21,11 +21,11 @@ from unittest import mock
 import pytest
 
 # ---------------------------------------------------------------------------
-# Import the script module via importlib (scripts/ is not a package)
+# Load the module under its historical name, as its tests patch it there
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-_SCRIPT_PATH = REPO_ROOT / "scripts" / "check_promotion_candidate.py"
+_SCRIPT_PATH = REPO_ROOT / "silverquillm" / "tools" / "check_promotion_candidate.py"
 
 _spec = importlib.util.spec_from_file_location(
     "check_promotion_candidate", _SCRIPT_PATH

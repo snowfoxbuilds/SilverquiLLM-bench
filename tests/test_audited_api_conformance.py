@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.oracle_support import check_v2_api, load_layout
+from silverquillm.tools.oracle_support import check_v2_api, load_layout
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _CONFORMANCE_PATH = (

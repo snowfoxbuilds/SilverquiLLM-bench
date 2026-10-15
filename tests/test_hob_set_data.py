@@ -1,7 +1,7 @@
 """Platform test for the pinned HOB Draft Set data (``data/sets/hob.json``).
 
 The file is the committed, contamination-fresh source every HOB benchmark
-derives its pool from (fetched by ``scripts/fetch_hob_set.py``). These tests
+derives its pool from (fetched by ``silverquillm/tools/fetch_hob_set.py``). These tests
 pin its shape so a bad re-fetch or hand-edit is caught in CI:
 
 - it exists and is valid JSON,
