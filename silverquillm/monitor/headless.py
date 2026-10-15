@@ -84,7 +84,8 @@ def _run(view: RunView, batches: dict[str, tuple[str, int] | None], now: datetim
         },
         "run_dir": _path(run.run_dir),
         "estimated_percent": view.estimated_percent,
-        "estimated_cost_usd": _decimal(view.cost),
+        "run_cost_usd": _decimal(view.cost),
+        "run_cost_source": view.cost_source,
         "cost_recorded": view.cost_recorded,
         "record_run_id": run.record.run_id if run.record is not None else None,
     }

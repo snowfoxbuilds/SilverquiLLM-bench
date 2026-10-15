@@ -185,6 +185,12 @@ class ProvisionalCost:
         ]
 
     @property
+    def source(self) -> str:
+        """``reported`` while Claude Code's own per-request figures are summed, otherwise
+        ``estimated`` from the price table (ADR-019)."""
+        return "reported" if self._claude else "estimated"
+
+    @property
     def total(self) -> Decimal | None:
         """The sum of priced requests; None until the events file exists."""
         if not self.available:

@@ -125,6 +125,9 @@ def _rows(value: Any) -> list[dict]:
 _COMPLETENESS_RANK = {"complete": 2, "partial": 1}
 # Reasons that only the price table gives, which a native CLI's figure never shares.
 _PRICING_ONLY = {"per_response_usage_unavailable"}
+# Observation reasons meaning a pre-ADR-019 coverage total left out some request's figure:
+# one was malformed or absent, or a request never reached OTel at all.
+_LEGACY_COST_GAPS = {"otel_cost_malformed", "otel_missing_native_request"}
 
 
 def _legacy_reported_cost(measurements: dict) -> dict:
@@ -132,9 +135,20 @@ def _legacy_reported_cost(measurements: dict) -> dict:
 
     Such a record keeps the native CLI's total in its coverage, and the estimate's reasons
     without the ones its pricing alone added are the reasons the CLI's figure shares.
+
+    That total started at zero whenever any OTel event arrived, so a zero beside a cost gap
+    may sum no figure at all; it is treated as unavailable, never as a reported zero. The old
+    schema cannot tell that from a partial sum of genuine zero figures, so both fall back to
+    the estimate. A zero with no gap (a run with no requests, or genuine zero figures) stays.
     """
     total = mapping(measurements.get("coverage")).get("native_reported_cost_usd")
-    if _decimal(total) is None:
+    value = _decimal(total)
+    if value is None:
+        return {}
+    observed = set()
+    for name in ("estimated_cost", "usage"):
+        observed.update(_rows_of_text(mapping(measurements.get(name)).get("reasons")))
+    if value == 0 and observed & _LEGACY_COST_GAPS:
         return {}
     estimated = mapping(measurements.get("estimated_cost"))
     pricing = set(_PRICING_ONLY)

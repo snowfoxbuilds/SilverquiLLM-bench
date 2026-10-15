@@ -18,7 +18,8 @@ from silverquillm.karn.claude_observations import (
 )
 from silverquillm.karn.host import NATIVE_TELEMETRY_ENVIRONMENT
 from silverquillm.karn.observations import summarize_events
-from silverquillm.monitor.history import run_cost
+from silverquillm.monitor.details import record_detail
+from silverquillm.monitor.history import run_cost, summarize
 
 SESSION = "0b9c7f6e-1111-4222-8333-944455556666"
 
@@ -1014,3 +1015,104 @@ def test_a_reused_request_id_does_not_charge_the_clis_cost_twice(first):
     assert result["reported_cost"]["value"] == "0.0246"
     assert result["coverage"]["native_reported_cost_usd"] == "0.0246"
     assert len(result["request_reported_costs"]) == 2
+
+
+# Records written before ADR-019 carry only coverage.native_reported_cost_usd, which started
+# at zero whenever any OTel event arrived, so a zero there may sum no figure at all.
+_ADDED_BY_ADR_019 = ("reported_cost", "request_reported_costs", "cost_warnings")
+
+
+def legacy(result, *, estimate=True):
+    measurements = {k: v for k, v in result.items() if k not in _ADDED_BY_ADR_019}
+    if not estimate:
+        measurements["estimated_cost"] = {
+            "value": None,
+            "completeness": "missing",
+            "reasons": [*measurements["estimated_cost"]["reasons"], "model_price_unavailable"],
+        }
+        measurements["request_prices"] = [
+            {**row, "usd": None} for row in measurements["request_prices"]
+        ]
+    return measurements
+
+
+def legacy_run_cost(measurements, tmp_path):
+    """The Run Cost and its source through run_cost(), summarize() and record_detail()."""
+    cost, source = run_cost(measurements)
+    manifest = {"run_id": "run-a", "run_metadata": {"measurements": measurements}}
+    run = summarize(manifest, {}, tmp_path / "results" / "hash" / "run-a")
+    assert (run.cost, run.cost_source) == (
+        Decimal(cost["value"]) if cost.get("value") is not None else None,
+        source,
+    )
+    record = tmp_path / "record"
+    record.mkdir(parents=True)
+    (record / "manifest.json").write_text(json.dumps(manifest))
+    detail = record_detail(record)
+    priced = {row["response_id"]: row["usd"] for row in measurements["request_prices"]}
+    assert [request.usd for request in detail.requests] == [
+        Decimal(priced[r["response_id"]]) if priced.get(r["response_id"]) else None
+        for r in sorted(measurements["requests"], key=lambda r: r["timestamp_ms"])
+    ]
+    return cost, source
+
+
+def tool_only_otel():
+    return normalize_claude_otlp(
+        otlp(name="claude_code.tool_result", tool_use_id="toolu_01", tool_name="Bash")
+    )
+
+
+LEGACY_FALSE_ZEROS = {
+    "all_invalid": lambda: reconciled(
+        api_request("req_01", cost_usd="NaN"), api_request("req_02", cost_usd="NaN")
+    ),
+    "all_absent": lambda: reconciled(
+        api_request("req_01", cost_usd=None), api_request("req_02", cost_usd=None)
+    ),
+    "tool_only": lambda: reconciled(tool_only_otel()),
+}
+
+
+@pytest.mark.parametrize("case", sorted(LEGACY_FALSE_ZEROS))
+def test_a_legacy_zero_beside_a_cost_gap_is_not_a_reported_zero(case, tmp_path):
+    result = LEGACY_FALSE_ZEROS[case]()
+    measurements = legacy(result)
+    assert measurements["coverage"]["native_reported_cost_usd"] == "0"
+    assert measurements["estimated_cost"]["value"] not in (None, "0")
+    cost, source = legacy_run_cost(measurements, tmp_path)
+    assert (cost["value"], source) == (measurements["estimated_cost"]["value"], "estimated")
+
+
+@pytest.mark.parametrize("case", sorted(LEGACY_FALSE_ZEROS))
+def test_a_legacy_zero_beside_a_cost_gap_without_an_estimate_stays_missing(case, tmp_path):
+    measurements = legacy(LEGACY_FALSE_ZEROS[case](), estimate=False)
+    cost, source = legacy_run_cost(measurements, tmp_path)
+    assert (cost["value"], cost["completeness"], source) == (None, "missing", "estimated")
+
+
+def test_a_legacy_genuine_zero_and_a_positive_total_stay_reported(tmp_path):
+    zero = legacy(
+        reconciled(api_request("req_01", cost_usd=0.0), api_request("req_02", cost_usd=0.0))
+    )
+    cost, source = legacy_run_cost(zero, tmp_path / "zero")
+    assert (Decimal(cost["value"]), source) == (0, "reported")
+    positive = legacy(reconciled(api_request("req_01"), api_request("req_02")))
+    cost, source = legacy_run_cost(positive, tmp_path / "positive")
+    assert (cost["value"], source) == ("0.0246", "reported")
+    # A partial positive sum still says what the CLI reported.
+    partial = legacy(reconciled(api_request("req_01", cost_usd="NaN"), api_request("req_02")))
+    cost, source = legacy_run_cost(partial, tmp_path / "partial")
+    assert (cost["value"], cost["completeness"]) == ("0.0123", "partial")
+
+
+def test_a_legacy_run_with_no_requests_keeps_its_reported_zero():
+    measurements = {
+        "estimated_cost": {"value": "0", "completeness": "complete", "reasons": []},
+        "usage": {"value": {}, "completeness": "complete", "reasons": []},
+        "requests": [],
+        "request_prices": [],
+        "coverage": {"native_reported_cost_usd": "0"},
+    }
+    cost, source = run_cost(measurements)
+    assert (cost["value"], cost["completeness"], source) == ("0", "complete", "reported")

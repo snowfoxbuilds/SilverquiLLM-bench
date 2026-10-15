@@ -254,7 +254,10 @@ def expected_grader(record: KarnRunRecord, docker, *, substitute: bool) -> tuple
 
 def _dimensions(scores: dict) -> dict:
     return {
-        name: {key: scores[name].get(key) for key in ("tests_passed", "tests_total", "pass_rate")}
+        name: {
+            key: scores[name].get(key)
+            for key in ("tests_passed", "tests_total", "pass_rate", "complete")
+        }
         for name in DIMENSIONS
     }
 

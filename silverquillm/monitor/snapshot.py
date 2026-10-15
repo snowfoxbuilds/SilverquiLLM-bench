@@ -68,14 +68,17 @@ class RunView:
     estimated_percent: float | None
     """None without comparable history (RUN-MONITORING.md, Dashboard)."""
     cost: Decimal | None
-    """The record's Estimated Cost once the run has one (``cost_recorded``), else the
-    provisional one shown with ``~``; None when neither is known."""
+    """The record's Run Cost once the run has one (``cost_recorded``), else the provisional
+    one shown with ``~``; None when neither is known."""
     unpriced_requests: int
     request_costs: tuple[tuple[int, Decimal], ...]
     """``(timestamp_ms, usd)`` per priced request, oldest first, for a sparkline."""
     cost_recorded: bool = False
     cost_completeness: str | None = None
     """The recorded measurement's completeness; None while the cost is provisional."""
+    cost_source: str | None = None
+    """``reported`` (the native CLI's figure) or ``estimated`` (the price table), recorded or
+    provisional alike (ADR-019); None when no cost is known."""
     conflicting_requests: int = 0
     """Live observations of one request that disagree, each charged once."""
 
@@ -401,14 +404,17 @@ class Monitor:
                 record.request_costs,
                 cost_recorded=True,
                 cost_completeness=record.cost_completeness or "missing",
+                cost_source=record.cost_source if record.cost is not None else None,
             )
+        total = cost.total if run.native_telemetry else None
         return RunView(
             run,
             percent,
-            cost.total if run.native_telemetry else None,
+            total,
             cost.unpriced,
             tuple((row.timestamp_ms, row.usd) for row in cost.requests if row.usd is not None),
             conflicting_requests=cost.conflicts,
+            cost_source=None if total is None else cost.source,
         )
 
     def snapshot(self) -> MonitorSnapshot:
@@ -433,7 +439,9 @@ class Monitor:
         recent = now - FINISHED_WINDOW
         counts = Counts(
             queued=sum(
-                len(batch.runs) for batch in queued if batch.status not in ("unsupported_legacy_batch", "error")
+                len(batch.runs)
+                for batch in queued
+                if batch.status not in ("unsupported_legacy_batch", "error")
             ),
             live=len(runs),
             finished_recent=sum(1 for run in history if run.run_date and run.run_date >= recent),
