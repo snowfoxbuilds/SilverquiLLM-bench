@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-02
+Last updated: 2026-10-14
 
 # Scoring
 
@@ -120,6 +120,29 @@ When the block cannot be computed it is `{"available": false, "reason": "<reason
 | `baseline_incomplete` | The baseline reference grade is incomplete for any reason but the FDN coverage gap every run shares |
 
 A regrade reuses an earlier output's block only when it is available or unavailable as `regression_not_evaluated`, which depends on the candidate's own grading; any other unavailable block is graded again on the next regrade, with no `--force` needed.
+
+### Tests that did not run
+
+Every graded suite, each card's and the engine's, states how many test functions it expected and which of them did not run, with why (grilling 2026-10-13, #221).
+The expected functions are collected statically from the authoritative test files, outside the process that runs the candidate's code, so a candidate cannot change what is expected.
+A parametrized function counts once, and it ran if any of its cases ran.
+
+| Reason | When |
+| --- | --- |
+| `import_error` | The function's test module failed to collect because an import failed |
+| `collection_error` | The function's test module failed to collect for another reason |
+| `collection_interrupted` | Another module's collection error stopped the suite before anything ran |
+| `timeout` | The suite hit its time limit; a timed-out suite keeps no results |
+| `skipped` | The function was skipped or marked xfail at run time |
+| `pytest_exited` | pytest ended abnormally (for example `os._exit`) before reporting the function |
+| `not_reported` | pytest finished without reporting the function |
+| `grading_support_missing` | Authoritative grading support was absent, so the suite never ran |
+| `candidate_code_missing` | The candidate's engine or cards directory was absent, so the suite never ran |
+
+Scoring is unchanged: a raw pass/total counts only the nodes that ran, so a function that did not run lowers no pass rate.
+An analysis that wants it counted as a failure divides by the expected functions instead.
+Each failing node also keeps a failure message: one printable line of at most 240 characters with object addresses masked, and at most 128 KiB of messages per grade, later ones dropped.
+Not-run reasons and failure messages are diagnostics and never enter a score.
 
 ### Complexity Weighting
 

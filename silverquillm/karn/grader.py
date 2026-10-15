@@ -28,6 +28,9 @@ import silverquillm
 from silverquillm.benchmark_targets import target_cards
 from silverquillm.evaluator import (
     _REPO_ROOT,
+    FAILURE_MESSAGE_BUDGET,
+    FAILURE_MESSAGE_LIMIT,
+    NOT_RUN_REASONS,
     CardResult,
     EnginePatchError,
     EngineResult,
@@ -560,12 +563,14 @@ def _evaluation_payload(stdout: bytes) -> bytes:
     return payload
 
 
+GAP_FIELDS = {"expected_test_functions", "not_run", "failure_messages"}
 CARD_FIELDS = {
     "collector_number", "tests_passed", "tests_failed", "tests_total", "pass_rate",
-    "errors", "skipped", "test_nodes", "tests_hash",
+    "errors", "skipped", "test_nodes", "tests_hash", *GAP_FIELDS,
 }  # fmt: skip
 ENGINE_FIELDS = {
     "tests_passed", "tests_failed", "tests_total", "pass_rate", "errors", "test_nodes",
+    *GAP_FIELDS,
 }  # fmt: skip
 RESULT_FIELDS = {
     "sos_results", "fdn_results", "engine_result",
@@ -605,6 +610,50 @@ def _test_nodes(nodes) -> list[dict]:
     return [dict(node) for node in nodes]
 
 
+def _gaps(value: dict, nodes: list[dict]) -> dict:
+    """The expected-function count, not-run nodes and failure messages, shape-checked.
+
+    None of these change a score; the checks keep them bounded and consistent.
+    """
+    expected, not_run, messages = (
+        value["expected_test_functions"], value["not_run"], value["failure_messages"]
+    )
+    if expected is not None and (type(expected) is not int or not 0 <= expected < MAX_TEST_COUNT):
+        raise GraderError("evaluation_invalid_expected")
+    if not isinstance(not_run, list) or not all(
+        isinstance(row, dict)
+        and set(row) == {"test_node", "reason"}
+        and isinstance(row["test_node"], str)
+        and "::" in row["test_node"]
+        and row["reason"] in NOT_RUN_REASONS
+        for row in not_run
+    ):
+        raise GraderError("evaluation_invalid_not_run")
+    names = [row["test_node"] for row in not_run]
+    if len(set(names)) != len(names) or len(names) > (expected or 0):
+        raise GraderError("evaluation_invalid_not_run")
+    ran = {node["test_node"].split("[", 1)[0] for node in nodes}
+    if ran.intersection(names):
+        raise GraderError("evaluation_invalid_not_run")
+    failed = {node["test_node"] for node in nodes if node["outcome"] == "fail"}
+    if (
+        not isinstance(messages, dict)
+        or not all(
+            node in failed
+            and isinstance(message, str)
+            and 0 < len(message) <= FAILURE_MESSAGE_LIMIT
+            for node, message in messages.items()
+        )
+        or sum(map(len, messages.values())) > FAILURE_MESSAGE_BUDGET
+    ):
+        raise GraderError("evaluation_invalid_failure_messages")
+    return {
+        "expected_test_functions": expected,
+        "not_run": [dict(row) for row in not_run],
+        "failure_messages": dict(messages),
+    }
+
+
 def _card(key: str, value) -> CardResult:
     if not isinstance(value, dict) or set(value) != CARD_FIELDS or value["collector_number"] != key:
         raise GraderError("evaluation_invalid_card")
@@ -627,6 +676,7 @@ def _card(key: str, value) -> CardResult:
         skipped=value["skipped"],
         test_nodes=nodes,
         tests_hash=value["tests_hash"],
+        **_gaps(value, nodes),
     )
 
 
@@ -648,6 +698,7 @@ def evaluation_from_json(raw: bytes) -> FullEvalResult:
     if not isinstance(engine, dict) or set(engine) != ENGINE_FIELDS:
         raise GraderError("evaluation_invalid_engine")
     passed, failed, total = _counts(engine)
+    engine_nodes = _test_nodes(engine["test_nodes"])
     result = FullEvalResult(
         sos_results=_cards(value["sos_results"]),
         fdn_results=_cards(value["fdn_results"]),
@@ -657,9 +708,17 @@ def evaluation_from_json(raw: bytes) -> FullEvalResult:
             tests_total=total,
             pass_rate=passed / total if total else 0.0,
             errors=_strings(engine["errors"]),
-            test_nodes=_test_nodes(engine["test_nodes"]),
+            test_nodes=engine_nodes,
+            **_gaps(engine, engine_nodes),
         ),
     )
+    messages = [
+        holder.failure_messages
+        for holder in (*result.sos_results.values(), *result.fdn_results.values(),
+                       result.engine_result)
+    ]  # fmt: skip
+    if sum(len(text) for mapping in messages for text in mapping.values()) > FAILURE_MESSAGE_BUDGET:
+        raise GraderError("evaluation_invalid_failure_messages")
     result.compute_aggregates()
     return result
 

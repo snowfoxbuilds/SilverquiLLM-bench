@@ -31,6 +31,9 @@ Public API:
 
 from __future__ import annotations
 
+import ast
+import configparser
+import fnmatch
 import hashlib
 import json
 import logging
@@ -110,6 +113,9 @@ class CardResult:
     skipped: bool = False
     test_nodes: list[dict] = field(default_factory=list)
     tests_hash: str = ""
+    expected_test_functions: int | None = None
+    not_run: list[dict] = field(default_factory=list)
+    failure_messages: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -122,6 +128,9 @@ class EngineResult:
     pass_rate: float = 0.0
     errors: list[str] = field(default_factory=list)
     test_nodes: list[dict] = field(default_factory=list)
+    expected_test_functions: int | None = None
+    not_run: list[dict] = field(default_factory=list)
+    failure_messages: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -620,13 +629,33 @@ def _prepare_engine_work(
     return engine_dir, None
 
 
+# A failure message is a short diagnostic, never part of a score: candidate code shapes
+# it, so it is bounded per node here and per evaluation by ``_apply_message_budget``.
+FAILURE_MESSAGE_LIMIT = 240
+FAILURE_MESSAGE_BUDGET = 128 * 1024
+NOT_RUN_REASONS = frozenset({
+    "collection_error",        # the node's own test module failed to collect
+    "import_error",            # ...because an import failed
+    "collection_interrupted",  # another module's collection error stopped the session
+    "timeout",                 # the suite hit its time limit
+    "skipped",                 # skipped or xfail at run time
+    "pytest_exited",           # pytest ended abnormally before reporting the node
+    "not_reported",            # pytest finished without reporting the node
+    "grading_support_missing",  # authoritative grading support was absent
+    "candidate_code_missing",  # the candidate's engine or cards directory was absent
+})  # fmt: skip
+_DEFAULT_PYTHON_FILES = ("test_*.py", "tests.py")
+
+
 def _generate_report_plugin(report_jsonl_path: str) -> str:
     """Return Python source for a pytest plugin that records test outcomes to JSONL.
 
     The generated plugin uses the ``pytest_runtest_logreport`` hook to capture
-    per-test outcomes.  Only ``when == "call"`` reports are recorded for
-    pass/fail.  ``when == "setup"`` failures (including collection errors) are
-    also captured since those tests never reach ``call``.
+    per-test outcomes.  ``when == "call"`` reports give pass/fail, and a failure
+    keeps a short message.  ``when == "setup"`` failures are also captured since
+    those tests never reach ``call``.  Skipped and xfail outcomes, and collection
+    errors, are recorded so that a node that did not run can say why; only pass
+    and fail rows ever become ``test_nodes``.
 
     The JSONL file path is baked into the source as a literal string so no
     env-var plumbing is needed.
@@ -637,33 +666,56 @@ def _generate_report_plugin(report_jsonl_path: str) -> str:
 import json as _json
 
 _REPORT_PATH = "{safe_path}"
+_LIMIT = {FAILURE_MESSAGE_LIMIT * 4}
 _seen_nodes = set()
+
+def _message(report):
+    text = None
+    try:
+        crash = getattr(report.longrepr, "reprcrash", None)
+        if crash is not None:
+            text = crash.message
+    except Exception:
+        text = None
+    if not text:
+        try:
+            lines = [line for line in str(report.longrepr).splitlines() if line.strip()]
+            text = lines[-1] if lines else ""
+        except Exception:
+            text = ""
+    return str(text)[:_LIMIT]
+
+def _write(row):
+    with open(_REPORT_PATH, "a") as f:
+        f.write(_json.dumps(row) + "\\n")
 
 def pytest_runtest_logreport(report):
     """Record each test node outcome to a JSONL file."""
     nodeid = report.nodeid
     if report.when == "call":
-        # Skip xfail/xpass outcomes — they appear as skipped=True in the call phase.
-        # Intentionally omit them; only genuine pass/fail outcomes are recorded.
-        if report.skipped or hasattr(report, "wasxfail"):
-            return
-        outcome = "pass" if report.passed else "fail"
         _seen_nodes.add(nodeid)
-        with open(_REPORT_PATH, "a") as f:
-            f.write(_json.dumps({{"nodeid": nodeid, "when": "call", "outcome": outcome}}) + "\\n")
-    elif report.when == "setup" and report.failed:
-        # Setup failure — test never reaches "call"
+        # Skipped and xfail/xpass outcomes are never pass/fail outcomes.
+        if report.skipped or hasattr(report, "wasxfail"):
+            _write({{"nodeid": nodeid, "when": "call", "outcome": "skip"}})
+            return
+        row = {{"nodeid": nodeid, "when": "call", "outcome": "pass" if report.passed else "fail"}}
+        if not report.passed:
+            row["message"] = _message(report)
+        _write(row)
+    elif report.when == "setup" and (report.failed or report.skipped):
+        # Setup failure or skip — the test never reaches "call"
         if nodeid not in _seen_nodes:
             _seen_nodes.add(nodeid)
-            with open(_REPORT_PATH, "a") as f:
-                f.write(_json.dumps({{"nodeid": nodeid, "when": "setup", "outcome": "fail"}}) + "\\n")
+            if report.failed:
+                _write({{"nodeid": nodeid, "when": "setup", "outcome": "fail", "message": _message(report)}})
+            else:
+                _write({{"nodeid": nodeid, "when": "setup", "outcome": "skip"}})
 
 def pytest_collectreport(report):
     """Record collection errors."""
     if report.failed:
         nodeid = report.nodeid or "<collection-error>"
-        with open(_REPORT_PATH, "a") as f:
-            f.write(_json.dumps({{"nodeid": nodeid, "when": "collect", "outcome": "fail"}}) + "\\n")
+        _write({{"nodeid": nodeid, "when": "collect", "outcome": "fail", "message": _message(report)}})
 '''
 
 
@@ -693,6 +745,72 @@ def _suite_relative_nodeid(nodeid: str, suite_dir: str) -> str:
     return nodeid.removeprefix(suite_dir + "/")
 
 
+def _bounded_message(value) -> str:
+    """One printable line of at most ``FAILURE_MESSAGE_LIMIT`` characters, always valid UTF-8."""
+    text = value if isinstance(value, str) else ""
+    text = text.encode("utf-8", "replace").decode("utf-8")
+    text = " ".join("".join(ch if ch.isprintable() else " " for ch in text).split())
+    # Object addresses differ between gradings of the same workspace.
+    text = re.sub(r"\b0x[0-9a-fA-F]{6,}\b", "0x…", text)
+    return text[:FAILURE_MESSAGE_LIMIT]
+
+
+@dataclass
+class _Report:
+    nodes: list[dict] = field(default_factory=list)
+    skipped: set[str] = field(default_factory=set)
+    messages: dict[str, str] = field(default_factory=dict)
+    # Module id (``""`` when pytest named none) -> message of its collection error.
+    collection_errors: dict[str, str] = field(default_factory=dict)
+
+
+def _read_report(report_path: Path, suite_dir: str | None = None) -> _Report:
+    report = _Report()
+    if not report_path.exists():
+        return report
+
+    seen: set[str] = set()
+    for line in report_path.read_text(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+
+        raw_nodeid = entry.get("nodeid", "")
+        if not isinstance(raw_nodeid, str):
+            continue
+        outcome = entry.get("outcome")
+        if suite_dir is not None:
+            normalized = _suite_relative_nodeid(raw_nodeid, suite_dir)
+        elif raw_nodeid and raw_nodeid != "<collection-error>":
+            normalized = _normalize_nodeid(raw_nodeid)
+        else:
+            normalized = "tests.py::<collection-error>"
+
+        if outcome == "skip":
+            report.skipped.add(normalized)
+            continue
+        # Only accept the explicit values the conftest writes ('pass' / 'fail').
+        # Any other or missing outcome is ignored — must not be silently coerced.
+        if outcome not in ("pass", "fail"):
+            continue
+        if outcome == "fail" and normalized not in report.messages:
+            report.messages[normalized] = _bounded_message(entry.get("message"))
+        if entry.get("when") == "collect":
+            module = normalized.removesuffix("::<collection-error>")
+            module = "" if module == "<collection-error>" else module
+            report.collection_errors.setdefault(module, report.messages[normalized])
+        if normalized not in seen:
+            seen.add(normalized)
+            report.nodes.append({"test_node": normalized, "outcome": outcome})
+    return report
+
+
 def _parse_report_jsonl(report_path: Path, suite_dir: str | None = None) -> list[dict]:
     """Parse the JSONL report file into a list of ``{"test_node": ..., "outcome": ...}`` dicts.
 
@@ -702,47 +820,21 @@ def _parse_report_jsonl(report_path: Path, suite_dir: str | None = None) -> list
     *suite_dir*, nodeids are made relative to that suite directory and a
     nodeless collection error becomes ``<collection-error>``.
     """
-    if not report_path.exists():
-        return []
-
-    seen: set[str] = set()
-    nodes: list[dict] = []
-
-    for line in report_path.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
-        raw_nodeid = entry.get("nodeid", "")
-        outcome = entry.get("outcome")
-
-        # Only accept the explicit values the conftest writes ('pass' / 'fail').
-        # Any other or missing outcome is ignored — must not be silently coerced.
-        if outcome not in ("pass", "fail"):
-            continue
-
-        if suite_dir is not None:
-            normalized = _suite_relative_nodeid(raw_nodeid, suite_dir)
-        elif raw_nodeid and raw_nodeid != "<collection-error>":
-            normalized = _normalize_nodeid(raw_nodeid)
-        else:
-            normalized = "tests.py::<collection-error>"
-
-        if normalized not in seen:
-            seen.add(normalized)
-            nodes.append({
-                "test_node": normalized,
-                "outcome": outcome,
-            })
-
-    return nodes
+    return _read_report(report_path, suite_dir).nodes
 
 
-def _run_pytest_with_pythonpath(
+@dataclass
+class _PytestRun:
+    passed: int
+    failed: int
+    total: int
+    errors: list[str]
+    report: _Report
+    timed_out: bool = False
+    returncode: int | None = None
+
+
+def _run_pytest(
     test_path: Path,
     pythonpath_parts: list[str],
     timeout: int = 60,
@@ -750,12 +842,8 @@ def _run_pytest_with_pythonpath(
     *,
     isolated_workspace: Path | None = None,
     suite_dir: str | None = None,
-) -> tuple[int, int, int, list[str]] | tuple[int, int, int, list[str], list[dict]]:
+) -> _PytestRun:
     """Run pytest on *test_path* with a custom PYTHONPATH.
-
-    Returns ``(passed, failed, total, errors)``.  When *capture_test_nodes*
-    is ``True``, returns a 5-tuple with an additional list of per-node
-    outcome dicts: ``[{"test_node": "tests.py::test_x", "outcome": "pass"|"fail"}, ...]``.
 
     Node capture loads a generated reporter as its own pytest plugin
     (``-p <module>``) from a fresh temporary directory placed first on
@@ -816,29 +904,239 @@ def _run_pytest_with_pythonpath(
             )
             combined = result.stdout + "\n" + result.stderr
         except subprocess.TimeoutExpired:
-            if capture_test_nodes:
-                return 0, 0, 0, [f"Timeout after {timeout}s"], []
-            return 0, 0, 0, [f"Timeout after {timeout}s"]
+            # A timed-out suite grades nothing: no partial nodes are kept.
+            return _PytestRun(0, 0, 0, [f"Timeout after {timeout}s"], _Report(), timed_out=True)
 
-        parsed = _parse_pytest_output(combined)
-
-        if capture_test_nodes:
-            # test_nodes enumerates only executed pass/fail nodes.  Skipped and
-            # xfail tests are intentionally omitted, so len(test_nodes) may be
-            # less than tests_total when skips exist.  The authoritative counts
-            # (tests_passed, tests_failed, tests_total) come from
-            # _parse_pytest_output and are unaffected.
-            test_nodes = (
-                _parse_report_jsonl(report_jsonl_path, suite_dir) if report_jsonl_path else []
-            )
-            return parsed[0], parsed[1], parsed[2], parsed[3], test_nodes
-
-        return parsed
+        passed, failed, total, errors = _parse_pytest_output(combined)
+        # test_nodes enumerates only executed pass/fail nodes.  Skipped and
+        # xfail tests are intentionally omitted, so len(test_nodes) may be
+        # less than tests_total when skips exist.  The authoritative counts
+        # (tests_passed, tests_failed, tests_total) come from
+        # _parse_pytest_output and are unaffected.
+        report = _read_report(report_jsonl_path, suite_dir) if report_jsonl_path else _Report()
+        return _PytestRun(passed, failed, total, errors, report, returncode=result.returncode)
     finally:
         # However the body exits (normal return, TimeoutExpired, or any other
         # exception such as OSError/PermissionError).
         if report_dir is not None:
             shutil.rmtree(report_dir, ignore_errors=True)
+
+
+def _run_pytest_with_pythonpath(
+    test_path: Path,
+    pythonpath_parts: list[str],
+    timeout: int = 60,
+    capture_test_nodes: bool = False,
+    *,
+    isolated_workspace: Path | None = None,
+    suite_dir: str | None = None,
+) -> tuple[int, int, int, list[str]] | tuple[int, int, int, list[str], list[dict]]:
+    """Run pytest on *test_path* with a custom PYTHONPATH.
+
+    Returns ``(passed, failed, total, errors)``.  When *capture_test_nodes*
+    is ``True``, returns a 5-tuple with an additional list of per-node
+    outcome dicts: ``[{"test_node": "tests.py::test_x", "outcome": "pass"|"fail"}, ...]``.
+    """
+    run = _run_pytest(
+        test_path, pythonpath_parts, timeout, capture_test_nodes,
+        isolated_workspace=isolated_workspace, suite_dir=suite_dir,
+    )
+    if capture_test_nodes:
+        return run.passed, run.failed, run.total, run.errors, run.report.nodes
+    return run.passed, run.failed, run.total, run.errors
+
+
+# ---------------------------------------------------------------------------
+# Expected test functions and the nodes that did not run
+# ---------------------------------------------------------------------------
+
+
+def _decorator_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    names = []
+    for decorator in function.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        parts = []
+        while isinstance(target, ast.Attribute):
+            parts.append(target.attr)
+            target = target.value
+        if isinstance(target, ast.Name):
+            parts.append(target.id)
+        names.append(".".join(reversed(parts)))
+    return names
+
+
+def _is_test_function(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        and node.name.startswith("test")
+        and not any(name.rsplit(".", 1)[-1] == "fixture" for name in _decorator_names(node))
+    )
+
+
+def _is_test_class(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.ClassDef)
+        and node.name.startswith("Test")
+        and not any(
+            isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef) and item.name == "__init__"
+            for item in node.body
+        )
+    )
+
+
+def expected_test_functions(source: str, module_id: str) -> list[str] | None:
+    """The test functions pytest collects from one authoritative test module, statically.
+
+    Mirrors pytest's default discovery: module-level ``test*`` functions and the
+    ``test*`` methods of ``Test*`` classes without ``__init__`` (nested ones too,
+    and methods inherited from classes defined in the same module).  A
+    parametrized function is one entry, without its ``[...]`` ids.  This reads
+    host-side files only, never the candidate's code, so a candidate cannot
+    change what is expected.  ``None`` when the module does not parse.
+    """
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+    found: list[str] = []
+
+    def methods(cls: ast.ClassDef, visiting: frozenset[str]) -> dict[str, None]:
+        names: dict[str, None] = {}
+        for base in cls.bases:
+            if isinstance(base, ast.Name) and base.id in classes and base.id not in visiting:
+                names.update(methods(classes[base.id], visiting | {base.id}))
+        for item in cls.body:
+            if _is_test_function(item):
+                names[item.name] = None
+        return names
+
+    def visit_class(cls: ast.ClassDef, prefix: str, visiting: frozenset[str]) -> None:
+        found.extend(f"{prefix}::{name}" for name in methods(cls, visiting))
+        for item in cls.body:
+            if _is_test_class(item):
+                visit_class(item, f"{prefix}::{item.name}", visiting | {item.name})
+
+    for node in tree.body:
+        if _is_test_function(node):
+            found.append(f"{module_id}::{node.name}")
+        elif _is_test_class(node):
+            visit_class(node, f"{module_id}::{node.name}", frozenset({node.name}))
+    return list(dict.fromkeys(found))
+
+
+def _python_files(support_dir: Path) -> tuple[str, ...]:
+    """The suite's ``python_files``: the evaluator's own fallback ini when support has none."""
+    ini = support_dir / "pytest.ini"
+    if not ini.is_file():
+        return _DEFAULT_PYTHON_FILES
+    config = configparser.ConfigParser(interpolation=None)
+    try:
+        config.read(ini)
+        value = config.get("pytest", "python_files", fallback="")
+    except (configparser.Error, OSError, UnicodeDecodeError):
+        value = ""
+    return tuple(value.split()) or ("test_*.py", "*_test.py")
+
+
+def expected_suite_functions(tests_dir: Path, python_files: Iterable[str]) -> list[str] | None:
+    """Every expected test function of an authoritative suite directory, suite-relative."""
+    patterns = tuple(python_files)
+    found: list[str] = []
+    for path in sorted(tests_dir.rglob("*.py")):
+        relative = path.relative_to(tests_dir)
+        if any(part.startswith(".") or part == "__pycache__" for part in relative.parts):
+            continue
+        if not any(fnmatch.fnmatch(path.name, pattern) for pattern in patterns):
+            continue
+        try:
+            source = path.read_text()
+        except (OSError, UnicodeDecodeError):
+            return None
+        functions = expected_test_functions(source, relative.as_posix())
+        if functions is None:
+            return None
+        found.extend(functions)
+    return found
+
+
+def _base_node(test_node: str) -> str:
+    return test_node.split("[", 1)[0]
+
+
+def _not_run(expected: list[str] | None, run: _PytestRun | None, reason: str | None = None) -> list[dict]:
+    """The expected test functions none of whose nodes ran, each with why.
+
+    *reason* overrides the per-node diagnosis (used when the suite never started).
+    """
+    if not expected:
+        return []
+    if run is None:
+        return [{"test_node": node, "reason": reason or "not_reported"} for node in expected]
+    report = run.report
+    ran = {
+        _base_node(node["test_node"])
+        for node in report.nodes
+        if "::" in node["test_node"] and "<collection-error>" not in node["test_node"]
+    }
+    skipped = {_base_node(node) for node in report.skipped}
+    missing = []
+    for node in expected:
+        if node in ran:
+            continue
+        module = node.split("::", 1)[0]
+        if reason is not None:
+            why = reason
+        elif run.timed_out:
+            why = "timeout"
+        elif node in skipped:
+            why = "skipped"
+        elif module in report.collection_errors or (
+            "" in report.collection_errors and len(report.collection_errors) == 1
+        ):
+            message = report.collection_errors.get(module, report.collection_errors.get(""))
+            why = (
+                "import_error"
+                if re.search(r"\b(ImportError|ModuleNotFoundError)\b", message or "")
+                else "collection_error"
+            )
+        elif report.collection_errors:
+            why = "collection_interrupted"
+        elif run.returncode not in (0, 1):
+            why = "pytest_exited"
+        else:
+            why = "not_reported"
+        missing.append({"test_node": node, "reason": why})
+    return missing
+
+
+def _failure_messages(run: _PytestRun) -> dict[str, str]:
+    failed = {node["test_node"] for node in run.report.nodes if node["outcome"] == "fail"}
+    return {
+        node: message
+        for node, message in run.report.messages.items()
+        if node in failed and message
+    }
+
+
+def _apply_message_budget(result: FullEvalResult) -> None:
+    """Drop failure messages past ``FAILURE_MESSAGE_BUDGET`` characters per evaluation."""
+    remaining = FAILURE_MESSAGE_BUDGET
+    holders = [
+        *(result.sos_results[key] for key in sorted(result.sos_results)),
+        *(result.fdn_results[key] for key in sorted(result.fdn_results)),
+        result.engine_result,
+    ]
+    for holder in holders:
+        kept = {}
+        for node in sorted(holder.failure_messages):
+            message = _bounded_message(holder.failure_messages[node])
+            if len(message) > remaining:
+                remaining = 0
+                continue
+            remaining -= len(message)
+            kept[node] = message
+        holder.failure_messages = kept
 
 
 def _make_card_result(
@@ -1037,19 +1335,31 @@ def _eval_engine(
         return EngineResult(errors=[f"No engine tests at {engine_tests_dir}"])
     if not support_dir.is_dir():
         return EngineResult(errors=[f"authoritative engine support not found at {support_dir}"])
+    # From the authoritative suite and its support pytest.ini, never the candidate's copy.
+    expected = expected_suite_functions(engine_tests_dir, _python_files(support_dir))
+
+    def unavailable(error: str, reason: str = "grading_support_missing") -> EngineResult:
+        return EngineResult(
+            errors=[error],
+            expected_test_functions=None if expected is None else len(expected),
+            not_run=_not_run(expected, None, reason),
+        )
+
     if test_interface is not None:
         missing = interface_support_missing(test_interface)
         if missing is not None:
-            return EngineResult(errors=[missing])
+            return unavailable(missing)
         support = engine_work.parent / "test_utils.py"
     else:
         support = test_utils if test_utils is not None else support_dir / "test_utils.py"
         if not support.is_file():
-            return EngineResult(errors=[f"authoritative test_utils.py not found at {support}"])
+            return unavailable(f"authoritative test_utils.py not found at {support}")
     selected_cards = cards_dir if cards_dir is not None else engine_work.parent / "cards"
     for source in (engine_work, selected_cards):
         if not source.is_dir():
-            return EngineResult(errors=[f"selected grading code directory not found at {source}"])
+            return unavailable(
+                f"selected grading code directory not found at {source}", "candidate_code_missing"
+            )
 
     data_root = _BENCHMARK_DATA_ROOT.get() or Path(
         os.environ.get("SILVERQUILLM_BENCH_ROOT", _REPO_ROOT)
@@ -1091,18 +1401,21 @@ def _eval_engine(
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, destination)
 
-        passed, failed, total, errors, test_nodes = _run_pytest_with_pythonpath(
+        run = _run_pytest(
             staged_tests, [str(workspace), str(_REPO_ROOT)], timeout=timeout,
             capture_test_nodes=True, isolated_workspace=workspace,
             suite_dir=staged_tests.name,
         )
     return EngineResult(
-        tests_passed=passed,
-        tests_failed=failed,
-        tests_total=total,
-        pass_rate=passed / total if total > 0 else 0.0,
-        errors=errors,
-        test_nodes=test_nodes,
+        tests_passed=run.passed,
+        tests_failed=run.failed,
+        tests_total=run.total,
+        pass_rate=run.passed / run.total if run.total > 0 else 0.0,
+        errors=run.errors,
+        test_nodes=run.report.nodes,
+        expected_test_functions=None if expected is None else len(expected),
+        not_run=_not_run(expected, run),
+        failure_messages=_failure_messages(run),
     )
 
 
@@ -1256,8 +1569,16 @@ def _grade_audited_card(
             None if support is not None and support.is_file()
             else f"authoritative test_utils.py not found at {support}"
         )
+    try:
+        expected = expected_test_functions(test_file.read_text(), "tests.py")
+    except (OSError, UnicodeDecodeError):
+        expected = None
     if missing is not None:
-        return CardResult(collector_number=card_id, skipped=True, errors=[missing])
+        return CardResult(
+            collector_number=card_id, skipped=True, errors=[missing],
+            expected_test_functions=None if expected is None else len(expected),
+            not_run=_not_run(expected, None, "grading_support_missing"),
+        )
     tmp_dir = tempfile.mkdtemp(prefix="eval_contract_")
     try:
         tmp = Path(tmp_dir)
@@ -1291,11 +1612,12 @@ def _grade_audited_card(
             "_sys.modules[__name__] = _selected\n"
         )
         pp = [str(tmp), str(overlay), str(candidate_card), str(_REPO_ROOT)]
-        passed, failed, total, errors, test_nodes = _run_pytest_with_pythonpath(
-            tmp / "tests.py", pp, timeout=timeout, capture_test_nodes=True,
-        )
-        cr = _make_card_result(card_id, passed, failed, total, errors)
-        cr.test_nodes = test_nodes
+        run = _run_pytest(tmp / "tests.py", pp, timeout=timeout, capture_test_nodes=True)
+        cr = _make_card_result(card_id, run.passed, run.failed, run.total, run.errors)
+        cr.test_nodes = run.report.nodes
+        cr.expected_test_functions = None if expected is None else len(expected)
+        cr.not_run = _not_run(expected, run)
+        cr.failure_messages = _failure_messages(run)
         try:
             cr.tests_hash = hashlib.sha256(test_file.read_bytes()).hexdigest()
         except OSError:
@@ -1434,6 +1756,7 @@ def evaluate_run(
         shutil.rmtree(overlay_root, ignore_errors=True)
         _BENCHMARK_DATA_ROOT.reset(data_root_token)
 
+    _apply_message_budget(result)
     result.compute_aggregates()
     return result
 

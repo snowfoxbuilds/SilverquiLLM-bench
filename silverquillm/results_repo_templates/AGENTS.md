@@ -86,6 +86,9 @@ The manifest contains `run_id`, `candidate`, `candidate_hash`, `benchmark`, `bud
 Measurements retain response/tool components, token usage, versioned API-equivalent pricing, and completeness reasons.
 The three existing score-dimension names remain; an absent dimension uses `evaluated: false`, null counts/pass rate, and `missing_reasons`.
 Coverage distinguishes the complete reference population from cards with executed audited cases.
+Each card under `card_correctness.cards` and `fdn_regression.cards`, and `engine_regression` itself, also carries `expected_test_functions` (statically collected from the authoritative tests; null when unknown), `not_run` (`{"test_node", "reason"}` for each expected function none of whose nodes ran) and `failure_messages` (failing node → one bounded line).
+They are diagnostics: the counts and pass rate still cover only the nodes that ran.
+Records graded before these fields existed lack them and remain valid.
 A snapshot fallback names its selected source while retaining the final workspace separately.
 Host grading inputs have content fingerprints in `run_metadata.grading_inputs`.
 A later recovery observation can have its own record id while `recovery_of` and `execution_run_id` link it to the original model execution; the prior record remains unchanged, and a reader of the records sees that link in the recovery's own record.

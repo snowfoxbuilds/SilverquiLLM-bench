@@ -193,6 +193,7 @@ Retain the final Workspace and existing Output Snapshot/fallback provenance so a
 
 An unknown failure cause remains unknown instead of receiving a guessed attribution.
 If grading could not run, record why; an absent evaluation is different from an evaluated implementation scoring zero.
+A grade also lists, per suite, the expected test functions that did not run and why, and a bounded failure message for each failing node; neither changes a score ([SCORING.md](SCORING.md) → Tests that did not run).
 Incomplete cost or turn measurements are labeled as such alongside the available values.
 No eligible/ineligible decision is required to retain or analyze these observations.
 A missing result file after a forced stop does not prevent partial grading.
