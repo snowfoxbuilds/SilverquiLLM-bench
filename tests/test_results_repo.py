@@ -792,6 +792,108 @@ class TestResultsInit:
         assert "not empty" in result.output
         assert not (tmp_path / "x").exists()
 
+    @pytest.mark.parametrize("git_clone", [False, True])
+    def test_a_config_parent_failure_leaves_nothing_and_a_retry_succeeds(
+        self, tmp_path: Path, git_clone: bool
+    ) -> None:
+        target = tmp_path / "clone"
+        if git_clone:
+            (target / ".git").mkdir(parents=True)
+        xdg = tmp_path / "xdg"
+        xdg.mkdir()
+        (xdg / "silverquillm").write_text("not a directory")
+        env = {"XDG_CONFIG_HOME": str(xdg)}
+        result = CliRunner().invoke(cli_main, ["results-init", str(target)], env=env)
+        assert result.exit_code == 1
+        assert "cannot write" in result.output
+        if git_clone:
+            assert sorted(p.name for p in target.iterdir()) == [".git"]
+        else:
+            assert not target.exists()
+        (xdg / "silverquillm").unlink()
+        retry = CliRunner().invoke(cli_main, ["results-init", str(target)], env=env)
+        assert retry.exit_code == 0, retry.output
+        assert (target / ".git").is_dir() == git_clone
+        assert (
+            load_host_config(xdg / "silverquillm" / "config.toml").locations["results_repo"]
+            == target.resolve()
+        )
+
+    def test_a_partial_config_write_publishes_nothing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from silverquillm import host_config
+
+        config_file = tmp_path / "xdg" / "silverquillm" / "config.toml"
+        real_fsync = host_config.os.fsync
+
+        def failing_fsync(descriptor: int) -> None:
+            raise OSError(5, "simulated flush failure")
+
+        monkeypatch.setattr(host_config.os, "fsync", failing_fsync)
+        env = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+        result = CliRunner().invoke(cli_main, ["results-init", str(tmp_path / "clone")], env=env)
+        assert result.exit_code == 1
+        assert not config_file.exists()
+        assert list(config_file.parent.iterdir()) == []
+        assert not (tmp_path / "clone").exists()
+        monkeypatch.setattr(host_config.os, "fsync", real_fsync)
+        retry = CliRunner().invoke(cli_main, ["results-init", str(tmp_path / "clone")], env=env)
+        assert retry.exit_code == 0, retry.output
+        assert (
+            load_host_config(config_file).locations["results_repo"]
+            == (tmp_path / "clone").resolve()
+        )
+
+    def test_a_skeleton_failure_removes_the_config_it_wrote(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config_file = tmp_path / "xdg" / "silverquillm" / "config.toml"
+
+        def failing_init(path: Path) -> list[Path]:
+            raise OSError(28, "simulated full disk")
+
+        monkeypatch.setattr(rr, "init_results_repo", failing_init)
+        env = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+        result = CliRunner().invoke(cli_main, ["results-init", str(tmp_path / "clone")], env=env)
+        assert result.exit_code == 1
+        assert "cannot lay out" in result.output
+        assert not config_file.exists()
+
+    def test_an_interrupt_removes_the_config_it_wrote(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config_file = tmp_path / "xdg" / "silverquillm" / "config.toml"
+
+        def interrupted_init(path: Path) -> list[Path]:
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(rr, "init_results_repo", interrupted_init)
+        env = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+        result = CliRunner().invoke(cli_main, ["results-init", str(tmp_path / "clone")], env=env)
+        assert result.exit_code != 0
+        assert not config_file.exists()
+
+    def test_a_config_created_meanwhile_is_kept(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from silverquillm import host_config
+
+        config_file = tmp_path / "xdg" / "silverquillm" / "config.toml"
+        real_link = host_config.os.link
+
+        def racing_link(source: str, destination: Path) -> None:
+            Path(destination).write_text('state_root = "/theirs"\n')
+            real_link(source, destination)
+
+        monkeypatch.setattr(host_config.os, "link", racing_link)
+        env = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+        result = CliRunner().invoke(cli_main, ["results-init", str(tmp_path / "clone")], env=env)
+        assert result.exit_code == 0, result.output
+        assert config_file.read_text() == 'state_root = "/theirs"\n'
+        assert "kept existing" in result.output
+        assert sorted(p.name for p in config_file.parent.iterdir()) == ["config.toml"]
+
     def test_the_schema_stays_in_the_package(self) -> None:
         text = (rr.TEMPLATE_DIR / "AGENTS.md").read_text()
         for needle in (

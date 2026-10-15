@@ -16,7 +16,7 @@ The operator runbook lives in the results repository's `AGENTS.md`; operational 
 
 Every command finds the results repository, the batch queue, the run directory, the state root and the bench checkout the same way: its flag (`--results-repo`, `--batches-dir`, `--results-dir`, `--state-root`, `--bench-root`), else its environment variable (only `SILVERQUILLM_RESULTS_REPO` has one), else the host configuration file.
 The state root defaults to `~/.local/state/silverquillm` and the bench root to the working directory; any other location left unset is an error naming all three sources, never a path relative to the working directory.
-`silverquillm results-init PATH` lays out an empty results repository and, if the host has no configuration file yet, writes a minimal one.
+`silverquillm results-init PATH` lays out an empty results repository and, if the host has no configuration file yet, writes a minimal one. It publishes the configuration whole or not at all and never replaces an existing one; if either step fails, neither the skeleton nor a configuration it wrote is left behind, so rerunning it after fixing the cause succeeds.
 Relative paths in the file resolve from the file's own directory.
 
 ```toml
@@ -300,11 +300,15 @@ The historical `--image` lineage remains under `silverquillm legacy`; `legacy re
 
 ## Re-grade retained runs
 
-After Audited Tests or other grading inputs change, re-grade the runs already recorded instead of rerunning them:
+After Audited Tests or other grading inputs change, re-grade the runs already recorded instead of rerunning them. From the results repository, publish into the directory named by the digest being graded on:
 
 ```sh
-silverquillm regrade --benchmark hob-medium --out regrades/hob-medium
+cd ~/bench-results   # the results repository checkout (results_repo in the host configuration)
+hex=$(silverquillm grading-inputs hob-medium | python3 -c 'import json, sys; print(json.load(sys.stdin)["digest"].removeprefix("sha256:"))')
+silverquillm regrade --benchmark hob-medium --out "regrades/$hex"
 ```
+
+Any other `--out` inside the results repository is refused; outside it, any directory works as scratch output.
 
 - Each run is graded again from the workspace it was graded from (`grading_source.selected`), found under `--results-dir/<run-id>`, on the grader image its record names, with the same container isolation as a run. A record's artifact pointers are not followed, so a record from another host never chooses what is mounted.
 - Nothing in the results repository or the run artifacts is written; an `--out` that overlaps either is refused, except the results repository's `regrades/<digest hex>/` for the grading inputs being graded on (`silverquillm grading-inputs BENCHMARK` prints that digest), where re-grades are published. `--out` holds `<candidate-hash>/<run-id>.json` per run, with the new scores in the record's `scores.json` shape, the record's own counts and grading-inputs digest, the new digest, and a digest of the grading code.
@@ -319,7 +323,7 @@ silverquillm regrade --benchmark hob-medium --out regrades/hob-medium
 
 ## Shared results repository
 
-Several hosts write to the same bench-results repository. Records never collide, since each has its own path, so pull before a batch and push its records after; every file the bench writes there is write-once.
+Several hosts write to the same bench-results repository. Records never collide, since each has its own path, so pull before a batch and push its records after. Every record, workspace archive and exclusion the bench writes there is write-once; a published re-grade under `regrades/<digest hex>/` is the exception, rewritten when that run is graded again (a cache miss or `--force`).
 
 ### Workspace archives
 

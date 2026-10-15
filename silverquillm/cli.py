@@ -9,6 +9,7 @@ Entry point registered in pyproject.toml: ``benchmark = "silverquillm.cli:main"`
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import secrets
@@ -1582,19 +1583,40 @@ def results_init(path: Path) -> None:
     (silverquillm/results_repo_templates/AGENTS.md).
     """
     from silverquillm.host_config import config_path, write_minimal_config
-    from silverquillm.results_repo import ResultsRepoError, init_results_repo
+    from silverquillm.results_repo import (
+        ResultsRepoError,
+        check_results_repo_target,
+        init_results_repo,
+    )
 
+    # One transaction: check the target, publish the configuration, lay out the
+    # skeleton; a failure at any step leaves neither behind, so a retry starts clean.
     try:
-        written = init_results_repo(path)
+        check_results_repo_target(path)
     except ResultsRepoError as exc:
         raise click.ClickException(str(exc)) from exc
+    config_file = config_path()
+    try:
+        config_written = write_minimal_config(config_file, path, _REPO_ROOT)
+    except OSError as exc:
+        raise click.ClickException(f"cannot write {config_file}: {exc}") from exc
+    try:
+        written = init_results_repo(path)
+    except BaseException as exc:
+        if config_written:
+            with contextlib.suppress(OSError):
+                config_file.unlink()
+        if isinstance(exc, ResultsRepoError | OSError):
+            raise click.ClickException(f"cannot lay out {path}: {exc}") from exc
+        raise
     for file_path in written:
         click.echo(f"wrote {file_path}")
-    config_file = config_path()
-    if write_minimal_config(config_file, path, _REPO_ROOT):
+    if config_written:
         click.echo(f"wrote {config_file} (results_repo, bench_root, batches_dir, runs_dir)")
     else:
-        click.echo(f"kept existing {config_file}; set results_repo = {path.resolve()} there if needed")
+        click.echo(
+            f"kept existing {config_file}; set results_repo = {path.resolve()} there if needed"
+        )
 
 
 from silverquillm.karn.commands import COMMANDS as _KARN_COMMANDS

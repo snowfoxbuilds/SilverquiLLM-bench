@@ -7,7 +7,7 @@ Operator instructions live in [Karn benchmarking](../docs/KARN-BENCHMARKING.md).
   Batches are scanned in name order.
   Batch ids are one-shot: the state file records what ran under that id, so write a new file instead of reusing one.
 - **`state/<id>.json`** — the scheduler's observed state for that Batch (schema 2), written atomically after every transition.
-  Commit it as runs finish; the scheduler never runs git.
+  Batch files and their state are host-local operational files: back them up with the host's raw data, and never commit or publish them; the scheduler never runs git.
 
 ## Batch file
 
@@ -31,7 +31,7 @@ The file is reread before every not-yet-started entry, so appending entries to a
 
 - The scheduler fills free eligible Login Pool slots automatically, through the same lifecycle as `silverquillm run`; no concurrency setting is needed.
 - Entries start in file order within a batch and can overlap. Batches with a slot available take priority in filename order; a blocked batch does not hold up another batch's pool. Completion order can differ from start order.
-- A batch without committed state is blocked until acknowledged once with `--replay-without-state <id>`, because starting from entry 0 could replay finished runs.
+- A batch without state is blocked until acknowledged once with `--replay-without-state <id>`, because starting from entry 0 could replay finished runs.
 - A failed entry is recorded with its evidence and the batch continues.
 - An entry with no eligible slot stays pending, along with later entries in its batch. It counts as started only after claiming a slot.
 - All runs left `running` by a crashed or killed scheduler are checked for recovery; runs still owned by a live worker are deferred. An unowned run that never wrote its run input is recorded as failed with `interrupted_before_launch`.

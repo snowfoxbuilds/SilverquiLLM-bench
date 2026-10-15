@@ -123,7 +123,7 @@ A `--cards` filter is available for development and pipeline validation, but fil
 ## Batches
 
 A batch is a `batches/<id>.toml` file with `format = "karn-v5"` (earlier `karn-v4` files still run) and ordered `[[runs]]` of build output, construct, and benchmark.
-The scheduler runs batches serially and commits progress to `batches/state/<id>.json`; see [batches/README.md](batches/README.md) and [Karn benchmarking](docs/KARN-BENCHMARKING.md).
+The scheduler serves every batch in its batch directory and records progress in `state/<id>.json` beside them; see [batches/README.md](batches/README.md) and [Karn benchmarking](docs/KARN-BENCHMARKING.md).
 Historical Candidate Bundle batches are shown as unsupported and never run.
 
 ---

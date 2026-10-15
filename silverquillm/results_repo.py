@@ -779,6 +779,25 @@ def iter_run_records(repo_root: Path) -> Iterator[tuple[Path, RunRecord]]:
 # ---------------------------------------------------------------------------
 
 
+def check_results_repo_target(path: Path) -> bool:
+    """Refuse a target :func:`init_results_repo` may not lay out; True if it exists.
+
+    *path* may not exist yet, be an empty directory, or be an empty git clone
+    (nothing but ``.git`` inside).
+    """
+    path = Path(path)
+    if not path.exists():
+        return False
+    if not path.is_dir():
+        raise ResultsRepoError(f"{path} is not a directory")
+    entries = sorted(p.name for p in path.iterdir() if p.name != ".git")
+    if entries:
+        raise ResultsRepoError(
+            f"{path} is not empty; refusing to initialize over: {', '.join(entries)}"
+        )
+    return True
+
+
 def init_results_repo(path: Path) -> list[Path]:
     """Lay out an empty results repo at *path*; return the files written.
 
@@ -793,15 +812,7 @@ def init_results_repo(path: Path) -> list[Path]:
     removed again so the operator can simply retry.
     """
     path = Path(path)
-    create_root = not path.exists()
-    if not create_root:
-        if not path.is_dir():
-            raise ResultsRepoError(f"{path} is not a directory")
-        entries = sorted(p.name for p in path.iterdir() if p.name != ".git")
-        if entries:
-            raise ResultsRepoError(
-                f"{path} is not empty; refusing to initialize over: {', '.join(entries)}"
-            )
+    create_root = not check_results_repo_target(path)
     created: list[Path] = []
     written: list[Path] = []
     try:

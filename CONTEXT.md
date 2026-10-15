@@ -76,7 +76,7 @@ Historical Candidate Bundle batches (candidate ref + mode) are unsupported and n
 Desired state, authored by the operator or a campaign top-up, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `state/`.
 Both are host-local operational files, backed up with the host's raw data and never published; a Batch has no analytical meaning (grilling 2026-10-14).
 The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused).
-One batch directory and one scheduler serve each host; a later Batch's runs dispatch after an earlier one's, and a Batch added to a running scheduler is picked up without a restart (grilling 2026-10-13, #219).
+One batch directory and one scheduler serve each host; Batches dispatch in name order, and a Batch with no state is blocked until the operator acknowledges starting it from entry zero.
 Edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
 
 _Avoid_: "job" (the substrate's job dir is a different concept), "queue entry" for the file (a Batch holds several runs)

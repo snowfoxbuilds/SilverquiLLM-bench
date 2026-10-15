@@ -9,8 +9,10 @@ host configuration).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+import tempfile
 import tomllib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -141,11 +143,23 @@ def write_minimal_config(path: Path, results_repo: Path, bench_root: Path) -> bo
         "",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
+    # Publish a complete file or none: a failed write never leaves a partial
+    # configuration that later calls would keep as "existing".
+    descriptor, temporary = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
     try:
-        with path.open("x", encoding="utf-8") as handle:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             handle.write("\n".join(lines))
-    except FileExistsError:
-        return False
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            return False
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
     return True
 
 

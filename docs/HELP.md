@@ -99,7 +99,8 @@ python scripts/harvest_validated_results.py --bench sos --summary
 export SILVERQUILLM_RESULTS_REPO=~/src/silverquillm-results   # or pass --results-repo everywhere
 # Lay out an empty clone (results/, exclusions/, cohorts/, campaigns/, regrades/) and,
 # if this host has none, a minimal ~/.config/silverquillm/config.toml
-# (refuses any non-empty target except a bare .git; a failed init rolls itself back)
+# (refuses any non-empty target except a bare .git; a failed init — skeleton or config —
+# leaves neither behind, so rerunning it after fixing the cause succeeds)
 silverquillm results-init "$SILVERQUILLM_RESULTS_REPO"
 # Harvest from the results repo instead of the docker/ walk (identical rows)
 python scripts/harvest_validated_results.py --bench sos --results-repo "$SILVERQUILLM_RESULTS_REPO"
