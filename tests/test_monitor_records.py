@@ -152,7 +152,7 @@ def test_a_record_failing_its_own_validation_is_unreadable(tmp_path):
     path = retain(run / "run-record.json", "r1")
     publish(repo, "r1", retained=path)
     document = json.loads(path.read_text())
-    del document["scores"]["engine_regression"]
+    del document["scores"]["engine"]
     path.write_text(json.dumps(document))
     assert stages(runs, repo, tmp_path=tmp_path) == {
         "r1": (Stage.NEEDS_RECOVER, ("unreadable_record",))

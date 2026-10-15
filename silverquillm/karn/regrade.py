@@ -33,8 +33,8 @@ from .baseline import (
     STABLE_UNAVAILABLE,
     BaselineStore,
     StagedBaseline,
+    baseline_comparison,
     baseline_reference_grade,
-    combined_regression,
     grading_code_digest,
     stage_baseline,
 )
@@ -52,10 +52,11 @@ from .grader import (
 )
 from .grading_inputs import grading_inputs
 from .records import (
-    DIMENSIONS,
+    SCHEMA_VERSIONS,
+    SUITES,
     KarnRunRecord,
     read_record,
-    validate_combined_regression,
+    validate_baseline_comparison,
     validate_scores,
 )
 from .workspace_archive import ArchiveRefused, graded_path, materialize
@@ -83,7 +84,7 @@ OUTPUT_KEYS = frozenset(
     }
 )
 #: Present only when this host's grader stood in for an absent recorded image.
-OPTIONAL_OUTPUT_KEYS = frozenset({"grader_substituted_for", "combined_regression"})
+OPTIONAL_OUTPUT_KEYS = frozenset({"grader_substituted_for", "baseline_comparison"})
 WORKSPACE_SOURCES = frozenset({"run_artifacts", "results_repo"})
 STOP_SECONDS = 30
 
@@ -153,7 +154,7 @@ def select_records(
             continue
         if not isinstance(manifest, dict) or manifest.get("benchmark") != benchmark_id:
             continue
-        if manifest.get("schema_version") != 2:
+        if manifest.get("schema_version") not in SCHEMA_VERSIONS:
             skipped.append({"run_id": run_dir.name, "reason": "not_a_karn_record"})
             continue
         try:
@@ -252,13 +253,13 @@ def expected_grader(record: KarnRunRecord, docker, *, substitute: bool) -> tuple
     return (used, image_id) if used and used != image_id else ("", None)
 
 
-def _dimensions(scores: dict) -> dict:
+def _suite_counts(record: KarnRunRecord) -> dict:
+    """The record's own counts per suite, under the suites' current names."""
     return {
         name: {
-            key: scores[name].get(key)
-            for key in ("tests_passed", "tests_total", "pass_rate", "complete")
+            key: score.get(key) for key in ("tests_passed", "tests_total", "pass_rate", "complete")
         }
-        for name in DIMENSIONS
+        for name, score in record.suites.items()
     }
 
 
@@ -381,7 +382,7 @@ def _source(record: KarnRunRecord) -> dict:
         "grading_inputs_digest": (metadata.get("grading_inputs") or {}).get("digest"),
         "workspace_digest": metadata["benchmark_input"].get("workspace_digest"),
         "execution_status": metadata["execution"]["status"],
-        "scores": _dimensions(record.scores),
+        "scores": _suite_counts(record),
     }
 
 
@@ -448,15 +449,15 @@ def _reusable(previous, identity: dict, grader: tuple) -> dict | None:
         or not isinstance(previous["graded_at"], str)
     ):
         return None
-    if ("combined_regression" in previous) != (identity["baseline_workspace_digest"] is not None):
+    if ("baseline_comparison" in previous) != (identity["baseline_workspace_digest"] is not None):
         return None
     try:
         validate_scores(previous["scores"])
-        if "combined_regression" in previous:
-            combined = previous["combined_regression"]
-            validate_combined_regression(combined)
+        if "baseline_comparison" in previous:
+            comparison = previous["baseline_comparison"]
+            validate_baseline_comparison(comparison)
             # A failed or input-shifted comparison is retried, never kept.
-            if not combined["available"] and combined["reason"] not in STABLE_UNAVAILABLE:
+            if not comparison["available"] and comparison["reason"] not in STABLE_UNAVAILABLE:
                 return None
         datetime.fromisoformat(previous["graded_at"])
     except (InvalidRunRecordError, ValueError):
@@ -529,9 +530,9 @@ def _regrade_one(
         except InvalidRunRecordError:
             raise GraderError("regrade_scores_invalid") from None
         result["scores"] = scores
-        combined = combined_regression(scores, evaluated, baseline, inputs_changed=inputs_changed)
-        if combined is not None:
-            result["combined_regression"] = combined
+        comparison = baseline_comparison(scores, evaluated, baseline, inputs_changed=inputs_changed)
+        if comparison is not None:
+            result["baseline_comparison"] = comparison
     except Skip as skip:
         return {**result, "skipped": str(skip)}
     except GraderError as error:
@@ -605,7 +606,7 @@ def summarize(
         }
         if unknown_run:
             entry["run_id"] = unknown_run
-        for name in DIMENSIONS:
+        for name in SUITES:
             before, after, paired = _means(
                 (r["source"]["scores"][name].get("pass_rate"), r["scores"][name].get("pass_rate"))
                 for r in rows
@@ -661,7 +662,7 @@ def regrade(
 ) -> dict:
     """Re-grade the selected runs into ``out`` and return the summary written beside them.
 
-    A benchmark with a Known Defect manifest also reports each run's Combined Regression
+    A benchmark with a Known Defect manifest also reports each run's baseline comparison
     against the baseline reference grade of its current Workspace, kept under
     ``state_root`` (by default the ``run`` command's).
     """
