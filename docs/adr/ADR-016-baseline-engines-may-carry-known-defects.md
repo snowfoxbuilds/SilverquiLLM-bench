@@ -14,7 +14,7 @@ Oracle validation could not catch this, because each Test Oracle Workspace engin
 
 A benchmark's baseline engine and FDN implementations may carry Known Defects, either inherited (found in an engine or implementation) or seeded on purpose; Seeded Defects are fixed per benchmark version, and agents may fix either kind.
 The FDN and engine Audited Tests assert rules-correct behavior even where the baseline fails them.
-Those the unmodified Workspace fails are Dependency Tests and those it passes are Collateral Tests, both counted in the Net Card Score of ADR-020 (amended 2026-10-14).
+Those the unmodified Workspace fails are Dependency Tests and those it passes are Collateral Tests, both counted in the Net Card Score of ADR-020 (amended 2026-10-14, #242).
 
 A Known-Best Workspace, separate from every benchmark, holds the Known-Best Engine and the FDN implementations with every Known Defect fixed, and the full FDN and engine Audited Tests.
 A benchmark is built by porting a copy of it; its Test Oracle Workspace engine starts from that copy, and its baseline engine is that copy plus its Known Defects.
@@ -25,10 +25,10 @@ Released benchmarks never take the fix.
 
 ## Consequences
 
-- **Positive**: Fixing an engine defect the target cards depend on raises an agent's score instead of lowering it, so the benchmark measures rules knowledge rather than tolerance of a contradictory spec (amended 2026-10-14).
+- **Positive**: Fixing an engine defect the target cards depend on raises an agent's score instead of lowering it, so the benchmark measures rules knowledge rather than tolerance of a contradictory spec (amended 2026-10-14, #242).
 - **Positive**: Every graded test is shown passable on a defect-free engine, and Seeded Defects become a deliberate difficulty knob.
 - **Positive**: Failing cases no longer have to be cut from graded suites to keep the baseline green.
-- **Negative**: An FDN or engine pass rate below 100% no longer means the agent broke something; only a failing Collateral Test does (amended 2026-10-14).
+- **Negative**: An FDN or engine pass rate below 100% no longer means the agent broke something; only a failing Collateral Test does (amended 2026-10-14, #242).
 - **Negative**: The Known-Best Engine and each benchmark's oracle engine must be kept in step by porting; a missed port shows up only as a failing oracle check.
 - **Neutral**: The baseline reference grade moves whenever an FDN or engine Audited Test changes, so it is recomputed per grading-inputs digest.
 
@@ -42,8 +42,9 @@ Released benchmarks never take the fix.
 
 ## Amendments
 
-- **2026-10-14**: The Combined Regression report and its Baseline Score and Known-Best Score reference points gave way to the Net Card Score of ADR-020, which classes the FDN and engine Audited Tests as Dependency or Collateral Tests and credits only fixes the target cards depend on; evaluation-sense "regression" names were swapped per the rename record ADR-021.
+- **2026-10-14**: The Combined Regression report and its Baseline Score and Known-Best Score reference points gave way to the Net Card Score of ADR-020, which classes the FDN and engine Audited Tests as Dependency or Collateral Tests and credits only fixes the target cards depend on; evaluation-sense "regression" names were swapped per the rename record ADR-021 (#242).
 
 ## Relevant PRs
 
 - #126 — Specifies the Known-Best Engine model, Known Defect manifests and Combined Regression.
+- #242 — Hands the reporting clause to the Net Card Score and swaps the evaluation-sense "regression" names.

@@ -46,3 +46,7 @@ A Benchmark Run's headline is its Net Card Score, in units of working cards:
 - **Store the score in Run Records**: rejected because records are immutable, so a corrected attribution would leave stale scores behind.
 - **Floor the score at 0**: rejected because it hides runs that wreck the engine.
 - **Re-score hob-medium**: rejected because its graded suites have no Dependency Tests for existing cards and no Known Defect record, so its scores would not be comparable.
+
+## Relevant PRs
+
+- #242 — Makes the Net Card Score the headline, with its test classes, Attributed Cards and Known Defect manifest schema 2.

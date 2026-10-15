@@ -41,3 +41,7 @@ Breaking behavior that worked is now a collateral mistake, measured by Collatera
 - The ordinary software sense of "regression" is not part of the rename: regression guards in comments, and test files such as `test_known_best_gameplay_regressions.py`.
 - History keeps its words: every Amendments log and Relevant PRs entry, the incident entries of KNOWN-ISSUES.md, `KEY_DECISIONS.md`, the legacy SOS results under `docker/`, the Results Repo's analyses and the published hob-medium article.
 - The glossary lists the retired names as terms to avoid.
+
+## Relevant PRs
+
+- #242 — Renames the evaluation sense in the glossary, specifications, ADRs and operator documentation; the code, data and Results Repo follow with the Net Card Score's implementation.

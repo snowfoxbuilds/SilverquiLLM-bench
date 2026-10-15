@@ -40,4 +40,4 @@ Snapshot fallback is whole-Workspace fallback. The runner must not combine final
 
 ## Amendments
 
-- **2026-10-14**: Evaluation-sense "regression" names swapped for the new terms; see the rename record ADR-021.
+- **2026-10-14**: Evaluation-sense "regression" names swapped for the new terms; see the rename record ADR-021 (#242).

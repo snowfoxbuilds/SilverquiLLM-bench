@@ -45,4 +45,4 @@ fra-hard v1, the HOB tiers and SOS keep their directive-driven priority.
 ## Amendments
 
 - **2026-10-05**: Tests choose actions through the players' scripts rather than Intents, since ADR-018 makes the scripts the only source of answers from fra-hard-v2 onward.
-- **2026-10-14**: Evaluation-sense "regression" names swapped for the new terms; see the rename record ADR-021.
+- **2026-10-14**: Evaluation-sense "regression" names swapped for the new terms; see the rename record ADR-021 (#242).

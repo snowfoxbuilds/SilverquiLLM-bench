@@ -37,8 +37,9 @@ hob-medium and SOS, frozen before that split, grade their engine suite from the 
 
 - **2026-09-03**: Updated the staged engine-test path from `workspace/tests/engine/` to `workspace/engine_tests/`, matching the flattened workspace layout adopted in ADR-007 (the workspace is now a pre-built directory copied wholesale rather than assembled by per-file staging). The decision is unchanged — engine tests are agent-visible; SOS and FDN audited tests stay hidden.
 - **2026-10-02 (#126)**: Staged engine tests became editable Engine Reference Tests, and grading moved to a hidden Audited Engine Tests copy, so an agent can fix an engine defect a staged test encodes and the graded copy can be fixed after the Workspace locks (ADR-016).
-- **2026-10-14**: Evaluation-sense "regression" names swapped for the new terms; see the rename record ADR-021.
+- **2026-10-14**: Evaluation-sense "regression" names swapped for the new terms; see the rename record ADR-021 (#242).
 
 ## Relevant PRs
 
 - #126 — Makes staged tests editable Reference Tests and grades hidden Audited Engine Tests under the Known-Best Engine model.
+- #242 — Swaps the evaluation-sense "regression" names.
