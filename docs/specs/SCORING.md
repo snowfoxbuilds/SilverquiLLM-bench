@@ -126,7 +126,7 @@ A regrade reuses an earlier output's block only when it is available or unavaila
 Every suite the benchmark-parameterized grading path grades (each target card's, each FDN card's and the engine's, for Karn runs and their regrades) states how many test functions it expected and which of them did not run, with why (grilling 2026-10-13, #221).
 The legacy SOS/FDN `evaluate` path, the historical `--image` lineage's compatibility runner, records none of these fields for its card results, which carry `expected_test_functions: null`, an empty `not_run` and no failure messages; its engine result comes from the same engine grading as Karn runs and carries all three.
 The expected functions are collected statically from the authoritative test files, outside the process that runs the candidate's code, so a candidate cannot change what is expected.
-Static collection follows pytest's `__test__ = False`: a module, a class (and a subclass that does not set it back) or a function that sets it is not expected; a `Test*` class pytest skips for defining `__new__` is still expected, a known limitation no audited test meets.
+Static collection follows pytest's `__test__`: a false value turns off a module, a class (and a subclass that does not set it back) or a function, and exactly `True` makes a function or class expected whatever its name; the value set last counts, so a later `X.__test__ = ...` or a redefinition overrides an earlier one. A function in a module, class or directory skipped at collection (including by a `conftest.py` skip) is `skipped`. A `Test*` class pytest skips for defining `__new__` is still expected, a known limitation no audited test meets.
 A parametrized function counts once, and it ran if any of its cases ran.
 
 | Reason | When |

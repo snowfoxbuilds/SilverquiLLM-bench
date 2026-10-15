@@ -1083,117 +1083,146 @@ def _decorator_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> list[s
     return names
 
 
-def _is_test_function(node: ast.AST) -> bool:
-    return (
-        isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-        and node.name.startswith("test")
-        and not any(name.rsplit(".", 1)[-1] == "fixture" for name in _decorator_names(node))
+_UNSET = object()
+
+
+def _is_fixture(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any(name.rsplit(".", 1)[-1] == "fixture" for name in _decorator_names(node))
+
+
+def _has_init(cls: ast.ClassDef) -> bool:
+    return any(
+        isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef) and item.name == "__init__"
+        for item in cls.body
     )
 
 
-def _is_test_class(node: ast.AST) -> bool:
-    return (
-        isinstance(node, ast.ClassDef)
-        and node.name.startswith("Test")
-        and not any(
-            isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef) and item.name == "__init__"
-            for item in node.body
-        )
-    )
+def _test_value(value: ast.AST) -> object:
+    """The constant assigned to ``__test__``; ``_UNSET`` when not a plain constant."""
+    return value.value if isinstance(value, ast.Constant) else _UNSET
 
 
-def _test_flag(value: ast.AST) -> bool | None:
-    """The truth of a ``__test__ = <constant>`` value; ``None`` when not a plain constant."""
-    return bool(value.value) if isinstance(value, ast.Constant) else None
+def _final_bindings(body: list[ast.stmt]) -> dict[str, tuple[ast.AST, object]]:
+    """Each function and class *body* defines, with the ``__test__`` last set on it.
 
-
-def _disabled_names(body: list[ast.stmt]) -> set[str]:
-    """Names in *body* given ``<name>.__test__ = False`` (pytest then skips them)."""
-    names = set()
+    Read in order, as the body runs: a redefinition replaces the object and drops
+    any ``__test__`` set on the old one, and a later ``<name>.__test__ = <constant>``
+    overrides an earlier one.  Order is first definition, as in ``__dict__``.
+    """
+    bindings: dict[str, tuple[ast.AST, object]] = {}
     for statement in body:
-        if not isinstance(statement, ast.Assign):
-            continue
-        for target in statement.targets:
-            if (
-                isinstance(target, ast.Attribute)
-                and target.attr == "__test__"
-                and isinstance(target.value, ast.Name)
-                and _test_flag(statement.value) is False
-            ):
-                names.add(target.value.id)
-    return names
+        if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            bindings[statement.name] = (statement, _UNSET)
+        elif isinstance(statement, ast.Assign):
+            value = _test_value(statement.value)
+            for target in statement.targets:
+                if (
+                    value is not _UNSET
+                    and isinstance(target, ast.Attribute)
+                    and target.attr == "__test__"
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id in bindings
+                ):
+                    bindings[target.value.id] = (bindings[target.value.id][0], value)
+    return bindings
 
 
-def _own_test_flag(body: list[ast.stmt]) -> bool | None:
-    """The ``__test__ = <constant>`` set directly in a module or class body, if any."""
-    flag = None
+def _own_test_value(body: list[ast.stmt]) -> object:
+    """The ``__test__ = <constant>`` set directly in a module or class body; the last wins."""
+    value = _UNSET
     for statement in body:
         if isinstance(statement, ast.Assign) and any(
             isinstance(target, ast.Name) and target.id == "__test__" for target in statement.targets
         ):
-            flag = _test_flag(statement.value)
-    return flag
+            value = _test_value(statement.value)
+    return value
+
+
+def _turned_on(value: object) -> bool:
+    return value is _UNSET or bool(value)
+
+
+def _collects_function(node: ast.AST, name: str, value: object) -> bool:
+    """pytest's function rule: a ``test`` name, or ``__test__`` exactly ``True``; never a fixture."""
+    if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) or _is_fixture(node):
+        return False
+    return (name.startswith("test") or value is True) and _turned_on(value)
 
 
 def expected_test_functions(source: str, module_id: str) -> list[str] | None:
     """The test functions pytest collects from one authoritative test module, statically.
 
-    Mirrors pytest's default discovery: module-level ``test*`` functions and the
-    ``test*`` methods of ``Test*`` classes without ``__init__`` (nested ones too,
-    and methods inherited from classes defined in the same module), leaving out
-    what ``__test__ = False`` turns off: the module, a class (and classes that
-    inherit it without setting it back), or a function.  A
-    parametrized function is one entry, without its ``[...]`` ids.  This reads
-    host-side files only, never the candidate's code, so a candidate cannot
-    change what is expected.  ``None`` when the module does not parse.
+    Mirrors pytest's default discovery: ``test*`` functions and the ``test*``
+    methods of ``Test*`` classes without ``__init__`` (nested ones too, and
+    methods inherited from classes defined in the same module).  ``__test__``
+    follows pytest: a false value turns off the module, a class (and classes
+    that inherit it without setting it back), or a function, and exactly
+    ``True`` collects a function or class whatever its name.  The value that
+    counts is the last one set before collection, so a later assignment or a
+    redefinition overrides an earlier one.  A parametrized function is one
+    entry, without its ``[...]`` ids.  This reads host-side files only, never
+    the candidate's code, so a candidate cannot change what is expected.
+    ``None`` when the module does not parse.
     """
     try:
         tree = ast.parse(source)
     except (SyntaxError, ValueError):
         return None
-    if _own_test_flag(tree.body) is False:
+    if not _turned_on(_own_test_value(tree.body)):
         return []
-    classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
-    disabled = _disabled_names(tree.body)
+    bindings = _final_bindings(tree.body)
+    classes = {
+        name: entry for name, entry in bindings.items() if isinstance(entry[0], ast.ClassDef)
+    }
     found: list[str] = []
 
-    def collected(cls: ast.ClassDef, visiting: frozenset[str]) -> bool:
-        # A class's own __test__ wins; otherwise it inherits the first module-local base's.
-        own = _own_test_flag(cls.body)
-        if own is not None:
+    def class_value(cls: ast.ClassDef, assigned: object, visiting: frozenset[str]) -> object:
+        # Set after the class wins, then its own body; otherwise the first module-local base's.
+        if assigned is not _UNSET:
+            return assigned
+        own = _own_test_value(cls.body)
+        if own is not _UNSET:
             return own
         for base in cls.bases:
             if isinstance(base, ast.Name) and base.id in classes and base.id not in visiting:
-                return collected(classes[base.id], visiting | {base.id})
-        return True
+                node, base_assigned = classes[base.id]
+                return class_value(node, base_assigned, visiting | {base.id})
+        return _UNSET
 
     def methods(cls: ast.ClassDef, visiting: frozenset[str]) -> dict[str, None]:
         names: dict[str, None] = {}
         for base in cls.bases:
             if isinstance(base, ast.Name) and base.id in classes and base.id not in visiting:
-                names.update(methods(classes[base.id], visiting | {base.id}))
-        off = _disabled_names(cls.body)
-        for item in cls.body:
-            if _is_test_function(item):
-                if item.name in off:
-                    names.pop(item.name, None)
-                else:
-                    names[item.name] = None
+                names.update(methods(classes[base.id][0], visiting | {base.id}))
+        for name, (item, value) in _final_bindings(cls.body).items():
+            if not isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            if _collects_function(item, name, value):
+                names[name] = None
+            else:
+                names.pop(name, None)
         return names
 
-    def visit_class(cls: ast.ClassDef, prefix: str, visiting: frozenset[str]) -> None:
-        if not collected(cls, visiting):
+    def visit_class(
+        name: str, cls: ast.ClassDef, assigned: object, prefix: str, visiting: frozenset[str]
+    ) -> None:
+        visiting = visiting | {name}
+        value = class_value(cls, assigned, visiting)
+        if not (
+            (name.startswith("Test") or value is True) and not _has_init(cls) and _turned_on(value)
+        ):
             return
-        found.extend(f"{prefix}::{name}" for name in methods(cls, visiting))
-        for item in cls.body:
-            if _is_test_class(item):
-                visit_class(item, f"{prefix}::{item.name}", visiting | {item.name})
+        prefix = f"{prefix}::{name}"
+        found.extend(f"{prefix}::{method}" for method in methods(cls, visiting))
+        for nested, (item, nested_assigned) in _final_bindings(cls.body).items():
+            if isinstance(item, ast.ClassDef):
+                visit_class(nested, item, nested_assigned, prefix, visiting)
 
-    for node in tree.body:
-        if _is_test_function(node) and node.name not in disabled:
-            found.append(f"{module_id}::{node.name}")
-        elif _is_test_class(node) and node.name not in disabled:
-            visit_class(node, f"{module_id}::{node.name}", frozenset({node.name}))
+    for name, (node, assigned) in bindings.items():
+        if _collects_function(node, name, assigned):
+            found.append(f"{module_id}::{name}")
+        elif isinstance(node, ast.ClassDef):
+            visit_class(name, node, assigned, module_id, frozenset())
     return list(dict.fromkeys(found))
 
 
@@ -1272,7 +1301,10 @@ def _not_run(expected: list[str] | None, run: _PytestRun | None, reason: str | N
         elif run.timed_out:
             why = "timeout"
         elif node in skipped or any(
-            node.startswith(collector + "::") for collector in report.skipped_collectors
+            # A skipped module or class covers its "::" children; a skipped directory
+            # (a conftest skip there) covers the "/" paths beneath it.
+            node.startswith((collector + "::", collector + "/"))
+            for collector in report.skipped_collectors
         ):
             why = "skipped"
         elif covering is not None or set(report.collection_errors) == {""}:

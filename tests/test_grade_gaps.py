@@ -457,6 +457,7 @@ def _engine(tmp_path: Path, files: dict[str, str], timeout: int = 60, *, support
     suite = tmp_path / "engine_tests"
     suite.mkdir()
     for name, source in files.items():
+        (suite / name).parent.mkdir(parents=True, exist_ok=True)
         (suite / name).write_text(_module(source))
     return _eval_engine(
         workspace / "engine", suite, timeout,
@@ -1193,6 +1194,107 @@ def test_test_false_matches_pytest_collection(tmp_path):
     expected, run = _run(tmp_path, source)
     assert expected == ["tests.py::test_on"]
     assert _not_run(expected, run) == []
+
+
+def _collect_only(tmp_path: Path, source: str) -> list[str]:
+    """The function node ids real pytest collects from *source*, without parametrize ids."""
+    import subprocess
+    import sys
+
+    (tmp_path / "tests.py").write_text(_module(source))
+    (tmp_path / "pytest.ini").write_text("[pytest]\npython_files = tests.py\n")
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider",
+         "-c", str(tmp_path / "pytest.ini"), "--rootdir", str(tmp_path), "tests.py"],
+        cwd=tmp_path, capture_output=True, text=True, timeout=60, check=False,
+    )
+    return list(dict.fromkeys(line.split("[")[0] for line in result.stdout.splitlines() if "::" in line))
+
+
+def test_test_true_and_later_assignments_match_pytest_collection(tmp_path):
+    source = """\
+        def test_redefined():
+            pass
+        test_redefined.__test__ = False
+
+        def test_redefined():
+            pass
+
+        def test_off_then_on():
+            pass
+        test_off_then_on.__test__ = False
+        test_off_then_on.__test__ = True
+
+        def check_nose():
+            pass
+        check_nose.__test__ = True
+
+        def check_truthy():
+            pass
+        check_truthy.__test__ = 1
+
+        class TestOff:
+            __test__ = False
+
+            def test_m(self):
+                pass
+
+        class TestSub(TestOff):
+            def test_n(self):
+                pass
+        TestSub.__test__ = True
+
+        class Helper:
+            __test__ = True
+
+            def test_h(self):
+                pass
+
+            def check_x(self):
+                pass
+            check_x.__test__ = True
+
+        class Plain:
+            def test_p(self):
+                pass
+        Plain.__test__ = True
+
+        class Inherited(Helper):
+            def test_i(self):
+                pass
+
+        class TestAfterOff:
+            def test_q(self):
+                pass
+        TestAfterOff.__test__ = False
+    """
+    expected = expected_test_functions(_module(source), "tests.py")
+    assert expected == [
+        "tests.py::test_redefined",
+        "tests.py::test_off_then_on",
+        "tests.py::check_nose",
+        "tests.py::TestSub::test_m",
+        "tests.py::TestSub::test_n",
+        "tests.py::Helper::test_h",
+        "tests.py::Helper::check_x",
+        "tests.py::Plain::test_p",
+        "tests.py::Inherited::test_h",
+        "tests.py::Inherited::check_x",
+        "tests.py::Inherited::test_i",
+    ]
+    assert expected == _collect_only(tmp_path, source)
+
+
+def test_a_skip_in_a_subdirectory_conftest_labels_its_functions_skipped(tmp_path):
+    engine = _engine(tmp_path, {
+        "test_top.py": "def test_top():\n    pass\n",
+        "sub/conftest.py": "import pytest\n\npytest.skip('not here', allow_module_level=True)\n",
+        "sub/test_inner.py": "def test_a():\n    pass\n\ndef test_b():\n    pass\n",
+    })
+    assert engine.not_run == [
+        {"test_node": "sub/test_inner.py::test_a", "reason": "skipped"},
+        {"test_node": "sub/test_inner.py::test_b", "reason": "skipped"},
+    ]
 
 
 def test_a_regrade_source_keeps_the_record_completeness():
