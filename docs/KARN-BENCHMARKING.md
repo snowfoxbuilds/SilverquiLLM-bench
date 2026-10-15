@@ -216,6 +216,7 @@ silverquillm top   # needs the monitor extra: pip install -e '.[monitor]'
 ```
 
 In `top`, every action has a key and `?` lists them; `--no-mouse` leaves the mouse to the terminal for selecting text.
+Without a terminal (an agent's shell, cron), `silverquillm top --json` prints one snapshot of the same facts: each live run's stage, needs-recover reasons and Batch, the queue, every Login Profile's state and cooldown, the dispatch mode and the queue ledger's status.
 
 On a host whose batch directory already has a queue ledger (`queue.json`), a new batch needs no flag: the scheduler, running or not, records it and starts it after every batch queued before it.
 The flag is needed only the first time a scheduler serves a directory (with no ledger yet, the scheduler cannot tell a new batch from one whose state was lost) and to restart a batch whose state file was lost from entry zero. The scheduler warns about each batch it skips and why.

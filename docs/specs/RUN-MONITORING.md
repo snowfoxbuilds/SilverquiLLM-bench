@@ -18,7 +18,15 @@ This page replaces the historical image-run artifact and telemetry spec; that la
 
 `silverquillm top` opens the monitor; `silverquillm queue ls` stays the scriptable one-shot queue listing (grilling 2026-10-07).
 The monitor is a Textual application shipped as the optional `monitor` extra (`silverquillm-bench[monitor]`), so grader and candidate environments never install it; without the extra, `top` prints a one-line install hint.
-Without a terminal, `top` draws nothing and points to `queue ls`.
+Without a terminal, `top` draws nothing and points to `top --json`.
+
+`silverquillm top --json` prints one snapshot of what the dashboard shows as a JSON document and exits; it needs no terminal and no `monitor` extra, so an operating agent without a TTY sees the same facts (grilling 2026-10-14, #225).
+It is built from the same poll as the dashboard, so its stages follow [Run stages](#run-stages) exactly, and it is read-only like the monitor.
+The document (`schema_version` 1) has the host label, each resolved location and its source, the configuration, Docker and exclusion errors, the dispatch mode, the queue ledger's status (`none`, `ok` or `damaged`, with the error), and the dashboard counts.
+`runs` lists every live run with its stage and needs-recover reasons, the Batch and entry that started it, benchmark, construct, Candidate Hash, model and effort, Login Profile, budget, start time and elapsed container time, its container, run directory, estimate and Estimated Cost.
+`queue` lists every Batch in queue order with its status, the run ids it has started and its unstarted entries.
+`logins` lists every Login Profile with one state word (`pending`, `unknown`, `busy`, `cooldown` or `free`, most blocking first), the pending run, when a cooldown ends, the run holding it, and its Estimated Weekly Usage.
+`queue ls --json` keeps its own row shape for scripts that read the queue alone.
 
 The monitor is read-only with one exception (grilling 2026-10-07).
 It never takes a lock that a runner or the scheduler takes, stops or recovers a run, edits a Batch, or fetches or pulls the Results Repo.

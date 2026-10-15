@@ -326,7 +326,7 @@ def test_the_top_command_needs_no_configured_location():
 
     result = CliRunner().invoke(main, ["top"])
     assert result.exit_code == 1
-    assert "queue ls" in result.output
+    assert "top --json" in result.output
 
 
 # Pilot-driven views ------------------------------------------------------------

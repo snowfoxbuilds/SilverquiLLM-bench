@@ -552,16 +552,26 @@ def _monitor_location(key: str, help: str):
 @click.option(
     "--no-mouse", is_flag=True, help="Leave the mouse to the terminal; every action has a key."
 )
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Print one snapshot of what the monitor shows as JSON and exit; needs no terminal.",
+)
 @_monitor_location("results_repo", "The results repo clone.")
 @_monitor_location("batches_dir", "The batch queue directory.")
 @_monitor_location("runs_dir", "The run directory.")
 @_monitor_location("state_root", "The state root holding the Login Pools.")
-def top(interval, no_flair, no_mouse, **locations):
+def top(interval, no_flair, no_mouse, as_json, **locations):
     """Read-only monitor: live runs, queue, Login Profiles, history and run details.
 
-    Every action has a key; press ? in the monitor for the list. q quits.
+    Every action has a key; press ? in the monitor for the list. q quits. With --json, one
+    snapshot of the same facts is printed for scripts and agents without a terminal.
     """
-    from silverquillm.top import launch
+    from silverquillm.top import launch, print_snapshot
+
+    if as_json:
+        raise SystemExit(print_snapshot(locations))
 
     raise SystemExit(launch(locations, interval=interval, no_flair=no_flair, mouse=not no_mouse))
 

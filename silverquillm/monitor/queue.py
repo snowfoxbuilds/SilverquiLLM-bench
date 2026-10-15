@@ -46,6 +46,8 @@ class QueuedBatch:
     total: int
     runs: tuple[QueuedRun, ...]
     error: str | None = None
+    run_ids: tuple[str, ...] = ()
+    """The run id of every entry the batch has started, in entry order."""
 
     @property
     def needs_ack(self) -> bool:
@@ -76,6 +78,30 @@ def dispatch_mode(batches_dir: Path | None) -> str:
     return read_control(Path(batches_dir))["mode"]
 
 
+def _ledger(directory: Path) -> tuple[list[dict] | None, str | None]:
+    """The queue ledger's entries, and the error when it is damaged (then the entries are None)."""
+    try:
+        if _unparseable(directory / LEDGER_FILENAME):
+            raise KarnError("queue_ledger_invalid")
+        return read_ledger(directory), None
+    except (KarnError, RecursionError) as error:
+        # A damaged ledger reads as none, and stops every dispatch until it is repaired.
+        return None, str(error) if isinstance(error, KarnError) else "queue_ledger_invalid"
+    except OSError as error:
+        return None, f"queue_ledger_unreadable:{type(error).__name__}"
+
+
+def ledger_status(batches_dir: Path | None) -> tuple[str, str | None]:
+    """``none`` before the scheduler first records a batch here, ``ok``, or ``damaged`` with
+    the error that stops every dispatch."""
+    if batches_dir is None:
+        return "none", None
+    entries, damaged = _ledger(Path(batches_dir))
+    if damaged:
+        return "damaged", damaged
+    return ("none" if entries is None else "ok"), None
+
+
 def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
     """Batches in queue order, each with the run specs its state has not started yet."""
     if batches_dir is None:
@@ -85,17 +111,7 @@ def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
         found_paths = {path.stem: path for path in directory.glob("*.toml")}
     except OSError:
         return []
-    damaged = None
-    try:
-        if _unparseable(directory / LEDGER_FILENAME):
-            raise KarnError("queue_ledger_invalid")
-        ledger = read_ledger(directory)
-    except (KarnError, RecursionError) as error:
-        # A damaged ledger reads as none, and stops every dispatch until it is repaired.
-        ledger, damaged = (
-            None,
-            str(error) if isinstance(error, KarnError) else "queue_ledger_invalid",
-        )
+    ledger, damaged = _ledger(directory)
     paths = [found_paths[name] for name in queue_order(found_paths, ledger)]
     found = []
     for path in paths:
@@ -143,7 +159,17 @@ def queued_batches(batches_dir: Path | None) -> list[QueuedBatch]:
         error = None
         if damaged and status in ("pending", "needs_ack"):
             status, error = "ledger_damaged", damaged
+        run_ids = tuple(row["run_id"] for row in state["runs"]) if state else ()
         found.append(
-            QueuedBatch(batch_id, status, batch.get("not_before"), started, len(specs), runs, error)
+            QueuedBatch(
+                batch_id,
+                status,
+                batch.get("not_before"),
+                started,
+                len(specs),
+                runs,
+                error,
+                run_ids,
+            )
         )
     return found

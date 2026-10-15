@@ -88,7 +88,7 @@ listed = invoke("queue", "ls", "--batches-dir", str(mixed))
 assert "trial [karn-v5]" in listed and "old [legacy]: unsupported legacy batch" in listed, listed
 assert '"unsupported_legacy_batch"' in invoke("queue", "ls", "--json", "--batches-dir", str(mixed))
 refused = CliRunner().invoke(main, ["top", "--batches-dir", str(mixed)])
-assert refused.exit_code == 1 and "queue ls" in refused.output, refused.output
+assert refused.exit_code == 1 and "top --json" in refused.output, refused.output
 
 # The scheduler and recovery refuse a bench root whose package is not the one imported.
 options = ["--bench-root", str(Path(silverquillm.__file__).resolve().parents[1])]
