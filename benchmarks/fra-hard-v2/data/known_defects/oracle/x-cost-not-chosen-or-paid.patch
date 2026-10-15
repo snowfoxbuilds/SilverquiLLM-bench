@@ -1,0 +1,18 @@
+--- a/engine/casting.py
++++ b/engine/casting.py
+@@ -569,15 +569,7 @@
+     A spell cast without paying its mana cost has X = 0 (rule 107.3b). The
+     offered maximum counts the generic *reduction* the payment will get.
+     """
+-    from engine.card_queries import choose_number
+-
+     card.x_value = 0  # type: ignore[attr-defined]
+-    x_count = card.mana_cost.x_count
+-    if x_count and not free:
+-        maximum = max(0, player.mana_pool.total() + reduction - card.mana_cost.cmc) // x_count
+-        card.x_value = choose_number(  # type: ignore[attr-defined]
+-            game, player, 0, maximum, "Choose X", source_card=card
+-        )
+ 
+ 
+ def _with_x(cost: ManaCost, x_value: int) -> ManaCost:

@@ -43,7 +43,7 @@ A Benchmark Run's headline is its Net Card Score, in units of working cards:
 - **Three dimensions with no composite score**: rejected because readers took the target-card pass rate as the headline, and it ignored breakage.
 - **Target-card test pass rate as the headline**: rejected because it compresses the top candidates into a few percent and weights a card by its number of tests.
 - **Credit every Known Defect fixed**: rejected because fra-hard-v2's 14 defects reach 18 FDN cards against 11 targets, so fixes the task does not need would outweigh the task and drive the rankings.
-- **Credit a fix per existing card it reaches**: rejected because fra-hard-v2's one related defect reaches six FDN cards and two engine test files, which would make it worth more than half the task.
+- **Credit a fix per existing card it reaches**: rejected because fra-hard-v2's related zone-change defect alone reaches six FDN cards and two engine test files, which would make it worth more than half the task.
 - **Treat engine mechanics the baseline lacks as dependencies**: rejected because engine work is the difficulty knob of the hard benchmarks, and nearly every target-card test would be excluded.
 - **Store the score in Run Records**: rejected because records are immutable, so a corrected attribution would leave stale scores behind.
 - **Floor the score at 0**: rejected because it hides runs that wreck the engine.

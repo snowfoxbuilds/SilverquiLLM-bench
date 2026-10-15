@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "benchmark": "smoke",
   "defects": [
     {
@@ -20,7 +20,7 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "engine_regression": [
+        "engine": [
           "test_stack.py::TestCopySpellStintRevalidation::test_new_targets_copy_rejects_leave_and_return",
           "test_stack.py::TestCopySpellStintRevalidation::test_retained_targets_copy_rejects_leave_and_return",
           "test_zone_change.py::test_card_off_the_battlefield_has_no_status",
@@ -35,7 +35,7 @@
           "test_zone_change.py::test_returned_permanent_enters_untapped",
           "test_zone_change.py::test_token_dies_trigger_fires_with_last_known_information"
         ],
-        "fdn_regression": [
+        "fdn": [
           "fdn_117/tests.py::TestAshrootAnimistAttack::test_a_later_return_and_departure_do_not_change_the_pending_power",
           "fdn_117/tests.py::TestAshrootAnimistAttack::test_uses_its_power_as_it_last_existed_if_it_left",
           "fdn_120/tests.py::TestFiendishPandaDies::test_returns_a_creature_card_with_mana_value_up_to_its_power",
@@ -48,7 +48,9 @@
           "fdn_66/tests.py::TestNineLivesEntersWithRevival::test_enters_from_stack_gets_eight_revival",
           "fdn_86/tests.py::TestFieryAnnihilationTargets::test_creature_leaves_and_returns_takes_no_damage"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "x-cost-not-chosen-or-paid",
@@ -62,15 +64,17 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "engine_regression": [
+        "engine": [
           "test_x_costs.py::test_x_is_chosen_paid_and_kept_by_the_permanent"
         ],
-        "fdn_regression": [
+        "fdn": [
           "fdn_236/tests.py::TestWildwoodScourgeProperties::test_enters_with_x_counters",
           "fdn_236/tests.py::TestWildwoodScourgeTriggerRegistration::test_condition_matches_other_nonhydra_creature_you_control",
           "fdn_88/tests.py::TestGoblinNegotiationMint::test_excess_damage_mints_11_red_goblin_tokens"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "raid-history-not-recorded",
@@ -81,17 +85,19 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "engine_regression": [
+        "engine": [
           "test_turn_history.py::test_declaring_an_attacker_records_attacked_this_turn"
         ],
-        "fdn_regression": [
+        "fdn": [
           "fdn_115/tests.py::TestAleshaRaid::test_returns_a_creature_card_with_mana_value_up_to_its_power",
           "fdn_115/tests.py::TestAleshaRaid::test_uses_its_power_as_it_last_existed_if_it_left",
           "fdn_87/tests.py::TestGoblinBoardersRaid::test_enters_buffed_when_attacked_this_turn",
           "fdn_87/tests.py::TestGoblinBoardersRaid::test_reads_controller_attacked_flag",
           "fdn_93/tests.py::TestSearslicerGoblinMint::test_raid_end_step_mints_11_red_goblin_token"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "death-history-not-recorded",
@@ -101,13 +107,15 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "engine_regression": [
+        "engine": [
           "test_turn_history.py::test_creature_dying_records_creature_died_this_turn"
         ],
-        "fdn_regression": [
+        "fdn": [
           "fdn_94/tests.py::TestSlumberingCerberusMorbid::test_untaps_when_a_creature_died_this_turn"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "skip-untap-ignored",
@@ -117,13 +125,15 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "engine_regression": [
+        "engine": [
           "test_turn_history.py::test_permanent_that_does_not_untap_stays_tapped"
         ],
-        "fdn_regression": [
+        "fdn": [
           "fdn_94/tests.py::TestSlumberingCerberusMorbid::test_stays_tapped_when_no_creature_died"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "combat-damage-prevention-ignored",
@@ -134,14 +144,16 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "engine_regression": [
+        "engine": [
           "test_combat_damage_prevention.py::test_prevented_creature_survives_a_lethal_block",
           "test_combat_damage_prevention.py::test_prevention_ends_at_cleanup"
         ],
-        "fdn_regression": [
+        "fdn": [
           "fdn_13/tests.py::TestFleetingFlightResolution::test_targeted_creature_survives_combat_with_a_four_power_flyer"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "fdn-200-mode-not-chosen",
@@ -152,11 +164,13 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "fdn_regression": [
+        "fdn": [
           "fdn_200/tests.py::TestGoblinSurpriseMint::test_token_mode_mints_two_11_red_goblin_tokens",
           "fdn_200/tests.py::TestGoblinSurprisePump::test_pump_mode_gives_creatures_you_control_plus_two_until_end_of_turn"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "fdn-244-replacement-leaves-it-on-battlefield",
@@ -167,14 +181,16 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "fdn_regression": [
+        "fdn": [
           "fdn_244/tests.py::TestProgenitusGraveyardReplacement::test_replacement_redirects_to_library_and_prevents"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "fdn-81-minus-four-has-no-targets",
-      "description": "Chandra, Flameshaper's \u22124 has no targeting, so it deals no damage.",
+      "description": "Chandra, Flameshaper's −4 has no targeting, so it deals no damage.",
       "rules": [
         "CR 601.2c",
         "CR 602.2b",
@@ -182,14 +198,16 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "fdn_regression": [
+        "fdn": [
           "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_baseline_takes_first_offered_lowest",
           "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_division_is_locked_in_at_activation",
           "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_each_queried_target_must_get_at_least_one",
           "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_intent_chooses_the_split",
           "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_single_target_takes_all_8_without_a_query"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "fdn-66-returns-immediately",
@@ -201,16 +219,18 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "fdn_regression": [
+        "fdn": [
           "fdn_66/tests.py::TestNineLivesDiesReturn::test_dies_returns_with_one_fewer_revival",
           "fdn_66/tests.py::TestNineLivesDiesReturn::test_does_not_return_before_the_next_end_step",
           "fdn_66/tests.py::TestNineLivesEntersWithRevival::test_enters_from_stack_gets_eight_revival"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "fdn-81-division-chosen-at-resolution",
-      "description": "Chandra, Flameshaper's \u22124 divides its damage on resolution, among whichever targets are still legal.",
+      "description": "Chandra, Flameshaper's −4 divides its damage on resolution, among whichever targets are still legal.",
       "rules": [
         "CR 601.2d",
         "CR 602.2b",
@@ -218,10 +238,12 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "fdn_regression": [
+        "fdn": [
           "fdn_81/tests.py::TestChandraFlameshaperMinus4Split::test_division_is_locked_in_at_activation"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "storm-copy-gains-targets",
@@ -232,10 +254,12 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "fdn_regression": [
+        "fdn": [
           "fdn_248/tests.py::TestStormCopyRetargeting::test_copy_cannot_gain_a_target_its_original_left_unchosen"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "summoning-sick-creature-taps",
@@ -245,13 +269,15 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "engine_regression": [
+        "engine": [
           "test_summoning_sickness.py::TestCreatureThatJustArrived::test_cannot_use_its_tap_ability_the_turn_it_is_cast",
           "test_summoning_sickness.py::TestCreatureThatJustArrived::test_still_cannot_on_the_opponents_turn",
           "test_summoning_sickness.py::TestCreatureThatJustArrived::test_cannot_tap_for_mana_the_turn_it_is_cast",
           "test_summoning_sickness.py::TestCreatureThatChangedControl::test_cannot_tap_for_its_new_controller"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     },
     {
       "id": "fdn-156-keeps-abilities",
@@ -262,7 +288,7 @@
       ],
       "kind": "inherited",
       "failing_tests": {
-        "fdn_regression": [
+        "fdn": [
           "fdn_156/tests.py::TestImprisonedLand::test_a_forest_taps_for_colorless_instead_of_green",
           "fdn_156/tests.py::TestImprisonedLand::test_its_colorless_mana_cannot_pay_green",
           "fdn_156/tests.py::TestImprisonedLand::test_a_land_loses_its_other_activated_abilities",
@@ -271,7 +297,9 @@
           "fdn_156/tests.py::TestImprisonedCreature::test_an_opponents_creature_taps_for_colorless_for_its_controller",
           "fdn_156/tests.py::TestImprisonedCreature::test_destroying_the_aura_makes_archdruid_count_it_again"
         ]
-      }
+      },
+      "target_tests": [],
+      "host_card": null
     }
   ]
 }

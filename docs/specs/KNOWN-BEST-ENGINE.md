@@ -123,7 +123,7 @@ CI checks, for every benchmark in scope:
    - every attribution key names an Audited Test.
 5. Every target card has at least one test counting toward it that the unmodified Workspace fails (grilling 2026-10-19).
 
-Each check is a Platform Test, making one call per suite so each stays within the test timeout: `tests/known_defect_checks.py` provides `oracle_problems` and `workspace_problems` for the first two, which return the problems found and `[]` when the check passes.
+Each check is a Platform Test, making one call per suite so each stays within the test timeout: `tests/known_defect_checks.py` provides `oracle_problems`, `workspace_problems` and `defect_problems` for the first three, which return the problems found and `[]` when the check passes; `defect_problems` grades one Known Defect's target-card suite per call.
 
 #### Manifest
 
