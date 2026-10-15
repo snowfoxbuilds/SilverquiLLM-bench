@@ -124,7 +124,7 @@ A regrade reuses an earlier output's block only when it is available or unavaila
 ### Tests that did not run
 
 Every suite the benchmark-parameterized grading path grades (each target card's, each FDN card's and the engine's, for Karn runs and their regrades) states how many test functions it expected and which of them did not run, with why (grilling 2026-10-13, #221).
-The legacy SOS/FDN `evaluate` path, the historical `--image` lineage's compatibility runner, records none of these fields; its grades carry `expected_test_functions: null`, an empty `not_run` and no failure messages.
+The legacy SOS/FDN `evaluate` path, the historical `--image` lineage's compatibility runner, records none of these fields for its card results, which carry `expected_test_functions: null`, an empty `not_run` and no failure messages; its engine result comes from the same engine grading as Karn runs and carries all three.
 The expected functions are collected statically from the authoritative test files, outside the process that runs the candidate's code, so a candidate cannot change what is expected.
 A parametrized function counts once, and it ran if any of its cases ran.
 
@@ -135,19 +135,20 @@ A parametrized function counts once, and it ran if any of its cases ran.
 | `collection_interrupted` | Another module's collection error stopped the suite before anything ran |
 | `timeout` | The suite hit its time limit; a timed-out suite keeps no results |
 | `skipped` | The function was skipped or marked xfail at run time |
-| `pytest_exited` | pytest ended with an abnormal exit status (a crash, or `os._exit` with a nonzero code) before reporting the function |
-| `not_reported` | pytest finished without reporting the function |
+| `pytest_exited` | pytest did not run its session to the end (a crash, or `os._exit` with any exit status) before reporting the function |
+| `not_reported` | pytest ran its session to the end without reporting the function |
 | `grading_support_missing` | Authoritative grading support was absent, so the suite never ran |
 | `candidate_code_missing` | The candidate's engine or cards directory was absent, so the suite never ran |
 
 Every expected function that did not run counts as one failed test in its dimension's score: the dimension's `tests_total` is the nodes that ran plus the functions that did not, so a candidate cannot raise a pass rate by skipping a test or breaking its collection (grilling 2026-10-15).
-Cards and the engine are counted the same way, from the reported nodes: a collection error is never a node of its own, and a node that failed in its setup, call or teardown is one failed node.
+Cards and the engine are counted the same way, from the reported nodes: a collection error is never a node of its own, whether a module or a class (`<file>::<Class>::<collection-error>`) failed to collect, and a node that failed in its setup, call or teardown is one failed node.
 Only a result with no node reporting at all, such as an older one, falls back to pytest's summary counts.
 A parametrized function that did not run counts once, since its case ids are not known statically.
 `grading_support_missing` is the exception: a suite the bench could not grade stays unevaluated, because an absent evaluation is different from an evaluated implementation scoring zero.
 A card whose tests all failed to run is therefore scored, at zero, rather than left uncovered; the Combined Regression already counts a baseline-passing node that did not run as regressed.
 Each card's own `tests_passed`, `tests_failed` and `tests_total` stay pytest's raw counts of the nodes that ran; the dimension totals and pass rates apply this rule.
-A grade whose suite reported errors other than test failures is incomplete, and that includes pytest ending without a summary (a crash, or `os._exit`), recorded as the error `pytest_exited: exit status N`; the nodes that ran before it keep their outcomes.
+A grade whose suite reported errors other than test failures is incomplete, and that includes pytest not running its session to the end (a crash, or `os._exit`), recorded as the error `pytest_exited: exit status N`; the nodes that ran before it keep their outcomes.
+The grader's reporter records the end of each session with a value generated for that grading, so an exit status alone never makes a suite look finished: a candidate that calls `os._exit(0)`, `os._exit(1)` or `os._exit(5)` mid-suite still leaves it incomplete.
 Each failing node also keeps a failure message: one printable line of at most 240 characters with object addresses masked, and at most 128 KiB per grade of message mappings as they encode in JSON, node ids and separators included, later ones dropped.
 Not-run reasons and failure messages are diagnostics; only the not-run count enters a score.
 Grades written before this rule count only the nodes that ran, so compare scores only across grades on the same grading code; a regrade applies the rule to an older record.

@@ -643,3 +643,233 @@ def test_the_kept_messages_encode_within_the_budget():
     assert sum(len(json.dumps(mapping).encode()) for mapping in kept) <= FAILURE_MESSAGE_BUDGET
     for mapping in kept:
         assert len(json.dumps(mapping)) == sum(failure_message_cost(*entry) for entry in mapping.items())
+
+
+def _card(tmp_path: Path, source: str) -> CardResult:
+    """Grade one hob card whose authoritative tests are *source*, with a working card."""
+    audited = tmp_path / "audited" / "hob" / "hob_1"
+    audited.mkdir(parents=True)
+    test_file = audited / "tests.py"
+    test_file.write_text(_module(source))
+    support = tmp_path / "test_utils.py"
+    support.write_text("")
+    overlay = tmp_path / "workspace"
+    card = overlay / "cards" / "hob" / "hob_1"
+    card.mkdir(parents=True)
+    (overlay / "engine").mkdir()
+    (overlay / "engine" / "__init__.py").write_text("")
+    (card / "card_impl.py").write_text("class Card:\n    pass\n")
+    return _grade_audited_card("hob_1", test_file, overlay, 60, test_utils=support)
+
+
+def _host_round_trip(engine: EngineResult | None = None, card: CardResult | None = None) -> FullEvalResult:
+    value = FullEvalResult(
+        sos_results={"hob_1": card} if card is not None else {},
+        engine_result=engine or EngineResult(),
+    )
+    return evaluation_from_json(json.dumps(asdict(value)).encode())
+
+
+_CLASS_COLLECTION_ERROR = """\
+    import pytest
+
+    class TestBad:
+        @pytest.mark.parametrize("x,y", [(1,)])
+        def test_bad(self, x, y):
+            pass
+
+    def test_good():
+        pass
+"""
+
+_NESTED_CLASS_COLLECTION_ERROR = """\
+    import pytest
+
+    class TestOuter:
+        class TestInner:
+            @pytest.mark.parametrize("x,y", [(1,)])
+            def test_bad(self, x, y):
+                pass
+
+        def test_outer(self):
+            pass
+"""
+
+
+@pytest.mark.parametrize(
+    ("source", "collector", "missing"),
+    [
+        (_CLASS_COLLECTION_ERROR, "test_e.py::TestBad", ["test_e.py::TestBad::test_bad", "test_e.py::test_good"]),
+        (
+            _NESTED_CLASS_COLLECTION_ERROR,
+            "test_e.py::TestOuter::TestInner",
+            ["test_e.py::TestOuter::TestInner::test_bad", "test_e.py::TestOuter::test_outer"],
+        ),
+    ],
+    ids=["class", "nested_class"],
+)
+def test_an_engine_class_collection_error_is_not_a_scored_test(tmp_path, source, collector, missing):
+    from silverquillm.karn.execution import _suite_counts
+
+    engine = _engine(tmp_path, {"test_e.py": source})
+    row = f"{collector}::<collection-error>"
+    assert {"test_node": row, "outcome": "fail"} in engine.test_nodes
+    assert sorted(item["test_node"] for item in engine.not_run) == sorted(missing)
+    assert _suite_counts(engine) == (0, 2)
+    decoded = _host_round_trip(engine=engine).engine_result
+    assert decoded.test_nodes == engine.test_nodes and decoded.not_run == engine.not_run
+    assert _suite_counts(decoded) == (0, 2)
+    assert _engine_score(decoded, tmp_path)[:2] == (0, 2)
+
+
+def test_a_card_class_collection_error_is_not_a_scored_test(tmp_path):
+    from silverquillm.karn.execution import _suite_counts
+
+    card = _card(tmp_path, _CLASS_COLLECTION_ERROR)
+    assert {"test_node": "tests.py::TestBad::<collection-error>", "outcome": "fail"} in card.test_nodes
+    assert {row["test_node"]: row["reason"] for row in card.not_run} == {
+        "tests.py::TestBad::test_bad": "collection_error",
+        "tests.py::test_good": "collection_interrupted",
+    }
+    assert "tests.py::TestBad::<collection-error>" in card.failure_messages
+    assert _suite_counts(card) == (0, 2)
+    assert _suite_counts(_host_round_trip(card=card).sos_results["hob_1"]) == (0, 2)
+
+
+def test_a_suite_that_keeps_collecting_scores_its_unaffected_tests(tmp_path):
+    from silverquillm.evaluator import _eval_engine
+    from silverquillm.karn.execution import _suite_counts
+
+    workspace = tmp_path / "workspace"
+    (workspace / "engine").mkdir(parents=True)
+    (workspace / "cards").mkdir()
+    (workspace / "pytest.ini").write_text(
+        "[pytest]\npython_files = test_*.py\n"
+        "addopts = --import-mode=importlib --continue-on-collection-errors\n"
+    )
+    (workspace / "test_utils.py").write_text("")
+    suite = tmp_path / "engine_tests"
+    suite.mkdir()
+    (suite / "test_e.py").write_text(_module(_CLASS_COLLECTION_ERROR))
+    engine = _eval_engine(
+        workspace / "engine", suite, 60, support_dir=workspace, test_utils=workspace / "test_utils.py",
+    )
+    assert [row["test_node"] for row in engine.not_run] == ["test_e.py::TestBad::test_bad"]
+    assert _suite_counts(engine) == (1, 2)
+    block = _class_collection_combined_regression(engine, tmp_path)
+    assert (block["tests_passed"], block["tests_total"]) == (2, 3)
+
+
+def _class_collection_combined_regression(engine: EngineResult, tmp_path: Path) -> dict:
+    from silverquillm.karn.baseline import combined_regression
+
+    from .test_karn_combined_regression import baseline
+
+    fdn = {"fdn_1": CardResult("fdn_1", test_nodes=[{"test_node": "tests.py::a", "outcome": "pass"}])}
+    scores = _dimensions(engine, tmp_path, fdn)
+    reference = baseline(
+        {"fdn_1/tests.py::a": "pass"},
+        {"test_e.py::TestBad::test_bad": "pass", "test_e.py::test_good": "pass"},
+    )
+    return combined_regression(scores, FullEvalResult(fdn_results=fdn, engine_result=engine), reference)
+
+
+def test_a_class_collection_error_reaches_the_combined_regression_once(tmp_path):
+    engine = _engine(tmp_path, {"test_e.py": _CLASS_COLLECTION_ERROR})
+    block = _class_collection_combined_regression(engine, tmp_path)
+    assert (block["tests_passed"], block["tests_total"]) == (1, 3)
+
+
+def _exiting(status: int, after_a_pass: bool) -> str:
+    if after_a_pass:
+        return f"""\
+            import os
+
+            def test_first():
+                pass
+
+            def test_exits():
+                os._exit({status})
+
+            def test_after():
+                pass
+        """
+    return f"""\
+        import os
+
+        os._exit({status})
+
+        def test_first():
+            pass
+
+        def test_exits():
+            pass
+
+        def test_after():
+            pass
+    """
+
+
+@pytest.mark.parametrize("after_a_pass", [False, True], ids=["before_any_test", "after_a_pass"])
+@pytest.mark.parametrize("status", [0, 1, 5])
+def test_an_engine_suite_cut_short_with_an_orderly_status_is_incomplete(tmp_path, status, after_a_pass):
+    engine = _engine(tmp_path, {"test_e.py": _exiting(status, after_a_pass)})
+    assert f"pytest_exited: exit status {status}" in engine.errors
+    passed = 1 if after_a_pass else 0
+    assert _engine_score(engine, tmp_path) == (passed, 3, False)
+    assert {row["reason"] for row in engine.not_run} == {"pytest_exited"}
+    decoded = _host_round_trip(engine=engine).engine_result
+    assert _engine_score(decoded, tmp_path) == (passed, 3, False)
+
+
+@pytest.mark.parametrize("after_a_pass", [False, True], ids=["before_any_test", "after_a_pass"])
+@pytest.mark.parametrize("status", [0, 1, 5])
+def test_a_card_suite_cut_short_with_an_orderly_status_is_incomplete(tmp_path, status, after_a_pass):
+    from silverquillm.karn.execution import _suite_counts
+
+    card = _card(tmp_path, _exiting(status, after_a_pass))
+    assert f"pytest_exited: exit status {status}" in card.errors
+    assert _suite_counts(card) == (1 if after_a_pass else 0, 3)
+    assert {row["reason"] for row in card.not_run} == {"pytest_exited"}
+    decoded = _host_round_trip(card=card).sos_results["hob_1"]
+    assert f"pytest_exited: exit status {status}" in decoded.errors
+
+
+def test_a_regrade_keeps_a_cut_short_suite_incomplete(tmp_path):
+    from silverquillm.karn import regrade as regrade_module
+    from silverquillm.karn.execution import _scores
+    from silverquillm.karn.records import validate_scores
+
+    engine = _engine(tmp_path, {"test_e.py": _exiting(0, after_a_pass=True)})
+    scores = _dimensions(engine, tmp_path)
+    validate_scores(scores)
+    assert scores["engine_regression"]["complete"] is False
+    assert "pytest_exited: exit status 0" in scores["engine_regression"]["missing_reasons"]
+    assert regrade_module._scores is _scores
+
+
+@pytest.mark.parametrize(
+    ("source", "reasons"),
+    [
+        ("def test_passes():\n    pass\n", set()),
+        ("def test_fails():\n    assert False\n", set()),
+        ("import pytest\n\n@pytest.mark.skip\ndef test_skipped():\n    pass\n", {"skipped"}),
+        ("import pytest\n\n@pytest.mark.xfail\ndef test_xfails():\n    assert False\n", {"skipped"}),
+        ("def helper():\n    pass\n", set()),
+    ],
+    ids=["passing", "failing", "all_skipped", "xfail", "no_tests"],
+)
+def test_an_orderly_session_is_not_cut_short(tmp_path, source, reasons):
+    expected, run = _run(tmp_path, source)
+    assert run.report.completed and not run.ended_early
+    assert not any(error.startswith("pytest_exited") for error in run.errors)
+    assert {row["reason"] for row in _not_run(expected, run)} == reasons
+
+
+@pytest.mark.parametrize("token", [None, "other"])
+def test_a_completion_row_without_this_runs_token_does_not_complete(tmp_path, token):
+    report = tmp_path / "report.jsonl"
+    report.write_text(json.dumps({"when": "session", "outcome": "complete", "token": "forged"}) + "\n")
+    assert not _read_report(report, None, token).completed
+    assert _read_report(report, None, "forged").completed
+    assert _read_report(report, None, "forged").nodes == []

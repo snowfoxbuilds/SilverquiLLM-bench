@@ -646,11 +646,13 @@ NOT_RUN_REASONS = frozenset({
 })  # fmt: skip
 _DEFAULT_PYTHON_FILES = ("test_*.py", "tests.py")
 # pytest's own exit statuses for a session that ran to its end: all passed, some failed,
-# nothing collected.  Any other status ended the session early.
+# nothing collected.  Only a run without node reporting judges completion by them; with node
+# reporting, the reporter's session-completion row decides, since candidate code can exit
+# with any status before pytest finishes.
 _PYTEST_ORDERLY_EXITS = (0, 1, 5)
 
 
-def _generate_report_plugin(report_jsonl_path: str) -> str:
+def _generate_report_plugin(report_jsonl_path: str, session_token: str = "") -> str:
     """Return Python source for a pytest plugin that records test outcomes to JSONL.
 
     The generated plugin uses the ``pytest_runtest_logreport`` hook to capture
@@ -661,6 +663,11 @@ def _generate_report_plugin(report_jsonl_path: str) -> str:
     errors, are recorded so that a node that did not run can say why; only pass
     and fail rows ever become ``test_nodes``.
 
+    At session finish it writes one completion row carrying *session_token*, a
+    per-run random value; a session cut short (``os._exit``, a crash) never
+    reaches that hook, so the missing row marks the suite as ended early whatever
+    exit status the process reported.
+
     The JSONL file path is baked into the source as a literal string so no
     env-var plumbing is needed.
     """
@@ -670,6 +677,7 @@ def _generate_report_plugin(report_jsonl_path: str) -> str:
 import json as _json
 
 _REPORT_PATH = "{safe_path}"
+_SESSION_TOKEN = "{session_token}"
 _LIMIT = {FAILURE_MESSAGE_LIMIT * 4}
 _seen_nodes = set()
 
@@ -723,6 +731,10 @@ def pytest_collectreport(report):
     if report.failed:
         nodeid = report.nodeid or "<collection-error>"
         _write({{"nodeid": nodeid, "when": "collect", "outcome": "fail", "message": _message(report)}})
+
+def pytest_sessionfinish(session, exitstatus):
+    """Record that the session ran to its end; never a test node."""
+    _write({{"when": "session", "outcome": "complete", "token": _SESSION_TOKEN}})
 '''
 
 
@@ -767,11 +779,16 @@ class _Report:
     nodes: list[dict] = field(default_factory=list)
     skipped: set[str] = field(default_factory=set)
     messages: dict[str, str] = field(default_factory=dict)
-    # Module id (``""`` when pytest named none) -> message of its collection error.
+    # Collector id (module, or class within it; ``""`` when pytest named none) -> message
+    # of its collection error.
     collection_errors: dict[str, str] = field(default_factory=dict)
+    # The reporter's session-completion row was read: pytest ran the session to its end.
+    completed: bool = False
 
 
-def _read_report(report_path: Path, suite_dir: str | None = None) -> _Report:
+def _read_report(
+    report_path: Path, suite_dir: str | None = None, session_token: str | None = None
+) -> _Report:
     report = _Report()
     if not report_path.exists():
         return report
@@ -786,6 +803,11 @@ def _read_report(report_path: Path, suite_dir: str | None = None) -> _Report:
         except json.JSONDecodeError:
             continue
         if not isinstance(entry, dict):
+            continue
+        if entry.get("when") == "session":
+            # Completion only counts with this run's token; it is never a node.
+            if session_token and entry.get("outcome") == "complete" and entry.get("token") == session_token:
+                report.completed = True
             continue
 
         raw_nodeid = entry.get("nodeid", "")
@@ -806,12 +828,18 @@ def _read_report(report_path: Path, suite_dir: str | None = None) -> _Report:
         # Any other or missing outcome is ignored — must not be silently coerced.
         if outcome not in ("pass", "fail"):
             continue
+        collector = None
+        if entry.get("when") == "collect":
+            collector = normalized.removesuffix("::<collection-error>")
+            collector = "" if collector == "<collection-error>" else collector
+            if "::" in collector:
+                # A class collector's row would read as a test node; mark it a collection error
+                # so every scoring filter leaves it out, keeping its own id for reason matching.
+                normalized = f"{collector}::<collection-error>"
         if outcome == "fail" and normalized not in report.messages:
             report.messages[normalized] = _bounded_message(entry.get("message"))
-        if entry.get("when") == "collect":
-            module = normalized.removesuffix("::<collection-error>")
-            module = "" if module == "<collection-error>" else module
-            report.collection_errors.setdefault(module, report.messages.get(normalized, ""))
+        if collector is not None:
+            report.collection_errors.setdefault(collector, report.messages.get(normalized, ""))
         if normalized not in seen:
             seen[normalized] = len(report.nodes)
             report.nodes.append({"test_node": normalized, "outcome": outcome})
@@ -842,6 +870,8 @@ class _PytestRun:
     report: _Report
     timed_out: bool = False
     returncode: int | None = None
+    # pytest did not run its session to the end (os._exit, a crash), whatever its exit status.
+    ended_early: bool = False
 
 
 def _run_pytest(
@@ -872,6 +902,7 @@ def _run_pytest(
 
     report_jsonl_path = None
     report_dir = None
+    session_token = uuid.uuid4().hex
 
     cmd = [
         sys.executable,
@@ -895,7 +926,7 @@ def _run_pytest(
         # First on the path, so no graded module can shadow the reporter.
         plugin = f"_silverquillm_node_report_{uuid.uuid4().hex}"
         (report_dir / f"{plugin}.py").write_text(
-            _generate_report_plugin(str(report_jsonl_path))
+            _generate_report_plugin(str(report_jsonl_path), session_token)
         )
         parts = [str(report_dir), *parts]
         cmd.extend(["-p", plugin])
@@ -918,18 +949,29 @@ def _run_pytest(
             return _PytestRun(0, 0, 0, [f"Timeout after {timeout}s"], _Report(), timed_out=True)
 
         passed, failed, total, errors = _parse_pytest_output(combined)
-        if result.returncode not in _PYTEST_ORDERLY_EXITS and all(
-            error.startswith("FAILED ") for error in errors
-        ):
-            # pytest died without a summary (a crash, os._exit): the grade must not look complete.
+        report = (
+            _read_report(report_jsonl_path, suite_dir, session_token)
+            if report_jsonl_path
+            else _Report()
+        )
+        if report_jsonl_path is not None:
+            ended_early = not report.completed
+        else:
+            ended_early = result.returncode not in _PYTEST_ORDERLY_EXITS and all(
+                error.startswith("FAILED ") for error in errors
+            )
+        if ended_early:
+            # pytest did not finish its session (a crash, os._exit): the grade must not look complete.
             errors.append(f"pytest_exited: exit status {result.returncode}")
         # test_nodes enumerates only executed pass/fail nodes.  Skipped and
         # xfail tests are intentionally omitted, so len(test_nodes) may be
         # less than tests_total when skips exist.  The authoritative counts
         # (tests_passed, tests_failed, tests_total) come from
         # _parse_pytest_output and are unaffected.
-        report = _read_report(report_jsonl_path, suite_dir) if report_jsonl_path else _Report()
-        return _PytestRun(passed, failed, total, errors, report, returncode=result.returncode)
+        return _PytestRun(
+            passed, failed, total, errors, report,
+            returncode=result.returncode, ended_early=ended_early,
+        )
     finally:
         # However the body exits (normal return, TimeoutExpired, or any other
         # exception such as OSError/PermissionError).
@@ -1125,7 +1167,7 @@ def _not_run(expected: list[str] | None, run: _PytestRun | None, reason: str | N
             )
         elif report.collection_errors:
             why = "collection_interrupted"
-        elif run.returncode not in (0, 1):
+        elif run.ended_early:
             why = "pytest_exited"
         else:
             why = "not_reported"
