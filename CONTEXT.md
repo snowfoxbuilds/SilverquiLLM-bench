@@ -71,7 +71,13 @@ _Avoid_: "zero point", "floor" (an agent can score below it by regressing)
 
 **Batch**
 
-One file `batches/<id>.toml` in the bench repo's batch queue: an optional `not_before` (RFC 3339 with an offset) plus an ordered list of run specs (Karn build output + construct + benchmark, with an optional Login Profile and budget). Historical Candidate Bundle batches (candidate ref + mode) are unsupported and never run. Desired state, authored and edited by the operator, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `batches/state/` — portable, committed by the operator as checkpoints, never carrying a host-local detail. The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused). A Batch with no committed state is blocked until the operator acknowledges starting it from entry zero. Batches execute serially in name order; edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
+A group of runs queued together: one Batch TOML in the host's batch directory, holding an optional `not_before` (RFC 3339 with an offset) and an ordered list of run specs (Karn build output + construct + benchmark, with an optional budget).
+Historical Candidate Bundle batches (candidate ref + mode) are unsupported and never run.
+Desired state, authored by the operator or a campaign top-up, never written by the scheduler; the scheduler's observed state (pending / running / done / failed per started run, with the identity resolved at run start) lives beside it in `state/`.
+Both are host-local operational files, backed up with the host's raw data and never published; a Batch has no analytical meaning (grilling 2026-10-14).
+The id is a permanent, one-shot identifier (its state file is the record of what ran under it; never reused).
+One batch directory and one scheduler serve each host; a later Batch's runs dispatch after an earlier one's, and a Batch added to a running scheduler is picked up without a restart (grilling 2026-10-13, #219).
+Edits to a running Batch affect only not-yet-started runs; a failed run continues the Batch (#66).
 
 _Avoid_: "job" (the substrate's job dir is a different concept), "queue entry" for the file (a Batch holds several runs)
 
@@ -109,6 +115,12 @@ Benchmark mode (`MODE=blind`) where the prompt does not instruct the agent to wr
 
 _Avoid_: "blind implementation" as a noun (deprecated — was `blind_impl.py`)
 
+**Campaign**
+
+A group of Benchmark Runs with exactly the same settings: the same Candidate Hash, benchmark workspace and budget, each run one more data point (grilling 2026-10-14).
+Membership follows from the Run Records; a campaign file in the Results Repo states its target and the run attributes a run needs to count.
+_Avoid_: "batch" for this (a Batch is only what was queued together), "sweep" (a sweep is several campaigns)
+
 **Candidate Bundle** *(legacy interchange format)*
 
 The self-contained directory artifact a Benchmark Candidate is exchanged as: the worker-type definition + resolved pins (base image digest, knowledge pin) + vendored knowledge tree + adapter identity, secret values excluded. Exported by the-ozolith's tooling (`theozolith candidate export`: `candidate.json` + generated `Dockerfile` + compiled knowledge tree + baked policy tree; `docs/specs/BENCH-CONTRACT.md`, `bundle_format_version` 2); historically the only thing the removed Candidate Bundle run path accepted. Candidate Bundles are no longer executed; each historical `ozolith-v1` Run Record carries its vendored bundle. Candidate identity = (base image digest, instruction hash, adapter identity), recomputed and verified from the bundle by TheOzolith's verifier (`silverquillm.candidate` consumes `verify_bundle`; the bench never reimplements the hash) — never trusted from a recorded value: a bundle whose recorded identity, or whose directory-name suffix, disagrees with the recomputed one is a hard refusal, as is a bundle carrying a secret value (#65). Adapter-agnostic by contract: the format never hardcodes the adapter set, and neither does the bench.
@@ -138,6 +150,13 @@ _Avoid_: "card data", "card definition"
 Retired with the MSH benchmark: the checkpoint/capability-DAG design served bounded-context sequential implementation over a ~281-card pool; HOB problem sets (5–23 cards, one run) don't have that problem. Was: a frozen, reference-validated snapshot of the whole MSH benchmark workspace taken after a card group — the unit of resume, regression attribution, and bounded per-step agent context.
 
 _Avoid_: "Output Snapshot" (runner-owned 60-second Git commits), "snapshot" alone
+
+**Cohort**
+
+A named group of Benchmark Runs that are comparable analytically, kept in the Results Repo as a member list, its acceptance criteria and its current grading inputs (grilling 2026-10-14).
+A label that makes querying easier, never the ground truth of any run attribute: whether a run counts is decided by each analysis.
+Every run is in exactly one default cohort (same benchmark and benchmark workspace); ad hoc cohorts may overlap it.
+_Avoid_: "cohort" for the regrade summary's candidate × grading-inputs groups
 
 **Combined Regression**
 
@@ -438,8 +457,9 @@ _Avoid_: "differential testing" (deprecated XMage approach), "checkpoint validat
 
 **Results Repo**
 
-The dedicated private git repository that is the home of benchmark results (#39 §3), git-as-truth: one Run Record per Benchmark Run, filed under its Candidate Hash, with Exclusions and each record's Workspace Archive beside the records.
-It carries its own schema so analysis needs nothing else, keeps pointers rather than heavy artifacts such as transcripts and snapshots, and has no derived index: its records are read directly (grilling 2026-10-07).
+The dedicated private git repository `bench-results` that is the home of benchmark results (#39 §3), git-as-truth: one Run Record per Benchmark Run, filed under its Candidate Hash, with Exclusions and each record's Workspace Archive beside the records.
+It also holds the operator runbook (its `AGENTS.md`), Cohorts, Campaigns, published regrades and analyses, and is the working directory of operational agents (grilling 2026-10-14).
+It keeps pointers rather than heavy artifacts such as transcripts and snapshots, which stay in each host's raw data, and has no derived index: its records are read directly (grilling 2026-10-07).
 Historical `ozolith-v1` candidates keep their vendored Candidate Bundle beside their records.
 
 _Avoid_: "results dir" (the per-run `docker/<image>/results/` working output), "leaderboard repo" (publishing is the separate port into the bench repo's `published/` — see Published Result)
@@ -604,7 +624,8 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - The existing publication pipeline requires a Promoted Candidate that verifies by recomputation and permits its knowledge to be published; these publication rules do not gate collection or analysis of Karn run data.
 - Each Login Profile has one Estimated Weekly Usage, fed by every Benchmark Run that used it, excluded runs included.
 - A Login Profile is under at most one Login Cooldown at a time; setting another replaces it.
-- A Batch holds ordered run specs; the scheduler executes one run at a time, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
+- A Batch holds ordered run specs; the scheduler dispatches them across free login slots, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
+- A Benchmark Run belongs to exactly one Campaign and one default Cohort; a Campaign's runs all fall in one default Cohort.
 - Filesystem checks (does the file exist, does it differ from the template?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only.
 - `run_summary.json` is automatically generated after evaluation by aggregating per-card `result.json` files. The aggregator is a pure, idempotent function.
 - The runner does NOT orchestrate test iteration — the agent self-manages. The runner stages, launches, harvests, evaluates.
