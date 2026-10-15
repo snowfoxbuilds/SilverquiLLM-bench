@@ -141,6 +141,7 @@ A parametrized function counts once, and it ran if any of its cases ran.
 
 Every expected function that did not run counts as one failed test in its dimension's score: the dimension's `tests_total` is the nodes that ran plus the functions that did not, so a candidate cannot raise a pass rate by skipping a test or breaking its collection (grilling 2026-10-15).
 A parametrized function that did not run counts once, since its case ids are not known statically.
+`grading_support_missing` is the exception: a suite the bench could not grade stays unevaluated, because an absent evaluation is different from an evaluated implementation scoring zero.
 A card whose tests all failed to run is therefore scored, at zero, rather than left uncovered; the Combined Regression already counts a baseline-passing node that did not run as regressed.
 Each card's own `tests_passed`, `tests_failed` and `tests_total` stay pytest's raw counts of the nodes that ran; the dimension totals and pass rates apply this rule.
 `complete` is unchanged: a grade whose suite reported errors other than test failures is still incomplete.

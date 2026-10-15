@@ -185,6 +185,11 @@ def attach_to_record(results_repo: Path, record: KarnRunRecord, run_dir: Path) -
     return outcome
 
 
+def _scored_not_run(value) -> int:
+    """Expected functions that did not run and count as failed tests."""
+    return sum(row["reason"] != "grading_support_missing" for row in value.not_run)
+
+
 def _scores(evaluated, benchmark) -> dict:
     result = missing_scores("grading_did_not_execute")
     for name, cards in (
@@ -208,6 +213,7 @@ def _scores(evaluated, benchmark) -> dict:
 
         def case_counts(value):
             # An expected test that did not run counts as a failed test (SCORING.md).
+            # Missing authoritative support is the bench's fault: that suite stays unevaluated.
             if value.test_nodes:
                 executed = [
                     node
@@ -217,7 +223,7 @@ def _scores(evaluated, benchmark) -> dict:
                 passed, total = sum(node["outcome"] == "pass" for node in executed), len(executed)
             else:
                 passed, total = value.tests_passed, value.tests_total
-            return passed, total + len(value.not_run)
+            return passed, total + _scored_not_run(value)
 
         counts = {key: case_counts(value) for key, value in cards.items()}
         observed = {key for key, (_, total) in counts.items() if total > 0}
@@ -249,7 +255,7 @@ def _scores(evaluated, benchmark) -> dict:
             "cards": {key: dataclasses.asdict(value) for key, value in cards.items()},
         }
     engine = evaluated.engine_result
-    engine_total = engine.tests_total + len(engine.not_run)
+    engine_total = engine.tests_total + _scored_not_run(engine)
     result["engine_regression"] = {
         "evaluated": engine_total > 0,
         "complete": engine_total > 0
