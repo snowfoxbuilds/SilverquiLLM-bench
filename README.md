@@ -115,6 +115,10 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | `silverquillm results-init PATH` | Lay out an empty private results repository and, if none exists, a minimal host configuration. |
 | `silverquillm grading-inputs BENCHMARK` | Print a benchmark's current grading-inputs digest as JSON. |
 | `silverquillm validate …` | Validate 17lands replays against the engine. |
+| `silverquillm data fetch-hob-set\|fetch-fra-set\|card-id-map\|token-id-map\|download-replays` | Fetch and build the reference data under `data/`. |
+| `silverquillm build fra-hard\|port-from-known-best\|printed-classes\|fdn-specs\|audited-stubs` | Generate benchmark inputs. |
+| `silverquillm audit check-promotion\|printed-identity` | Gate a candidate Audited Test for promotion; rewrite name-string card identification in tests. |
+| `silverquillm qualify claude-telemetry\|codex-telemetry` | Qualify an agent CLI version's telemetry before its accounting is trusted. |
 | `silverquillm legacy run-image\|smoke\|resume\|chain\|rescore\|logs …` | The historical `--image` entrypoint lineage and its run directories. |
 
 A `--cards` filter is available for development and pipeline validation, but filtered runs are **not** leaderboard-valid.

@@ -40,7 +40,7 @@
 - **Entry Points**: Start with `parser.py` → `parse_replay()` for understanding the data flow, then `executor.py` → `ReplayExecutor` for engine integration.
 - **Extension**: Add new action types in `state.py` → `infer_actions()`. Add new divergence checks in `validation.py` → `ValidatingExecutor`.
 - **Constraints**:
-  - Card ID map (`data/replays/card_id_map.json`) must be kept in sync when new cards are added; use `scripts/build_card_id_map.py` to regenerate.
+  - Card ID map (`data/replays/card_id_map.json`) must be kept in sync when new cards are added; use `silverquillm data card-id-map` to regenerate.
   - `GameSnapshot` objects are immutable once created — state reconstruction creates new copies.
   - `ReplayExecutor` expects snapshots in chronological order.
 

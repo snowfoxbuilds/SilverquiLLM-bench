@@ -191,7 +191,7 @@ class StepResult:
 
 
 # ---------------------------------------------------------------------------
-# Token identity map (corpus-derived; see scripts/build_token_id_map.py)
+# Token identity map (corpus-derived; see `silverquillm data token-id-map`)
 # ---------------------------------------------------------------------------
 
 def _token_signature(
@@ -361,7 +361,7 @@ def load_token_id_map(
     a silently-empty map would still run, but every token would mis-report as
     unproducible / anonymous, quietly inflating the divergence and MISSING_CARD
     metrics the run exists to measure. Regeneration stays documented and
-    reproducible via ``scripts/build_token_id_map.py``.
+    reproducible via ``silverquillm data token-id-map``.
     """
     if path is None:
         data_root = os.environ.get("SILVERQUILLM_BENCH_ROOT")
@@ -374,7 +374,7 @@ def load_token_id_map(
             raise FileNotFoundError(
                 f"token identity map not found at {path}; simulate-mode "
                 f"validation requires it — regenerate with "
-                f"scripts/build_token_id_map.py"
+                f"silverquillm data token-id-map"
             )
         return TokenIdMap({})
     try:
@@ -384,7 +384,7 @@ def load_token_id_map(
         if required:
             raise ValueError(
                 f"token identity map at {path} is malformed ({exc}); "
-                f"regenerate with scripts/build_token_id_map.py"
+                f"regenerate with silverquillm data token-id-map"
             ) from exc
         raise
     token_map = TokenIdMap(data)
@@ -392,7 +392,7 @@ def load_token_id_map(
         raise ValueError(
             f"token identity map at {path} carries no token entries; "
             f"simulate-mode validation would silently mis-report token "
-            f"producibility — regenerate with scripts/build_token_id_map.py"
+            f"producibility — regenerate with silverquillm data token-id-map"
         )
     return token_map
 
