@@ -35,7 +35,7 @@ The headline of every Benchmark Run on smoke, fra-hard-v2 and later benchmarks i
 
 ```
 Net Card Score = (Cards Implemented + Cards Fixed − Cards Broken)
-                 / (target cards + cards hosting related Known Defects)
+                 / (target cards + other cards hosting related Known Defects)
 ```
 
 | Reference point | Score |
@@ -45,8 +45,7 @@ Net Card Score = (Cards Implemented + Cards Fixed − Cards Broken)
 
 There is no floor: a run that breaks more existing cards than it makes work scores below 0, and a run that wrecks the engine shows it (grilling 2026-10-14).
 
-Every target card has at least one Implementation Test the unmodified Workspace fails, so the unmodified Workspace scores 0.
-A target card whose tests mostly depend on a Known Defect, such as fra-hard-v2's Inside Information on X costs, also gets Implementation Tests of its other behaviour that pass whether or not the defect is fixed (grilling 2026-10-19).
+Every target card has at least one test counting toward it that the unmodified Workspace fails, so the unmodified Workspace scores 0 (grilling 2026-10-19).
 
 A candidate's leaderboard score is the mean Net Card Score over the runs its analysis counts, from one Cohort graded on one grading-inputs digest, shown with the run count; there are no significance tests or confidence intervals.
 Which runs count is the analysis's call, made from run attributes in the Results Repo, and a low score never leaves a run out.
@@ -90,7 +89,9 @@ Every test the score counts has exactly one Attributed Card, so that one broken 
 - Rules that no card's text names, such as turn structure, game start and end, playing lands and the mana pool, are hosted on the basic lands and never on other cards, so a failing basic land always means engine breakage.
   Several rules may share a land; engine breakage is rare, and a land broken twice still counts once (grilling 2026-10-19).
 - Audited Engine Tests that check engine internals rather than a rules mechanic, such as the decision data layer, the card registry, the `card_impl.py` lint and the zone containers, are grouped by file onto basic lands or onto cards that host nothing else, so their failures count too.
-- Host cards are base Workspace cards other than the benchmark's targets.
+- Host cards are base Workspace cards other than the benchmark's targets, but for a related Known Defect a target card cannot be tested without.
+  Such a defect is hosted on that target card, because any agent that tests the card finds the defect: fixing it is part of implementing the card, which counts once (grilling 2026-10-19).
+  fra-hard-v2's X-cost defect is hosted on Inside Information, whose effect does nothing while X is always 0.
 
 The attribution is host-only benchmark data (see [KNOWN-BEST-ENGINE.md](KNOWN-BEST-ENGINE.md) → Attribution data).
 
@@ -98,8 +99,8 @@ The attribution is host-only benchmark data (see [KNOWN-BEST-ENGINE.md](KNOWN-BE
 
 | Count | Cards |
 | --- | --- |
-| Cards Implemented | Target cards all of whose attributed Implementation Tests pass |
-| Cards Fixed | Cards hosting a related Known Defect all of whose attributed Dependency Tests pass |
+| Cards Implemented | Target cards all of whose attributed Implementation Tests pass, and, for a target hosting a related Known Defect, all of whose Dependency Tests too |
+| Cards Fixed | Other cards hosting a related Known Defect all of whose attributed Dependency Tests pass |
 | Cards Broken | Cards with at least one attributed Collateral Test failing, or no longer executed |
 
 Each count is all-or-nothing per card (grilling 2026-10-14).

@@ -117,7 +117,7 @@ CI checks, for every benchmark in scope:
 2. The unmodified Workspace fails exactly the FDN and engine Audited Tests the manifest lists, and passes the rest of the FDN and engine suites.
 3. Putting each Known Defect back into the Test Oracle Workspace fails exactly the target-card tests its entry lists (grilling 2026-10-14).
 4. Every FDN, engine and target-card Audited Test resolves to exactly one Attributed Card, a base Workspace card other than a target, and every related Known Defect names a host card (grilling 2026-10-14).
-5. Every target card has at least one Implementation Test the unmodified Workspace fails (grilling 2026-10-19).
+5. Every target card has at least one test counting toward it that the unmodified Workspace fails (grilling 2026-10-19).
 
 Each check is a Platform Test, making one call per suite so each stays within the test timeout: `tests/known_defect_checks.py` provides `oracle_problems` and `workspace_problems` for the first two, which return the problems found and `[]` when the check passes.
 
@@ -149,7 +149,7 @@ Each check is a Platform Test, making one call per suite so each stays within th
 - `id` is unique, lowercase letters, digits and hyphens, at most 64 characters; `description` is non-empty; `rules` is a non-empty list of distinct citations like `CR 400.7` or `CR 603.10a`; `kind` is `inherited` or `seeded`.
 - `failing_tests` maps `fdn`, `engine` or both to a non-empty list of distinct Audited Test ids. The same test may be listed under two defects; the unmodified Workspace is expected to fail their union.
 - `target_tests` is a list, possibly empty, of the distinct target-card tests that fail once the defect is put back into the Test Oracle Workspace; the defect is related when it is non-empty.
-- `host_card` is a base Workspace card id other than a target when the defect is related, and `null` otherwise.
+- `host_card` is a card id when the defect is related, and `null` otherwise: a base Workspace card other than a target, or a target the defect's own target-card tests belong to when that target cannot be tested without the fix (grilling 2026-10-19).
 - A benchmark frozen with schema version 1 (fra-hard v1) keeps it, with `fdn_regression` and `engine_regression` keys and no `target_tests` or `host_card` (grilling 2026-10-14).
 
 An Audited Test id is the pytest node id relative to its suite's graded root:

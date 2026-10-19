@@ -164,14 +164,15 @@ _Avoid_: "regressions", "cards regressed"
 
 **Cards Fixed**
 
-The cards hosting a related Known Defect whose attributed Dependency Tests all pass after the agent's changes (grilling 2026-10-14).
+The cards other than targets hosting a related Known Defect whose attributed Dependency Tests all pass after the agent's changes (grilling 2026-10-14).
+A related Known Defect hosted on a target card counts toward Cards Implemented instead (grilling 2026-10-19).
 Fixing a Known Defect that no target card depends on earns nothing, and a Dependency Test that also depends on such a defect counts toward no card.
 
 _Avoid_: "defects fixed" (the count is of cards, one card per mechanic)
 
 **Cards Implemented**
 
-The target cards whose attributed Implementation Tests all pass (grilling 2026-10-14).
+The target cards whose attributed Implementation Tests all pass, together with the Dependency Tests of any related Known Defect the card hosts (grilling 2026-10-14, 2026-10-19).
 The count is all-or-nothing per card, so a card with many tests weighs the same as a card with few.
 
 _Avoid_: "card pass rate" (counts every target-card test, Dependency Tests included)
@@ -446,7 +447,7 @@ _Avoid_: "tags" (working name)
 
 **Net Card Score**
 
-The headline score of a Benchmark Run (grilling 2026-10-14): Cards Implemented plus Cards Fixed minus Cards Broken, over the number of target cards plus the cards hosting related Known Defects.
+The headline score of a Benchmark Run (grilling 2026-10-14): Cards Implemented plus Cards Fixed minus Cards Broken, over the number of target cards plus the other cards hosting related Known Defects.
 An unmodified Workspace scores 0 and the Known-Best Workspace with the Test Oracle Impls scores 1; a run that breaks more existing cards than it makes work scores below 0, with no floor.
 
 _Avoid_: "overall score", the target-card test pass rate as the headline
