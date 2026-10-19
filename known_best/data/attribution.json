@@ -195,5 +195,9 @@
     "test_zone_change.py": "fdn_122",
     "test_zones.py": "fdn_206"
   },
-  "fdn": {}
+  "fdn": {
+    "fdn_173/tests.py": "fdn_236",
+    "fdn_221/tests.py": "fdn_236",
+    "fdn_88/tests.py::TestGoblinNegotiationXZero": "fdn_236"
+  }
 }

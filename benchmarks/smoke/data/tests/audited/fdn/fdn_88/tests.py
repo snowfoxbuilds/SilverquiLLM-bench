@@ -3,7 +3,7 @@
 "Goblin Negotiation deals X damage to target creature. Create a number of 1/1
 red Goblin creature tokens equal to the amount of excess damage dealt to that
 creature this way." X is chosen and paid while casting (rules 107.3a, 601.2b,
-601.2f).
+601.2f); with only {R}{R} to spend, X can only be 0.
 """
 
 from __future__ import annotations
@@ -17,6 +17,23 @@ from cards.fdn.fdn_272.card_impl import Plains
 from test_interface import Phase, Side, Step, Zone, card, create_game, token
 
 from table import Table, appears, ceases, life, moves, taps
+
+
+class TestGoblinNegotiationXZero:
+    def test_x_zero_deals_no_damage_and_mints_nothing(self) -> None:
+        """Cast for {R}{R} at a 2/2 with X = 0: it resolves, the creature
+        survives and no Goblin token appears."""
+        spell, target = card(GoblinNegotiation), card(CourageousGoblin)
+        game = create_game(
+            Side(hand=[spell], mana={ManaType.RED: 2}),
+            Side(battlefield=[target]),
+            start=(Phase.PRECOMBAT_MAIN, 0),
+        )
+        t = Table(game)
+        t.act(0, spell, choices=[Decision.number(0), target], then=[moves(spell, Zone.STACK)])
+        t.pass_(0)
+        t.pass_(1, then=[moves(spell, Zone.GRAVEYARD)])
+        t.run()
 
 
 class TestGoblinNegotiationMint:
