@@ -83,6 +83,8 @@ Every test the score counts has exactly one Attributed Card, so that one broken 
 - A mechanic is roughly one keyword or one rules subsection, such as trample, the legend rule or flashback; the grouping is best-effort.
 - No card but a basic land hosts two mechanics.
   A mechanic's Collateral Tests and the Dependency Tests of its own Known Defect are one mechanic and share its card, which can then be fixed and broken at once.
+  A defect hosted on a target is the exception: its mechanic's Collateral Tests stay together on one base Workspace card, so breaking the existing cards that use the mechanic still costs a card (grilling 2026-10-19).
+  fra-hard-v2's {X}-cost Collateral Tests, across the FDN cards with {X} in their cost, count toward Wildwood Scourge.
 - Each related Known Defect has its own host card; two related defects share one only when no other card fits, and that card is fixed only when both are.
 - A test that exercises several mechanics counts toward the mechanic its assertion checks.
   A test involving several target cards counts toward the main card it tests, or is split into separate tests.
