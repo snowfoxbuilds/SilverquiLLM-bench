@@ -29,16 +29,25 @@ The total combines both kinds of event; response and tool-call counts remain sep
 
 _Avoid_: "Codex turn" (one native user request can contain many Agent Turns), "tool call" as a synonym for the total
 
+**Attributed Card**
+
+The one card an Audited Test counts toward in the Net Card Score (grilling 2026-10-14).
+A target-card Implementation Test counts toward the card doing most of the work in it, even when it sits in another card's suite; a Dependency Test counts toward the card hosting its Known Defect; and a Collateral Test counts toward the base Workspace card hosting its mechanic, which for an FDN Audited Test is normally its own card.
+The tests of one mechanic, and the Dependency Tests of one related Known Defect, share one card, and no card but a basic land hosts two mechanics, so one broken mechanic is roughly one broken card.
+
+_Avoid_: "owning card", "the test's card" (the suite a test sits in need not be its Attributed Card)
+
 **Audited Engine Tests**
 
-The hidden Audited Tests suite for the Engine Regression dimension, at a benchmark's `data/tests/audited/engine/` (grilling 2026-10-02).
+The hidden Audited Tests of the engine suite, at a benchmark's `data/tests/audited/engine/` (grilling 2026-10-02).
 Seeded from the Engine Reference Tests, then maintained independently of them; it asserts rules-correct engine behavior through the Audited Test API.
 
 _Avoid_: "engine tests" alone, "hidden engine tests" (informal)
 
 **Audited Eval**
 
-The only evaluation method in v1: audited tests run against agent output post-run. Three dimensions: target-set card correctness (SOS card correctness for SOS; HOB card correctness for the HOB-generation benchmarks), FDN card regression, engine regression. Tests are LLM-drafted, then failure-reviewed by a human. The authoritative measure of correctness.
+The only evaluation method in v1: audited tests run against agent output post-run. It grades three suites: target-card, FDN and engine. Tests are LLM-drafted, then failure-reviewed by a human. The authoritative measure of correctness.
+Its headline is the Net Card Score, with per-suite pass rates kept as diagnostics; SOS, hob-medium and fra-hard v1 reported each suite separately (grilling 2026-10-14).
 
 _Avoid_: "gold eval", "human eval"
 
@@ -58,16 +67,17 @@ _Avoid_: "gold tests", "grader tests" (informal — say "Audited Tests"), "bench
 
 **Base Set**
 
-The FDN Draft Set — the MTG Foundations limited format card pool (FDN 001–291 + SPG 074–083 Special Guests) — plus three supporting FDN cards outside it that Audited Tests need to reach positions no Draft Set card reaches: Basilisk Collar (669), Demolition Field (687) and Confiscate (709) (grilling 2026-10-05). Serves as engine validation, agent reference examples, and regression suite. Ported from XMage Java source. Engine validated via Replay Validation against 17lands GRE JSON data.
+The FDN Draft Set — the MTG Foundations limited format card pool (FDN 001–291 + SPG 074–083 Special Guests) — plus three supporting FDN cards outside it that Audited Tests need to reach positions no Draft Set card reaches: Basilisk Collar (669), Demolition Field (687) and Confiscate (709) (grilling 2026-10-05). Serves as engine validation, agent reference examples, and the FDN suite. Ported from XMage Java source. Engine validated via Replay Validation against 17lands GRE JSON data.
 
 _Avoid_: "foundation cards" (use "Foundations cards" or "base set")
 
-**Baseline Score**
+**Baseline Score** *(retired — grilling 2026-10-14)*
 
-The Combined Regression score an unmodified benchmark Workspace earns (grilling 2026-10-02).
-It is below the Known-Best Score by exactly the tests the benchmark's Known Defects make fail, and it changes whenever those Audited Tests change.
+Retired with Combined Regression (ADR-021).
+Was: the Combined Regression score an unmodified benchmark Workspace earned.
+An unmodified Workspace now scores 0 on the Net Card Score, and its per-test outcomes are the baseline reference grade.
 
-_Avoid_: "zero point", "floor" (an agent can score below it by regressing)
+_Avoid_: "Baseline Score", "zero point"
 
 **Batch**
 
@@ -145,6 +155,28 @@ JSON file (`card_spec.json`) containing a card's name, mana cost, type line, and
 
 _Avoid_: "card data", "card definition"
 
+**Cards Broken**
+
+The existing cards with at least one failing Collateral Test attributed to them after the agent's changes (grilling 2026-10-14).
+Subtracted in the Net Card Score.
+
+_Avoid_: "regressions", "cards regressed"
+
+**Cards Fixed**
+
+The cards other than targets hosting a related Known Defect whose attributed Dependency Tests all pass after the agent's changes (grilling 2026-10-14).
+A related Known Defect hosted on a target card counts toward Cards Implemented instead (grilling 2026-10-19).
+Fixing a Known Defect that no target card depends on earns nothing, and a Dependency Test that also depends on such a defect counts toward no card.
+
+_Avoid_: "defects fixed" (the count is of cards, one card per mechanic)
+
+**Cards Implemented**
+
+The target cards whose attributed Implementation Tests all pass, together with the Dependency Tests of any related Known Defect the card hosts (grilling 2026-10-14, 2026-10-19).
+The count is all-or-nothing per card, so a card with many tests weighs the same as a card with few.
+
+_Avoid_: "card pass rate" (counts every target-card test, Dependency Tests included)
+
 **Checkpoint (MSH)** *(retired — grilling 2026-08-27)*
 
 Retired with the MSH benchmark: the checkpoint/capability-DAG design served bounded-context sequential implementation over a ~281-card pool; HOB problem sets (5–23 cards, one run) don't have that problem. Was: a frozen, reference-validated snapshot of the whole MSH benchmark workspace taken after a card group — the unit of resume, regression attribution, and bounded per-step agent context.
@@ -158,12 +190,21 @@ A label that makes querying easier, never the ground truth of any run attribute:
 Every run is in exactly one default cohort (same benchmark and benchmark workspace); ad hoc cohorts may overlap it.
 _Avoid_: "cohort" for the regrade summary's candidate × grading-inputs groups
 
-**Combined Regression**
+**Collateral Test**
 
-The pooled FDN Card Regression and Engine Regression Audited Tests of a benchmark, reported as one raw pass/total with its Baseline Score, Known-Best Score, Fixed and Regressed counts (grilling 2026-10-02).
-The two regression dimensions it pools keep their own raw pass/total for diagnosis.
+An FDN or engine Audited Test that the unmodified Workspace passes (grilling 2026-10-14).
+Failing it after the agent's changes is a collateral mistake: the agent broke behavior that worked.
+Collateral Tests are one group across the FDN and engine suites, each counting toward an existing card, so every engine breakage shows up as a broken existing card.
 
-_Avoid_: "regression score" alone (ambiguous with either dimension), "total regression"
+_Avoid_: "regression" for the failure
+
+**Combined Regression** *(retired — grilling 2026-10-14)*
+
+Retired with the regression dimensions (ADR-021).
+Was: the pooled FDN and engine Audited Tests, reported as one raw pass/total against a Baseline Score and a Known-Best Score.
+Its tests are now Dependency Tests or Collateral Tests counted in the Net Card Score, and the per-test record of what moved from the unmodified Workspace is the baseline comparison.
+
+_Avoid_: "Combined Regression", "regression score"
 
 **Complexity Tier**
 
@@ -183,6 +224,15 @@ _Avoid_: "Candidate Bundle" (the historical interchange format), "image" alone
 When an LLM has seen target card implementations in its training data, invalidating the benchmark. Controlled via new set selection, no web access, and clean workspaces.
 
 _Avoid_: "data leakage" (too generic)
+
+**Dependency Test**
+
+An Audited Test that fails because of a Known Defect (grilling 2026-10-14).
+It is either an FDN or engine Audited Test that the unmodified Workspace fails, or a target-card test that fails once the Known Defect is put back into the Test Oracle Workspace.
+Failing it is a dependency mistake, which comes from the engine rather than from the agent's own implementation.
+The Dependency Tests of a Known Defect that is not related are left out of the Net Card Score.
+
+_Avoid_: "baseline gap" (the retired name for failing cases cut from a graded suite)
 
 **DeterministicPlayer (SOS)**
 
@@ -209,11 +259,13 @@ Modification or addition to `engine/` files by the agent during a benchmark run.
 
 _Avoid_: "engine modification" (neutral — use "engine extension" to imply additive/constructive intent)
 
-**Engine Regression**
+**Engine Regression** *(retired — grilling 2026-10-14)*
 
-Post-run evaluation dimension: Audited Engine Tests run against the agent's final Writable Engine. Detects whether engine extensions broke fundamental game mechanics (mana, stack, combat, state-based actions, etc.) and whether Known Defects were fixed. Pooled into Combined Regression (grilling 2026-10-02). Separate from FDN Card Regression — an agent could pass all FDN card tests but fail engine tests if card-level workarounds corrupt internal state.
+Retired evaluation dimension (ADR-021).
+Was: the Audited Engine Tests run against the agent's final Writable Engine and reported as their own pass rate.
+They are now the engine suite, whose tests are Dependency Tests or Collateral Tests, each counting toward an existing card.
 
-_Avoid_: "engine test" alone (ambiguous — say "Audited Engine Tests" or "Engine Reference Tests")
+_Avoid_: "Engine Regression", "engine test" alone (say "Audited Engine Tests" or "Engine Reference Tests")
 
 **Engine Reference Tests**
 
@@ -248,17 +300,19 @@ Subagent use is a run attribute each analysis judges, never a rule (#230); an an
 
 _Avoid_: "rejected run", "invalid run" (the record stays valid evidence), "filtered out" for an ad hoc analysis choice
 
-**FDN Card Regression**
+**FDN Card Regression** *(retired — grilling 2026-10-14)*
 
-Post-run evaluation dimension: FDN audited tests (`tests/audited/fdn/`) run against pre-filled FDN `card_impl.py` files using the agent's final Writable Engine. Detects whether engine extensions broke existing card behavior and whether Known Defects were fixed. Pooled into Combined Regression (grilling 2026-10-02). Host-side only; not staged into the Workspace. Distinct from FDN Reference Tests.
+Retired evaluation dimension (ADR-021).
+Was: the FDN Audited Tests run against the pre-filled FDN implementations and the agent's final Writable Engine, reported as their own pass rate.
+They are now the FDN suite, whose tests are Dependency Tests or Collateral Tests.
 
-_Avoid_: "regression check" (deprecated — was per-card sequential re-run), "FDN tests" alone (ambiguous — specify Reference vs Card Regression)
+_Avoid_: "FDN Card Regression", "regression check", "FDN tests" alone (say "FDN Audited Tests" or "FDN Reference Tests")
 
 **FDN Reference Tests**
 
 Illustrative pytest files colocated with FDN reference implementations at `cards/fdn/{collector_number}/tests.py`. Agent-visible inside the Workspace. Demonstrate the testing pattern (DeterministicPlayer scripts, expected-state asserts) so agents can model `cards/sos/{card_id}/tests.py` after them in Tested Mode. Distinct from FDN Card Regression — these are learning material, not grading input. One kind of Reference Tests: editable, and may be wrong (grilling 2026-10-02).
 
-_Avoid_: "FDN tests" alone (ambiguous — specify Reference vs Card Regression), "FDN illustrative tests" (use "FDN Reference Tests")
+_Avoid_: "FDN tests" alone (say "FDN Reference Tests" or "FDN Audited Tests"), "FDN illustrative tests" (use "FDN Reference Tests")
 
 **Game Refs**
 
@@ -301,6 +355,13 @@ The `priority_loop(game)` advancer audited tests use to move the game forward by
 
 _Avoid_: "game loop" / "run loop" (`game.run()` is banned in audited tests), "auto-drain" (that is the engine's loop, which this replaces)
 
+**Implementation Test**
+
+A target-card Audited Test that depends on no Known Defect (grilling 2026-10-14).
+Failing it is an implementation mistake, the agent's own; an engine mechanic that a target card needs but the baseline lacks is part of that card's implementation.
+
+_Avoid_: "obvious test", "obvious mistake" (the agent's own mistakes are not always obvious)
+
 **Implementation-Agnostic Testing**
 
 The core audited-test philosophy: a test asserts *what a card does* (observable game-state behavior) and must pass against *any* correct implementation — never coupling to one implementation's naming, internal structure, method names, or conventions. It discriminates correctness, not style: independent correct impls all pass, only genuinely wrong behavior fails. Operationalized by the behavioral/outcome-based, canonical-engine-API-only, `DeterministicPlayer`-scripted audited tests (see [AUDITED-TEST-SUITE.md](docs/specs/AUDITED-TEST-SUITE.md)), and is the principle every test-improvement decision serves. The formalized, strengthened restatement of the Phase 18 behavioral-testing direction.
@@ -331,6 +392,7 @@ _Avoid_: "ability word" (distinct concept — see Ability Word)
 
 A recorded way a benchmark's baseline engine or FDN implementations depart from `RULEBOOK.txt`, listed with its rule citation and the Audited Tests it makes fail (grilling 2026-10-02).
 A Known Defect is either inherited (found in an engine or implementation) or a Seeded Defect; agents may fix either kind.
+A Known Defect is related when at least one target-card Audited Test depends on it; only related Known Defects earn Cards Fixed (grilling 2026-10-14).
 
 _Avoid_: "bug" alone, "baseline gap" (the retired name for failing cases cut from a graded suite)
 
@@ -341,15 +403,17 @@ Benchmark baselines and Test Oracle Workspace engines are ported from it; fixes 
 
 _Avoid_: "reference engine", "canonical engine" (the canonical engine is a benchmark's agent-visible baseline), "gold engine"
 
-**Known-Best Score**
+**Known-Best Score** *(retired — grilling 2026-10-14)*
 
-The Combined Regression score the Known-Best Engine earns: always a perfect score, which validates that every regression Audited Test is passable (grilling 2026-10-02).
+Retired with Combined Regression (ADR-021).
+Was: the perfect Combined Regression score the Known-Best Engine earned.
+The Known-Best Workspace with the Test Oracle Impls now scores 1 on the Net Card Score, and CI still checks that every Audited Test passes on it.
 
-_Avoid_: "max score", "oracle score"
+_Avoid_: "Known-Best Score", "max score", "oracle score"
 
 **Known-Best Workspace**
 
-The host-only, benchmark-independent workspace holding the Known-Best Engine, the FDN implementations with every Known Defect fixed, and the full regression Audited Tests (grilling 2026-10-02).
+The host-only, benchmark-independent workspace holding the Known-Best Engine, the FDN implementations with every Known Defect fixed, and the full FDN and engine Audited Tests (grilling 2026-10-02).
 A benchmark is built by porting a copy of it.
 
 _Avoid_: "master workspace", "reference workspace"
@@ -380,6 +444,13 @@ _Avoid_: "candidate credential" (authentication is not candidate identity)
 Refinements riding on a Player Decision (spend restrictions, snow, doesn't-empty, …). Invisible to satisfaction matching; read only by engine predicates (e.g. spend-time checks) and audit assertions. Tested agents may add private Modifiers; Modifiers asserted on by audited tests must use canonical names.
 
 _Avoid_: "tags" (working name)
+
+**Net Card Score**
+
+The headline score of a Benchmark Run (grilling 2026-10-14): Cards Implemented plus Cards Fixed minus Cards Broken, over the number of target cards plus the other cards hosting related Known Defects.
+An unmodified Workspace scores 0 and the Known-Best Workspace with the Test Oracle Impls scores 1; a run that breaks more existing cards than it makes work scores below 0, with no floor.
+
+_Avoid_: "overall score", the target-card test pass rate as the headline
 
 **Output Snapshot**
 
@@ -622,14 +693,14 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 
 ## Relationships
 
+- Every Audited Test is exactly one of an Implementation Test, a Dependency Test or a Collateral Test, and every one the Net Card Score counts has exactly one Attributed Card (grilling 2026-10-14).
 - A Benchmark Run evaluates one Benchmark Candidate against the selected benchmark's configured Card Pool and instruction data.
 - A Benchmark Run launches one container session. The agent receives the benchmark's entire problem set (every target card) in a single Workspace — one benchmark = one problem set; there is no card-subset "workload" notion (grilling 2026-08-27).
 - FDN cards are in-context examples (filled `card_impl.py` + colocated `tests.py` demonstrating the testing pattern). SOS cards are benchmark targets (SOS Card Stubs to fill in).
 - Each agent produces `card_impl.py` per SOS card. In Tested Mode, also `tests.py` per card.
 - The agent has a Writable Engine (`/workspace/engine/`) and may extend it freely throughout the run.
 - All evaluation is post-run. After the container exits, the evaluator runs tests against harvested implementations and the final engine state.
-- FDN Card Regression: evaluator runs `tests/audited/fdn/` against pre-filled FDN card impls + agent's final Writable Engine. Detects broken card behavior.
-- Engine Regression: evaluator runs the Audited Engine Tests against agent's final Writable Engine. Detects broken rules mechanics.
+- The FDN suite runs the FDN Audited Tests against the pre-filled FDN implementations and the agent's final Writable Engine; the engine suite runs the Audited Engine Tests against that engine. Their tests are Dependency Tests or Collateral Tests, so broken card behavior and broken rules mechanics both show up as Cards Broken (grilling 2026-10-14).
 - Self-eval / N×N cross-eval are retired; the Test Harvester (manual v1, automated v2) improves audited tests instead. Automated v2 test-quality scoring is future work.
 - The Base Set forms the reference codebase agents can browse. No Expanded Pool — agents implement new mechanics from scratch.
 - A Draft Set may span multiple Scryfall set codes (e.g., FDN + SPG).
@@ -648,7 +719,7 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - On container timeout, the runner harvests partial results. Completed cards are evaluated normally; unfinished cards scored as zero.
 - Historical **Blind** and **Tested** modes varied test instructions. New Karn runs take their guidance from the selected benchmark and have no independent mode selector.
 - Audited Tests are evaluation-only artifacts — never staged in the agent's workspace, never in results directories. Reference Tests are the agent-visible, editable, ungraded counterpart: FDN Reference Tests at `workspace/cards/fdn/{collector_number}/tests.py` and Engine Reference Tests at `workspace/engine_tests/` (ADR-006). Audited target-card tests live host-side only — there is no `workspace/tests/cards/` directory.
-- hob-medium and SOS predate the Audited Engine Tests suite and grade Engine Regression from the host copy of their Engine Reference Tests; both are frozen (grilling 2026-10-02).
+- hob-medium and SOS predate the Audited Engine Tests suite and grade their engine suite from the host copy of their Engine Reference Tests; both are frozen (grilling 2026-10-02).
 - The runner is the hard timeout authority. Historical Agent Containers may read the Run Manifest for pacing, but correctness does not depend on honoring it.
 - Output Snapshots are runner-owned, Workspace-only, and independent of candidate cooperation. The runner may use a prior snapshot as fallback if the final engine state is unusable.
 - Historical image runs write the User Prompt to `/workspace/prompt.md`; Karn task input follows the Construct Definition's declared file mounts.

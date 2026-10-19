@@ -144,12 +144,10 @@ def header(shown: Shown, now: datetime, theme: Theme) -> Table:
     right.add_column(style=theme.style("muted"))
     right.add_column()
     if summary is not None:
-        for name, label in (
-            ("card_correctness", "target"),
-            ("fdn_regression", "fdn"),
-            ("engine_regression", "engine"),
-        ):
-            right.add_row(label, fmt.score(summary.scores.get(name), theme))
+        if summary.net_card is not None:
+            right.add_row("net card", fmt.net_card(summary.net_card, theme))
+        for suite in ("target", "fdn", "engine"):
+            right.add_row(suite, fmt.score(summary.scores.get(suite), theme))
         cost = fmt.money(summary.cost, theme)
         if summary.cost is not None and not summary.cost_complete:
             completeness = summary.cost_completeness or "partial"

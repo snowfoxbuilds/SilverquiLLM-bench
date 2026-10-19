@@ -22,6 +22,7 @@ from silverquillm.results_repo import (
     InvalidRunRecordError,
     RunRecord,
     RunRecordExistsError,
+    SCHEMA_1_SCORE_KEYS,
     iter_run_records,
     write_run_record,
 )
@@ -113,7 +114,7 @@ def options(tmp_path, **changes):
 def test_a_direct_run_records_its_scores_evidence_and_grading_inputs(plain_run):
     """End to end: one successful run of the toy benchmark, read without changing it."""
     opts, record = plain_run.opts, plain_run.record
-    assert record.manifest["schema_version"] == 2
+    assert record.manifest["schema_version"] == 3
     assert "mode" not in record.manifest and "leaderboard_valid" not in record.manifest
     assert all(
         score["tests_total"] == 1 and score["tests_passed"] == 1 for score in record.scores.values()
@@ -232,7 +233,7 @@ def test_mixed_history_reader_preserves_original_schema(plain_run_clone):
         resumed_from=None,
         run_metadata={"run_date": "old-date"},
         proposal_status=None,
-        scores={key: {} for key in missing_scores("unused")},
+        scores={key: {} for key in SCHEMA_1_SCORE_KEYS},
     )
     write_run_record(opts["results_repo"], legacy)
     records = list(iter_run_records(opts["results_repo"]))
@@ -240,7 +241,7 @@ def test_mixed_history_reader_preserves_original_schema(plain_run_clone):
     by_id = {record.run_id: record for _, record in records}
     assert by_id["old-run"].mode == "basic" and by_id["old-run"].leaderboard_valid is False
     current = by_id[new.run_id].manifest
-    assert current["schema_version"] == 2 and "mode" not in current
+    assert current["schema_version"] == 3 and "mode" not in current
 
 
 def test_batch_uses_shared_runner_and_does_not_replay_completed_entries(tmp_path):
@@ -360,7 +361,7 @@ def test_collector_failures_suppress_neither_execution_nor_grading(tmp_path):
     assert "collector_teardown_failed" in record.run_metadata["execution"]["observation_errors"]
 
 
-def test_schema2_rejects_impossible_or_absent_score_numbers(plain_run):
+def test_a_record_rejects_impossible_or_absent_score_numbers(plain_run):
     result = copy.deepcopy(plain_run.record)
     result.scores.update(missing_scores("grading_did_not_execute"))
     for change in (
@@ -370,7 +371,7 @@ def test_schema2_rejects_impossible_or_absent_score_numbers(plain_run):
         {"evaluated": True, "tests_passed": 1, "tests_total": 2, "pass_rate": 1},
     ):
         damaged = copy.deepcopy(result)
-        damaged.scores["card_correctness"].update(change)
+        damaged.scores["target"].update(change)
         with pytest.raises(InvalidRunRecordError):
             damaged.validate()
     good = result.run_metadata["test_toolchain"]
@@ -530,7 +531,7 @@ def test_failed_assertions_are_observed_zero_scores_not_missing_grading(tmp_path
         )
 
     benchmark = load_benchmark(benchmark_data(tmp_path), "example")
-    score = execution._scores(failed_engine(), benchmark)["engine_regression"]
+    score = execution._scores(failed_engine(), benchmark)["engine"]
     assert score["evaluated"] and score["complete"]
     assert score["pass_rate"] == 0 and score["tests_passed"] == 0
     assert score["missing_reasons"] == []
@@ -716,11 +717,11 @@ def test_grading_binds_selected_implementations_reference_cards_and_the_data_roo
 
     result = run_benchmark(**opts)
 
-    assert result.scores["card_correctness"]["tests_passed"] == 1
-    assert result.scores["fdn_regression"]["tests_passed"] == 2
-    assert result.scores["fdn_regression"]["coverage"]["evaluated_cards"] == ["fdn_2", "spg_74"]
-    assert result.scores["engine_regression"]["tests_passed"] == 2
-    assert result.scores["engine_regression"]["tests_total"] == 2
+    assert result.scores["target"]["tests_passed"] == 1
+    assert result.scores["fdn"]["tests_passed"] == 2
+    assert result.scores["fdn"]["coverage"]["evaluated_cards"] == ["fdn_2", "spg_74"]
+    assert result.scores["engine"]["tests_passed"] == 2
+    assert result.scores["engine"]["tests_total"] == 2
 
 
 def test_replay_card_map_uses_selected_benchmark_data_root(tmp_path, monkeypatch):

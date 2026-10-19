@@ -53,17 +53,21 @@ Stage Workspace → Run Agent Container → Snapshot progress → Harvest final 
 
 ---
 
-## Evaluation Dimensions
+## Scoring
 
-Three independent dimensions are scored against the agent's harvested engine:
+Each run gets one headline number, the **Net Card Score**, which counts working cards:
 
-| Dimension | What it measures |
+| Part | What it counts |
 | --- | --- |
-| **Card Correctness** | Whether the agent's target card implementations pass audited tests |
-| **Reference Regression** | Whether the agent's engine changes broke the pre-filled reference cards |
-| **Engine Regression** | Whether the agent's engine changes broke core game mechanics |
+| **Cards implemented** | New cards whose own behavior passes every audited test |
+| **Existing cards fixed** | Existing cards that were broken by an engine bug the new cards depend on, and now work |
+| **Existing cards broken** | Existing cards, or engine mechanics, that worked before the agent's changes and no longer do |
 
-Audited tests are never visible to the agent. Agent-written tests are harvested as artifacts but are not scored.
+The score is cards implemented plus existing cards fixed, minus existing cards broken, divided by the number of cards the task can make work. An untouched workspace scores 0, a perfect run scores 1, and a run that breaks more than it builds scores below 0.
+
+A failure caused by a known engine bug is not counted against the new card that hit it. Fixing an engine bug that none of the new cards needs earns nothing.
+
+Audited tests are never visible to the agent. Agent-written tests are harvested as artifacts but are not scored. Older benchmarks (SOS, hob-medium, fra-hard v1) were scored before the Net Card Score existed; they report a pass rate for each test suite.
 
 ---
 
@@ -114,6 +118,7 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | `silverquillm grader build [--python X.Y]` | Build the pinned, network-less grader images, one per graded Python version; each run is graded on its candidate's version. |
 | `silverquillm results-init PATH` | Lay out an empty private results repository and, if none exists, a minimal host configuration. |
 | `silverquillm grading-inputs BENCHMARK` | Print a benchmark's current grading-inputs digest as JSON. |
+| `silverquillm net-card-score PATH...` | Print the Net Card Score of Run Records and re-grades, one JSON line each. |
 | `silverquillm validate …` | Validate 17lands replays against the engine. |
 | `silverquillm data fetch-hob-set\|fetch-fra-set\|card-id-map\|token-id-map\|download-replays` | Fetch and build the reference data under `data/`. |
 | `silverquillm build fra-hard\|port-from-known-best\|printed-classes\|fdn-specs\|audited-stubs` | Generate benchmark inputs. |
@@ -136,7 +141,7 @@ Historical Candidate Bundle batches are shown as unsupported and never run.
 
 ## Scoring & Leaderboards
 
-A leaderboard-valid run requires the full target set, an unfiltered run, and a successful, evaluatable final state. Smoke runs, filtered runs, and runs that produced no viable output are excluded. The regression dimensions are reported separately rather than folded into a single composite score.
+A leaderboard-valid run requires the full target set, an unfiltered run, and a successful, evaluatable final state. Smoke runs, filtered runs, and runs that produced no viable output are excluded. Leaderboards rank by the Net Card Score; each test suite's raw pass rate stays available for analysis.
 
 Published results are on [snowfoxbuilds.com](https://snowfoxbuilds.com/silverquillm).
 

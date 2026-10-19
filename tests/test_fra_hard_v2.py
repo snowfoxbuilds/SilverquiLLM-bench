@@ -124,6 +124,6 @@ def test_unimplemented_target_fails_its_hidden_suite(code, number):
     config = {**benchmark.config, "cards": [f"{code}:{number}"]}
     from .known_defect_checks import audited_outcomes
 
-    outcomes = audited_outcomes(Benchmark(benchmark.id, benchmark.root, config), BENCH / "workspace", "card_correctness")
+    outcomes = audited_outcomes(Benchmark(benchmark.id, benchmark.root, config), BENCH / "workspace", "target")
     failed = [node for node, outcome in outcomes.nodes.items() if outcome == "fail"]
     assert len(failed) >= len(outcomes.nodes) // 2, outcomes.nodes

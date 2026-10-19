@@ -288,6 +288,77 @@ def test_a_removed_package_file_disappears_on_the_next_port(smoke_copy) -> None:
     assert (benchmark / "workspace/AGENTS.md").is_file()
 
 
+def test_the_attribution_data_follows_the_known_best_workspace(smoke_copy) -> None:
+    """``data/attribution.json`` is ported whole, and removed with the Known-Best copy."""
+    from silverquillm.tools.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    assert (benchmark / "data/attribution.json").read_bytes() == (known_best / "data/attribution.json").read_bytes()
+
+    (known_best / "data/attribution.json").write_text('{"schema_version": 1, "engine": {}, "fdn": {}}\n')
+    assert "data/attribution.json" in check(benchmark, known_best)
+    port(benchmark, known_best)
+    assert (benchmark / "data/attribution.json").read_bytes() == (known_best / "data/attribution.json").read_bytes()
+
+    (known_best / "data/attribution.json").unlink()
+    port(benchmark, known_best)
+    assert not (benchmark / "data/attribution.json").exists()
+    assert (benchmark / "data/target_attribution.json").is_file()  # the benchmark's own
+
+
+def _attribution_as_a_directory(benchmark: Path) -> None:
+    (benchmark / "data/attribution.json").unlink()
+    (benchmark / "data/attribution.json").mkdir()
+    (benchmark / "data/attribution.json/stale.json").write_text("{}\n")
+
+
+def test_attribution_data_replaces_a_directory_in_its_place(smoke_copy) -> None:
+    """A directory where the attribution file belongs is replaced whole, and the
+    repaired data loads."""
+    from silverquillm.attribution import load_attribution
+    from silverquillm.tools.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    targets = (benchmark / "data/target_attribution.json").read_bytes()
+    _attribution_as_a_directory(benchmark)
+    assert "data/attribution.json" in check(benchmark, known_best)
+
+    port(benchmark, known_best)
+    assert (benchmark / "data/attribution.json").read_bytes() == (known_best / "data/attribution.json").read_bytes()
+    assert check(benchmark, known_best) == []
+    assert (benchmark / "data/target_attribution.json").read_bytes() == targets
+    load_attribution(benchmark)
+
+
+def test_attribution_data_removal_removes_a_directory_in_its_place(smoke_copy) -> None:
+    from silverquillm.tools.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    targets = (benchmark / "data/target_attribution.json").read_bytes()
+    _attribution_as_a_directory(benchmark)
+    (known_best / "data/attribution.json").unlink()
+
+    port(benchmark, known_best)
+    assert not (benchmark / "data/attribution.json").exists()
+    assert check(benchmark, known_best) == []
+    assert (benchmark / "data/target_attribution.json").read_bytes() == targets
+
+
+def test_attribution_data_that_is_not_a_file_fails_the_port_and_changes_nothing(smoke_copy) -> None:
+    from silverquillm.tools.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    (known_best / "data/attribution.json").unlink()
+    (known_best / "data/attribution.json").mkdir()
+    (known_best / "data/attribution.json/inside.json").write_text("{}\n")
+    before = _snapshot(benchmark)
+    with pytest.raises(PortError, match="must be a regular file"):
+        port(benchmark, known_best)
+    with pytest.raises(PortError, match="must be a regular file"):
+        check(benchmark, known_best)
+    assert _snapshot(benchmark) == before
+
+
 def test_a_hidden_engine_test_stays_out_of_the_engine_reference_tests(smoke_copy) -> None:
     """A listed Audited Engine Test is graded but never staged; the rest are."""
     from silverquillm.tools.port_from_known_best import port

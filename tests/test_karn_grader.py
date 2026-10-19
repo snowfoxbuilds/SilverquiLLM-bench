@@ -265,7 +265,7 @@ def test_grading_mounts_the_audited_engine_tests_and_never_the_staged_copy(tmp_p
         "workspace/pytest.ini",
         "workspace/test_utils.py",
     ]
-    engine = record.scores["engine_regression"]
+    engine = record.scores["engine"]
     assert engine["tests_passed"] == engine["tests_total"] == 1
     assert engine["test_nodes"] == [
         {"test_node": "test_audited.py::test_audited", "outcome": "pass"}
@@ -298,7 +298,7 @@ def test_grading_mounts_without_audited_engine_tests_are_unchanged(tmp_path):
         "workspace/pytest.ini",
         "workspace/test_utils.py",
     ]
-    assert record.scores["engine_regression"]["test_nodes"] == [
+    assert record.scores["engine"]["test_nodes"] == [
         {"test_node": "test_engine.py::test_value", "outcome": "pass"}
     ]
 

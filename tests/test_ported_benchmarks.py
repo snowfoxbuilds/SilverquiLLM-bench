@@ -1,9 +1,11 @@
 """Platform Tests for the benchmarks ported from the Known-Best Workspace.
 
 Each ported benchmark lists its Known Defects in a manifest, and CI checks the
-two properties `docs/specs/KNOWN-BEST-ENGINE.md` requires: the unmodified
-Workspace fails exactly the manifest's Audited Tests, and the Test Oracle
-Workspace passes every Audited Test (see ADR-016).
+properties `docs/specs/KNOWN-BEST-ENGINE.md` requires: the unmodified Workspace
+fails exactly the manifest's Audited Tests, the Test Oracle Workspace passes
+every Audited Test (see ADR-016), and putting each Known Defect back into the
+Test Oracle Workspace fails exactly the target-card tests its entry lists, and
+every target card has a test counting toward it that the unmodified Workspace fails.
 """
 
 from __future__ import annotations
@@ -13,14 +15,22 @@ from pathlib import Path
 
 import pytest
 
+from silverquillm.benchmark_targets import target_cards
 from silverquillm.karn.benchmark import load_benchmark
-from silverquillm.known_defects import REGRESSION_DIMENSIONS, load_known_defects
+from silverquillm.known_defects import SUITES, load_known_defects
 
-from .known_defect_checks import oracle_problems, workspace_problems
+from .known_defect_checks import (
+    defect_problems,
+    implementation_problems,
+    oracle_problems,
+    workspace_problems,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 KNOWN_BEST = REPO / "known_best"
 PORTED = ("smoke", "fra-hard", "fra-hard-v2")
+SCHEMA_2 = ("smoke", "fra-hard-v2")
+"""Ported benchmarks on manifest schema version 2; the frozen fra-hard v1 keeps version 1."""
 _CACHES = ["__pycache__", ".pytest_cache"]
 
 
@@ -31,25 +41,64 @@ def test_known_defect_manifest_is_valid(name: str) -> None:
     assert manifest.benchmark == name
     assert manifest.defects
     assert all(defect.kind == "inherited" for defect in manifest.defects)
+    assert manifest.schema_version == (2 if name in SCHEMA_2 else 1)
 
 
-@pytest.mark.parametrize("dimension", REGRESSION_DIMENSIONS)
+@pytest.mark.parametrize("name", SCHEMA_2)
+def test_target_tests_and_host_cards_name_real_cards(name: str) -> None:
+    """``target_tests`` are target-card tests, and a related defect's host card is a base
+    Workspace card other than a target, or the target holding all of them
+    (KNOWN-BEST-ENGINE.md → Manifest)."""
+    benchmark = load_benchmark(REPO, name)
+    targets = {f"{code}_{number}" for code, number in target_cards(benchmark.target_set, benchmark.cards)}
+    cards = {path.name for path in (benchmark.root / "workspace/cards").glob("*/*") if path.is_dir()}
+    for defect in load_known_defects(benchmark.root).defects:
+        assert {node.split("/", 1)[0] for node in defect.target_tests} <= targets, defect.id
+        if defect.hosted_on_target:
+            assert defect.host_card in targets, defect.id
+        elif defect.related:
+            assert defect.host_card in cards - targets, defect.id
+
+
+def _defects(names):
+    return [
+        (name, defect.id)
+        for name in names
+        for defect in load_known_defects(REPO / "benchmarks" / name).defects
+    ]
+
+
+@pytest.mark.parametrize(("name", "defect_id"), _defects(SCHEMA_2))
+def test_each_known_defect_put_back_fails_exactly_its_target_tests(
+    name: str, defect_id: str, tmp_path: Path
+) -> None:
+    problems = defect_problems(load_benchmark(REPO, name), defect_id, tmp_path)
+    assert problems == [], "\n".join(problems)
+
+
+@pytest.mark.parametrize("suite", SUITES)
 @pytest.mark.parametrize("name", PORTED)
-def test_unmodified_workspace_fails_exactly_the_manifest(name: str, dimension: str) -> None:
-    problems = workspace_problems(load_benchmark(REPO, name), dimension)
+def test_unmodified_workspace_fails_exactly_the_manifest(name: str, suite: str) -> None:
+    problems = workspace_problems(load_benchmark(REPO, name), suite)
+    assert problems == [], "\n".join(problems)
+
+
+@pytest.mark.parametrize("name", SCHEMA_2)
+def test_unmodified_workspace_implements_no_target(name: str) -> None:
+    problems = implementation_problems(load_benchmark(REPO, name))
     assert problems == [], "\n".join(problems)
 
 
 @pytest.mark.parametrize("name", PORTED)
 def test_oracle_passes_every_target_audited_test(name: str) -> None:
-    problems = oracle_problems(load_benchmark(REPO, name), "card_correctness")
+    problems = oracle_problems(load_benchmark(REPO, name), "target")
     assert problems == [], "\n".join(problems)
 
 
-@pytest.mark.parametrize("dimension", REGRESSION_DIMENSIONS)
+@pytest.mark.parametrize("suite", SUITES)
 @pytest.mark.parametrize("name", ("fra-hard", "fra-hard-v2"))
-def test_fra_hard_oracle_passes_every_regression_audited_test(name: str, dimension: str) -> None:
-    problems = oracle_problems(load_benchmark(REPO, name), dimension)
+def test_fra_hard_oracle_passes_every_fdn_and_engine_audited_test(name: str, suite: str) -> None:
+    problems = oracle_problems(load_benchmark(REPO, name), suite)
     assert problems == [], "\n".join(problems)
 
 
@@ -92,7 +141,7 @@ def test_workspaces_carry_the_known_best_rulebook(name: str) -> None:
 
 def test_smoke_oracle_is_the_known_best_workspace() -> None:
     """With identical grading inputs, `test_known_best_workspace.py` already shows
-    smoke's oracle passes both regression dimensions (CI check 1)."""
+    smoke's oracle passes the FDN and engine suites (CI check 1)."""
     smoke = REPO / "benchmarks/smoke"
     for item in (
         "engine", "cards", "conftest.py", "pytest.ini", "test_utils.py",

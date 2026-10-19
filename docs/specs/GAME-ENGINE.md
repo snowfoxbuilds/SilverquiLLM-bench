@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-10-05
+Last updated: 2026-10-14
 
 # Game Engine
 
@@ -56,7 +56,7 @@ The Base Set serves as:
 
 1. Engine validation — validated via Replay Validation against 17lands data; all Foundations tests passing = core mechanics correct
 2. Agent reference — agents browse these as working examples during benchmarking
-3. Regression suite — catches engine regressions
+3. FDN suite — its Audited Tests catch engine changes that break existing cards
 
 ### Game State API (Draft)
 

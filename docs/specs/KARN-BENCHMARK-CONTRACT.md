@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-10-13
+Last updated: 2026-10-15
 
 # Karn Benchmark Contract
 
@@ -248,11 +248,13 @@ Operational agents work from the Results Repo, whose `AGENTS.md` is the operator
 The file also carries the host's `host_label`.
 `silverquillm results-init PATH` lays out an empty Results Repo (`results/`, `exclusions/`, `cohorts/`, `campaigns/`, `regrades/`) and, when the host has no configuration file, writes a minimal one naming PATH and this checkout; it never writes `AGENTS.md`, and the record schema stays in the package at `silverquillm/results_repo_templates/AGENTS.md` (grilling 2026-10-14).
 `silverquillm grading-inputs BENCHMARK` prints the benchmark's current grading-inputs digest, which Results Repo scripts compare with a cohort's.
+`silverquillm net-card-score PATH...` prints the Net Card Score of Run Records and re-grades as JSON lines, derived from this checkout's scoring data (see [Scoring](SCORING.md#deriving-the-score)).
 
-New immutable Run Records use schema 2 and an identity scheme that names the definition version: `karn-v4` for a v4 definition, `karn-v5` for a v5 one.
+New immutable Run Records use schema 3 and an identity scheme that names the definition version: `karn-v4` for a v4 definition, `karn-v5` for a v5 one.
+Schema 3 differs from the schema 2 records before it only in naming: its suites are `target`, `fdn` and `engine`, and it carries the `baseline_comparison` where schema 2 carried `combined_regression`; readers choose the keys by schema version.
 An identity whose scheme does not match its `definition_version` is invalid, and records of either scheme stay valid side by side.
-They retain the full selected definition, execution observations, three independent grading dimensions, measurement completeness, and artifact pointers.
-An unexecuted grading dimension has null counts and pass rate with a reason.
+They retain the full selected definition, execution observations, the three graded suites' results, measurement completeness, and artifact pointers.
+An unexecuted suite has null counts and pass rate with a reason.
 Coverage names tested and uncovered cards, so an incomplete FDN suite does not imply full FDN coverage.
 
 Workspace snapshots contain only workspace files and exclude authentication state.
@@ -266,7 +268,7 @@ The workspace comes from the local run artifacts, else from the run's workspace 
 A re-grade never replaces or edits a record: its scores go to a separate output directory, tagged with the new digest, and a run whose workspace or grader image is unavailable is skipped with a reason.
 The output directory may not overlap the records or the run artifacts, except that it may be the Results Repo's `regrades/<digest hex>/` for the grading inputs being graded on, where re-grades are published (grilling 2026-10-14).
 The output directory is written only through descriptors that never follow a link, so no link inside it can redirect a write into the records or run artifacts.
-A re-grade summary compares before and after within a cohort of one candidate and one original grading-inputs digest, never across digests, leaves out excluded runs and lists them separately, and reuses an earlier output only when it is a complete, invariant-satisfying success on the same inputs, grading code and grader image; any unusable earlier output is a miss that re-grades only that run.
+A re-grade summary compares before and after within a cohort of one candidate and one original grading-inputs digest, never across digests, reports each cohort's mean Net Card Score after the re-grade where the benchmark has scoring data, leaves out excluded runs and lists them separately, and reuses an earlier output only when it is a complete, invariant-satisfying success on the same inputs, grading code and grader image; any unusable earlier output is a miss that re-grades only that run.
 
 ### Shared results repository
 
@@ -300,3 +302,4 @@ This consumer contract governs Karn v4 and v5 execution.
 | [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | SilverquiLLM runs Karn constructs without Ozolith; Candidate Bundle execution is removed |
 | [ADR-015](../adr/ADR-015-results-repo-keeps-graded-workspaces-as-diffs.md) | The results repo keeps each graded workspace as a diff from one shared baseline |
 | [ADR-019](../adr/ADR-019-run-cost-prefers-the-native-clis-reported-cost.md) | A run's cost prefers the native CLI's Reported Cost over the bench's Estimated Cost |
+| [ADR-021](../tombstone/ADR-021-rename-regression-to-collateral.md) | Rename record: evaluation-sense "regression" names retired or renamed |

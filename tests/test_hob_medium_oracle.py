@@ -58,7 +58,7 @@ def test_selected_oracle_passes_audited_suite(card_id, tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_authoritative_fdn_regression_passes_v2_baseline():
+def test_authoritative_fdn_suite_passes_v2_baseline():
     suites = BENCH / "data/tests/audited/fdn"
     assert list(suites.glob("*/tests.py")), "FDN regression suite is empty"
     with tempfile.TemporaryDirectory(prefix="hob_fdn_helpers_") as directory:

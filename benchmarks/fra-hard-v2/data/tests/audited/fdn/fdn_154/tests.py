@@ -1,4 +1,4 @@
-"""Regression tests for FDN 154 — Extravagant Replication.
+"""Audited Tests for FDN 154 — Extravagant Replication.
 
 "At the beginning of your upkeep, create a token that's a copy of another
 target nonland permanent you control." The copy is a token (rule 707.2): a

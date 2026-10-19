@@ -1,26 +1,26 @@
 """Evaluation runner for benchmark implementations.
 
-Three post-run scoring dimensions, all using audited tests:
+Three graded suites, all of audited tests:
 
-**Dimension 1 — SOS Card Correctness:**
-  For each completed SOS card, run audited tests against the agent's card_impl.py
+**Target-card suite:**
+  For each completed target card, run audited tests against the agent's card_impl.py
   with the agent's engine modifications.
 
-**Dimension 2 — FDN Card Regression:**
+**FDN suite:**
   For each FDN card with audited tests, run them against the pre-filled reference
-  card_impl.py using the agent's engine modifications. Failures indicate the
-  agent's engine changes broke existing card behavior.
+  card_impl.py using the agent's engine modifications. A test the unmodified
+  Workspace passed that now fails means the agent broke existing card behavior.
 
-**Dimension 3 — Engine Regression:**
-  Run core engine tests against the agent's engine_work/. Failures indicate
-  the agent broke fundamental game mechanics.
+**Engine suite:**
+  Run core engine tests against the agent's engine_work/. A test the unmodified
+  Workspace passed that now fails means the agent broke a game mechanic.
 
 Legacy API (``run_tests``, ``run_self_eval``, ``run_cross_eval``,
 ``run_audited_eval``, ``run_audited_eval_per_card``) is retained for
 backward compatibility.
 
 Public API:
-- ``evaluate`` — run all three scoring dimensions and return an ``FullEvalResult``.
+- ``evaluate`` — run all three graded suites and return an ``FullEvalResult``.
 - ``CardResult`` / ``EngineResult`` / ``FullEvalResult`` — result dataclasses.
 - ``EvalResult`` — legacy per-card evaluation outcome (v1 schema).
 - ``run_tests`` — low-level: execute pytest on an impl + test pair.
@@ -108,7 +108,7 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------
-# Result dataclasses — new 3-dimension schema
+# Result dataclasses — one per graded suite
 # ---------------------------------------------------------------------------
 
 
@@ -147,7 +147,7 @@ class EngineResult:
 
 @dataclass
 class FullEvalResult:
-    """Aggregated result across all three evaluation dimensions."""
+    """Aggregated result across all three graded suites."""
 
     sos_results: dict[str, CardResult] = field(default_factory=dict)
     fdn_results: dict[str, CardResult] = field(default_factory=dict)
@@ -568,7 +568,7 @@ def run_audited_eval_per_card(
 
 
 # ---------------------------------------------------------------------------
-# New 3-dimension evaluation system
+# Three-suite evaluation
 # ---------------------------------------------------------------------------
 
 
@@ -1401,7 +1401,7 @@ def _eval_sos_cards(
     audited_dir: Path,
     timeout: int = 60,
 ) -> dict[str, CardResult]:
-    """Dimension 1: SOS Card Correctness.
+    """The SOS target-card suite.
 
     For each SOS card where status == 'completed', run audited tests
     against the agent's card_impl.py + engine_work.
@@ -1494,7 +1494,7 @@ def _eval_fdn_cards(
     audited_dir: Path,
     timeout: int = 60,
 ) -> dict[str, CardResult]:
-    """Dimension 2: FDN Card Regression.
+    """The FDN suite.
 
     For each FDN card with audited tests, run them against the pre-filled
     reference card_impl.py using the agent's engine_work.
@@ -1660,9 +1660,8 @@ def _eval_engine(
 class EvalPaths:
     """The suites and support files the Audited Eval resolves per benchmark.
 
-    ``target_set`` cards are what the agent implements (Dimension 1); ``fdn``
-    is the FDN regression population (Dimension 2); ``engine_tests`` is the
-    engine suite (Dimension 3), and ``engine_support`` the host-side directory
+    ``target_set`` cards are what the agent implements (the target-card suite);
+    ``fdn`` is the FDN suite's population; ``engine_tests`` is the engine suite, and ``engine_support`` the host-side directory
     that supplies its ``conftest.py`` and ``pytest.ini``.  All are resolved
     from the benchmark root so a
     new benchmark needs no code change — and the ``sos`` resolution reproduces
@@ -1892,7 +1891,7 @@ def _eval_target_cards(
     test_utils: Path | None,
     test_interface: Path | None = None,
 ) -> dict[str, CardResult]:
-    """Dimension 1: correctness of the benchmark's target cards."""
+    """The target-card suite: correctness of the benchmark's target cards."""
     results: dict[str, CardResult] = {}
     for card_set, cn in resolve_target_cards(target_set, target_cards):
         audited_set = audited_target.parent / card_set
@@ -1914,8 +1913,8 @@ def _eval_audited_dir(
     exclude: Collection[str] = frozenset(),
     test_interface: Path | None = None,
 ) -> dict[str, CardResult]:
-    """Dimension 2: every card with an audited suite under *audited_dir* graded
-    against the agent's tree (FDN regression), except the cards in *exclude*."""
+    """The FDN suite: every card with an audited suite under *audited_dir* graded
+    against the agent's tree, except the cards in *exclude*."""
     results: dict[str, CardResult] = {}
     if not audited_dir.is_dir():
         return results
@@ -1937,7 +1936,7 @@ def evaluate_run(
     *,
     workspace_source: Path | None = None,
 ) -> FullEvalResult:
-    """Run the three-dimension Audited Eval for a Contract Run.
+    """Run the three-suite Audited Eval for a Contract Run.
 
     *benchmark* is any :class:`GradedBenchmark` (``root``, ``cards``,
     ``target_set``).  The agent's harvested tree at
@@ -1964,13 +1963,13 @@ def evaluate_run(
     try:
         shutil.copytree(agent_ws, overlay, ignore=_GRADING_IGNORE)
 
-        # Dimension 1 — target-card correctness.
+        # The target-card suite.
         result.sos_results = _eval_target_cards(
             overlay, benchmark.target_set, list(benchmark.cards),
             paths.audited_target, timeout, test_utils=paths.test_utils,
             test_interface=paths.test_interface,
         )
-        # Dimension 2 — FDN card regression.
+        # The FDN suite.
         result.fdn_results = _eval_audited_dir(
             overlay, paths.audited_fdn, timeout, test_utils=paths.test_utils,
             test_interface=paths.test_interface,
@@ -1978,7 +1977,7 @@ def evaluate_run(
                 benchmark.target_set, benchmark.cards, paths.audited_fdn.parent
             ),
         )
-        # Dimension 3 — engine regression (authoritative suite + support, agent engine).
+        # The engine suite (authoritative suite + support, agent engine).
         result.engine_result = _eval_engine(
             overlay / "engine", paths.engine_tests, timeout=timeout,
             support_dir=paths.engine_support, test_utils=paths.test_utils,
@@ -1999,7 +1998,7 @@ def evaluate(
     engine_dir: Path,
     timeout: int = 60,
 ) -> FullEvalResult:
-    """Run all three evaluation dimensions and return aggregated results.
+    """Run all three graded suites and return aggregated results.
 
     Parameters
     ----------
@@ -2019,7 +2018,7 @@ def evaluate(
     Returns
     -------
     FullEvalResult
-        Aggregated evaluation results across all three dimensions.
+        Aggregated evaluation results across all three suites.
     """
     run_dir = Path(run_dir)
     cards_dir = Path(cards_dir)
@@ -2031,7 +2030,7 @@ def evaluate(
     # On patch-apply failure we fall back to the baseline engine and record
     # the error so the run is visibly degraded rather than silently
     # mis-scored against the baseline. The error is merged into
-    # ``result.engine_result.errors`` after Dimension 3 runs (since
+    # ``result.engine_result.errors`` after the engine suite runs (since
     # ``_eval_engine`` builds a fresh ``EngineResult``).
     engine_prep_error: str | None = None
     try:
@@ -2049,17 +2048,17 @@ def evaluate(
     engine_tests = _sos_paths.engine_tests
 
     try:
-        # Dimension 1: SOS Card Correctness
+        # The target-card suite
         result.sos_results = _eval_sos_cards(
             run_dir, cards_dir, engine_work, audited_sos, timeout=timeout,
         )
 
-        # Dimension 2: FDN Card Regression
+        # The FDN suite
         result.fdn_results = _eval_fdn_cards(
             cards_dir, engine_work, audited_fdn, timeout=timeout,
         )
 
-        # Dimension 3: Engine Regression
+        # The engine suite
         result.engine_result = _eval_engine(
             engine_work, engine_tests, timeout=timeout,
             support_dir=_sos_paths.engine_support, cards_dir=cards_dir,

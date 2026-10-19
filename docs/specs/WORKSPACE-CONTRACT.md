@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-09-26
+Last updated: 2026-10-14
 
 # Workspace Contract
 
@@ -45,7 +45,7 @@ Each benchmark set is fully self-contained: `benchmarks/{target_set}/` is the un
   conftest.py
   test_utils.py
   test_utils.md
-  engine_tests/         # engine regression tests
+  engine_tests/         # staged engine tests
   cards/
     fdn/
       fdn_{collector_number}/
@@ -102,7 +102,7 @@ FDN examples and SOS targets use the same directory contract.
 - SOS `card_impl.py` files start as templates for the agent to fill.
 This keeps examples directly comparable to targets.
 
-FDN reference tests are colocated with the cards they demonstrate: illustrative FDN tests live at `workspace/cards/fdn/{collector_number}/tests.py` rather than under `workspace/tests/cards/fdn/`. Colocation makes them obvious learning material attached to the card they demonstrate, and removes the directory-name collision with the host-side FDN Card Regression suite. Audited SOS grader tests remain host-side only; there is no `workspace/tests/cards/` directory. Audited FDN tests at `benchmarks/sos/data/tests/audited/fdn/{collector_number}/tests.py` exist as bench-author regression coverage — they catch engine regressions that break the canonical FDN implementations and run in bench-side CI. They are not part of agent grading (the agent is graded on SOS audited tests only) and may freely overlap in assertion content with workspace FDN tests; there is no contamination concern because the agent is not graded against either FDN suite.
+FDN reference tests are colocated with the cards they demonstrate: illustrative FDN tests live at `workspace/cards/fdn/{collector_number}/tests.py` rather than under `workspace/tests/cards/fdn/`. Colocation makes them obvious learning material attached to the card they demonstrate, and removes the directory-name collision with the host-side FDN suite. Audited SOS grader tests remain host-side only; there is no `workspace/tests/cards/` directory. Audited FDN tests at `benchmarks/sos/data/tests/audited/fdn/{collector_number}/tests.py` exist as bench-author regression coverage — they catch engine regressions that break the canonical FDN implementations and run in bench-side CI. They are not part of agent grading (the agent is graded on SOS audited tests only) and may freely overlap in assertion content with workspace FDN tests; there is no contamination concern because the agent is not graded against either FDN suite.
 
 ### Shared helpers
 
@@ -125,7 +125,7 @@ The baseline engine remains on the host side, outside the container. After the r
 
 For the HOB-generation benchmarks the engine is **freely modifiable** and `engine_diff.patch` is a **diagnostic** artifact only — never scored, never policed. The SOS (V1) additive-only rule below does not apply to them; see [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Engine rules and [SCORING.md](SCORING.md) → Agent envelope.
 
-The SOS (V1) additive-only rule is enforced structurally rather than by a protected-symbol list: audited grader tests live host-side and `import` from `engine/` by path and symbol name, so any rename, move, or delete causes `ImportError` before assertions run. Keeping the rule flat — rather than enumerating a protected-symbol list — keeps the prompt and `AGENTS.md` short and removes any drift risk as audited tests evolve. The staged `engine_tests/` regression suite gives agents a local regression-check loop for their engine modifications and is the agent's local proxy for "did I keep the engine importable"; the runner grades against its own authoritative host-side copies. This scoping to the SOS (V1) workspace — with the HOB-generation benchmarks (hob-easy/medium/hard) dropping the rule and judging solely by the three audited dimensions against the harvested engine — is part of the SOS workspace's frozen Benchmarking-tier contract (grilling 2026-08-27).
+The SOS (V1) additive-only rule is enforced structurally rather than by a protected-symbol list: audited grader tests live host-side and `import` from `engine/` by path and symbol name, so any rename, move, or delete causes `ImportError` before assertions run. Keeping the rule flat — rather than enumerating a protected-symbol list — keeps the prompt and `AGENTS.md` short and removes any drift risk as audited tests evolve. The staged `engine_tests/` suite gives agents a local regression-check loop for their engine modifications and is the agent's local proxy for "did I keep the engine importable"; the runner grades against its own authoritative host-side copies. This scoping to the SOS (V1) workspace — with the HOB-generation benchmarks (hob-easy/medium/hard) dropping the rule and judging solely by the three audited suites against the harvested engine — is part of the SOS workspace's frozen Benchmarking-tier contract (grilling 2026-08-27).
 
 ### Agent prompt rule
 

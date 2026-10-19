@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-10-06
+Last updated: 2026-10-14
 
 # Test Interface
 
@@ -19,7 +19,7 @@ The Player Query protocol it plays through is described in [Decision Model](DECI
 An Audited Test plays two novice players who have come to a board state: the engine tells them what they may do and what happens when they do it, and they notice only what is visible on the table (grilling 2026-10-05).
 Tests therefore build a position, play it through the players' choices, and judge the result by what the players can see — never by an object's internal details.
 
-The principle binds every Audited Test: target-card tests, FDN Card Regression and Audited Engine Tests (grilling 2026-10-05).
+The principle binds every Audited Test: target-card tests, FDN Audited Tests and Audited Engine Tests (grilling 2026-10-05).
 Reference Tests keep their current form, and the workspace documents define the Test Interface without describing how Audited Tests are written (grilling 2026-10-05).
 
 ### Ownership

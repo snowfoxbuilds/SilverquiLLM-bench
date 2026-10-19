@@ -37,6 +37,11 @@ def _rate(name: str) -> Callable[[RunSummary], Any]:
     return key
 
 
+def _net_card(run: RunSummary) -> float:
+    value = run.net_card
+    return value["score"] if value and value.get("available") is True else float("-inf")
+
+
 def _stamp(run: RunSummary) -> float:
     return run.run_date.timestamp() if run.run_date else float("-inf")
 
@@ -46,9 +51,10 @@ COLUMNS = (
     Column("benchmark", "benchmark", lambda run: run.benchmark or ""),
     Column("candidate", "candidate", lambda run: run.candidate.label),
     Column("status", "status", lambda run: run.status or ""),
-    Column("target", "target", _rate("card_correctness")),
-    Column("fdn", "fdn", _rate("fdn_regression")),
-    Column("engine", "engine", _rate("engine_regression")),
+    Column("net", "net card", _net_card),
+    Column("target", "target", _rate("target")),
+    Column("fdn", "fdn", _rate("fdn")),
+    Column("engine", "engine", _rate("engine")),
     Column("cost", "cost", lambda run: run.cost if run.cost is not None else -1),
     Column("duration", "time", lambda run: run.duration_seconds or -1.0),
     Column("turns", "turns", lambda run: run.agent_turns or -1),
@@ -82,9 +88,10 @@ def run_cells(run: RunSummary, theme: Theme) -> tuple[Text, ...]:
         fmt.badge(run.benchmark, theme),
         Text(run.candidate.label, style=theme.style("text")),
         fmt.status(run.status, theme),
-        fmt.score(run.scores.get("card_correctness"), theme),
-        fmt.score(run.scores.get("fdn_regression"), theme, counts=False),
-        fmt.score(run.scores.get("engine_regression"), theme, counts=False),
+        fmt.net_card(run.net_card, theme),
+        fmt.score(run.scores.get("target"), theme),
+        fmt.score(run.scores.get("fdn"), theme, counts=False),
+        fmt.score(run.scores.get("engine"), theme, counts=False),
         cost,
         duration,
         fmt.count(run.agent_turns),

@@ -21,7 +21,7 @@ from silverquillm.benchmark_targets import target_cards
 from silverquillm.evaluator import _target_card_id, fdn_target_card_ids
 from silverquillm.queue_state import _write_atomically
 
-from .baseline import BaselineStore, baseline_reference_grade, combined_regression
+from .baseline import BaselineStore, baseline_comparison, baseline_reference_grade
 from .benchmark import load_benchmark, stage_benchmark
 from .definition import KarnError, canonical, load_candidate
 from .exclusions import exclude_by_rule
@@ -31,7 +31,7 @@ from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
 from .login import LOGIN_PLUGINS, LoginProfile
 from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, logins_root
 from .provenance import collect as collect_provenance
-from .records import KarnIdentity, KarnRunRecord, missing_scores, write_record
+from .records import SCHEMA_VERSION, KarnIdentity, KarnRunRecord, missing_scores, write_record
 from .snapshots import WorkspaceSnapshots, retain_git_history
 from .subscription_usage import codex_usage, subscription_usage
 from .subscription_usage import provider_for as usage_provider
@@ -192,7 +192,7 @@ def _scored_not_run(value) -> int:
 
 
 def _suite_counts(value) -> tuple[int, int]:
-    """A graded suite's passed and total for its dimension's score, the same for cards and engine.
+    """A graded suite's passed and total for its score, the same for cards and engine.
 
     The total is the nodes that ran plus each scored function that did not (SCORING.md).
     A suite graded with node reporting counts its reported nodes, never a collection-error
@@ -214,10 +214,10 @@ def _suite_counts(value) -> tuple[int, int]:
 def _scores(evaluated, benchmark) -> dict:
     result = missing_scores("grading_did_not_execute")
     for name, cards in (
-        ("card_correctness", evaluated.sos_results),
-        ("fdn_regression", evaluated.fdn_results),
+        ("target", evaluated.sos_results),
+        ("fdn", evaluated.fdn_results),
     ):
-        if name == "card_correctness":
+        if name == "target":
             expected = {
                 _target_card_id(card_set, number, benchmark.root / "data/tests/audited" / card_set)
                 for card_set, number in target_cards(benchmark.target_set, benchmark.cards)
@@ -263,7 +263,7 @@ def _scores(evaluated, benchmark) -> dict:
         }
     engine = evaluated.engine_result
     engine_passed, engine_total = _suite_counts(engine)
-    result["engine_regression"] = {
+    result["engine"] = {
         "evaluated": engine_total > 0,
         "complete": engine_total > 0
         and not any(not error.startswith("FAILED ") for error in engine.errors),
@@ -572,9 +572,11 @@ def _collect(
                 if changed:
                     metadata["grading_inputs"]["changed_during_grading"] = True
                     metadata["grading_inputs"]["after"] = after_grading
-                combined = combined_regression(scores, evaluated, baseline, inputs_changed=changed)
-                if combined is not None:
-                    metadata["combined_regression"] = combined
+                comparison = baseline_comparison(
+                    scores, evaluated, baseline, inputs_changed=changed
+                )
+                if comparison is not None:
+                    metadata["baseline_comparison"] = comparison
             else:
                 scores = missing_scores("no_usable_workspace_or_snapshot")
         else:
@@ -620,7 +622,7 @@ def _collect(
     )
     record = KarnRunRecord(
         {
-            "schema_version": 2,
+            "schema_version": SCHEMA_VERSION,
             "run_id": run_id,
             "candidate": identity.to_dict(),
             "candidate_hash": identity.hash,

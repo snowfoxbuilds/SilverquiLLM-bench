@@ -2,8 +2,8 @@
 
 A benchmark built from the Known-Best Workspace lists the Known Defects its Workspace
 carries in the host-only ``data/known_defects.json`` (``docs/specs/KNOWN-BEST-ENGINE.md``).
-Every per-test id here is qualified relative to its dimension's graded suite root, so the
-manifest, the baseline reference grade and Combined Regression all name a test the same way.
+Every per-test id here is qualified relative to its suite's graded root, so the manifest,
+the baseline reference grade and the baseline comparison all name a test the same way.
 """
 
 from __future__ import annotations
@@ -18,13 +18,20 @@ from types import MappingProxyType
 from silverquillm.evaluator import CardResult, EngineResult, FullEvalResult
 from silverquillm.karn.definition import KarnError, read_regular, strict_json
 
-REGRESSION_DIMENSIONS = ("fdn_regression", "engine_regression")
+SUITES = ("fdn", "engine")
+"""The suites a Known Defect's failing tests sit in: the ``failing_tests`` keys of a
+schema version 2 manifest."""
+SCHEMA_1_SUITE_KEYS = {"fdn_regression": "fdn", "engine_regression": "engine"}
+"""Schema version 1, which fra-hard v1 froze with, keyed ``failing_tests`` by the retired
+names (ADR-021)."""
+SCHEMA_VERSIONS = (1, 2)
 MANIFEST = Path("data/known_defects.json")
 MANIFEST_LIMIT = 1024 * 1024
 KINDS = ("inherited", "seeded")
 DEFECT_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 RULE = re.compile(r"CR \d{3}(\.\d+[a-z]?)?")
 FDN_NODE = re.compile(r"[A-Za-z0-9_]+/tests\.py::\S.*")
+CARD_ID = re.compile(r"[a-z0-9]+_[0-9]+[a-z]?")
 
 
 @dataclass(frozen=True)
@@ -76,10 +83,11 @@ def engine_outcomes(result: EngineResult) -> Outcomes:
     )
 
 
-def regression_outcomes(evaluated: FullEvalResult) -> dict[str, Outcomes]:
+def suite_outcomes(evaluated: FullEvalResult) -> dict[str, Outcomes]:
+    """The FDN and engine suites' outcomes, by suite."""
     return {
-        "fdn_regression": card_outcomes(evaluated.fdn_results),
-        "engine_regression": engine_outcomes(evaluated.engine_result),
+        "fdn": card_outcomes(evaluated.fdn_results),
+        "engine": engine_outcomes(evaluated.engine_result),
     }
 
 
@@ -90,18 +98,45 @@ class KnownDefect:
     rules: tuple[str, ...]
     kind: str
     failing_tests: Mapping[str, tuple[str, ...]]
+    """Suite (``fdn`` | ``engine``) -> the Audited Tests the defect makes fail."""
+    target_tests: tuple[str, ...] = ()
+    """Target-card tests that fail once the defect is put back into the Test Oracle
+    Workspace; always empty in a schema version 1 manifest."""
+    host_card: str | None = None
+    """The card hosting the defect's Dependency Tests; set exactly when it is related.
+    It is the target whose suite holds every one of ``target_tests`` when that target
+    cannot be tested without the fix (SCORING.md → Attributed Cards)."""
+
+    @property
+    def related(self) -> bool:
+        """At least one target-card test depends on the defect (SCORING.md → Test classes)."""
+        return bool(self.target_tests)
+
+    @property
+    def hosted_on_target(self) -> bool:
+        """The defect is part of implementing its host, a target card (SCORING.md → Counting)."""
+        return self.related and all(node.split("/", 1)[0] == self.host_card for node in self.target_tests)
 
 
 @dataclass(frozen=True)
 class KnownDefects:
     benchmark: str
     defects: tuple[KnownDefect, ...]
+    schema_version: int = 2
 
-    def failing_tests(self, dimension: str) -> frozenset[str]:
-        """The Audited Tests the unmodified Workspace fails in ``dimension``."""
+    def failing_tests(self, suite: str) -> frozenset[str]:
+        """The Audited Tests the unmodified Workspace fails in ``suite`` (``fdn`` | ``engine``)."""
+        if suite not in SUITES:
+            raise ValueError(f"unknown suite {suite!r}")
         return frozenset(
-            node for defect in self.defects for node in defect.failing_tests.get(dimension, ())
+            node for defect in self.defects for node in defect.failing_tests.get(suite, ())
         )
+
+    def defect(self, defect_id: str) -> KnownDefect:
+        for defect in self.defects:
+            if defect.id == defect_id:
+                return defect
+        raise KeyError(defect_id)
 
 
 class KnownDefectsError(ValueError):
@@ -134,8 +169,9 @@ def load_known_defects(benchmark_root: Path) -> KnownDefects | None:
         "defects",
     }:
         fail("top level must have exactly schema_version, benchmark and defects")
-    if type(document["schema_version"]) is not int or document["schema_version"] != 1:
-        fail("schema_version must be 1")
+    version = document["schema_version"]
+    if type(version) is not int or version not in SCHEMA_VERSIONS:
+        fail("schema_version must be 1 or 2")
     if document["benchmark"] != benchmark_root.name:
         fail(f"benchmark must be {benchmark_root.name!r}")
     if not isinstance(document["defects"], list):
@@ -145,12 +181,19 @@ def load_known_defects(benchmark_root: Path) -> KnownDefects | None:
         name = f"defects[{index}]"
         if isinstance(entry, dict) and isinstance(entry.get("id"), str):
             name += f" ({entry['id']})"
-        defects.append(_defect(entry, lambda what, name=name: fail(f"{name}: {what}"), seen))
-    return KnownDefects(benchmark=document["benchmark"], defects=tuple(defects))
+        defects.append(
+            _defect(entry, lambda what, name=name: fail(f"{name}: {what}"), seen, version)
+        )
+    return KnownDefects(
+        benchmark=document["benchmark"], defects=tuple(defects), schema_version=version
+    )
 
 
-def _defect(entry, fail, seen: set[str]) -> KnownDefect:
+def _defect(entry, fail, seen: set[str], version: int) -> KnownDefect:
     keys = {"id", "description", "rules", "kind", "failing_tests"}
+    if version >= 2:
+        keys |= {"target_tests", "host_card"}
+    suite_of = {suite: suite for suite in SUITES} if version >= 2 else SCHEMA_1_SUITE_KEYS
     if not isinstance(entry, dict) or set(entry) != keys:
         fail("must have exactly " + ", ".join(sorted(keys)))
     if not isinstance(entry["id"], str) or not DEFECT_ID.fullmatch(entry["id"]):
@@ -173,26 +216,55 @@ def _defect(entry, fail, seen: set[str]) -> KnownDefect:
     failing = entry["failing_tests"]
     if not isinstance(failing, dict) or not failing:
         fail("failing_tests must be a non-empty object")
-    for dimension, nodes in failing.items():
-        if dimension not in REGRESSION_DIMENSIONS:
-            fail(f"failing_tests: unknown dimension {dimension!r}")
+    for key, nodes in failing.items():
+        if key not in suite_of:
+            fail(f"failing_tests: unknown suite {key!r}")
         if (
             not isinstance(nodes, list)
             or not nodes
             or not all(isinstance(node, str) for node in nodes)
             or len(set(nodes)) != len(nodes)
         ):
-            fail(f"failing_tests.{dimension} must be a non-empty list of unique strings")
-        valid = _engine_node if dimension == "engine_regression" else FDN_NODE.fullmatch
+            fail(f"failing_tests.{key} must be a non-empty list of unique strings")
+        valid = _engine_node if suite_of[key] == "engine" else FDN_NODE.fullmatch
         for node in nodes:
             if not valid(node):
-                fail(f"failing_tests.{dimension}: malformed Audited Test id {node!r}")
+                fail(f"failing_tests.{key}: malformed Audited Test id {node!r}")
+    target_tests: list[str] = []
+    host_card = None
+    if version >= 2:
+        target_tests = entry["target_tests"]
+        if (
+            not isinstance(target_tests, list)
+            or not all(isinstance(node, str) for node in target_tests)
+            or len(set(target_tests)) != len(target_tests)
+        ):
+            fail("target_tests must be a list of unique strings")
+        for node in target_tests:
+            if not FDN_NODE.fullmatch(node):
+                fail(f"target_tests: malformed Audited Test id {node!r}")
+        host_card = entry["host_card"]
+        if target_tests:
+            if not isinstance(host_card, str) or not CARD_ID.fullmatch(host_card):
+                fail("host_card must be a card id like 'fdn_122' when target_tests is non-empty")
+            suites = {node.split("/", 1)[0] for node in target_tests}
+            if host_card in suites and suites != {host_card}:
+                fail("a target host_card must hold every one of the defect's target_tests")
+        elif host_card is not None:
+            fail("host_card must be null when target_tests is empty")
     return KnownDefect(
         id=entry["id"],
         description=entry["description"],
         rules=tuple(rules),
         kind=entry["kind"],
-        failing_tests=MappingProxyType({key: tuple(value) for key, value in failing.items()}),
+        failing_tests=MappingProxyType(
+            {
+                suite_of[key]: tuple(value)
+                for key, value in failing.items()
+            }
+        ),
+        target_tests=tuple(target_tests),
+        host_card=host_card,
     )
 
 

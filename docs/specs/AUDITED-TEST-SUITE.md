@@ -1,10 +1,10 @@
 Status: SETTLED
 
-Last updated: 2026-10-02
+Last updated: 2026-10-14
 
 # Audited Test Suite
 
-**Audited tests** are the maintainer-curated grading suite used to score agent output; this spec defines their conventions. It also documents **Agent tests** — the `tests.py` agents write during a Tested Mode run — which are harvested as artifacts but never used for v1 scoring (test-quality scoring and cross-evaluation are v2 features; see Test Harvester). Two further test populations are out of scope here and defined in [CONTEXT.md](../../CONTEXT.md): **Engine tests** (the Engine Regression dimension) and **Platform tests** (the repo-tooling suite).
+**Audited tests** are the maintainer-curated grading suite used to score agent output; this spec defines their conventions. It also documents **Agent tests** — the `tests.py` agents write during a Tested Mode run — which are harvested as artifacts but never used for v1 scoring (test-quality scoring and cross-evaluation are v2 features; see Test Harvester). Two further test populations are out of scope here and defined in [CONTEXT.md](../../CONTEXT.md): **Engine tests** (the engine suite) and **Platform tests** (the repo-tooling suite).
 
 ## Context
 
@@ -24,7 +24,7 @@ Observability is outcome-based: tests assert against post-cast/post-resolve game
 
 ### Tests as envelope (HOB-generation)
 
-Because audited tests are behavioral and simulate gameplay (Implementation-Agnostic Testing), the audited suite **is** the agent envelope for the HOB-generation benchmarks: **any** engine modification — including renames and refactors, not just additions — is permitted, and is judged solely by its observable consequences on the three audited dimensions (HOB card correctness, FDN card regression, engine regression), all run against the harvested engine. There is no additive-only rule and no diff policing; that additive-only regime is scoped to SOS V1 (see [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) and [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Engine rules).
+Because audited tests are behavioral and simulate gameplay (Implementation-Agnostic Testing), the audited suite **is** the agent envelope for the HOB-generation benchmarks: **any** engine modification — including renames and refactors, not just additions — is permitted, and is judged solely by its observable consequences on the three audited suites (target-card, FDN and engine), all run against the harvested engine. There is no additive-only rule and no diff policing; that additive-only regime is scoped to SOS V1 (see [WORKSPACE-CONTRACT.md](WORKSPACE-CONTRACT.md) and [HOB-BENCHMARKS.md](HOB-BENCHMARKS.md) → Engine rules).
 
 Enforcement is the scoring itself: a change that breaks a symbol the audited tests import (a moved/renamed engine path or class) raises `ImportError` before assertions run, so those tests score as failing — **that scoring is the enforcement**, needing no separate diff policy or engine-churn review.
 
@@ -41,9 +41,9 @@ Both modes produce `card_impl.py` per card. Tested mode also produces `tests.py`
 **Evaluation Phase** (after all agents finish):
 
 1. **SOS Card Correctness** — Audited SOS tests against each agent's `card_impl.py` + harvested `/workspace/engine/` (materialized in `workspace_final/`)
-2. **FDN Card Regression** — Audited FDN tests against pre-filled FDN impls + harvested `/workspace/engine/` (materialized in `workspace_final/`)
-3. **Engine Regression** — Audited Engine Tests against harvested `/workspace/engine/` (materialized in `workspace_final/`); the staged Engine Reference Tests are never graded (grilling 2026-10-02)
-Self-eval and cross-eval deferred to v2 (requires test harvester). Agent-written `tests.py` files are harvested as artifacts but not used for v1 scoring. The FDN audited tests (`tests/audited/fdn/`) serve as the post-run regression check against the agent's Writable Engine.
+2. **FDN suite** — Audited FDN tests against pre-filled FDN impls + harvested `/workspace/engine/` (materialized in `workspace_final/`)
+3. **Engine suite** — Audited Engine Tests against harvested `/workspace/engine/` (materialized in `workspace_final/`); the staged Engine Reference Tests are never graded (grilling 2026-10-02)
+Self-eval and cross-eval deferred to v2 (requires test harvester). Agent-written `tests.py` files are harvested as artifacts but not used for v1 scoring. The FDN audited tests (`tests/audited/fdn/`) serve as the post-run check that the existing cards still work on the agent's Writable Engine.
 
 ### Audited test authoring and file layout
 

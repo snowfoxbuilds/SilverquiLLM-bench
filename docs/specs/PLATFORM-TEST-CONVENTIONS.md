@@ -1,6 +1,6 @@
 Status: SETTLED
 
-Last updated: 2026-10-03
+Last updated: 2026-10-14
 
 # Platform Test Conventions
 
@@ -42,7 +42,7 @@ Everything else, such as building a record, scoring an evaluation or validating 
 
 A Simulated Benchmark is an end-to-end test (grilling 2026-10-03):
 
-- It runs only for a genuinely distinct pipeline configuration: a successful run, a failing grader, a killed run and its recovery, a re-grade, Combined Regression, results sharing.
+- It runs only for a genuinely distinct pipeline configuration: a successful run, a failing grader, a killed run and its recovery, a re-grade, the baseline comparison, results sharing.
 - It asserts everything its configuration decides, rather than one field per run.
 - Two runs that differ only in which field a test reads are one run.
 

@@ -21,7 +21,7 @@ from silverquillm.karn.exclusions import Exclusion, write_exclusion
 from silverquillm.karn.execution import run_lock
 from silverquillm.karn.login import secret_values
 from silverquillm.karn.observations import normalize_rollout
-from silverquillm.karn.records import KarnIdentity, KarnRunRecord, missing_scores
+from silverquillm.karn.records import SCHEMA_VERSION, KarnIdentity, KarnRunRecord, missing_scores
 from silverquillm.karn.records import write_record as write_run_record
 from silverquillm.karn.subscription_usage import codex_usage
 from silverquillm.monitor import Monitor, Stage
@@ -344,7 +344,7 @@ def valid_record(
     if recovery_of is not None:
         metadata.update(recovery_of=recovery_of, execution_run_id=recovery_of)
     manifest = {
-        "schema_version": 2,
+        "schema_version": SCHEMA_VERSION,
         "run_id": run_id,
         "candidate": identity,
         "candidate_hash": KarnIdentity.from_dict(identity).hash,
@@ -764,7 +764,7 @@ def test_history_summarizes_records_and_marks_exclusions(tmp_path):
     run = runs[0]
     assert run.duration_seconds == 1200
     assert run.target.pass_rate == 0.5 and run.target.passed == 5
-    assert run.scores["fdn_regression"].evaluated is False
+    assert run.scores["fdn"].evaluated is False
     assert (run.cost, run.agent_turns, run.total_tokens) == (Decimal("1.50"), 42, 1000)
     assert run.request_costs == (
         (int(datetime(2026, 10, 6, 10, 1, tzinfo=UTC).timestamp() * 1000), Decimal("1.50")),

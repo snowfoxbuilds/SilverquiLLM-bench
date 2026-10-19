@@ -31,7 +31,7 @@ Rules the module enforces:
 - **The manifest records ``benchmark``, never ``workload``** (the term is
   retired — CONTEXT.md).  ``mode`` and ``benchmark`` are run-spec parameters,
   orthogonal to candidate identity.
-- **Scores use benchmark-neutral keys** (:data:`SCORE_DIMENSIONS`) so a migrated
+- **Scores use benchmark-neutral keys** (:data:`SCHEMA_1_SCORE_KEYS`) so a migrated
   SOS record, a smoke record, and a HOB record all have the same shape.
 - **Heavy artifacts never enter the tree.** ``artifact_pointers`` carry
   ``{"kind", "location"}`` references only.  A ``legacy-tree`` pointer is
@@ -84,10 +84,12 @@ __all__ = [
     "OZOLITH_SCHEME",
     "RESULTS_DIRNAME",
     "RESULTS_REPO_ENV",
+    "RETIRED_SUITE_KEYS",
+    "SCHEMA_1_SCORE_KEYS",
     "SCHEMA_VERSION",
     "SCORES_FILENAME",
-    "SCORE_DIMENSIONS",
     "SKELETON_DIRNAMES",
+    "SUITES",
     "TEMPLATE_DIR",
     "CandidateIdentity",
     "InvalidRunRecordError",
@@ -106,6 +108,7 @@ __all__ = [
     "read_run_record",
     "record_file_texts",
     "resolve_results_repo",
+    "suite_keys",
     "write_run_record",
 ]
 
@@ -149,10 +152,28 @@ _HEX64_RE = re.compile(r"[0-9a-f]{64}")
 # adapters: the bench never allowlists adapters (BENCH-CONTRACT.md).
 _ADAPTER_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
-#: The three audited dimensions under benchmark-neutral keys.  ``scores.json``
-#: carries exactly these keys, each holding the matching ``run_summary.json``
-#: sub-object unchanged.
-SCORE_DIMENSIONS: tuple[str, ...] = ("card_correctness", "fdn_regression", "engine_regression")
+#: The graded suites, under the names Run Records use from schema version 3 on.
+SUITES: tuple[str, ...] = ("target", "fdn", "engine")
+
+#: Each suite's key in records written before schema version 3, which keep the
+#: names the rename record retired (ADR-021); readers dispatch on schema version.
+RETIRED_SUITE_KEYS: dict[str, str] = {
+    "target": "card_correctness",
+    "fdn": "fdn_regression",
+    "engine": "engine_regression",
+}
+
+#: The keys of a schema 1 ``scores.json``, each holding the matching
+#: ``run_summary.json`` sub-object unchanged.
+SCHEMA_1_SCORE_KEYS: tuple[str, ...] = tuple(RETIRED_SUITE_KEYS.values())
+
+
+def suite_keys(schema_version: Any) -> dict[str, str]:
+    """Each suite's key in the ``scores.json`` of a record of ``schema_version``."""
+    if type(schema_version) is int and schema_version >= 3:
+        return {suite: suite for suite in SUITES}
+    return RETIRED_SUITE_KEYS
+
 
 #: ``artifact_pointers[].kind`` for a migrated run whose heavy artifacts stay
 #: in place under the bench repo's ``docker/<image>/validated_results/<run>/``.
@@ -525,12 +546,12 @@ class RunRecord:
             raise InvalidRunRecordError(
                 "'workload' is retired vocabulary; the manifest records 'benchmark'"
             )
-        if not isinstance(self.scores, dict) or set(self.scores) != set(SCORE_DIMENSIONS):
+        if not isinstance(self.scores, dict) or set(self.scores) != set(SCHEMA_1_SCORE_KEYS):
             raise InvalidRunRecordError(
-                f"scores must have exactly the keys {list(SCORE_DIMENSIONS)}, "
+                f"scores must have exactly the keys {list(SCHEMA_1_SCORE_KEYS)}, "
                 f"got {sorted(self.scores) if isinstance(self.scores, dict) else self.scores!r}"
             )
-        for key in SCORE_DIMENSIONS:
+        for key in SCHEMA_1_SCORE_KEYS:
             if not isinstance(self.scores[key], dict):
                 raise InvalidRunRecordError(f"scores[{key!r}] must be a dict")
         if not isinstance(self.artifact_pointers, list):
@@ -583,8 +604,8 @@ class RunRecord:
         }
 
     def scores_dict(self) -> dict[str, Any]:
-        """The ``scores.json`` payload: exactly the neutral dimension keys."""
-        return {key: self.scores[key] for key in SCORE_DIMENSIONS}
+        """The ``scores.json`` payload: exactly the neutral score keys."""
+        return {key: self.scores[key] for key in SCHEMA_1_SCORE_KEYS}
 
     @classmethod
     def from_dicts(cls, manifest: Mapping[str, Any], scores: Mapping[str, Any]) -> RunRecord:
@@ -726,7 +747,7 @@ def read_run_record(run_dir: Path) -> RunRecord:
     scores = _load_json(run_dir / SCORES_FILENAME)
     if not isinstance(manifest, dict) or not isinstance(scores, dict):
         raise InvalidRunRecordError(f"{run_dir}: manifest.json and scores.json must be objects")
-    if manifest.get("schema_version") == 2:
+    if manifest.get("schema_version") in (2, 3):
         from silverquillm.karn.records import read_record
 
         return read_record(run_dir)
