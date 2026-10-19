@@ -32,7 +32,7 @@ LIMIT = 1024 * 1024
 SUITES = ("engine", "fdn", "target")
 CARD_ID = re.compile(r"[a-z][a-z0-9]*_[0-9]+[a-z]?")
 _ENGINE_KEY = re.compile(r"(?:[A-Za-z0-9_]+/)*[A-Za-z0-9_]+\.py(?:::[A-Za-z0-9_]+)*")
-_CARD_KEY = re.compile(r"[a-z][a-z0-9]*_[0-9]+[a-z]?(?:/tests\.py(?:::[A-Za-z0-9_]+)*)?")
+_CARD_KEY = re.compile(r"[a-z][a-z0-9]*_[0-9]+[a-z]?/tests\.py(?:::[A-Za-z0-9_]+)*")
 
 
 class AttributionError(ValueError):
@@ -58,14 +58,11 @@ class Attribution:
 def boundaries(test_id: str) -> Iterator[str]:
     """``test_id`` and its prefixes ending at a file or class boundary, longest first.
 
-    A parametrized case counts as its test function; an FDN or target-card id also
-    ends at its card directory.
+    A parametrized case counts as its test function.
     """
     parts = test_id.split("[", 1)[0].split("::")
     for count in range(len(parts), 0, -1):
         yield "::".join(parts[:count])
-    if "/" in parts[0]:
-        yield parts[0].split("/", 1)[0]
 
 
 def load_attribution(benchmark_root: Path) -> Attribution | None:

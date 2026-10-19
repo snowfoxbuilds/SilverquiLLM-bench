@@ -363,12 +363,16 @@ def _replace(source: Path, destination: Path) -> None:
 
 
 def _sync_file(source: Path, destination: Path) -> None:
-    """Copy ``source`` over ``destination``, or remove ``destination`` when the
-    Known-Best Workspace has no such file: an owned path is synchronized, not merged."""
+    """Replace ``destination`` whole with the file ``source``, or remove it when
+    the Known-Best Workspace has no such file: an owned path is synchronized,
+    not merged, whatever type the destination has."""
+    if source.is_symlink() or (source.exists() and not source.is_file()):
+        raise PortError(f"{source} must be a regular file")
     if source.is_file():
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-    elif destination.exists():
+        _replace(source, destination)
+    elif destination.is_dir() and not destination.is_symlink():
+        shutil.rmtree(destination)
+    elif destination.exists() or destination.is_symlink():
         destination.unlink()
 
 

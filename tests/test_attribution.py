@@ -88,6 +88,7 @@ def test_a_benchmark_without_attribution_data_has_none(tmp_path: Path) -> None:
     '{"schema_version": 1, "engine": {"../test_x.py": "fdn_272"}, "fdn": {}}',
     '{"schema_version": 1, "engine": {"test_x.py::": "fdn_272"}, "fdn": {}}',
     '{"schema_version": 1, "engine": {}, "fdn": {"tests.py": "fdn_272"}}',
+    '{"schema_version": 1, "engine": {}, "fdn": {"fdn_66": "fdn_122"}}',
     '{"schema_version": 1, "engine": {"test_x.py": "fdn_272", "test_x.py": "fdn_274"}, "fdn": {}}',
     '{"schema_version": 1, "engine": {}, "fdn": {}, "extra": 1}',
 ])
@@ -95,6 +96,13 @@ def test_malformed_attribution_data_is_refused(tmp_path: Path, document: str) ->
     (tmp_path / "data").mkdir()
     (tmp_path / ATTRIBUTION).write_text(document)
     with pytest.raises(AttributionError, match="attribution.json"):
+        load_attribution(tmp_path)
+
+
+def test_a_card_directory_key_is_refused_for_target_overrides(tmp_path: Path) -> None:
+    """A key ends at a file or class boundary, so a bare card directory is no key."""
+    _write(tmp_path, target={"hob_76": "fut_78"})
+    with pytest.raises(AttributionError, match="malformed key 'hob_76'"):
         load_attribution(tmp_path)
 
 
