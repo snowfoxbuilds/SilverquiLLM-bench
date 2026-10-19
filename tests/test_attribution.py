@@ -177,21 +177,27 @@ def test_every_attribution_key_names_an_audited_test(benchmark: str) -> None:
 def test_every_related_known_defect_names_a_host_card(benchmark: str) -> None:
     manifest = load_known_defects(REPO / "benchmarks" / benchmark)
     assert manifest is not None and manifest.schema_version == 2
-    _, hosts, _ = _audited(benchmark)
-    assert [defect.id for defect in manifest.defects if defect.related and defect.host_card not in hosts] == []
+    _, hosts, targets = _audited(benchmark)
+    assert [
+        defect.id
+        for defect in manifest.defects
+        if defect.related and defect.host_card not in (targets if defect.hosted_on_target else hosts)
+    ] == []
     assert [defect.id for defect in manifest.defects if not defect.related and defect.host_card is not None] == []
 
 
 @pytest.mark.parametrize("benchmark", SCORED)
 def test_a_related_defects_mechanic_shares_its_host_card(benchmark: str) -> None:
     """A mechanic's Collateral Tests and its own Known Defect's Dependency Tests are one
-    mechanic on one card, so the defect's engine tests are attributed to its host card."""
+    mechanic on one card, so the defect's engine tests are attributed to its host card.
+    A defect hosted on a target is part of implementing that target instead, and its
+    mechanic's Collateral Tests stay on a base Workspace card."""
     root = REPO / "benchmarks" / benchmark
     attribution, manifest = load_attribution(root), load_known_defects(root)
     elsewhere = [
         f"{defect.id}: {test_id} -> {attribution.card('engine', test_id)}, not {defect.host_card}"
         for defect in manifest.defects
-        if defect.related
+        if defect.related and not defect.hosted_on_target
         for test_id in defect.failing_tests.get("engine", ())
         if attribution.card("engine", test_id) != defect.host_card
     ]
