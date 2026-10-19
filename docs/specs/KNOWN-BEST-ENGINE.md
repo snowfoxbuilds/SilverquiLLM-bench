@@ -116,7 +116,11 @@ CI checks, for every benchmark in scope:
 1. The Test Oracle Workspace passes every Audited Test of all three suites.
 2. The unmodified Workspace fails exactly the FDN and engine Audited Tests the manifest lists, and passes the rest of the FDN and engine suites.
 3. Putting each Known Defect back into the Test Oracle Workspace fails exactly the target-card tests its entry lists (grilling 2026-10-14).
-4. Every FDN, engine and target-card Audited Test resolves to exactly one Attributed Card, a base Workspace card other than a target, and every related Known Defect names a host card (grilling 2026-10-14).
+4. Every test resolves to exactly one Attributed Card by its class, and every related Known Defect names a host card (grilling 2026-10-14):
+   - a target-card Implementation Test to a target, its own or another through `data/target_attribution.json`;
+   - a counted Dependency Test to its Known Defect's `host_card`, a target only under the exception in the manifest rules below;
+   - every FDN and engine Audited Test, through `data/attribution.json` or its own card, to a base Workspace card other than a target, which it counts toward whenever it is a Collateral Test;
+   - every attribution key names an Audited Test.
 5. Every target card has at least one test counting toward it that the unmodified Workspace fails (grilling 2026-10-19).
 
 Each check is a Platform Test, making one call per suite so each stays within the test timeout: `tests/known_defect_checks.py` provides `oracle_problems` and `workspace_problems` for the first two, which return the problems found and `[]` when the check passes.
@@ -185,8 +189,8 @@ Each Collateral Test and target-card Implementation Test counts toward one Attri
 
 - A key is an Audited Test id, or a prefix of one ending at a file or class boundary; the longest matching key wins.
 - Every Audited Engine Test must match a key; an FDN or target-card test that matches none counts toward the card whose suite holds it.
-- A value is a base Workspace card id; a benchmark's targets are never a value.
-- Dependency Tests are not listed: they count toward their Known Defect's `host_card`.
+- A value of `data/attribution.json` is a base Workspace card id, never one of the benchmark's targets; a value of `data/target_attribution.json` is a target.
+- An FDN or engine test is attributed whatever its class, since its class depends on the manifest; while it is a Dependency Test it counts toward its Known Defect's `host_card` instead, and while it depends on an unrelated defect it counts toward nothing.
 - `data/target_attribution.json` has the same shape with one `target` map; a benchmark with no overrides ships an empty map.
 
 ### Baseline reference grade

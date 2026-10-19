@@ -115,6 +115,7 @@ It is a pure function of a grade's per-test outcomes and baseline comparison, fr
 One package function derives it for `silverquillm top`, the regrade summaries, and a `silverquillm` command that prints it for the Results Repo's run table and analyses, which never compute it themselves.
 The grading-inputs digest leaves the manifest and attribution data out, so an attribution correction needs no re-score; instead every derived score names the digest of the scoring data it used, which an analysis states beside its cohort's grading digest.
 It is unavailable, with the baseline comparison's reason, when the baseline comparison is.
+A candidate whose engine breaks every test it is graded on is still scored: its expected tests that did not run, through an import error, a timeout or an early exit, fail (see Tests that did not run), so it scores at or below 0.
 
 ### Run Record results
 
@@ -156,7 +157,7 @@ When the comparison cannot be computed it is `{"available": false, "reason": "<r
 | Reason | When |
 | --- | --- |
 | `grading_inputs_changed_during_grading` | The grading inputs changed while the run or the baseline was graded |
-| `suite_not_evaluated` | The FDN or engine suite executed no test for the run |
+| `suite_not_evaluated` | The FDN or engine suite has no tests to count: the bench could not grade it (`grading_support_missing`), or an older grade recorded no expected tests; a suite whose expected tests all did not run is evaluated, and its baseline-passing tests are broken |
 | `baseline_workspace_incomplete` | The unmodified Workspace could not be copied in full |
 | `baseline_grading_failed:<reason>` | Grading the unmodified Workspace failed |
 | `baseline_incomplete` | The baseline reference grade is incomplete for any reason but the FDN coverage gap every run shares |
