@@ -4,7 +4,8 @@ Each ported benchmark lists its Known Defects in a manifest, and CI checks the
 properties `docs/specs/KNOWN-BEST-ENGINE.md` requires: the unmodified Workspace
 fails exactly the manifest's Audited Tests, the Test Oracle Workspace passes
 every Audited Test (see ADR-016), and putting each Known Defect back into the
-Test Oracle Workspace fails exactly the target-card tests its entry lists.
+Test Oracle Workspace fails exactly the target-card tests its entry lists, and
+every target card has a test counting toward it that the unmodified Workspace fails.
 """
 
 from __future__ import annotations
@@ -18,7 +19,12 @@ from silverquillm.benchmark_targets import target_cards
 from silverquillm.karn.benchmark import load_benchmark
 from silverquillm.known_defects import SUITES, load_known_defects
 
-from .known_defect_checks import defect_problems, oracle_problems, workspace_problems
+from .known_defect_checks import (
+    defect_problems,
+    implementation_problems,
+    oracle_problems,
+    workspace_problems,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 KNOWN_BEST = REPO / "known_best"
@@ -74,6 +80,12 @@ def test_each_known_defect_put_back_fails_exactly_its_target_tests(
 @pytest.mark.parametrize("name", PORTED)
 def test_unmodified_workspace_fails_exactly_the_manifest(name: str, suite: str) -> None:
     problems = workspace_problems(load_benchmark(REPO, name), suite)
+    assert problems == [], "\n".join(problems)
+
+
+@pytest.mark.parametrize("name", SCHEMA_2)
+def test_unmodified_workspace_implements_no_target(name: str) -> None:
+    problems = implementation_problems(load_benchmark(REPO, name))
     assert problems == [], "\n".join(problems)
 
 

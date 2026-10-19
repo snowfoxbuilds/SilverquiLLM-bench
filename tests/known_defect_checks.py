@@ -1,6 +1,6 @@
 """Platform Test checks of a benchmark against its Known Defect manifest.
 
-Three CI checks apply to every benchmark built from the Known-Best Workspace
+CI checks that apply to every benchmark built from the Known-Best Workspace
 (``docs/specs/KNOWN-BEST-ENGINE.md`` → Known Defects):
 
 1. :func:`oracle_problems` — the Test Oracle Workspace passes every Audited Test of all
@@ -9,6 +9,8 @@ Three CI checks apply to every benchmark built from the Known-Best Workspace
    the manifest lists, and passes the rest of the FDN and engine suites.
 3. :func:`defect_problems` — putting one Known Defect back into the Test Oracle
    Workspace fails exactly the target-card tests its entry lists.
+5. :func:`implementation_problems` — every target card has at least one Implementation
+   Test the unmodified Workspace fails, so the unmodified Workspace scores 0.
 
 Each call grades one suite, or one defect's target-card suite, in-process, so a
 Platform Test parametrized over them stays within the pytest timeout. ``[]`` means the
@@ -22,6 +24,8 @@ import tempfile
 from pathlib import Path
 
 from silverquillm import evaluator
+from silverquillm.attribution import AttributionError, load_attribution
+from silverquillm.benchmark_targets import target_cards
 from silverquillm.evaluator import (
     _GRADING_IGNORE,
     _eval_audited_dir,
@@ -213,3 +217,62 @@ def defect_problems(benchmark, defect_id: str, scratch: Path, *, timeout: int = 
             ),
         ]
     )
+
+
+def implementation_problems(benchmark, *, timeout: int = 240) -> list[str]:
+    """CI check 5: every target card has at least one test counting toward it that the
+    unmodified Workspace fails, so the unmodified Workspace implements no target card.
+
+    A target's counted tests are its Implementation Tests (target-card tests no Known
+    Defect makes fail) and, for a related Known Defect hosted on it, that defect's
+    Dependency Tests; check 2 holds that the unmodified Workspace fails the latter's FDN
+    and engine tests."""
+    try:
+        manifest = load_known_defects(benchmark.root)
+        attribution = load_attribution(benchmark.root)
+    except (KnownDefectsError, AttributionError) as error:
+        return [str(error)]
+    if manifest is None:
+        return [f"no Known Defect manifest at {benchmark.root / MANIFEST}"]
+    if manifest.schema_version < 2:
+        return [f"schema version {manifest.schema_version} lists no target_tests"]
+    # Target-card Dependency Test -> its target host, or None when it counts toward no target.
+    dependency: dict[str, str | None] = {}
+    for defect in manifest.defects:
+        for node in defect.target_tests:
+            dependency[node] = defect.host_card if defect.hosted_on_target else None
+    failing: dict[str, int] = {}
+    for defect in manifest.defects:
+        if defect.hosted_on_target:
+            failing[defect.host_card] = failing.get(defect.host_card, 0) + sum(
+                map(len, defect.failing_tests.values())
+            )
+    outcomes = audited_outcomes(benchmark, benchmark.root / "workspace", "target", timeout=timeout)
+    for node, outcome in outcomes.nodes.items():
+        listed = node if node in dependency else _function(node)
+        if listed in dependency:
+            card = dependency[listed]
+            if card is None:
+                continue
+        else:
+            card = attribution.card("target", node) if attribution else node.split("/", 1)[0]
+        failing[card] = failing.get(card, 0) + (outcome == "fail")
+    targets = sorted(
+        f"{code}_{number}" for code, number in target_cards(benchmark.target_set, benchmark.cards)
+    )
+    return sorted(
+        [
+            *_grading_problems(outcomes),
+            *(f"{card}: no test counts toward it" for card in targets if card not in failing),
+            *(
+                f"{card}: no test counting toward it fails on the unmodified Workspace"
+                for card in targets
+                if failing.get(card) == 0
+            ),
+        ]
+    )
+
+
+def _function(node: str) -> str:
+    """A parametrized case counts as its test function."""
+    return node.split("[", 1)[0]

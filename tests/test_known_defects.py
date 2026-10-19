@@ -22,6 +22,7 @@ from . import known_defect_fixture as fixture
 from .known_defect_checks import (
     audited_outcomes,
     defect_problems,
+    implementation_problems,
     oracle_problems,
     workspace_problems,
 )
@@ -475,3 +476,36 @@ def test_a_patch_that_does_not_apply_is_reported(related, tmp_path):
     )
     [problem] = defect_problems(related, "lifegain-loses-one", tmp_path)
     assert "does not apply to the Test Oracle Workspace" in problem
+
+
+# --- CI check 5: every target card has a counted test the Workspace fails ------------
+
+
+def test_every_target_fails_a_counted_test_on_the_workspace(kd):
+    assert implementation_problems(kd) == []
+
+
+def test_a_target_the_workspace_already_implements_is_reported(kd):
+    (kd.root / "workspace/cards/hob/hob_1/card_impl.py").write_text(fixture.TARGET)
+    assert implementation_problems(kd) == [
+        "hob_1: no test counting toward it fails on the unmodified Workspace"
+    ]
+
+
+def test_a_target_whose_tests_all_depend_on_a_defect_is_reported(related):
+    value = copy.deepcopy(fixture.MANIFEST)
+    value["defects"][0].update(
+        target_tests=["hob_1/tests.py::test_effect", LIFEGAIN_TARGET], host_card="fdn_2"
+    )
+    fixture.write_manifest(related.root, value)
+    assert implementation_problems(related) == ["hob_1: no test counts toward it"]
+
+
+def test_a_target_hosting_the_defect_its_tests_depend_on_passes(related):
+    (related.root / "workspace/cards/hob/hob_1/card_impl.py").write_text(fixture.TARGET)
+    value = copy.deepcopy(fixture.MANIFEST)
+    value["defects"][0].update(
+        target_tests=["hob_1/tests.py::test_effect", LIFEGAIN_TARGET], host_card="hob_1"
+    )
+    fixture.write_manifest(related.root, value)
+    assert implementation_problems(related) == []
