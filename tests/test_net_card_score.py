@@ -404,6 +404,92 @@ def test_fra_hard_v2_denominator_counts_both_related_defects():
     assert hosts == {"fdn_122", "fdn_236"}
 
 
+# --- Parametrized target cases: the manifest names a case or a whole function -------
+
+CASES = ("tests.py::test_returns_again[needs_fix]", "tests.py::test_returns_again[independent]")
+
+
+def _case_data(tmp_path, entry):
+    """The bench with tgt_2's test_returns_again parametrized, and the manifest naming
+    ``entry`` as its Dependency Test."""
+    root = tmp_path / "cases" / "bench"
+    (root / "data").mkdir(parents=True)
+    manifest = json.loads(json.dumps(MANIFEST))
+    manifest["defects"][0]["target_tests"] = [entry]
+    for name, document in (
+        ("known_defects.json", manifest),
+        ("attribution.json", ATTRIBUTION),
+        ("target_attribution.json", TARGET_ATTRIBUTION),
+    ):
+        (root / "data" / name).write_text(json.dumps(document))
+    return load_scoring_data(root, ["tgt_1", "tgt_2"])
+
+
+def _case_scores(outcomes, not_run=False):
+    """Oracle scores with tgt_2's two cases given ``outcomes``, or not run at all."""
+    scores = _scores(ORACLE_FAILS)
+    tgt_2 = scores["target"]["cards"]["tgt_2"]
+    tgt_2["test_nodes"] = [
+        node for node in tgt_2["test_nodes"] if node["test_node"] != "tests.py::test_returns_again"
+    ]
+    if not_run:
+        tgt_2["not_run"] = [{"test_node": "tests.py::test_returns_again", "reason": "import_error"}]
+    else:
+        tgt_2["test_nodes"] += [
+            {"test_node": node, "outcome": outcome} for node, outcome in zip(CASES, outcomes)
+        ]
+    return scores
+
+
+def _case_score(data, outcomes, not_run=False, reader="record"):
+    scores, comparison = _case_scores(outcomes, not_run), _comparison(ORACLE_FAILS)
+    if reader == "record":
+        grade = _record(scores, comparison)
+    else:
+        grade = regrade_grade({"scores": scores, "baseline_comparison": comparison})
+    return derive(grade, data)
+
+
+LISTED_CASE = "tgt_2/tests.py::test_returns_again[needs_fix]"
+
+
+@pytest.mark.parametrize("reader", ["record", "regrade"])
+def test_only_the_listed_parametrized_case_is_a_dependency(tmp_path, reader):
+    """The unlisted sibling of a listed case is an Implementation Test."""
+    result = _case_score(_case_data(tmp_path, LISTED_CASE), ("pass", "fail"), reader=reader)
+    assert result["cards_implemented"] == ["tgt_1"]
+    assert result["cards_fixed"] == ["fdn_10"]
+    assert result["failing_tests"]["tgt_2"] == {
+        "implementation": ["tgt_2/tests.py::test_returns_again[independent]"]
+    }
+
+
+def test_a_failing_listed_case_withholds_the_fix_not_the_implementation(tmp_path):
+    result = _case_score(_case_data(tmp_path, LISTED_CASE), ("fail", "pass"))
+    assert result["cards_implemented"] == ["tgt_1", "tgt_2"]
+    assert result["cards_fixed"] == []
+
+
+def test_passing_cases_earn_both_the_implementation_and_the_fix(tmp_path):
+    result = _case_score(_case_data(tmp_path, LISTED_CASE), ("pass", "pass"))
+    assert (result["cards_implemented"], result["cards_fixed"]) == (["tgt_1", "tgt_2"], ["fdn_10"])
+
+
+def test_a_function_that_did_not_run_fails_both_its_listed_and_unlisted_cases(tmp_path):
+    result = _case_score(_case_data(tmp_path, LISTED_CASE), (), not_run=True)
+    assert result["cards_implemented"] == ["tgt_1"]
+    assert result["cards_fixed"] == []
+
+
+def test_a_bare_function_entry_covers_every_case(tmp_path):
+    data = _case_data(tmp_path, "tgt_2/tests.py::test_returns_again")
+    result = _case_score(data, ("pass", "fail"))
+    assert result["cards_implemented"] == ["tgt_1", "tgt_2"]
+    assert result["cards_fixed"] == []
+    not_run = _case_score(data, (), not_run=True)
+    assert (not_run["cards_implemented"], not_run["cards_fixed"]) == (["tgt_1", "tgt_2"], [])
+
+
 # --- Reading it: the command, `top` history and the regrade summary -------------------
 
 
@@ -451,6 +537,65 @@ def test_score_paths_reads_records_and_regrade_outputs(tmp_path, data, monkeypat
     assert rows[0]["scoring_data_digest"] == data.digest
     (single,) = module.score_paths([results / "run1"], tmp_path)
     assert single["run_id"] == "run1"
+
+
+@pytest.mark.parametrize(
+    "malform",
+    [
+        lambda scores, comparison: scores["target"]["cards"]["tgt_1"].update(test_nodes=1),
+        lambda scores, comparison: scores["engine"].update(test_nodes=[3]),
+        lambda scores, comparison: scores["fdn"]["cards"].update(fdn_10=[]),
+        lambda scores, comparison: comparison.update(broken=["fdn_10/tests.py::test_plain"]),
+        lambda scores, comparison: comparison["broken"].update(engine="test_zones.py"),
+    ],
+    ids=["card-test-nodes", "engine-node", "card", "comparison", "comparison-suite"],
+)
+def test_one_malformed_grade_does_not_abort_the_batch(tmp_path, data, monkeypatch, malform):
+    """A malformed record or regrade output is unreadable on its own row; the rest score."""
+    import silverquillm.net_card_score as module
+
+    monkeypatch.setattr(module, "benchmark_scoring_data", lambda root, benchmark: data)
+
+    def malformed():
+        scores, comparison = _scores(ORACLE_FAILS), _comparison(ORACLE_FAILS)
+        malform(scores, comparison)
+        return scores, comparison
+
+    results = tmp_path / "results" / CANDIDATE
+    _write_record(results / "run1", *malformed())
+    _write_record(results / "run2", _scores(ORACLE_FAILS), _comparison(ORACLE_FAILS))
+    regrades = tmp_path / "regrades" / ("d" * 64) / CANDIDATE
+    regrades.mkdir(parents=True)
+    for run_id, (scores, comparison) in (
+        ("run3", malformed()),
+        ("run4", (_scores(ORACLE_FAILS), _comparison(ORACLE_FAILS))),
+    ):
+        output = {
+            "run_id": run_id,
+            "candidate_hash": CANDIDATE,
+            "benchmark": "bench",
+            "scores": scores,
+            "baseline_comparison": comparison,
+        }
+        (regrades / f"{run_id}.json").write_text(json.dumps(output))
+
+    rows = list(module.score_paths([tmp_path / "results", tmp_path / "regrades"], tmp_path))
+    assert [(row["run_id"], row["available"], row.get("reason")) for row in rows] == [
+        ("run1", False, "unreadable_grade"),
+        ("run2", True, None),
+        ("run3", False, "unreadable_grade"),
+        ("run4", True, None),
+    ]
+    assert rows[0]["scoring_data_digest"] == data.digest
+    assert [row["score"] for row in rows if row["available"]] == [1, 1]
+
+
+def test_an_omitted_suite_or_comparison_is_not_malformed(data):
+    """Legacy omissions keep their meaning: a missing suite was not evaluated, and a
+    record without a comparison has none."""
+    scores = _scores(ORACLE_FAILS)
+    del scores["engine"]
+    assert derive(_record(scores, None), data)["reason"] == "no_baseline_comparison"
 
 
 def test_the_command_prints_one_json_line_per_grade(tmp_path):

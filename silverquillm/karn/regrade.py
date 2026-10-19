@@ -27,6 +27,7 @@ from pathlib import Path
 
 from silverquillm.known_defects import has_known_defects_manifest
 from silverquillm.net_card_score import (
+    MalformedGrade,
     ScoringData,
     ScoringDataError,
     benchmark_scoring_data,
@@ -571,11 +572,14 @@ def _excluded(result: dict, exclusions: dict[str, Exclusion]) -> Exclusion | Non
 
 def _net_card_means(rows: list[dict], scoring: ScoringData) -> dict:
     """The mean Net Card Score after the regrade, over the runs it could be derived for."""
-    scored = [
-        result
-        for row in rows
-        if (result := derive(regrade_grade(row), scoring))["available"] is True
-    ]
+    scored = []
+    for row in rows:
+        try:
+            result = derive(regrade_grade(row), scoring)
+        except MalformedGrade:
+            continue
+        if result["available"] is True:
+            scored.append(result)
 
     def mean(key: str) -> float | None:
         return statistics.fmean(result[key] for result in scored) if scored else None

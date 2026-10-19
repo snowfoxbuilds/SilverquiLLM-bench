@@ -40,6 +40,10 @@ class ScoringDataError(ValueError):
     """Scoring data that cannot be used; the message says why."""
 
 
+class MalformedGrade(ValueError):
+    """A grade whose nested structure is not the shape its readers consume."""
+
+
 @dataclass(frozen=True)
 class ScoringData:
     """What a benchmark's Net Card Score is derived from besides the grade."""
@@ -118,99 +122,147 @@ def benchmark_scoring_data(bench_root: Path, benchmark_id: str) -> ScoringData |
     return load_scoring_data(benchmark.root, targets)
 
 
-def _mapping(value: Any) -> Mapping:
-    return value if isinstance(value, Mapping) else {}
+def _mapping(value: Any, where: str) -> Mapping:
+    """``value`` as an object; an omitted (``None``) value reads as empty."""
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise MalformedGrade(f"{where} must be an object")
+    return value
 
 
-def _card_suite(value: Any) -> tuple[dict[str, str], list[str]]:
+def _rows(value: Any, where: str) -> list[Mapping]:
+    """``value`` as a list of objects; an omitted (``None``) value reads as empty."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise MalformedGrade(f"{where} must be a list")
+    for i, row in enumerate(value):
+        if not isinstance(row, Mapping):
+            raise MalformedGrade(f"{where}[{i}] must be an object")
+    return list(value)
+
+
+def _test_node(row: Mapping, where: str) -> str:
+    node = row.get("test_node")
+    if not isinstance(node, str):
+        raise MalformedGrade(f"{where}.test_node must be a string")
+    return node
+
+
+def _card_suite(value: Any, where: str) -> tuple[dict[str, str], list[str]]:
     nodes: dict[str, str] = {}
     not_run: list[str] = []
-    for card_id, card in _mapping(_mapping(value).get("cards")).items():
-        for node in _mapping(card).get("test_nodes") or ():
-            _add(nodes, not_run, f"{card_id}/{_mapping(node).get('test_node')}", node)
-        for row in _mapping(card).get("not_run") or ():
-            if _mapping(row).get("reason") != _GRADING_NOT_RUN:
-                not_run.append(f"{card_id}/{_mapping(row).get('test_node')}")
+    cards = _mapping(_mapping(value, where).get("cards"), f"{where}.cards")
+    for card_id, card in cards.items():
+        at = f"{where}.cards.{card_id}"
+        card = _mapping(card, at)
+        for i, node in enumerate(_rows(card.get("test_nodes"), f"{at}.test_nodes")):
+            _add(nodes, not_run, f"{card_id}/{_test_node(node, f'{at}.test_nodes[{i}]')}", node)
+        for i, row in enumerate(_rows(card.get("not_run"), f"{at}.not_run")):
+            if row.get("reason") != _GRADING_NOT_RUN:
+                not_run.append(f"{card_id}/{_test_node(row, f'{at}.not_run[{i}]')}")
     return nodes, not_run
 
 
-def _engine_suite(value: Any) -> tuple[dict[str, str], list[str]]:
+def _engine_suite(value: Any, where: str) -> tuple[dict[str, str], list[str]]:
     nodes: dict[str, str] = {}
     not_run: list[str] = []
-    for node in _mapping(value).get("test_nodes") or ():
-        _add(nodes, not_run, str(_mapping(node).get("test_node")), node)
-    for row in _mapping(value).get("not_run") or ():
-        if _mapping(row).get("reason") != _GRADING_NOT_RUN:
-            not_run.append(str(_mapping(row).get("test_node")))
+    value = _mapping(value, where)
+    for i, node in enumerate(_rows(value.get("test_nodes"), f"{where}.test_nodes")):
+        _add(nodes, not_run, _test_node(node, f"{where}.test_nodes[{i}]"), node)
+    for i, row in enumerate(_rows(value.get("not_run"), f"{where}.not_run")):
+        if row.get("reason") != _GRADING_NOT_RUN:
+            not_run.append(_test_node(row, f"{where}.not_run[{i}]"))
     return nodes, not_run
 
 
-def _add(nodes: dict[str, str], not_run: list[str], test_id: str, node: Any) -> None:
+def _add(nodes: dict[str, str], not_run: list[str], test_id: str, node: Mapping) -> None:
     if "::" not in test_id or "<collection-error>" in test_id:
         not_run.append(test_id)
     elif test_id not in nodes:
-        nodes[test_id] = "pass" if _mapping(node).get("outcome") == "pass" else "fail"
+        nodes[test_id] = "pass" if node.get("outcome") == "pass" else "fail"
 
 
-def _unevaluated(value: Any) -> bool:
+def _unevaluated(value: Any, where: str) -> bool:
     """A suite the bench could not grade, as opposed to one that scored zero."""
-    value = _mapping(value)
+    value = _mapping(value, where)
     if not value:
         return True
     if value.get("evaluated") is True:
         return False
-    rows = list(value.get("not_run") or ())
-    for card in _mapping(value.get("cards")).values():
-        rows.extend(_mapping(card).get("not_run") or ())
-    return not rows or any(_mapping(row).get("reason") == _GRADING_NOT_RUN for row in rows)
+    rows = _rows(value.get("not_run"), f"{where}.not_run")
+    for card_id, card in _mapping(value.get("cards"), f"{where}.cards").items():
+        rows.extend(
+            _rows(
+                _mapping(card, f"{where}.cards.{card_id}").get("not_run"),
+                f"{where}.cards.{card_id}.not_run",
+            )
+        )
+    return not rows or any(row.get("reason") == _GRADING_NOT_RUN for row in rows)
 
 
 def _comparison(value: Any) -> Mapping[str, Any] | None:
     """A baseline comparison under its current names; a schema 2 ``combined_regression``
     keeps ``regressed``/``test_nodes`` under the retired suite keys."""
-    if not isinstance(value, Mapping):
+    if value is None:
         return None
+    value = _mapping(value, "baseline comparison")
     if value.get("available") is not True:
         reason = value.get("reason")
         return {"available": False, "reason": _RETIRED_REASONS.get(reason, reason)}
     if "broken" in value:
-        return {
-            "available": True,
-            "broken": {suite: list(value["broken"].get(suite, ())) for suite in ("fdn", "engine")},
-        }
-    retired = _mapping(_mapping(value.get("regressed")).get("test_nodes"))
-    broken = {new: list(retired.get(old, ())) for old, new in _RETIRED_COMPARISON_KEYS.items()}
+        broken = _mapping(value["broken"], "baseline comparison.broken")
+    else:
+        regressed = _mapping(value.get("regressed"), "baseline comparison.regressed")
+        retired = _mapping(regressed.get("test_nodes"), "baseline comparison.regressed.test_nodes")
+        broken = {new: retired.get(old) for old, new in _RETIRED_COMPARISON_KEYS.items()}
     return {
         "available": True,
-        "broken": {suite: broken.get(suite, []) for suite in ("fdn", "engine")},
+        "broken": {suite: _ids(broken.get(suite), suite) for suite in ("fdn", "engine")},
     }
 
 
+def _ids(value: Any, suite: str) -> list[str]:
+    where = f"baseline comparison.broken.{suite}"
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(test, str) for test in value):
+        raise MalformedGrade(f"{where} must be a list of test ids")
+    return list(value)
+
+
 def _grade(scores: Any, keys: Mapping[str, str], comparison: Any) -> Grade:
-    scores = _mapping(scores)
+    scores = _mapping(scores, "scores")
     nodes, not_run, unevaluated = {}, {}, set()
     for suite, key in keys.items():
         reader = _engine_suite if suite == "engine" else _card_suite
-        suite_nodes, suite_not_run = reader(scores.get(key))
+        suite_nodes, suite_not_run = reader(scores.get(key), f"scores.{key}")
         nodes[suite], not_run[suite] = suite_nodes, tuple(suite_not_run)
-        if _unevaluated(scores.get(key)):
+        if _unevaluated(scores.get(key), f"scores.{key}"):
             unevaluated.add(suite)
     return Grade(nodes, not_run, frozenset(unevaluated), _comparison(comparison))
 
 
 def record_grade(manifest: Any, scores: Any) -> Grade:
-    """The grade of a Run Record, keyed by its schema version."""
-    manifest = _mapping(manifest)
-    metadata = _mapping(manifest.get("run_metadata"))
+    """The grade of a Run Record, keyed by its schema version.
+
+    Raises MalformedGrade when a structure the score reads has the wrong shape.
+    """
+    manifest = _mapping(manifest, "manifest")
+    metadata = _mapping(manifest.get("run_metadata"), "manifest.run_metadata")
     comparison = metadata.get("baseline_comparison", metadata.get("combined_regression"))
     return _grade(scores, suite_keys(manifest.get("schema_version")), comparison)
 
 
 def regrade_grade(output: Any) -> Grade:
     """The grade of a regrade output; outputs carry no schema version, so the suite names
-    its scores use decide."""
-    output = _mapping(output)
-    scores = _mapping(output.get("scores"))
+    its scores use decide.
+
+    Raises MalformedGrade when a structure the score reads has the wrong shape.
+    """
+    output = _mapping(output, "regrade output")
+    scores = _mapping(output.get("scores"), "scores")
     keys = suite_keys(3 if "target" in scores else 2)
     comparison = output.get("baseline_comparison", output.get("combined_regression"))
     return _grade(scores, keys, comparison)
@@ -284,11 +336,13 @@ def derive(grade: Grade, data: ScoringData | None) -> dict:
         suite: frozenset(_function(t) for t in grade.not_run[suite]) for suite in grade.nodes
     }
 
-    # Implementation Tests: every target-card test that is not a Dependency Test.
-    dependency_functions = {_function(test) for test in target_dependencies}
+    # Implementation Tests: every target-card test that is not a Dependency Test. A
+    # manifest entry naming a parametrized case covers that case only; a bare function
+    # covers all its cases, and is the only entry that covers the function not running.
+    dependency_functions = {test for test in target_dependencies if "[" not in test}
 
     def is_dependency(test_id: str) -> bool:
-        return _function(test_id) in dependency_functions
+        return test_id in target_dependencies or _function(test_id) in dependency_functions
 
     implementation: dict[str, list[tuple[str, bool]]] = {}
     target_nodes = grade.nodes["target"]
@@ -413,5 +467,11 @@ def score_paths(paths: Iterable[Path], bench_root: Path) -> Iterator[dict]:
             if isinstance(data, str):
                 yield {**row, "available": False, "reason": data}
                 continue
-            grade = record_grade(manifest, scores) if kind == "record" else regrade_grade(document)
+            try:
+                grade = (
+                    record_grade(manifest, scores) if kind == "record" else regrade_grade(document)
+                )
+            except MalformedGrade:
+                yield {**row, **unavailable("unreadable_grade", data)}
+                continue
             yield {**row, **derive(grade, data)}
