@@ -226,6 +226,56 @@ def test_the_target_dependency_test_counts_toward_the_host_not_the_target(data):
     ]
 
 
+@pytest.fixture
+def hosted(tmp_path):
+    """The bench with zone-change hosted on tgt_2, whose own test cannot avoid it."""
+    root = tmp_path / "hosted" / "bench"
+    (root / "data").mkdir(parents=True)
+    manifest = json.loads(json.dumps(MANIFEST))
+    manifest["defects"][0]["host_card"] = "tgt_2"
+    for name, document in (
+        ("known_defects.json", manifest),
+        ("attribution.json", ATTRIBUTION),
+        ("target_attribution.json", TARGET_ATTRIBUTION),
+    ):
+        (root / "data" / name).write_text(json.dumps(document))
+    return load_scoring_data(root, ["tgt_1", "tgt_2"])
+
+
+ORACLE = {"fdn_30/tests.py::test_unrelated", "fdn_10/tests.py::test_shared"}
+
+
+def test_a_target_hosted_defect_leaves_the_denominator_to_the_targets(hosted):
+    result = _score(hosted, failing=ORACLE)
+    assert result["score"] == 1
+    assert result["cards_implemented"] == ["tgt_1", "tgt_2"]
+    assert result["cards_fixed"] == [] and result["host_cards"] == []
+    assert result["denominator"] == 2
+    assert _score(hosted, failing=UNMODIFIED)["score"] == 0
+
+
+def test_a_target_hosting_an_unfixed_defect_is_not_implemented(hosted):
+    result = _score(hosted, failing={*BASELINE_FAILS, "tgt_2/tests.py::test_returns_again"})
+    assert result["cards_implemented"] == ["tgt_1"]
+    assert result["failing_tests"]["tgt_2"] == {
+        "dependency": [
+            "engine:test_zones.py::test_counters_reset",
+            "fdn:fdn_10/tests.py::test_returns_new",
+            "target:tgt_2/tests.py::test_returns_again",
+        ]
+    }
+    assert result["score"] == 1 / 2
+
+
+def test_a_card_local_workaround_does_not_implement_the_hosting_target(hosted):
+    result = _score(hosted, failing=BASELINE_FAILS)
+    assert result["cards_implemented"] == ["tgt_1"]
+    assert (
+        "target:tgt_2/tests.py::test_returns_again"
+        not in result["failing_tests"]["tgt_2"]["dependency"]
+    )
+
+
 def test_fixing_an_unrelated_defect_earns_nothing(data):
     fixed = _score(data, failing={"fdn_10/tests.py::test_shared"})
     unfixed = _score(
@@ -383,7 +433,11 @@ def test_the_real_scoring_data_loads(benchmark):
     data = benchmark_scoring_data(REPO, benchmark)
     assert data is not None and data.targets
     assert set(data.targets).isdisjoint(
-        {defect.host_card for defect in data.defects.defects if defect.related}
+        {
+            defect.host_card
+            for defect in data.defects.defects
+            if defect.related and not defect.hosted_on_target
+        }
     )
 
 
@@ -398,10 +452,14 @@ def test_earlier_benchmarks_have_no_scoring_data(benchmark):
     assert data is None
 
 
-def test_fra_hard_v2_denominator_counts_both_related_defects():
+def test_fra_hard_v2_hosts_the_x_cost_defect_on_inside_information():
     data = benchmark_scoring_data(REPO, "fra-hard-v2")
-    hosts = {defect.host_card for defect in data.defects.defects if defect.related}
-    assert hosts == {"fdn_122", "fdn_236"}
+    hosts = {defect.id: defect.host_card for defect in data.defects.defects if defect.related}
+    assert hosts == {
+        "zone-change-keeps-object-state": "fdn_122",
+        "x-cost-not-chosen-or-paid": "hob_76",
+    }
+    assert len(data.targets) + len(set(hosts.values()) - set(data.targets)) == 12
 
 
 # --- Parametrized target cases: the manifest names a case or a whole function -------

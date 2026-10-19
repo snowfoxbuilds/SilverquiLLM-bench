@@ -249,7 +249,7 @@ The historic view browses by benchmark, by Candidate display, or by run (grillin
 Selecting a benchmark or a Candidate display lists its runs; a Candidate display expands to its individual Candidate Hashes.
 
 A run occupies one line: run date, benchmark, Candidate display, execution status, container duration over budget, scores, Run Cost, Agent Turns, total tokens, Login Profile, host label, and the short run id.
-The scores are the Net Card Score with Cards Implemented, Cards Fixed and Cards Broken over its denominator (`+0.62 7+1-0/13`), then the target-card pass rate with passed/total and the FDN and engine suites' pass rates (grilling 2026-10-14).
+The scores are the Net Card Score with Cards Implemented, Cards Fixed and Cards Broken over its denominator (`+0.67 7+1-0/12`), then the target-card pass rate with passed/total and the FDN and engine suites' pass rates (grilling 2026-10-14).
 The Net Card Score shows for smoke, fra-hard-v2 and later benchmarks, derived from the bench checkout's scoring data (`bench_root`), or why it is unavailable; older benchmarks show a dash there and are read by their pass rates.
 Every column sorts.
 Excluded runs are dimmed with their reason code, and a key hides them.

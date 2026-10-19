@@ -3,7 +3,10 @@
 ``docs/specs/SCORING.md`` defines it::
 
     (Cards Implemented + Cards Fixed - Cards Broken)
-        / (target cards + cards hosting related Known Defects)
+        / (target cards + other cards hosting related Known Defects)
+
+A related Known Defect hosted on a target card is part of implementing that card, so its
+Dependency Tests count toward Cards Implemented rather than Cards Fixed.
 
 It is a pure function of a grade's per-test outcomes and baseline comparison, the
 benchmark's Known Defect manifest and its attribution data, so it is never stored: a
@@ -355,24 +358,29 @@ def derive(grade: Grade, data: ScoringData | None) -> dict:
             implementation.setdefault(attribution.card("target", test_id), []).append(
                 (test_id, False)
             )
+    dependencies_pass = {}
+    for host in sorted(dependencies):
+        dependencies_pass[host] = True
+        for suite, test_id in sorted(dependencies[host]):
+            if not _passes(test_id, grade.nodes[suite], not_run[suite]):
+                dependencies_pass[host] = False
+                fail(host, "dependency", f"{suite}:{test_id}")
+
     implemented = []
     for card in sorted(targets):
         tests = implementation.get(card, [])
         for test_id, passed in tests:
             if not passed:
                 fail(card, "implementation", test_id)
-        if tests and all(passed for _, passed in tests):
+        if (
+            (tests or card in dependencies)
+            and all(passed for _, passed in tests)
+            and dependencies_pass.get(card, True)
+        ):
             implemented.append(card)
 
-    fixed = []
-    for host in sorted(dependencies):
-        passed = True
-        for suite, test_id in sorted(dependencies[host]):
-            if not _passes(test_id, grade.nodes[suite], not_run[suite]):
-                passed = False
-                fail(host, "dependency", f"{suite}:{test_id}")
-        if passed:
-            fixed.append(host)
+    hosts = sorted(set(dependencies) - targets)
+    fixed = [host for host in hosts if dependencies_pass[host]]
 
     broken = set()
     for suite in ("fdn", "engine"):
@@ -383,7 +391,7 @@ def derive(grade: Grade, data: ScoringData | None) -> dict:
             broken.add(card)
             fail(card, "collateral", f"{suite}:{test_id}")
 
-    denominator = len(targets) + len(dependencies)
+    denominator = len(targets) + len(hosts)
     return {
         "available": True,
         "score": (len(implemented) + len(fixed) - len(broken)) / denominator,
@@ -395,7 +403,7 @@ def derive(grade: Grade, data: ScoringData | None) -> dict:
         "broken": len(broken),
         "denominator": denominator,
         "targets": sorted(targets),
-        "host_cards": sorted(dependencies),
+        "host_cards": hosts,
         "failing_tests": {card: failing[card] for card in sorted(failing)},
         "dependency_tests_left_out": left_out,
         "scoring_data_digest": data.digest,
