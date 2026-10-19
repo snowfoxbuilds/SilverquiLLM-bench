@@ -44,6 +44,10 @@ Net Card Score = (Cards Implemented + Cards Fixed − Cards Broken)
 | Known-Best Workspace with the Test Oracle Impls | 1 |
 
 There is no floor: a run that breaks more existing cards than it makes work scores below 0, and a run that wrecks the engine shows it (grilling 2026-10-14).
+
+Every target card has at least one Implementation Test the unmodified Workspace fails, so the unmodified Workspace scores 0.
+A target card whose tests mostly depend on a Known Defect, such as fra-hard-v2's Inside Information on X costs, also gets Implementation Tests of its other behaviour that pass whether or not the defect is fixed (grilling 2026-10-19).
+
 A candidate's leaderboard score is the mean Net Card Score over the runs its analysis counts, from one Cohort graded on one grading-inputs digest, shown with the run count; there are no significance tests or confidence intervals.
 Which runs count is the analysis's call, made from run attributes in the Results Repo, and a low score never leaves a run out.
 
@@ -78,13 +82,14 @@ Every test the score counts has exactly one Attributed Card, so that one broken 
 | Engine Collateral Test | The base Workspace card hosting its mechanic |
 
 - A mechanic is roughly one keyword or one rules subsection, such as trample, the legend rule or flashback; the grouping is best-effort.
-- No card hosts two mechanics.
+- No card but a basic land hosts two mechanics.
   A mechanic's Collateral Tests and the Dependency Tests of its own Known Defect are one mechanic and share its card, which can then be fixed and broken at once.
 - Each related Known Defect has its own host card; two related defects share one only when no other card fits, and that card is fixed only when both are.
 - A test that exercises several mechanics counts toward the mechanic its assertion checks.
   A test involving several target cards counts toward the main card it tests, or is split into separate tests.
-- Rules that no card's text names, such as turn structure, game start and end, playing lands and the mana pool, are hosted on the basic lands, one rule per land.
-- Audited Engine Tests that check engine internals rather than a rules mechanic, such as the decision data layer, the card registry, the `card_impl.py` lint and the zone containers, are grouped by file onto cards that host nothing else, basic lands first, so their failures count too.
+- Rules that no card's text names, such as turn structure, game start and end, playing lands and the mana pool, are hosted on the basic lands and never on other cards, so a failing basic land always means engine breakage.
+  Several rules may share a land; engine breakage is rare, and a land broken twice still counts once (grilling 2026-10-19).
+- Audited Engine Tests that check engine internals rather than a rules mechanic, such as the decision data layer, the card registry, the `card_impl.py` lint and the zone containers, are grouped by file onto basic lands or onto cards that host nothing else, so their failures count too.
 - Host cards are base Workspace cards other than the benchmark's targets.
 
 The attribution is host-only benchmark data (see [KNOWN-BEST-ENGINE.md](KNOWN-BEST-ENGINE.md) → Attribution data).

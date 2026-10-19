@@ -38,6 +38,7 @@ Breaking behavior that worked is now a collateral mistake, measured by Collatera
 - Re-grades already published under the Results Repo's `regrades/` keep the keys of the bench that graded them until they are graded again.
 - Frozen benchmarks keep their bytes: hob-medium, fra-hard v1 and SOS, including their `data/fdn_regression_coverage.json` files and fra-hard v1's schema version 1 manifest.
 - Every benchmark Workspace keeps its agent-visible bytes, smoke's included, so a benchmark's runs stay in one default cohort, including the "Regression tests for FDN …" headers of its FDN Reference Tests.
+- The historical `--image` lineage's run summary (`silverquillm legacy`, `results.py`) keeps its keys, since that format is frozen.
 - The ordinary software sense of "regression" is not part of the rename: regression guards in comments, and test files such as `test_known_best_gameplay_regressions.py`.
 - History keeps its words: every Amendments log and Relevant PRs entry, the incident entries of KNOWN-ISSUES.md, `KEY_DECISIONS.md`, the legacy SOS results under `docker/`, the Results Repo's analyses and the published hob-medium article.
 - The glossary lists the retired names as terms to avoid.

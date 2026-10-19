@@ -18,11 +18,12 @@ A Benchmark Run's headline is its Net Card Score, in units of working cards:
 - Every Audited Test is an Implementation Test (a target-card test that depends on no Known Defect), a Dependency Test (one that fails because of a Known Defect) or a Collateral Test (an FDN or engine Audited Test the unmodified Workspace passes).
   Which target-card tests depend on a Known Defect is found by putting the defect back into the Test Oracle Workspace; only Known Defects are dependencies, and an engine mechanic a target card needs but the baseline lacks is part of that card's implementation.
 - Every counted test has one Attributed Card. Collateral Tests are one group across the FDN and engine suites, so every engine breakage shows up as a broken existing card.
-  The tests of one mechanic, or of one related Known Defect, share one card, and no card hosts two mechanics; the grouping is best-effort.
+  The tests of one mechanic, or of one related Known Defect, share one card, and no card but a basic land hosts two mechanics; the grouping is best-effort.
+  Rules no card's text names are hosted only on basic lands, so a failing basic land always means engine breakage.
 - Only related Known Defects earn Cards Fixed: those some target-card test depends on.
   Dependency Tests of other Known Defects, and those that also depend on one, are left out.
 - Each count is all-or-nothing per card.
-- An unmodified Workspace scores 0 and the Known-Best Workspace with the Test Oracle Impls scores 1. There is no floor.
+- An unmodified Workspace scores 0, because every target card has an Implementation Test it fails, and the Known-Best Workspace with the Test Oracle Impls scores 1. There is no floor.
 - The score is derived when read, from a Run Record's per-test outcomes, the baseline reference grade and the benchmark's attribution and relatedness data; Run Records do not store it.
 - It applies from fra-hard-v2 on. hob-medium, fra-hard v1 and SOS keep the results they reported.
 
