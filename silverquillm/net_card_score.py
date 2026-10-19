@@ -207,29 +207,56 @@ def _unevaluated(value: Any, where: str) -> bool:
 
 def _comparison(value: Any) -> Mapping[str, Any] | None:
     """A baseline comparison under its current names; a schema 2 ``combined_regression``
-    keeps ``regressed``/``test_nodes`` under the retired suite keys."""
+    keeps ``regressed``/``test_nodes`` under the retired suite keys.
+
+    Only a grade with no comparison at all reads as None, and a suite the broken tests
+    omit broke nothing. Every value present must have the shape the bench writes, so a
+    damaged comparison is never read as one that found nothing broken.
+    """
     if value is None:
         return None
-    value = _mapping(value, "baseline comparison")
-    if value.get("available") is not True:
+    where = "baseline comparison"
+    if not isinstance(value, Mapping):
+        raise MalformedGrade(f"{where} must be an object")
+    available = value.get("available")
+    if not isinstance(available, bool):
+        raise MalformedGrade(f"{where}.available must be a boolean")
+    if not available:
         reason = value.get("reason")
+        if not isinstance(reason, str):
+            raise MalformedGrade(f"{where}.reason must be a string")
         return {"available": False, "reason": _RETIRED_REASONS.get(reason, reason)}
     if "broken" in value:
-        broken = _mapping(value["broken"], "baseline comparison.broken")
+        broken = _container(value["broken"], f"{where}.broken")
+        suites = {suite: (suite, f"{where}.broken.{suite}") for suite in ("fdn", "engine")}
+    elif "regressed" in value:
+        regressed = _container(value["regressed"], f"{where}.regressed")
+        if "test_nodes" not in regressed:
+            raise MalformedGrade(f"{where}.regressed.test_nodes is missing")
+        broken = _container(regressed["test_nodes"], f"{where}.regressed.test_nodes")
+        suites = {
+            new: (old, f"{where}.regressed.test_nodes.{old}")
+            for old, new in _RETIRED_COMPARISON_KEYS.items()
+        }
     else:
-        regressed = _mapping(value.get("regressed"), "baseline comparison.regressed")
-        retired = _mapping(regressed.get("test_nodes"), "baseline comparison.regressed.test_nodes")
-        broken = {new: retired.get(old) for old, new in _RETIRED_COMPARISON_KEYS.items()}
+        raise MalformedGrade(f"{where} has no broken tests")
     return {
         "available": True,
-        "broken": {suite: _ids(broken.get(suite), suite) for suite in ("fdn", "engine")},
+        "broken": {suite: _ids(broken, key, at) for suite, (key, at) in suites.items()},
     }
 
 
-def _ids(value: Any, suite: str) -> list[str]:
-    where = f"baseline comparison.broken.{suite}"
-    if value is None:
+def _container(value: Any, where: str) -> Mapping:
+    if not isinstance(value, Mapping):
+        raise MalformedGrade(f"{where} must be an object")
+    return value
+
+
+def _ids(container: Mapping, key: str, where: str) -> list[str]:
+    """The test ids under ``key``; a suite the container omits broke nothing."""
+    if key not in container:
         return []
+    value = container[key]
     if not isinstance(value, list) or not all(isinstance(test, str) for test in value):
         raise MalformedGrade(f"{where} must be a list of test ids")
     return list(value)

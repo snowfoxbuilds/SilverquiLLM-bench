@@ -127,7 +127,7 @@ The score is unavailable, with a reason, when:
 | `suite_not_evaluated` | The bench could not grade the target-card suite |
 | `no_scoring_data` | The benchmark has no attribution data or no schema version 2 Known Defect manifest (SOS, hob-medium, fra-hard v1) |
 | `scoring_data_invalid: <why>` | The benchmark's scoring data breaks its schema |
-| `unreadable_grade` | The record or re-grade cannot be read |
+| `unreadable_grade` | The record or re-grade cannot be read, or a structure the score reads, its baseline comparison included, has the wrong shape |
 
 ### Run Record results
 

@@ -605,8 +605,38 @@ def test_score_paths_reads_records_and_regrade_outputs(tmp_path, data, monkeypat
         lambda scores, comparison: scores["fdn"]["cards"].update(fdn_10=[]),
         lambda scores, comparison: comparison.update(broken=["fdn_10/tests.py::test_plain"]),
         lambda scores, comparison: comparison["broken"].update(engine="test_zones.py"),
+        lambda scores, comparison: comparison["broken"].update(fdn=None),
+        lambda scores, comparison: comparison.update(broken=None),
+        lambda scores, comparison: comparison.pop("broken"),
+        lambda scores, comparison: comparison.update(available="true"),
+        lambda scores, comparison: comparison.pop("available"),
+        lambda scores, comparison: _replace(comparison, {"available": False, "reason": []}),
+        lambda scores, comparison: _replace(comparison, {"available": False, "reason": {}}),
+        lambda scores, comparison: _replace(comparison, {"available": False}),
+        lambda scores, comparison: _replace(comparison, {"available": True, "regressed": None}),
+        lambda scores, comparison: _replace(
+            comparison, {"available": True, "regressed": {"test_nodes": None}}
+        ),
+        lambda scores, comparison: _replace(comparison, {"available": True, "regressed": {}}),
     ],
-    ids=["card-test-nodes", "engine-node", "card", "comparison", "comparison-suite"],
+    ids=[
+        "card-test-nodes",
+        "engine-node",
+        "card",
+        "comparison",
+        "comparison-suite",
+        "comparison-suite-null",
+        "broken-null",
+        "broken-missing",
+        "available-string",
+        "available-missing",
+        "reason-list",
+        "reason-object",
+        "reason-missing",
+        "retired-regressed-null",
+        "retired-test-nodes-null",
+        "retired-test-nodes-missing",
+    ],
 )
 def test_one_malformed_grade_does_not_abort_the_batch(tmp_path, data, monkeypatch, malform):
     """A malformed record or regrade output is unreadable on its own row; the rest score."""
@@ -646,6 +676,104 @@ def test_one_malformed_grade_does_not_abort_the_batch(tmp_path, data, monkeypatc
     ]
     assert rows[0]["scoring_data_digest"] == data.digest
     assert [row["score"] for row in rows if row["available"]] == [1, 1]
+
+
+def _replace(comparison: dict, value: dict) -> None:
+    comparison.clear()
+    comparison.update(value)
+
+
+def _batch(tmp_path, comparisons):
+    """One record and one regrade output per comparison, in that order, then a valid pair."""
+    results = tmp_path / "results" / CANDIDATE
+    regrades = tmp_path / "regrades" / ("d" * 64) / CANDIDATE
+    regrades.mkdir(parents=True)
+    valid = _comparison(ORACLE_FAILS)
+    for i, comparison in enumerate([*comparisons, valid]):
+        _write_record(results / f"run{i}", _scores(ORACLE_FAILS), comparison)
+        output = {
+            "run_id": f"run{i}",
+            "candidate_hash": CANDIDATE,
+            "benchmark": "bench",
+            "scores": _scores(ORACLE_FAILS),
+            "baseline_comparison": comparison,
+        }
+        (regrades / f"run{i}.json").write_text(json.dumps(output))
+    return [tmp_path / "results", tmp_path / "regrades"]
+
+
+@pytest.mark.parametrize(
+    ("comparison", "reason"),
+    [
+        ({"available": False, "reason": "baseline_incomplete"}, "baseline_incomplete"),
+        (
+            {"available": False, "reason": "baseline_grading_failed:TypeError"},
+            "baseline_grading_failed:TypeError",
+        ),
+        ({"available": False, "reason": "regression_not_evaluated"}, "suite_not_evaluated"),
+    ],
+)
+def test_a_valid_unavailable_comparison_keeps_its_reason(
+    tmp_path, data, monkeypatch, comparison, reason
+):
+    import silverquillm.net_card_score as module
+
+    monkeypatch.setattr(module, "benchmark_scoring_data", lambda root, benchmark: data)
+    rows = list(module.score_paths(_batch(tmp_path, [comparison]), tmp_path))
+    assert [(row["kind"], row["available"], row.get("reason")) for row in rows] == [
+        ("record", False, reason),
+        ("record", True, None),
+        ("regrade", False, reason),
+        ("regrade", True, None),
+    ]
+
+
+@pytest.mark.parametrize(
+    "comparison",
+    [
+        {"available": True, "broken": {}},
+        {
+            "available": True,
+            "fixed": {"fdn": [], "engine": []},
+            "broken": {"fdn": [], "engine": []},
+        },
+        {"available": True, "regressed": {"count": 0, "test_nodes": {}}},
+    ],
+    ids=["empty", "empty-suites", "retired-empty"],
+)
+def test_an_empty_breakage_mapping_scores(tmp_path, data, monkeypatch, comparison):
+    """A comparison that found nothing broken is valid, under either naming."""
+    import silverquillm.net_card_score as module
+
+    monkeypatch.setattr(module, "benchmark_scoring_data", lambda root, benchmark: data)
+    rows = list(module.score_paths(_batch(tmp_path, [comparison]), tmp_path))
+    assert [(row["available"], row["score"], row["broken"]) for row in rows] == [(True, 1, 0)] * 4
+
+
+def test_the_command_continues_past_a_malformed_comparison(tmp_path, data, monkeypatch):
+    from click.testing import CliRunner
+
+    import silverquillm.net_card_score as module
+    from silverquillm.cli import main
+
+    monkeypatch.setattr(module, "benchmark_scoring_data", lambda root, benchmark: data)
+    paths = _batch(
+        tmp_path, [{"available": False, "reason": []}, {"available": True, "broken": None}]
+    )
+    outcome = CliRunner().invoke(
+        main, ["net-card-score", "--bench-root", str(tmp_path), *map(str, paths)]
+    )
+    assert outcome.exit_code == 0, outcome.output
+    rows = [json.loads(line) for line in outcome.output.splitlines()]
+    assert [(row["kind"], row["run_id"], row.get("reason")) for row in rows] == [
+        ("record", "run0", "unreadable_grade"),
+        ("record", "run1", "unreadable_grade"),
+        ("record", "run2", None),
+        ("regrade", "run0", "unreadable_grade"),
+        ("regrade", "run1", "unreadable_grade"),
+        ("regrade", "run2", None),
+    ]
+    assert all(row["scoring_data_digest"] == data.digest for row in rows)
 
 
 def test_an_omitted_suite_or_comparison_is_not_malformed(data):
@@ -747,3 +875,35 @@ def test_the_regrade_summary_reports_each_cohorts_mean_score(data):
     assert (
         "net_card_score" not in regrade.summarize([output("r1", set())], {}, "bench")["cohorts"][0]
     )
+
+
+@pytest.mark.parametrize(
+    "comparison",
+    [{"available": False, "reason": []}, {"available": True, "broken": None}],
+    ids=["reason-list", "broken-null"],
+)
+def test_the_regrade_summary_leaves_a_malformed_comparison_out_of_the_mean(data, comparison):
+    from silverquillm.karn import regrade
+
+    def output(run_id, baseline_comparison):
+        return {
+            "run_id": run_id,
+            "candidate_hash": CANDIDATE,
+            "candidate_name": "candidate",
+            "source": {
+                "grading_inputs_digest": "sha256:" + "a" * 64,
+                "scores": {name: {"pass_rate": None} for name in ("target", "fdn", "engine")},
+            },
+            "scores": _scores(ORACLE_FAILS),
+            "baseline_comparison": baseline_comparison,
+        }
+
+    summary = regrade.summarize(
+        [output("r1", comparison), output("r2", _comparison(ORACLE_FAILS))],
+        {},
+        "bench",
+        scoring=data,
+    )
+    (cohort,) = summary["cohorts"]
+    assert cohort["net_card_score"]["scored_runs"] == 1
+    assert cohort["net_card_score"]["mean_score"] == 1.0
