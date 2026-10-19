@@ -509,3 +509,100 @@ def test_a_target_hosting_the_defect_its_tests_depend_on_passes(related):
     )
     fixture.write_manifest(related.root, value)
     assert implementation_problems(related) == []
+
+
+# A related lifegain defect hosted on hob_1, whose engine Dependency Test an unrelated defect
+# also lists, so the score leaves that test out (SCORING.md → Test classes).
+SHARED_ENGINE = {
+    "id": "engine-shared",
+    "description": "Another defect the engine lifegain test also fails on.",
+    "rules": ["CR 119.3"],
+    "kind": "seeded",
+    "failing_tests": {"engine": [fixture.ENGINE_DEFECT]},
+    "target_tests": [],
+    "host_card": None,
+}
+# A target Dependency Test the unmodified Workspace passes despite the defect.
+PASSING_DEPENDENCY = (
+    "from card_impl import effect\nfrom engine.rules import lifegain\n\n\n"
+    "def test_effect():\n    assert effect() == 'done'\n\n\n"
+    "def test_effect_gains_life():\n    assert lifegain(3) >= 2\n"
+)
+
+
+def _hosted_on_target(related, *, shared: bool, target_tests: str, also_hosted_on=None):
+    """``related`` with hob_1 implemented and hosting the lifegain defect; ``shared`` also
+    lists its engine test under an unrelated defect, and ``also_hosted_on`` (``first`` or
+    ``last``) lists its target test under a second related defect hosted on fdn_2."""
+    (related.root / "workspace/cards/hob/hob_1/card_impl.py").write_text(fixture.TARGET)
+    (related.root / "data/tests/audited/hob/hob_1/tests.py").write_text(target_tests)
+    value = copy.deepcopy(fixture.MANIFEST)
+    value["defects"][0].update(target_tests=[LIFEGAIN_TARGET], host_card="hob_1")
+    if also_hosted_on:
+        value["defects"][1].update(target_tests=[LIFEGAIN_TARGET], host_card="fdn_2")
+        if also_hosted_on == "first":
+            value["defects"].reverse()
+    if shared:
+        value["defects"].append(copy.deepcopy(SHARED_ENGINE))
+    fixture.write_manifest(related.root, value)
+    (related.root / "data/attribution.json").write_text(
+        json.dumps({"schema_version": 1, "engine": {"test_rules.py": "fdn_2"}, "fdn": {}})
+    )
+    return related
+
+
+def _derive_implements(benchmark) -> bool:
+    """Whether the score credits hob_1 to the unmodified Workspace."""
+    from silverquillm.net_card_score import Grade, derive, load_scoring_data
+
+    workspace = benchmark.root / "workspace"
+    nodes = {
+        suite: dict(audited_outcomes(benchmark, workspace, suite).nodes)
+        for suite in ("target", "fdn", "engine")
+    }
+    grade = Grade(
+        nodes,
+        {suite: () for suite in nodes},
+        frozenset(),
+        {"available": True, "broken": {"fdn": [], "engine": []}},
+    )
+    return (
+        "hob_1" in derive(grade, load_scoring_data(benchmark.root, ["hob_1"]))["cards_implemented"]
+    )
+
+
+def test_a_dependency_shared_with_an_unrelated_defect_is_not_counted(related):
+    """The engine test fails, but counts toward nothing, so hob_1 is implemented for free."""
+    kd = _hosted_on_target(related, shared=True, target_tests=PASSING_DEPENDENCY)
+    assert implementation_problems(kd) == [
+        "hob_1: no test counting toward it fails on the unmodified Workspace"
+    ]
+    assert _derive_implements(kd)
+
+
+def test_a_failing_dependency_no_unrelated_defect_lists_counts(related):
+    kd = _hosted_on_target(related, shared=False, target_tests=PASSING_DEPENDENCY)
+    assert implementation_problems(kd) == []
+    assert not _derive_implements(kd)
+
+
+@pytest.mark.parametrize("also_hosted_on", [None, "first", "last"])
+def test_a_failing_target_dependency_counts_when_every_other_is_left_out(related, also_hosted_on):
+    """With its engine test left out, hob_1's failing target Dependency Test is what keeps
+    it unimplemented, whichever order the defects listing that test come in."""
+    kd = _hosted_on_target(
+        related, shared=True, target_tests=TARGET_TESTS, also_hosted_on=also_hosted_on
+    )
+    assert implementation_problems(kd) == []
+    assert not _derive_implements(kd)
+
+
+@pytest.mark.parametrize("also_hosted_on", ["first", "last"])
+def test_a_passing_target_dependency_hosted_twice_is_reported(related, also_hosted_on):
+    kd = _hosted_on_target(
+        related, shared=True, target_tests=PASSING_DEPENDENCY, also_hosted_on=also_hosted_on
+    )
+    assert implementation_problems(kd) == [
+        "hob_1: no test counting toward it fails on the unmodified Workspace"
+    ]
+    assert _derive_implements(kd)

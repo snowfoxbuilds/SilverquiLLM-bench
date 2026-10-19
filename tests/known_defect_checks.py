@@ -9,8 +9,8 @@ CI checks that apply to every benchmark built from the Known-Best Workspace
    the manifest lists, and passes the rest of the FDN and engine suites.
 3. :func:`defect_problems` — putting one Known Defect back into the Test Oracle
    Workspace fails exactly the target-card tests its entry lists.
-5. :func:`implementation_problems` — every target card has at least one Implementation
-   Test the unmodified Workspace fails, so the unmodified Workspace scores 0.
+5. :func:`implementation_problems` — every target card has at least one test counting
+   toward it that the unmodified Workspace fails, so the unmodified Workspace scores 0.
 
 Each call grades one suite, or one defect's target-card suite, in-process, so a
 Platform Test parametrized over them stays within the pytest timeout. ``[]`` means the
@@ -195,7 +195,9 @@ def defect_problems(benchmark, defect_id: str, scratch: Path, *, timeout: int = 
     try:
         apply_patch(patched, patch)
     except PortError as error:
-        return [f"{patch.relative_to(benchmark.root)} does not apply to the Test Oracle Workspace: {error}"]
+        return [
+            f"{patch.relative_to(benchmark.root)} does not apply to the Test Oracle Workspace: {error}"
+        ]
     try:
         outcomes = audited_outcomes(benchmark, patched, "target", timeout=timeout)
     finally:
@@ -209,7 +211,11 @@ def defect_problems(benchmark, defect_id: str, scratch: Path, *, timeout: int = 
                 for node in expected
                 if node not in outcomes.nodes
             ),
-            *("listed but passes: " + node for node in expected if outcomes.nodes.get(node) == "pass"),
+            *(
+                "listed but passes: " + node
+                for node in expected
+                if outcomes.nodes.get(node) == "pass"
+            ),
             *(
                 "fails but is not listed: " + node
                 for node, outcome in outcomes.nodes.items()
@@ -236,27 +242,41 @@ def implementation_problems(benchmark, *, timeout: int = 240) -> list[str]:
         return [f"no Known Defect manifest at {benchmark.root / MANIFEST}"]
     if manifest.schema_version < 2:
         return [f"schema version {manifest.schema_version} lists no target_tests"]
-    # Target-card Dependency Test -> its target host, or None when it counts toward no target.
-    dependency: dict[str, str | None] = {}
+    # As derive counts them: an FDN or engine Dependency Test also listed under an
+    # unrelated defect counts toward nothing, and a target-card Dependency Test counts
+    # toward the host of every defect listing it.
+    unrelated = {
+        (suite, test)
+        for defect in manifest.defects
+        if not defect.related
+        for suite, tests in defect.failing_tests.items()
+        for test in tests
+    }
+    target_hosts: dict[str, set[str]] = {}
     for defect in manifest.defects:
         for node in defect.target_tests:
-            dependency[node] = defect.host_card if defect.hosted_on_target else None
+            hosts = target_hosts.setdefault(node, set())
+            if defect.hosted_on_target:
+                hosts.add(defect.host_card)
     failing: dict[str, int] = {}
     for defect in manifest.defects:
         if defect.hosted_on_target:
-            failing[defect.host_card] = failing.get(defect.host_card, 0) + sum(
-                map(len, defect.failing_tests.values())
+            counted = sum(
+                (suite, test) not in unrelated
+                for suite, tests in defect.failing_tests.items()
+                for test in tests
             )
+            if counted:
+                failing[defect.host_card] = failing.get(defect.host_card, 0) + counted
     outcomes = audited_outcomes(benchmark, benchmark.root / "workspace", "target", timeout=timeout)
     for node, outcome in outcomes.nodes.items():
-        listed = node if node in dependency else _function(node)
-        if listed in dependency:
-            card = dependency[listed]
-            if card is None:
-                continue
+        listed = node if node in target_hosts else _function(node)
+        if listed in target_hosts:
+            cards = target_hosts[listed]
         else:
-            card = attribution.card("target", node) if attribution else node.split("/", 1)[0]
-        failing[card] = failing.get(card, 0) + (outcome == "fail")
+            cards = {attribution.card("target", node) if attribution else node.split("/", 1)[0]}
+        for card in cards:
+            failing[card] = failing.get(card, 0) + (outcome == "fail")
     targets = sorted(
         f"{code}_{number}" for code, number in target_cards(benchmark.target_set, benchmark.cards)
     )
