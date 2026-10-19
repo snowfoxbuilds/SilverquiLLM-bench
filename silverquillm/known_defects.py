@@ -103,12 +103,19 @@ class KnownDefect:
     """Target-card tests that fail once the defect is put back into the Test Oracle
     Workspace; always empty in a schema version 1 manifest."""
     host_card: str | None = None
-    """The card hosting the defect's Dependency Tests; set exactly when it is related."""
+    """The card hosting the defect's Dependency Tests; set exactly when it is related.
+    It is the target whose suite holds every one of ``target_tests`` when that target
+    cannot be tested without the fix (SCORING.md → Attributed Cards)."""
 
     @property
     def related(self) -> bool:
         """At least one target-card test depends on the defect (SCORING.md → Test classes)."""
         return bool(self.target_tests)
+
+    @property
+    def hosted_on_target(self) -> bool:
+        """The defect is part of implementing its host, a target card (SCORING.md → Counting)."""
+        return self.related and all(node.split("/", 1)[0] == self.host_card for node in self.target_tests)
 
 
 @dataclass(frozen=True)
@@ -240,6 +247,9 @@ def _defect(entry, fail, seen: set[str], version: int) -> KnownDefect:
         if target_tests:
             if not isinstance(host_card, str) or not CARD_ID.fullmatch(host_card):
                 fail("host_card must be a card id like 'fdn_122' when target_tests is non-empty")
+            suites = {node.split("/", 1)[0] for node in target_tests}
+            if host_card in suites and suites != {host_card}:
+                fail("a target host_card must hold every one of the defect's target_tests")
         elif host_card is not None:
             fail("host_card must be null when target_tests is empty")
     return KnownDefect(

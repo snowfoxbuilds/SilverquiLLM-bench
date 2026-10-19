@@ -96,8 +96,19 @@ def test_the_example_manifest_loads_and_unions_failing_tests(tmp_path):
         "hob_86/tests.py::test_a_sacrificed_food_is_a_creature_card_again",
     )
     assert not unrelated.related and unrelated.host_card is None
+    assert not related.hosted_on_target and not unrelated.hosted_on_target
     with pytest.raises(ValueError):
         manifest.failing_tests("fdn_regression")
+
+
+def test_a_target_may_host_a_defect_its_own_tests_depend_on(tmp_path: Path):
+    value = copy.deepcopy(EXAMPLE)
+    value["defects"][0].update(
+        target_tests=["hob_76/tests.py::test_x_two_exiles_two", "hob_76/tests.py::test_x_paid"],
+        host_card="hob_76",
+    )
+    defect = load_known_defects(manifest_root(tmp_path, value)).defects[0]
+    assert defect.related and defect.hosted_on_target and defect.host_card == "hob_76"
 
 
 def test_a_schema_version_1_manifest_keeps_its_keys_and_has_no_related_defects(tmp_path):
@@ -210,6 +221,14 @@ def _engine(node):
         (
             lambda value: value["defects"][1].__setitem__("host_card", "fdn_1"),
             "host_card must be null",
+        ),
+        (
+            _defect(
+                lambda d: d.update(
+                    target_tests=["hob_86/tests.py::t", "hob_76/tests.py::t"], host_card="hob_86"
+                )
+            ),
+            "a target host_card must hold every one",
         ),
         (_engine("test_combat.py"), "malformed Audited Test id"),
         (_engine("../test_combat.py::test_x"), "malformed Audited Test id"),

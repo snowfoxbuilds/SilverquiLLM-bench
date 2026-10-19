@@ -41,13 +41,16 @@ def test_known_defect_manifest_is_valid(name: str) -> None:
 @pytest.mark.parametrize("name", SCHEMA_2)
 def test_target_tests_and_host_cards_name_real_cards(name: str) -> None:
     """``target_tests`` are target-card tests, and a related defect's host card is a base
-    Workspace card other than a target (KNOWN-BEST-ENGINE.md → Manifest)."""
+    Workspace card other than a target, or the target holding all of them
+    (KNOWN-BEST-ENGINE.md → Manifest)."""
     benchmark = load_benchmark(REPO, name)
     targets = {f"{code}_{number}" for code, number in target_cards(benchmark.target_set, benchmark.cards)}
     cards = {path.name for path in (benchmark.root / "workspace/cards").glob("*/*") if path.is_dir()}
     for defect in load_known_defects(benchmark.root).defects:
         assert {node.split("/", 1)[0] for node in defect.target_tests} <= targets, defect.id
-        if defect.related:
+        if defect.hosted_on_target:
+            assert defect.host_card in targets, defect.id
+        elif defect.related:
             assert defect.host_card in cards - targets, defect.id
 
 

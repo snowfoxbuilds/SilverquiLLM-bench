@@ -97,7 +97,7 @@
         "hob_76/tests.py::test_x_cards_are_exiled_from_the_top_of_the_opponents_library",
         "hob_76/tests.py::test_x_greater_than_the_library_exiles_what_there_is"
       ],
-      "host_card": "fdn_236"
+      "host_card": "hob_76"
     },
     {
       "id": "raid-history-not-recorded",
