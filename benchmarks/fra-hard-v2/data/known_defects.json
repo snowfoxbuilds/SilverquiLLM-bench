@@ -338,7 +338,9 @@
       "failing_tests": {
         "fdn": [
           "fdn_17/tests.py::TestHeraldOfEternalDawnCantLose::test_its_controller_at_zero_life_does_not_lose",
-          "fdn_17/tests.py::TestHeraldOfEternalDawnCantLose::test_its_controller_loses_once_it_leaves"
+          "fdn_17/tests.py::TestHeraldOfEternalDawnCantLose::test_its_controller_loses_once_it_leaves",
+          "fdn_17/tests.py::TestHeraldOfEternalDawnCantLose::test_its_controller_drawing_from_an_empty_library_does_not_lose",
+          "fdn_17/tests.py::TestHeraldOfEternalDawnCantLose::test_a_draw_made_with_it_does_not_cost_the_game_once_it_leaves"
         ]
       },
       "target_tests": [

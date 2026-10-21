@@ -186,12 +186,12 @@ def _sba_draw_from_empty_library(game: GameState) -> bool:
     """A player who attempted to draw from an empty library loses the game."""
     action_taken = False
     for player in game.players:
-        if (
-            hasattr(player, "drawn_from_empty_library")
-            and player.drawn_from_empty_library
-            and not player.has_lost
-            and not _cant_lose(player)
-        ):
+        if not player.drawn_from_empty_library:
+            continue
+        # Rule 704.5b counts only the draws since the last check: a draw that a
+        # player who can't lose survived must not cost them the game later.
+        player.drawn_from_empty_library = False
+        if not player.has_lost and not _cant_lose(player):
             player.has_lost = True
             action_taken = True
     return action_taken

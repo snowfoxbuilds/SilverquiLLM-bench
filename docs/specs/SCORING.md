@@ -103,7 +103,7 @@ The attribution is host-only benchmark data (see [KNOWN-BEST-ENGINE.md](KNOWN-BE
 
 | Count | Cards |
 | --- | --- |
-| Cards Implemented | Target cards all of whose attributed Implementation Tests pass, and, for a target hosting a related Known Defect, all of whose Dependency Tests too |
+| Cards Implemented | Target cards all of whose attributed Implementation Tests and Dependency Tests pass |
 | Cards Fixed | Other cards hosting a related Known Defect all of whose attributed Dependency Tests pass |
 | Cards Broken | Cards with at least one attributed Collateral Test failing, or no longer executed |
 
