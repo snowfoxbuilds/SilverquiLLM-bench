@@ -118,7 +118,7 @@ CI checks, for every benchmark in scope:
 3. Putting each Known Defect back into the Test Oracle Workspace fails exactly the target-card tests its entry lists (grilling 2026-10-14).
 4. Every test resolves to exactly one Attributed Card by its class, and every related Known Defect names a host card (grilling 2026-10-14):
    - a target-card Implementation Test to a target, its own or another through `data/target_attribution.json`;
-   - a counted Dependency Test to its Known Defect's `host_card`, a target only under the exception in the manifest rules below;
+   - a counted Dependency Test to its Known Defect's `host_card`, a target only under the exception in the manifest rules below, where a target-card test of the defect counts toward a target as an Implementation Test would;
    - every FDN and engine Audited Test, through `data/attribution.json` or its own card, to a base Workspace card other than a target, which it counts toward whenever it is a Collateral Test;
    - every attribution key names an Audited Test.
 5. Every target card has at least one test counting toward it that the unmodified Workspace fails (grilling 2026-10-19).
@@ -192,6 +192,7 @@ Each Collateral Test and target-card Implementation Test counts toward one Attri
 - A value of `data/attribution.json` is a base Workspace card id, never one of the benchmark's targets; a value of `data/target_attribution.json` is a target.
 - An FDN or engine test is attributed whatever its class, since its class depends on the manifest; while it is a Dependency Test it counts toward its Known Defect's `host_card` instead, and while it depends on an unrelated defect it counts toward nothing.
 - `data/target_attribution.json` has the same shape with one `target` map; a benchmark with no overrides ships an empty map.
+  It also names the target that a target-card Dependency Test of a defect hosted on a target counts toward.
 
 ### Baseline reference grade
 

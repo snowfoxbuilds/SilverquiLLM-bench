@@ -244,7 +244,8 @@ def implementation_problems(benchmark, *, timeout: int = 240) -> list[str]:
         return [f"schema version {manifest.schema_version} lists no target_tests"]
     # As derive counts them: an FDN or engine Dependency Test also listed under an
     # unrelated defect counts toward nothing, and a target-card Dependency Test counts
-    # toward the host of every defect listing it.
+    # toward the target doing most of the work in it for each target-hosted defect
+    # listing it.
     unrelated = {
         (suite, test)
         for defect in manifest.defects
@@ -257,7 +258,7 @@ def implementation_problems(benchmark, *, timeout: int = 240) -> list[str]:
         for node in defect.target_tests:
             hosts = target_hosts.setdefault(node, set())
             if defect.hosted_on_target:
-                hosts.add(defect.host_card)
+                hosts.add(attribution.card("target", node) if attribution else defect.host_card)
     failing: dict[str, int] = {}
     for defect in manifest.defects:
         if defect.hosted_on_target:

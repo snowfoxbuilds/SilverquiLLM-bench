@@ -344,7 +344,7 @@ def derive(grade: Grade, data: ScoringData | None) -> dict:
         for suite, tests in defect.failing_tests.items()
         for test in tests
     }
-    # Host card -> (suite, test id) of every Dependency Test counting toward it.
+    # Card -> (suite, test id) of every Dependency Test counting toward it.
     dependencies: dict[str, set[tuple[str, str]]] = {}
     target_dependencies: set[str] = set()
     for defect in defects:
@@ -353,7 +353,11 @@ def derive(grade: Grade, data: ScoringData | None) -> dict:
         hosted = dependencies.setdefault(defect.host_card, set())
         for suite, tests in defect.failing_tests.items():
             hosted.update((suite, test) for test in tests if (suite, test) not in unrelated)
-        hosted.update(("target", test) for test in defect.target_tests)
+        for test in defect.target_tests:
+            # A defect hosted on a target is part of implementing the targets, so each
+            # of its target-card tests counts toward the target doing most of the work.
+            card = attribution.card("target", test) if defect.host_card in targets else defect.host_card
+            dependencies.setdefault(card, set()).add(("target", test))
         target_dependencies.update(defect.target_tests)
     left_out = sorted(f"{suite}:{test}" for suite, test in unrelated)
 

@@ -49,6 +49,11 @@ class Player(ABC):
         # Granted by an effect such as High Fae Trickster's; cleared and
         # reapplied with continuous effects.
         self.can_cast_as_flash: bool = False
+        # Granted by an effect such as Herald of Eternal Dawn's ("you can't
+        # lose the game and your opponents can't win the game"); cleared and
+        # reapplied with continuous effects.
+        self.cant_lose: bool = False
+        self.cant_win: bool = False
         # Authoritative per-turn record of the instant and sorcery spells THIS
         # player has cast this turn (rule "…instant and sorcery spell you've cast
         # … this turn", e.g. Thousand-Year Storm's copy count). This belongs to

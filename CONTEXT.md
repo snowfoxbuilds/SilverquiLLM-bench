@@ -32,7 +32,7 @@ _Avoid_: "Codex turn" (one native user request can contain many Agent Turns), "t
 **Attributed Card**
 
 The one card an Audited Test counts toward in the Net Card Score (grilling 2026-10-14).
-A target-card Implementation Test counts toward the card doing most of the work in it, even when it sits in another card's suite; a Dependency Test counts toward the card hosting its Known Defect; and a Collateral Test counts toward the base Workspace card hosting its mechanic, which for an FDN Audited Test is normally its own card.
+A target-card Implementation Test counts toward the card doing most of the work in it, even when it sits in another card's suite; a Dependency Test counts toward the card hosting its Known Defect, or, for a defect hosted on a target, a target-card one toward the target doing most of the work in it; and a Collateral Test counts toward the base Workspace card hosting its mechanic, which for an FDN Audited Test is normally its own card.
 The tests of one mechanic, and the Dependency Tests of one related Known Defect, share one card, and no card but a basic land hosts two mechanics, so one broken mechanic is roughly one broken card.
 
 _Avoid_: "owning card", "the test's card" (the suite a test sits in need not be its Attributed Card)

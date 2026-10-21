@@ -1,0 +1,75 @@
+--- a/engine/continuous_effects.py
++++ b/engine/continuous_effects.py
+@@ -363,8 +363,6 @@
+         """
+         for player in game.players:
+             player.can_cast_as_flash = False
+-            player.cant_lose = False
+-            player.cant_win = False
+             for obj in game.get_battlefield(player).get_all():
+                 if _CONTROLLER_BEFORE_EFFECTS in obj.__dict__:
+                     obj.controller = obj.__dict__.pop(_CONTROLLER_BEFORE_EFFECTS)
+--- a/engine/player.py
++++ b/engine/player.py
+@@ -49,11 +49,6 @@
+         # Granted by an effect such as High Fae Trickster's; cleared and
+         # reapplied with continuous effects.
+         self.can_cast_as_flash: bool = False
+-        # Granted by an effect such as Herald of Eternal Dawn's ("you can't
+-        # lose the game and your opponents can't win the game"); cleared and
+-        # reapplied with continuous effects.
+-        self.cant_lose: bool = False
+-        self.cant_win: bool = False
+         # Authoritative per-turn record of the instant and sorcery spells THIS
+         # player has cast this turn (rule "…instant and sorcery spell you've cast
+         # … this turn", e.g. Thousand-Year Storm's copy count). This belongs to
+--- a/engine/state_based_actions.py
++++ b/engine/state_based_actions.py
+@@ -26,22 +26,6 @@
+ # Internal helpers
+ # ---------------------------------------------------------------------------
+ 
+-def _cant_lose(player: Player) -> bool:
+-    """Whether an effect such as Herald of Eternal Dawn's says *player* can't
+-    lose the game; in a two-player game that is also "your opponents can't
+-    win the game"."""
+-    return player.cant_lose
+-
+-
+-def _cancel_losses_that_cannot_happen(game: GameState) -> None:
+-    """A player who can't lose the game doesn't, whatever made them lose
+-    (rule 101.2): an unpaid Slaughter Pact sets ``has_lost`` like any other
+-    effect, and the loss never happens."""
+-    for player in game.players:
+-        if player.has_lost and _cant_lose(player):
+-            player.has_lost = False
+-
+-
+ def _battlefield(game: GameState, player: Player) -> ZoneContainer:
+     """Return *player*'s battlefield zone."""
+     return player.zones[Zone.BATTLEFIELD]
+@@ -102,7 +86,7 @@
+     """A player with 0 or less life loses the game."""
+     action_taken = False
+     for player in game.players:
+-        if player.life <= 0 and not player.has_lost and not _cant_lose(player):
++        if player.life <= 0 and not player.has_lost:
+             player.has_lost = True
+             action_taken = True
+     return action_taken
+@@ -181,7 +165,6 @@
+             hasattr(player, "drawn_from_empty_library")
+             and player.drawn_from_empty_library
+             and not player.has_lost
+-            and not _cant_lose(player)
+         ):
+             player.has_lost = True
+             action_taken = True
+@@ -406,7 +389,6 @@
+     """
+     any_performed = False
+     while not game.is_game_over:
+-        _cancel_losses_that_cannot_happen(game)
+         sba_this_round = False
+         while check_state_based_actions(game):
+             sba_this_round = True

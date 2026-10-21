@@ -76,7 +76,7 @@ Every test the score counts has exactly one Attributed Card, so that one broken 
 | Test | Attributed Card |
 | --- | --- |
 | Target-card Implementation Test | The target card doing most of the work in it, even when the test sits in another card's suite |
-| Dependency Test | The card hosting its Known Defect |
+| Dependency Test | The card hosting its Known Defect; for a defect hosted on a target, a target-card test counts toward the target doing most of the work in it |
 | FDN Collateral Test | Normally its own card |
 | Engine Collateral Test | The base Workspace card hosting its mechanic |
 
@@ -94,6 +94,8 @@ Every test the score counts has exactly one Attributed Card, so that one broken 
 - Host cards are base Workspace cards other than the benchmark's targets, but for a related Known Defect a target card cannot be tested without.
   Such a defect is hosted on that target card, because any agent that tests the card finds the defect: fixing it is part of implementing the card, which counts once (grilling 2026-10-19).
   fra-hard-v2's X-cost defect is hosted on Inside Information, whose effect does nothing while X is always 0.
+- Fixing a defect hosted on a target is part of implementing the targets, so each of its target-card Dependency Tests counts toward the target doing most of the work in it, as an Implementation Test would.
+  fra-hard-v2's Inside Information test of casting an Adventure for life and then its Equipment for mana counts toward Glamdring, Foe-hammer.
 
 The attribution is host-only benchmark data (see [KNOWN-BEST-ENGINE.md](KNOWN-BEST-ENGINE.md) → Attribution data).
 

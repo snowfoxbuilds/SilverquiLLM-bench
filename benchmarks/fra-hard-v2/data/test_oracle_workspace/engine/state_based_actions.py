@@ -26,6 +26,22 @@ if TYPE_CHECKING:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _cant_lose(player: Player) -> bool:
+    """Whether an effect such as Herald of Eternal Dawn's says *player* can't
+    lose the game; in a two-player game that is also "your opponents can't
+    win the game"."""
+    return player.cant_lose
+
+
+def _cancel_losses_that_cannot_happen(game: GameState) -> None:
+    """A player who can't lose the game doesn't, whatever made them lose
+    (rule 101.2): an unpaid Slaughter Pact sets ``has_lost`` like any other
+    effect, and the loss never happens."""
+    for player in game.players:
+        if player.has_lost and _cant_lose(player):
+            player.has_lost = False
+
+
 def _battlefield(game: GameState, player: Player) -> ZoneContainer:
     """Return *player*'s battlefield zone."""
     return player.zones[Zone.BATTLEFIELD]
@@ -86,7 +102,7 @@ def _sba_player_life_zero(game: GameState) -> bool:
     """A player with 0 or less life loses the game."""
     action_taken = False
     for player in game.players:
-        if player.life <= 0 and not player.has_lost:
+        if player.life <= 0 and not player.has_lost and not _cant_lose(player):
             player.has_lost = True
             action_taken = True
     return action_taken
@@ -174,6 +190,7 @@ def _sba_draw_from_empty_library(game: GameState) -> bool:
             hasattr(player, "drawn_from_empty_library")
             and player.drawn_from_empty_library
             and not player.has_lost
+            and not _cant_lose(player)
         ):
             player.has_lost = True
             action_taken = True
@@ -403,6 +420,7 @@ def resolve_state_based_actions(game: GameState) -> bool:
     """
     any_performed = False
     while not game.is_game_over:
+        _cancel_losses_that_cannot_happen(game)
         sba_this_round = False
         while check_state_based_actions(game):
             sba_this_round = True

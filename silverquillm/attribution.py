@@ -11,8 +11,10 @@ of its tests (``docs/specs/SCORING.md`` › Attributed Cards,
   test counts toward when that is not the card whose suite holds it.
 
 A key is an Audited Test id, or a prefix of one ending at a file or class boundary;
-the longest matching key wins. Dependency Tests are not listed: they count toward
-their Known Defect's ``host_card``.
+the longest matching key wins. A Dependency Test counts toward its Known Defect's
+``host_card``, except that a target-card test of a defect hosted on a target counts
+toward the target ``data/target_attribution.json`` names, as an Implementation Test
+would.
 """
 
 from __future__ import annotations
