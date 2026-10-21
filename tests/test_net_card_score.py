@@ -267,6 +267,29 @@ def test_a_target_hosting_an_unfixed_defect_is_not_implemented(hosted):
     assert result["score"] == 1 / 2
 
 
+def test_a_target_hosted_dependency_test_counts_toward_its_attributed_target(tmp_path):
+    root = tmp_path / "attributed" / "bench"
+    (root / "data").mkdir(parents=True)
+    manifest = json.loads(json.dumps(MANIFEST))
+    manifest["defects"][0]["host_card"] = "tgt_2"
+    target_attribution = json.loads(json.dumps(TARGET_ATTRIBUTION))
+    target_attribution["target"]["tgt_2/tests.py::test_returns_again"] = "tgt_1"
+    for name, document in (
+        ("known_defects.json", manifest),
+        ("attribution.json", ATTRIBUTION),
+        ("target_attribution.json", target_attribution),
+    ):
+        (root / "data" / name).write_text(json.dumps(document))
+    data = load_scoring_data(root, ["tgt_1", "tgt_2"])
+    result = _score(data, failing={*ORACLE, "tgt_2/tests.py::test_returns_again"})
+    assert result["cards_implemented"] == ["tgt_2"]
+    assert result["failing_tests"]["tgt_1"] == {
+        "dependency": ["target:tgt_2/tests.py::test_returns_again"]
+    }
+    assert result["denominator"] == 2
+    assert _score(data, failing=ORACLE)["cards_implemented"] == ["tgt_1", "tgt_2"]
+
+
 def test_a_card_local_workaround_does_not_implement_the_hosting_target(hosted):
     result = _score(hosted, failing=BASELINE_FAILS)
     assert result["cards_implemented"] == ["tgt_1"]
@@ -458,8 +481,9 @@ def test_fra_hard_v2_hosts_the_x_cost_defect_on_inside_information():
     assert hosts == {
         "zone-change-keeps-object-state": "fdn_122",
         "x-cost-not-chosen-or-paid": "hob_76",
+        "cant-lose-not-enforced": "fdn_17",
     }
-    assert len(data.targets) + len(set(hosts.values()) - set(data.targets)) == 12
+    assert len(data.targets) + len(set(hosts.values()) - set(data.targets)) == 13
 
 
 # --- Parametrized target cases: the manifest names a case or a whole function -------

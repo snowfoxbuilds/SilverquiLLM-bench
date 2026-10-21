@@ -2260,7 +2260,7 @@ def test_scripted_play_draws_from_an_empty_library_on_a_later_turn():
     script(game, 1, pass_priority())
     run_scripts(game)
     # Drawing from the empty library loses the game (CR 704.5b), which ends it.
-    assert game.step == Step.DRAW and game.players[0].drawn_from_empty_library
+    assert game.step == Step.DRAW and game.players[0].has_lost
     assert game.is_game_over and game.winner is game.players[1]
 
 

@@ -369,6 +369,8 @@ class EffectManager:
         """
         for player in game.players:
             player.can_cast_as_flash = False
+            player.cant_lose = False
+            player.cant_win = False
             for obj in game.get_battlefield(player).get_all():
                 if _CONTROLLER_BEFORE_EFFECTS in obj.__dict__:
                     obj.controller = obj.__dict__.pop(_CONTROLLER_BEFORE_EFFECTS)

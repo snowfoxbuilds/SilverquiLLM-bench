@@ -4,7 +4,6 @@
     "fra_159/tests.py::test_a_slaughter_pact_copy_is_cast_free_and_still_comes_due": "fut_78",
     "fra_64/tests.py::test_an_animated_planeswalker_loses_the_granted_ability": "war_143",
     "fra_64/tests.py::test_the_granted_ability_returns_when_the_animation_ends": "war_143",
-    "hob_76/tests.py::test_a_pact_cast_this_way_still_comes_due_for_its_caster": "fut_78",
     "hob_76/tests.py::test_an_adventure_costs_its_own_mana_value_in_life_and_the_equipment_then_costs_mana": "hob_174"
   }
 }
