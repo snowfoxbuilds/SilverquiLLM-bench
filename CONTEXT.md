@@ -279,7 +279,7 @@ _Avoid_: "Engine Tests" alone (formerly named both the visible and the graded su
 
 The bench's own API-equivalent USD estimate of a Benchmark Run's observed model usage, priced from a versioned model-price table.
 It supports resource-use comparisons and does not represent the actual subscription charge attributable to the run (grilling 2026-09-26).
-It stands beside the Reported Cost as a cross-check, and is the Run Cost when no as-complete Reported Cost exists (ADR-019).
+It checks the Reported Cost on each request the price table prices fully, and is the Run Cost when no Reported Cost exists (ADR-021).
 
 _Avoid_: "billed cost", "subscription cost" for this estimate
 
@@ -531,7 +531,7 @@ _Avoid_: "differential testing" (deprecated XMage approach), "checkpoint validat
 **Reported Cost**
 
 The API-equivalent USD figure a Benchmark Run's native agent CLI reports for its own model requests, such as Claude Code's per-request cost.
-Like the Estimated Cost it is not the subscription charge; unlike it, the bench does not compute it, so it covers pricing the bench's table lacks (ADR-019).
+Like the Estimated Cost it is not the subscription charge; unlike it, the bench does not compute it, so it covers pricing the bench's table lacks (ADR-019, ADR-021).
 Codex reports none.
 
 _Avoid_: "actual cost", "billed cost"
@@ -565,7 +565,7 @@ _Avoid_: "resume notice", "resume header"
 
 **Run Cost**
 
-The cost the bench shows and sums for a Benchmark Run: its Reported Cost when that is at least as complete as its Estimated Cost, otherwise its Estimated Cost (ADR-019).
+The cost the bench shows and sums for a Benchmark Run, recorded as `run_cost`: its Reported Cost whenever the native CLI gave one, otherwise its Estimated Cost (ADR-021).
 
 _Avoid_: "cost" for either component alone when the distinction matters
 

@@ -804,18 +804,21 @@ def test_a_runs_cost_is_the_clis_reported_figure_when_it_has_one():
     assert run.request_costs == ((1_790_000_000_000, Decimal("2.10")),)
 
 
-def test_a_less_complete_reported_figure_gives_way_to_the_estimate():
+def test_a_partial_reported_figure_is_still_the_runs_cost():
     run = summary_of(cost_measurements(("2.10", "partial")))
-    assert (run.cost, run.cost_source) == (Decimal("2.00"), "estimated")
-    assert run.request_costs == ((1_790_000_000_000, Decimal("2.00")),)
-    unpriced = summary_of(
-        cost_measurements(("2.10", "partial"), estimated=None, estimated_completeness="missing")
-    )
-    assert (unpriced.cost, unpriced.cost_source, unpriced.cost_completeness) == (
+    assert (run.cost, run.cost_source, run.cost_completeness) == (
         Decimal("2.10"),
         "reported",
         "partial",
     )
+    assert run.request_costs == ((1_790_000_000_000, Decimal("2.10")),)
+
+
+def test_a_recorded_run_cost_names_its_own_source():
+    measurements = cost_measurements(("2.10", "complete"))
+    measurements["run_cost"] = {**measurements["estimated_cost"], "source": "estimated"}
+    run = summary_of(measurements)
+    assert (run.cost, run.cost_source) == (Decimal("2.00"), "estimated")
 
 
 def test_a_run_without_a_reported_figure_keeps_the_estimate():

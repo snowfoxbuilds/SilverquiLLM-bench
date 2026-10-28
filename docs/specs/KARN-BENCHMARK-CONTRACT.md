@@ -155,7 +155,7 @@ The estimate is a comparison of resource usage and does not claim to allocate th
 Every request is priced at standard-tier rates, whatever speed or service tier served it (grilling 2026-09-28): a flex, fast-mode or priority request counts as its standard-rate equivalent, so estimates compare token usage rather than billing tier. Each request records the tier observed for it, the tier Claude Code's transcript reports or the tier Codex requested in its telemetry, and a request for an unpriced model stays unpriced.
 Missing or incomplete observations remain explicitly missing or incomplete, rather than becoming zero.
 
-A run's Run Cost prefers the native CLI's own figure, its Reported Cost, over the bench's Estimated Cost whenever the Reported Cost is at least as complete; the Estimated Cost stays recorded beside it (ADR-019).
+A run's Run Cost is the native CLI's own figure, its Reported Cost, whenever the CLI gave one, and the bench's Estimated Cost otherwise; the Estimated Cost stays recorded beside it and checks the Reported Cost request by request (ADR-021).
 Claude Code reports an API-equivalent USD figure for every request it makes, compactions and subagents included, so a Claude run records that figure per request and in total; Codex reports none, so a Codex run's Reported Cost is missing and its Run Cost is the Estimated Cost.
 The Reported Cost shares the run's observation reasons but none of the price table's, so a model the table cannot price still has one.
 It is the sum of the CLI's valid figures, each request's charged to one response only; a run with requests but no valid figure has no Reported Cost, never a zero one.
@@ -302,4 +302,5 @@ This consumer contract governs Karn v4 and v5 execution.
 | [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | SilverquiLLM runs Karn constructs without Ozolith; Candidate Bundle execution is removed |
 | [ADR-015](../adr/ADR-015-results-repo-keeps-graded-workspaces-as-diffs.md) | The results repo keeps each graded workspace as a diff from one shared baseline |
 | [ADR-019](../adr/ADR-019-run-cost-prefers-the-native-clis-reported-cost.md) | A run's cost prefers the native CLI's Reported Cost over the bench's Estimated Cost |
+| [ADR-021](../adr/ADR-021-run-cost-is-the-reported-cost-checked-per-request.md) | A run's cost is its Reported Cost whenever the CLI gave one, checked request by request against the Estimated Cost |
 | [ADR-021](../tombstone/ADR-021-rename-regression-to-collateral.md) | Rename record: evaluation-sense "regression" names retired or renamed |

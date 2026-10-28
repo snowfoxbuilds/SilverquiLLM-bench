@@ -58,6 +58,7 @@ def mark_observation_problems(measurements: dict, problems: list[str]) -> None:
         measurements.get("usage"),
         measurements.get("reported_cost"),
         measurements.get("estimated_cost"),
+        measurements.get("run_cost"),
         measurements.get("cost_breakdown"),
     ]
     for field in fields:

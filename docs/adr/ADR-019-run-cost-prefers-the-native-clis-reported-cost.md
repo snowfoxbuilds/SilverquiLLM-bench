@@ -1,4 +1,4 @@
-Status: ACCEPTED
+Status: ACCEPTED; its Run Cost rule and cross-check are replaced by ADR-021
 Date: 2026-10-13
 
 # ADR-019: A Run's Cost Prefers the Native CLI's Reported Cost

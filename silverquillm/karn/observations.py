@@ -542,9 +542,39 @@ def derive_subagents(requests: list[dict[str, Any]], threads, efforts=None) -> d
 
 
 def _agrees(reported: Decimal, estimated: Decimal) -> bool:
-    """Whether a reported total matches a complete estimate, beyond the float noise of the
-    CLI's per-request figures."""
+    """Whether a reported figure matches the table's, beyond the float noise of the CLI's
+    per-request figures."""
     return abs(reported - estimated) <= max(reported, estimated) * Decimal("1e-6")
+
+
+def run_cost_of(reported: dict[str, Any], estimated: dict[str, Any]) -> dict[str, Any]:
+    """A run's Run Cost: its Reported Cost whenever the CLI gave one, else its Estimated Cost.
+
+    A Reported Cost shares only the run's observation reasons, which the Estimated Cost
+    carries too, so it is never less complete than the estimate it replaces (ADR-021)."""
+    if reported.get("value") is not None:
+        return {**reported, "source": "reported"}
+    return {**estimated, "source": "estimated"}
+
+
+def _verify_reported(
+    reported_costs: dict[str, Decimal], priced: list[dict[str, Any]]
+) -> dict[str, int]:
+    """Each reported request figure checked against the price table's, where the table prices
+    that request fully. A model the table leaves out, such as Haiku 5.5, goes unchecked."""
+    table = {
+        row["response_id"]: Decimal(row["usd"])
+        for row in priced
+        if row["usd"] is not None and not row["reasons"]
+    }
+    checked = {response: usd for response, usd in reported_costs.items() if response in table}
+    return {
+        "requests_checked": len(checked),
+        "requests_unchecked": len(reported_costs) - len(checked),
+        "requests_disagreeing": sum(
+            not _agrees(usd, table[response]) for response, usd in checked.items()
+        ),
+    }
 
 
 def _measurements(
@@ -582,6 +612,7 @@ def _measurements(
     costs_present = bool(priced_values) or observed_zero
     estimated = format(sum(priced_values, Decimal(0)), "f")
     reported, reported_reasons, cost_warnings = None, list(reasons), []
+    verification = None
     # Only a valid figure, or a run with no requests at all, is a Reported Cost; an empty
     # mapping beside requests is a missing one, never a zero.
     reported_present = reported_costs is not None and (bool(reported_costs) or observed_zero)
@@ -590,9 +621,16 @@ def _measurements(
     else:
         total = sum(reported_costs.values(), Decimal(0))
         reported = format(total, "f")
-        # A warning, not a reason: the Reported Cost stays the Run Cost (ADR-019).
-        if costs_present and not cost_reasons and not _agrees(total, Decimal(estimated)):
+        verification = _verify_reported(reported_costs, priced)
+        # Warnings, not reasons: the Reported Cost stays the Run Cost (ADR-021).
+        if verification["requests_disagreeing"] or (
+            costs_present and not cost_reasons and not _agrees(total, Decimal(estimated))
+        ):
             cost_warnings.append("reported_cost_disagrees_with_estimate")
+        if reported_costs and not verification["requests_checked"]:
+            cost_warnings.append("reported_cost_unverified")
+    reported_cost = _measurement(reported, reported_reasons, present=reported_present)
+    estimated_cost = _measurement(estimated, cost_reasons, present=costs_present)
     return {
         "schema_version": 1,
         # Agent threads beyond the main one: an observation, never an incompleteness reason.
@@ -607,9 +645,11 @@ def _measurements(
             "total": _measurement(response_count + tool_count, turn_reasons, present=present),
         },
         "usage": _measurement(totals, usage_reasons, present=bool(requests) or observed_zero),
-        # The native CLI's own figure, preferred over the price-table estimate (ADR-019).
-        "reported_cost": _measurement(reported, reported_reasons, present=reported_present),
-        "estimated_cost": _measurement(estimated, cost_reasons, present=costs_present),
+        # The native CLI's own figure, preferred over the price-table estimate (ADR-021).
+        "reported_cost": reported_cost,
+        "estimated_cost": estimated_cost,
+        "run_cost": run_cost_of(reported_cost, estimated_cost),
+        "cost_verification": verification,
         "cost_warnings": cost_warnings,
         # Input by type (uncached, cache read, 5-minute and 1-hour write) beside output.
         "cost_breakdown": _measurement(

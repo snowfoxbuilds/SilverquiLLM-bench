@@ -951,6 +951,52 @@ def test_a_model_missing_from_the_price_table_still_has_its_reported_cost():
         "completeness": "complete",
         "reasons": [],
     }
+    assert result["run_cost"] == {**result["reported_cost"], "source": "reported"}
+    assert result["cost_verification"] == {
+        "requests_checked": 0,
+        "requests_unchecked": 2,
+        "requests_disagreeing": 0,
+    }
+    assert result["cost_warnings"] == ["reported_cost_unverified"]
+
+
+def one_request_unpriced(*otel):
+    """The main transcript and each ``otel`` request's events, with request ``req_02`` on a
+    model the table lacks."""
+    events = qualified(events_of(main_transcript()) + [e for events in otel for e in events])
+    for event in events:
+        attributes = event.get("attributes") or {}
+        if event.get("request_id") == "req_02" and event["kind"] == "response":
+            event["model"] = "claude-unpriced-9"
+        if attributes.get("request_id") == "req_02":
+            attributes["model"] = "claude-unpriced-9"
+    return summarize_claude_events(events, exit_kind="completed")
+
+
+def test_the_estimate_checks_each_request_it_prices_when_others_are_unpriced():
+    result = one_request_unpriced(*table_priced("req_01"), api_request("req_02"))
+    assert "model_price_unavailable" in result["estimated_cost"]["reasons"]
+    assert result["run_cost"]["source"] == "reported"
+    assert result["cost_verification"] == {
+        "requests_checked": 1,
+        "requests_unchecked": 1,
+        "requests_disagreeing": 0,
+    }
+    assert result["cost_warnings"] == []
+
+
+def test_a_priced_request_that_disagrees_warns_although_the_estimate_is_partial():
+    result = one_request_unpriced(api_request("req_01", cost_usd=5.0), api_request("req_02"))
+    assert result["estimated_cost"]["completeness"] != "complete"
+    assert result["cost_verification"]["requests_disagreeing"] == 1
+    assert result["cost_warnings"] == ["reported_cost_disagrees_with_estimate"]
+    assert result["run_cost"]["value"] == result["reported_cost"]["value"]
+
+
+def test_without_a_reported_cost_the_run_cost_is_the_estimate():
+    result = summarize_claude_events(qualified(events_of(main_transcript())), exit_kind="completed")
+    assert result["run_cost"] == {**result["estimated_cost"], "source": "estimated"}
+    assert result["cost_verification"] is None
 
 
 def test_a_compaction_and_every_session_add_their_reported_costs():
@@ -1019,11 +1065,17 @@ def test_a_reused_request_id_does_not_charge_the_clis_cost_twice(first):
 
 # Records written before ADR-019 carry only coverage.native_reported_cost_usd, which started
 # at zero whenever any OTel event arrived, so a zero there may sum no figure at all.
-_ADDED_BY_ADR_019 = ("reported_cost", "request_reported_costs", "cost_warnings")
+_ADDED_SINCE_ADR_019 = (
+    "reported_cost",
+    "request_reported_costs",
+    "cost_warnings",
+    "run_cost",
+    "cost_verification",
+)
 
 
 def legacy(result, *, estimate=True):
-    measurements = {k: v for k, v in result.items() if k not in _ADDED_BY_ADR_019}
+    measurements = {k: v for k, v in result.items() if k not in _ADDED_SINCE_ADR_019}
     if not estimate:
         measurements["estimated_cost"] = {
             "value": None,
