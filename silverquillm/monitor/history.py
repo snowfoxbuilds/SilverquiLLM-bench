@@ -132,7 +132,6 @@ def _rows(value: Any) -> list[dict]:
     return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
 
 
-_COMPLETENESS_RANK = {"complete": 2, "partial": 1}
 # Reasons that only the price table gives, which a native CLI's figure never shares.
 _PRICING_ONLY = {"per_response_usage_unavailable"}
 # Observation reasons meaning a pre-ADR-019 coverage total left out some request's figure:
@@ -173,24 +172,21 @@ def _rows_of_text(value: Any) -> list[str]:
 
 
 def run_cost(measurements: dict) -> tuple[dict, str]:
-    """A run's cost measurement and its source (ADR-019).
+    """A run's cost measurement and its source (ADR-021).
 
-    The native CLI's Reported Cost is preferred whenever it is at least as complete as the
-    price table's Estimated Cost; Codex reports none, so a Codex run's cost is the estimate.
-    """
-    estimated = mapping(measurements.get("estimated_cost"))
+    A record from the run-cost change on names its Run Cost; an older one gets the same
+    rule, its Reported Cost whenever it has one, else its Estimated Cost. Codex reports no
+    cost, so a Codex run's cost is the estimate."""
+    recorded = mapping(measurements.get("run_cost"))
+    if recorded.get("source") in ("reported", "estimated"):
+        return {k: v for k, v in recorded.items() if k != "source"}, recorded["source"]
     if "reported_cost" in measurements:
         reported = mapping(measurements.get("reported_cost"))
     else:
         reported = _legacy_reported_cost(measurements)
-    if _decimal(reported.get("value")) is not None and _rank(reported) >= _rank(estimated):
+    if _decimal(reported.get("value")) is not None:
         return reported, "reported"
-    return estimated, "estimated"
-
-
-def _rank(measurement: dict) -> int:
-    completeness = measurement.get("completeness")
-    return _COMPLETENESS_RANK.get(completeness, 0) if isinstance(completeness, str) else 0
+    return mapping(measurements.get("estimated_cost")), "estimated"
 
 
 def _request_costs(measurements: dict, source: str) -> tuple[tuple[tuple[int, Decimal], ...], int]:
