@@ -17,7 +17,7 @@ jobs:
     # A new head makes the previous test outcome stale, so both labels come off
     # before the tests start; the test-outcome job labels this head when they end.
     # It runs on a GitHub-hosted runner, so a push loses its stale label within
-    # seconds even while another pull request's tests hold the self-hosted runner.
+    # seconds even while other pull requests' tests hold the self-hosted runners.
     # It only calls the GitHub API and never checks out pull request code; a fork's
     # token is read-only and cannot label, so fork pull requests skip it.
     name: Clear the test outcome
@@ -47,8 +47,8 @@ jobs:
     name: pytest (Python 3.13)
     needs: clear-outcome
     # Runs when clear-outcome succeeded, or was skipped on a push to main.
-    # The runner is a developer host and the repository is public: fork
-    # pull requests must never execute on it.
+    # The self-hosted runners are two sbx microVMs on gpuserver, and the
+    # repository is public: fork pull requests must never execute on them.
     if: >-
       !cancelled() && needs.clear-outcome.result != 'failure'
       && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
@@ -57,7 +57,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # On the runner's persistent home, so wheels and Python downloads
+      # survive between jobs; setup-uv would otherwise use the job's temp dir.
       - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          cache-local-path: /home/agent/.cache/uv
 
       - name: Create the Python 3.13 environment
         run: |
@@ -70,11 +74,11 @@ jobs:
         run: |
           uv pip install --python .venv/bin/python -e ".[dev,monitor]"
 
-      # A job-private basetemp: the host's own pytest sessions share
-      # /tmp/pytest-of-<user> and prune each other's numbered directories.
+      # A job-private basetemp, so no other pytest session in the runner's VM
+      # prunes its numbered directories under /tmp/pytest-of-<user>.
       # It stays under the system temp dir, which redaction tests expect.
-      # pytest-xdist runs it on eight workers, half the host's cores, since the
-      # runner shares the host; worksteal rebalances the long-running tests.
+      # pytest-xdist runs it on eight workers, one per vCPU of the runner's VM;
+      # worksteal rebalances the long-running tests.
       - name: Test
         run: |
           tmp="$(mktemp -d)"
@@ -86,7 +90,7 @@ jobs:
     # which runs inside each pinned grader, is tested on every graded version.
     # The login-plugin tests skip here: the plugin host stays on 3.13.
     # It runs after merge only: a pull request is gated on 3.13 alone, which
-    # halves its time on the one runner, and a 3.14-only break fails this job on main.
+    # halves its time on the runners, and a 3.14-only break fails this job on main.
     name: pytest (Python 3.14)
     if: github.event_name == 'push'
     runs-on: [self-hosted, Linux, X64]
@@ -95,7 +99,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # On the runner's persistent home, so wheels and Python downloads
+      # survive between jobs; setup-uv would otherwise use the job's temp dir.
       - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          cache-local-path: /home/agent/.cache/uv
 
       - name: Create the Python 3.14 environment
         run: |
