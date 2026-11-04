@@ -9,7 +9,6 @@ from decimal import Decimal
 import pytest
 
 from silverquillm.karn.claude_observations import (
-    QUALIFIED_CLAUDE_VERSIONS,
     ClaudeTelemetryCollector,
     claude_usage,
     normalize_claude_otlp,
@@ -40,7 +39,7 @@ def usage(uncached=10, read=4000, written=300, written_1h=100, output=50):
     }
 
 
-# Synthetic transcripts use a version never qualified, so they stay partial.
+# Synthetic transcripts use a version no real run has used.
 SYNTHETIC_VERSION = "2.1.999"
 
 
@@ -139,11 +138,25 @@ def test_a_message_split_across_block_lines_counts_once_with_its_tools():
     )
 
 
-def test_an_unqualified_version_keeps_values_but_marks_them_partial():
-    assert SYNTHETIC_VERSION not in QUALIFIED_CLAUDE_VERSIONS
-    result = summarize_claude_events(events_of(main_transcript()), exit_kind="completed")
+def test_any_claude_code_version_counts_as_complete():
+    for version in (SYNTHETIC_VERSION, "2.1.318"):
+        events = events_of(main_transcript())
+        for event in events:
+            if event["kind"] == "session":
+                event["native_version"] = version
+        result = summarize_claude_events(events, exit_kind="completed")
+        assert result["estimated_cost"]["completeness"] == "complete", version
+        assert result["estimated_cost"]["reasons"] == []
+
+
+def test_a_run_with_no_observed_version_is_partial():
+    events = events_of(main_transcript())
+    for event in events:
+        if event["kind"] == "session":
+            event["native_version"] = None
+    result = summarize_claude_events(events, exit_kind="completed")
     assert result["estimated_cost"]["completeness"] == "partial"
-    assert result["estimated_cost"]["reasons"] == ["native_version_not_qualified"]
+    assert result["estimated_cost"]["reasons"] == ["native_version_unknown"]
 
 
 def test_subagent_transcripts_add_their_own_responses_and_tools():
@@ -384,32 +397,16 @@ def test_otel_cross_check_flags_requests_missing_from_either_stream():
     assert extra["agent_turns"]["responses"]["value"] == 3
 
 
-QUALIFIED = min(QUALIFIED_CLAUDE_VERSIONS)
-
-
-def qualified(events):
-    """The synthetic streams relabelled as a qualified version, so agreement is complete."""
-    events = json.loads(json.dumps(events))
-    for event in events:
-        if event["kind"] == "session":
-            event["native_version"] = QUALIFIED
-        if event["source"] == "otel":
-            event["attributes"]["app.version"] = QUALIFIED
-    return events
-
-
 def reconciled(*otel):
     return summarize_claude_events(
-        qualified(events_of(main_transcript()) + [e for group in otel for e in group]),
+        events_of(main_transcript()) + [e for group in otel for e in group],
         exit_kind="completed",
     )
 
 
-def test_agreeing_streams_on_a_qualified_version_are_complete():
+def test_agreeing_streams_are_complete():
     agreed = reconciled(api_request("req_01"), api_request("req_02"))
-    native_only = summarize_claude_events(
-        qualified(events_of(main_transcript())), exit_kind="completed"
-    )
+    native_only = summarize_claude_events(events_of(main_transcript()), exit_kind="completed")
     for key in ("usage", "estimated_cost", "cost_breakdown"):
         assert agreed[key]["completeness"] == "complete", agreed[key]["reasons"]
         assert agreed[key]["value"] == native_only[key]["value"]
@@ -457,7 +454,7 @@ def test_a_transcript_response_without_a_request_id_cannot_be_reconciled():
         row.replace('"requestId": "req_02", ', "") if '"req_02"' in row else row
         for row in main_transcript()
     ]
-    events = qualified(events_of(transcript) + api_request("req_01") + api_request("req_02"))
+    events = events_of(transcript) + api_request("req_01") + api_request("req_02")
     result = summarize_claude_events(events, exit_kind="completed")
     assert "otel_usage_comparison_unavailable" in result["usage"]["reasons"]
 
@@ -467,7 +464,7 @@ def test_a_request_id_reused_by_a_second_response_is_flagged(first):
     extra = assistant("msg_00", "req_01", [{"type": "text"}], uncached=99999, output=77777)
     body = main_transcript()
     transcript = [body[0], *extra, *body[1:]] if first else [*body, *extra]
-    events = qualified(events_of(transcript) + api_request("req_01") + api_request("req_02"))
+    events = events_of(transcript) + api_request("req_01") + api_request("req_02")
     result = summarize_claude_events(events, exit_kind="completed")
     assert result["usage"]["completeness"] == "partial"
     assert "native_request_identity_reused" in result["usage"]["reasons"]
@@ -475,7 +472,7 @@ def test_a_request_id_reused_by_a_second_response_is_flagged(first):
 
 
 def test_a_malformed_retained_response_degrades_instead_of_crashing():
-    events = qualified(events_of(main_transcript()) + api_request("req_01") + api_request("req_02"))
+    events = events_of(main_transcript()) + api_request("req_01") + api_request("req_02")
     for event in events:
         if event["kind"] == "response":
             del event["usage"]["output_tokens"]
@@ -488,18 +485,18 @@ def test_duplicate_observations_reconcile_once_each():
     repeated = [dict(e, id=e["id"] + "-again") for e in api_request("req_01")]
     native = events_of(main_transcript())
     result = summarize_claude_events(
-        qualified(native + native + otel + otel + repeated), exit_kind="completed"
+        native + native + otel + otel + repeated, exit_kind="completed"
     )
     assert result["usage"]["completeness"] == "complete", result["usage"]["reasons"]
     assert result["agent_turns"]["responses"]["value"] == 2
     conflicting = [dict(e, id=e["id"] + "-again") for e in api_request("req_01", output_tokens="1")]
-    flagged = summarize_claude_events(qualified(native + otel + conflicting), exit_kind="completed")
+    flagged = summarize_claude_events(native + otel + conflicting, exit_kind="completed")
     assert "otel_usage_conflicts_with_native" in flagged["usage"]["reasons"]
     assert flagged["usage"]["value"] == result["usage"]["value"]
 
 
 def test_recovery_summaries_reconcile_the_same_way():
-    events = qualified(
+    events = (
         events_of(main_transcript())
         + api_request("req_01", output_tokens="1")
         + api_request("req_02")
@@ -666,12 +663,13 @@ def test_disagreeing_token_counts_do_not_qualify():
     assert {m["check"] for m in proof["mismatches"]} >= {"usage_agrees", "tool_calls_agree"}
 
 
-def test_every_qualified_claude_version_replays_its_committed_proof():
+def test_every_committed_claude_proof_replays():
     import hashlib
     from pathlib import Path
 
-    for version in QUALIFIED_CLAUDE_VERSIONS:
-        fixture = Path(__file__).parent / "fixtures" / ("karn_observations_claude_" + version)
+    fixtures = sorted((Path(__file__).parent / "fixtures").glob("karn_observations_claude_*"))
+    assert fixtures
+    for fixture in fixtures:
         proof = json.loads((fixture / "qualification.json").read_text())
         raw = (fixture / "events.jsonl").read_bytes()
         assert hashlib.sha256(raw).hexdigest() == proof["events_sha256"]
@@ -809,8 +807,7 @@ def test_an_otherwise_valid_unqualified_version_qualifies():
     qualified, checks, proof = verdict(events)
     assert (qualified, checks) == (True, set())
     assert proof["native_binary"] == "claude-code 2.1.300"
-    # Qualification is about stream agreement; the run itself is still from an unlisted version.
-    assert "native_version_not_qualified" in proof["usage"]["reasons"]
+    assert proof["usage"]["completeness"] == "complete"
 
 
 @pytest.mark.parametrize("valid", [True, False])
@@ -863,7 +860,7 @@ def test_transcript_responses_without_ids_are_unconfirmed_even_without_otel_requ
         row.replace('"requestId": "req_0', '"noRequestId": "req_0') for row in main_transcript()
     ]
     tool = normalize_claude_otlp(otlp(name="claude_code.tool_result", tool_use_id="toolu_01"))
-    result = summarize_claude_events(qualified(events_of(transcript) + tool), exit_kind="completed")
+    result = summarize_claude_events(events_of(transcript) + tool, exit_kind="completed")
     assert "otel_usage_comparison_unavailable" in result["usage"]["reasons"]
 
 
@@ -909,7 +906,7 @@ def test_subagent_threads_count_sidechain_transcripts_only():
 
 def table_priced(*requests):
     """``api_request`` events each reporting the price table's own figure for its request."""
-    native = summarize_claude_events(qualified(events_of(main_transcript())), exit_kind="completed")
+    native = summarize_claude_events(events_of(main_transcript()), exit_kind="completed")
     prices = {row["response_id"]: row["usd"] for row in native["request_prices"]}
     by_request = {"req_01": prices["msg_01"], "req_02": prices["msg_02"]}
     return [api_request(request, cost_usd=float(by_request[request])) for request in requests]
@@ -937,7 +934,7 @@ def test_a_reported_cost_that_differs_from_a_complete_estimate_stays_complete_wi
 
 
 def test_a_model_missing_from_the_price_table_still_has_its_reported_cost():
-    events = qualified(events_of(main_transcript()) + api_request("req_01") + api_request("req_02"))
+    events = events_of(main_transcript()) + api_request("req_01") + api_request("req_02")
     for event in events:
         if event["kind"] == "response":
             event["model"] = "claude-unpriced-9"
@@ -969,16 +966,14 @@ def test_a_compaction_and_every_session_add_their_reported_costs():
         *api_request("req_11", **{"session.id": other}),
         *api_request("req_12", **{"session.id": other}),
     ]
-    result = summarize_claude_events(
-        qualified(events_of(transcripts, second) + otel), exit_kind="completed"
-    )
+    result = summarize_claude_events(events_of(transcripts, second) + otel, exit_kind="completed")
     assert result["coverage"]["native_threads"] == 2
     assert result["reported_cost"]["value"] == "0.0615"
     assert len(result["request_reported_costs"]) == len(result["requests"]) == 5
 
 
 def test_without_otel_there_is_no_reported_cost():
-    result = summarize_claude_events(qualified(events_of(main_transcript())), exit_kind="completed")
+    result = summarize_claude_events(events_of(main_transcript()), exit_kind="completed")
     assert result["reported_cost"]["value"] is None
     assert result["reported_cost"]["completeness"] == "missing"
     assert "native_cost_not_reported" in result["reported_cost"]["reasons"]
@@ -1010,7 +1005,7 @@ def test_a_reused_request_id_does_not_charge_the_clis_cost_twice(first):
     extra = assistant("msg_00", "req_01", [{"type": "text"}])
     body = main_transcript()
     transcript = [body[0], *extra, *body[1:]] if first else [*body, *extra]
-    events = qualified(events_of(transcript) + api_request("req_01") + api_request("req_02"))
+    events = events_of(transcript) + api_request("req_01") + api_request("req_02")
     result = summarize_claude_events(events, exit_kind="completed")
     assert result["reported_cost"]["value"] == "0.0246"
     assert result["coverage"]["native_reported_cost_usd"] == "0.0246"

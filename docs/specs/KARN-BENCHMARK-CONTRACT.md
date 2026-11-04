@@ -166,7 +166,7 @@ The current stock result file's usage:null and whole-request turn.completed even
 Codex's existing opt-in telemetry is an implementation path to qualify without changing the task into a custom agent workflow.
 Claude Code mirrors it (grilling 2026-09-28): the session transcript under its config directory is the durable source that recovery also reads, and its OpenTelemetry request and tool events cross-check it.
 A request the two streams report differently, in shared token counts or model, keeps the transcript's values and leaves the measurements partial; OTel supplies usage only for a request the transcript never records, such as a compaction's.
-The transcript's format is internal to Claude Code, so each pinned Claude Code version is qualified before its measurements count as complete.
+The transcript's format is internal to Claude Code, but no Claude Code version is required: a run's measurements are partial only for what its own streams show, and qualifying a version from a real run is an optional check.
 
 Each record also keeps the newest subscription usage reading the run observed for its Login Profile: the provider's weekly-window utilization percentage, the window length, its reset time, and when the reading was observed (grilling 2026-10-07).
 Claude reports it in `rate_limit_event` stdout lines (the `seven_day` window).

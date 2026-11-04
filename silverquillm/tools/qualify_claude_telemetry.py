@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-"""Qualify a pinned Claude Code version from a real run's sanitized observations.
+"""Qualify a Claude Code version from a real run's sanitized observations.
 
-Claude Code documents its transcript format as internal, so the bench trusts a version's
-transcript accounting only after one real run shows the transcript and the OTel stream
-agree: every transcript request has an ``api_request`` with the same token counts and model,
-with nothing the runtime reconciliation (``reconcile_streams``) would flag, every other
-``api_request`` is a compaction matching a transcript compaction boundary, and both streams
-name the same tool calls. A version need not be qualified already to qualify. The run's
-``observations.events.jsonl`` holds only sanitized accounting fields, so it is the proof
-fixture itself.
+Claude Code documents its transcript format as internal. This optional check shows, from one
+real run, that a version's transcript and OTel stream agree: every transcript request has an
+``api_request`` with the same token counts and model, with nothing the runtime
+reconciliation (``reconcile_streams``) would flag, every other ``api_request`` is a
+compaction matching a transcript compaction boundary, and both streams name the same tool
+calls. The run's ``observations.events.jsonl`` holds only sanitized accounting fields, so it
+is the proof fixture itself.
 
     silverquillm qualify claude-telemetry runs/karn/<run-id> --out proof.json
 
-A qualifying proof is committed with its events under
-``tests/fixtures/karn_observations_claude_<version>/`` and the version is added to
-``QUALIFIED_CLAUDE_VERSIONS``.
+Measurements do not depend on it: no run is marked partial for its Claude Code version. A
+proof committed with its events under ``tests/fixtures/karn_observations_claude_<version>/``
+is replayed by the tests.
 """
 
 from __future__ import annotations

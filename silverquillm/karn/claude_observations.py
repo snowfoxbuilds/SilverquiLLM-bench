@@ -31,8 +31,6 @@ from .observations import (
     derive_subagents,
 )
 
-# Versions whose transcript and OTel streams were checked against each other on a real run.
-QUALIFIED_CLAUDE_VERSIONS: frozenset[str] = frozenset({"2.1.284", "2.1.293"})
 MAX_TRANSCRIPT_BYTES = 128 * 1024 * 1024
 MAX_TRANSCRIPT_FILES = 10_000
 MAX_REQUEST_COST_USD = Decimal(1_000_000)
@@ -513,8 +511,8 @@ def summarize_claude_events(
         reasons.append("compaction_usage_unavailable")
     if not sessions:
         reasons.append("native_journals_unavailable")
-    if not versions - {None} or not versions - {None} <= QUALIFIED_CLAUDE_VERSIONS:
-        reasons.append("native_version_not_qualified")
+    if not versions - {None}:
+        reasons.append("native_version_unknown")
     opened = {e["turn_id"] for e in rows if e["kind"] == "task_started"}
     closed = {e["turn_id"] for e in rows if e["kind"] == "task_complete"}
     if opened - closed:
@@ -629,6 +627,5 @@ class ClaudeTelemetryCollector(CodexTelemetryCollector):
             self.mark_incomplete("native_journals_unavailable")
 
     def finalize(self, *, exit_kind: str, native_version: str | None = None) -> dict[str, Any]:
-        if native_version is not None and native_version not in QUALIFIED_CLAUDE_VERSIONS:
-            self.mark_incomplete("native_version_not_qualified")
+        # Any Claude Code version counts; agreement between its streams is checked per run.
         return self._write_summary(summarize_claude_events, exit_kind)
