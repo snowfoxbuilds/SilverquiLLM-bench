@@ -137,6 +137,7 @@ The host runs exactly one of `karn-codex-login` or `karn-claude-login` per candi
 A run interrupted while its login was mounted leaves its slot with a pending refresh that only the plugin artifact which mounted it may settle.
 Other runs skip that slot; a run bringing the same plugin artifact takes it only when no settled slot is free, and settles it first.
 Settle it with `silverquillm recover RUN_ID`, naming the run in the slot's `active.json`; recovery uses that run's retained plugin artifact.
+`login refresh` on that slot, or `R` in `top`, settles it the same way before signing in, with the plugin artifact that mounted it: it stops the run's container, copies the run's native sessions into its evidence, and refuses with `login_native_state_not_preserved:<reason>` when that copy failed in a way a retry could fix, so retry once the cause (such as a full disk) is fixed.
 When every slot is pending, runs refuse with `login_pool_pending:<plugin-id>` until one is recovered.
 
 Candidates need no test tooling of their own.

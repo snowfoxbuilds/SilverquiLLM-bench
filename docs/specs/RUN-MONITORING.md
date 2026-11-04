@@ -33,11 +33,11 @@ When Docker cannot be read or the log holds no valid reading, the estimate rests
 The operator procedure that uses this document is in the Results Repo runbook (`runbook/monitoring-and-recovery.md`, snowfoxbuilds/bench-results#20).
 
 The monitor is read-only except for the Login Pools' slots (grilling 2026-10-07, 2026-11-04).
-It never stops or recovers a run, edits a Batch, or fetches or pulls the Results Repo, and it takes no lock a runner or the scheduler takes except a slot's own, the way `silverquillm login` does.
+It never stops or recovers a run except to settle a slot's pending login before signing that slot in, edits a Batch, or fetches or pulls the Results Repo, and it takes no lock a runner or the scheduler takes except a slot's own, the way `silverquillm login` does.
 Every write is one the operator asks for with a key in the LOGINS pane and goes through the same code as the matching `silverquillm login` subcommand, only for an enrolled Login Profile:
 
 - a Login Cooldown (2026-10-08), which touches nothing else of the slot (not its stored login, its lock, or a run holding it);
-- signing a new slot in, or an enrolled one again, which ends the slot's Login Block when it succeeds (grilling 2026-11-04);
+- signing a new slot in, or an enrolled one again, which ends the slot's Login Block when it succeeds (grilling 2026-11-04); a slot an interrupted run left pending is settled first, keeping that run's native sessions in its evidence, exactly as `silverquillm login refresh` settles it ([Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md));
 - removing a slot and its stored login, only after the operator confirms, and never one in use or holding a pending login (grilling 2026-11-04).
 
 A sign-in prints a long URL and reads a pasted code, so the monitor hands the terminal over for it: it suspends its own screen, runs the same enrollment as `silverquillm login refresh` in the plain terminal, waits for Enter so the outcome can be read, and then redraws (grilling 2026-11-04).

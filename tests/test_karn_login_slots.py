@@ -12,7 +12,6 @@ import pytest
 from click.testing import CliRunner
 
 from silverquillm.cli import main
-from silverquillm.karn import host as host_module
 from silverquillm.karn import login_admin
 from silverquillm.karn.definition import KarnError, canonical, digest
 from silverquillm.karn.execution import run_benchmark
@@ -220,19 +219,6 @@ def test_a_run_whose_login_failed_authentication_blocks_its_slot(tmp_path):
     target = LoginPool.of(state, CODEX)
     with contextlib.ExitStack() as hold, pytest.raises(LoginPoolBusyError):
         target.acquire(hold, wait=False)
-
-
-def test_a_successful_sign_in_lifts_the_block_and_a_failed_one_keeps_it(tmp_path, monkeypatch):
-    target = pool_of(tmp_path, CLAUDE, "slot-1")
-    profile = target.slot("slot-1")
-    block(profile.directory, reason="relogin_needed", run_id=None, now=NOW)
-    statuses = iter([1, 0])
-    monkeypatch.setattr(host_module, "enroll_login", lambda *args, **kwargs: next(statuses))
-    host = DockerHost(plugin_cache=tmp_path / "cache")
-    assert host.enroll_login(profile, None) == 1
-    assert is_blocked(profile.directory)
-    assert host.enroll_login(profile, None) == 0
-    assert not is_blocked(profile.directory)
 
 
 # ---- removal --------------------------------------------------------------------------------

@@ -224,6 +224,9 @@ class LoginPool:
                         os.stat(directory / "runner.lock", follow_symlinks=False),
                     ):
                         continue
+                # A run releasing the slot may have blocked it since the check above.
+                if is_blocked(directory):
+                    continue
                 # Unlike acquire's artifact-specific recovery, a capacity probe cannot settle.
                 journal = directory / "active.json"
                 if journal.exists() or journal.is_symlink():
@@ -346,10 +349,17 @@ class LoginPool:
                         if cooldown_until(profile.directory) is not None:
                             cooling += 1
                             continue
+                        # Checked before locking too, so polling never makes a sign-in
+                        # of the blocked slot find it in use.
                         if is_blocked(profile.directory):
                             blocked += 1
                             continue
                         lock.enter_context(profile.exclusive())
+                        # The run that held the slot until now may have blocked it.
+                        if is_blocked(profile.directory):
+                            lock.close()
+                            blocked += 1
+                            continue
                     except LoginInUseError:
                         busy += 1
                         continue

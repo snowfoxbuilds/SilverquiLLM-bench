@@ -39,7 +39,7 @@ from .login import (
     preserve_pending_native,
     recover_login,
 )
-from .login_block import block_if_relogin_needed, unblock
+from .login_block import block_if_relogin_needed
 from .toolchain import TOOLCHAIN_TARGET, CandidateToolchain
 
 DEFAULT_BUDGET_SECONDS = 24 * 60 * 60
@@ -187,7 +187,7 @@ class DockerHost:
 
     def enroll_login(self, profile: LoginProfile, artifact, *, executable=None) -> int:
         """Sign the slot in again; a successful sign-in lifts its Login Block."""
-        status = enroll_login(
+        return enroll_login(
             profile,
             artifact,
             self.plugin_cache,
@@ -196,9 +196,6 @@ class DockerHost:
             cleanup=self.docker.cleanup_run,
             executable=executable,
         )
-        if status == 0:
-            unblock(profile.directory)
-        return status
 
     def _stage(self, candidate, workspace, evidence, prompt, file_inputs, mount_bindings):
         mounts, named = [], {}

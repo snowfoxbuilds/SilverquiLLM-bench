@@ -624,9 +624,49 @@ def enroll_login(
     cleanup: Callable[[str, str], None] | None = None,
     executable: Path | None = None,
 ) -> int:
-    """Sign the profile in through the plugin's setup; ``executable`` is an installed one."""
+    """Sign the profile in through the plugin's setup; ``executable`` is an installed one.
+
+    An interrupted run's pending login is settled first, and like every settlement it first
+    copies that run's native journals into the run's own evidence, since settling clears
+    them. A copy a retry could still make refuses the sign-in and keeps the journal; one no
+    retry can make (no evidence directory, a tree over the limit) is reported and settled.
+    A successful sign-in lifts the slot's Login Block before the slot is released, so it
+    never lifts a block a later owner of the slot wrote.
+    """
+    from .login_block import unblock  # login_block builds on this module
+
     with profile.exclusive():
         executable = executable or install_plugin(artifact, cache, python=python)
         with PluginProcess(artifact, executable, profile) as plugin:
+            _preserve_before_settling(profile, plugin, stop_and_confirm)
             recover_login(profile, plugin, stop_and_confirm, cleanup=cleanup)
-            return plugin.setup()
+            status = plugin.setup()
+            if status == 0:
+                unblock(profile.directory)
+            return status
+
+
+# Preservation failures a later attempt can cure, so settling now would lose what it could keep.
+RETRYABLE_NATIVE_LOSS = ("native_state_container_not_stopped", "native_state_copy_failed")
+
+
+def _preserve_before_settling(
+    profile: LoginProfile, plugin: PluginProcess, stop_and_confirm: Callable[[str, str], None]
+) -> None:
+    pending = profile.pending()
+    if pending is None:
+        return
+    # Checked before the pending run's container is stopped, as recover_login checks it.
+    if pending.get("plugin_artifact") != plugin.artifact.row["artifact"]:
+        raise KarnError("login_recovery_requires_previous_plugin")
+    kept = preserve_pending_native(profile, stop_and_confirm)
+    reason = kept["reason"] if kept else None
+    if reason in RETRYABLE_NATIVE_LOSS:
+        raise KarnError("login_native_state_not_preserved:" + reason)
+    if reason not in (None, "native_state_unavailable"):
+        with contextlib.suppress(OSError, ValueError):
+            print(
+                f"settling the login of run {kept['run_id']} without its native state ({reason})",
+                file=sys.stderr,
+                flush=True,
+            )
