@@ -13,7 +13,7 @@ Claude Code already reports an API-equivalent USD figure for each request it mak
 
 Each run records the native CLI's own figure as its Reported Cost, per request and in total, beside the Estimated Cost, which is still computed and recorded in full.
 A run's Run Cost, the figure the bench shows and sums, is its Reported Cost whenever that is at least as complete as its Estimated Cost, and its Estimated Cost otherwise.
-The Reported Cost takes the run's observation reasons, but none of the price table's (amended 2026-11-04, #PRNUM); a Reported Cost that differs from a complete Estimated Cost stays as complete as it was and adds the warning `reported_cost_disagrees_with_estimate`.
+The Reported Cost takes the run's observation reasons, but none of the price table's (amended 2026-11-04, #254); a Reported Cost that differs from a complete Estimated Cost stays as complete as it was and adds the warning `reported_cost_disagrees_with_estimate`.
 Only a valid figure from the CLI is a Reported Cost: a run whose requests all lack one has none, never a zero.
 Codex reports no cost, so a Codex run's Run Cost is its Estimated Cost.
 
@@ -21,7 +21,7 @@ Codex reports no cost, so a Codex run's Run Cost is its Estimated Cost.
 
 - **Positive**: a model the table cannot price, or prices only by a rule the table lacks, still has a cost, and Claude runs need no hand-maintained price for each new model.
 - **Positive**: the Estimated Cost remains a reproducible, independent check on every figure the CLI reports.
-- **Negative**: the Run Cost of a Claude run rests on a figure the workload's own process produces, which a candidate could in principle steer; only the disagreement warning, the OTel cross-check of every transcript request, and the recorded Estimated Cost guard it (amended 2026-11-04, #PRNUM). The warning never demotes the Reported Cost: a price-table gap, such as a changed list price or a long-context tier the table lacks, would otherwise demote the figure the decision trusts.
+- **Negative**: the Run Cost of a Claude run rests on a figure the workload's own process produces, which a candidate could in principle steer; only the disagreement warning, the OTel cross-check of every transcript request, and the recorded Estimated Cost guard it (amended 2026-11-04, #254). The warning never demotes the Reported Cost: a price-table gap, such as a changed list price or a long-context tier the table lacks, would otherwise demote the figure the decision trusts.
 - **Neutral**: Claude and Codex runs take their cost from different sources, so a comparison across providers compares a CLI's figure with the bench's table where the two cannot be checked against each other.
 
 ## Alternatives Considered
@@ -32,8 +32,8 @@ Codex reports no cost, so a Codex run's Run Cost is its Estimated Cost.
 
 ## Amendments
 
-- **2026-11-04 (#PRNUM)**: Claude Code versions are no longer qualified before their measurements count, so version qualification no longer guards the Reported Cost; the operator chose to run the newest Claude Code without first qualifying each version (#253).
+- **2026-11-04 (#254)**: Claude Code versions are no longer qualified before their measurements count, so version qualification no longer guards the Reported Cost; the operator chose to run the newest Claude Code without first qualifying each version (#253).
 
 ## Relevant PRs
 
-- #PRNUM — stopped gating Claude measurements on qualified Claude Code versions
+- #254 — stopped gating Claude measurements on qualified Claude Code versions
