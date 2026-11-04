@@ -1,4 +1,4 @@
-"""The monitor's one write: a Login Cooldown set from the status pane's keys.
+"""The monitor's Login Cooldown writes, set from the LOGINS pane's keys.
 
 It goes through the same file and validation as ``silverquillm login cooldown`` and touches
 nothing else of the slot (RUN-MONITORING.md, Command and scope).

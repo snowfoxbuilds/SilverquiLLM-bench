@@ -39,6 +39,7 @@ from .login import (
     preserve_pending_native,
     recover_login,
 )
+from .login_block import block_if_relogin_needed, unblock
 from .toolchain import TOOLCHAIN_TARGET, CandidateToolchain
 
 DEFAULT_BUDGET_SECONDS = 24 * 60 * 60
@@ -184,15 +185,20 @@ class DockerHost:
         if probe.returncode:
             raise KarnError("restricted_network_requires_python3")
 
-    def enroll_login(self, profile: LoginProfile, artifact) -> int:
-        return enroll_login(
+    def enroll_login(self, profile: LoginProfile, artifact, *, executable=None) -> int:
+        """Sign the slot in again; a successful sign-in lifts its Login Block."""
+        status = enroll_login(
             profile,
             artifact,
             self.plugin_cache,
             self.docker.stop_and_confirm,
             python=self.plugin_python,
             cleanup=self.docker.cleanup_run,
+            executable=executable,
         )
+        if status == 0:
+            unblock(profile.directory)
+        return status
 
     def _stage(self, candidate, workspace, evidence, prompt, file_inputs, mount_bindings):
         mounts, named = [], {}
@@ -682,6 +688,13 @@ class DockerHost:
             try:
                 plugin.invoke("after_container_exit", result.run_id, mounts)
                 result.login_state = plugin.status()
+                block_if_relogin_needed(
+                    profile.directory,
+                    plugin.artifact.row["id"],
+                    profile.name,
+                    result.login_state,
+                    result.run_id,
+                )
                 if (profile.state / "mounted.json").exists():
                     result.observation_errors.append("login_harvest_pending")
                 else:

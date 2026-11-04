@@ -622,9 +622,11 @@ def enroll_login(
     *,
     python: str | None = None,
     cleanup: Callable[[str, str], None] | None = None,
+    executable: Path | None = None,
 ) -> int:
+    """Sign the profile in through the plugin's setup; ``executable`` is an installed one."""
     with profile.exclusive():
-        executable = install_plugin(artifact, cache, python=python)
+        executable = executable or install_plugin(artifact, cache, python=python)
         with PluginProcess(artifact, executable, profile) as plugin:
             recover_login(profile, plugin, stop_and_confirm, cleanup=cleanup)
             return plugin.setup()

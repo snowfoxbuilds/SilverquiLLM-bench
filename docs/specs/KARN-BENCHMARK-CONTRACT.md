@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-10-15
+Last updated: 2026-11-04
 
 # Karn Benchmark Contract
 
@@ -124,6 +124,10 @@ Concurrent runs on one subscription share its rate limits; the operator accepts 
 An operator can put profiles under a Login Cooldown for a set time, such as when a subscription nears its weekly limit (grilling 2026-10-08).
 A cooling-down profile counts as busy until the cooldown ends: a run passes over it and, with no other profile free, waits rather than refusing; a run already holding the profile is unaffected.
 The cooldown is a host-local file beside the profile's stored login (`cooldown.json`, its end time in UTC), written atomically only by `silverquillm login cooldown` or the cooldown keys of [Run Monitoring](RUN-MONITORING.md), through the same code; it never touches the stored login, the profile's lock, or a run, and an expired or unreadable one is no cooldown, so nothing has to remove it.
+A profile whose login plugin reports after a run that its login needs signing in again (`relogin needed`, an expired or revoked login) is put under a Login Block, so a dead login stops failing run after run (grilling 2026-11-04).
+A blocked profile counts as busy the way a cooling-down one does, so with no other profile free a run waits rather than refusing, but the block has no end time: only a successful re-enrollment of that profile or `silverquillm login unblock` lifts it.
+The block is a host-local file beside the stored login (`blocked.json`: its reason, the run that reported it, and when), written by the host when it reads the plugin's status after a run or a recovery's settlement; an unreadable one still blocks.
+Profiles are tried, and listed, in slot-number order, so `slot-2` comes before `slot-10` (grilling 2026-11-04).
 No new account registry, credential-deduplication system, or cross-host coordination is part of this integration (grilling 2026-09-26).
 Each host benchmarks independently.
 
@@ -228,10 +232,12 @@ On restart, recovery checks every running state row; a row still owned by a live
 Ctrl-C, SIGTERM, and SIGHUP stop new dispatch, interrupt the scheduler's own workers, and drain their cleanup and state updates before releasing the exclusive queue lock.
 A worker reporting an interrupt, or a run ending `interrupted`, is treated the same way and stops the whole scheduler: a service stop or terminal hangup reaches the workers and the scheduler in no fixed order, and no new run may start in between (grilling 2026-10-13).
 Dispatch has three modes, set by the operator from any process and kept in the batch directory across restarts: running; paused, where no new run launches, runs in flight finish normally and the scheduler keeps serving recovery and pending publications; and draining, which is paused until no run of the scheduler's own is in flight, when the scheduler exits successfully and leaves dispatch paused. A run already past login selection when dispatch closes is refused at launch and its entry stays pending. A control setting that cannot be read counts as paused, never as running, and no fault in it ever interrupts a run in flight; every change of mode, the operator's and a finished drain's, is serialized and replaces the setting whole, so a drain's change to paused never overwrites an operator's later change and a failed change keeps the previous stopped mode. Pause and drain never interrupt a run; interruption is only by signal (grilling 2026-10-13).
-The `login` command enrolls one Login Profile into the pool of the selected existing plugin, or re-enrolls a named one; `login cooldown` sets or lifts a Login Cooldown on named profiles, or every profile, of one provider's pool.
+The `login` subcommands manage one provider's pool by name (`claude` or `codex`), naming a slot as `3` or `slot-3` (grilling 2026-11-04): `login ls` lists every profile and its state, `login add` signs a new slot in, `login refresh` signs an enrolled one in again, `login remove` deletes a slot and its stored login after a confirmation, refusing one in use, holding a pending login, or enrolled again under that name since it was confirmed, and `login unblock` lifts a Login Block without signing in.
+They take the login plugin from the host's plugin cache, the verified artifacts runs have installed, choosing the newest one, or the artifact a pending login was mounted with so that login settles first; a cache entry that is not private to the operator, or whose manifest is incomplete or no longer matches its digest, is never used.
+On a host where no run has installed the plugin yet, `login --build-output … --construct …` enrolls through a construct's own plugin, and `--adopt` moves a login from before pools; `login cooldown` sets or lifts a Login Cooldown on named profiles, or every profile, of one provider's pool.
 SilverquiLLM runs a completed Karn build by itself; the vendored v4 and v5 construct definition schemas are the only thing it takes from Karn, and no Ozolith package is involved.
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
-[Run Monitoring](RUN-MONITORING.md) defines `top`, the read-only monitor over live runs, the queue, Login Pools, and history.
+[Run Monitoring](RUN-MONITORING.md) defines `top`, the monitor over live runs, the queue, Login Pools, and history, read-only except for the slot keys of its LOGINS pane.
 
 Every Karn command resolves five host locations the same way: its flag, else its environment variable, else the host configuration file `~/.config/silverquillm/config.toml` (grilling 2026-10-07).
 

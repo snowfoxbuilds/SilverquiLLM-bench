@@ -33,6 +33,8 @@ def _login_state(status: ProfileStatus) -> str:
     """One word for the slot, most blocking first: a pending settlement outranks the rest."""
     if status.pending:
         return "pending"
+    if status.blocked is not None:
+        return "blocked"
     if status.busy is None:
         return "unknown"
     if status.busy:
@@ -123,6 +125,8 @@ def _login(view: ProfileView) -> dict:
         "pending": status.pending,
         "pending_run": status.pending_run,
         "cooldown_until": _time(status.cooldown_until),
+        "blocked": status.blocked,
+        "blocked_run": status.blocked_run,
         "run_id": view.run_id,
         "weekly_usage_percent": weekly.percent if weekly is not None else None,
         "weekly_usage_estimated": weekly.estimated if weekly is not None else None,

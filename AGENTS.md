@@ -40,7 +40,7 @@ All specs, code, and agent instructions use these terms exactly.
 | `SCORING.md` | The Net Card Score headline: graded suites, test classes, Attributed Cards, counting, Run Record results and baseline comparison, leaderboard format; earlier benchmarks' per-suite reporting and SOS complexity weighting |
 | `AGENT-CONTAINERS.md` | Docker black-box architecture, file-based contract, entrypoint design, isolation guarantees |
 | `WORKSPACE-CONTRACT.md` | Workspace layout, card directory invariant, Run Manifest, writable engine, FDN/SOS structure |
-| `RUN-MONITORING.md` | The `silverquillm top` monitor, read-only but for Login Cooldowns: dashboard of live runs, queue and Login Profiles with Estimated Weekly Usage; historic browser over the Results Repo; run details with live output |
+| `RUN-MONITORING.md` | The `silverquillm top` monitor, read-only but for Login Pool slots (cooldowns, sign-in, removal): dashboard of live runs, queue and Login Profiles with Estimated Weekly Usage; historic browser over the Results Repo; run details with live output |
 | `AUDITED-TEST-CONVENTIONS.md` | Safety conventions for Audited Tests and the Reference Tests maintainers write |
 | `PLATFORM-TEST-CONVENTIONS.md` | Platform Test safety, and keeping Simulated Benchmarks to end-to-end tests with shared, cloned setup |
 | `17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format for engine correctness validation |

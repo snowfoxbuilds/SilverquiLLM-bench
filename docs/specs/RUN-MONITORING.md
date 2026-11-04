@@ -1,10 +1,10 @@
 Status: DRAFT
 
-Last updated: 2026-10-15
+Last updated: 2026-11-04
 
 # Run Monitoring
 
-`silverquillm top` is a terminal monitor over this host's live Benchmark Runs, the batch queue, the Login Pools, and the Results Repo's history; the only thing it changes is a Login Cooldown the operator asks for.
+`silverquillm top` is a terminal monitor over this host's live Benchmark Runs, the batch queue, the Login Pools, and the Results Repo's history; the only things it changes are the Login Pools' slots, when the operator asks.
 
 ## Context
 
@@ -25,16 +25,24 @@ It is built from the same poll as the dashboard, so its stages follow [Run stage
 The document (`schema_version` 1) has the host label, each resolved location and its source, the configuration, Docker and exclusion errors, the dispatch mode, the queue ledger's status (`none`, `ok` or `damaged`, with the error), and the dashboard counts.
 `runs` lists every live run with its stage and needs-recover reasons, the Batch and entry that started it, benchmark, construct, Candidate Hash, model and effort, Login Profile, budget, start time and elapsed container time, its container, run directory, estimate, and Run Cost with its source (`run_cost_usd`, `run_cost_source`: `reported` or `estimated`, provisional until `cost_recorded`).
 `queue` lists every Batch in queue order with its status, the run ids it has started and its unstarted entries; the status uses `queue ls`'s strings (`pending`, `running`, `done`, `missing_state`, `ledger_damaged`, `unsupported_legacy_batch`, `error`) (grilling 2026-10-14).
-`logins` lists every Login Profile with one state word (`pending`, `unknown`, `busy`, `cooldown` or `free`, most blocking first), the pending run, when a cooldown ends, the run holding it, and its Estimated Weekly Usage.
+`logins` lists every Login Profile with one state word (`pending`, `blocked`, `unknown`, `busy`, `cooldown` or `free`, most blocking first), the pending run, its Login Block's reason and run, when a cooldown ends, the run holding it, and its Estimated Weekly Usage.
 A run's Batch and entry come from the retained Batch state files (`state/<batch>.json`), not from the Batch TOMLs, so a run keeps its Batch after the TOML is removed or stops parsing, as when recovery publishes a run whose Batch file is gone; a missing, oversized or invalid state file attributes nothing, and a run two entries claim has no Batch, never an arbitrary one (grilling 2026-10-15).
 Since it follows no log, the one-shot snapshot reads each running Claude container's recent log once, `docker logs --timestamps --tail` without `--follow`, through the same line and usage parsers a followed log uses, so the live weekly reading the dashboard would show feeds the same [Estimated Weekly Usage](#estimated-weekly-usage); the read is bounded in time (5 s) and bytes (8 MiB), its `docker logs` is always ended, and only the parsed reading is kept, never a log line (grilling 2026-10-15).
 When Docker cannot be read or the log holds no valid reading, the estimate rests on the records, as the dashboard's would without a reading.
 `queue ls --json` keeps its own row shape for scripts that read the queue alone.
 The operator procedure that uses this document is in the Results Repo runbook (`runbook/monitoring-and-recovery.md`, snowfoxbuilds/bench-results#20).
 
-The monitor is read-only with one exception (grilling 2026-10-07).
-It never takes a lock that a runner or the scheduler takes, stops or recovers a run, edits a Batch, or fetches or pulls the Results Repo.
-Its one write is a Login Cooldown the operator asks for with a key in the LOGINS pane (2026-10-08): it goes through the same file and validation as `silverquillm login cooldown`, only for an enrolled Login Profile, and touches nothing else of the slot (not its stored login, its lock, or a run holding it).
+The monitor is read-only except for the Login Pools' slots (grilling 2026-10-07, 2026-11-04).
+It never stops or recovers a run, edits a Batch, or fetches or pulls the Results Repo, and it takes no lock a runner or the scheduler takes except a slot's own, the way `silverquillm login` does.
+Every write is one the operator asks for with a key in the LOGINS pane and goes through the same code as the matching `silverquillm login` subcommand, only for an enrolled Login Profile:
+
+- a Login Cooldown (2026-10-08), which touches nothing else of the slot (not its stored login, its lock, or a run holding it);
+- signing a new slot in, or an enrolled one again, which ends the slot's Login Block when it succeeds (grilling 2026-11-04);
+- removing a slot and its stored login, only after the operator confirms, and never one in use or holding a pending login (grilling 2026-11-04).
+
+A sign-in prints a long URL and reads a pasted code, so the monitor hands the terminal over for it: it suspends its own screen, runs the same enrollment as `silverquillm login refresh` in the plain terminal, waits for Enter so the outcome can be read, and then redraws (grilling 2026-11-04).
+Polling pauses while the terminal is handed over; runs and the scheduler carry on.
+A terminal the monitor cannot hand over to refuses the key and names the CLI command instead.
 Stopping a run, recovering, and editing the queue stay CLI and file operations.
 
 Live views cover this host only: its Docker daemon, its run directory, its batch queue, and its Login Pools (grilling 2026-10-07).
@@ -165,18 +173,20 @@ The STATUS pane shows, one above another (grilling 2026-10-07):
 - the resolved locations and their sources, this host's label, and the Results Repo clone's last fetch time and how many commits it is behind its remote-tracking branch, both from local refs;
 - counts of queued runs, live runs (every stage but Finished), and runs finished in the last seven days, with the all-time total dimmed.
 
-The LOGINS pane shows each Login Pool under its own header with its untapped count, then one line per Login Profile: a free, busy, pending or cooling-down marker, a usage bar, and its Estimated Weekly Usage with reset time and reading age (2026-10-08).
+The LOGINS pane shows each Login Pool under its own header with its untapped count, then one line per Login Profile, in slot-number order (`slot-2` before `slot-10`) (grilling 2026-11-04): a free, busy, pending, blocked or cooling-down marker, a usage bar, and its Estimated Weekly Usage with reset time and reading age (2026-10-08).
 A profile with a pending login journal names the run that owns its settlement before its usage.
 The pools sit side by side, one column each, so six profiles a pool fit in the height of the STATUS pane.
 The pane takes the fullest form that fits the width uncut: usage bars and full wording, then without the bars, then with the wording shortened (`41% · Thu 14:00 · 12m ago`); failing those, the form that fits by cutting only profile names.
 When no form fits two columns, the pools stack and the pane scrolls, as it does whenever a pool has more profiles than its height.
 
 A Login Profile under a Login Cooldown shows its own marker and colour and reads `cooldown until Thu 14:00 (3h12m)` before its usage (grilling 2026-10-08).
-A pool's untapped count counts only profiles a new run could take now: not busy, not pending, and not cooling down.
+A Login Profile under a Login Block shows the blocked marker in the alarm colour and reads `relogin · R re-enroll` before its usage (grilling 2026-11-04).
+A pool's untapped count counts only profiles a new run could take now: not busy, not pending, not blocked, and not cooling down.
 
 Each pool takes the keyboard focus in turn, and the focused pool marks its selected profile; the pane scrolls to keep it in view (2026-10-08).
 `t` holds the selected profile for one more hour: an hour from now, or an hour past a cooldown already in force, so each press adds an hour.
 `c` ends the selected profile's cooldown ten seconds from now rather than at once, and does nothing but say so when it has none.
+`a` signs a new slot in to the focused pool, `R` signs the selected profile in again, and `D` removes the selected profile after a `y`/`n` confirmation (grilling 2026-11-04).
 Each write refreshes the view at once and says what it set; a write that fails says why and changes nothing.
 
 Each running-pane row shows the stage, benchmark, Candidate display, Login Profile, a progress bar with its Estimated %, elapsed container time with the budget beside it, Run Cost, and a cost sparkline.
@@ -301,6 +311,9 @@ The list never grows past the terminal: it opens focused, scrolls with ↑ ↓, 
 | ← → or `h` `l` | LOGINS pane | the other pool, or the neighbouring pane |
 | `t` | LOGINS pane | hold the selected profile one more hour |
 | `c` | LOGINS pane | end the selected profile's cooldown in ten seconds |
+| `a` | LOGINS pane | sign a new slot in to the focused pool, outside the TUI |
+| `R` | LOGINS pane | sign the selected profile in again, outside the TUI |
+| `D` | LOGINS pane | remove the selected profile, after a `y`/`n` confirmation |
 | Escape | run details | back to the view it was opened from |
 | `r` | everywhere | refresh now |
 | `?` | everywhere | the key list |

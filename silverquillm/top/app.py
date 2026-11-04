@@ -7,9 +7,10 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import ClassVar
 
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SuspendNotSupported
 from textual.binding import Binding, BindingType
 from textual.markup import escape
 from textual.message import Message
@@ -17,10 +18,18 @@ from textual.timer import Timer
 from textual.widgets import ContentSwitcher, Static
 
 from silverquillm.karn.definition import KarnError
+from silverquillm.karn.login_admin import PROVIDER_OF, remove_slot, slot_identity
 from silverquillm.monitor import LogLine, Monitor, MonitorSnapshot, RunSummary, WorkspaceView
 
-from . import cooldowns
-from .dashboard import CooldownWanted, DashboardView, PoolPanel, RunChosen
+from . import cooldowns, slots
+from .dashboard import (
+    CooldownWanted,
+    DashboardView,
+    EnrollWanted,
+    PoolPanel,
+    RemoveWanted,
+    RunChosen,
+)
 from .details import DetailsView
 from .historic import HistoryView
 from .keys import HelpScreen
@@ -435,7 +444,7 @@ class MonitorApp(App):
         self.query_one("#topbar", Static).update("".join(parts))
         profiles = isinstance(self.focused, PoolPanel)
         hints = {
-            "dashboard": "↑↓ slot · ←→ pool · t cooldown +1h · c end cooldown in 10s"
+            "dashboard": "↑↓ slot · ←→ pool · t cooldown +1h · c end it · a add · R re-enroll · D remove"
             if profiles
             else "tab pane · enter open run",
             "history": "b browse · l list · enter open · s/</> sort · S reverse · x excluded",
@@ -477,16 +486,15 @@ class MonitorApp(App):
 
     def on_cooldown_wanted(self, message: CooldownWanted) -> None:
         """Write the cooldown through the CLI's own path, then refresh at once to show it."""
-        location = self.snapshot.locations.get("state_root") if self.snapshot else None
-        if location is None or location.path is None:
-            self.notify("no state root: cannot set a cooldown", severity="error")
+        state_root = self._state_root("set a cooldown")
+        if state_root is None:
             return
         now = self.clock()
         try:
             if message.lengthen:
-                until = cooldowns.lengthen(location.path, message.plugin_id, message.slot, now=now)
+                until = cooldowns.lengthen(state_root, message.plugin_id, message.slot, now=now)
             else:
-                until = cooldowns.end_soon(location.path, message.plugin_id, message.slot, now=now)
+                until = cooldowns.end_soon(state_root, message.plugin_id, message.slot, now=now)
         except (KarnError, OSError) as error:
             self.notify(f"{message.slot}: cooldown not written ({error})", severity="error")
             return
@@ -499,6 +507,57 @@ class MonitorApp(App):
         else:
             self.notify(f"{message.slot} cooldown ends at {local:%H:%M:%S} (in 10s)")
         self.poll()
+
+    def _state_root(self, action: str) -> Path | None:
+        location = self.snapshot.locations.get("state_root") if self.snapshot else None
+        if location is None or location.path is None:
+            self.notify(f"no state root: cannot {action}", severity="error")
+            return None
+        return location.path
+
+    def on_enroll_wanted(self, message: EnrollWanted) -> None:
+        """Sign in outside the TUI: the URL and pasted code need the plain terminal."""
+        state_root = self._state_root("enroll a slot")
+        if state_root is None:
+            return
+        try:
+            with self.suspend():
+                outcome = slots.sign_in(state_root, message.plugin_id, message.slot)
+        except SuspendNotSupported:
+            self.notify(
+                "this terminal cannot hand over to a sign-in; use `silverquillm login`",
+                severity="error",
+            )
+            return
+        failed = not outcome.endswith(" enrolled")
+        self.notify(outcome, severity="error" if failed else "information")
+        self.poll()
+
+    def on_remove_wanted(self, message: RemoveWanted) -> None:
+        state_root = self._state_root("remove a slot")
+        if state_root is None:
+            return
+        ref = f"{message.plugin_id}/{message.slot}"
+        agent = PROVIDER_OF[message.plugin_id]
+        try:
+            # The confirmation is for this slot as it is now, never a successor of its name.
+            identity = slot_identity(state_root, agent, message.slot)
+        except (KarnError, OSError) as error:
+            self.notify(f"{ref}: not removed ({error})", severity="error")
+            return
+
+        def answered(remove: bool | None) -> None:
+            if not remove:
+                return
+            try:
+                remove_slot(state_root, agent, message.slot, identity=identity)
+            except (KarnError, OSError) as error:
+                self.notify(f"{ref}: not removed ({error})", severity="error")
+                return
+            self.notify(f"{ref} removed")
+            self.poll()
+
+        self.push_screen(slots.ConfirmRemove(self.look, ref), answered)
 
     def on_run_chosen(self, message: RunChosen) -> None:
         details = self.query_one(DetailsView)
