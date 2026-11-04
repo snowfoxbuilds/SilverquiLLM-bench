@@ -123,7 +123,7 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | `silverquillm data fetch-hob-set\|fetch-fra-set\|card-id-map\|token-id-map\|download-replays` | Fetch and build the reference data under `data/`. |
 | `silverquillm build fra-hard\|port-from-known-best\|printed-classes\|fdn-specs\|audited-stubs` | Generate benchmark inputs. |
 | `silverquillm audit check-promotion\|printed-identity` | Gate a candidate Audited Test for promotion; rewrite name-string card identification in tests. |
-| `silverquillm qualify claude-telemetry\|codex-telemetry` | Qualify an agent CLI version's telemetry before its accounting is trusted. |
+| `silverquillm qualify claude-telemetry\|codex-telemetry` | Qualify an agent CLI version's telemetry: required before a Codex version's accounting is trusted, optional for Claude Code. |
 | `silverquillm replay triage REPORT.json` | Cluster a replay-validation report's divergences by root cause and check every one is tagged. |
 | `silverquillm legacy run-image\|smoke\|resume\|chain\|rescore\|logs …` | The historical `--image` entrypoint lineage and its run directories. |
 
