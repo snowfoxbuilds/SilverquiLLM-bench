@@ -583,6 +583,23 @@ def test_fable_is_priced_from_anthropic_rates():
     assert Decimal(row["usd"]) == Decimal("0.018")
 
 
+def test_sonnet_cache_reads_are_priced_at_a_twentieth_of_input():
+    row = price_requests([{**claude_request(100), "model": "claude-sonnet-5-5"}])[0]
+    parts = row["breakdown"]
+    # Sonnet 5.5: input $2, 5m write $2.50, 1h write $4, read $0.10 (0.05x), output $10.
+    expected = {
+        "uncached_input": (1000, "0.002"),
+        "cache_read": (4000, "0.0004"),
+        "cache_write": (200, "0.0005"),
+        "cache_write_1h": (100, "0.0004"),
+        "output": (50, "0.0005"),
+    }
+    for kind, (tokens, usd) in expected.items():
+        assert parts[kind]["tokens"] == tokens
+        assert Decimal(parts[kind]["usd"]) == Decimal(usd)
+    assert Decimal(row["usd"]) == Decimal("0.0038")
+
+
 def test_unknown_one_hour_split_is_not_priced_at_either_rate():
     row = price_requests([claude_request(None)])[0]
     assert row["usd"] is None
