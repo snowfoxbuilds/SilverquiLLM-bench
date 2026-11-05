@@ -113,8 +113,9 @@ See [Karn benchmarking](docs/KARN-BENCHMARKING.md) for batches, recovery, retain
 | `silverquillm regrade --benchmark … --out DIR [--run ID] [--candidate HASH]` | Re-grade retained runs on the current Audited Tests and grading inputs, writing new scores to DIR; records are never changed. |
 | `silverquillm queue ls [--json]` | One-shot, read-only view of the batch queue, including interrupted, partially observed, and unsupported batches. |
 | `silverquillm queue pause\|drain\|resume` | Stop launching new runs (drain also stops the scheduler once nothing is in flight), or launch again; runs in flight are never interrupted. |
-| `silverquillm top` | Read-only monitor: live runs, the queue, Login Profiles with Estimated Weekly Usage, history, and run details with live output (`q` quits; needs the `monitor` extra). `--json` prints one snapshot for scripts and agents without a terminal. |
-| `silverquillm login --build-output … --construct …` | Enroll the construct's own subscription login through its login plugin. |
+| `silverquillm top` | Monitor: live runs, the queue, Login Profiles with Estimated Weekly Usage, history, and run details with live output (`q` quits; needs the `monitor` extra). The LOGINS pane can also cool down, add, re-enroll and remove slots (`?` lists the keys). `--json` prints one snapshot for scripts and agents without a terminal. |
+| `silverquillm login ls\|add\|refresh\|remove\|unblock claude\|codex [SLOT]` | Manage a provider's Login Pool: list slots, sign a new one in, sign one in again after its login expired, delete one, or lift the block on a slot whose login was reported expired. A slot is `3` or `slot-3`. |
+| `silverquillm login --build-output … --construct …` | Enroll through a construct's own login plugin, on a host where no run has installed it yet. |
 | `silverquillm grader build [--python X.Y]` | Build the pinned, network-less grader images, one per graded Python version; each run is graded on its candidate's version. |
 | `silverquillm results-init PATH` | Lay out an empty private results repository and, if none exists, a minimal host configuration. |
 | `silverquillm grading-inputs BENCHMARK` | Print a benchmark's current grading-inputs digest as JSON. |

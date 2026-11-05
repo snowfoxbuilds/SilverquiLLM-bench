@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from silverquillm.karn.login import LOGIN_PLUGINS
+from silverquillm.karn.login_block import login_block
 from silverquillm.karn.login_cooldown import cooldown_until
 from silverquillm.karn.login_pool import enrolled_slots, logins_root
 from silverquillm.karn.subscription_usage import PROVIDERS
@@ -30,11 +31,20 @@ class ProfileStatus:
     """The run the pending journal names, when it names one; that run owns the settlement."""
     cooldown_until: datetime | None = None
     """When the profile's Login Cooldown ends; None when no cooldown is in force."""
+    blocked: str | None = None
+    """The Login Block's reason, such as ``relogin_needed``; None when not blocked."""
+    blocked_run: str | None = None
+    """The run whose login plugin reported the login dead, when the block names one."""
 
     @property
     def free(self) -> bool:
         """Untapped: a new run could take it now."""
-        return self.busy is False and not self.pending and self.cooldown_until is None
+        return (
+            self.busy is False
+            and not self.pending
+            and self.cooldown_until is None
+            and self.blocked is None
+        )
 
     @property
     def ref(self) -> str:
@@ -62,6 +72,7 @@ def login_profiles(
             directory = root / plugin_id / slot
             journal = directory / "active.json"
             pending = journal.exists()
+            held_out = login_block(directory)
             profiles.append(
                 ProfileStatus(
                     plugin_id,
@@ -71,6 +82,8 @@ def login_profiles(
                     pending,
                     _journal_run(journal) if pending else None,
                     cooldown_until(directory, now=now),
+                    held_out["reason"] if held_out else None,
+                    held_out["run_id"] if held_out else None,
                 )
             )
     return profiles

@@ -132,6 +132,8 @@ Tab.-active {{ color: {c("title")}; text-style: bold; }}
 HelpScreen {{ align: center middle; background: {c("background")} 70%; }}
 #help {{ width: 90; max-width: 100%; height: auto; max-height: 100%; padding: 1 2; }}
 #help > Static {{ width: 100%; height: auto; }}
+ConfirmRemove {{ align: center middle; background: {c("background")} 70%; }}
+#confirm {{ width: 64; max-width: 100%; height: auto; padding: 1 2; }}
 """
 
 
@@ -189,6 +191,7 @@ MTG = Theme(
         "untapped": "◦",
         "pending": "⚠",
         "cooldown": "❄",
+        "blocked": "⊘",
         "lock_unknown": "?",
         "running": "▸",
         "grading": "⚖",
@@ -258,6 +261,7 @@ PLAIN = Theme(
         "untapped": "-",
         "pending": "!",
         "cooldown": "z",
+        "blocked": "x",
         "lock_unknown": "?",
         "running": ">",
         "grading": "=",

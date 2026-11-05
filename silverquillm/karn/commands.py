@@ -19,6 +19,8 @@ from .exclusions import REASONS as REASON_CODES
 from .grader import DEFAULT_GRADING_TIMEOUT, GRADER_BASES
 from .host import DockerHost
 from .interruption import terminate_as_interrupt
+from .login import LoginInUseError
+from .login_admin import AGENTS
 
 BATCHES_DIR_OPTION = location_option("batches_dir", help="The batch queue directory.")
 
@@ -138,17 +140,19 @@ class _LoginGroup(click.Group):
     def resolve_command(self, ctx, args):
         if args and args[0] not in self.commands and not args[0].startswith("-"):
             raise click.UsageError(
-                f"unexpected extra argument ({args[0]}): a login is never named; "
-                "it comes from the construct's pool (subcommands: "
-                + ", ".join(sorted(self.commands))
-                + ")",
+                f"unexpected extra argument ({args[0]}): name a slot through a subcommand "
+                "(subcommands: " + ", ".join(sorted(self.commands)) + ")",
                 ctx,
             )
         return super().resolve_command(ctx, args)
 
 
 @click.group("login", cls=_LoginGroup, invoke_without_command=True)
-@click.option("--build-output", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option(
+    "--build-output",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="A build output; needed only before any run has installed the login plugin.",
+)
 @click.option("--construct", help="Any construct using the login plugin.")
 @click.option("--slot", help="Re-enroll this slot of the pool; omitted, enroll a new slot.")
 @click.option(
@@ -159,10 +163,13 @@ class _LoginGroup(click.Group):
 @STATE_ROOT_OPTION
 @click.pass_context
 def enroll(ctx, build_output, construct, slot, adopt, state_root):
-    """Enroll one subscription login into the pool of the construct's Karn login plugin.
+    """Manage the Login Pools' slots: one subscription login each, serving one run at a time.
 
-    Each slot serves one run at a time, so enroll as many as runs you want concurrently.
-    `login cooldown` holds slots out of new runs for a while instead.
+    Day to day, use the subcommands: `login ls`, `login add claude`, `login refresh codex 3`,
+    `login remove codex 3`, `login unblock claude 2`, `login cooldown`. They find the login
+    plugin among those runs installed on this host. Without a subcommand, `--build-output`
+    and `--construct` enroll from a construct's own plugin, as on a host that has never run
+    one, and `--adopt` moves a login from before pools.
     """
     if ctx.invoked_subcommand is not None:
         if ctx.get_parameter_source("state_root") is click.core.ParameterSource.COMMANDLINE:
@@ -174,7 +181,11 @@ def enroll(ctx, build_output, construct, slot, adopt, state_root):
         if value is None
     ]
     if missing:
-        raise click.UsageError(f"Missing option {' and '.join(missing)}.", ctx)
+        raise click.UsageError(
+            f"Missing option {' and '.join(missing)}, or use a subcommand"
+            " (`login add claude`, `login refresh codex 3`; see `login --help`).",
+            ctx,
+        )
     from .login import LOGIN_PLUGINS
     from .login_pool import LoginPool, adopt_legacy_login
 
@@ -208,7 +219,147 @@ def enroll(ctx, build_output, construct, slot, adopt, state_root):
     raise click.exceptions.Exit(status)
 
 
-AGENTS = {"codex": "karn-codex-login", "claude": "karn-claude-login"}
+def _login_state_root(ctx, state_root):
+    if ctx.get_parameter_source("state_root") is not click.core.ParameterSource.COMMANDLINE:
+        return ctx.meta.get(_LOGIN_STATE_ROOT, state_root)
+    return state_root
+
+
+AGENT_ARGUMENT = click.argument("agent", type=click.Choice(sorted(AGENTS)))
+SLOT_ARGUMENT = click.argument("slot", metavar="SLOT")
+
+
+def _enrolled(state_root, agent, text) -> str:
+    """The enrolled slot ``text`` names (``3`` or ``slot-3``), or a usage error listing them."""
+    from .login_admin import slot_name
+    from .login_pool import enrolled_slots, logins_root
+
+    plugin_id = AGENTS[agent]
+    enrolled = enrolled_slots(logins_root(state_root) / plugin_id, plugin_id)
+    try:
+        name = slot_name(text)
+    except KarnError:
+        name = None
+    if name not in enrolled:
+        listed = ", ".join(enrolled) or "none"
+        raise click.UsageError(f"Not enrolled in the {agent} pool: {text} (enrolled: {listed}).")
+    return name
+
+
+def _sign_in(state_root, agent, slot):
+    from .login_admin import enroll_slot
+
+    try:
+        ref, status = enroll_slot(state_root, agent, slot)
+    except (KarnError, OSError, ValueError) as error:
+        message = str(error)
+        if message.startswith("login_plugin_not_cached:"):
+            message += (
+                ": no run on this host has installed it yet; enroll once with"
+                " `silverquillm login --build-output <build> --construct <construct>`"
+            )
+        raise click.ClickException(message) from None
+    click.echo(f"{ref}: " + ("enrolled" if status == 0 else f"sign-in failed (exit {status})"))
+    raise click.exceptions.Exit(status)
+
+
+@enroll.command("ls")
+@click.argument("agent", required=False, type=click.Choice(sorted(AGENTS)))
+@STATE_ROOT_OPTION
+@click.pass_context
+def list_slots(ctx, agent, state_root):
+    """List every enrolled slot with its state: free, busy, cooldown, blocked or pending."""
+    from silverquillm.monitor.headless import _login_state
+    from silverquillm.monitor.locks import held_locks
+    from silverquillm.monitor.pools import login_profiles
+
+    state_root = _login_state_root(ctx, state_root)
+    profiles = [
+        status
+        for status in login_profiles(state_root, held_locks())
+        if agent is None or status.plugin_id == AGENTS[agent]
+    ]
+    if not profiles:
+        click.echo("no login slots enrolled")
+        return
+    for status in profiles:
+        detail = ""
+        if status.pending:
+            detail = f"run {status.pending_run} must be recovered" if status.pending_run else ""
+        elif status.blocked is not None:
+            detail = status.blocked + (
+                f" after run {status.blocked_run}" if status.blocked_run else ""
+            )
+            detail += "; `login refresh` re-enrolls"
+        elif status.cooldown_until is not None:
+            detail = "until " + status.cooldown_until.astimezone().strftime("%a %Y-%m-%d %H:%M %Z")
+        line = f"{status.provider:<7} {status.slot:<12} {_login_state(status):<9} {detail}"
+        click.echo(line.rstrip())
+
+
+@enroll.command("add")
+@AGENT_ARGUMENT
+@STATE_ROOT_OPTION
+@click.pass_context
+def add_slot(ctx, agent, state_root):
+    """Sign a new slot in to the AGENT pool (claude or codex)."""
+    _sign_in(_login_state_root(ctx, state_root), agent, None)
+
+
+@enroll.command("refresh")
+@AGENT_ARGUMENT
+@SLOT_ARGUMENT
+@STATE_ROOT_OPTION
+@click.pass_context
+def refresh_slot(ctx, agent, slot, state_root):
+    """Sign SLOT (3 or slot-3) in again, as after its login expired; lifts its Login Block."""
+    state_root = _login_state_root(ctx, state_root)
+    _sign_in(state_root, agent, _enrolled(state_root, agent, slot))
+
+
+@enroll.command("remove")
+@AGENT_ARGUMENT
+@SLOT_ARGUMENT
+@click.option("--yes", is_flag=True, help="Do not ask for confirmation.")
+@STATE_ROOT_OPTION
+@click.pass_context
+def remove_slot_command(ctx, agent, slot, yes, state_root):
+    """Delete SLOT and its stored login. A slot in use or with a pending login is refused."""
+    from .login_admin import remove_slot, slot_identity
+
+    state_root = _login_state_root(ctx, state_root)
+    name = _enrolled(state_root, agent, slot)
+    try:
+        identity = slot_identity(state_root, agent, name)
+        if not yes:
+            click.confirm(f"Remove {AGENTS[agent]}/{name} and its stored login?", abort=True)
+        ref = remove_slot(state_root, agent, name, identity=identity)
+    except LoginInUseError:
+        raise click.ClickException("login_in_use: a run or enrollment holds the slot") from None
+    except (KarnError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+    click.echo(f"{ref}: removed")
+
+
+@enroll.command("unblock")
+@AGENT_ARGUMENT
+@click.argument("slots", nargs=-1, required=True, metavar="SLOT...")
+@STATE_ROOT_OPTION
+@click.pass_context
+def unblock_slots(ctx, agent, slots, state_root):
+    """Lift the Login Block on SLOTs without signing in again, as after a false alarm."""
+    from .login_block import unblock
+    from .login_pool import logins_root
+
+    state_root = _login_state_root(ctx, state_root)
+    names = list(dict.fromkeys(_enrolled(state_root, agent, slot) for slot in slots))
+    pool_root = logins_root(state_root) / AGENTS[agent]
+    for name in names:
+        try:
+            lifted = unblock(pool_root / name)
+        except OSError as error:
+            raise click.ClickException(str(error)) from None
+        click.echo(f"{AGENTS[agent]}/{name}: " + ("block lifted" if lifted else "not blocked"))
 
 
 @enroll.command("cooldown")
@@ -235,8 +386,7 @@ def cooldown(ctx, agent, slots, every, duration, clear, more_slots, state_root):
     from .login_cooldown import clear_cooldown, parse_duration, set_cooldown
     from .login_pool import enrolled_slots, logins_root
 
-    if ctx.get_parameter_source("state_root") is not click.core.ParameterSource.COMMANDLINE:
-        state_root = ctx.meta.get(_LOGIN_STATE_ROOT, state_root)
+    state_root = _login_state_root(ctx, state_root)
     names = [*slots, *more_slots]
     if every and names:
         raise click.UsageError("Pass --slots or --all, not both.")

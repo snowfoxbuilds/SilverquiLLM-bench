@@ -16,6 +16,8 @@ from textual.geometry import Region
 from textual.message import Message
 from textual.widgets import DataTable, Static
 
+from silverquillm.karn.login_admin import AGENTS
+from silverquillm.karn.login_pool import slot_order
 from silverquillm.monitor import MonitorSnapshot, ProfileView, RunView, Stage
 
 from . import format as fmt
@@ -67,6 +69,22 @@ class RunChosen(Message):
         """Opened as one Run Record from history: details keep showing that record."""
         self.record_path = record_path
         """The pinned record's own path: several records can share one run id."""
+
+
+class EnrollWanted(Message):
+    """``a`` on a pool (``slot`` None: a new slot) or ``R`` on a selected Login Profile."""
+
+    def __init__(self, plugin_id: str, slot: str | None) -> None:
+        super().__init__()
+        self.plugin_id, self.slot = plugin_id, slot
+
+
+class RemoveWanted(Message):
+    """``D`` on a selected Login Profile; the app confirms before anything is deleted."""
+
+    def __init__(self, plugin_id: str, slot: str) -> None:
+        super().__init__()
+        self.plugin_id, self.slot = plugin_id, slot
 
 
 class CooldownWanted(Message):
@@ -232,7 +250,7 @@ class LoginsPane(VerticalScroll, can_focus=False):
     def views(snapshot: MonitorSnapshot, provider: str) -> list[ProfileView]:
         """One pool's profiles in drawing order."""
         views = [view for view in snapshot.profiles if view.status.provider == provider]
-        return sorted(views, key=lambda view: view.status.slot)
+        return sorted(views, key=lambda view: slot_order(view.status.slot))
 
     @staticmethod
     def pool(
@@ -283,6 +301,8 @@ class LoginsPane(VerticalScroll, can_focus=False):
         status = view.status
         if status.pending:
             mark = Text(theme.glyph("pending"), style=theme.style("bad", bold=True))
+        elif status.blocked is not None:
+            mark = Text(theme.glyph("blocked"), style=theme.style("bad", bold=True))
         elif status.cooldown_until is not None and not status.busy:
             mark = Text(theme.glyph("cooldown"), style=theme.style("cooldown", bold=True))
         elif status.busy is None:
@@ -306,6 +326,16 @@ class LoginsPane(VerticalScroll, can_focus=False):
                 held.append(theme.glyph("sep"), style=theme.style("muted"))
                 held.append_text(weekly)
             weekly = held
+        if status.blocked is not None:
+            # Nothing but a new sign-in frees a blocked profile, so that is what it reads.
+            reason = "relogin" if status.blocked == "relogin_needed" else "blocked"
+            held = Text(
+                f"{reason} · R re-enroll" if not short else reason, style=theme.style("bad")
+            )
+            if not short:
+                held.append(theme.glyph("sep"), style=theme.style("muted"))
+                held.append_text(weekly)
+            weekly = held
         if status.pending_run:
             # The run that still owns this login's settlement; recovering it frees the profile.
             owner = Text(
@@ -318,7 +348,10 @@ class LoginsPane(VerticalScroll, can_focus=False):
 
 
 class PoolPanel(Static, can_focus=True):
-    """One Login Pool, one selectable line per profile: ``t`` and ``c`` set Login Cooldowns."""
+    """One Login Pool, one selectable line per profile.
+
+    ``t`` and ``c`` set Login Cooldowns; ``a``, ``R`` and ``D`` add, re-enroll and remove slots.
+    """
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("up,k", "move(-1)", "Previous profile", show=False),
@@ -327,6 +360,9 @@ class PoolPanel(Static, can_focus=True):
         Binding("right,l", "app.focus_next", "Next pane", show=False),
         Binding("t", "cooldown(True)", "Cooldown +1h", show=False),
         Binding("c", "cooldown(False)", "End cooldown", show=False),
+        Binding("a", "add", "Add slot", show=False),
+        Binding("R", "refresh_login", "Re-enroll", show=False),
+        Binding("D", "remove", "Remove slot", show=False),
     ]
 
     def __init__(self, theme: Theme, provider: str) -> None:
@@ -410,6 +446,17 @@ class PoolPanel(Static, can_focus=True):
     def action_cooldown(self, lengthen: bool) -> None:
         if self.selected is not None:
             self.post_message(CooldownWanted(*self.selected, lengthen=lengthen))
+
+    def action_add(self) -> None:
+        self.post_message(EnrollWanted(AGENTS[self.provider], None))
+
+    def action_refresh_login(self) -> None:
+        if self.selected is not None:
+            self.post_message(EnrollWanted(*self.selected))
+
+    def action_remove(self) -> None:
+        if self.selected is not None:
+            self.post_message(RemoveWanted(*self.selected))
 
     def on_click(self, event: Click) -> None:
         offset = event.get_content_offset(self)

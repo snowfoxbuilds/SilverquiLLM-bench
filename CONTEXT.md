@@ -425,6 +425,13 @@ Runs treat a cooling-down profile as busy and wait for it; a run already using t
 
 _Avoid_: "disabled slot", "pause" (the profile stays enrolled and its runs are not paused), "lockout"
 
+**Login Block**
+
+A hold that keeps one Login Profile out of every new Benchmark Run because its login plugin reported that the login must be signed in again, as after it expired (grilling 2026-11-04).
+Runs treat a blocked profile as busy and wait for it, but the block never ends by itself: only signing the profile in again, or the operator lifting it, ends it.
+
+_Avoid_: "expired slot", "broken slot", "disabled slot", "Login Cooldown" (a cooldown is the operator's hold and ends at a set time)
+
 **Login Pool**
 
 The host-local set of Login Profiles enrolled through one login plugin, such as every Claude subscription login on the host.
@@ -711,6 +718,7 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - The existing publication pipeline requires a Promoted Candidate that verifies by recomputation and permits its knowledge to be published; these publication rules do not gate collection or analysis of Karn run data.
 - Each Login Profile has one Estimated Weekly Usage, fed by every Benchmark Run that used it, excluded runs included.
 - A Login Profile is under at most one Login Cooldown at a time; setting another replaces it.
+- A Login Profile is under at most one Login Block at a time, independent of its Login Cooldown.
 - A Batch holds ordered run specs; the scheduler dispatches them across free login slots, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
 - A Benchmark Run belongs to exactly one Campaign and one default Cohort; a Campaign's runs all fall in one default Cohort.
 - Filesystem checks (does the file exist, does it differ from the template?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only.

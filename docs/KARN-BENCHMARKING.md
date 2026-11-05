@@ -76,13 +76,26 @@ Each construct carries no custom skills or polling controller.
 Build output and the exact local image must remain available; queued execution never rebuilds or pulls an image.
 Enrollment uses the host's Codex CLI in an isolated home, through Karn's existing plugin.
 Logins are pooled per login plugin in `<state-root>/logins/<plugin-id>/<slot>`: any construct with that plugin can use any slot, so a new construct needs no new login.
-Each `silverquillm login` enrolls one new slot (`slot-1`, `slot-2`, …) through a fresh login; `--slot NAME` re-enrolls that slot instead.
+Manage a pool by provider name; a slot is named `3` or `slot-3`:
+
+```bash
+silverquillm login ls                  # every slot, in number order, with its state
+silverquillm login add codex           # sign a new slot in: slot-1, slot-2, …
+silverquillm login refresh claude 3    # sign slot-3 in again, as after its login expired
+silverquillm login remove codex 10     # delete slot-10 and its stored login (asks first; --yes skips)
+silverquillm login unblock claude 3    # lift a Login Block without signing in
+```
+
+These find the login plugin among those runs have installed on this host (`<state-root>/plugins`). On a host where no run has installed it yet, they refuse with `login_plugin_not_cached:<plugin-id>`; enroll the first slot through a construct instead, with `silverquillm login --build-output BUILD --construct CONSTRUCT` (`--slot NAME` re-enrolls a named slot that way).
+`login remove` refuses a slot a run or enrollment holds (`login_in_use`) or one holding an interrupted run's login (`login_slot_pending`) until `silverquillm recover` settles it.
+In `top`'s LOGINS pane, `a` adds a slot to the focused pool, `R` signs the selected slot in again, and `D` removes it after a `y`/`n` confirmation; a sign-in suspends `top` and runs in the plain terminal, so the URL and the pasted code work as in the CLI.
 A slot serves one run at a time, so enroll as many slots per provider as runs you want at once, and use the same state root for direct runs and batches.
 A run takes any free eligible slot. When every usable slot is busy, a direct run waits (`waiting for a login slot`) before creating anything; the scheduler leaves the entry pending and tries other batches. A batch entry counts as started only once it holds a slot, so a scheduler stopped before claiming one leaves it pending.
 With no slot enrolled a run refuses with `login_pool_empty:<plugin-id>`. The scheduler then leaves that batch's entries pending, warns once per pass, and goes on with other batches; `serve` retries on its next pass, and `--once` exits with the error only if nothing else ran.
 Each slot records the plugin it was enrolled through and serves only that plugin's pool.
 Before a settled slot is taken, its stored login is checked, without being copied, refreshed or changed, to be a readable file of that plugin's own shape; a damaged slot is skipped with a warning naming only the reason (such as `login_secret_malformed`), and the run takes another.
-When every slot's stored login is damaged, runs refuse with `login_pool_unusable:<plugin-id>`, and the scheduler defers the batch as for an empty pool; re-enroll a slot with `--slot NAME`.
+When every slot's stored login is damaged, runs refuse with `login_pool_unusable:<plugin-id>`, and the scheduler defers the batch as for an empty pool; re-enroll a slot with `login refresh`.
+When a run's login plugin reports that the login must be signed in again (an expired or revoked login, `relogin needed` in the run's `login_state`), the host puts the slot under a Login Block and prints `blocked login slot <plugin-id>/<slot>`. A blocked slot counts as busy, like a cooling-down one, but stays blocked until `login refresh` signs it in successfully or `login unblock` lifts it; `login ls` and `top` show it as `blocked`. When no other slot is free, a direct run waits (`… blocked until re-enrolled`) and the scheduler defers the batch.
 Slots that are logins to the same subscription share its rate limits, so concurrent runs on one account can slow each other; each run input and record names its slot (`login_profile`, such as `karn-claude-login/slot-1`).
 A login enrolled before pools existed, at `<state-root>/logins/<construct>`, joins a pool only by an explicit command, with no new login:
 
@@ -124,6 +137,7 @@ The host runs exactly one of `karn-codex-login` or `karn-claude-login` per candi
 A run interrupted while its login was mounted leaves its slot with a pending refresh that only the plugin artifact which mounted it may settle.
 Other runs skip that slot; a run bringing the same plugin artifact takes it only when no settled slot is free, and settles it first.
 Settle it with `silverquillm recover RUN_ID`, naming the run in the slot's `active.json`; recovery uses that run's retained plugin artifact.
+`login refresh` on that slot, or `R` in `top`, settles it the same way before signing in, with the plugin artifact that mounted it: it stops the run's container, copies the run's native sessions into its evidence, and refuses with `login_native_state_not_preserved:<reason>` when that copy failed in a way a retry could fix, so retry once the cause (such as a full disk) is fixed.
 When every slot is pending, runs refuse with `login_pool_pending:<plugin-id>` until one is recovered.
 
 Candidates need no test tooling of their own.

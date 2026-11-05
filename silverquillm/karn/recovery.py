@@ -42,6 +42,7 @@ from .login import (
     preserve_pending_native,
     recover_login,
 )
+from .login_block import block_if_relogin_needed
 from .records import (
     SCHEMA_VERSION,
     KarnIdentity,
@@ -329,10 +330,14 @@ def _settle_own_login(run_id, profile, host, candidate) -> list[dict] | None:
                 profile, plugin, host.docker.stop_and_confirm, cleanup=host.docker.cleanup_run
             )
             try:
-                return plugin.status()
+                status = plugin.status()
             except KarnError:
                 # The login is settled; only its informational status is unavailable.
                 return []
+            block_if_relogin_needed(
+                profile.directory, artifact.row["id"], profile.name, status, run_id
+            )
+            return status
 
 
 def _failure_reason(error: Exception) -> str:

@@ -22,9 +22,12 @@ from pathlib import Path
 
 from .definition import KarnError, canonical, read_regular, strict_json
 from .login import LOGIN_PLUGINS, LoginInUseError, LoginProfile, private_directory, write_private
+from .login_block import is_blocked
 from .login_cooldown import cooldown_until
 
 SLOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
+# ASCII digits only: ``str.isdigit`` also accepts characters ``int`` refuses, such as ``²``.
+_DIGITS = re.compile(r"([0-9]+)")
 DEFAULT_POLL_SECONDS = 5.0
 SLOT_RECORD = "pool.json"
 # A secret file holds one JSON string of at most 64 KiB, escaped: the bound its store keeps.
@@ -35,6 +38,15 @@ STORED_LOGIN_FILES = {
     "karn-codex-login": ("auth.json", frozenset({"auth.json"})),
     "karn-claude-login": (".credentials.json", frozenset({".credentials.json", ".claude.json"})),
 }
+
+
+def slot_order(name: str) -> tuple:
+    """Sort key putting ``slot-2`` before ``slot-10``: digit runs compare as numbers."""
+    return tuple(
+        (0, int(part), part) if _DIGITS.fullmatch(part) else (1, 0, part)
+        for part in _DIGITS.split(name)
+        if part
+    )
 
 
 class LoginPoolUnavailableError(KarnError):
@@ -64,7 +76,7 @@ def _announce(message: str) -> None:
 def enrolled_slots(pool: Path, plugin_id: str) -> list[str]:
     """A pool's enrolled slots, like ``LoginPool.enrolled`` but never creating the pool directory."""
     try:
-        entries = sorted(os.scandir(pool), key=lambda entry: entry.name)
+        entries = sorted(os.scandir(pool), key=lambda entry: slot_order(entry.name))
     except OSError:
         return []
     return [
@@ -181,7 +193,7 @@ class LoginPool:
     def enrolled(self) -> list[str]:
         """Slots of this plugin holding a stored login; an unfinished enrollment is not one."""
         names = []
-        for entry in sorted(self.root.iterdir()):
+        for entry in sorted(self.root.iterdir(), key=lambda entry: slot_order(entry.name)):
             if (
                 SLOT_NAME.fullmatch(entry.name)
                 and entry.is_dir()
@@ -198,7 +210,7 @@ class LoginPool:
             directory = self.root / name
             descriptor = None
             try:
-                if cooldown_until(directory) is not None:
+                if cooldown_until(directory) is not None or is_blocked(directory):
                     continue
                 try:
                     descriptor = os.open(directory / "runner.lock", os.O_RDONLY | os.O_NOFOLLOW)
@@ -212,6 +224,9 @@ class LoginPool:
                         os.stat(directory / "runner.lock", follow_symlinks=False),
                     ):
                         continue
+                # A run releasing the slot may have blocked it since the check above.
+                if is_blocked(directory):
+                    continue
                 # Unlike acquire's artifact-specific recovery, a capacity probe cannot settle.
                 journal = directory / "active.json"
                 if journal.exists() or journal.is_symlink():
@@ -252,6 +267,41 @@ class LoginPool:
             if not (profile.directory / "secret.json").exists():
                 shutil.rmtree(profile.directory)
 
+    def identity(self, name: str) -> tuple[int, int]:
+        """The slot directory's identity, so a removal confirmed for it never takes a successor."""
+        if name not in enrolled_slots(self.root, self.plugin_id):
+            raise KarnError("login_slot_not_enrolled")
+        info = os.stat(self.root / name, follow_symlinks=False)
+        return info.st_dev, info.st_ino
+
+    def remove(self, name: str, *, identity: tuple[int, int] | None = None) -> None:
+        """Delete an enrolled slot and its stored login, under the pool's and the slot's locks.
+
+        A slot in use, or holding an interrupted run's login that is not yet settled, is
+        refused: that run's recovery still needs it. With ``identity``, a slot removed and
+        enrolled again under the same name since is refused rather than deleted. The slot
+        is first renamed out of the pool in one step, so a run or enrollment opening it
+        concurrently finds no slot rather than a half-deleted one.
+        """
+        with self._creating():
+            if name not in self.enrolled():
+                raise KarnError("login_slot_not_enrolled")
+            profile = self.slot(name)
+            with profile.exclusive():
+                if identity is not None and self.identity(name) != identity:
+                    raise KarnError("login_slot_replaced")
+                for pending in (
+                    profile.directory / "active.json",
+                    profile.directory / "plugin" / "mounted.json",
+                ):
+                    if pending.exists() or pending.is_symlink():
+                        raise KarnError("login_slot_pending")
+                # A leading dot is never a slot name, so the moved directory is never enrolled.
+                doomed = self.root / f".removing-{name}-{os.urandom(8).hex()}"
+                os.rename(profile.directory, doomed)
+            _fsync_directory(self.root)
+        shutil.rmtree(doomed)
+
     def acquire(
         self,
         hold: contextlib.ExitStack,
@@ -270,9 +320,10 @@ class LoginPool:
         the plugin artifact this run brings, so the host can preserve that run's native state
         and settle it as a login's next run always has. Its stored login is left for that
         plugin to judge. Any other pending slot waits for ``recover``. A slot under a Login
-        Cooldown counts as busy until the cooldown ends, so a run waits for it rather than
-        refusing. With no slot enrolled, or none usable and none busy or cooling down,
-        waiting could never end, so those refuse instead.
+        Cooldown counts as busy until the cooldown ends, and a slot under a Login Block until
+        it is re-enrolled or unblocked, so a run waits for it rather than refusing. With no
+        slot enrolled, or none usable and none busy, cooling down or blocked, waiting could
+        never end, so those refuse instead.
         """
         report = on_wait or _announce
         announced, skipped = False, set()
@@ -287,7 +338,7 @@ class LoginPool:
             names = self.enrolled()
             if not names:
                 raise LoginPoolUnavailableError("login_pool_empty:" + self.plugin_id)
-            busy = cooling = damaged_logins = 0
+            busy = cooling = blocked = damaged_logins = 0
             # Every lock taken while choosing is released here unless handed to ``hold``.
             with contextlib.ExitStack() as candidates:
                 settleable = None
@@ -298,7 +349,17 @@ class LoginPool:
                         if cooldown_until(profile.directory) is not None:
                             cooling += 1
                             continue
+                        # Checked before locking too, so polling never makes a sign-in
+                        # of the blocked slot find it in use.
+                        if is_blocked(profile.directory):
+                            blocked += 1
+                            continue
                         lock.enter_context(profile.exclusive())
+                        # The run that held the slot until now may have blocked it.
+                        if is_blocked(profile.directory):
+                            lock.close()
+                            blocked += 1
+                            continue
                     except LoginInUseError:
                         busy += 1
                         continue
@@ -330,21 +391,31 @@ class LoginPool:
                 if settleable is not None:
                     hold.enter_context(settleable[1].pop_all())
                     return settleable[0]
-            if not busy and not cooling:
+            if not busy and not cooling and not blocked:
                 # Only a damaged login needs re-enrolling; anything else waits for recovery.
                 reason = "unusable" if damaged_logins == len(names) else "pending"
                 raise LoginPoolUnavailableError(f"login_pool_{reason}:{self.plugin_id}")
             if not wait:
                 raise LoginPoolBusyError("login_pool_busy:" + self.plugin_id)
             if not announced:
-                held = f"all {busy} usable {self.plugin_id} slots are busy"
-                if cooling and not busy:
-                    held = f"all {cooling} usable {self.plugin_id} slots are cooling down"
-                elif cooling:
-                    held = (
-                        f"{busy} usable {self.plugin_id} slots are busy and {cooling} cooling down"
+                held = [
+                    (count, what)
+                    for count, what in (
+                        (busy, "busy"),
+                        (cooling, "cooling down"),
+                        (blocked, "blocked until re-enrolled"),
                     )
-                report(f"waiting for a login slot: {held}")
+                    if count
+                ]
+                if len(held) == 1:
+                    ((count, what),) = held
+                    text = f"all {count} usable {self.plugin_id} slots are {what}"
+                else:
+                    (count, what), *rest = held
+                    text = f"{count} usable {self.plugin_id} slots are {what} and " + " and ".join(
+                        f"{n} {w}" for n, w in rest
+                    )
+                report(f"waiting for a login slot: {text}")
                 announced = True
             time.sleep(poll_seconds)
 
