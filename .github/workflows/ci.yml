@@ -76,12 +76,15 @@ jobs:
 
       # A job-private basetemp, so no other pytest session in the runner's VM
       # prunes its numbered directories under /tmp/pytest-of-<user>.
-      # It stays under the system temp dir, which redaction tests expect.
+      # It lives under $RUNNER_TEMP, not /tmp: the sbx VM's /tmp is overlayfs,
+      # where the monitor's /proc/locks probe can't match a lock file's device,
+      # so live runs read as needs_recover. $RUNNER_TEMP is on the runner's
+      # persistent virtiofs home, and the runner empties it after every job.
       # pytest-xdist runs it on eight workers, one per vCPU of the runner's VM;
       # worksteal rebalances the long-running tests.
       - name: Test
         run: |
-          tmp="$(mktemp -d)"
+          tmp="$(mktemp -d -p "$RUNNER_TEMP")"
           trap 'rm -rf "$tmp"' EXIT
           python -m pytest tests/ -q -n 8 --dist worksteal --basetemp "$tmp/pytest"
 
@@ -116,7 +119,7 @@ jobs:
 
       - name: Test
         run: |
-          tmp="$(mktemp -d)"
+          tmp="$(mktemp -d -p "$RUNNER_TEMP")"
           trap 'rm -rf "$tmp"' EXIT
           python -m pytest tests/ -q -n 8 --dist worksteal --basetemp "$tmp/pytest"
 
