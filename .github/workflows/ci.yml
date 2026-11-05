@@ -95,7 +95,10 @@ jobs:
     # It runs after merge only: a pull request is gated on 3.13 alone, which
     # halves its time on the runners, and a 3.14-only break fails this job on main.
     name: pytest (Python 3.14)
-    if: github.event_name == 'push'
+    # A plain `if:` implies success() over the whole needs chain, and clear-outcome is
+    # skipped on a push, so without !cancelled() this job never ran on main.
+    if: >-
+      !cancelled() && github.event_name == 'push' && needs.test.result == 'success'
     runs-on: [self-hosted, Linux, X64]
     needs: test
     timeout-minutes: 30
