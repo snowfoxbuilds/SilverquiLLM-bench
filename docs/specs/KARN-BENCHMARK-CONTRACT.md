@@ -218,13 +218,19 @@ The proxy sidecar listens on port 8080 too, serves only clients on the run's own
 The relay passes on only `POST /v1/chat/completions` and `GET /v1/models`, and refuses a request for more than one choice (`n`).
 The server stops with the run, before grading, and with the runner if the runner dies.
 
+Before the run launches its workload, `run-input.json` holds the server facts the run verified, so a recovered record carries the same `run_metadata.model_server` and `native_telemetry`.
+Recovery copies them as recorded and never reverifies the host's current files; a run interrupted before verification is recovered with `model_sha256_verified` null.
+
 The relay is the run's only observation source, so it cannot be combined with `--native-telemetry` other than `auto`.
 Each relayed request becomes one request row on thread `main`, with the served model, its usage, `finish_reason` and the server's own `timings`.
 Every request reaches one server, so the relay cannot tell a second agent process from the main one: subagent use is unknown (`subagents` null, `subagents_reason` `threads_not_observable`), never `none`.
-A request that failed or was cut off after the server took it, such as the one in flight at the deadline, or a response that reported usage more than once, leaves usage partial (`relayed_request_incomplete`, `multiple_usage_reports`).
+The relay writes a `request_started` event to `observations.events.jsonl` before it forwards a request, and a `response` event with the same id when the request settles.
+When the run ends, the relay stops admitting requests, cancels those still in flight, and waits at most 10 seconds for their `response` events; nothing is recorded after the measurements are computed, so the events file always summarizes to the record's measurements.
+A start with no `response`, from a runner that died or a request that did not settle in time, counts as an unfinished request.
+A request that failed, was cancelled or was unfinished, or a response that reported usage more than once, leaves usage partial (`relayed_request_incomplete`, `multiple_usage_reports`).
 Usage follows OpenAI's convention, input including cached tokens; cache writes are zero, and reasoning tokens are missing, because llama.cpp counts them inside completion tokens.
 No price applies, so the Estimated Cost is incomplete with `model_price_unavailable`.
-`measurements.server_timings` sums the server's prompt and generation tokens and times into tokens per second, and `coverage.failed_requests` counts requests the relay could not complete.
+`measurements.server_timings` sums the server's prompt and generation tokens and times into tokens per second, `coverage.failed_requests` counts requests the relay could not complete, and `coverage.unfinished_requests` those of them that never settled.
 A request may set sampling parameters of its own, which llama.cpp honours over the server's flags; each event keeps them as `request_parameters`, and `coverage.requests_with_parameter_overrides` counts such requests.
 `run_metadata.model_server` records the spec, the binary and its version, the verified digest, and how long verification and start-up took.
 The run directory also keeps `model-transcript.jsonl`: per request, the messages added since the last reply and the assembled response, with its reasoning and tool calls.

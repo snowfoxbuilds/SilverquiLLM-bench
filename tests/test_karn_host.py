@@ -35,6 +35,7 @@ def make_candidate(
     timeout=None,
     definition_version=4,
     mode="automaton",
+    environment=None,
 ):
     value = json.loads(
         (FIXTURES / "wire-vectors-v4/canonical-definition-id/input.json").read_bytes()
@@ -49,7 +50,7 @@ def make_candidate(
         timeout_seconds=timeout,
         plugins=[],
         credentials=[],
-        environment={},
+        environment=environment or {},
         network=network or {"mode": "none", "https_hosts": []},
     )
     mounts = []

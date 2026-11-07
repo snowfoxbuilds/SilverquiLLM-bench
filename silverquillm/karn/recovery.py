@@ -553,6 +553,11 @@ def _recover(
     if "provenance" in inputs:
         # Where and from what the run was launched, not where it was recovered.
         metadata["provenance"] = inputs["provenance"]
+    if "model_server" in inputs:
+        # The server the run started, as recorded then; recovery never reverifies the host's
+        # files. An input written before the digest was verified leaves verification unknown.
+        metadata["model_server"] = {"model_sha256_verified": None, **inputs["model_server"]}
+        metadata["native_telemetry"] = telemetry
     if benchmark.identity != inputs["benchmark_identity"]:
         scores = missing_scores("benchmark_changed_since_run_started")
     elif selection and selection["selected"]:

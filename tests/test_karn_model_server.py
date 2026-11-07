@@ -6,6 +6,7 @@ import json
 import socket
 import sys
 import threading
+import time
 import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,7 +29,7 @@ from silverquillm.karn.observations import summarize_events
 from silverquillm.karn.proxy import ModelForwardServer
 
 FAKE_SERVER = r"""
-import json, sys
+import json, os, sys, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 if "--version" in sys.argv:
     print("version: 0.9.0-dev (build 12182, commit fd27b2034)")
@@ -48,8 +49,29 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+    def hold(self):
+        # A request still in prompt processing: say so, then wait to be released.
+        open(sys.argv[0] + ".held", "a").write("1")
+        for _ in range(600):
+            if os.path.exists(sys.argv[0] + ".release"):
+                return
+            time.sleep(0.05)
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        messages = request.get("messages")
+        last = messages[-1].get("content") if isinstance(messages, list) and messages else None
+        if last == "hold":
+            self.hold()
+        if last == "hold-close":
+            # A close-delimited stream, which http.client reads after dropping its socket.
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(b"data: {}\n\n")
+            self.wfile.flush()
+            self.hold()
+            return
         usage = {"prompt_tokens": 100, "completion_tokens": 7, "total_tokens": 107,
                  "prompt_tokens_details": {"cached_tokens": 60}}
         timings = {"cache_n": 60, "prompt_n": 40, "prompt_ms": 20.0,
@@ -78,8 +100,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
-        for chunk in [*(b"data: " + json.dumps(c).encode() + b"\n\n" for c in chunks),
-                      b"data: [DONE]\n\n"]:
+        for position, chunk in enumerate(
+            [*(b"data: " + json.dumps(c).encode() + b"\n\n" for c in chunks), b"data: [DONE]\n\n"]
+        ):
+            if position == 1 and last == "hold-stream":
+                self.wfile.flush()
+                self.hold()
             self.wfile.write(b"%x\r\n%s\r\n" % (len(chunk), chunk))
         self.wfile.write(b"0\r\n\r\n")
 
@@ -480,7 +506,9 @@ def test_workload_content_is_kept_bounded_and_overrides_are_recorded(served, tmp
         assert refused.value.code == 400
         post(collector.endpoint + "/v1/chat/completions", {"messages": 5})
         measurements = collector.finalize(exit_kind="completed")
-    event, malformed = collector.events
+    start, event, _, malformed = collector.events
+    assert start["kind"] == "request_started" and start["id"] == event["id"]
+    assert start["requested_model"]["truncated_from_chars"] == 100_002
     assert event["requested_model"]["truncated_from_chars"] == 100_002
     assert event["request_parameters"] == {"temperature": 0}
     assert malformed["request_messages"] is None and malformed["status"] == 200
@@ -518,3 +546,289 @@ def test_lost_or_repeated_usage_leaves_usage_partial():
     repeated = [{**base, "id": "a", "response_id": "a", "usage": usage, "usage_reports": 4}]
     reasons = summarize_model_events(repeated, exit_kind="completed")["usage"]["reasons"]
     assert reasons == ["multiple_usage_reports"]
+
+
+def held(served, count=1):
+    marker = Path(str(served.binary) + ".held")
+    for _ in range(200):
+        if marker.exists() and len(marker.read_text()) >= count:
+            return
+        time.sleep(0.05)
+    raise AssertionError("the fake server never held a request")
+
+
+def in_background(url, content, *, stream=True):
+    outcome = {}
+
+    def send():
+        try:
+            outcome["status"] = post(
+                url, {"stream": stream, "messages": [{"role": "user", "content": content}]}
+            )[0]
+        except Exception as error:  # noqa: BLE001 -- the client only reports what it saw.
+            outcome["error"] = type(error).__name__
+
+    thread = threading.Thread(target=send, daemon=True)
+    thread.start()
+    return thread, outcome
+
+
+def replayed(run_dir, exit_kind):
+    events = [json.loads(line) for line in (run_dir / "observations.events.jsonl").open()]
+    return events, summarize_events(events, exit_kind=exit_kind, adapter="model_server")
+
+
+def test_a_request_without_its_first_byte_at_finalize_is_cancelled_and_counted(served, tmp_path):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        in_background(collector.endpoint + "/v1/chat/completions", "hold")
+        held(served)
+        started = time.monotonic()
+        measurements = collector.finalize(exit_kind="deadline")
+        assert time.monotonic() - started < 5
+        Path(str(served.binary) + ".release").write_text("")
+        time.sleep(0.3)
+    assert measurements["coverage"]["relayed_requests"] == 1
+    assert measurements["coverage"]["failed_requests"] == 1
+    assert "relayed_request_incomplete" in measurements["usage"]["reasons"]
+    events, replay = replayed(run_dir, "deadline")
+    assert [event["kind"] for event in events] == ["request_started", "response"]
+    assert events[1]["error"] == "cancelled_at_finalize"
+    assert replay["coverage"] == measurements["coverage"]
+    assert replay["usage"] == measurements["usage"]
+
+
+def test_a_stream_cut_mid_response_is_never_counted_complete(served, tmp_path):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        in_background(collector.endpoint + "/v1/chat/completions", "hold-stream")
+        held(served)
+        measurements = collector.finalize(exit_kind="deadline")
+    assert measurements["requests"] == []
+    assert measurements["coverage"]["failed_requests"] == 1
+    events, replay = replayed(run_dir, "deadline")
+    assert events[-1]["status"] == 200 and events[-1]["error"] == "cancelled_at_finalize"
+    assert replay["coverage"] == measurements["coverage"]
+
+
+def test_concurrent_requests_settle_once_each_at_finalize(served, tmp_path):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        url = collector.endpoint + "/v1/chat/completions"
+        assert post(url, {"messages": [{"role": "user", "content": "done"}]})[0] == 200
+        in_background(url, "hold")
+        in_background(url, "hold-stream")
+        held(served, 2)
+        measurements = collector.finalize(exit_kind="deadline")
+        assert collector.finalize(exit_kind="deadline")["coverage"] == measurements["coverage"]
+    assert measurements["coverage"]["relayed_requests"] == 3
+    assert measurements["coverage"]["failed_requests"] == 2
+    assert len(measurements["requests"]) == 1
+    events, replay = replayed(run_dir, "deadline")
+    assert sum(event["kind"] == "response" for event in events) == 3
+    assert replay["coverage"] == measurements["coverage"]
+    assert replay["requests"] == measurements["requests"]
+
+
+def test_a_request_finishing_as_the_run_ends_is_counted_once(served, tmp_path):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        thread, _ = in_background(collector.endpoint + "/v1/chat/completions", "hold")
+        held(served)
+        Path(str(served.binary) + ".release").write_text("")
+        measurements = collector.finalize(exit_kind="completed")
+        thread.join(5)
+    assert measurements["coverage"]["relayed_requests"] == 1
+    events, replay = replayed(run_dir, "completed")
+    assert sum(event["kind"] == "response" for event in events) == 1
+    assert replay["coverage"] == measurements["coverage"]
+    assert replay["requests"] == measurements["requests"]
+
+
+def test_a_start_with_no_terminal_record_is_unfinished_for_recovery():
+    events = [
+        {"id": "a", "kind": "request_started", "timestamp_ms": 1},
+        {
+            "id": "a",
+            "kind": "response",
+            "response_id": "x",
+            "status": 200,
+            "model": "m",
+            "usage": None,
+            "timestamp_ms": 1,
+            "tool_calls": 0,
+        },
+        {"id": "b", "kind": "request_started", "timestamp_ms": 2},
+        {"id": "b", "kind": "request_started", "timestamp_ms": 2},
+    ]
+    measurements = summarize_model_events(events, exit_kind="interrupted")
+    assert measurements["coverage"]["relayed_requests"] == 2
+    assert measurements["coverage"]["failed_requests"] == 1
+    assert measurements["coverage"]["unfinished_requests"] == 1
+    assert len(measurements["requests"]) == 1
+    assert "relayed_request_incomplete" in measurements["usage"]["reasons"]
+
+
+class RelayHost:
+    """A workload that asks the run's model server one question and stops."""
+
+    def __init__(self):
+        from .test_karn_execution import FixtureHost
+
+        self.inner = FixtureHost()
+        self.docker = self.inner.docker
+
+    def preflight(self, candidate, budget_seconds):
+        pass
+
+    def run(self, candidate, workspace, evidence_dir, prompt, *, model_endpoint, **kwargs):
+        post(
+            model_endpoint + "/v1/chat/completions",
+            {"messages": [{"role": "user", "content": "go"}]},
+        )
+        return self.inner.run(candidate, workspace, evidence_dir, prompt, **kwargs)
+
+
+def model_server_run(served, tmp_path):
+    from .test_karn_execution import options
+    from .test_karn_host import make_candidate
+
+    document = spec_document(model={"file": "model.gguf", "sha256": served.spec.model_sha256})
+    candidate = make_candidate(
+        tmp_path / "recipe",
+        network={"mode": "restricted", "https_hosts": []},
+        environment={
+            "CONSTRUCT_MODEL": "qwen3.8-27b",
+            "CONSTRUCT_PI_BASE_URL": MODEL_SERVER_URL,
+            MODEL_SERVER_ENV: json.dumps(document),
+        },
+    )
+    return options(
+        tmp_path,
+        build_output=candidate.build_output,
+        host=RelayHost(),
+        model_server_host=served.host,
+        collector_host="127.0.0.1",
+    )
+
+
+def interrupted_run(opts, run_id):
+    from silverquillm.karn.execution import run_benchmark
+
+    def runner_dies(*args, **kwargs):
+        raise SystemExit(91)
+
+    with pytest.raises(SystemExit):
+        run_benchmark(**opts, run_id=run_id, evaluator=runner_dies)
+    return opts["results_dir"] / run_id
+
+
+def recover(opts, run_id, monkeypatch, tmp_path):
+    from silverquillm.karn import recovery
+
+    docker = SimpleNamespace(stop_and_confirm=lambda *args: None, cleanup_run=lambda *args: None)
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: SimpleNamespace(docker=docker, plugin_cache=tmp_path / "cache"),
+    )
+    keys = ("bench_root", "results_dir", "results_repo", "state_root", "grader")
+    return recovery.recover_benchmark(run_id=run_id, spec={}, **{key: opts[key] for key in keys})
+
+
+def test_recovery_keeps_the_server_the_run_verified_without_reverifying(
+    served, tmp_path, monkeypatch
+):
+    opts = model_server_run(served, tmp_path)
+    run_dir = interrupted_run(opts, "cut")
+    inputs = json.loads((run_dir / "run-input.json").read_text())
+    assert inputs["model_server"]["model_sha256_verified"] is True
+    # The host's files are gone by the time the run is recovered; recovery never reads them.
+    served.binary.unlink()
+    (served.host.models_dir / "model.gguf").unlink()
+    recovered = recover(opts, "cut", monkeypatch, tmp_path)
+    server = recovered.run_metadata["model_server"]
+    assert server == inputs["model_server"]
+    assert server["model"]["sha256"] == served.spec.model_sha256
+    assert server["model_bytes"] == len(b"GGUF weights")
+    assert recovered.run_metadata["native_telemetry"]["adapter"] == "model_server"
+    measurements = recovered.run_metadata["measurements"]
+    assert measurements["coverage"]["relayed_requests"] == 1
+    assert measurements["requests"][0]["model"] == "qwen3.8-27b"
+
+
+def test_a_run_that_failed_before_verifying_recovers_with_verification_unknown(
+    served, tmp_path, monkeypatch
+):
+    from silverquillm.karn import model_server
+
+    opts = model_server_run(served, tmp_path)
+
+    def runner_dies(path):
+        raise SystemExit(91)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(model_server, "file_sha256", runner_dies)
+        with pytest.raises(SystemExit):
+            from silverquillm.karn.execution import run_benchmark
+
+            run_benchmark(**opts, run_id="unverified")
+    recovered = recover(opts, "unverified", monkeypatch, tmp_path)
+    server = recovered.run_metadata["model_server"]
+    assert server["model_sha256_verified"] is None
+    assert server["model"]["sha256"] == served.spec.model_sha256
+    assert "model_bytes" not in server
+    assert recovered.run_metadata["measurements"]["coverage"]["relayed_requests"] == 0
+
+
+def test_a_changed_model_file_is_recorded_unverified_and_never_served(served, tmp_path):
+    from silverquillm.karn.execution import run_benchmark
+
+    opts = model_server_run(served, tmp_path)
+    (served.host.models_dir / "model.gguf").write_bytes(b"other weights")
+    record = run_benchmark(**opts, run_id="changed")
+    assert record.run_metadata["model_server"]["model_sha256_verified"] is None
+    assert record.run_metadata["execution"]["error"] == "model_digest_mismatch"
+
+
+def test_a_close_delimited_stream_is_cancelled_without_waiting(served, tmp_path):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        in_background(collector.endpoint + "/v1/chat/completions", "hold-close")
+        held(served)
+        started = time.monotonic()
+        measurements = collector.finalize(exit_kind="deadline")
+        assert time.monotonic() - started < 5
+    events, replay = replayed(run_dir, "deadline")
+    assert events[-1]["error"] == "cancelled_at_finalize"
+    assert measurements["coverage"]["unfinished_requests"] == 0
+    assert replay["coverage"] == measurements["coverage"]
+
+
+def test_a_start_that_cannot_be_written_is_refused_not_relayed(served, tmp_path):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        sink = collector._sink
+
+        class FullDisk:
+            closed = False
+
+            def write(self, text):
+                raise OSError(28, "No space left on device")
+
+        collector._sink = FullDisk()
+        with pytest.raises(urllib.error.HTTPError) as refused:
+            post(collector.endpoint + "/v1/chat/completions", {"messages": []})
+        assert refused.value.code == 503
+        collector._sink = sink
+        started = time.monotonic()
+        measurements = collector.finalize(exit_kind="completed")
+        assert time.monotonic() - started < 5
+    assert measurements["coverage"]["relayed_requests"] == 0
+    assert not Path(str(served.binary) + ".held").exists()

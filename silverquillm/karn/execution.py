@@ -468,7 +468,8 @@ def _collect(
         "started_at": start,
     }
     if model_server is not None:
-        run_input["model_server"] = model_server.to_dict()
+        # Unknown until the collector verifies the file during the run.
+        run_input["model_server"] = {**model_server.to_dict(), "model_sha256_verified": None}
     if grader.candidate_python is not None:
         # Recovery grades on this version; it never runs the candidate image again.
         run_input["candidate_python"] = grader.candidate_python
@@ -491,7 +492,7 @@ def _collect(
         "provenance": provenance,
     }
     if model_server is not None:
-        metadata["model_server"] = model_server.to_dict()
+        metadata["model_server"] = run_input["model_server"]
     observed = HostResult(
         run_id,
         candidate.identity(),
@@ -523,6 +524,13 @@ def _collect(
         ) as collector:
             if model_server is not None:
                 metadata["model_server"] = {**metadata["model_server"], **collector.facts}
+                # Before launch, so a recovered record names the server this run verified.
+                run_input["model_server"] = metadata["model_server"]
+                _write_atomically(
+                    run_dir / "run-input.json",
+                    canonical(run_input).decode() + "\n",
+                    prefix=".run-input-",
+                )
             with WorkspaceSnapshots(
                 workspace,
                 run_dir,

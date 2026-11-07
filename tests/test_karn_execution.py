@@ -653,6 +653,7 @@ def test_recovery_of_uncertain_record_stops_writers_and_appends_linked_evidence(
     assert recovered.run_metadata["benchmark_input"] == original.run_metadata["benchmark_input"]
     assert recovered.candidate == original.candidate
     assert recovered.run_metadata["test_toolchain"] == original.run_metadata["test_toolchain"]
+    assert not {"model_server", "native_telemetry"} & recovered.run_metadata.keys()
     assert all(score["tests_passed"] == 0 for score in recovered.scores.values())
     assert (run_dir / "workspace_final/engine/card.py").read_text() == "value = 1\n"
     assert recovered.run_metadata["grading_source"]["selected"] != "workspace_final"

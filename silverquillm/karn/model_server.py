@@ -73,6 +73,10 @@ ORDINARY_REQUEST_KEYS = frozenset(
     {"model", "messages", "tools", "stream", "stream_options", "store", "max_completion_tokens"}
 )
 UPSTREAM_TIMEOUT_SECONDS = 1800
+# How long finalizing waits for cancelled requests to write their terminal records. A request
+# still unsettled after it is counted from its start record as unfinished.
+SETTLE_SECONDS = 10
+REQUEST_STARTED = "request_started"
 RELAYED_PATHS = {("POST", "/v1/chat/completions"), ("GET", "/v1/models")}
 
 
@@ -432,6 +436,12 @@ class ModelRelayCollector:
         self._server = self._thread = None
         self._sink = self._transcript = None
         self.llama: LlamaServer | None = None
+        # Requests between admission and their terminal record, by relay id, with the sockets
+        # that cancelling one shuts down.
+        self._active: dict[str, list[socket.socket]] = {}
+        self._cancelled: set[str] = set()
+        self._idle = threading.Condition(self._lock)
+        self._closing = self._settled = False
 
     def __enter__(self):
         self.run_dir.mkdir(parents=True, exist_ok=True)
@@ -492,6 +502,9 @@ class ModelRelayCollector:
 
     def record(self, event: dict[str, Any], transcript: dict[str, Any] | None) -> None:
         with self._lock:
+            if self._settled:
+                # The summary is computed; a late record would make the event file disagree.
+                return
             self.events.append(event)
             self._write(self._sink, event)
             if transcript is not None:
@@ -519,7 +532,8 @@ class ModelRelayCollector:
         self._server.daemon_threads = True
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
-        self._exit.callback(self._stop_relay)
+        # Runs before the sinks close and the server stops, so no handler writes to either.
+        self._exit.callback(self._settle)
 
     def relay(self, handler: BaseHTTPRequestHandler) -> None:
         if not handler.path.startswith(self.path + "/"):
@@ -549,13 +563,72 @@ class ModelRelayCollector:
             return
         self._forward(handler, target, body, request)
 
+    def _admit(self, identity, client: socket.socket, request, started_ms) -> bool:
+        """Registers a request, and durably records its start before the server sees it: a
+        runner that dies mid-request still leaves the request counted, as unfinished. A start
+        that cannot be written is refused, so the file and the summary never disagree."""
+        with self._lock:
+            if self._closing:
+                return False
+            if request is not None:
+                start = {
+                    "id": identity,
+                    "kind": REQUEST_STARTED,
+                    "requested_model": _kept(request.get("model"), 256),
+                    "stream": bool(request.get("stream")),
+                    "timestamp_ms": started_ms,
+                }
+                try:
+                    self._write(self._sink, start)
+                except (OSError, ValueError):
+                    return False
+                self.events.append(start)
+            self._active[identity] = [client]
+            return True
+
+    def _connected(self, identity, upstream: socket.socket) -> None:
+        with self._lock:
+            # Kept apart from the connection, which drops its socket once a response that
+            # closes the connection begins.
+            self._active[identity].append(upstream)
+            if identity in self._cancelled:
+                raise ConnectionAbortedError
+
+    def _release(self, identity) -> None:
+        with self._lock:
+            self._active.pop(identity, None)
+            self._idle.notify_all()
+
+    def _cancel_active(self) -> None:
+        with self._lock:
+            for identity, sockets in self._active.items():
+                self._cancelled.add(identity)
+                for held in sockets:
+                    # Wakes the handler's blocked read or write; llama-server drops the task.
+                    with contextlib.suppress(OSError):
+                        held.shutdown(socket.SHUT_RDWR)
+
     def _forward(self, handler, target: str, body: bytes, request: dict | None) -> None:
         started_ms = int(time.time() * 1000)
-        response, status, error = _Response(), None, None
+        # One event per relayed request, whatever ids the server reuses.
+        identity = "relay-" + uuid.uuid4().hex
         connection = http.client.HTTPConnection(
             "127.0.0.1", self.llama.port, timeout=UPSTREAM_TIMEOUT_SECONDS
         )
+        if not self._admit(identity, handler.connection, request, started_ms):
+            with contextlib.suppress(OSError):
+                handler.send_error(503)
+            return
         try:
+            self._relay_upstream(handler, target, body, request, identity, connection, started_ms)
+        finally:
+            self._release(identity)
+
+    def _relay_upstream(self, handler, target, body, request, identity, connection, started_ms):
+        response, status, error = _Response(), None, None
+        try:
+            connection.connect()
+            self._connected(identity, connection.sock)
             headers = {"Content-Type": "application/json"} if body else {}
             connection.request(handler.command, target, body or None, headers)
             upstream = connection.getresponse()
@@ -588,10 +661,11 @@ class ModelRelayCollector:
                     handler.send_error(502)
         finally:
             connection.close()
+        if identity in self._cancelled:
+            # A cancelled stream can end like a finished one; it is never counted as complete.
+            error = "cancelled_at_finalize"
         if request is None:
             return
-        # One event per relayed request, whatever ids the server reuses.
-        identity = "relay-" + uuid.uuid4().hex
         try:
             self._observe(identity, request, response, status, error, started_ms)
         except Exception:  # noqa: BLE001 -- a request the server saw is never left unrecorded.
@@ -647,8 +721,23 @@ class ModelRelayCollector:
         }
         self.record(event, transcript)
 
-    def finalize(self, *, exit_kind: str, native_version: str | None = None) -> dict[str, Any]:
+    def _settle(self) -> None:
+        """Stops admitting requests, cancels those in flight, and waits a bounded time for
+        their terminal records; nothing is recorded after this returns."""
+        with self._lock:
+            if self._settled:
+                return
+            self._closing = True
+        self._cancel_active()
         self._stop_relay()
+        with self._lock:
+            deadline = time.monotonic() + SETTLE_SECONDS
+            while self._active and (remaining := deadline - time.monotonic()) > 0:
+                self._idle.wait(remaining)
+            self._settled = True
+
+    def finalize(self, *, exit_kind: str, native_version: str | None = None) -> dict[str, Any]:
+        self._settle()
         with self._lock:
             result = summarize_model_events(
                 self.events, exit_kind=exit_kind, collection_reasons=self.reasons
@@ -706,9 +795,25 @@ def summarize_model_events(events, *, exit_kind: str, collection_reasons=()) -> 
     """
     reasons = list(collection_reasons)
     unique: dict[str, dict[str, Any]] = {}
+    starts: dict[str, dict[str, Any]] = {}
     for event in events:
-        if isinstance(event, dict) and event.get("kind") == "response" and event.get("id"):
+        if not isinstance(event, dict) or not event.get("id"):
+            continue
+        if event.get("kind") == "response":
             unique.setdefault(event["id"], event)
+        elif event.get("kind") == REQUEST_STARTED:
+            starts.setdefault(event["id"], event)
+    unfinished = [start for identity, start in starts.items() if identity not in unique]
+    for start in unfinished:
+        # Started and never settled: cut off at the deadline, or its runner died.
+        unique[start["id"]] = {
+            "id": start["id"],
+            "kind": "response",
+            "status": None,
+            "error": "request_unfinished",
+            "usage": None,
+            "timestamp_ms": start.get("timestamp_ms"),
+        }
     rows = sorted(unique.values(), key=lambda row: row.get("timestamp_ms") or 0)
     completed = [row for row in rows if row.get("status") == 200 and not row.get("error")]
     failed = len(rows) - len(completed)
@@ -747,6 +852,7 @@ def summarize_model_events(events, *, exit_kind: str, collection_reasons=()) -> 
             "source": TELEMETRY_ADAPTER,
             "relayed_requests": len(rows),
             "failed_requests": failed,
+            "unfinished_requests": len(unfinished),
             "requests_with_parameter_overrides": sum(
                 1 for row in rows if row.get("request_parameters")
             ),
