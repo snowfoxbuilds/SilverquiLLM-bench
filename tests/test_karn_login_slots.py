@@ -375,6 +375,7 @@ def test_an_unreadable_cache_entry_never_hides_the_others(tmp_path):
     assert login_admin.cached_login_plugin(state, CLAUDE).executable == good / "bin/python"
 
 
+@pytest.mark.skipif(sys.version_info[:2] != (3, 13), reason="pinned Plugin SDK needs 3.13")
 def test_a_cached_plugin_runs_as_the_artifact_it_was_installed_from(
     tmp_path,
     artifact,  # noqa: F811
