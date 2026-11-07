@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .definition import KarnError, inspect_image, strict_json
+from .model_server import MODEL_SERVER_HOST, MODEL_SERVER_PORT
 
 RUN_LABEL = "org.silverquillm.run"
 
@@ -165,10 +166,15 @@ class Network:
     network: str = "none"
     proxy_name: str | None = None
     environment: dict | None = None
+    model_endpoint: str | None = None
+    hosts: dict | None = None
+    """Names the workload resolves without DNS: ``model-server`` is the sidecar."""
 
     def __enter__(self):
-        self.environment = {}
+        self.environment, self.hosts = {}, {}
         self.telemetry_endpoint = self.collector_endpoint
+        if self.model_endpoint and self.policy["mode"] != "restricted":
+            raise KarnError("model_server_requires_restricted_network")
         if self.policy["mode"] == "none":
             return self
         if self.policy["mode"] == "open":
@@ -222,6 +228,9 @@ class Network:
             ]
             if self.collector_endpoint:
                 arguments[1:1] = ["--env", "SILVERQUILLM_OTLP_ENDPOINT=" + self.collector_endpoint]
+            if self.model_endpoint:
+                arguments[1:1] = ["--env", "SILVERQUILLM_MODEL_ENDPOINT=" + self.model_endpoint]
+            ports = (3128, MODEL_SERVER_PORT) if self.model_endpoint else (3128,)
             self.docker.command(*arguments)
             self.docker.command("network", "connect", self.network, self.proxy_name)
             self.docker.command("start", self.proxy_name)
@@ -233,7 +242,8 @@ class Network:
                     "python3",
                     "-I",
                     "-c",
-                    "import socket; socket.create_connection(('127.0.0.1',3128),1).close()",
+                    "import socket\n"
+                    f"for port in {ports!r}: socket.create_connection(('127.0.0.1',port),1).close()",
                     check=False,
                 )
                 if result.returncode == 0:
@@ -249,9 +259,11 @@ class Network:
             self.environment = {
                 key: endpoint for key in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
             }
-            self.environment.update(
-                NO_PROXY="localhost,127.0.0.1," + address, no_proxy="localhost,127.0.0.1," + address
-            )
+            bypass = "localhost,127.0.0.1," + address
+            if self.model_endpoint:
+                self.hosts[MODEL_SERVER_HOST] = address
+                bypass += "," + MODEL_SERVER_HOST
+            self.environment.update(NO_PROXY=bypass, no_proxy=bypass)
         except BaseException:
             self.__exit__(None, None, None)
             raise

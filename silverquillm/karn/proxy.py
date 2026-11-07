@@ -8,7 +8,21 @@ import os
 import select
 import socket
 import socketserver
+import threading
+import urllib.parse
 import urllib.request
+
+
+def read_exactly(source, length: int) -> bytes:
+    """The handlers read an unbuffered socket, where one read may return part of a body."""
+    parts, remaining = [], length
+    while remaining:
+        part = source.read(remaining)
+        if not part:
+            break
+        parts.append(part)
+        remaining -= len(part)
+    return b"".join(parts)
 
 
 def resolve_public(host: str, port: int) -> list[tuple]:
@@ -93,7 +107,7 @@ class ConnectProxy(socketserver.StreamRequestHandler):
             or headers.get("content-type", "").split(";")[0] != "application/json"
         ):
             raise ValueError("invalid_otlp_request")
-        body = self.rfile.read(length)
+        body = read_exactly(self.rfile, length)
         if len(body) != length:
             raise ValueError("incomplete_otlp_request")
         request = urllib.request.Request(
@@ -113,6 +127,76 @@ class ConnectProxy(socketserver.StreamRequestHandler):
         )
 
 
+class ModelForward(socketserver.StreamRequestHandler):
+    """The workload's plain-HTTP route to the host's model relay: one request per connection,
+    only under ``/v1/``, and only to the one relay address the host gave the sidecar."""
+
+    rbufsize = 0
+
+    def handle(self):
+        # Prompt processing at a long context can keep the first byte away for many minutes.
+        self.connection.settimeout(1800)
+        remote = None
+        try:
+            first = self.rfile.readline(8193)
+            if len(first) > 8192:
+                raise ValueError("request_too_large")
+            method, target, version = first.decode("ascii").strip().split(" ")
+            if (
+                method not in ("GET", "POST")
+                or version not in ("HTTP/1.0", "HTTP/1.1")
+                or not target.startswith("/v1/")
+                or any(c in target for c in "\\ ?#")
+                or ".." in target
+            ):
+                raise ValueError("model_request_refused")
+            headers, remaining = {}, 32768
+            while True:
+                line = self.rfile.readline(min(8193, remaining + 1))
+                remaining -= len(line)
+                if not line or remaining < 0 or len(line) > 8192:
+                    raise ValueError("invalid_headers")
+                if line in (b"\r\n", b"\n"):
+                    break
+                key, value = line.decode("ascii").split(":", 1)
+                headers[key.strip().lower()] = value.strip()
+            if "transfer-encoding" in headers:
+                raise ValueError("chunked_request_refused")
+            length = int(headers.get("content-length", "0"))
+            if not 0 <= length <= 64 * 1024 * 1024:
+                raise ValueError("model_request_too_large")
+            body = read_exactly(self.rfile, length)
+            if len(body) != length:
+                raise ValueError("incomplete_model_request")
+            relay = urllib.parse.urlsplit(self.server.model_endpoint)
+            remote = socket.create_connection((relay.hostname, relay.port), timeout=1800)
+            head = (
+                f"{method} {relay.path}{target} HTTP/1.1\r\nHost: {relay.netloc}\r\n"
+                f"Content-Type: application/json\r\nContent-Length: {length}\r\n"
+                "Connection: close\r\n\r\n"
+            )
+            remote.sendall(head.encode("ascii") + body)
+            while data := remote.recv(65536):
+                self.connection.sendall(data)
+        except (OSError, ValueError, UnicodeError):
+            try:
+                self.wfile.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+            except OSError:
+                pass
+        finally:
+            if remote is not None:
+                remote.close()
+
+
+class ModelForwardServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+    def __init__(self, address, model_endpoint):
+        self.model_endpoint = model_endpoint
+        super().__init__(address, ModelForward)
+
+
 class ProxyServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
@@ -125,6 +209,9 @@ class ProxyServer(socketserver.ThreadingTCPServer):
 
 if __name__ == "__main__":
     hosts = json.loads(os.environ["SILVERQUILLM_HTTPS_HOSTS"])
+    if os.environ.get("SILVERQUILLM_MODEL_ENDPOINT"):
+        forward = ModelForwardServer(("0.0.0.0", 8080), os.environ["SILVERQUILLM_MODEL_ENDPOINT"])
+        threading.Thread(target=forward.serve_forever, daemon=True).start()
     with ProxyServer(
         ("0.0.0.0", 3128), hosts, os.environ.get("SILVERQUILLM_OTLP_ENDPOINT")
     ) as server:

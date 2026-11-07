@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import fcntl
+import functools
 import ipaddress
 import json
 import os
@@ -30,6 +31,13 @@ from .grading_inputs import grading_inputs
 from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
 from .login import LOGIN_PLUGINS, LoginProfile
 from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, logins_root
+from .model_server import (
+    TELEMETRY_ADAPTER,
+    ModelRelayCollector,
+    ModelServerHost,
+    model_server_spec,
+    plan_model_server,
+)
 from .provenance import collect as collect_provenance
 from .records import SCHEMA_VERSION, KarnIdentity, KarnRunRecord, missing_scores, write_record
 from .snapshots import WorkspaceSnapshots, retain_git_history
@@ -80,6 +88,16 @@ def select_native_telemetry(candidate, requested: str) -> dict:
     """
     if requested not in NATIVE_TELEMETRY:
         raise KarnError("invalid_native_telemetry")
+    if model_server_spec(candidate.runtime) is not None:
+        # The relay sees every request; there is no native journal to choose (issue #262).
+        if requested != "auto":
+            raise KarnError("native_telemetry_unavailable_with_model_server")
+        return {
+            "requested": requested,
+            "enabled": True,
+            "source": "model_server",
+            "adapter": TELEMETRY_ADAPTER,
+        }
     environment = candidate.runtime["environment"]
     declared = [name for name, home in NATIVE_HOMES.items() if home in environment]
     if len(declared) > 1:
@@ -96,7 +114,11 @@ def select_native_telemetry(candidate, requested: str) -> dict:
 
 
 def telemetry_collector(telemetry: dict):
-    """Runs recorded before adapters existed were Codex runs."""
+    """Runs recorded before adapters existed were Codex runs.
+
+    A model-server run's live collector is built from its plan in ``_collect``; recovery
+    only needs a passive receiver, and re-summarizes the relay's events by adapter.
+    """
     if telemetry.get("adapter", "codex") == "claude":
         from .claude_observations import ClaudeTelemetryCollector
 
@@ -131,6 +153,16 @@ def login_profile(state_root: Path, name: str | None) -> LoginProfile | None:
     if name in LOGIN_PLUGINS or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", name):
         raise KarnError("invalid_login_profile_name")
     return LoginProfile(logins_root(state_root) / name, name)
+
+
+def host_model_server() -> ModelServerHost:
+    from silverquillm.host_config import HostConfigError, load_host_config
+
+    try:
+        config = load_host_config()
+    except HostConfigError as error:
+        raise KarnError("host_config_invalid") from error
+    return ModelServerHost(config.models_dir, dict(config.llama_cpp))
 
 
 def _login_pool(state_root: Path, candidate) -> LoginPool | None:
@@ -310,6 +342,7 @@ def run_benchmark(
     on_login_selected=None,
     on_login_released=None,
     allow_dirty: bool = False,
+    model_server_host: ModelServerHost | None = None,
 ) -> KarnRunRecord:
     """Refuse what cannot run before any evidence exists, then collect under both locks.
 
@@ -330,6 +363,12 @@ def run_benchmark(
     evaluator = evaluator or grader.evaluate_run
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     telemetry = select_native_telemetry(candidate, native_telemetry)
+    spec = model_server_spec(candidate.runtime)
+    model_server = None
+    if spec is not None:
+        model_server = plan_model_server(
+            spec, model_server_host or host_model_server(), state_root
+        )
     host.preflight(candidate, budget_seconds)
     toolchain = prepare_toolchain(state_root)
     run_id = run_id or uuid.uuid4().hex
@@ -376,6 +415,7 @@ def run_benchmark(
             on_login_released=on_login_released,
             provenance=provenance,
             baseline_store=BaselineStore(Path(state_root).resolve() / "baseline-grades"),
+            model_server=model_server,
         )
 
 
@@ -402,6 +442,7 @@ def _collect(
     on_login_released,
     provenance,
     baseline_store,
+    model_server=None,
 ) -> KarnRunRecord:
     start = datetime.now(UTC).isoformat()
     artifact_dir = run_dir / "candidate"
@@ -426,6 +467,8 @@ def _collect(
         "provenance": provenance,
         "started_at": start,
     }
+    if model_server is not None:
+        run_input["model_server"] = model_server.to_dict()
     if grader.candidate_python is not None:
         # Recovery grades on this version; it never runs the candidate image again.
         run_input["candidate_python"] = grader.candidate_python
@@ -447,6 +490,8 @@ def _collect(
         "measurements": None,
         "provenance": provenance,
     }
+    if model_server is not None:
+        metadata["model_server"] = model_server.to_dict()
     observed = HostResult(
         run_id,
         candidate.identity(),
@@ -466,11 +511,18 @@ def _collect(
         )
         (run_dir / "prompt.md").write_text(prompt)
         native = telemetry["enabled"]
-        factory = collector_factory or telemetry_collector(telemetry)
+        if collector_factory is not None:
+            factory = collector_factory
+        elif model_server is not None:
+            factory = functools.partial(ModelRelayCollector, plan=model_server)
+        else:
+            factory = telemetry_collector(telemetry)
         bind = collector_host or (collector_address() if native else "127.0.0.1")
         with observation_session(
             factory, run_dir, observation_problems, bind_host=bind
         ) as collector:
+            if model_server is not None:
+                metadata["model_server"] = {**metadata["model_server"], **collector.facts}
             with WorkspaceSnapshots(
                 workspace,
                 run_dir,
@@ -486,11 +538,13 @@ def _collect(
                         usage["codex"] = codex_usage(native_state)
                     if native_state is not None:
                         collector.harvest_native(native_state)
-                    else:
+                    elif model_server is None:
                         collector.mark_incomplete("native_state_unavailable")
 
                 arguments = {}
-                if native and telemetry.get("adapter") == "claude":
+                if model_server is not None:
+                    arguments = {"model_endpoint": collector.endpoint}
+                elif native and telemetry.get("adapter") == "claude":
                     arguments = {
                         "runtime_environment": lambda network: collector.otel_environment(
                             network.telemetry_endpoint

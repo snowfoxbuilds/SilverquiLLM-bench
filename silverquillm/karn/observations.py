@@ -306,6 +306,12 @@ def summarize_events(
         return summarize_claude_events(
             events, exit_kind=exit_kind, collection_reasons=collection_reasons
         )
+    if adapter == "model_server":
+        from .model_server import summarize_model_events
+
+        return summarize_model_events(
+            events, exit_kind=exit_kind, collection_reasons=collection_reasons
+        )
     unique: dict[str, dict[str, Any]] = {}
     reasons = list(collection_reasons)
     for event in events:
