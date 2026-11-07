@@ -20,8 +20,8 @@ The host config maps each llama.cpp build to a binary and names a models directo
 Before any evidence exists, the bench refuses a missing build, a binary whose `--version` reports another build, or a missing model file.
 During the run, it holds a host-wide lock, verifies the file's digest, and starts `llama-server` on loopback with the recipe's flags and the construct's model as its alias.
 A host-side relay forwards each request to the server and records its usage, the server's timings and a compact transcript.
-The workload reaches the relay only through the run's proxy sidecar, whose one plain-HTTP listener the workload resolves as `model-server`.
-The relay's measurements carry one thread and no subagents.
+The workload reaches the relay only through the run's proxy sidecar, whose one plain-HTTP listener the workload resolves as `model-server` and which serves only the run's own internal network.
+The relay's measurements carry one thread, and subagent use as unknown: one server answers every agent process, so the relay cannot count them.
 
 ## Consequences
 
@@ -29,6 +29,8 @@ The relay's measurements carry one thread and no subagents.
 - **Positive**: the workload has no internet; its only route out is the model server.
 - **Positive**: no GPU container runtime is needed; the server runs as an ordinary host process.
 - **Negative**: the served model's name is the alias the bench gives it, so `model_match` holds by construction; the model's identity is the verified file digest in the record.
+- **Negative**: a campaign of these runs cannot require `no_subagents`; pi has no subagent tool, but the workload could start a second agent process unseen.
+- **Negative**: a request can override the server's sampling settings; the relay records such overrides but does not refuse them.
 - **Negative**: the host must keep each pinned build and model file for as long as its candidates run; a rebuilt binary with the same build number is not detected.
 - **Neutral**: no price applies, so the Estimated Cost stays incomplete with `model_price_unavailable`, and usage is partial because llama.cpp does not split reasoning tokens out of completion tokens.
 

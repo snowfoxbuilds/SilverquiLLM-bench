@@ -56,13 +56,22 @@ SERVER_FLAGS: dict[str, bool] = {
     **dict.fromkeys(("--chat-template-kwargs", "--reasoning-budget", "--reasoning-format"), True),
     **dict.fromkeys(("--cache-reuse", "-n", "--n-predict"), True),
     **dict.fromkeys(("--rope-scaling", "--rope-scale", "--yarn-orig-ctx"), True),
-    **dict.fromkeys(("--jinja", "--no-mmap", "--mlock", "--swa-full", "--no-warmup"), False),
+    **dict.fromkeys(("--jinja", "--swa-full", "--no-warmup"), False),
     **dict.fromkeys(("-kvu", "--kv-unified", "--no-context-shift", "--context-shift"), False),
 }
 _BUILD = re.compile(r"b([0-9]{1,8})")
 _VERSION = re.compile(r"build ([0-9]{1,8}), commit ([0-9a-f]{7,40})")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
-MAX_REQUEST_BYTES = 64 * 1024 * 1024
+# A request at the largest context is a few MiB; the cap also bounds the parse here and the
+# sidecar's copy, which runs in 128 MiB.
+MAX_REQUEST_BYTES = 16 * 1024 * 1024
+# What the relay keeps of workload-controlled request content, per field and per request.
+MAX_KEPT_FIELD_CHARS = 4096
+MAX_KEPT_MESSAGES_CHARS = 1024 * 1024
+# Request keys pi sends; any other is a per-request override of the recipe's server settings.
+ORDINARY_REQUEST_KEYS = frozenset(
+    {"model", "messages", "tools", "stream", "stream_options", "store", "max_completion_tokens"}
+)
 UPSTREAM_TIMEOUT_SECONDS = 1800
 RELAYED_PATHS = {("POST", "/v1/chat/completions"), ("GET", "/v1/models")}
 
@@ -114,6 +123,8 @@ def model_server_spec(runtime: dict) -> ModelServerSpec | None:
         or set(model) != {"file", "sha256"}
         or not isinstance(model["file"], str)
         or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.gguf", model["file"])
+        # Only the named file is verified, so a split model's other parts would load unchecked.
+        or re.search(r"-[0-9]{5}-of-[0-9]{5}\.gguf$", model["file"])
         or not isinstance(model["sha256"], str)
         or not _SHA256.fullmatch(model["sha256"])
     ):
@@ -322,6 +333,7 @@ class _Response:
     def __init__(self):
         self.response_id = self.model = self.finish_reason = None
         self.usage = self.timings = None
+        self.usage_reports = 0
         self.content: list[str] = []
         self.reasoning: list[str] = []
         self.tool_calls: dict[int, dict[str, Any]] = {}
@@ -347,6 +359,7 @@ class _Response:
         self.model = document.get("model") or self.model
         if document.get("usage") is not None:
             self.usage = document["usage"]
+            self.usage_reports += 1
         if isinstance(document.get("timings"), dict):
             self.timings = document["timings"]
         for choice in document.get("choices") or []:
@@ -378,15 +391,25 @@ class _Response:
         }
 
 
-def _new_messages(request: dict) -> list:
+def _kept(value: Any, limit: int) -> Any:
+    """Workload-controlled content as kept in the run's files: whole, or cut to ``limit``."""
+    text = json.dumps(value, sort_keys=True, default=str)
+    if len(text) <= limit:
+        return value
+    return {"truncated_from_chars": len(text), "head": text[:limit]}
+
+
+def _new_messages(request: dict) -> Any:
     """The messages after the last assistant turn: what the agent added since its last reply."""
     messages = request.get("messages")
     if not isinstance(messages, list):
         return []
+    added = messages
     for position in range(len(messages) - 1, -1, -1):
         if isinstance(messages[position], dict) and messages[position].get("role") == "assistant":
-            return messages[position + 1 :]
-    return messages
+            added = messages[position + 1 :]
+            break
+    return _kept(added, MAX_KEPT_MESSAGES_CHARS)
 
 
 class ModelRelayCollector:
@@ -480,6 +503,8 @@ class ModelRelayCollector:
         class Relay(BaseHTTPRequestHandler):
             # HTTP/1.0: each response ends when the relay closes, so a stream needs no framing.
             protocol_version = "HTTP/1.0"
+            # Reading a request; the sidecar sends each one whole.
+            timeout = 300
 
             def log_message(self, *args):
                 pass
@@ -517,7 +542,12 @@ class ModelRelayCollector:
         except (ValueError, RecursionError):
             handler.send_error(400)
             return
-        self._forward(handler, target, body, request if isinstance(request, dict) else {})
+        request = request if isinstance(request, dict) else {}
+        # Several choices in one stream would each report usage; pi asks for one.
+        if request.get("n", 1) != 1:
+            handler.send_error(400)
+            return
+        self._forward(handler, target, body, request)
 
     def _forward(self, handler, target: str, body: bytes, request: dict | None) -> None:
         started_ms = int(time.time() * 1000)
@@ -560,27 +590,48 @@ class ModelRelayCollector:
             connection.close()
         if request is None:
             return
-        self._observe(request, response, status, error, started_ms)
-
-    def _observe(self, request, response: _Response, status, error, started_ms):
         # One event per relayed request, whatever ids the server reuses.
         identity = "relay-" + uuid.uuid4().hex
+        try:
+            self._observe(identity, request, response, status, error, started_ms)
+        except Exception:  # noqa: BLE001 -- a request the server saw is never left unrecorded.
+            self.record(
+                {
+                    "id": identity,
+                    "kind": "response",
+                    "response_id": identity,
+                    "status": status,
+                    "error": "observation_failed",
+                    "usage": None,
+                    "timestamp_ms": started_ms,
+                },
+                None,
+            )
+
+    def _observe(self, identity, request, response: _Response, status, error, started_ms):
         message = response.message()
+        messages = request.get("messages")
+        overrides = sorted(set(request) - ORDINARY_REQUEST_KEYS)
         event = {
             "id": identity,
             "kind": "response",
-            "response_id": response.response_id or identity,
+            "response_id": _kept(response.response_id, 256) or identity,
             "thread_id": THREAD_ID,
-            "model": response.model,
-            "requested_model": request.get("model"),
+            "model": _kept(response.model, 256),
+            "requested_model": _kept(request.get("model"), 256),
+            "request_parameters": _kept(
+                {key: request[key] for key in overrides}, MAX_KEPT_FIELD_CHARS
+            ),
             "status": status,
             "error": error,
-            "finish_reason": response.finish_reason,
+            "finish_reason": _kept(response.finish_reason, 64),
             "usage": _usage(response.usage),
-            "timings": response.timings,
+            "usage_reports": response.usage_reports,
+            "timings": _kept(response.timings, MAX_KEPT_FIELD_CHARS),
             "tool_calls": len(message["tool_calls"]),
             "stream": bool(request.get("stream")),
-            "request_messages": len(request.get("messages") or []),
+            "max_completion_tokens": _kept(request.get("max_completion_tokens"), 64),
+            "request_messages": len(messages) if isinstance(messages, list) else None,
             "timestamp_ms": started_ms,
             "completed_ms": int(time.time() * 1000),
         }
@@ -589,7 +640,7 @@ class ModelRelayCollector:
             "response_id": event["response_id"],
             "timestamp_ms": started_ms,
             "new_messages": _new_messages(request),
-            "response": message,
+            "response": _kept(message, MAX_KEPT_MESSAGES_CHARS),
             "finish_reason": response.finish_reason,
             "status": status,
             "error": error,
@@ -648,7 +699,11 @@ def server_timings(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def summarize_model_events(events, *, exit_kind: str, collection_reasons=()) -> dict[str, Any]:
-    """Measurements from the relay's events: one thread, never a subagent."""
+    """Measurements from the relay's events.
+
+    Every request reaches one server, so the relay cannot tell a second agent process from
+    the main one: subagent use is unknown, never ``none``.
+    """
     reasons = list(collection_reasons)
     unique: dict[str, dict[str, Any]] = {}
     for event in events:
@@ -657,6 +712,11 @@ def summarize_model_events(events, *, exit_kind: str, collection_reasons=()) -> 
     rows = sorted(unique.values(), key=lambda row: row.get("timestamp_ms") or 0)
     completed = [row for row in rows if row.get("status") == 200 and not row.get("error")]
     failed = len(rows) - len(completed)
+    if failed:
+        # The server may have done the work of a request whose usage never reached the relay.
+        reasons.append("relayed_request_incomplete")
+    if any((row.get("usage_reports") or 0) > 1 for row in completed):
+        reasons.append("multiple_usage_reports")
     requests = []
     for row in completed:
         usage = row.get("usage")
@@ -683,9 +743,17 @@ def summarize_model_events(events, *, exit_kind: str, collection_reasons=()) -> 
         sum(row.get("tool_calls") or 0 for row in completed),
         reasons,
         True,
-        {"source": TELEMETRY_ADAPTER, "relayed_requests": len(rows), "failed_requests": failed},
-        subagent_threads=0,
-        subagents=[],
+        {
+            "source": TELEMETRY_ADAPTER,
+            "relayed_requests": len(rows),
+            "failed_requests": failed,
+            "requests_with_parameter_overrides": sum(
+                1 for row in rows if row.get("request_parameters")
+            ),
+        },
+        subagent_threads=None,
+        subagents=None,
+        subagents_reason="threads_not_observable",
     )
     measurements["server_timings"] = server_timings(completed)
     return measurements

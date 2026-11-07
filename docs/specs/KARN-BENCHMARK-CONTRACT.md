@@ -214,16 +214,21 @@ Then the run:
 3. starts `llama-server` on loopback with the recipe's flags and `--alias <CONSTRUCT_MODEL>`, logging to `model-server.log` in the run directory;
 4. relays every request to it from a host-side relay on a secret path.
 
-The proxy sidecar listens on port 8080 too, forwards only `/v1/` requests, one per connection, to that relay, and the workload resolves it as `model-server` through `--add-host`.
+The proxy sidecar listens on port 8080 too, serves only clients on the run's own internal network, and forwards only `/v1/` requests of at most 16 MiB, one per connection, to that relay; the workload resolves it as `model-server` through `--add-host`.
+The relay passes on only `POST /v1/chat/completions` and `GET /v1/models`, and refuses a request for more than one choice (`n`).
 The server stops with the run, before grading, and with the runner if the runner dies.
 
 The relay is the run's only observation source, so it cannot be combined with `--native-telemetry` other than `auto`.
-Each relayed request becomes one request row on thread `main`, with the served model, its usage, `finish_reason` and the server's own `timings`; `measurements.subagents` is empty.
+Each relayed request becomes one request row on thread `main`, with the served model, its usage, `finish_reason` and the server's own `timings`.
+Every request reaches one server, so the relay cannot tell a second agent process from the main one: subagent use is unknown (`subagents` null, `subagents_reason` `threads_not_observable`), never `none`.
+A request that failed or was cut off after the server took it, such as the one in flight at the deadline, or a response that reported usage more than once, leaves usage partial (`relayed_request_incomplete`, `multiple_usage_reports`).
 Usage follows OpenAI's convention, input including cached tokens; cache writes are zero, and reasoning tokens are missing, because llama.cpp counts them inside completion tokens.
 No price applies, so the Estimated Cost is incomplete with `model_price_unavailable`.
 `measurements.server_timings` sums the server's prompt and generation tokens and times into tokens per second, and `coverage.failed_requests` counts requests the relay could not complete.
+A request may set sampling parameters of its own, which llama.cpp honours over the server's flags; each event keeps them as `request_parameters`, and `coverage.requests_with_parameter_overrides` counts such requests.
 `run_metadata.model_server` records the spec, the binary and its version, the verified digest, and how long verification and start-up took.
 The run directory also keeps `model-transcript.jsonl`: per request, the messages added since the last reply and the assembled response, with its reasoning and tool calls.
+What the relay keeps of workload-controlled content is bounded: 1 MiB of messages and of response per request, and a few KiB for each other field, cut with `truncated_from_chars`.
 
 ### Outcomes and retained evidence
 

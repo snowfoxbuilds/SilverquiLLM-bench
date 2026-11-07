@@ -163,7 +163,7 @@ class ModelForward(socketserver.StreamRequestHandler):
             if "transfer-encoding" in headers:
                 raise ValueError("chunked_request_refused")
             length = int(headers.get("content-length", "0"))
-            if not 0 <= length <= 64 * 1024 * 1024:
+            if not 0 <= length <= 16 * 1024 * 1024:
                 raise ValueError("model_request_too_large")
             body = read_exactly(self.rfile, length)
             if len(body) != length:
@@ -175,7 +175,8 @@ class ModelForward(socketserver.StreamRequestHandler):
                 f"Content-Type: application/json\r\nContent-Length: {length}\r\n"
                 "Connection: close\r\n\r\n"
             )
-            remote.sendall(head.encode("ascii") + body)
+            remote.sendall(head.encode("ascii"))
+            remote.sendall(body)
             while data := remote.recv(65536):
                 self.connection.sendall(data)
         except (OSError, ValueError, UnicodeError):
@@ -189,12 +190,19 @@ class ModelForward(socketserver.StreamRequestHandler):
 
 
 class ModelForwardServer(socketserver.ThreadingTCPServer):
+    """Serves only the run's own internal network: the sidecar also sits on Docker's shared
+    bridge, where other containers could otherwise spend this run's model server."""
+
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(self, address, model_endpoint):
+    def __init__(self, address, model_endpoint, clients="0.0.0.0/0"):
         self.model_endpoint = model_endpoint
+        self.clients = ipaddress.ip_network(clients)
         super().__init__(address, ModelForward)
+
+    def verify_request(self, request, client_address):
+        return ipaddress.ip_address(client_address[0]) in self.clients
 
 
 class ProxyServer(socketserver.ThreadingTCPServer):
@@ -210,7 +218,11 @@ class ProxyServer(socketserver.ThreadingTCPServer):
 if __name__ == "__main__":
     hosts = json.loads(os.environ["SILVERQUILLM_HTTPS_HOSTS"])
     if os.environ.get("SILVERQUILLM_MODEL_ENDPOINT"):
-        forward = ModelForwardServer(("0.0.0.0", 8080), os.environ["SILVERQUILLM_MODEL_ENDPOINT"])
+        forward = ModelForwardServer(
+            ("0.0.0.0", 8080),
+            os.environ["SILVERQUILLM_MODEL_ENDPOINT"],
+            os.environ["SILVERQUILLM_MODEL_CLIENTS"],
+        )
         threading.Thread(target=forward.serve_forever, daemon=True).start()
     with ProxyServer(
         ("0.0.0.0", 3128), hosts, os.environ.get("SILVERQUILLM_OTLP_ENDPOINT")

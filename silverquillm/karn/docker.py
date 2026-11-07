@@ -229,7 +229,12 @@ class Network:
             if self.collector_endpoint:
                 arguments[1:1] = ["--env", "SILVERQUILLM_OTLP_ENDPOINT=" + self.collector_endpoint]
             if self.model_endpoint:
-                arguments[1:1] = ["--env", "SILVERQUILLM_MODEL_ENDPOINT=" + self.model_endpoint]
+                arguments[1:1] = [
+                    "--env",
+                    "SILVERQUILLM_MODEL_ENDPOINT=" + self.model_endpoint,
+                    "--env",
+                    "SILVERQUILLM_MODEL_CLIENTS=" + self._subnet(),
+                ]
             ports = (3128, MODEL_SERVER_PORT) if self.model_endpoint else (3128,)
             self.docker.command(*arguments)
             self.docker.command("network", "connect", self.network, self.proxy_name)
@@ -268,6 +273,17 @@ class Network:
             self.__exit__(None, None, None)
             raise
         return self
+
+    def _subnet(self) -> str:
+        """The run's internal network, the only clients the model-server listener serves."""
+        result = self.docker.command("network", "inspect", self.network)
+        try:
+            subnet = json.loads(result.stdout)[0]["IPAM"]["Config"][0]["Subnet"]
+        except (ValueError, KeyError, IndexError, TypeError):
+            raise KarnError("network_subnet_unavailable") from None
+        if not isinstance(subnet, str) or "/" not in subnet:
+            raise KarnError("network_subnet_unavailable")
+        return subnet
 
     def __exit__(self, *_):
         if self.proxy_name is not None:

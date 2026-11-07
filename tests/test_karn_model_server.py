@@ -230,7 +230,8 @@ def test_the_relay_streams_through_and_records_each_request(served, tmp_path):
     assert first["model"] == "qwen3.8-27b" and first["thread_id"] == "main"
     assert first["usage"]["input_tokens"] == 100 and first["usage"]["cached_input_tokens"] == 60
     assert first["finish_reason"] == "tool_calls" and second["finish_reason"] == "stop"
-    assert measurements["subagents"] == [] and measurements["subagent_threads"] == 0
+    assert measurements["subagents"] is None and measurements["subagent_threads"] is None
+    assert measurements["subagents_reason"] == "threads_not_observable"
     assert measurements["agent_turns"]["tool_calls"]["value"] == 1
     assert "model_price_unavailable" in measurements["estimated_cost"]["reasons"]
     timings = measurements["server_timings"]
@@ -331,7 +332,10 @@ class NetworkDocker:
 
     def command(self, *args, check=True):
         self.commands.append(args)
-        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        stdout = b""
+        if args[:2] == ("network", "inspect"):
+            stdout = json.dumps([{"IPAM": {"Config": [{"Subnet": "10.9.0.0/24"}]}}]).encode()
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr=b"")
 
     def inspect_container(self, name):
         return {"NetworkSettings": {"Networks": {"sq-net-r1": {"IPAddress": "10.9.0.2"}}}}
@@ -350,6 +354,7 @@ def test_the_sidecar_is_the_model_server_and_is_not_proxied(tmp_path):
         assert network.environment["NO_PROXY"].endswith(",model-server")
         create = next(command for command in docker.commands if command[0] == "create")
         assert "SILVERQUILLM_MODEL_ENDPOINT=http://h:1/model/x" in create
+        assert "SILVERQUILLM_MODEL_CLIENTS=10.9.0.0/24" in create
         ready = next(command for command in docker.commands if command[0] == "exec")
         assert "(3128, 8080)" in ready[-1]
     with pytest.raises(KarnError, match="model_server_requires_restricted_network"):
@@ -439,3 +444,77 @@ def test_a_body_larger_than_one_read_reaches_the_relay_whole(served, tmp_path):
             forward.server_close()
             thread.join()
         assert len(collector.finalize(exit_kind="completed")["requests"]) == 1
+
+
+def test_the_sidecar_serves_only_its_own_runs_network(served, tmp_path):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    with ModelRelayCollector(tmp_path / "run", plan=plan) as collector:
+        forward = ModelForwardServer(("127.0.0.1", 0), collector.endpoint, "10.9.0.0/24")
+        thread = threading.Thread(target=forward.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with socket.create_connection(forward.server_address, timeout=5) as client:
+                client.sendall(b"GET /v1/models HTTP/1.1\r\n\r\n")
+                assert client.recv(4096) == b""
+        finally:
+            forward.shutdown()
+            forward.server_close()
+            thread.join()
+        assert collector.finalize(exit_kind="completed")["coverage"]["relayed_requests"] == 0
+
+
+def test_workload_content_is_kept_bounded_and_overrides_are_recorded(served, tmp_path):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        post(
+            collector.endpoint + "/v1/chat/completions",
+            {
+                "model": "m" * 100_000,
+                "temperature": 0,
+                "messages": [{"role": "user", "content": "x" * 2_000_000}],
+            },
+        )
+        with pytest.raises(urllib.error.HTTPError) as refused:
+            post(collector.endpoint + "/v1/chat/completions", {"n": 4, "messages": []})
+        assert refused.value.code == 400
+        post(collector.endpoint + "/v1/chat/completions", {"messages": 5})
+        measurements = collector.finalize(exit_kind="completed")
+    event, malformed = collector.events
+    assert event["requested_model"]["truncated_from_chars"] == 100_002
+    assert event["request_parameters"] == {"temperature": 0}
+    assert malformed["request_messages"] is None and malformed["status"] == 200
+    assert (run_dir / "observations.events.jsonl").stat().st_size < 20_000
+    kept = json.loads((run_dir / "model-transcript.jsonl").open().readline())["new_messages"]
+    assert len(kept["head"]) == 1024 * 1024
+    assert measurements["coverage"]["requests_with_parameter_overrides"] == 1
+
+
+def test_split_models_are_refused_since_only_one_file_is_verified():
+    document = spec_document(model={"file": "Qwen-BF16-00001-of-00002.gguf", "sha256": "0" * 64})
+    with pytest.raises(KarnError, match="model_server_model_invalid"):
+        model_server_spec(runtime(document))
+
+
+def test_lost_or_repeated_usage_leaves_usage_partial():
+    base = {"kind": "response", "status": 200, "model": "m", "timestamp_ms": 1, "tool_calls": 0}
+    usage = {
+        key: 1
+        for key in (
+            "input_tokens",
+            "cached_input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "reasoning_output_tokens",
+        )
+    }
+    usage["cache_write_input_tokens"] = 0
+    lost = [
+        {**base, "id": "a", "response_id": "a", "usage": usage},
+        {**base, "id": "b", "response_id": "b", "usage": None, "error": "client_disconnected"},
+    ]
+    reasons = summarize_model_events(lost, exit_kind="completed")["usage"]["reasons"]
+    assert reasons == ["relayed_request_incomplete"]
+    repeated = [{**base, "id": "a", "response_id": "a", "usage": usage, "usage_reports": 4}]
+    reasons = summarize_model_events(repeated, exit_kind="completed")["usage"]["reasons"]
+    assert reasons == ["multiple_usage_reports"]
