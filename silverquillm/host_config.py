@@ -66,6 +66,10 @@ class HostConfig:
     theme: str | None = None
     host_label: str | None = None
     """Validated where run provenance reads it (``karn.provenance.host_label``)."""
+    models_dir: Path | None = None
+    """``[model_server] models_dir``: where model files a recipe names are found."""
+    llama_cpp: Mapping[str, Path] = field(default_factory=dict)
+    """``[model_server.llama_cpp]``: each llama.cpp build (``b12182``) to its llama-server."""
 
 
 @dataclass(frozen=True)
@@ -95,7 +99,9 @@ def load_host_config(
         return HostConfig(path=path, loaded=False)
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
         raise HostConfigError(f"{path}: {error}") from None
-    unknown = sorted(set(document) - set(LOCATIONS) - {"usage_rates", "monitor", "host_label"})
+    unknown = sorted(
+        set(document) - set(LOCATIONS) - {"usage_rates", "monitor", "host_label", "model_server"}
+    )
     if unknown:
         raise HostConfigError(f"{path}: unknown key(s) {', '.join(unknown)}")
     locations = {}
@@ -117,7 +123,38 @@ def load_host_config(
         usage_rates=_usage_rates(path, document.get("usage_rates", {})),
         theme=_theme(path, document.get("monitor", {})),
         host_label=host_label,
+        **_model_server(path, document.get("model_server", {})),
     )
+
+
+def _model_server(path: Path, table) -> dict:
+    """The local model server's builds and model directory; paths resolve like locations."""
+    if not isinstance(table, dict) or set(table) - {"models_dir", "llama_cpp"}:
+        raise HostConfigError(f"{path}: [model_server] takes only models_dir and llama_cpp")
+
+    def location(value, key):
+        if not isinstance(value, str) or not value.strip():
+            raise HostConfigError(f"{path}: {key} must be a non-empty path string")
+        resolved = Path(value).expanduser()
+        return resolved if resolved.is_absolute() else path.parent / resolved
+
+    builds = table.get("llama_cpp", {})
+    if not isinstance(builds, dict) or not all(
+        isinstance(build, str) and build.startswith("b") and build[1:].isdigit()
+        for build in builds
+    ):
+        raise HostConfigError(f"{path}: [model_server.llama_cpp] maps builds like b12182 to paths")
+    return {
+        "models_dir": (
+            location(table["models_dir"], "model_server.models_dir")
+            if "models_dir" in table
+            else None
+        ),
+        "llama_cpp": {
+            build: location(binary, "model_server.llama_cpp." + build)
+            for build, binary in builds.items()
+        },
+    }
 
 
 RAW_ROOT = "~/raw-bench-results"
