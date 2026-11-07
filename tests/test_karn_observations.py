@@ -189,6 +189,8 @@ def test_codex_reports_no_cost_so_its_cost_is_the_estimate():
     assert "native_cost_not_reported" in result["reported_cost"]["reasons"]
     assert result["request_reported_costs"] == []
     assert result["estimated_cost"]["value"] is not None
+    assert result["run_cost"] == {**result["estimated_cost"], "source": "estimated"}
+    assert result["cost_verification"] is None
 
 
 def test_interrupted_model_response_retains_lower_bound_and_missing_usage():
