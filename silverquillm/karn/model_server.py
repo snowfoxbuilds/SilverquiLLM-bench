@@ -922,6 +922,8 @@ def summarize_model_events(events, *, exit_kind: str, collection_reasons=()) -> 
         subagent_threads=None,
         subagents=None,
         subagents_reason="threads_not_observable",
+        # The served name is an alias the recipe chose; no hosted model's price applies to it.
+        prices={},
     )
     measurements["server_timings"] = server_timings(completed)
     return measurements

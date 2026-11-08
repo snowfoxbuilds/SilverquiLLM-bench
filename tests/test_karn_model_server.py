@@ -1013,3 +1013,99 @@ def test_a_cancelled_request_whose_record_cannot_be_written_stays_unfinished(
         measurements = collector.finalize(exit_kind="deadline")
     assert measurements["coverage"]["unfinished_requests"] == 1
     assert_replay_agrees(run_dir, measurements, "deadline")
+
+
+def events_file_faults(monkeypatch, plan, *, cut_back=True):
+    """Runs ``plan`` (as ``failing_writes`` does, plus "unterminated", which writes all but
+    the newline) against the events file of whatever run starts next; with ``cut_back``
+    false, cutting a failed append back fails too."""
+    from silverquillm.karn import model_server
+
+    files, real_init = [], model_server._EventFile.__init__
+    real_write, real_truncate, plan = model_server.os.write, model_server.os.ftruncate, list(plan)
+
+    def init(self, path):
+        real_init(self, path)
+        if path.name == "observations.events.jsonl":
+            files.append(self.fd)
+
+    def write(fd, data):
+        if fd not in files or not plan or (step := plan.pop(0)) is None:
+            return real_write(fd, data)
+        if step in ("partial", "unterminated"):
+            plan.insert(0, "error")
+            return real_write(fd, bytes(data[: len(data) // 2 if step == "partial" else -1]))
+        raise OSError(28, "No space left on device")
+
+    def ftruncate(fd, length):
+        if fd in files and not cut_back:
+            raise OSError(5, "Input/output error")
+        return real_truncate(fd, length)
+
+    monkeypatch.setattr(model_server._EventFile, "__init__", init)
+    monkeypatch.setattr(model_server.os, "write", write)
+    monkeypatch.setattr(model_server.os, "ftruncate", ftruncate)
+
+
+@pytest.mark.parametrize(
+    ("plan", "requests", "tail_cut"),
+    [
+        # The terminal event is whole JSON short of its newline, and cannot be cut back.
+        ([None, "unterminated"], 0, True),
+        # Half the terminal event is left, and cannot be cut back.
+        ([None, "partial"], 0, True),
+        # Every line is whole.
+        ([], 1, False),
+    ],
+)
+def test_recovery_reads_only_the_lines_the_relay_committed(
+    served, tmp_path, monkeypatch, plan, requests, tail_cut
+):
+    opts = model_server_run(served, tmp_path)
+    with monkeypatch.context() as patch:
+        events_file_faults(patch, plan, cut_back=False)
+        run_dir = interrupted_run(opts, "tail")
+    live = json.loads((run_dir / "observations.json").read_text())
+    recovered = recover(opts, "tail", monkeypatch, tmp_path).run_metadata["measurements"]
+    assert len(live["requests"]) == len(recovered["requests"]) == requests
+    assert recovered["coverage"] == live["coverage"]
+    assert recovered["usage"]["value"] == live["usage"]["value"]
+    assert ("interrupted_observation_line" in recovered["usage"]["reasons"]) == tail_cut
+
+
+def test_a_runner_that_died_before_a_newline_leaves_its_request_unfinished(
+    served, tmp_path, monkeypatch
+):
+    opts = model_server_run(served, tmp_path)
+    run_dir = interrupted_run(opts, "died")
+    events = run_dir / "observations.events.jsonl"
+    # The runner died between the event's last two writes: the line parses but never ended.
+    events.write_bytes(events.read_bytes().removesuffix(b"\n"))
+    assert json.loads(events.read_text().splitlines()[-1])["kind"] == "response"
+    measurements = recover(opts, "died", monkeypatch, tmp_path).run_metadata["measurements"]
+    assert measurements["requests"] == []
+    assert measurements["coverage"]["unfinished_requests"] == 1
+    assert "interrupted_observation_line" in measurements["usage"]["reasons"]
+
+
+@pytest.mark.parametrize("alias", ["gpt-6-sol", "qwen3.8-27b"])
+def test_a_local_model_is_never_priced_as_a_hosted_one(served, tmp_path, alias):
+    spec = model_server_spec(
+        runtime(
+            spec_document(model={"file": "model.gguf", "sha256": served.spec.model_sha256}),
+            CONSTRUCT_MODEL=alias,
+        )
+    )
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan_model_server(spec, served.host, served.state)) as c:
+        ask(c, "done")
+        measurements = c.finalize(exit_kind="completed")
+    assert measurements["requests"][0]["model"] == alias
+    _, replay = replayed(run_dir, "completed")
+    for summary in (measurements, replay):
+        assert [row["usd"] for row in summary["request_prices"]] == [None]
+        assert summary["request_prices"][0]["reasons"] == ["model_price_unavailable"]
+        assert summary["estimated_cost"]["value"] is None
+        assert "model_price_unavailable" in summary["estimated_cost"]["reasons"]
+        assert summary["cost_breakdown"]["value"] is None
+        assert summary["price_table"]["models"] == {}

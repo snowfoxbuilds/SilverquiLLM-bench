@@ -228,11 +228,12 @@ The relay writes a `request_started` event to `observations.events.jsonl` before
 When the run ends, the relay stops admitting requests, cancels those still in flight, and waits at most 10 seconds for their `response` events; nothing is recorded after the measurements are computed, so the events file always summarizes to the record's measurements.
 A start with no `response`, from a runner that died or a request that did not settle in time, counts as an unfinished request.
 An event counts only once it is written whole: a failed write is cut back before the next one, the relay stops admitting requests when it cannot be, and a request whose terminal event cannot be written stays unfinished, so the live and recovered summaries agree.
+Recovery reads only the newline-terminated lines of the relay's events file; an unterminated last line, even one that parses, is ignored with `interrupted_observation_line`.
 A response with status 200 is complete only when it carries a final choice (`finish_reason`) and, for a stream, ends with `data: [DONE]`; one the server ends early is failed with `upstream_response_incomplete`, or `upstream_response_truncated` when a fixed-length body is cut short.
 A complete response that reports no usage still counts, with usage partial (`response_usage_missing`).
 A request that failed, was cancelled or was unfinished, or a response that reported usage more than once, leaves usage partial (`relayed_request_incomplete`, `multiple_usage_reports`).
 Usage follows OpenAI's convention, input including cached tokens; cache writes are zero, and reasoning tokens are missing, because llama.cpp counts them inside completion tokens.
-No price applies, so the Estimated Cost is incomplete with `model_price_unavailable`.
+No price applies, whatever name the recipe serves the model under: requests are priced from an empty table (`price_table.models` is empty), so the Estimated Cost is unavailable with `model_price_unavailable`.
 `measurements.server_timings` sums the server's prompt and generation tokens and times into tokens per second, `coverage.failed_requests` counts requests the relay could not complete, and `coverage.unfinished_requests` those of them that never settled.
 A request may set sampling parameters of its own, which llama.cpp honours over the server's flags; each event keeps them as `request_parameters`, and `coverage.requests_with_parameter_overrides` counts such requests.
 `run_metadata.model_server` records the spec, the binary and its version, the verified digest, and how long verification and start-up took.

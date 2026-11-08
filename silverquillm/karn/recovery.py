@@ -43,6 +43,7 @@ from .login import (
     recover_login,
 )
 from .login_block import block_if_relogin_needed
+from .model_server import TELEMETRY_ADAPTER as MODEL_SERVER_ADAPTER
 from .records import (
     SCHEMA_VERSION,
     KarnIdentity,
@@ -448,7 +449,14 @@ def _recover(
     events, reasons = [], ["prior_runner_interrupted"]
     previous = run_dir / "observations.events.jsonl"
     if previous.exists() and previous.stat().st_size <= 128 * 1024 * 1024:
-        for line in previous.read_text().splitlines():
+        text = previous.read_text()
+        lines = text.splitlines()
+        if telemetry.get("adapter") == MODEL_SERVER_ADAPTER and text and not text.endswith("\n"):
+            # The relay commits whole lines only: an unterminated tail never counted live,
+            # even when it parses.
+            lines.pop()
+            reasons.append("interrupted_observation_line")
+        for line in lines:
             try:
                 events.append(json.loads(line))
             except ValueError:
