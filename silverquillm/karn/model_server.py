@@ -77,6 +77,7 @@ UPSTREAM_TIMEOUT_SECONDS = 1800
 # still unsettled after it is counted from its start record as unfinished.
 SETTLE_SECONDS = 10
 REQUEST_STARTED = "request_started"
+TRANSCRIPT_LOST = "transcript_lost"
 RELAYED_PATHS = {("POST", "/v1/chat/completions"), ("GET", "/v1/models")}
 
 
@@ -341,9 +342,17 @@ class _Response:
         self.content: list[str] = []
         self.reasoning: list[str] = []
         self.tool_calls: dict[int, dict[str, Any]] = {}
+        self.stream_done = self._streamed = False
         self._pending = b""
 
+    @property
+    def complete(self) -> bool:
+        """The server finished the completion: a final choice and, for a stream, its end
+        marker. An upstream that closes early can still end the HTTP response cleanly."""
+        return self.finish_reason is not None and (self.stream_done or not self._streamed)
+
     def feed_stream(self, chunk: bytes) -> None:
+        self._streamed = True
         lines = (self._pending + chunk).split(b"\n")
         self._pending = lines.pop()
         for line in lines:
@@ -352,6 +361,7 @@ class _Response:
                 continue
             payload = line[5:].strip()
             if payload == b"[DONE]":
+                self.stream_done = True
                 continue
             with contextlib.suppress(ValueError, RecursionError):
                 self.ingest(json.loads(payload), delta=True)
@@ -416,6 +426,44 @@ def _new_messages(request: dict) -> Any:
     return _kept(added, MAX_KEPT_MESSAGES_CHARS)
 
 
+class _EventFile:
+    """A JSON-lines file whose committed prefix is whole lines: a failed append is cut back
+    before the next one, so recovery never reads a row a live summary did not count."""
+
+    def __init__(self, path: Path):
+        self.fd: int | None = os.open(
+            path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
+        )
+        self.committed = 0
+        self.broken = False
+
+    def append(self, row: dict[str, Any]) -> bool:
+        if self.fd is None or self.broken:
+            return False
+        try:
+            line = memoryview((json.dumps(row, sort_keys=True) + "\n").encode())
+        except (TypeError, ValueError):
+            return False
+        size = len(line)
+        try:
+            while line:
+                line = line[os.write(self.fd, line) :]
+        except OSError:
+            try:
+                os.ftruncate(self.fd, self.committed)
+                os.lseek(self.fd, self.committed, os.SEEK_SET)
+            except OSError:
+                self.broken = True
+            return False
+        self.committed += size
+        return True
+
+    def close(self) -> None:
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
+
+
 class ModelRelayCollector:
     """Holds the host's model-server lock, starts the server, and relays and records requests.
 
@@ -456,8 +504,8 @@ class ModelRelayCollector:
                 "model_bytes": self.plan.model_path.stat().st_size,
                 "verify_seconds": round(time.monotonic() - started, 3),
             }
-            self._sink = self._exit.enter_context(self._open(EVENTS_FILE))
-            self._transcript = self._exit.enter_context(self._open(TRANSCRIPT_FILE))
+            self._sink = self._open(EVENTS_FILE)
+            self._transcript = self._open(TRANSCRIPT_FILE)
             started = time.monotonic()
             self.llama = self._exit.enter_context(LlamaServer(self.plan, self.run_dir / SERVER_LOG))
             self.facts["ready_seconds"] = round(time.monotonic() - started, 3)
@@ -475,11 +523,10 @@ class ModelRelayCollector:
         except BlockingIOError:
             raise KarnError("model_server_busy") from None
 
-    def _open(self, name: str):
-        fd = os.open(
-            self.run_dir / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
-        )
-        return os.fdopen(fd, "w", encoding="utf-8")
+    def _open(self, name: str) -> _EventFile:
+        sink = _EventFile(self.run_dir / name)
+        self._exit.callback(sink.close)
+        return sink
 
     @property
     def endpoint(self) -> str:
@@ -494,21 +541,28 @@ class ModelRelayCollector:
     def harvest_native(self, native_state: Path) -> None:
         """A model-server run has no native journals; the relay saw every request."""
 
-    def _write(self, sink, row: dict[str, Any]) -> None:
+    def _commit(self, event: dict[str, Any]) -> bool:
+        """An event counts only once it is in the file, so live and recovered summaries of
+        the run agree."""
         with self._lock:
-            if sink is not None and not sink.closed:
-                sink.write(json.dumps(row, sort_keys=True) + "\n")
-                sink.flush()
+            if self._sink is None or not self._sink.append(event):
+                return False
+            self.events.append(event)
+            return True
 
-    def record(self, event: dict[str, Any], transcript: dict[str, Any] | None) -> None:
+    def record(self, event: dict[str, Any], transcript: dict[str, Any] | None) -> bool:
         with self._lock:
             if self._settled:
                 # The summary is computed; a late record would make the event file disagree.
-                return
-            self.events.append(event)
-            self._write(self._sink, event)
-            if transcript is not None:
-                self._write(self._transcript, transcript)
+                return False
+            if not self._commit(event):
+                return False
+            if transcript is not None and not (
+                self._transcript is not None and self._transcript.append(transcript)
+            ):
+                # The terminal event stands; the transcript is only short of this row.
+                self._commit({"id": event["id"], "kind": TRANSCRIPT_LOST})
+            return True
 
     def _start_relay(self):
         collector = self
@@ -568,7 +622,7 @@ class ModelRelayCollector:
         runner that dies mid-request still leaves the request counted, as unfinished. A start
         that cannot be written is refused, so the file and the summary never disagree."""
         with self._lock:
-            if self._closing:
+            if self._closing or self._sink is None or self._sink.broken:
                 return False
             if request is not None:
                 start = {
@@ -578,11 +632,8 @@ class ModelRelayCollector:
                     "stream": bool(request.get("stream")),
                     "timestamp_ms": started_ms,
                 }
-                try:
-                    self._write(self._sink, start)
-                except (OSError, ValueError):
+                if not self._commit(start):
                     return False
-                self.events.append(start)
             self._active[identity] = [client]
             return True
 
@@ -654,6 +705,10 @@ class ModelRelayCollector:
             if whole:
                 with contextlib.suppress(ValueError, RecursionError):
                     response.ingest(json.loads(b"".join(whole)), delta=False)
+            if upstream.length:
+                error = error or "upstream_response_truncated"
+            if request is not None and status == 200 and not error and not response.complete:
+                error = "upstream_response_incomplete"
         except (OSError, http.client.HTTPException) as failure:
             error = error or "upstream_failed:" + type(failure).__name__
             if status is None:
@@ -667,8 +722,11 @@ class ModelRelayCollector:
         if request is None:
             return
         try:
-            self._observe(identity, request, response, status, error, started_ms)
+            recorded = self._observe(identity, request, response, status, error, started_ms)
         except Exception:  # noqa: BLE001 -- a request the server saw is never left unrecorded.
+            recorded = False
+        if not recorded:
+            # If this cannot be written either, the durable start leaves the request unfinished.
             self.record(
                 {
                     "id": identity,
@@ -719,7 +777,7 @@ class ModelRelayCollector:
             "status": status,
             "error": error,
         }
-        self.record(event, transcript)
+        return self.record(event, transcript)
 
     def _settle(self) -> None:
         """Stops admitting requests, cancels those in flight, and waits a bounded time for
@@ -796,6 +854,7 @@ def summarize_model_events(events, *, exit_kind: str, collection_reasons=()) -> 
     reasons = list(collection_reasons)
     unique: dict[str, dict[str, Any]] = {}
     starts: dict[str, dict[str, Any]] = {}
+    transcript_lost: set[str] = set()
     for event in events:
         if not isinstance(event, dict) or not event.get("id"):
             continue
@@ -803,6 +862,8 @@ def summarize_model_events(events, *, exit_kind: str, collection_reasons=()) -> 
             unique.setdefault(event["id"], event)
         elif event.get("kind") == REQUEST_STARTED:
             starts.setdefault(event["id"], event)
+        elif event.get("kind") == TRANSCRIPT_LOST:
+            transcript_lost.add(event["id"])
     unfinished = [start for identity, start in starts.items() if identity not in unique]
     for start in unfinished:
         # Started and never settled: cut off at the deadline, or its runner died.
@@ -853,6 +914,7 @@ def summarize_model_events(events, *, exit_kind: str, collection_reasons=()) -> 
             "relayed_requests": len(rows),
             "failed_requests": failed,
             "unfinished_requests": len(unfinished),
+            "transcript_rows_missing": len(transcript_lost),
             "requests_with_parameter_overrides": sum(
                 1 for row in rows if row.get("request_parameters")
             ),

@@ -72,8 +72,32 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.flush()
             self.hold()
             return
+        if last in ("eof-stream", "eof-after-finish"):
+            # The server closes a stream early, before or after its final choice.
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            choice = {"index": 0, "delta": {"content": "partial"}}
+            if last == "eof-after-finish":
+                choice["finish_reason"] = "stop"
+            self.wfile.write(b"data: " + json.dumps({"id": "chatcmpl-1", "model": alias,
+                "choices": [choice]}).encode() + b"\n\n")
+            self.close_connection = True
+            return
+        if last in ("truncated", "malformed"):
+            body = b'{"id": "chatcmpl-1", "choices": ['
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body) + (100 if last == "truncated" else 0)))
+            self.end_headers()
+            self.wfile.write(body)
+            self.close_connection = True
+            return
         usage = {"prompt_tokens": 100, "completion_tokens": 7, "total_tokens": 107,
                  "prompt_tokens_details": {"cached_tokens": 60}}
+        if last == "no-usage":
+            usage = None
         timings = {"cache_n": 60, "prompt_n": 40, "prompt_ms": 20.0,
                    "predicted_n": 7, "predicted_ms": 70.0}
         base = {"id": "chatcmpl-1", "model": alias, "object": "chat.completion.chunk"}
@@ -810,25 +834,182 @@ def test_a_close_delimited_stream_is_cancelled_without_waiting(served, tmp_path)
     assert replay["coverage"] == measurements["coverage"]
 
 
-def test_a_start_that_cannot_be_written_is_refused_not_relayed(served, tmp_path):
+def failing_writes(monkeypatch, sink, plan):
+    """Makes the next appends to ``sink`` go as ``plan`` says: None writes, "error" writes
+    nothing and fails, "partial" writes half the line and then fails."""
+    from silverquillm.karn import model_server
+
+    real, plan = model_server.os.write, list(plan)
+
+    def write(fd, data):
+        if fd != sink.fd or not plan or (step := plan.pop(0)) is None:
+            return real(fd, data)
+        if step == "partial":
+            plan.insert(0, "error")
+            return real(fd, bytes(data[: len(data) // 2]))
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(model_server.os, "write", write)
+
+
+def test_a_start_that_cannot_be_written_is_refused_not_relayed(served, tmp_path, monkeypatch):
     plan = plan_model_server(served.spec, served.host, served.state)
     run_dir = tmp_path / "run"
     with ModelRelayCollector(run_dir, plan=plan) as collector:
-        sink = collector._sink
-
-        class FullDisk:
-            closed = False
-
-            def write(self, text):
-                raise OSError(28, "No space left on device")
-
-        collector._sink = FullDisk()
+        failing_writes(monkeypatch, collector._sink, ["error"])
         with pytest.raises(urllib.error.HTTPError) as refused:
             post(collector.endpoint + "/v1/chat/completions", {"messages": []})
         assert refused.value.code == 503
-        collector._sink = sink
         started = time.monotonic()
         measurements = collector.finalize(exit_kind="completed")
         assert time.monotonic() - started < 5
     assert measurements["coverage"]["relayed_requests"] == 0
     assert not Path(str(served.binary) + ".held").exists()
+
+
+def ask(collector, content, *, stream=True):
+    return post(
+        collector.endpoint + "/v1/chat/completions",
+        {"stream": stream, "messages": [{"role": "user", "content": content}]},
+    )
+
+
+def assert_replay_agrees(run_dir, measurements, exit_kind="completed"):
+    lines = (run_dir / "observations.events.jsonl").read_text().splitlines()
+    events = [json.loads(line) for line in lines]
+    replay = summarize_events(events, exit_kind=exit_kind, adapter="model_server")
+    for key in ("coverage", "usage", "requests", "agent_turns"):
+        assert replay[key] == measurements[key], key
+    return events
+
+
+@pytest.mark.parametrize(
+    ("content", "stream", "error"),
+    [
+        ("eof-stream", True, "upstream_response_incomplete"),
+        ("eof-after-finish", True, "upstream_response_incomplete"),
+        ("truncated", False, "upstream_response_truncated"),
+        ("malformed", False, "upstream_response_incomplete"),
+    ],
+)
+def test_an_upstream_that_ends_before_its_completion_counts_failed(
+    served, tmp_path, content, stream, error
+):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        assert ask(collector, content, stream=stream)[0] == 200
+        measurements = collector.finalize(exit_kind="completed")
+    assert measurements["requests"] == []
+    assert measurements["coverage"]["failed_requests"] == 1
+    assert measurements["coverage"]["unfinished_requests"] == 0
+    assert "relayed_request_incomplete" in measurements["usage"]["reasons"]
+    events = assert_replay_agrees(run_dir, measurements)
+    assert events[-1]["error"] == error
+    transcript = json.loads((run_dir / "model-transcript.jsonl").read_text())
+    assert transcript["error"] == error
+    if stream:
+        assert transcript["response"]["content"] == "partial"
+
+
+@pytest.mark.parametrize("stream", [True, False])
+@pytest.mark.parametrize("content", ["done", "no-usage"])
+def test_a_finished_response_counts_whether_or_not_it_reports_usage(
+    served, tmp_path, content, stream
+):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        ask(collector, content, stream=stream)
+        measurements = collector.finalize(exit_kind="completed")
+    assert measurements["coverage"]["failed_requests"] == 0
+    assert len(measurements["requests"]) == 1
+    reasons = measurements["usage"]["reasons"]
+    assert ("response_usage_missing" in reasons) == (content == "no-usage")
+    assert_replay_agrees(run_dir, measurements)
+
+
+@pytest.mark.parametrize(
+    ("plan", "failed", "unfinished"),
+    [
+        # The terminal write fails; its fallback is written and counts the request failed.
+        ([None, "error"], 1, 0),
+        # Half a line is written before the failure; it is cut back before the fallback.
+        ([None, "partial"], 1, 0),
+        # Nothing more can be written: the durable start leaves the request unfinished.
+        ([None, *["error"] * 5], 1, 1),
+    ],
+)
+def test_a_terminal_event_counts_only_once_it_is_written(
+    served, tmp_path, monkeypatch, plan, failed, unfinished
+):
+    run_dir = tmp_path / "run"
+    server = plan_model_server(served.spec, served.host, served.state)
+    with ModelRelayCollector(run_dir, plan=server) as collector:
+        failing_writes(monkeypatch, collector._sink, plan)
+        ask(collector, "done")
+        measurements = collector.finalize(exit_kind="completed")
+    assert measurements["requests"] == []
+    assert measurements["coverage"]["failed_requests"] == failed
+    assert measurements["coverage"]["unfinished_requests"] == unfinished
+    assert_replay_agrees(run_dir, measurements)
+
+
+def test_a_file_that_cannot_be_cut_back_stops_admitting(served, tmp_path, monkeypatch):
+    from silverquillm.karn import model_server
+
+    run_dir = tmp_path / "run"
+    server = plan_model_server(served.spec, served.host, served.state)
+    with ModelRelayCollector(run_dir, plan=server) as collector:
+        failing_writes(monkeypatch, collector._sink, [None, "partial"])
+        real = model_server.os.ftruncate
+
+        def ftruncate(fd, length):
+            if fd == collector._sink.fd:
+                raise OSError(5, "Input/output error")
+            return real(fd, length)
+
+        monkeypatch.setattr(model_server.os, "ftruncate", ftruncate)
+        ask(collector, "done")
+        with pytest.raises(urllib.error.HTTPError) as refused:
+            ask(collector, "again")
+        assert refused.value.code == 503
+        measurements = collector.finalize(exit_kind="completed")
+    assert measurements["coverage"]["relayed_requests"] == 1
+    assert measurements["coverage"]["unfinished_requests"] == 1
+    # Recovery reads the whole lines before the cut and counts the same request unfinished.
+    first, cut = (run_dir / "observations.events.jsonl").read_text().splitlines()
+    replay = summarize_events([json.loads(first)], exit_kind="completed", adapter="model_server")
+    assert replay["coverage"] == measurements["coverage"]
+    with pytest.raises(ValueError):
+        json.loads(cut)
+
+
+def test_a_lost_transcript_row_never_changes_the_requests_record(served, tmp_path, monkeypatch):
+    run_dir = tmp_path / "run"
+    server = plan_model_server(served.spec, served.host, served.state)
+    with ModelRelayCollector(run_dir, plan=server) as collector:
+        failing_writes(monkeypatch, collector._transcript, ["error"])
+        ask(collector, "done")
+        ask(collector, "again")
+        measurements = collector.finalize(exit_kind="completed")
+    assert len(measurements["requests"]) == 2
+    assert measurements["coverage"]["failed_requests"] == 0
+    assert measurements["coverage"]["transcript_rows_missing"] == 1
+    events = assert_replay_agrees(run_dir, measurements)
+    assert sum(event["kind"] == "response" for event in events) == 2
+    assert len((run_dir / "model-transcript.jsonl").read_text().splitlines()) == 1
+
+
+def test_a_cancelled_request_whose_record_cannot_be_written_stays_unfinished(
+    served, tmp_path, monkeypatch
+):
+    run_dir = tmp_path / "run"
+    server = plan_model_server(served.spec, served.host, served.state)
+    with ModelRelayCollector(run_dir, plan=server) as collector:
+        failing_writes(monkeypatch, collector._sink, [None, *["error"] * 5])
+        in_background(collector.endpoint + "/v1/chat/completions", "hold")
+        held(served)
+        measurements = collector.finalize(exit_kind="deadline")
+    assert measurements["coverage"]["unfinished_requests"] == 1
+    assert_replay_agrees(run_dir, measurements, "deadline")
