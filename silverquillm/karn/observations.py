@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from .pricing import price_requests, price_table_metadata, total_breakdown
+from .pricing import MODEL_PRICES, ModelPrice, price_requests, price_table_metadata, total_breakdown
 
 # Versions whose journal and OTel streams were checked against each other on a real run.
 QUALIFIED_CODEX_VERSIONS = frozenset({"0.153.4", "0.157.1", "0.159.0"})
@@ -306,6 +306,12 @@ def summarize_events(
         return summarize_claude_events(
             events, exit_kind=exit_kind, collection_reasons=collection_reasons
         )
+    if adapter == "model_server":
+        from .model_server import summarize_model_events
+
+        return summarize_model_events(
+            events, exit_kind=exit_kind, collection_reasons=collection_reasons
+        )
     unique: dict[str, dict[str, Any]] = {}
     reasons = list(collection_reasons)
     for event in events:
@@ -560,9 +566,11 @@ def _measurements(
     subagents_truncated: int = 0,
     subagents_reason: str | None = None,
     reported_costs: dict[str, Decimal] | None = None,
+    prices: Mapping[str, ModelPrice] = MODEL_PRICES,
 ) -> dict[str, Any]:
     """``reported_costs`` maps a request's ``response_id`` to the native CLI's own USD figure
-    for it; None means the CLI reported no cost at all, as Codex does not."""
+    for it; None means the CLI reported no cost at all, as Codex does not. ``prices`` is the
+    table requests are priced from."""
     observed_zero = present and not response_count and not reasons
     turn_reasons = list(reasons)
     usage_reasons = list(reasons)
@@ -573,7 +581,7 @@ def _measurements(
         if len(observed) != len(values):
             usage_reasons.append("missing_" + key)
         totals[key] = sum(observed) if observed else (0 if observed_zero else None)
-    priced = price_requests(requests)
+    priced = price_requests(requests, prices)
     priced_values = [Decimal(r["usd"]) for r in priced if r["usd"] is not None]
     cost_reasons = list(reasons) + [why for row in priced for why in row["reasons"]]
     if response_count and not requests:
@@ -621,7 +629,7 @@ def _measurements(
             {"response_id": response, "usd": format(usd, "f")}
             for response, usd in (reported_costs or {}).items()
         ],
-        "price_table": price_table_metadata(),
+        "price_table": price_table_metadata(prices),
         "coverage": coverage,
     }
 

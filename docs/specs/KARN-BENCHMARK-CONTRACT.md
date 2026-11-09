@@ -56,6 +56,7 @@ A controller is needed for automatic scheduling, not direct execution; controlle
 Externally launched execution does not suppress authentication or other selected lifecycle hooks.
 
 The first supported facilities are ordinary Docker, account bootstrap, temporary Workspace/input/output mounts, Codex and Claude subscription login, and restricted networking for model and authentication access (grilling 2026-09-26).
+A pi construct may also declare a local model server the bench starts for it ([Local model server](#local-model-server)).
 Admission is not tied to a hardcoded model list.
 The integration does not require an exhaustive rejection layer for every facility outside this initial implementation (grilling 2026-09-26).
 The bench does not create a production issue claim or acquire authority to publish a pull request merely to execute a benchmark task.
@@ -189,6 +190,57 @@ Only those fields are kept, and a run that observed no valid weekly window recor
 Claude's stdout carries no time of its own, so a Claude reading's observation time is recorded as unknown; the run's container stop bounds it.
 The reading feeds the operator's Estimated Weekly Usage in [Run Monitoring](RUN-MONITORING.md) and is not an efficiency measurement.
 
+### Local model server
+
+A pi construct may be served by a llama.cpp `llama-server` the bench starts for each run (ADR-022).
+The recipe declares the server as `SILVERQUILLM_MODEL_SERVER` in `runtime.environment`, a JSON object with exactly these keys:
+
+| Key | Holds |
+| --- | --- |
+| `engine` | `"llama.cpp"` |
+| `build` | the llama.cpp build, as `b12182` |
+| `model` | `{"file": "<name>.gguf", "sha256": "<64 hex>"}`, one file in the host's models directory |
+| `arguments` | server flags, each from the bench's allowlist: context, KV-cache types, GPU layers and split, batch sizes, slots, sampling and chat-template settings |
+
+The recipe also sets `CONSTRUCT_PI_BASE_URL = "http://model-server:8080/v1"`, a `CONSTRUCT_MODEL`, and `restricted` egress; an empty `https_hosts` means no internet.
+The bench owns the model path, the address, the alias and the API, so it refuses any other flag.
+
+The host config's `[model_server]` table names `models_dir` and maps each build to its binary under `[model_server.llama_cpp]`.
+Before any evidence exists, a run is refused if the build is not mapped, if the binary's `--version` reports another build, or if the model file is missing.
+Then the run:
+
+1. takes the host's one model-server lock (`<state_root>/model-server.lock`), so two servers never share the GPUs;
+2. verifies the file's sha256;
+3. starts `llama-server` on loopback with the recipe's flags and `--alias <CONSTRUCT_MODEL>`, logging to `model-server.log` in the run directory;
+4. relays every request to it from a host-side relay on a secret path.
+
+The proxy sidecar listens on port 8080 too, serves only clients on the run's own internal network, and forwards only `/v1/` requests of at most 16 MiB, one per connection, to that relay; the workload resolves it as `model-server` through `--add-host`.
+The relay passes on only `POST /v1/chat/completions` and `GET /v1/models`, and refuses a request for more than one choice (`n`).
+The server stops with the run, before grading, and with the runner if the runner dies.
+
+Before the run launches its workload, `run-input.json` holds the server facts the run verified, so a recovered record carries the same `run_metadata.model_server` and `native_telemetry`.
+Recovery copies them as recorded and never reverifies the host's current files; a run interrupted before verification is recovered with `model_sha256_verified` null.
+
+The relay is the run's only observation source, so it cannot be combined with `--native-telemetry` other than `auto`.
+Each relayed request becomes one request row on thread `main`, with the served model, its usage, `finish_reason` and the server's own `timings`.
+Every request reaches one server, so the relay cannot tell a second agent process from the main one: subagent use is unknown (`subagents` null, `subagents_reason` `threads_not_observable`), never `none`.
+The relay writes a `request_started` event to `observations.events.jsonl` before it forwards a request, and a `response` event with the same id when the request settles.
+When the run ends, the relay stops admitting requests, cancels those still in flight, and waits at most 10 seconds for their `response` events; nothing is recorded after the measurements are computed, so the events file always summarizes to the record's measurements.
+A start with no `response`, from a runner that died or a request that did not settle in time, counts as an unfinished request.
+An event counts only once it is written whole: a failed write is cut back before the next one, the relay stops admitting requests when it cannot be, and a request whose terminal event cannot be written stays unfinished, so the live and recovered summaries agree.
+Recovery reads only the newline-terminated lines of the relay's events file; an unterminated last line, even one that parses, is ignored with `interrupted_observation_line`.
+A response with status 200 is complete only when it carries a final choice (`finish_reason`) and, for a stream, ends with `data: [DONE]`; one the server ends early is failed with `upstream_response_incomplete`, or `upstream_response_truncated` when a fixed-length body is cut short.
+A complete response that reports no usage still counts, with usage partial (`response_usage_missing`).
+A request that failed, was cancelled or was unfinished, or a response that reported usage more than once, leaves usage partial (`relayed_request_incomplete`, `multiple_usage_reports`).
+Usage follows OpenAI's convention, input including cached tokens; cache writes are zero, and reasoning tokens are missing, because llama.cpp counts them inside completion tokens.
+No price applies, whatever name the recipe serves the model under: requests are priced from an empty table (`price_table.models` is empty), so the Estimated Cost is unavailable with `model_price_unavailable`.
+`measurements.server_timings` sums the server's prompt and generation tokens and times into tokens per second, `coverage.failed_requests` counts requests the relay could not complete, and `coverage.unfinished_requests` those of them that never settled.
+A request may set sampling parameters of its own, which llama.cpp honours over the server's flags; each event keeps them as `request_parameters`, and `coverage.requests_with_parameter_overrides` counts such requests.
+`run_metadata.model_server` records the spec, the binary and its version, the verified digest, and how long verification and start-up took.
+The run directory also keeps `model-transcript.jsonl`: per request, the messages added since the last reply and the assembled response, with its reasoning and tool calls.
+A transcript row that cannot be written leaves its request's record unchanged; `coverage.transcript_rows_missing` counts such rows.
+What the relay keeps of workload-controlled content is bounded: 1 MiB of messages and of response per request, and a few KiB for each other field, cut with `truncated_from_chars`.
+
 ### Outcomes and retained evidence
 
 Execution outcome, grading, and measurement completeness are separate observations (grilling 2026-09-26).
@@ -312,3 +364,4 @@ This consumer contract governs Karn v4 and v5 execution.
 | [ADR-015](../adr/ADR-015-results-repo-keeps-graded-workspaces-as-diffs.md) | The results repo keeps each graded workspace as a diff from one shared baseline |
 | [ADR-019](../adr/ADR-019-run-cost-prefers-the-native-clis-reported-cost.md) | A run's cost prefers the native CLI's Reported Cost over the bench's Estimated Cost |
 | [ADR-021](../tombstone/ADR-021-rename-regression-to-collateral.md) | Rename record: evaluation-sense "regression" names retired or renamed |
+| [ADR-022](../adr/ADR-022-pi-constructs-run-against-a-bench-started-local-model-server.md) | pi constructs run against a bench-started llama.cpp server, observed by a host-side relay |

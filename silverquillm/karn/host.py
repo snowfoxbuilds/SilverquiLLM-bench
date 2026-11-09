@@ -298,6 +298,8 @@ class DockerHost:
         ]
         if network.policy["mode"] == "restricted":
             arguments += ["--dns", "127.0.0.1"]
+        for hostname, address in sorted((network.hosts or {}).items()):
+            arguments += ["--add-host", hostname + ":" + address]
         if not candidate.runtime["sudo"]:
             arguments += ["--cap-drop", "ALL", "--security-opt", "no-new-privileges"]
             if candidate.runtime["bootstrap"]:
@@ -352,6 +354,7 @@ class DockerHost:
         runtime_environment: Callable[[Network], dict[str, str]] | None = None,
         after_stop: Callable[[HostResult, Path | None], None] | None = None,
         collector_endpoint: str | None = None,
+        model_endpoint: str | None = None,
         login_lock_held: bool = False,
     ) -> HostResult:
         validate_budget(candidate, budget_seconds)
@@ -513,6 +516,7 @@ class DockerHost:
                         candidate.image_id,
                         evidence,
                         collector_endpoint=collector_endpoint,
+                        model_endpoint=model_endpoint,
                     )
                     network.__enter__()
                     environment = {
