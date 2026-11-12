@@ -175,7 +175,7 @@ A request the two streams report differently, in shared token counts or model, k
 The transcript's format is internal to Claude Code, but no Claude Code version is required: a run's measurements are partial only for what its own streams show, and qualifying a version from a real run is an optional check.
 
 Each record also keeps the newest subscription usage reading the run observed for its Login Profile: the provider's weekly-window utilization percentage, the window length, its reset time, and when the reading was observed (grilling 2026-10-07).
-Claude reports it in `rate_limit_event` stdout lines (the `seven_day` window).
+Claude reports it in `rate_limit_event` stdout lines (the `seven_day` window); a Claude record also keeps, under `fable`, the newest reading of the Fable limit (the `seven_day_overage_included` window), in the same shape, when the run observed one (#264).
 Codex reports it in its rollout `rate_limits`, whose window names do not fix their lengths: a `primary` window may be short, so the weekly reading is whichever of the reported windows has a `window_minutes` of exactly 10080.
 The reading is qualified against the pinned Codex CLI's rollout format, with a preserved real rollout as the fixture, before capture counts.
 Only those fields are kept, and a run that observed no valid weekly window records the reading as missing; the operator's estimate then falls back as [Run Monitoring](RUN-MONITORING.md#estimated-weekly-usage) describes.

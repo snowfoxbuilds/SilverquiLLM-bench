@@ -192,15 +192,25 @@ def sparkline(
     return Text(chars, style=theme.style("spark"))
 
 
-def weekly(usage: WeeklyUsage | None, now: datetime, theme: Theme, *, short: bool = False) -> Text:
+def weekly(
+    usage: WeeklyUsage | None,
+    now: datetime,
+    theme: Theme,
+    *,
+    short: bool = False,
+    label: str | None = None,
+) -> Text:
     """``41% · resets Thu 14:00 · read 12m ago``, or ``≈ 47%`` when estimated.
 
-    ``short`` drops the words for a narrow column: ``41% · Thu 14:00 · 12m ago``.
+    ``short`` drops the words for a narrow column: ``41% · Thu 14:00 · 12m ago``. ``label``
+    names a window other than the weekly one, as ``Fable 41% · …``.
     """
     if usage is None:
         return Text("no rate", style=theme.style("muted"))
     role = "bad" if usage.percent >= 90 else "warn" if usage.percent >= 75 else "text"
     text = Text()
+    if label:
+        text.append(f"{label} ", style=theme.style("muted"))
     if usage.estimated:
         text.append(theme.glyph("estimated") + " ", style=theme.style("muted"))
     text.append(f"{usage.percent:.0f}%", style=theme.style(role, bold=True))

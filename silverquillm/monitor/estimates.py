@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from .history import RunSummary, UsageReading
+from .history import WEEKLY, RunSummary, UsageReading
 from .live import LiveRun
 
 LIVE_CAP = 99.0
@@ -77,17 +77,24 @@ def weekly_usage(
     readings: Iterable[UsageReading],
     costs: Iterable[tuple[int, Decimal]],
     now: datetime,
+    window: str = WEEKLY,
 ) -> WeeklyUsage | None:
-    """The profile's value per the spec's table; None without a rate for its provider.
+    """The profile's value of one window per the spec's table; None without a rate for its
+    provider.
 
-    ``costs`` are ``(timestamp_ms, usd)`` of every request the profile served, from records
-    and live runs alike; an Exclusion does not undo spend, so excluded runs count.
+    ``costs`` are ``(timestamp_ms, usd)`` of every request the window counts, from records
+    and live runs alike; an Exclusion does not undo spend, so excluded runs count. The Fable
+    limit is converted at the provider's weekly rate until its own is measured.
     """
     rate = rates.get(provider)
     if rate is None or rate <= 0:
         return None
     costs = list(costs)
-    usable = [r for r in readings if r.provider == provider and r.effective_at is not None]
+    usable = [
+        r
+        for r in readings
+        if r.provider == provider and r.window == window and r.effective_at is not None
+    ]
     observed = {(r.utilization_percent, r.resets_at) for r in usable if r.observed_at}
     # A record's untimed copy of a reading already seen live is that same observation.
     usable = [

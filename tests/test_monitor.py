@@ -44,7 +44,7 @@ from silverquillm.monitor.output import (
 from silverquillm.monitor.pools import login_profiles
 from silverquillm.monitor.queue import queued_batches
 
-from .test_karn_subscription_usage import claude_event, codex_line, write_lines
+from .test_karn_subscription_usage import claude_event, codex_line, fable_event, write_lines
 
 NOW = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
 VECTOR = Path(__file__).parent / "fixtures/karn/wire-vectors-v4/canonical-definition-id/input.json"
@@ -970,8 +970,8 @@ def test_estimated_percent_caps_while_live_and_is_blank_without_history(tmp_path
     assert estimated_percent(run, [], NOW) is None
 
 
-def reading(percent, observed, resets, provider="claude"):
-    return UsageReading(provider, percent, 10080, resets, observed)
+def reading(percent, observed, resets, provider="claude", window="weekly"):
+    return UsageReading(provider, percent, 10080, resets, observed, window=window)
 
 
 def ms(moment):
@@ -993,6 +993,16 @@ def test_weekly_usage_adds_cost_after_an_unreset_reading():
     assert usage.reading_age(NOW) == timedelta(hours=2)
     exact = weekly_usage("p", "claude", RATES, [reading(40.0, observed, resets)], costs[:1], NOW)
     assert (exact.percent, exact.estimated) == (40.0, False)
+
+
+def test_each_window_starts_from_its_own_readings():
+    observed, resets = NOW - timedelta(hours=2), NOW + timedelta(days=2)
+    readings = [reading(40.0, observed, resets), reading(97.0, observed, resets, window="fable")]
+    costs = [(ms(NOW - timedelta(hours=1)), Decimal(50))]
+    weekly = weekly_usage("p", "claude", RATES, readings, costs, NOW)
+    fable = weekly_usage("p", "claude", RATES, readings, costs, NOW, "fable")
+    assert (weekly.percent, fable.percent) == (pytest.approx(42.0), pytest.approx(99.0))
+    assert fable.reading.window == "fable"
 
 
 def test_weekly_usage_after_the_reset_counts_cost_since_the_reset():
@@ -1208,8 +1218,25 @@ def test_a_followed_container_is_redacted_line_by_line_and_yields_claude_reading
     assert [line.text for line in follower.lines_since(0, "stderr")] == ["warn"]
     assert follower.reading.utilization_percent == 42.0
     assert follower.reading.observed_at == datetime(2026, 10, 7, 11, 59, 30, tzinfo=UTC)
+    assert (follower.fable_reading, follower.readings) == (None, (follower.reading,))
     last = lines[-1].seq
     assert follower.lines_since(last) == []
+
+
+def test_the_follower_keeps_the_newest_fable_limit_apart_from_the_weekly_window():
+    stdout = b"".join(
+        b"2026-10-07T11:59:%02d.000000000Z " % second + json.dumps(event).encode() + b"\n"
+        for second, event in ((10, fable_event(0.90, 0.95)), (20, claude_event(0.91)))
+    )
+    follower = LogFollower("sq-run-abc", [], popen=lambda *a, **k: FakeProcess(stdout, b""))
+    follower.start()
+    follower.stop()
+    assert (follower.reading.utilization_percent, follower.reading.window) == (91.0, "weekly")
+    assert (follower.fable_reading.utilization_percent, follower.fable_reading.window) == (
+        95.0,
+        "fable",
+    )
+    assert follower.fable_reading.observed_at == datetime(2026, 10, 7, 11, 59, 10, tzinfo=UTC)
 
 
 def stamp(second: int) -> bytes:
