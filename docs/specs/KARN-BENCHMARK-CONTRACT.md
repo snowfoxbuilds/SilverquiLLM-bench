@@ -167,6 +167,8 @@ The Reported Cost shares the run's observation reasons but none of the price tab
 It is the sum of the CLI's valid figures, each request's charged to one response only; a run with requests but no valid figure has no Reported Cost, never a zero one.
 A Reported Cost that differs from a complete Estimated Cost stays complete and remains the Run Cost; the measurements record `reported_cost_disagrees_with_estimate` under `cost_warnings`, a signal to review the price table or the run, because the two agree on every request the table prices fully.
 
+Claude Code can put usage-limit text into the model's context near or past a usage limit ("Usage limit approaching. Checkpoint now…", a grace window's wrap-up, or a release), which may cut a run short. The measurements record it as `usage_wrap_up`: how many such messages the run's transcripts carried and of which kind (Claude Code's `usageLimitNote`), never their text. It is a run attribute for analysis, never an exclusion or a completeness reason for cost, because excluding the runs would be too expensive and their effect is not yet known (#265).
+
 The integration qualifies response, tool-call, and usage capture against the pinned native CLI.
 The current stock result file's usage:null and whole-request turn.completed events do not establish the required measurements.
 Codex's existing opt-in telemetry is an implementation path to qualify without changing the task into a custom agent workflow.

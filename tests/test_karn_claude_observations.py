@@ -1111,3 +1111,86 @@ def test_a_legacy_run_with_no_requests_keeps_its_reported_zero():
     }
     cost, source = run_cost(measurements)
     assert (cost["value"], cost["completeness"], source) == ("0", "complete", "reported")
+
+
+def usage_note(
+    second, note=None, text="[Usage limit approaching. Checkpoint now: finish the step.]"
+):
+    fields = {"isMeta": True, "turnCompanion": True, "message": {"role": "user", "content": text}}
+    if note is not None:
+        fields["usageLimitNote"] = note
+    return line("user", second=second, **fields)
+
+
+def test_usage_limit_notes_in_the_context_are_counted_by_kind_without_their_text():
+    transcript = [
+        *main_transcript(),
+        usage_note(3, "near_limit"),
+        usage_note(4, "wrap_up", text="[A served text with a secret.]"),
+        usage_note(5, "release", text="[Carry on.]"),
+    ]
+    rows = events_of(transcript)
+    notes = [row for row in rows if row["kind"] == "usage_limit_note"]
+    assert [row["note"] for row in notes] == ["near_limit", "wrap_up", "release"]
+    assert "secret" not in json.dumps(rows)
+    result = summarize_claude_events(rows, exit_kind="completed")
+    assert result["usage_wrap_up"] == {
+        "value": {"messages": 3, "kinds": {"near_limit": 1, "release": 1, "wrap_up": 1}},
+        "completeness": "complete",
+        "reasons": [],
+    }
+    # A flag, never a reason: the run's other measurements stay complete.
+    assert result["usage"]["completeness"] == "complete"
+
+
+def test_a_run_without_usage_limit_notes_reads_none():
+    result = summarize_claude_events(events_of(main_transcript()), exit_kind="completed")
+    assert result["usage_wrap_up"]["value"] == {"messages": 0, "kinds": {}}
+    assert result["usage_wrap_up"]["completeness"] == "complete"
+
+
+def test_built_in_wrap_up_texts_are_recognized_without_the_note_field():
+    texts = {
+        "near_limit": "[Usage limit approaching. Checkpoint now: finish the current step.]",
+        "wrap_up": "[Usage limit reached — grace window active. Wrap up: finish or checkpoint.]",
+    }
+    transcript = [
+        *main_transcript(),
+        usage_note(3, text=texts["near_limit"]),
+        usage_note(4, text=[{"type": "text", "text": texts["wrap_up"]}]),
+        # The model's own words, or a tool's output, are not the CLI's note.
+        line("user", second=5, message={"content": texts["near_limit"]}),
+    ]
+    result = summarize_claude_events(events_of(transcript), exit_kind="completed")
+    assert result["usage_wrap_up"]["value"]["kinds"] == {"near_limit": 1, "wrap_up": 1}
+
+
+def test_a_malformed_usage_limit_note_is_counted_as_unknown_and_flagged():
+    rows, problems = normalize_transcript([*main_transcript(), usage_note(3, "Not A Label!")])
+    assert problems == ["native_label_rejected"]
+    assert [row["note"] for row in rows if row["kind"] == "usage_limit_note"] == ["unknown"]
+
+
+def test_usage_wrap_up_is_missing_when_no_transcript_was_read(tmp_path):
+    with ClaudeTelemetryCollector(tmp_path / "run") as collector:
+        collector.harvest_native(tmp_path / "absent")
+        result = collector.finalize(exit_kind="completed")
+    assert result["usage_wrap_up"]["completeness"] == "missing"
+    assert result["usage_wrap_up"]["value"] is None
+
+
+def test_harvested_usage_limit_notes_reach_the_summary_and_replay_in_recovery(tmp_path):
+    session = tmp_path / "work/projects/-workspace"
+    session.mkdir(parents=True)
+    transcript = [*main_transcript(), usage_note(3, "near_limit")]
+    (session / (SESSION + ".jsonl")).write_text("\n".join(transcript) + "\n")
+    with ClaudeTelemetryCollector(tmp_path / "run") as collector:
+        collector.harvest_native(tmp_path / "work")
+        result = collector.finalize(exit_kind="completed")
+    assert result["usage_wrap_up"]["value"] == {"messages": 1, "kinds": {"near_limit": 1}}
+    replayed = [
+        json.loads(row)
+        for row in (tmp_path / "run/observations.events.jsonl").read_text().splitlines()
+    ]
+    recovered = summarize_events(replayed, exit_kind="interrupted", adapter="claude")
+    assert recovered["usage_wrap_up"]["value"] == {"messages": 1, "kinds": {"near_limit": 1}}
