@@ -22,7 +22,7 @@ from silverquillm.monitor.history import UsageReading
 from silverquillm.monitor.live import live_runs
 from silverquillm.monitor.locks import held_locks
 
-from .test_karn_subscription_usage import claude_event
+from .test_karn_subscription_usage import claude_event, fable_event
 from .test_monitor import (
     CANDIDATE_HASH,
     NOW,
@@ -679,3 +679,86 @@ def test_the_next_run_keeps_then_replaces_the_retained_reading_until_it_expires(
     # A window past that it is dropped, and the last seven days count.
     host.now = datetime.fromisoformat("2026-10-15T15:00:00+00:00")
     assert (host.weekly().percent, host.weekly().reading) == (0.0, None)
+
+
+# The Fable limit
+
+
+def fable_run(runs_dir, run_id):
+    """A live run whose candidate runs a Fable model."""
+    run = make_run(runs_dir, run_id)
+    path = run / "candidate/constructs/bare-claude-opus/definition.json"
+    definition = json.loads(path.read_text())
+    definition["runtime"]["environment"]["CONSTRUCT_MODEL"] = "claude-fable-5-2"
+    path.write_text(json.dumps(definition))
+    return run
+
+
+def stdout_with_fable(weekly, fable, minute):
+    line = json.dumps(fable_event(weekly, fable)).encode()
+    return b"2026-10-07T11:%02d:00.000000000Z " % minute + line + b"\n"
+
+
+def settle_profile(host, expected):
+    deadline = time.monotonic() + 5
+    while True:
+        [profile] = host.snapshot().profiles
+        if profile.fable is not None and profile.fable.percent == pytest.approx(expected):
+            return profile
+        if time.monotonic() > deadline:
+            return profile
+        time.sleep(0.02)
+
+
+def test_a_slot_running_a_fable_candidate_shows_its_fable_limit(tmp_path):
+    followers = Followers()
+    host = Host(tmp_path, popen=followers)
+    # An earlier Opus run's spend counts against the weekly window only.
+    publish(host.repo, "r0", requests=[(NOW - timedelta(minutes=20), "50")])
+    run = fable_run(host.runs, "r1")
+    followers.stdout["sq-run-r1"] = stdout_with_fable(0.90, 0.95, 30)
+    live_cost(run, "25", NOW - timedelta(minutes=10))
+    host.own(run)
+    host.containers = [container("r1")]
+    profile = settle_profile(host, 96.0)
+    assert profile.fable_run and profile.shows_fable
+    assert (profile.fable.percent, profile.fable.reading.window) == (pytest.approx(96.0), "fable")
+    assert profile.weekly.percent == pytest.approx(93.0)
+    assert profile.shown is profile.fable
+
+
+def test_a_slot_running_another_model_shows_the_weekly_window(tmp_path):
+    followers = Followers()
+    host = Host(tmp_path, popen=followers)
+    run = make_run(host.runs, "r1")
+    followers.stdout["sq-run-r1"] = stdout_with_fable(0.40, 0.95, 30)
+    host.own(run)
+    host.containers = [container("r1")]
+    profile = settle_profile(host, 95.0)
+    # The Fable limit is still known, for ``top --json``, but the dashboard shows the weekly one.
+    assert profile.fable.percent == pytest.approx(95.0)
+    assert not profile.fable_run and not profile.shows_fable
+    assert profile.shown is profile.weekly
+
+
+def test_a_fable_run_without_a_fable_reading_shows_the_weekly_window(tmp_path):
+    followers = Followers()
+    host = Host(tmp_path, popen=followers)
+    run = fable_run(host.runs, "r1")
+    followers.stdout["sq-run-r1"] = stdout_with_reading(0.40, 30)
+    host.own(run)
+    host.containers = [container("r1")]
+    settle(host, 40.0)
+    [profile] = host.snapshot().profiles
+    assert profile.fable_run and profile.fable is None and not profile.shows_fable
+    assert profile.shown is profile.weekly
+
+
+def test_a_record_keeps_the_fable_limit_after_its_run(tmp_path):
+    host = Host(tmp_path)
+    usage = claude_usage(40.0, resets="2026-10-08T14:00:00Z")
+    usage["fable"] = {**usage["value"], "utilization_percent": 88.0}
+    publish(host.repo, "r1", usage=usage, requests=[])
+    [profile] = host.snapshot().profiles
+    assert (profile.weekly.percent, profile.fable.percent) == (40.0, 88.0)
+    assert profile.fable.reading.window == "fable" and not profile.fable_run

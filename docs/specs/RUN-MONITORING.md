@@ -25,7 +25,7 @@ It is built from the same poll as the dashboard, so its stages follow [Run stage
 The document (`schema_version` 1) has the host label, each resolved location and its source, the configuration, Docker and exclusion errors, the dispatch mode, the queue ledger's status (`none`, `ok` or `damaged`, with the error), and the dashboard counts.
 `runs` lists every live run with its stage and needs-recover reasons, the Batch and entry that started it, benchmark, construct, Candidate Hash, model and effort, Login Profile, budget, start time and elapsed container time, its container, run directory, estimate, and Run Cost with its source (`run_cost_usd`, `run_cost_source`: `reported` or `estimated`, provisional until `cost_recorded`).
 `queue` lists every Batch in queue order with its status, the run ids it has started and its unstarted entries; the status uses `queue ls`'s strings (`pending`, `running`, `done`, `missing_state`, `ledger_damaged`, `unsupported_legacy_batch`, `error`) (grilling 2026-10-14).
-`logins` lists every Login Profile with one state word (`pending`, `blocked`, `unknown`, `busy`, `cooldown` or `free`, most blocking first), the pending run, its Login Block's reason and run, when a cooldown ends, the run holding it, and its Estimated Weekly Usage.
+`logins` lists every Login Profile with one state word (`pending`, `blocked`, `unknown`, `busy`, `cooldown` or `free`, most blocking first), the pending run, its Login Block's reason and run, when a cooldown ends, the run holding it, its Estimated Weekly Usage, and its Fable limit (`fable_usage_percent`, `fable_usage_estimated`, `fable_resets_at`, null until a reading of it has been seen) whatever model it runs.
 A run's Batch and entry come from the retained Batch state files (`state/<batch>.json`), not from the Batch TOMLs, so a run keeps its Batch after the TOML is removed or stops parsing, as when recovery publishes a run whose Batch file is gone; a missing, oversized or invalid state file attributes nothing, and a run two entries claim has no Batch, never an arbitrary one (grilling 2026-10-15).
 Since it follows no log, the one-shot snapshot reads each running Claude container's recent log once, `docker logs --timestamps --tail` without `--follow`, through the same line and usage parsers a followed log uses, so the live weekly reading the dashboard would show feeds the same [Estimated Weekly Usage](#estimated-weekly-usage); the read is bounded in time (5 s) and bytes (8 MiB), its `docker logs` is always ended, and only the parsed reading is kept, never a log line (grilling 2026-10-15).
 When Docker cannot be read or the log holds no valid reading, the estimate rests on the records, as the dashboard's would without a reading.
@@ -252,6 +252,16 @@ A Claude reading retained in a record has no time of its own; the run's containe
 Such a reading counts spend only after that stop, so spend between the reading and the stop is missing: its value is always marked `≈`, and its age is shown as a lower bound, as in `read ≥3h ago`.
 When the same reading was also seen live with a time, the timed observation is used.
 A value from an unexpired reading reads like `41% · resets Thu 14:00 · read 12m ago`.
+
+#### The Fable limit
+
+Claude reports a second weekly window in the same `rate_limit_event` lines, `seven_day_overage_included`, which Claude Code 2.1.321 labels the Fable limit: Fable requests are refused once it is spent, whatever the weekly window reads (#264).
+Each record keeps its newest reading beside the weekly one, and the monitor estimates it per Login Profile exactly as the weekly window, from its own readings, except that only Fable runs' (`claude-fable-*`) spend is added; that spend is converted at the provider's weekly rate until the Fable limit's own is measured.
+A Login Profile has a Fable limit once a reading of it has been seen, from a live run or a record.
+
+The dashboard shows one figure per Login Profile, since the LOGINS pane has room for one.
+While a Fable run holds the profile and its Fable limit is known, that figure is the Fable limit, labelled `Fable` (`Fable ≈ 96% · resets Thu 14:00 · read 2m ago`); otherwise it is the Estimated Weekly Usage.
+`top --json` reports both.
 
 ### Historic view
 

@@ -1,7 +1,7 @@
 """The newest subscription usage reading a run observed for its Login Profile.
 
 Claude Code reports the account's weekly window in ``rate_limit_event`` lines on its
-stream-json stdout; Codex reports it in the ``rate_limits`` of its session rollouts, which
+stream-json stdout, beside a second weekly window it names the Fable limit; Codex reports it in the ``rate_limits`` of its session rollouts, which
 sit in the login plugin's work directory beside live credentials. Only the reading's
 allowlisted fields are kept, never a whole line, and only rollout files are opened there.
 """
@@ -32,6 +32,10 @@ MAX_LINE_BYTES = 1024 * 1024
 EARLIEST_RESET = datetime(2000, 1, 1, tzinfo=UTC).timestamp()
 LATEST_RESET = datetime(2100, 1, 1, tzinfo=UTC).timestamp()
 PROVIDERS = {"karn-codex-login": "codex", "karn-claude-login": "claude"}
+WEEKLY_WINDOW = "seven_day"
+# Claude Code 2.1.321 labels this window "Fable limit": Fable requests are refused once it
+# is spent, whatever the weekly window reads.
+FABLE_WINDOW = "seven_day_overage_included"
 
 
 def missing(*reasons: str) -> dict[str, Any]:
@@ -93,10 +97,10 @@ def _reading(provider, percent, window, resets_at, observed_at) -> dict[str, Any
     }
 
 
-def claude_reading(document: Any) -> dict[str, Any] | None:
-    """The seven-day window of one ``rate_limit_event``, whose utilization is a fraction."""
+def claude_reading(document: Any, window: str = WEEKLY_WINDOW) -> dict[str, Any] | None:
+    """One seven-day window of a ``rate_limit_event``, whose utilization is a fraction."""
     try:
-        window = document["rate_limit_info"]["unifiedWindows"]["seven_day"]
+        window = document["rate_limit_info"]["unifiedWindows"][window]
         fraction, resets_at = window["utilization"], window["resetsAt"]
     except (KeyError, TypeError):
         return None
@@ -168,7 +172,7 @@ def claude_usage(stdout: Path) -> dict[str, Any]:
         content = read_regular(stdout, limit=MAX_STDOUT_BYTES)
     except KarnError:
         return missing("claude_stdout_unavailable")
-    newest, reasons = None, set()
+    newest, fable, reasons = None, None, set()
     for document in _documents(content, b'"rate_limit_event"'):
         if document is None:
             reasons.add("malformed_reading_dropped")
@@ -180,9 +184,15 @@ def claude_usage(stdout: Path) -> dict[str, Any]:
             reasons.add("malformed_reading_dropped")
         else:
             newest = reading
-    if newest is None:
-        return missing("claude_rate_limit_event_absent", *reasons)
-    return _complete(newest, reasons)
+        fable = claude_reading(document, FABLE_WINDOW) or fable
+    usage = (
+        missing("claude_rate_limit_event_absent", *reasons)
+        if newest is None
+        else _complete(newest, reasons)
+    )
+    if fable is not None:
+        usage["fable"] = fable
+    return usage
 
 
 def _is_rollout(path: PurePosixPath) -> bool:

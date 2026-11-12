@@ -33,7 +33,14 @@ from .containers import RUN_CONTAINER_PREFIX, RunContainer, run_containers
 from .costs import ProvisionalCost
 from .details import RecordDetail, WorkspaceView, record_detail, workspace_view
 from .estimates import WEEK, WeeklyUsage, estimated_percent, weekly_usage
-from .history import HistoryStore, RepoFreshness, RunSummary, UsageReading, repo_freshness
+from .history import (
+    FABLE,
+    HistoryStore,
+    RepoFreshness,
+    RunSummary,
+    UsageReading,
+    repo_freshness,
+)
 from .live import LiveRun, RecordCache, Stage, live_runs, run_candidate_hash
 from .locks import PROC_LOCKS, held_locks
 from .output import (
@@ -42,7 +49,7 @@ from .output import (
     live_codex_reading,
     profile_redactions,
     retained_lines,
-    sampled_claude_reading,
+    sampled_claude_readings,
 )
 from .pools import ProfileStatus, login_profiles
 from .queue import QueuedBatch, batch_runs, dispatch_mode, ledger_status, queued_batches
@@ -50,7 +57,8 @@ from .queue import QueuedBatch, batch_runs, dispatch_mode, ledger_status, queued
 CODEX_READING_SECONDS = 30.0
 HISTORY_SECONDS = 10.0
 OBSERVED_PROFILES = 64
-"""At most this many Login Profiles keep a live-observed reading after their run ends."""
+"""At most this many Login Profile windows keep a live-observed reading after their run ends."""
+FABLE_MODEL_PREFIX = "claude-fable-"
 FINISHED_WINDOW = timedelta(days=7)
 # A deeply nested file recurses; an unknown ``~user`` path fails to expand.
 CONFIG_ERRORS = (HostConfigError, RecursionError, RuntimeError, ValueError, OSError)
@@ -89,12 +97,30 @@ class RunView:
         return min(1.0, elapsed / self.run.budget_seconds)
 
 
+def is_fable(model: str | None) -> bool:
+    return isinstance(model, str) and model.startswith(FABLE_MODEL_PREFIX)
+
+
 @dataclass(frozen=True)
 class ProfileView:
     status: ProfileStatus
     weekly: WeeklyUsage | None
     run_id: str | None
     """The live run holding this Login Profile, when one does."""
+    fable: WeeklyUsage | None = None
+    """Claude's Fable limit, once a reading of it has been seen for this profile."""
+    fable_run: bool = False
+    """The live run holding this profile is a Fable model's."""
+
+    @property
+    def shown(self) -> WeeklyUsage | None:
+        """The one figure the dashboard shows: the Fable limit while a Fable run holds the
+        profile and a reading of it exists, else the weekly window."""
+        return self.fable if self.fable_run and self.fable is not None else self.weekly
+
+    @property
+    def shows_fable(self) -> bool:
+        return self.fable_run and self.fable is not None
 
 
 @dataclass(frozen=True)
@@ -206,7 +232,7 @@ class Monitor:
         self._live: dict[str, _Live] = {}
         self._records = RecordCache()
         self._codex_readings: dict[str, tuple[float, UsageReading | None]] = {}
-        self._observed: dict[str, UsageReading] = {}
+        self._observed: dict[tuple[str, str], UsageReading] = {}
         self._repo = RepoFreshness(None, None)
         self._stopping = False
 
@@ -242,7 +268,8 @@ class Monitor:
             entry = self._live.pop(run_id)
             if entry.follower is not None:
                 # The run's record may keep only an untimed copy of what was seen live.
-                self._observe(entry.run.login_profile, entry.follower.reading)
+                for reading in entry.follower.readings:
+                    self._observe(entry.run.login_profile, reading)
                 entry.follower.stop()
         for run_id, run in current.items():
             entry = self._live.get(run_id)
@@ -277,17 +304,19 @@ class Monitor:
         return checked[1]
 
     def _observe(self, login: str | None, reading: UsageReading | None) -> None:
-        """Keep the newest reading seen live for ``login`` beyond the follower that saw it."""
+        """Keep the newest reading of each window seen live for ``login`` beyond the follower
+        that saw it."""
         if login is None or reading is None or reading.effective_at is None:
             return
-        if _newer(reading, self._observed.get(login)):
-            self._observed[login] = reading
+        key = (login, reading.window)
+        if _newer(reading, self._observed.get(key)):
+            self._observed[key] = reading
 
-    def _observed_readings(self, now: datetime) -> dict[str, UsageReading]:
+    def _observed_readings(self, now: datetime) -> dict[tuple[str, str], UsageReading]:
         # A reading speaks for one window past its reset at most (estimates.weekly_usage).
         self._observed = {
-            login: reading
-            for login, reading in self._observed.items()
+            key: reading
+            for key, reading in self._observed.items()
             if now < reading.resets_at + WEEK
         }
         if len(self._observed) > OBSERVED_PROFILES:
@@ -324,8 +353,9 @@ class Monitor:
             login = _canonical_login(summary.login_profile, profiles)
             if login is None:
                 continue
-            if summary.usage_reading is not None:
-                readings[login].append(summary.usage_reading)
+            for reading in (summary.usage_reading, summary.fable_usage_reading):
+                if reading is not None:
+                    readings[login].append(reading)
             rank = _spend_rank(summary, local_copy)
             current = best.get(summary.execution_id)
             if current is None or rank > current[0]:
@@ -344,50 +374,65 @@ class Monitor:
     ) -> list[ProfileView]:
         executions, readings = self._executions(profiles, history, local)
         costs: dict[str, list[tuple[int, Decimal]]] = defaultdict(list)
+        # The Fable limit counts only Fable requests (estimates.weekly_usage, window ``fable``).
+        fable_costs: dict[str, list[tuple[int, Decimal]]] = defaultdict(list)
         for login, record in executions.values():
             costs[login].extend(record.request_costs)
-        holder = {}
+            if is_fable(record.candidate.model):
+                fable_costs[login].extend(record.request_costs)
+        holder, fable_runs = {}, set()
         for run_id, entry in self._live.items():
             login = entry.run.login_profile
             if login is None:
                 continue
             holder[login] = run_id
+            fable = is_fable(entry.run.candidate.model)
+            if fable:
+                fable_runs.add(login)
             if run_id not in executions:
-                costs[login].extend(
+                live_costs = [
                     (row.timestamp_ms, row.usd)
                     for row in entry.cost.requests
                     if row.usd is not None
-                )
+                ]
+                costs[login].extend(live_costs)
+                if fable:
+                    fable_costs[login].extend(live_costs)
             if entry.follower is not None:
-                self._observe(login, entry.follower.reading)
+                for reading in entry.follower.readings:
+                    self._observe(login, reading)
             elif (
                 self.sample_usage
                 and entry.run.provider == "claude"
                 and entry.run.stage is Stage.RUNNING
                 and entry.run.container is not None
             ):
-                self._observe(
-                    login, sampled_claude_reading(RUN_CONTAINER_PREFIX + run_id, popen=self.popen)
-                )
+                for reading in sampled_claude_readings(
+                    RUN_CONTAINER_PREFIX + run_id, popen=self.popen
+                ):
+                    self._observe(login, reading)
             if entry.run.provider == "codex" and entry.run.stage is Stage.RUNNING:
                 self._observe(login, self._codex_reading(login))
-        for login, reading in self._observed_readings(now).items():
+        for (login, _), reading in self._observed_readings(now).items():
             readings[_canonical_login(login, profiles)].append(reading)
-        return [
-            ProfileView(
-                profile,
-                weekly_usage(
-                    profile.ref,
-                    profile.provider,
-                    self.config.usage_rates,
-                    readings[profile.ref],
-                    costs[profile.ref],
-                    now,
-                ),
-                holder.get(profile.ref),
+        views = []
+        for profile in profiles:
+            ref, rates = profile.ref, self.config.usage_rates
+            fable = None
+            if any(r.window == FABLE for r in readings[ref]):
+                fable = weekly_usage(
+                    ref, profile.provider, rates, readings[ref], fable_costs[ref], now, FABLE
+                )
+            views.append(
+                ProfileView(
+                    profile,
+                    weekly_usage(ref, profile.provider, rates, readings[ref], costs[ref], now),
+                    holder.get(ref),
+                    fable,
+                    ref in fable_runs,
+                )
             )
-            for profile in profiles
-        ]
+        return views
 
     def _view(self, run: LiveRun, history: list[RunSummary], now: datetime) -> RunView:
         percent = (

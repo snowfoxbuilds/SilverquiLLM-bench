@@ -11,7 +11,7 @@ import pytest
 
 from silverquillm.monitor import Monitor
 from silverquillm.monitor.headless import snapshot_document
-from silverquillm.monitor.output import sampled_claude_reading
+from silverquillm.monitor.output import sampled_claude_readings
 from silverquillm.monitor.queue import batch_runs
 from silverquillm.top import print_snapshot
 
@@ -136,7 +136,7 @@ def test_docker_that_cannot_start_reads_nothing():
     def unavailable(arguments, **kwargs):
         raise OSError("no docker")
 
-    assert sampled_claude_reading("sq-run-r1", popen=unavailable) is None
+    assert sampled_claude_readings("sq-run-r1", popen=unavailable) == ()
 
 
 class Hanging(FakeProcess):
@@ -170,8 +170,8 @@ class Hanging(FakeProcess):
 def test_a_docker_read_that_hangs_is_ended_within_the_time_bound():
     process = Hanging()
     started = time.monotonic()
-    reading = sampled_claude_reading("sq-run-r1", popen=lambda *a, **k: process, timeout=0.3)
-    assert reading is None
+    readings = sampled_claude_readings("sq-run-r1", popen=lambda *a, **k: process, timeout=0.3)
+    assert readings == ()
     assert process.terminated
     assert time.monotonic() - started < 3
 
@@ -180,12 +180,12 @@ def test_reading_stops_at_the_byte_bound():
     line = stdout_with_reading(0.92, 30)
     filler = b"2026-10-07T11:00:00.000000000Z " + b"x" * 1000 + b"\n"
     stdout = filler * 50 + line  # the reading lies past the bound
-    reading = sampled_claude_reading(
+    readings = sampled_claude_readings(
         "sq-run-r1", popen=lambda *a, **k: FakeProcess(stdout, b""), max_bytes=10_000
     )
-    assert reading is None
-    found = sampled_claude_reading("sq-run-r1", popen=lambda *a, **k: FakeProcess(stdout, b""))
-    assert found is not None and found.utilization_percent == pytest.approx(92.0)
+    assert readings == ()
+    [found] = sampled_claude_readings("sq-run-r1", popen=lambda *a, **k: FakeProcess(stdout, b""))
+    assert found.utilization_percent == pytest.approx(92.0)
 
 
 # --- run attribution from retained batch state ------------------------------------------
