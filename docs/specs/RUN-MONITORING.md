@@ -1,6 +1,6 @@
 Status: DRAFT
 
-Last updated: 2026-11-04
+Last updated: 2026-11-16
 
 # Run Monitoring
 
@@ -26,6 +26,7 @@ The document (`schema_version` 1) has the host label, each resolved location and
 `runs` lists every live run with its stage and needs-recover reasons, the Batch and entry that started it, benchmark, construct, Candidate Hash, model and effort, Login Profile, budget, start time and elapsed container time, its container, run directory, estimate, and Run Cost with its source (`run_cost_usd`, `run_cost_source`: `reported` or `estimated`, provisional until `cost_recorded`).
 `queue` lists every Batch in queue order with its status, the run ids it has started and its unstarted entries; the status uses `queue ls`'s strings (`pending`, `running`, `done`, `missing_state`, `ledger_damaged`, `unsupported_legacy_batch`, `error`) (grilling 2026-10-14).
 `logins` lists every Login Profile with one state word (`pending`, `blocked`, `unknown`, `busy`, `cooldown` or `free`, most blocking first), the pending run, its Login Block's reason and run, when a cooldown ends, the run holding it, its Estimated Weekly Usage, and its Fable limit (`fable_usage_percent`, `fable_usage_estimated`, `fable_resets_at`, null until a reading of it has been seen) whatever model it runs.
+`gpu_slots` lists every GPU Slot with one state word (`held`, `busy` or `free`), the run holding it, and each of its GPUs' name, UUID and used and total memory from `nvidia-smi`, or null with a reason when `nvidia-smi` cannot be read (grilling 2026-11-16).
 A run's Batch and entry come from the retained Batch state files (`state/<batch>.json`), not from the Batch TOMLs, so a run keeps its Batch after the TOML is removed or stops parsing, as when recovery publishes a run whose Batch file is gone; a missing, oversized or invalid state file attributes nothing, and a run two entries claim has no Batch, never an arbitrary one (grilling 2026-10-15).
 Since it follows no log, the one-shot snapshot reads each running Claude container's recent log once, `docker logs --timestamps --tail` without `--follow`, through the same line and usage parsers a followed log uses, so the live weekly reading the dashboard would show feeds the same [Estimated Weekly Usage](#estimated-weekly-usage); the read is bounded in time (5 s) and bytes (8 MiB), its `docker logs` is always ended, and only the parsed reading is kept, never a log line (grilling 2026-10-15).
 When Docker cannot be read or the log holds no valid reading, the estimate rests on the records, as the dashboard's would without a reading.
@@ -178,6 +179,8 @@ A profile with a pending login journal names the run that owns its settlement be
 The pools sit side by side, one column each, so six profiles a pool fit in the height of the STATUS pane.
 The pane takes the fullest form that fits the width uncut: usage bars and full wording, then without the bars, then with the wording shortened (`41% · Thu 14:00 · 12m ago`); failing those, the form that fits by cutting only profile names.
 When no form fits two columns, the pools stack and the pane scrolls, as it does whenever a pool has more profiles than its height.
+On a host with a local model server, the LOGINS pane also shows a GPU section with its free count, one line per GPU Slot in config order (grilling 2026-11-16): its value, the GPUs' names, a free, held or busy marker, the run holding it or the foreign compute processes keeping it busy, and a used-memory bar.
+The section is read-only: no key acts on a GPU Slot.
 
 A Login Profile under a Login Cooldown shows its own marker and colour and reads `cooldown until Thu 14:00 (3h12m)` before its usage (grilling 2026-10-08).
 A Login Profile under a Login Block shows the blocked marker in the alarm colour and reads `relogin · R re-enroll` before its usage (grilling 2026-11-04).
@@ -355,3 +358,4 @@ Pass rates take a rarity colour: mythic from 90%, rare from 70%, uncommon from 4
 | [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | The Karn commands, `top` among them, own the top level |
 | [ADR-019](../adr/ADR-019-run-cost-prefers-the-native-clis-reported-cost.md) | The monitor shows and sums the Run Cost, which prefers the native CLI's Reported Cost |
 | [ADR-020](../adr/ADR-020-net-card-score-is-the-headline.md) | The Net Card Score is the headline score |
+| [ADR-022](../adr/ADR-022-pi-constructs-run-against-a-bench-started-local-model-server.md) | A model-server run claims one of the host's GPU Slots, shown beside the Login Pools |

@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-11-04
+Last updated: 2026-11-16
 
 # Karn Benchmark Contract
 
@@ -38,10 +38,11 @@ Karn resolves and builds the candidate; the bench consumes the resulting build o
 Image and definition selection are fixed for that run, and build time is outside its execution budget.
 Recipes and other build sources provide provenance; they do not substitute for the artifact actually executed.
 
-A run's sources must all be committed (#116).
-Its image must carry Karn's `karn.config.revision` label naming a recipe commit, which a build from the committed tree records and a `--worktree` build does not; the bench checkout that runs and grades, and the one holding the benchmark data, must have no change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`.
+The candidate hash binds a result to the exact definition and image that ran, so a candidate's recipe need not be committed: a `--worktree` build, or one whose image has no `karn.config.revision` label, runs like any other (grilling 2026-11-16).
+The record keeps the recipe revision, a commit or Karn's dirty marker, so a reader can tell a recipe that can be read back from one that cannot.
+The bench's own sources are not hashed and grade the run, so they must be committed (#116): the bench checkout that runs and grades, and the one holding the benchmark data, must have no change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`.
 Ignored files and untracked files elsewhere, such as scratch notes, worktrees and run artifacts, do not count.
-`run` and `scheduler` refuse a run that breaks this before any evidence exists, unless the operator passes `--allow-dirty`.
+`run` and `scheduler` refuse a run whose bench sources break this before any evidence exists, unless the operator passes `--allow-dirty`.
 Every new record carries its provenance: the host label (`SILVERQUILLM_HOST_LABEL`, else the host configuration's `host_label`, else the hostname; grilling 2026-10-14), the commit and dirty state of both checkouts, the recipe revision, and any overridden reasons; the grader image is already recorded under `grading_isolation`.
 
 ### Independent execution
@@ -50,13 +51,14 @@ The bench launches the candidate directly, without an Ozolith Node Daemon (grill
 The bench owns scheduling, Workspace staging, User Prompt delivery, run launch, timeout enforcement, harvesting, and evaluation.
 Karn configuration selects the container command, initializer, bootstrap, declared mounts and files, and required runtime facilities.
 The benchmark host honors that selection.
+Every container the bench creates runs with Docker's `runc` runtime, whatever the host's default runtime: no container needs a GPU, so every host runs candidates the same way (grilling 2026-11-16).
 
 Karn allows an Automaton to omit a polling controller (grilling 2026-09-26).
 A controller is needed for automatic scheduling, not direct execution; controller-free execution requires no new wire-format field.
 Externally launched execution does not suppress authentication or other selected lifecycle hooks.
 
 The first supported facilities are ordinary Docker, account bootstrap, temporary Workspace/input/output mounts, Codex and Claude subscription login, and restricted networking for model and authentication access (grilling 2026-09-26).
-A pi construct may also declare a local model server the bench starts for it ([Local model server](#local-model-server)).
+A pi construct may also declare a local model server the bench starts for it ([Local Model Server](LOCAL-MODEL-SERVER.md)).
 Admission is not tied to a hardcoded model list.
 The integration does not require an exhaustive rejection layer for every facility outside this initial implementation (grilling 2026-09-26).
 The bench does not create a production issue claim or acquire authority to publish a pull request merely to execute a benchmark task.
@@ -192,57 +194,6 @@ Only those fields are kept, and a run that observed no valid weekly window recor
 Claude's stdout carries no time of its own, so a Claude reading's observation time is recorded as unknown; the run's container stop bounds it.
 The reading feeds the operator's Estimated Weekly Usage in [Run Monitoring](RUN-MONITORING.md) and is not an efficiency measurement.
 
-### Local model server
-
-A pi construct may be served by a llama.cpp `llama-server` the bench starts for each run (ADR-022).
-The recipe declares the server as `SILVERQUILLM_MODEL_SERVER` in `runtime.environment`, a JSON object with exactly these keys:
-
-| Key | Holds |
-| --- | --- |
-| `engine` | `"llama.cpp"` |
-| `build` | the llama.cpp build, as `b12182` |
-| `model` | `{"file": "<name>.gguf", "sha256": "<64 hex>"}`, one file in the host's models directory |
-| `arguments` | server flags, each from the bench's allowlist: context, KV-cache types, GPU layers and split, batch sizes, slots, sampling and chat-template settings |
-
-The recipe also sets `CONSTRUCT_PI_BASE_URL = "http://model-server:8080/v1"`, a `CONSTRUCT_MODEL`, and `restricted` egress; an empty `https_hosts` means no internet.
-The bench owns the model path, the address, the alias and the API, so it refuses any other flag.
-
-The host config's `[model_server]` table names `models_dir` and maps each build to its binary under `[model_server.llama_cpp]`.
-Before any evidence exists, a run is refused if the build is not mapped, if the binary's `--version` reports another build, or if the model file is missing.
-Then the run:
-
-1. takes the host's one model-server lock (`<state_root>/model-server.lock`), so two servers never share the GPUs;
-2. verifies the file's sha256;
-3. starts `llama-server` on loopback with the recipe's flags and `--alias <CONSTRUCT_MODEL>`, logging to `model-server.log` in the run directory;
-4. relays every request to it from a host-side relay on a secret path.
-
-The proxy sidecar listens on port 8080 too, serves only clients on the run's own internal network, and forwards only `/v1/` requests of at most 16 MiB, one per connection, to that relay; the workload resolves it as `model-server` through `--add-host`.
-The relay passes on only `POST /v1/chat/completions` and `GET /v1/models`, and refuses a request for more than one choice (`n`).
-The server stops with the run, before grading, and with the runner if the runner dies.
-
-Before the run launches its workload, `run-input.json` holds the server facts the run verified, so a recovered record carries the same `run_metadata.model_server` and `native_telemetry`.
-Recovery copies them as recorded and never reverifies the host's current files; a run interrupted before verification is recovered with `model_sha256_verified` null.
-
-The relay is the run's only observation source, so it cannot be combined with `--native-telemetry` other than `auto`.
-Each relayed request becomes one request row on thread `main`, with the served model, its usage, `finish_reason` and the server's own `timings`.
-Every request reaches one server, so the relay cannot tell a second agent process from the main one: subagent use is unknown (`subagents` null, `subagents_reason` `threads_not_observable`), never `none`.
-The relay writes a `request_started` event to `observations.events.jsonl` before it forwards a request, and a `response` event with the same id when the request settles.
-When the run ends, the relay stops admitting requests, cancels those still in flight, and waits at most 10 seconds for their `response` events; nothing is recorded after the measurements are computed, so the events file always summarizes to the record's measurements.
-A start with no `response`, from a runner that died or a request that did not settle in time, counts as an unfinished request.
-An event counts only once it is written whole: a failed write is cut back before the next one, the relay stops admitting requests when it cannot be, and a request whose terminal event cannot be written stays unfinished, so the live and recovered summaries agree.
-Recovery reads only the newline-terminated lines of the relay's events file; an unterminated last line, even one that parses, is ignored with `interrupted_observation_line`.
-A response with status 200 is complete only when it carries a final choice (`finish_reason`) and, for a stream, ends with `data: [DONE]`; one the server ends early is failed with `upstream_response_incomplete`, or `upstream_response_truncated` when a fixed-length body is cut short.
-A complete response that reports no usage still counts, with usage partial (`response_usage_missing`).
-A request that failed, was cancelled or was unfinished, or a response that reported usage more than once, leaves usage partial (`relayed_request_incomplete`, `multiple_usage_reports`).
-Usage follows OpenAI's convention, input including cached tokens; cache writes are zero, and reasoning tokens are missing, because llama.cpp counts them inside completion tokens.
-No price applies, whatever name the recipe serves the model under: requests are priced from an empty table (`price_table.models` is empty), so the Estimated Cost is unavailable with `model_price_unavailable`.
-`measurements.server_timings` sums the server's prompt and generation tokens and times into tokens per second, `coverage.failed_requests` counts requests the relay could not complete, and `coverage.unfinished_requests` those of them that never settled.
-A request may set sampling parameters of its own, which llama.cpp honours over the server's flags; each event keeps them as `request_parameters`, and `coverage.requests_with_parameter_overrides` counts such requests.
-`run_metadata.model_server` records the spec, the binary and its version, the verified digest, and how long verification and start-up took.
-The run directory also keeps `model-transcript.jsonl`: per request, the messages added since the last reply and the assembled response, with its reasoning and tool calls.
-A transcript row that cannot be written leaves its request's record unchanged; `coverage.transcript_rows_missing` counts such rows.
-What the relay keeps of workload-controlled content is bounded: 1 MiB of messages and of response per request, and a few KiB for each other field, cut with `truncated_from_chars`.
-
 ### Outcomes and retained evidence
 
 Execution outcome, grading, and measurement completeness are separate observations (grilling 2026-09-26).
@@ -281,7 +232,8 @@ The scheduler dispatches concurrently into every free eligible Login Profile, wi
 Batches take priority in queue order among those whose next unstarted entry can start: a later Batch's entries follow an earlier one's. Queue order is the order in which the scheduler first recorded each Batch in its batch directory's queue ledger (`queue.json`), whatever the file names; Batches recorded together, and those present when a ledger is first created, are ordered by name (grilling 2026-10-13). Entries within a Batch start in file order: a blocked unstarted entry defers later entries in that Batch, but not another Batch with available capacity. Multiple entries of one Batch may run concurrently and finish out of order.
 A running scheduler picks up a Batch file added to its directory without a restart. A valid Batch the ledger has never recorded is new: the scheduler writes its empty state and records it, in that order. A Batch the ledger already records but whose state file is missing has lost its state, and is refused until the operator restores the state or acknowledges a restart from entry zero with `--replay-without-state`. An acknowledgement is consumed by the one start it allows, and by any usable state the scheduler adopts for that Batch, whether written automatically for a new Batch or restored: a Batch whose state is lost again needs a new one. Without a ledger, nothing tells a new Batch from a lost one, so the first ledger records every stateless Batch present as needing that acknowledgement; a damaged ledger, or a ledger or Batch state the scheduler cannot write (including the acknowledgement of a replayed start, which is retried before anything else is admitted), stops all new dispatch until it is repaired, removed or made writable, while runs already in flight finish. The scheduler reports every such stop on every pass; the queue views show `ledger_damaged` only for damage visible in `queue.json` itself, since they never write and cannot see a failed write (grilling 2026-10-13). The scheduler warns, in serve mode too, about every Batch it skips and why, including a new file in an unsupported format, which stays unrecorded until it is a valid Batch. A renamed Batch file is a new Batch, and every `*.toml` file in the directory is a submission (grilling 2026-10-13).
 An entry is recorded as started only once its worker holds a Login Profile. When execution and authentication harvest release a profile, another entry may claim it while the earlier worker grades or publishes its record.
-Candidates without a login plugin have no pool to bound concurrency, so the scheduler runs at most one such candidate at a time.
+A model-server candidate is bounded by the host's GPU Slots instead ([Local Model Server](LOCAL-MODEL-SERVER.md)), and the scheduler defers it, in queue order, until one frees (grilling 2026-11-16).
+Other candidates without a login plugin have no pool to bound concurrency, so the scheduler runs at most one of them at a time.
 With `--once`, the scheduler fills currently eligible slots and drains its own workers, continuing to dispatch as slots become available. It returns when no workers of its own remain and no queued entry is currently eligible; it does not wait for externally busy slots, cooldown expiry, or future `not_before` times. Continuous serving retries deferred entries on later passes.
 On restart, recovery checks every running state row; a row still owned by a live worker is deferred without interrupting that worker. Other eligible work may proceed.
 Ctrl-C, SIGTERM, and SIGHUP stop new dispatch, interrupt the scheduler's own workers, and drain their cleanup and state updates before releasing the exclusive queue lock.
