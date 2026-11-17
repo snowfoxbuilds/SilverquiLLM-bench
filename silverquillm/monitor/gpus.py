@@ -8,7 +8,7 @@ from typing import Any
 
 from silverquillm.karn.model_server import GpuReading, gpu_slots
 
-from .live import LiveRun
+from .live import LiveRun, Stage
 from .locks import lock_held
 
 
@@ -39,9 +39,10 @@ class GpuSlotStatus:
 
 
 def _holder(value: str | None, runs: list[LiveRun]) -> str | None:
-    # A run that is grading has released its slot; only one still serving holds it.
+    """The run whose server is live on the slot: one staging or running. A run that is grading
+    or recording has stopped its server and released the slot."""
     for run in runs:
-        serving = run.container is None or run.container.running
+        serving = run.stage in (Stage.STARTING, Stage.RUNNING)
         if run.model_server and run.gpu_slot == value and serving:
             return run.run_id
     return None

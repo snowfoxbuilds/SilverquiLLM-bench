@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from silverquillm.karn.model_server import GpuReading, claim_gpu_slot, gpu_slots
-from silverquillm.monitor import Monitor
+from silverquillm.monitor import Monitor, Stage
 from silverquillm.monitor.gpus import GpuSlotStatus, gpu_slot_statuses
 from silverquillm.monitor.headless import snapshot_document
 from silverquillm.monitor.locks import held_locks
@@ -31,13 +31,8 @@ def h100(index, used=14):
 READING = GpuReading((h100(0), h100(1), h100(2, used=40000), h100(3)), frozenset({"GPU-3"}))
 
 
-def served(run_id, slot, *, running=True):
-    return SimpleNamespace(
-        run_id=run_id,
-        model_server=True,
-        gpu_slot=slot,
-        container=SimpleNamespace(running=running),
-    )
+def served(run_id, slot, stage=Stage.RUNNING):
+    return SimpleNamespace(run_id=run_id, model_server=True, gpu_slot=slot, stage=stage)
 
 
 def lock_table_now(tmp_path):
@@ -53,10 +48,26 @@ def test_each_slot_reads_held_busy_or_free_without_taking_its_lock(tmp_path):
     claim = claim_gpu_slot(slots[:1], lambda: READING)
     held = lock_table_now(tmp_path)
     claim.release()
-    runs = [served("graded-run", "0", running=False), served("serving-run-0001", "0")]
+    runs = [
+        served("grading-run", "0", Stage.GRADING),
+        served("recording-run", "0", Stage.RECORDING),
+        served("serving-run-0001", "0"),
+    ]
     statuses = gpu_slot_statuses(state, ("0", "1", "2", "3"), held, READING, runs)
     assert [status.state for status in statuses] == ["held", "free", "busy", "busy"]
     assert statuses[0].run_id == "serving-run-0001"
+    staging = gpu_slot_statuses(
+        state,
+        ("0",),
+        held,
+        READING,
+        [served("grading-run", "0", Stage.GRADING), served("staging", "0", Stage.STARTING)],
+    )
+    assert staging[0].run_id == "staging"
+    graded = gpu_slot_statuses(
+        state, ("0",), held, READING, [served("grading-run", "0", Stage.GRADING)]
+    )
+    assert graded[0].state == "held" and graded[0].run_id is None
     assert (statuses[2].busy, statuses[3].busy) == ("memory_used", "compute_process")
     assert statuses[1].gpus == (h100(1),)
     # The monitor's read left every lock free for the next run to claim.
