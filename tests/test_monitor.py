@@ -1134,6 +1134,18 @@ def test_codex_provisional_cost_prices_completed_responses(tmp_path):
     assert cost.unpriced == 1
 
 
+def test_a_local_model_servers_run_has_no_provisional_cost(tmp_path):
+    rows = [
+        {"kind": "request_started", "id": "r1", "timestamp_ms": 1},
+        {"kind": "response", "id": "r1", "status": 200, "timestamp_ms": 2},
+    ]
+    (tmp_path / "observations.events.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    cost = ProvisionalCost(tmp_path, "model_server")
+    cost.update()
+    assert cost.available
+    assert cost.total is None, "never priced, so never a provisional zero"
+
+
 def test_hostile_events_never_break_a_provisional_cost(tmp_path):
     claude, codex, fifo = (tmp_path / name for name in ("claude", "codex", "fifo"))
     for directory in (claude, codex, fifo):

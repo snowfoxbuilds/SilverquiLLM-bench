@@ -15,6 +15,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from silverquillm.karn.model_server import TELEMETRY_ADAPTER as MODEL_SERVER_ADAPTER
 from silverquillm.karn.observations import _OTLP_TOKENS
 from silverquillm.karn.pricing import price_requests
 
@@ -192,8 +193,9 @@ class ProvisionalCost:
 
     @property
     def total(self) -> Decimal | None:
-        """The sum of priced requests; None until the events file exists."""
-        if not self.available:
+        """The sum of priced requests; None until the events file exists, and always for a
+        local model server's run, which is never priced (ADR-023)."""
+        if not self.available or self.adapter == MODEL_SERVER_ADAPTER:
             return None
         return sum((row.usd for row in self.requests if row.usd is not None), Decimal(0))
 
