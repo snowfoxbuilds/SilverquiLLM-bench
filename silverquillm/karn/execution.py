@@ -553,7 +553,11 @@ def _collect(
 
                 arguments = {}
                 if model_server is not None:
-                    arguments = {"model_endpoint": collector.endpoint}
+                    arguments = {
+                        "model_endpoint": collector.endpoint,
+                        # Every hop waits as long as the recipe allows one request to take.
+                        "model_timeout_seconds": model_server.spec.request_timeout,
+                    }
                 elif native and telemetry.get("adapter") == "claude":
                     arguments = {
                         "runtime_environment": lambda network: collector.otel_environment(

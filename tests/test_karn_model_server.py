@@ -67,6 +67,8 @@ class Handler(BaseHTTPRequestHandler):
         last = messages[-1].get("content") if isinstance(messages, list) and messages else None
         if last == "hold":
             self.hold()
+        if isinstance(last, str) and last.startswith("delay:"):
+            time.sleep(float(last[len("delay:"):]))
         if last == "hold-close":
             # A close-delimited stream, which http.client reads after dropping its socket.
             self.send_response(200)
@@ -433,6 +435,7 @@ def test_the_sidecar_is_the_model_server_and_is_not_proxied(tmp_path):
         assert create[runtime + 1] == "runc" and runtime < create.index("sha256:" + "1" * 64)
         assert "SILVERQUILLM_MODEL_ENDPOINT=http://h:1/model/x" in create
         assert "SILVERQUILLM_MODEL_CLIENTS=10.9.0.0/24" in create
+        assert "SILVERQUILLM_MODEL_TIMEOUT=1800" in create
         ready = next(command for command in docker.commands if command[0] == "exec")
         assert "(3128, 8080)" in ready[-1]
     with pytest.raises(KarnError, match="model_server_requires_restricted_network"):
@@ -1497,3 +1500,183 @@ def test_the_host_config_names_an_environment_only_this_host_needs(tmp_path):
             ModelServerHost(tmp_path, {}, {"CUDA_VISIBLE_DEVICES": "0"}),
             tmp_path,
         )
+
+
+# The recipe's request timeout governs every hop of a model request (#275 review).
+
+
+def test_the_recipe_request_timeout_reaches_the_sidecar_launch(served, tmp_path):
+    from silverquillm.karn.execution import run_benchmark
+
+    seen = {}
+
+    class TimedHost(RelayHost):
+        def run(self, *args, model_timeout_seconds, **kwargs):
+            seen["timeout"] = model_timeout_seconds
+            return super().run(*args, **kwargs)
+
+    for document, expected in (
+        (spec_document(model=served.spec.to_dict()["model"], request_timeout_seconds=7200), 7200),
+        (spec_document(model=served.spec.to_dict()["model"]), 1800),
+    ):
+        opts = model_server_run(served, tmp_path / str(expected))
+        candidate_dir = tmp_path / str(expected) / "recipe"
+        definition = next(candidate_dir.rglob("definition.json"))
+        data = json.loads(definition.read_text())
+        data["runtime"]["environment"][MODEL_SERVER_ENV] = json.dumps(document)
+        definition.write_text(json.dumps(data))
+        opts["host"] = TimedHost()
+        try:
+            run_benchmark(**opts, run_id="timed")
+        except KarnError:
+            pass
+        assert seen.pop("timeout", None) == expected
+    docker = NetworkDocker()
+    policy = {"mode": "restricted", "https_hosts": []}
+    with Network(
+        docker,
+        "r1",
+        policy,
+        "sha256:" + "1" * 64,
+        tmp_path,
+        model_endpoint="http://h:1/model/x",
+        model_timeout_seconds=7200,
+    ):
+        create = next(command for command in docker.commands if command[0] == "create")
+        assert "SILVERQUILLM_MODEL_TIMEOUT=7200" in create
+
+
+def test_the_sidecar_waits_on_the_relay_as_long_as_it_was_configured(monkeypatch):
+    from silverquillm.karn import proxy
+
+    forward = proxy.model_forward_from_environment(
+        {
+            "SILVERQUILLM_MODEL_ENDPOINT": "http://127.0.0.1:9/model/x",
+            "SILVERQUILLM_MODEL_CLIENTS": "127.0.0.0/8",
+            "SILVERQUILLM_MODEL_TIMEOUT": "7200",
+        },
+        ("127.0.0.1", 0),
+    )
+    timeouts, real_connect = [], socket.create_connection
+
+    def connect(address, timeout):
+        if address != ("127.0.0.1", 9):
+            return real_connect(address, timeout=timeout)
+        timeouts.append(timeout)
+        raise OSError("relay unreachable in this test")
+
+    monkeypatch.setattr(proxy.socket, "create_connection", connect)
+    thread = threading.Thread(target=forward.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with real_connect(forward.server_address, timeout=5) as client:
+            client.sendall(b"POST /v1/chat/completions HTTP/1.1\r\nContent-Length: 0\r\n\r\n")
+            assert b"403" in client.recv(4096)
+    finally:
+        forward.shutdown()
+        forward.server_close()
+        thread.join()
+    assert timeouts == [7200]
+    assert proxy.model_forward_from_environment({}) is None
+    default = proxy.model_forward_from_environment(
+        {"SILVERQUILLM_MODEL_ENDPOINT": "http://h:1/x", "SILVERQUILLM_MODEL_CLIENTS": "10.0.0.0/8"},
+        ("127.0.0.1", 0),
+    )
+    assert default.model_timeout == 1800
+    default.server_close()
+
+
+def delayed_request(served, tmp_path, *, recipe_timeout, sidecar_timeout, delay):
+    """One non-streaming request that the fake server answers after *delay* seconds, sent
+    through a real sidecar route and relay; returns the client's outcome and measurements."""
+    document = spec_document(
+        model=served.spec.to_dict()["model"], request_timeout_seconds=recipe_timeout
+    )
+    plan = plan_model_server(model_server_spec(runtime(document)), served.host, served.state)
+    with ModelRelayCollector(tmp_path / "run", plan=plan) as collector:
+        forward = ModelForwardServer(
+            ("127.0.0.1", 0), collector.endpoint, model_timeout=sidecar_timeout
+        )
+        thread = threading.Thread(target=forward.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{forward.server_address[1]}/v1/chat/completions"
+            try:
+                status, body = post(
+                    url, {"stream": False, "messages": [{"role": "user", "content": delay}]}
+                )
+                outcome = (status, json.loads(body)["choices"][0]["finish_reason"])
+            except (urllib.error.HTTPError, urllib.error.URLError, ConnectionError) as error:
+                outcome = (getattr(error, "code", None), type(error).__name__)
+            time.sleep(0.2)
+        finally:
+            forward.shutdown()
+            forward.server_close()
+            thread.join()
+        measurements = collector.finalize(exit_kind="completed")
+    return outcome, measurements
+
+
+def test_a_request_slower_than_the_old_limit_succeeds_within_the_recipes(
+    served, tmp_path, monkeypatch
+):
+    from silverquillm.karn import proxy
+
+    # The old fixed limit, scaled down: the recipe's longer limit must win on every hop.
+    monkeypatch.setattr(proxy, "DEFAULT_MODEL_TIMEOUT_SECONDS", 1)
+    outcome, measurements = delayed_request(
+        served, tmp_path, recipe_timeout=5, sidecar_timeout=5, delay="delay:1.5"
+    )
+    assert outcome == (200, "stop")
+    assert measurements["coverage"]["relayed_requests"] == 1
+    assert measurements["coverage"]["failed_requests"] == 0
+    assert measurements["requests"][0]["finish_reason"] == "stop"
+
+
+def test_a_request_past_the_recipes_limit_fails_and_is_counted_failed(served, tmp_path):
+    outcome, measurements = delayed_request(
+        served, tmp_path, recipe_timeout=1, sidecar_timeout=1, delay="delay:2.5"
+    )
+    assert outcome[0] in (403, None)
+    coverage = measurements["coverage"]
+    assert coverage["relayed_requests"] == 1
+    assert coverage["failed_requests"] == 1
+    assert coverage["unfinished_requests"] == 0
+    assert measurements["requests"] == []
+    assert "relayed_request_incomplete" in measurements["usage"]["reasons"]
+
+
+@pytest.mark.parametrize("flag", ["--lora-scaled", "--control-vector-scaled"])
+@pytest.mark.parametrize("spelling", ["dash", "underscore"])
+def test_scaled_adapters_are_refused_since_files_cannot_carry_a_scale(flag, spelling):
+    written = flag.replace("-", "_").replace("__", "--", 1) if spelling == "underscore" else flag
+    with pytest.raises(KarnError, match="model_server_flag_not_allowed:" + flag):
+        model_server_spec(runtime(spec_document(arguments=[written, "a.gguf:0.5"])))
+    files = [
+        {"file": "m.gguf", "sha256": "0" * 64, "flag": "--model"},
+        {"file": "a.gguf", "sha256": "0" * 64, "flag": written},
+    ]
+    with pytest.raises(KarnError, match="model_server_file_flag_not_allowed"):
+        model_server_spec(runtime(with_files(*files)))
+
+
+def test_unscaled_adapters_are_verified_and_passed(served, tmp_path):
+    models = served.host.models_dir
+    (models / "adapter.gguf").write_bytes(b"lora")
+    (models / "vector.gguf").write_bytes(b"control")
+    files = [
+        {"file": "model.gguf", "sha256": served.spec.model_sha256, "flag": "--model"},
+        {"file": "adapter.gguf", "sha256": file_sha256(models / "adapter.gguf"), "flag": "--lora"},
+        {
+            "file": "vector.gguf",
+            "sha256": file_sha256(models / "vector.gguf"),
+            "flag": "--control-vector",
+        },
+    ]
+    plan = plan_model_server(
+        model_server_spec(runtime(with_files(*files))), served.host, served.state
+    )
+    with ModelRelayCollector(tmp_path / "run", plan=plan):
+        argv = json.loads(Path(str(served.binary) + ".argv").read_text())
+    assert argv[argv.index("--lora") + 1] == str(models.resolve() / "adapter.gguf")
+    assert argv[argv.index("--control-vector") + 1] == str(models.resolve() / "vector.gguf")

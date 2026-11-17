@@ -34,7 +34,7 @@ The recipe declares the server as `SILVERQUILLM_MODEL_SERVER` in `runtime.enviro
 | `arguments` | server flags, any but the bench's own |
 | `environment` (optional) | variables for the server process, as `GGML_CUDA_*` |
 | `ready_timeout_seconds` (optional) | how long the server may take to become ready, default 900; named apart from the measured `ready_seconds` the record keeps (#271) |
-| `request_timeout_seconds` (optional) | how long one relayed request may take, default 1800 |
+| `request_timeout_seconds` (optional) | how long one model request may stay silent, default 1800; it governs every hop, the sidecar's route to the relay and the relay's request to the server (#275) |
 
 Under `files`, exactly one entry has the flag `--model`, and that entry is the model; `model` is that one entry alone (grilling 2026-11-16).
 A file is named by its bare name in the models directory, never a path, and a split model lists every part, since llama.cpp loads the later parts by name (#271).
@@ -52,8 +52,9 @@ The bench refuses only the flags it owns or that would defeat the record (grilli
 | the presets `--embd-gemma-default`, `--fim-qwen-{1.5b,3b,7b,30b}-default`, `--fim-qwen-{7b,14b}-spec`, `--gpt-oss-{20b,120b}-default`, `--vision-gemma-{4b,12b}-default` | each downloads a model and moves the port (grilling 2026-11-16) |
 | `--rpc`, `--tools`, `--tools-runtime`, `--mcp-servers-config`, `--mcp-servers-json`, the `--ui-mcp-proxy` forms, `-ag`/`--agent` and its `--no-` forms, `--connect`, `--connect-code` | the server reaches no other host and runs nothing on this one for a request |
 | `--log-file`, `--slot-save-path`, `--log-prompts-dir`, `--media-path`, `--video-ffmpeg-dir`, `-lcd`, `--lookup-cache-dynamic` | the server writes, and reads for a request, only where the bench puts it |
+| `--lora-scaled`, `--control-vector-scaled`, as arguments and as a `files` flag | they take `FNAME:SCALE`, and a `files` entry declares no scale: `files` supports the unscaled `--lora` and `--control-vector` only (#275) |
 
-The bench also refuses, among the arguments only, the flags of llama.cpp b12182 that name an input file: `-m`, `--model`, `-md`, `--model-draft`, `--spec-draft-model`, `-mm`, `--mmproj`, `--chat-template-file`, `--grammar-file`, `-jf`, `--json-schema-file`, `-lcs`, `--lookup-cache-static`, `--lora`, `--lora-scaled`, `--control-vector`, `--control-vector-scaled`, `-f`, `--file`, `-bf` and `--binary-file`.
+The bench also refuses, among the arguments only, the flags of llama.cpp b12182 that name an input file: `-m`, `--model`, `-md`, `--model-draft`, `--spec-draft-model`, `-mm`, `--mmproj`, `--chat-template-file`, `--grammar-file`, `-jf`, `--json-schema-file`, `-lcs`, `--lookup-cache-static`, `--lora`, `--control-vector`, `-f`, `--file`, `-bf` and `--binary-file`.
 Such a file is declared in `files` instead, so its digest is verified and recorded (#271).
 A flag is refused alone or as `--flag=value`, and every argument is checked, a value too, so a refused flag cannot hide as one; every other flag passes and is recorded with the arguments; a later build's new file flag passes unverified until it is added to that list.
 llama.cpp rewrites `_` to `-` in every argument starting with `--` before it looks the flag up, so the bench compares the same rewritten name: `--hf_repo` is refused as `--hf-repo` (grilling 2026-11-16).

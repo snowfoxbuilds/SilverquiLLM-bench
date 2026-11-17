@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .definition import KarnError, inspect_image, strict_json
-from .model_server import MODEL_SERVER_HOST, MODEL_SERVER_PORT
+from .model_server import DEFAULT_REQUEST_TIMEOUT_SECONDS, MODEL_SERVER_HOST, MODEL_SERVER_PORT
 
 RUN_LABEL = "org.silverquillm.run"
 
@@ -167,6 +167,8 @@ class Network:
     proxy_name: str | None = None
     environment: dict | None = None
     model_endpoint: str | None = None
+    model_timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS
+    """How long the sidecar waits on one model request: the recipe's request timeout."""
     hosts: dict | None = None
     """Names the workload resolves without DNS: ``model-server`` is the sidecar."""
 
@@ -236,6 +238,8 @@ class Network:
                     "SILVERQUILLM_MODEL_ENDPOINT=" + self.model_endpoint,
                     "--env",
                     "SILVERQUILLM_MODEL_CLIENTS=" + self._subnet(),
+                    "--env",
+                    f"SILVERQUILLM_MODEL_TIMEOUT={self.model_timeout_seconds}",
                 ]
             ports = (3128, MODEL_SERVER_PORT) if self.model_endpoint else (3128,)
             self.docker.command(*arguments)

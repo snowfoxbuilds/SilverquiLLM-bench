@@ -71,6 +71,8 @@ REFUSED_FLAGS = frozenset(
         *("--fim-qwen-7b-default", "--fim-qwen-7b-spec", "--fim-qwen-14b-spec"),
         *("--fim-qwen-30b-default", "--gpt-oss-20b-default", "--gpt-oss-120b-default"),
         *("--vision-gemma-4b-default", "--vision-gemma-12b-default"),
+        # They take ``FNAME:SCALE``, which a ``files`` entry has no way to say.
+        *("--lora-scaled", "--control-vector-scaled"),
     }
 )
 # llama.cpp b12182's flags naming an input file: refused among the arguments, since a file
@@ -79,8 +81,8 @@ FILE_FLAGS = frozenset(
     {
         *("-m", "--model", "-md", "--model-draft", "--spec-draft-model", "-mm", "--mmproj"),
         *("--chat-template-file", "--grammar-file", "-jf", "--json-schema-file"),
-        *("-lcs", "--lookup-cache-static", "--lora", "--lora-scaled"),
-        *("--control-vector", "--control-vector-scaled", "-f", "--file", "-bf", "--binary-file"),
+        *("-lcs", "--lookup-cache-static", "--lora", "--control-vector"),
+        *("-f", "--file", "-bf", "--binary-file"),
     }
 )
 MODEL_FLAG = "--model"

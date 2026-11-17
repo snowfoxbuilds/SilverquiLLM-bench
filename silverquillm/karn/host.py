@@ -40,6 +40,7 @@ from .login import (
     recover_login,
 )
 from .login_block import block_if_relogin_needed
+from .model_server import DEFAULT_REQUEST_TIMEOUT_SECONDS
 from .toolchain import TOOLCHAIN_TARGET, CandidateToolchain
 
 DEFAULT_BUDGET_SECONDS = 24 * 60 * 60
@@ -359,6 +360,7 @@ class DockerHost:
         after_stop: Callable[[HostResult, Path | None], None] | None = None,
         collector_endpoint: str | None = None,
         model_endpoint: str | None = None,
+        model_timeout_seconds: int = DEFAULT_REQUEST_TIMEOUT_SECONDS,
         login_lock_held: bool = False,
     ) -> HostResult:
         validate_budget(candidate, budget_seconds)
@@ -521,6 +523,7 @@ class DockerHost:
                         evidence,
                         collector_endpoint=collector_endpoint,
                         model_endpoint=model_endpoint,
+                        model_timeout_seconds=model_timeout_seconds,
                     )
                     network.__enter__()
                     environment = {
