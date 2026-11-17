@@ -161,6 +161,8 @@ class DockerHost:
         # The egress proxy sidecar runs the candidate image's own python3 (see docker.Network).
         probe = self.docker.command(
             "run",
+            "--runtime",
+            "runc",
             "--rm",
             "--pull",
             "never",
@@ -285,6 +287,8 @@ class DockerHost:
     def _create(self, candidate, name, run_id, command, user, mounts, network, environment):
         arguments = [
             "create",
+            "--runtime",
+            "runc",
             "--pull",
             "never",
             "--name",

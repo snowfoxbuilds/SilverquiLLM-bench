@@ -195,6 +195,8 @@ class Network:
             )
             arguments = [
                 "create",
+                "--runtime",
+                "runc",
                 "--pull",
                 "never",
                 "--name",

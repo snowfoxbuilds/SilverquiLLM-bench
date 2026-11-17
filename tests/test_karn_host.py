@@ -194,6 +194,7 @@ def test_declared_inputs_and_immutable_image_launch_without_proposal_gate(tmp_pa
     assert result.workspace_stopped
     assert (tmp_path / "run/mounts/input/task.txt").read_text() == "Implement cards"
     create = docker.commands[0]
+    assert create[:3] == ("create", "--runtime", "runc")
     assert create[create.index("--entrypoint") + 2] == candidate.image_id
     assert "--pull" in create and "never" in create
     assert not any(command[0] in ("build", "pull") for command in docker.commands)

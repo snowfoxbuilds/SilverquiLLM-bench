@@ -966,7 +966,11 @@ def test_restricted_network_requires_python3_in_the_image_before_launch(tmp_path
     else:
         host.preflight(candidate, 60)
     (probe,) = docker.commands
-    assert probe[:2] == ("run", "--rm") and "none" in probe and candidate.image_id in probe
+    assert (
+        probe[:4] == ("run", "--runtime", "runc", "--rm")
+        and "none" in probe
+        and candidate.image_id in probe
+    )
     DockerHost(docker=ProbeDocker(1)).preflight(make_candidate(tmp_path / "open"), 60)
 
 

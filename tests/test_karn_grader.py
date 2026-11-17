@@ -66,6 +66,7 @@ def test_every_grading_container_is_sandboxed_and_sees_only_declared_inputs(plai
         assert run["image"] == FIXTURE_IMAGE_ID
         assert selected["--network"] == "none"
         assert selected["--pull"] == "never"
+        assert selected["--runtime"] == "runc"
         assert selected["--user"] == f"{os.getuid()}:{os.getgid()}"
         assert selected["--cap-drop"] == "ALL"
         assert selected["--security-opt"] == "no-new-privileges"
@@ -433,7 +434,7 @@ def test_the_python_probe_runs_the_candidate_image_sandboxed_and_reads_only_a_ve
     [probe] = docker.probes
     arguments = probe["arguments"]
     options = dict(itertools.pairwise(arguments))
-    assert arguments[:2] == ["run", "--rm"]
+    assert arguments[:4] == ["run", "--runtime", "runc", "--rm"]
     assert options["--pull"] == "never" and options["--network"] == "none"
     assert options["--user"] == f"{os.getuid()}:{os.getgid()}"
     assert "--read-only" in arguments and options["--cap-drop"] == "ALL"

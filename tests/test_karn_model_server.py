@@ -403,6 +403,8 @@ def test_the_sidecar_is_the_model_server_and_is_not_proxied(tmp_path):
         assert network.hosts == {"model-server": "10.9.0.2"}
         assert network.environment["NO_PROXY"].endswith(",model-server")
         create = next(command for command in docker.commands if command[0] == "create")
+        runtime = create.index("--runtime")
+        assert create[runtime + 1] == "runc" and runtime < create.index("sha256:" + "1" * 64)
         assert "SILVERQUILLM_MODEL_ENDPOINT=http://h:1/model/x" in create
         assert "SILVERQUILLM_MODEL_CLIENTS=10.9.0.0/24" in create
         ready = next(command for command in docker.commands if command[0] == "exec")
