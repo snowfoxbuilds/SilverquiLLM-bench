@@ -10,6 +10,7 @@ import pytest
 pytest.importorskip("textual")
 
 from silverquillm.karn.definition import KarnError
+from silverquillm.monitor.estimates import WeeklyUsage
 from silverquillm.top import slots
 from silverquillm.top.dashboard import LoginsPane
 from silverquillm.top.theme import MTG
@@ -46,6 +47,19 @@ def test_a_blocked_profile_reads_relogin_and_pools_order_by_number():
     text = _plain(LoginsPane.pool(snapshot, "codex", MTG))
     line = next(line for line in text.splitlines() if "slot-2" in line)
     assert MTG.glyph("blocked") in line and "relogin · R re-enroll" in line
+
+
+def test_a_slot_running_fable_shows_the_fable_limit_alone():
+    snapshot = FakeMonitor().snapshot()
+    claude = [view for view in snapshot.profiles if view.status.provider == "claude"]
+    weekly = claude[0].weekly
+    fable = WeeklyUsage(weekly.profile, 97.0, True, None)
+    others = [view for view in snapshot.profiles if view is not claude[0]]
+    for fable_run, shown, hidden in ((True, "Fable ≈ 97%", "41%"), (False, "41%", "Fable")):
+        view = replace(claude[0], fable=fable, fable_run=fable_run)
+        text = _plain(LoginsPane.pool(replace(snapshot, profiles=[view, *others]), "claude", MTG))
+        line = next(line for line in text.splitlines() if view.status.slot in line)
+        assert shown in line and hidden not in line
 
 
 @synchronous

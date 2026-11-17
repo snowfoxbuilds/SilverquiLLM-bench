@@ -316,8 +316,11 @@ class LoginsPane(VerticalScroll, can_focus=False):
             mark = Text(theme.glyph("untapped"), style=theme.style("muted"))
         name = Text(f"{mark.plain} ", style=mark.style)
         name.append(status.slot, style=theme.style("text" if status.busy else "muted"))
-        percent = view.weekly.percent / 100 if view.weekly else None
-        weekly = fmt.weekly(view.weekly, now, theme, short=short)
+        # A Fable run is held back by the Fable limit, so its slot shows that one alone.
+        usage = view.shown
+        percent = usage.percent / 100 if usage else None
+        label = "Fable" if view.shows_fable else None
+        weekly = fmt.weekly(usage, now, theme, short=short, label=label)
         if status.cooldown_until is not None:
             # A held profile reads its hold first: when it ends matters more than its usage,
             # which a short form leaves out.

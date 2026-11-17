@@ -23,10 +23,10 @@ from pathlib import Path
 from silverquillm.karn.definition import KarnError, read_regular, strict_json
 from silverquillm.karn.login import LOGIN_PLUGINS, secret_values
 from silverquillm.karn.login_pool import SECRET_FILE_LIMIT, SLOT_NAME, logins_root
-from silverquillm.karn.subscription_usage import claude_reading, codex_usage
+from silverquillm.karn.subscription_usage import FABLE_WINDOW, claude_reading, codex_usage
 
 from ._read import instant
-from .history import UsageReading
+from .history import FABLE, WEEKLY, UsageReading
 
 REDACTED = b"[REDACTED]"
 # A displayed line keeps its first 16 KiB; with DEFAULT_KEEP lines a followed run holds ~32 MiB.
@@ -113,23 +113,35 @@ def join_partials(line: bytes) -> bytes:
     return line[:start] + DOCKER_STAMP.sub(b"", line[start:])
 
 
-def claude_line_reading(line: bytes, at: datetime | None) -> UsageReading | None:
-    """A ``rate_limit_event`` line's weekly window, observed when Docker logged the line."""
+def claude_line_readings(line: bytes, at: datetime | None) -> tuple[UsageReading, ...]:
+    """A ``rate_limit_event`` line's weekly window and Fable limit, each when present,
+    observed when Docker logged the line."""
     if b'"rate_limit_event"' not in line or len(line) > MAX_LINE:
-        return None
+        return ()
     try:
         document = json.loads(line)
     except (ValueError, RecursionError):
-        return None
+        return ()
     if not isinstance(document, dict) or document.get("type") != "rate_limit_event":
-        return None
-    value = claude_reading(document)
-    resets_at = instant(value.get("resets_at")) if value else None
-    if value is None or resets_at is None:
-        return None
-    return UsageReading(
-        "claude", value["utilization_percent"], value["window_minutes"], resets_at, at
-    )
+        return ()
+    readings = []
+    for window, value in (
+        (WEEKLY, claude_reading(document)),
+        (FABLE, claude_reading(document, FABLE_WINDOW)),
+    ):
+        resets_at = instant(value.get("resets_at")) if value else None
+        if value is not None and resets_at is not None:
+            readings.append(
+                UsageReading(
+                    "claude",
+                    value["utilization_percent"],
+                    value["window_minutes"],
+                    resets_at,
+                    at,
+                    window=window,
+                )
+            )
+    return tuple(readings)
 
 
 class LineSplitter:
@@ -216,6 +228,7 @@ class LogFollower:
         self._process: subprocess.Popen | None = None
         self._threads: list[threading.Thread] = []
         self.reading: UsageReading | None = None
+        self.fable_reading: UsageReading | None = None
         self.error: str | None = None
 
     def start(self) -> None:
@@ -257,14 +270,21 @@ class LogFollower:
         for raw, redacted, truncated in rows:
             at, text = split_timestamp(redacted)
             if name == "stdout" and raw:
-                reading = claude_line_reading(split_timestamp(raw)[1], at)
-                if reading is not None:
-                    self.reading = reading
+                for reading in claude_line_readings(split_timestamp(raw)[1], at):
+                    if reading.window == FABLE:
+                        self.fable_reading = reading
+                    else:
+                        self.reading = reading
             with self._lock:
                 self._seq += 1
                 self._lines.append(
                     LogLine(self._seq, name, text.decode(errors="replace"), at, truncated)
                 )
+
+    @property
+    def readings(self) -> tuple[UsageReading, ...]:
+        """The newest weekly reading and the newest Fable reading, each once seen."""
+        return tuple(r for r in (self.reading, self.fable_reading) if r is not None)
 
     @property
     def running(self) -> bool:
@@ -302,15 +322,15 @@ SAMPLE_SECONDS = 5.0
 SAMPLE_MAX_BYTES = 8 * 1024 * 1024
 
 
-def sampled_claude_reading(
+def sampled_claude_readings(
     container: str,
     *,
     tail: int = DEFAULT_TAIL,
     popen: Popen = subprocess.Popen,
     timeout: float = SAMPLE_SECONDS,
     max_bytes: int = SAMPLE_MAX_BYTES,
-) -> UsageReading | None:
-    """The newest Claude usage reading in a run container's recent stdout, read once.
+) -> tuple[UsageReading, ...]:
+    """The newest Claude reading of each window in a run container's recent stdout, read once.
 
     ``docker logs --timestamps --tail`` without ``--follow``, through the same line and
     reading parsers a ``LogFollower`` uses. Reading stops at ``max_bytes`` or ``timeout``,
@@ -325,7 +345,7 @@ def sampled_claude_reading(
             stderr=subprocess.DEVNULL,
         )
     except OSError:
-        return None
+        return ()
     found: list[UsageReading] = []
 
     def pump() -> None:
@@ -349,16 +369,15 @@ def sampled_claude_reading(
     reader.join(1)
     with contextlib.suppress(OSError, ValueError):
         process.stdout.close()
-    return found[-1] if found else None
+    newest = {reading.window: reading for reading in found}
+    return tuple(newest[window] for window in (WEEKLY, FABLE) if window in newest)
 
 
 def _keep_readings(rows, found: list[UsageReading]) -> None:
     for raw, _, _ in rows:
         if raw:
             at, text = split_timestamp(raw)
-            reading = claude_line_reading(text, at)
-            if reading is not None:
-                found.append(reading)
+            found.extend(claude_line_readings(text, at))
 
 
 def _reap(process: subprocess.Popen) -> None:

@@ -56,6 +56,18 @@ def claude_event(fraction, resets_at=1791468000, **extra):
     }
 
 
+def fable_event(weekly, fable, resets_at=1791468000):
+    """A ``rate_limit_event`` that also carries the Fable limit, as Claude Code 2.1.321 does."""
+    document = claude_event(weekly, resets_at)
+    document["rate_limit_info"]["unifiedWindows"]["seven_day_overage_included"] = {
+        "utilization": fable,
+        "resetsAt": resets_at,
+        "status": "rejected",
+        "surpassedThreshold": 1,
+    }
+    return document
+
+
 def codex_line(percent, *, timestamp="2026-09-27T15:35:37.665Z", primary=None, secondary=None):
     primary = primary or {"used_percent": percent, "window_minutes": WEEK, "resets_at": 1791046725}
     return {
@@ -120,6 +132,42 @@ def test_claude_keeps_only_the_allowlisted_fields(tmp_path):
         "observed_at",
     }
     assert "secret" not in json.dumps(result) and "five_hour" not in json.dumps(result)
+
+
+def test_claude_keeps_the_last_fable_limit_beside_the_weekly_reading(tmp_path):
+    stdout = write_lines(
+        tmp_path / "stdout.log", [fable_event(0.90, 0.95), claude_event(0.92), fable_event(0.94, 1)]
+    )
+    usage = claude_usage(stdout)
+    assert usage["value"]["utilization_percent"] == 94.0
+    assert usage["fable"] == {
+        "provider": "claude",
+        "utilization_percent": 100.0,
+        "window_minutes": WEEK,
+        "resets_at": "2026-10-08T14:00:00Z",
+        "observed_at": None,
+    }
+    assert "rejected" not in json.dumps(usage)
+
+
+def test_claude_records_no_fable_limit_when_no_event_carries_one(tmp_path):
+    stdout = write_lines(tmp_path / "stdout.log", [claude_event(0.5)])
+    assert "fable" not in claude_usage(stdout)
+
+
+def test_a_malformed_fable_limit_leaves_the_weekly_reading_alone(tmp_path):
+    stdout = write_lines(tmp_path / "stdout.log", [fable_event(0.5, "full")])
+    usage = claude_usage(stdout)
+    assert (usage["completeness"], usage["reasons"]) == ("complete", [])
+    assert "fable" not in usage
+
+
+def test_a_fable_limit_without_a_weekly_reading_is_still_kept(tmp_path):
+    document = fable_event(0.5, 0.8)
+    del document["rate_limit_info"]["unifiedWindows"]["seven_day"]
+    usage = claude_usage(write_lines(tmp_path / "stdout.log", [document]))
+    assert usage["completeness"] == "missing"
+    assert usage["fable"]["utilization_percent"] == 80.0
 
 
 @pytest.mark.parametrize(

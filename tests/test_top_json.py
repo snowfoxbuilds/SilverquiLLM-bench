@@ -14,7 +14,9 @@ from click.testing import CliRunner
 from silverquillm.cli import main as cli
 from silverquillm.karn.execution import run_lock
 from silverquillm.monitor import Monitor, ProfileStatus, ProfileView
+from silverquillm.monitor.estimates import WeeklyUsage
 from silverquillm.monitor.headless import snapshot_document
+from silverquillm.monitor.history import UsageReading
 from silverquillm.monitor.queue import ledger_status
 from silverquillm.top import print_snapshot
 
@@ -113,6 +115,19 @@ def test_the_fixture_logins_report_weekly_usage():
     opus = next(login for login in logins if login["login_profile"].endswith("bare-claude-opus"))
     assert opus["weekly_usage_percent"] == 41.0 and opus["weekly_usage_estimated"] is False
     assert opus["state"] == "busy"
+    assert (opus["fable_usage_percent"], opus["fable_resets_at"]) == (None, None)
+
+
+def test_a_login_reports_its_fable_limit_beside_the_weekly_window():
+    snapshot = FakeMonitor().snapshot()
+    view = next(view for view in snapshot.profiles if view.status.provider == "claude")
+    resets = NOW + timedelta(days=1)
+    reading = UsageReading("claude", 95.0, 10080, resets, NOW, window="fable")
+    fable = replace(view, fable=WeeklyUsage(view.weekly.profile, 96.0, True, reading))
+    [login] = _document(replace(snapshot, profiles=[fable]))["logins"]
+    assert login["weekly_usage_percent"] == view.weekly.percent
+    assert (login["fable_usage_percent"], login["fable_usage_estimated"]) == (96.0, True)
+    assert login["fable_resets_at"] == resets.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def test_dispatch_mode_and_a_damaged_ledger_are_reported():

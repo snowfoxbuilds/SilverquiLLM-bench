@@ -115,8 +115,7 @@ def _batch(batch: QueuedBatch) -> dict:
 
 
 def _login(view: ProfileView) -> dict:
-    status = view.status
-    weekly = view.weekly
+    status, weekly, fable = view.status, view.weekly, view.fable
     return {
         "login_profile": status.ref,
         "provider": status.provider,
@@ -131,6 +130,9 @@ def _login(view: ProfileView) -> dict:
         "weekly_usage_percent": weekly.percent if weekly is not None else None,
         "weekly_usage_estimated": weekly.estimated if weekly is not None else None,
         "weekly_resets_at": _time(weekly.resets_at) if weekly is not None else None,
+        "fable_usage_percent": fable.percent if fable is not None else None,
+        "fable_usage_estimated": fable.estimated if fable is not None else None,
+        "fable_resets_at": _time(fable.resets_at) if fable is not None else None,
     }
 
 

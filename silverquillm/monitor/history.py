@@ -39,9 +39,12 @@ class Score:
     total: int | None
 
 
+WEEKLY, FABLE = "weekly", "fable"
+
+
 @dataclass(frozen=True)
 class UsageReading:
-    """A provider's report of a Login Profile's weekly window."""
+    """A provider's report of one of a Login Profile's weekly windows."""
 
     provider: str
     utilization_percent: float
@@ -50,6 +53,8 @@ class UsageReading:
     observed_at: datetime | None
     bound: datetime | None = None
     """When the reading's time is unknown, the latest it can have been taken."""
+    window: str = WEEKLY
+    """``weekly``, or ``fable`` for Claude's Fable limit."""
 
     @property
     def effective_at(self) -> datetime | None:
@@ -93,6 +98,7 @@ class RunSummary:
     net_card: dict | None = None
     """The Net Card Score derived for the record, available or not, for a benchmark with
     scoring data in the bench checkout; None for a benchmark without (SCORING.md)."""
+    fable_usage_reading: UsageReading | None = None
 
     @property
     def execution_id(self) -> str:
@@ -219,7 +225,17 @@ def _request_costs(measurements: dict, source: str) -> tuple[tuple[tuple[int, De
 
 
 def _reading(measurements: dict, stopped_at: datetime | None) -> UsageReading | None:
-    value = _value(measurements.get("subscription_usage"))
+    return _usage_reading(_value(measurements.get("subscription_usage")), stopped_at, WEEKLY)
+
+
+def _fable_reading(measurements: dict, stopped_at: datetime | None) -> UsageReading | None:
+    usage = measurements.get("subscription_usage")
+    value = usage.get("fable") if isinstance(usage, dict) else None
+    reading = _usage_reading(value, stopped_at, FABLE)
+    return reading if reading is not None and reading.provider == "claude" else None
+
+
+def _usage_reading(value: Any, stopped_at: datetime | None, window: str) -> UsageReading | None:
     if not isinstance(value, dict):
         return None
     percent, resets_at = number(value.get("utilization_percent")), instant(value.get("resets_at"))
@@ -232,6 +248,7 @@ def _reading(measurements: dict, stopped_at: datetime | None) -> UsageReading | 
         resets_at,
         instant(value.get("observed_at")),
         stopped_at,
+        window,
     )
 
 
@@ -290,6 +307,7 @@ def summarize(manifest: Any, scores: Any, path: Path) -> RunSummary | None:
         ),
         request_costs=request_costs,
         usage_reading=_reading(measurements, stopped_at),
+        fable_usage_reading=_fable_reading(measurements, stopped_at),
         path=path,
         workspace_stopped=stopped if isinstance(stopped, bool) else None,
         recovery_of=_text(metadata.get("recovery_of")),

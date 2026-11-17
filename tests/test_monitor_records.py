@@ -4,7 +4,9 @@ which execution each record's spend belongs to, and whose Login Profile it charg
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import json
+import os
 import shutil
 import time
 from datetime import datetime, timedelta
@@ -22,7 +24,7 @@ from silverquillm.monitor.history import UsageReading
 from silverquillm.monitor.live import live_runs
 from silverquillm.monitor.locks import held_locks
 
-from .test_karn_subscription_usage import claude_event
+from .test_karn_subscription_usage import claude_event, fable_event
 from .test_monitor import (
     CANDIDATE_HASH,
     NOW,
@@ -89,12 +91,29 @@ class Host:
         """Every runner has exited: the copied lock table holds nothing."""
         self.locks.write_text("")
 
-    def own(self, *run_dirs: Path) -> None:
-        """Hold these runs' locks in the copied lock table, as their runners would."""
+    @property
+    def login(self) -> Path:
+        return self.state / "logins/karn-claude-login/bare-claude-opus"
+
+    def own(self, *run_dirs: Path, login: bool = False) -> None:
+        """Hold these runs' locks in the copied lock table, as their runners would, and with
+        ``login`` the Login Profile's lock too, as a runner does from start until grading."""
         with contextlib.ExitStack() as stack:
             for run_dir in run_dirs:
                 stack.enter_context(run_lock(run_dir))
+            if login:
+                descriptor = os.open(self.login / "runner.lock", os.O_CREAT | os.O_RDWR)
+                stack.callback(os.close, descriptor)
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
             self.locks.write_text(Path("/proc/locks").read_text())
+
+    def journal(self, run_id: str | None) -> None:
+        """The Login Profile's login journal, naming ``run_id``; None settles it."""
+        path = self.login / "active.json"
+        if run_id is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(json.dumps({"run_id": run_id}))
 
     @property
     def monitor(self) -> Monitor:
@@ -679,3 +698,188 @@ def test_the_next_run_keeps_then_replaces_the_retained_reading_until_it_expires(
     # A window past that it is dropped, and the last seven days count.
     host.now = datetime.fromisoformat("2026-10-15T15:00:00+00:00")
     assert (host.weekly().percent, host.weekly().reading) == (0.0, None)
+
+
+# The Fable limit
+
+
+def fable_run(runs_dir, run_id):
+    """A live run whose candidate runs a Fable model."""
+    run = make_run(runs_dir, run_id)
+    path = run / "candidate/constructs/bare-claude-opus/definition.json"
+    definition = json.loads(path.read_text())
+    definition["runtime"]["environment"]["CONSTRUCT_MODEL"] = "claude-fable-5-2"
+    path.write_text(json.dumps(definition))
+    return run
+
+
+def stdout_with_fable(weekly, fable, minute):
+    line = json.dumps(fable_event(weekly, fable)).encode()
+    return b"2026-10-07T11:%02d:00.000000000Z " % minute + line + b"\n"
+
+
+def settle_profile(host, expected):
+    deadline = time.monotonic() + 5
+    while True:
+        [profile] = host.snapshot().profiles
+        if profile.fable is not None and profile.fable.percent == pytest.approx(expected):
+            return profile
+        if time.monotonic() > deadline:
+            return profile
+        time.sleep(0.02)
+
+
+def test_a_slot_running_a_fable_candidate_shows_its_fable_limit(tmp_path):
+    followers = Followers()
+    host = Host(tmp_path, popen=followers)
+    # An earlier Opus run's spend counts against the weekly window only.
+    publish(host.repo, "r0", requests=[(NOW - timedelta(minutes=20), "50")])
+    run = fable_run(host.runs, "r1")
+    followers.stdout["sq-run-r1"] = stdout_with_fable(0.90, 0.95, 30)
+    live_cost(run, "25", NOW - timedelta(minutes=10))
+    host.own(run, login=True)
+    host.containers = [container("r1")]
+    profile = settle_profile(host, 96.0)
+    assert profile.run_id == "r1" and profile.fable_run and profile.shows_fable
+    assert (profile.fable.percent, profile.fable.reading.window) == (pytest.approx(96.0), "fable")
+    assert profile.weekly.percent == pytest.approx(93.0)
+    assert profile.shown is profile.fable
+
+
+def test_a_slot_running_another_model_shows_the_weekly_window(tmp_path):
+    followers = Followers()
+    host = Host(tmp_path, popen=followers)
+    run = make_run(host.runs, "r1")
+    followers.stdout["sq-run-r1"] = stdout_with_fable(0.40, 0.95, 30)
+    host.own(run, login=True)
+    host.containers = [container("r1")]
+    profile = settle_profile(host, 95.0)
+    # The Fable limit is still known, for ``top --json``, but the dashboard shows the weekly one.
+    assert profile.fable.percent == pytest.approx(95.0)
+    assert not profile.fable_run and not profile.shows_fable
+    assert profile.shown is profile.weekly
+
+
+def test_a_fable_run_without_a_fable_reading_shows_the_weekly_window(tmp_path):
+    followers = Followers()
+    host = Host(tmp_path, popen=followers)
+    run = fable_run(host.runs, "r1")
+    followers.stdout["sq-run-r1"] = stdout_with_reading(0.40, 30)
+    host.own(run, login=True)
+    host.containers = [container("r1")]
+    settle(host, 40.0)
+    [profile] = host.snapshot().profiles
+    assert profile.fable_run and profile.fable is None and not profile.shows_fable
+    assert profile.shown is profile.weekly
+
+
+def test_a_record_keeps_the_fable_limit_after_its_run(tmp_path):
+    host = Host(tmp_path)
+    usage = claude_usage(40.0, resets="2026-10-08T14:00:00Z")
+    usage["fable"] = {**usage["value"], "utilization_percent": 88.0}
+    publish(host.repo, "r1", usage=usage, requests=[])
+    [profile] = host.snapshot().profiles
+    assert (profile.weekly.percent, profile.fable.percent) == (40.0, 88.0)
+    assert profile.fable.reading.window == "fable" and not profile.fable_run
+
+
+def test_a_free_slot_shows_the_weekly_window_while_fable_runs_linger(tmp_path):
+    host = Host(tmp_path)
+    usage = claude_usage(40.0, resets="2026-10-08T14:00:00Z")
+    usage["fable"] = {**usage["value"], "utilization_percent": 95.0}
+    publish(host.repo, "r0", usage=usage, requests=[])
+    # One Fable run awaits recovery and another is grading: neither holds the login.
+    recovering = fable_run(host.runs, "r1")
+    retain(recovering / "run-record.json", "r1", requests=[])
+    grading = fable_run(host.runs, "r2")
+    host.own(grading)
+    host.containers = [container("r2", running=False)]
+    snapshot = host.snapshot()
+    stages = {view.run.run_id: view.run.stage for view in snapshot.running}
+    assert stages == {"r1": Stage.NEEDS_RECOVER, "r2": Stage.GRADING}
+    [profile] = snapshot.profiles
+    assert profile.fable.percent == pytest.approx(95.0)
+    assert profile.run_id is None and not profile.fable_run and not profile.shows_fable
+    assert profile.shown is profile.weekly
+
+
+def handoff(tmp_path, fable_id, opus_id, *, fable_running, journal):
+    """A Fable run and an Opus run naming one profile: the one ``fable_running`` names runs and
+    holds the login, the other is grading. The running one's follower sees weekly 40% and Fable
+    95% at 11:30; each spent $25 (1%) after it."""
+    followers = Followers()
+    host = Host(tmp_path, popen=followers)
+    fable, opus = fable_run(host.runs, fable_id), make_run(host.runs, opus_id)
+    running, grading = (fable_id, opus_id) if fable_running else (opus_id, fable_id)
+    followers.stdout["sq-run-" + running] = stdout_with_fable(0.40, 0.95, 30)
+    for run in (fable, opus):
+        live_cost(run, "25", NOW - timedelta(minutes=10))
+    host.own(fable, opus, login=True)
+    if journal:
+        host.journal(running)
+    host.containers = [container(running), container(grading, running=False)]
+    profile = settle_profile(host, 96.0)
+    stages = {view.run.run_id: view.run.stage for view in host.snapshot().running}
+    assert stages == {running: Stage.RUNNING, grading: Stage.GRADING}
+    return profile, running
+
+
+@pytest.mark.parametrize("journal", [True, False])
+@pytest.mark.parametrize("ids", [("a-fable", "b-opus"), ("b-fable", "a-opus")])
+def test_a_slot_handed_from_fable_to_opus_shows_the_weekly_window(tmp_path, ids, journal):
+    profile, running = handoff(tmp_path, *ids, fable_running=False, journal=journal)
+    assert profile.run_id == running and not profile.fable_run
+    assert profile.shown is profile.weekly
+    # Each run's spend counts once: both in the weekly window, only Fable's in the Fable limit.
+    assert (profile.weekly.percent, profile.fable.percent) == (
+        pytest.approx(42.0),
+        pytest.approx(96.0),
+    )
+
+
+@pytest.mark.parametrize("journal", [True, False])
+@pytest.mark.parametrize("ids", [("a-fable", "b-opus"), ("b-fable", "a-opus")])
+def test_a_slot_handed_from_opus_to_fable_shows_the_fable_limit(tmp_path, ids, journal):
+    profile, running = handoff(tmp_path, *ids, fable_running=True, journal=journal)
+    assert profile.run_id == running and profile.fable_run and profile.shows_fable
+    assert profile.shown is profile.fable
+    assert (profile.weekly.percent, profile.fable.percent) == (
+        pytest.approx(42.0),
+        pytest.approx(96.0),
+    )
+
+
+def test_a_slot_whose_holder_cannot_be_told_shows_the_weekly_window(tmp_path):
+    host = Host(tmp_path)
+    usage = claude_usage(40.0, resets="2026-10-08T14:00:00Z")
+    usage["fable"] = {**usage["value"], "utilization_percent": 95.0}
+    publish(host.repo, "r0", usage=usage, requests=[])
+    first, second = fable_run(host.runs, "r1"), fable_run(host.runs, "r2")
+    host.own(first, second, login=True)
+    host.containers = [container("r1"), container("r2")]
+    # Two running runs name the profile and no journal says which holds it.
+    [profile] = host.snapshot().profiles
+    assert profile.run_id is None and not profile.shows_fable
+    # A journal naming a run that is not live names no holder either.
+    host.journal("elsewhere")
+    [profile] = host.snapshot().profiles
+    assert profile.run_id is None and not profile.shows_fable
+    host.journal("r2")
+    [profile] = host.snapshot().profiles
+    assert profile.run_id == "r2" and profile.shows_fable
+
+
+def test_a_fable_run_recording_its_record_no_longer_holds_the_slot(tmp_path):
+    host = Host(tmp_path)
+    usage = claude_usage(40.0, resets="2026-10-08T14:00:00Z")
+    usage["fable"] = {**usage["value"], "utilization_percent": 95.0}
+    publish(host.repo, "r0", usage=usage, requests=[])
+    run = fable_run(host.runs, "r1")
+    retain(run / "run-record.json", "r1", requests=[])
+    host.own(run)
+    # Its login journal is still being settled, but the login lock is released.
+    host.journal("r1")
+    [view] = host.snapshot().running
+    assert view.run.stage is Stage.RECORDING
+    [profile] = host.snapshot().profiles
+    assert profile.run_id is None and not profile.shows_fable

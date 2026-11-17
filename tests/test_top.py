@@ -80,6 +80,11 @@ def test_published_record_problems_read_as_words(code, words):
     assert fmt.reasons(run, MTG).plain == words
 
 
+def test_a_named_window_is_labelled_before_its_figure():
+    text = fmt.weekly(WeeklyUsage("p", 96.0, True, None), NOW, MTG, label="Fable").plain
+    assert text == "Fable ≈ 96%"
+
+
 def test_an_estimated_weekly_usage_is_marked_and_has_no_reset():
     text = fmt.weekly(WeeklyUsage("p", 47.4, True, None), NOW, MTG).plain
     assert text == "≈ 47%"
