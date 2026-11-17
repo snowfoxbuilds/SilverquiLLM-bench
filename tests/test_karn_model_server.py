@@ -207,6 +207,16 @@ def test_the_spec_keeps_the_recipes_server_and_serves_its_construct_model():
         (spec_document(arguments=["--log-file", "/tmp/x"]), "flag_not_allowed:--log-file"),
         (spec_document(arguments=["--media-path", "/"]), "flag_not_allowed:--media-path"),
         (spec_document(arguments=["--tools", "all"]), "flag_not_allowed:--tools"),
+        *(
+            (spec_document(arguments=[flag]), "flag_not_allowed:" + flag)
+            for flag in (
+                *("-ag", "--agent", "--connect", "--embd-gemma-default", "--fim-qwen-1.5b-default"),
+                *("--fim-qwen-3b-default", "--fim-qwen-7b-default", "--fim-qwen-7b-spec"),
+                *("--fim-qwen-14b-spec", "--fim-qwen-30b-default", "--gpt-oss-20b-default"),
+                *("--gpt-oss-120b-default", "--vision-gemma-4b-default", "-f", "-bf"),
+                "--vision-gemma-12b-default",
+            )
+        ),
         (spec_document(arguments=["-md", "draft.gguf"]), "flag_not_allowed:-md"),
         (spec_document(arguments=["--chat-template-file=t.jinja"]), "flag_not_allowed:--chat"),
         (spec_document(arguments=["-c", "8\0"]), "model_server_arguments_invalid"),
@@ -1161,8 +1171,14 @@ def test_a_recipe_written_before_files_records_exactly_what_it_did():
 
 
 def test_an_unlisted_flag_passes_and_is_kept_with_the_arguments():
-    spec = model_server_spec(runtime(spec_document(arguments=["--spec-type", "ngram-simple"])))
-    assert spec.arguments == ("--spec-type", "ngram-simple")
+    arguments = ["--spec-type", "ngram-simple", "--spec-default", "--cors-origins", "x"]
+    spec = model_server_spec(runtime(spec_document(arguments=arguments)))
+    assert spec.arguments == tuple(arguments)
+
+
+def test_a_debug_variable_that_writes_nothing_passes():
+    document = spec_document(environment={"CUBLASLT_LOG_LEVEL": "1", "GGML_SCHED_DEBUG": "1"})
+    assert model_server_spec(runtime(document)) is not None
 
 
 def with_files(*files, **overrides):
@@ -1381,6 +1397,10 @@ def test_a_linked_file_is_passed_by_its_declared_name_inside_the_models_director
         ("--lora_scaled", "--lora-scaled"),
         ("--mcp_servers_json", "--mcp-servers-json"),
         ("--webui_mcp_proxy", "--webui-mcp-proxy"),
+        ("--connect_code", "--connect-code"),
+        ("--reuse_port", "--reuse-port"),
+        ("--binary_file", "--binary-file"),
+        ("--gpt_oss_20b_default", "--gpt-oss-20b-default"),
         ("--host_name_is=not-a-flag", None),
     ],
 )
@@ -1426,6 +1446,12 @@ def test_the_recipe_environment_overrides_the_hosts():
                 *("HF_TOKEN", "HF_ENDPOINT", "HUGGING_FACE_HUB_TOKEN", "MODEL_ENDPOINT"),
                 *("MTMD_BACKEND_DEVICE", "http_proxy", "HTTPS_PROXY", "All_Proxy", "no_proxy"),
                 "__LLAMA_X",
+                *("CUDA_INJECTION64_PATH", "CUDA_AMODEL_DLL", "CUDA_FORCE_PRELOAD_LIBRARIES"),
+                *("CUDA_DEVCODE_PATH", "CUDA_MPS_PIPE_DIRECTORY", "CUDA_CACHE_PATH"),
+                *("CUDA_LOG_FILE", "CUDA_COREDUMP_FILE", "CUBLASLT_LOG_FILE", "CUBLAS_LOGDEST_DBG"),
+                *("CUDA_ENABLE_COREDUMP_ON_EXCEPTION", "MTMD_DEBUG_EMBEDDINGS"),
+                *("HUGGINGFACE_HUB_CACHE", "OPENSSL_CONF", "OPENSSL_MODULES", "SSL_CERT_FILE"),
+                *("SSL_CERT_DIR", "GGML_ET_PROFILE", "ET_TOOLCHAIN", "GCONV_PATH"),
             )
         ),
         ({"CUDA_VISIBLE_DEVICES": "0"}, "model_server_environment_refused:CUDA_VISIBLE"),
@@ -1461,7 +1487,7 @@ def test_the_host_config_names_an_environment_only_this_host_needs(tmp_path):
     path.write_text('[model_server.environment]\nLLAMA_ARG_N_GPU_LAYERS = "0"\n')
     with pytest.raises(HostConfigError, match="refused:LLAMA_ARG_N_GPU_LAYERS"):
         load_host_config(path)
-    for name in ("LD_PRELOAD", "PATH", "LLAMA_CACHE", "https_proxy"):
+    for name in ("LD_PRELOAD", "PATH", "LLAMA_CACHE", "https_proxy", "CUDA_INJECTION64_PATH"):
         path.write_text(f'[model_server.environment]\n{name} = "x"\n')
         with pytest.raises(HostConfigError, match="refused:" + name):
             load_host_config(path)

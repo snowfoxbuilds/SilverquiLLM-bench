@@ -63,6 +63,14 @@ REFUSED_FLAGS = frozenset(
         # The server writes, and reads on a request's behalf, only where the bench puts it.
         *("--log-file", "--slot-save-path", "--log-prompts-dir", "--media-path"),
         *("--video-ffmpeg-dir", "-lcd", "--lookup-cache-dynamic"),
+        # An agent mode, a tunnel, and a shared port all change who reaches the server.
+        *("-ag", "--agent", "-no-ag", "--no-agent", "--connect", "--connect-code"),
+        "--reuse-port",
+        # b12182's presets download a model from Hugging Face and move the port.
+        *("--embd-gemma-default", "--fim-qwen-1.5b-default", "--fim-qwen-3b-default"),
+        *("--fim-qwen-7b-default", "--fim-qwen-7b-spec", "--fim-qwen-14b-spec"),
+        *("--fim-qwen-30b-default", "--gpt-oss-20b-default", "--gpt-oss-120b-default"),
+        *("--vision-gemma-4b-default", "--vision-gemma-12b-default"),
     }
 )
 # llama.cpp b12182's flags naming an input file: refused among the arguments, since a file
@@ -72,23 +80,31 @@ FILE_FLAGS = frozenset(
         *("-m", "--model", "-md", "--model-draft", "--spec-draft-model", "-mm", "--mmproj"),
         *("--chat-template-file", "--grammar-file", "-jf", "--json-schema-file"),
         *("-lcs", "--lookup-cache-static", "--lora", "--lora-scaled"),
-        *("--control-vector", "--control-vector-scaled"),
+        *("--control-vector", "--control-vector-scaled", "-f", "--file", "-bf", "--binary-file"),
     }
 )
 MODEL_FLAG = "--model"
 # Variables llama.cpp b12182 reads as options, a port, a route, a config, cache or download
 # location, or a library path, and the ones the bench itself sets: the GPU Slot owns which
 # GPUs the server sees, and the bench owns PATH, HOME and the XDG directories.
+# libcuda, cuBLAS and the TLS library read some as code to load or a file to write.
 REFUSED_ENVIRONMENT_PREFIXES = (
-    *("LLAMA_", "LLAMACPP_", "AIP_", "LD_", "XDG_", "HF_", "HUGGING_FACE_", "__"),
+    *("LLAMA_", "LLAMACPP_", "AIP_", "LD_", "XDG_", "HF_", "HUGGING_FACE_", "HUGGINGFACE_"),
+    *("OPENSSL_", "SSL_CERT_", "__"),
 )
 REFUSED_ENVIRONMENT = frozenset(
     {
         *("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "PATH", "HOME"),
         *("GGML_BACKEND_PATH", "GGML_ET_KERNELS_PATH", "GGML_OPENCL_KERNEL_CACHE_DIR"),
-        *("MODEL_ENDPOINT", "MTMD_BACKEND_DEVICE"),
+        *("GGML_ET_PROFILE", "ET_TOOLCHAIN", "TOOLCHAIN_ROOT"),
+        *("MODEL_ENDPOINT", "MTMD_BACKEND_DEVICE", "MTMD_DEBUG_EMBEDDINGS"),
+        *("CUDA_INJECTION64_PATH", "CUDA_INJECTION32_PATH", "CUDA_AMODEL_DLL"),
+        *("CUDA_FORCE_PRELOAD_LIBRARIES", "CUDA_DEVCODE_PATH", "CUDA_CACHE_PATH"),
+        *("CUDA_MPS_PIPE_DIRECTORY", "CUDA_MPS_LOG_DIRECTORY", "GCONV_PATH"),
     }
 )
+# Any log file, log destination or core dump is a write to a host path.
+REFUSED_ENVIRONMENT_PATTERN = re.compile(r".*(_LOG_FILE|LOGDEST|COREDUMP).*")
 REFUSED_ENVIRONMENT_ANY_CASE = frozenset({"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"})
 # A dynamically linked build may need this one on its host; a recipe never sets it.
 HOST_ONLY_ENVIRONMENT = frozenset({"LD_LIBRARY_PATH"})
@@ -223,6 +239,7 @@ def environment_refusal(environment, *, host: bool = False) -> str | None:
             name in REFUSED_ENVIRONMENT
             or name.startswith(REFUSED_ENVIRONMENT_PREFIXES)
             or name.upper() in REFUSED_ENVIRONMENT_ANY_CASE
+            or REFUSED_ENVIRONMENT_PATTERN.fullmatch(name)
         ):
             return "refused:" + name
     return None

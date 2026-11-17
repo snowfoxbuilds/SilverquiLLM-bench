@@ -47,12 +47,13 @@ The bench refuses only the flags it owns or that would defeat the record (grilli
 
 | Refused | Why |
 | --- | --- |
-| `--host`, `--port`, `--path`, `--api-prefix`, `--api-key`, `--api-key-file`, `--ui`/`--webui` and their `--no-` and `-config` forms, `--ssl-key-file`, `--ssl-cert-file` | the bench owns the address and API surface |
+| `--host`, `--port`, `--path`, `--api-prefix`, `--api-key`, `--api-key-file`, `--ui`/`--webui` and their `--no-` and `-config` forms, `--ssl-key-file`, `--ssl-cert-file`, `--reuse-port` | the bench owns the address and API surface |
 | `-mu`, `--model-url`, `-dr`, `--docker-repo`, `-hf`, `-hfr`, `--hf-repo`, `-hff`, `--hf-file`, `-hft`, `--hf-token`, `-hfd`, `-hfrd`, `--hf-repo-draft`, `--spec-draft-hf`, `-mmu`, `--mmproj-url`, `-a`, `--alias`, `--models-dir`, `--models-preset` | the model's identity is the verified files and the bench's alias |
-| `--rpc`, `--tools`, `--tools-runtime`, `--mcp-servers-config`, `--mcp-servers-json`, the `--ui-mcp-proxy` forms | the server reaches no other host and runs nothing on this one for a request |
+| the presets `--embd-gemma-default`, `--fim-qwen-{1.5b,3b,7b,30b}-default`, `--fim-qwen-{7b,14b}-spec`, `--gpt-oss-{20b,120b}-default`, `--vision-gemma-{4b,12b}-default` | each downloads a model and moves the port (grilling 2026-11-16) |
+| `--rpc`, `--tools`, `--tools-runtime`, `--mcp-servers-config`, `--mcp-servers-json`, the `--ui-mcp-proxy` forms, `-ag`/`--agent` and its `--no-` forms, `--connect`, `--connect-code` | the server reaches no other host and runs nothing on this one for a request |
 | `--log-file`, `--slot-save-path`, `--log-prompts-dir`, `--media-path`, `--video-ffmpeg-dir`, `-lcd`, `--lookup-cache-dynamic` | the server writes, and reads for a request, only where the bench puts it |
 
-The bench also refuses, among the arguments only, the flags of llama.cpp b12182 that name an input file: `-m`, `--model`, `-md`, `--model-draft`, `--spec-draft-model`, `-mm`, `--mmproj`, `--chat-template-file`, `--grammar-file`, `-jf`, `--json-schema-file`, `-lcs`, `--lookup-cache-static`, `--lora`, `--lora-scaled`, `--control-vector` and `--control-vector-scaled`.
+The bench also refuses, among the arguments only, the flags of llama.cpp b12182 that name an input file: `-m`, `--model`, `-md`, `--model-draft`, `--spec-draft-model`, `-mm`, `--mmproj`, `--chat-template-file`, `--grammar-file`, `-jf`, `--json-schema-file`, `-lcs`, `--lookup-cache-static`, `--lora`, `--lora-scaled`, `--control-vector`, `--control-vector-scaled`, `-f`, `--file`, `-bf` and `--binary-file`.
 Such a file is declared in `files` instead, so its digest is verified and recorded (#271).
 A flag is refused alone or as `--flag=value`, and every argument is checked, a value too, so a refused flag cannot hide as one; every other flag passes and is recorded with the arguments; a later build's new file flag passes unverified until it is added to that list.
 llama.cpp rewrites `_` to `-` in every argument starting with `--` before it looks the flag up, so the bench compares the same rewritten name: `--hf_repo` is refused as `--hf-repo` (grilling 2026-11-16).
@@ -62,10 +63,14 @@ llama.cpp rewrites `_` to `-` in every argument starting with `--` before it loo
 | Refused | Why |
 | --- | --- |
 | `LLAMA_*` (as `LLAMA_ARG_*`, `LLAMA_API_KEY`, `LLAMA_CACHE`, `LLAMA_SERVER_*`), `LLAMACPP_*`, `MTMD_BACKEND_DEVICE` | llama.cpp reads them as flags or server settings |
+| `MTMD_DEBUG_EMBEDDINGS`, `GGML_ET_PROFILE`, `CUDA_CACHE_PATH`, `CUDA_MPS_LOG_DIRECTORY`, and any name ending `_LOG_FILE` or containing `LOGDEST` or `COREDUMP`, as `CUDA_LOG_FILE`, `CUBLASLT_LOG_FILE`, `CUBLAS_LOGDEST_DBG`, `CUDA_COREDUMP_FILE` | they write to a host path (grilling 2026-11-16) |
 | `AIP_*` | they move the server's port and routes |
-| `HF_*`, `HUGGING_FACE_*`, `MODEL_ENDPOINT`, and `http_proxy`, `https_proxy`, `all_proxy`, `no_proxy` in any case | they name download sources and routes out |
-| `LD_*`, `GGML_BACKEND_PATH`, `GGML_ET_KERNELS_PATH`, `GGML_OPENCL_KERNEL_CACHE_DIR` | they choose the code the server loads |
+| `HF_*`, `HUGGING_FACE_*`, `HUGGINGFACE_*`, `MODEL_ENDPOINT`, and `http_proxy`, `https_proxy`, `all_proxy`, `no_proxy` in any case | they name download sources, caches and routes out |
+| `LD_*`, `GGML_BACKEND_PATH`, `GGML_ET_KERNELS_PATH`, `GGML_OPENCL_KERNEL_CACHE_DIR`, `ET_TOOLCHAIN`, `TOOLCHAIN_ROOT`, `GCONV_PATH`, libcuda's `CUDA_INJECTION64_PATH`, `CUDA_INJECTION32_PATH`, `CUDA_AMODEL_DLL`, `CUDA_FORCE_PRELOAD_LIBRARIES`, `CUDA_DEVCODE_PATH`, `CUDA_MPS_PIPE_DIRECTORY`, and `OPENSSL_*`, `SSL_CERT_*` | they choose the code the server loads (grilling 2026-11-16) |
 | `PATH`, `HOME`, `XDG_*`, `CUDA_VISIBLE_DEVICES`, `CUDA_DEVICE_ORDER`, names starting `__` | the bench sets them, or passes the runner's GPU selection |
+
+These lists guard against an operator's mistake, not a hostile recipe author: recipes are written by the operator and recorded in full in the definition, so a variable or flag missing from them is still visible in the record (grilling 2026-11-16).
+A host `LD_LIBRARY_PATH` is likewise the operator's, and recorded, but the libraries it points at are not (grilling 2026-11-16).
 
 ### Host configuration
 
