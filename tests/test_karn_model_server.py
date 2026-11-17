@@ -1622,10 +1622,11 @@ def test_a_request_slower_than_the_old_limit_succeeds_within_the_recipes(
 ):
     from silverquillm.karn import proxy
 
-    # The old fixed limit, scaled down: the recipe's longer limit must win on every hop.
+    # The old fixed limit, scaled down to 1 s: the recipe's 15 s limit must win on every hop,
+    # with a wide margin either side of the 2 s answer for a loaded machine.
     monkeypatch.setattr(proxy, "DEFAULT_MODEL_TIMEOUT_SECONDS", 1)
     outcome, measurements = delayed_request(
-        served, tmp_path, recipe_timeout=5, sidecar_timeout=5, delay="delay:1.5"
+        served, tmp_path, recipe_timeout=15, sidecar_timeout=15, delay="delay:2"
     )
     assert outcome == (200, "stop")
     assert measurements["coverage"]["relayed_requests"] == 1
@@ -1633,16 +1634,36 @@ def test_a_request_slower_than_the_old_limit_succeeds_within_the_recipes(
     assert measurements["requests"][0]["finish_reason"] == "stop"
 
 
-def test_a_request_past_the_recipes_limit_fails_and_is_counted_failed(served, tmp_path):
+# Each hop's limit is tested alone, the other's set far above the delay, so exactly one hop
+# can give up and the outcome does not depend on which gives up first.
+
+
+def test_a_request_past_the_relays_limit_fails_and_is_counted_failed(served, tmp_path):
     outcome, measurements = delayed_request(
-        served, tmp_path, recipe_timeout=1, sidecar_timeout=1, delay="delay:2.5"
+        served, tmp_path, recipe_timeout=1, sidecar_timeout=60, delay="delay:6"
     )
-    assert outcome[0] in (403, None)
+    # The relay gave up on the server and answered; the sidecar passed the answer on.
+    assert outcome == (502, "HTTPError")
     coverage = measurements["coverage"]
     assert coverage["relayed_requests"] == 1
     assert coverage["failed_requests"] == 1
     assert coverage["unfinished_requests"] == 0
     assert measurements["requests"] == []
+    assert "relayed_request_incomplete" in measurements["usage"]["reasons"]
+
+
+def test_a_request_past_the_sidecars_limit_fails_there(served, tmp_path):
+    started = time.monotonic()
+    outcome, measurements = delayed_request(
+        served, tmp_path, recipe_timeout=60, sidecar_timeout=1, delay="delay:6"
+    )
+    # The sidecar gave up while the relay still waited; the run's end cancels the request.
+    assert outcome == (403, "HTTPError")
+    assert time.monotonic() - started < 6
+    coverage = measurements["coverage"]
+    assert coverage["relayed_requests"] == 1
+    assert coverage["failed_requests"] == 1
+    assert coverage["unfinished_requests"] == 0
     assert "relayed_request_incomplete" in measurements["usage"]["reasons"]
 
 
