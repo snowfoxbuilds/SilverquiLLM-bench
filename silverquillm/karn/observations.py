@@ -618,6 +618,11 @@ def _measurements(
         usage_reasons.append("per_response_usage_unavailable")
         cost_reasons.append("per_response_usage_unavailable")
     costs_present = bool(priced_values) or observed_zero
+    if not prices:
+        # An empty table prices nothing, even a run with no requests: a local model server's
+        # run has no cost, never a zero one (ADR-023).
+        cost_reasons.append("model_price_unavailable")
+        costs_present = False
     estimated = format(sum(priced_values, Decimal(0)), "f")
     reported, reported_reasons, cost_warnings = None, list(reasons), []
     verification = None

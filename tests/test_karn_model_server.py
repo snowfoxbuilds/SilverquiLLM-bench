@@ -1683,6 +1683,83 @@ def test_a_local_model_is_never_priced_as_a_hosted_one(served, tmp_path, alias):
         assert (cost["value"], source) == (None, "estimated")
 
 
+def assert_unpriced(measurements):
+    """A local model's run has no cost, never a zero one, and readers agree (ADR-023)."""
+    for name in ("estimated_cost", "run_cost"):
+        assert measurements[name]["value"] is None
+        assert measurements[name]["completeness"] == "missing"
+        assert "model_price_unavailable" in measurements[name]["reasons"]
+    assert measurements["run_cost"]["source"] == "estimated"
+    assert measurements["cost_breakdown"]["value"] is None
+    assert measurements["cost_verification"] is None
+    assert measurements["cost_warnings"] == []
+    cost, source = monitor_run_cost(measurements)
+    assert (cost["value"], source) == (None, "estimated")
+
+
+FAILED = {
+    "id": "f",
+    "kind": "response",
+    "response_id": "f",
+    "status": 502,
+    "model": None,
+    "error": "upstream_failed:OSError",
+    "usage": None,
+    "timestamp_ms": 2,
+    "tool_calls": 0,
+}
+
+
+@pytest.mark.parametrize(
+    ("events", "exit_kind"),
+    [
+        ([], "completed"),
+        ([], "interrupted"),
+        ([{"id": "f", "kind": "request_started", "timestamp_ms": 1}, FAILED], "completed"),
+        ([{"id": "u", "kind": "request_started", "timestamp_ms": 1}], "deadline"),
+    ],
+    ids=["no-requests", "interrupted-empty", "only-failed", "only-unfinished"],
+)
+def test_a_local_run_without_a_successful_request_is_never_priced(events, exit_kind):
+    live = summarize_model_events(events, exit_kind=exit_kind)
+    replay = summarize_events(events, exit_kind=exit_kind, adapter="model_server")
+    for measurements in (live, replay):
+        assert_unpriced(measurements)
+    assert live["run_cost"] == replay["run_cost"]
+    if events == [] and exit_kind == "completed":
+        # Confirmed no requests: turns and usage are a true zero, only the cost is unknown.
+        assert live["agent_turns"]["total"]["value"] == 0
+        assert live["usage"]["completeness"] == "complete"
+
+
+def test_a_local_run_that_asked_nothing_finalizes_and_replays_unpriced(served, tmp_path):
+    run_dir = tmp_path / "run"
+    plan = plan_model_server(served.spec, served.host, served.state)
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        measurements = collector.finalize(exit_kind="completed")
+    _, replay = replayed(run_dir, "completed")
+    for summary in (measurements, replay):
+        assert_unpriced(summary)
+
+
+@pytest.mark.parametrize("kept", ["nothing", "starts-only"])
+def test_a_recovered_local_run_without_a_response_is_unpriced(served, tmp_path, monkeypatch, kept):
+    opts = model_server_run(served, tmp_path)
+    run_dir = interrupted_run(opts, kept)
+    events = run_dir / "observations.events.jsonl"
+    # The runner died before asking anything, or before any request it started settled.
+    lines = events.read_text().splitlines(keepends=True)
+    starts = [line for line in lines if json.loads(line)["kind"] == "request_started"]
+    assert starts
+    events.write_text("".join(starts if kept == "starts-only" else []))
+    measurements = recover(opts, kept, monkeypatch, tmp_path).run_metadata["measurements"]
+    assert measurements["requests"] == []
+    assert measurements["coverage"]["unfinished_requests"] == len(
+        starts if kept == "starts-only" else []
+    )
+    assert_unpriced(measurements)
+
+
 # The recipe owns the server's flags, files, environment and timeouts (#271).
 
 RECIPE_Q8 = (
