@@ -190,7 +190,9 @@ graded it:
 The bench refuses a run that breaks 3 unless the operator passes
 `--allow-dirty`; an uncommitted recipe is never refused. Every new Karn record carries `run_metadata.provenance`:
 `host_label` and its `host_label_source`, `bench` and `benchmark_root` (each
-`commit` and `dirty`), `recipe_revision`, `allow_dirty`, and the
+`commit` and `dirty`), `recipe_revision`, `karn_version` (the image's
+`karn.version` label, null when absent or in a record written before it was
+recorded), `allow_dirty`, and the
 `dirty_reasons` that were overridden. The grader image is in
 `grading_isolation.grader_image_id`.
 

@@ -43,7 +43,7 @@ The record keeps the recipe revision, a commit or Karn's dirty marker, so a read
 The bench's own sources are not hashed and grade the run, so they must be committed (#116): the bench checkout that runs and grades, and the one holding the benchmark data, must have no change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`.
 Ignored files and untracked files elsewhere, such as scratch notes, worktrees and run artifacts, do not count.
 `run` and `scheduler` refuse a run whose bench sources break this before any evidence exists, unless the operator passes `--allow-dirty`.
-Every new record carries its provenance: the host label (`SILVERQUILLM_HOST_LABEL`, else the host configuration's `host_label`, else the hostname; grilling 2026-10-14), the commit and dirty state of both checkouts, the recipe revision, and any overridden reasons; the grader image is already recorded under `grading_isolation`.
+Every new record carries its provenance: the host label (`SILVERQUILLM_HOST_LABEL`, else the host configuration's `host_label`, else the hostname; grilling 2026-10-14), the commit and dirty state of both checkouts, the recipe revision, the Karn version from the image's `karn.version` label (grilling 2026-11-16), and any overridden reasons; the grader image is already recorded under `grading_isolation`.
 
 ### Independent execution
 

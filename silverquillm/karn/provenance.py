@@ -26,6 +26,7 @@ from .definition import KarnError
 
 HOST_LABEL_ENV = "SILVERQUILLM_HOST_LABEL"
 RECIPE_LABEL = "karn.config.revision"
+KARN_VERSION_LABEL = "karn.version"
 PACKAGE = Path(__file__).resolve().parents[1]
 # Untracked files here change what runs or grades; untracked files elsewhere (scratch
 # notes, worktrees, run artifacts) do not make a checkout dirty.
@@ -41,6 +42,8 @@ FIELDS = {
     "allow_dirty",
     "dirty_reasons",
 }
+# Records written before the Karn version was recorded lack it and stay valid.
+OPTIONAL_FIELDS = {"karn_version"}
 
 
 class DirtySourceError(KarnError):
@@ -138,6 +141,11 @@ def recipe_revision(image_labels: dict) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def karn_version(image_labels: dict) -> str | None:
+    value = (image_labels or {}).get(KARN_VERSION_LABEL)
+    return value if isinstance(value, str) else None
+
+
 def collect(image_labels: dict, bench_root: Path, *, allow_dirty: bool) -> dict:
     """The run's provenance; raises :class:`DirtySourceError` unless both checkouts are clean.
 
@@ -164,6 +172,7 @@ def collect(image_labels: dict, bench_root: Path, *, allow_dirty: bool) -> dict:
         "bench": bench,
         "benchmark_root": benchmark_root,
         "recipe_revision": revision,
+        "karn_version": karn_version(image_labels),
         "allow_dirty": allow_dirty,
         "dirty_reasons": reasons,
     }
@@ -180,13 +189,14 @@ def valid(value) -> bool:
 
     return (
         isinstance(value, dict)
-        and set(value) == FIELDS
+        and FIELDS <= set(value) <= FIELDS | OPTIONAL_FIELDS
         and isinstance(value["host_label"], str)
         and bool(LABEL.fullmatch(value["host_label"]))
         and value["host_label_source"] in ("env", "config", "hostname")
         and state(value["bench"])
         and state(value["benchmark_root"])
         and (value["recipe_revision"] is None or isinstance(value["recipe_revision"], str))
+        and (value.get("karn_version") is None or isinstance(value["karn_version"], str))
         and type(value["allow_dirty"]) is bool
         and isinstance(value["dirty_reasons"], list)
         and all(isinstance(reason, str) for reason in value["dirty_reasons"])
