@@ -34,9 +34,12 @@ Known-Best fix reaches its hidden Audited Tests or Test Oracle Workspace only by
 hand. ``--check`` skips such a benchmark and exits 0.
 
 Each target card (``config.json``) becomes a behavior-free stub in the Workspace,
-generated from its Card Spec by ``silverquillm build printed-classes``; an FDN
-target also loses its FDN Reference Test there and keeps its Known-Best
-implementation in the Test Oracle Workspace.
+generated from its Card Spec by ``silverquillm build printed-classes``, unless the
+benchmark holds a Starting Patch for it, ``data/starting_patches/<card>.patch``:
+that patch, which may change only the target's ``card_impl.py``, is applied to
+its Known-Best implementation instead. An FDN target also loses its FDN
+Reference Test in the Workspace and keeps its Known-Best implementation in the
+Test Oracle Workspace.
 
 Patches are unified diffs with paths relative to the tree they patch, applied in
 order with exact context; a patch that no longer applies fails the port, and so
@@ -80,6 +83,7 @@ ORACLE = Path("data/test_oracle_workspace")
 DEFECT_PATCHES = Path("data/known_defects")
 HIDDEN_ENGINE_TESTS = Path("data/hidden_engine_tests.json")
 ORACLE_PATCHES = Path("data/oracle_patches")
+STARTING_PATCHES = Path("data/starting_patches")
 ATTRIBUTION = Path("data/attribution.json")
 WORKSPACE_ITEMS = (
     "engine", "cards/fdn", "conftest.py", "pytest.ini", "test_utils.py",
@@ -391,12 +395,39 @@ def _copy_known_best_workspace(known_best: Path, tree: Path) -> None:
         _replace(workspace / "cards" / name, tree / "cards" / name)
 
 
-def _stub_targets(workspace: Path, cards: tuple[str, ...]) -> None:
+def starting_patches(benchmark_root: Path, cards: tuple[str, ...]) -> dict[str, Path]:
+    """Each target card's Starting Patch, by card; a patch for no target is refused."""
+    directory = benchmark_root / STARTING_PATCHES
+    if not directory.is_dir():
+        return {}
+    patches = {patch.stem: patch for patch in sorted(directory.glob("*.patch"))}
+    stray = sorted(set(patches) - set(cards))
+    if stray:
+        raise PortError(f"Starting Patches for no target card: {stray}")
+    return patches
+
+
+def _start_from(workspace: Path, card_dir: Path, patch: Path) -> None:
+    implementation = str((card_dir / "card_impl.py").relative_to(workspace))
+    try:
+        files = _parse_patch(patch.read_text())
+    except PortError as error:
+        raise PortError(f"{patch}: {error}") from None
+    for old, new, _ in files:
+        if old != implementation or new != implementation:
+            raise PortError(f"{patch}: a Starting Patch may change only {implementation}")
+    apply_patch(workspace, patch)
+
+
+def _stage_targets(workspace: Path, cards: tuple[str, ...], starting: dict[str, Path]) -> None:
     for card in cards:
         card_dir = workspace / "cards" / card.split("_", 1)[0] / card
         if not (card_dir / "card_spec.json").is_file():
             raise PortError(f"target {card} has no Card Spec at {card_dir}")
-        (card_dir / "card_impl.py").write_text(render(card_dir, make_stub=True))
+        if card in starting:
+            _start_from(workspace, card_dir, starting[card])
+        else:
+            (card_dir / "card_impl.py").write_text(render(card_dir, make_stub=True))
         (card_dir / "tests.py").unlink(missing_ok=True)
 
 
@@ -428,6 +459,7 @@ def _build(benchmark_root: Path, known_best: Path) -> None:
     workspace, oracle = benchmark_root / "workspace", benchmark_root / ORACLE
     patches = defect_patches(benchmark_root)
     hidden = hidden_engine_tests(benchmark_root, known_best)
+    starting = starting_patches(benchmark_root, layout.cards)
 
     for tree in (workspace, oracle):
         _copy_known_best_workspace(known_best, tree)
@@ -438,7 +470,7 @@ def _build(benchmark_root: Path, known_best: Path) -> None:
     for relative in hidden:
         (workspace / "engine_tests" / relative).unlink()
 
-    _stub_targets(workspace, layout.cards)
+    _stage_targets(workspace, layout.cards, starting)
     for patch in patches:
         apply_patch(workspace, patch)
     if (benchmark_root / ORACLE_PATCHES).is_dir():

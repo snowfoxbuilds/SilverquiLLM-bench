@@ -284,7 +284,7 @@ def test_a_removed_package_file_disappears_on_the_next_port(smoke_copy) -> None:
     assert not (benchmark / "data/test_oracle_workspace/cards/old_helper.py").exists()
     assert check(benchmark, known_best) == []
     # Benchmark-owned paths survive: target cards and the agent documents.
-    assert (benchmark / "workspace/cards/fdn/fdn_129/card_spec.json").is_file()
+    assert (benchmark / "workspace/cards/fdn/fdn_142/card_spec.json").is_file()
     assert (benchmark / "workspace/AGENTS.md").is_file()
 
 
@@ -383,6 +383,63 @@ def test_a_malformed_hidden_engine_test_listing_fails_the_port(smoke_copy, listi
     (benchmark / "data/hidden_engine_tests.json").write_text(listing)
     with pytest.raises(PortError, match="hidden_engine_tests.json"):
         port(benchmark, known_best)
+
+
+HAWK = "workspace/cards/fdn/fdn_142/card_impl.py"
+HAWK_START = "data/starting_patches/fdn_142.patch"
+
+
+def test_a_starting_patch_stages_its_target_from_the_known_best_implementation(smoke_copy) -> None:
+    known_best, benchmark = smoke_copy
+    known_best_hawk = (known_best / "workspace/cards/fdn/fdn_142/card_impl.py").read_text()
+    assert (benchmark / HAWK).read_text() == known_best_hawk.replace(
+        "keywords=Keyword.FLYING | Keyword.LIFELINK,", "keywords=Keyword.LIFELINK,"
+    )
+    assert not (benchmark / "workspace/cards/fdn/fdn_142/tests.py").exists()
+    assert (benchmark / "data/test_oracle_workspace/cards/fdn/fdn_142/card_impl.py").read_text() == known_best_hawk
+
+
+def test_a_target_without_a_starting_patch_is_stubbed(smoke_copy) -> None:
+    from silverquillm.tools.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    (benchmark / HAWK_START).unlink()
+    port(benchmark, known_best)
+    assert "Implementation task: see card_spec.json." in (benchmark / HAWK).read_text()
+
+
+def test_a_starting_patch_for_no_target_fails_the_port(smoke_copy) -> None:
+    from silverquillm.tools.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    (benchmark / "data/starting_patches/fdn_129.patch").write_text((benchmark / HAWK_START).read_text())
+    before = _snapshot(benchmark)
+    with pytest.raises(PortError, match="no target card"):
+        port(benchmark, known_best)
+    assert _snapshot(benchmark) == before
+
+
+def test_a_starting_patch_may_change_only_its_target_implementation(smoke_copy) -> None:
+    from silverquillm.tools.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    (benchmark / HAWK_START).write_text(_STALE)
+    before = _snapshot(benchmark)
+    with pytest.raises(PortError, match="may change only cards/fdn/fdn_142/card_impl.py"):
+        port(benchmark, known_best)
+    assert _snapshot(benchmark) == before
+
+
+def test_a_starting_patch_that_no_longer_applies_fails_the_port(smoke_copy) -> None:
+    from silverquillm.tools.port_from_known_best import port
+
+    known_best, benchmark = smoke_copy
+    hawk = known_best / "workspace/cards/fdn/fdn_142/card_impl.py"
+    hawk.write_text(hawk.read_text().replace("Keyword.FLYING | Keyword.LIFELINK", "Keyword.LIFELINK | Keyword.FLYING"))
+    before = _snapshot(benchmark)
+    with pytest.raises(PortError, match="does not apply"):
+        port(benchmark, known_best)
+    assert _snapshot(benchmark) == before
 
 
 def test_a_removed_workspace_document_disappears_from_the_oracle_mirror(smoke_copy) -> None:

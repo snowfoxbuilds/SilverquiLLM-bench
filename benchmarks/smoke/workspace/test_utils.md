@@ -325,4 +325,4 @@ def test_bushwhack_fight():
 
 - **Max 30 tests per card.**
 - Import helpers from `test_utils`; cards and their predefined classes from
-  `cards.fdn.fdn_<N>.card_impl` (target stubs and reference cards alike).
+  `cards.fdn.fdn_<N>.card_impl` (the target and reference cards alike).

@@ -62,7 +62,7 @@ class TestSosResolutionUnchanged:
         assert p.engine_tests == REPO / "benchmarks/smoke/data/tests/audited/engine"
 
 
-SMOKE_TARGETS = {"fdn_129", "fdn_205", "fdn_232"}
+SMOKE_TARGETS = {"fdn_142"}
 
 
 class TestFdnTargetExclusion:
@@ -70,7 +70,7 @@ class TestFdnTargetExclusion:
 
     def test_fdn_target_card_ids(self) -> None:
         audited = REPO / "benchmarks/smoke/data/tests/audited"
-        assert fdn_target_card_ids("fdn", ["129", "205", "232"], audited) == SMOKE_TARGETS
+        assert fdn_target_card_ids("fdn", ["142"], audited) == SMOKE_TARGETS
 
     @pytest.mark.parametrize("name", ["hob-medium", "sos", "fra-hard"])
     def test_no_fdn_targets_elsewhere(self, name: str) -> None:
@@ -138,12 +138,11 @@ class TestEvaluateRun:
         return run_dir
 
     def test_three_suites_computed(self, tmp_path: Path) -> None:
-        run_dir = self._harvest(tmp_path, implement=["fdn_129"])
+        run_dir = self._harvest(tmp_path, implement=["fdn_142"])
         result = evaluate_run(run_dir, load_benchmark(REPO, "smoke"), timeout=120)
-        assert set(result.sos_results) == {"fdn_129", "fdn_205", "fdn_232"}
-        assert result.sos_results["fdn_129"].tests_passed >= 8
-        assert result.sos_results["fdn_129"].tests_failed == 0
-        assert result.sos_results["fdn_205"].tests_total > 0
+        assert set(result.sos_results) == SMOKE_TARGETS
+        assert result.sos_results["fdn_142"].tests_passed >= 9
+        assert result.sos_results["fdn_142"].tests_failed == 0
         assert result.fdn_results
         assert not set(result.fdn_results) & SMOKE_TARGETS
         assert result.engine_result.tests_total > 0
@@ -170,14 +169,14 @@ class TestGradingIsolation:
 
     _AUTHORITATIVE = SMOKE_WS / "test_utils.py"
     _AUDITED = REPO / "benchmarks/smoke/data/tests/audited/fdn"
-    # fdn_129 is implemented (green); fdn_205 stays a stub (fails) — a broken
-    # isolation would let an always-pass test_utils flip fdn_205 to green.
-    _CARDS = ("129", "205")
+    # fdn_129 is a filled reference card (green); the staged target fdn_142
+    # lacks flying (fails) — a broken isolation would let an always-pass
+    # test_utils flip fdn_142 to green.
+    _CARDS = ("129", "142")
 
     def _overlay(self, tmp_path: Path, poison: str) -> Path:
         overlay = tmp_path / "overlay"
         shutil.copytree(SMOKE_WS, overlay, ignore=_IGNORE)
-        shutil.copy2(ORACLE_CARDS / "fdn_129" / "card_impl.py", overlay / "cards/fdn/fdn_129/card_impl.py")
         tu = overlay / "test_utils.py"
         if poison == "always-pass":
             tu.write_text(
@@ -202,9 +201,10 @@ class TestGradingIsolation:
         self, tmp_path: Path, poison: str, honest: dict
     ) -> None:
         tampered = self._grade(self._overlay(tmp_path / poison, poison))
-        # The stub target still fails under every poison; the green target stays green.
-        assert honest["fdn_205"].tests_failed > 0
-        for card in ("fdn_129", "fdn_205"):
+        # The staged target still fails under every poison; the green card stays green.
+        assert honest["fdn_142"].tests_failed > 0
+        assert honest["fdn_129"].tests_failed == 0
+        for card in ("fdn_129", "fdn_142"):
             assert tampered[card].tests_passed == honest[card].tests_passed
             assert tampered[card].tests_failed == honest[card].tests_failed
 

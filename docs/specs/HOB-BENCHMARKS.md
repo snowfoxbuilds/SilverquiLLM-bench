@@ -86,7 +86,7 @@ Deliberately excluded from every pool: Sagas and Vehicles (each a whole new subs
 ## Run shape
 
 - A Benchmark Run is one container session consuming the benchmark's **entire** problem set in a single Workspace. There is no card-subset ("workload") notion — that term is retired (CONTEXT.md) *(grilling 2026-08-27)*.
-- Cheap pipeline validation / candidate calibration uses a dedicated **smoke benchmark**: its own small problem set of already-validated FDN cards (known-good oracles and audited tests), never leaderboard-published, run like any other benchmark.
+- Cheap pipeline validation / candidate calibration uses a dedicated **smoke benchmark**: one already-validated FDN card (a known-good oracle and audited tests) staged nearly finished, so a run checks that a candidate runs end to end rather than how well it implements cards; never leaderboard-published, run like any other benchmark.
 - Checkpoints are retired (the MSH-CHECKPOINTS.md design page is deleted; see git history); resume legs cover crash recovery instead *(grilling 2026-08-27)*.
 - Runs use [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md): run spec = candidate + benchmark + budget (grilling 2026-09-26).
   Karn builds the immutable image and v4 Construct Definition before the run; the bench launches the candidate independently and grades its harvested implementation.

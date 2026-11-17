@@ -22,27 +22,25 @@ engine/            — Canonical game engine source. Imported as `engine`.
                      illegal choice and rolling the game back).
 engine_tests/      — Engine tests.
 cards/             — Card implementations.
-  cards/fdn/       — FDN cards: the three smoke target stubs (fdn_129, fdn_205,
-                     fdn_232 — implement these) plus completed reference cards.
+  cards/fdn/       — FDN cards: the smoke target (fdn_142, Healer's Hawk without
+                     flying — add it) plus completed reference cards.
 skills/            — Workspace-local skills (e.g. `grep-rulebook/SKILL.md`).
 ```
 
 ## Card paths
 
-The smoke targets are exactly these three writable stubs:
+The smoke target is exactly this writable file:
 
 ```
-cards/fdn/fdn_129/card_impl.py     — Leyline Axe (Artifact — Equipment)
-cards/fdn/fdn_205/card_impl.py     — Seismic Rupture (Sorcery)
-cards/fdn/fdn_232/card_impl.py     — Scavenging Ooze (Creature)
+cards/fdn/fdn_142/card_impl.py     — Healer's Hawk (Creature — Bird)
 ```
 
-For each target card with collector number `N`:
+Its card directory holds:
 
 ```
-cards/fdn/fdn_<N>/card_spec.json   — card metadata (name, mana_cost, oracle_text, P/T, keywords, …)
-cards/fdn/fdn_<N>/card_impl.py     — implementation stub you complete, with the card's predefined classes
-cards/fdn/fdn_<N>/tests.py         — your tests for this card (you create this)
+cards/fdn/fdn_142/card_spec.json   — card metadata (name, mana_cost, oracle_text, P/T, keywords, …)
+cards/fdn/fdn_142/card_impl.py     — the implementation, complete but for flying, with the card's predefined classes
+cards/fdn/fdn_142/tests.py         — your tests for this card, if you write any
 ```
 
 For an FDN reference card (every other `cards/fdn/fdn_<N>/`):

@@ -2,17 +2,20 @@
 
 ## Task
 
-You are implementing three FDN cards whose implementations have been reduced
-to stubs. The targets are exactly these files (the task prompt restates them):
+This is a smoke run: a short check that you can work in this Workspace, not a
+full benchmark task. The one target is Healer's Hawk, which is already
+implemented except that it lacks flying. Give it flying, as its
+`card_spec.json` says. The target is exactly this file (the task prompt
+restates it):
 
 ```
-cards/fdn/fdn_129/card_impl.py   — Leyline Axe
-cards/fdn/fdn_205/card_impl.py   — Seismic Rupture
-cards/fdn/fdn_232/card_impl.py   — Scavenging Ooze
+cards/fdn/fdn_142/card_impl.py   — Healer's Hawk
 ```
 
-These three implementations are the writable targets. Every other `cards/fdn/`
-implementation is a completed reference (read them for examples).
+This implementation is the writable target. Every other `cards/fdn/`
+implementation is a completed reference (read them for examples). The change
+is small: the engine already supports flying, and you need not change the
+engine or write tests for it.
 
 The engine may have deficiencies and bugs, and so may the existing tests. It's your job to make sure your
 implementations behave correctly according to the rules in `RULEBOOK.txt`, and
@@ -46,12 +49,11 @@ Tests drive play with action scripts and answer every other choice with
 
 ## Rules
 
-1. **Card location** — Each target card's implementation class stays in its
-   stub file (`cards/fdn/fdn_129/card_impl.py`, `cards/fdn/fdn_205/card_impl.py`,
-   `cards/fdn/fdn_232/card_impl.py`), under the class name the stub gives. Do
-   not move or rename card directories, or rename the predefined classes the
-   stub declares. Your own tests for a target card belong at
-   `cards/fdn/fdn_<N>/tests.py` (the targets ship without one).
+1. **Card location** — The target card's implementation stays in
+   `cards/fdn/fdn_142/card_impl.py`, under the name it already has. Do not
+   move or rename card directories, or rename the predefined classes the file
+   declares. Your own tests for the target card, if you write any, belong at
+   `cards/fdn/fdn_142/tests.py` (the target ships without one).
 
 2. **The engine is yours to change** — You may add, change, rename, move,
    refactor, or delete anything inside `engine/`. Prefer generic, reusable
@@ -109,7 +111,7 @@ This discovers:
   cards ship with a `tests.py` — see `PROJECT_MAP.md` for how to list them, and
   use them as per-card test examples. They cover only part of the existing
   cards' behavior.
-- Per-card tests you write for the target cards at
+- Per-card tests you write for the target card at
   `cards/fdn/fdn_{collector_number}/tests.py`.
 
 The workspace `pytest.ini` configures `python_files = test_*.py tests.py` for
