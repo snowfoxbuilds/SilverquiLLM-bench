@@ -449,35 +449,50 @@ PROBE_RECORD = "nvidia-smi-probe.json"
 PROBE_LOCK = ".nvidia-smi-probe.lock"
 
 
-def _process_start(pid: int) -> str | None:
+def _process_start(pid: int) -> int | None:
     """A live process's start time, which a reused PID cannot share; None once it is gone."""
     try:
         fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
     except (OSError, IndexError):
         return None
-    if len(fields) < 20 or fields[0] in ("Z", "X"):
+    if len(fields) < 20 or fields[0] in ("Z", "X") or not fields[19].isdigit():
         return None
-    return fields[19]
+    return int(fields[19])
+
+
+# The stand-in a recorded probe starts as: it waits for the word to go, and only then becomes
+# nvidia-smi. End of input, from a parent that failed or died before authorising it, makes
+# ``read`` fail, so the driver is never touched by a probe the host has no record of.
+_GATE = 'read go && exec "$0" "$@"'
 
 
 class HostProbes:
-    """The host's one in-flight ``nvidia-smi``, recorded under the state root from its start
-    until it is gone, so a probe outlives the process that started it: every worker, the
-    scheduler and a direct run start none while a recorded one lives. A reader that must not
-    write, as the monitor, honours the record but keeps none of its own."""
+    """The host's one in-flight ``nvidia-smi``, recorded under the state root before it may
+    touch the driver and until it is gone, so a probe outlives the process that started it:
+    every worker, the scheduler and a direct run start none while a recorded one lives. A
+    reader that must not write, as the monitor, honours the record but keeps none of its own."""
 
     def __init__(self, state_root: Path, *, record: bool = True):
         self.root, self.record = Path(state_root), record
 
-    def _live(self) -> bool:
+    def _identity(self) -> tuple[int, int] | None:
+        """The recorded probe's PID and start time; None when there is no well-formed one."""
         try:
             document = json.loads((self.root / PROBE_RECORD).read_text())
             pid, started = document["pid"], document["start"]
         except (OSError, ValueError, KeyError, TypeError):
-            return False
-        return type(pid) is int and _process_start(pid) == started
+            return None
+        if type(pid) is not int or type(started) is not int:
+            return None
+        return pid, started
+
+    def _live(self) -> bool:
+        identity = self._identity()
+        return identity is not None and _process_start(identity[0]) == identity[1]
 
     def start(self, argv: list[str]) -> subprocess.Popen:
+        """The probe, running: recorded, then authorised to become ``nvidia-smi``. Any failure
+        before that ends the stand-in unexecuted, and raises."""
         if not self.record:
             if self._live():
                 raise OSError("nvidia_smi_in_flight")
@@ -487,27 +502,72 @@ class HostProbes:
             fcntl.flock(lock, fcntl.LOCK_EX)
             if self._live():
                 raise OSError("nvidia_smi_in_flight")
-            process = _spawn(argv)
-            started = _process_start(process.pid)
-            _write_record(self.root / PROBE_RECORD, {"pid": process.pid, "start": started})
+            # A record naming no live probe, a malformed one included, is stale.
+            with contextlib.suppress(FileNotFoundError):
+                (self.root / PROBE_RECORD).unlink()
+            process = subprocess.Popen(
+                ["/bin/sh", "-c", _GATE, *argv],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            authorised = False
+            try:
+                started = _process_start(process.pid)
+                if started is None:
+                    raise OSError("nvidia_smi_identity_unavailable")
+                _write_record(self.root / PROBE_RECORD, {"pid": process.pid, "start": started})
+                # From the first byte of the word to go the stand-in may become nvidia-smi, so
+                # from here it is treated as a probe: recorded until it is confirmed gone.
+                authorised = True
+                process.stdin.write(b"go\n")
+                process.stdin.close()
+            except BaseException:
+                self._end(process, authorised)
+                raise
         return process
+
+    def _end(self, process: subprocess.Popen, authorised: bool) -> None:
+        """Stop a probe the parent cannot see through. Unauthorised, it is a stand-in that
+        never touched the driver, and is reaped; authorised, it stays recorded until gone."""
+        with contextlib.suppress(OSError):
+            process.stdin.close()
+        with contextlib.suppress(OSError):
+            process.kill()
+        with contextlib.suppress(OSError):
+            process.stdout.close()
+        if authorised:
+            if process.poll() is None:
+                _abandoned.append(process)
+            return
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=5)
+        self._clear(process.pid)
 
     def settle(self, process: subprocess.Popen) -> None:
         """Clear the record once its probe is gone; a probe still alive stays recorded."""
         if not self.record or process.poll() is None:
             return
-        path = self.root / PROBE_RECORD
         with contextlib.suppress(OSError), (self.root / PROBE_LOCK).open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            with contextlib.suppress(OSError, ValueError):
-                if json.loads(path.read_text()).get("pid") == process.pid:
-                    path.unlink()
+            self._clear(process.pid)
+
+    def _clear(self, pid: int) -> None:
+        path = self.root / PROBE_RECORD
+        with contextlib.suppress(OSError, ValueError, AttributeError):
+            if json.loads(path.read_text()).get("pid") == pid:
+                path.unlink()
 
 
 def _write_record(path: Path, document: dict) -> None:
     temporary = path.with_name(f".{path.name}.{os.getpid()}")
-    temporary.write_text(json.dumps(document))
-    os.replace(temporary, path)
+    try:
+        temporary.write_text(json.dumps(document))
+        os.replace(temporary, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            temporary.unlink()
+        raise
 
 
 def _spawn(argv: list[str]) -> subprocess.Popen:

@@ -100,8 +100,13 @@ Two things make a GPU Slot unusable, and an unusable slot is skipped and reporte
 When no GPU Slot is usable at all because of unknown GPUs, the refusal is `gpu_slot_unknown_gpu:<values>`; like `model_server_busy`, it defers the entry, and a direct run reports every unusable slot with it.
 The scheduler judges whether something is free from the kernel's lock table and one `nvidia-smi` reading per pass, never by taking a lock a run is about to claim; the claim itself decides.
 `nvidia-smi` is given 10 seconds and abandoned, never waited on, past them.
-Every probe is recorded from its start, by PID and the process's start time, in `<state_root>/nvidia-smi-probe.json`, and cleared once it is gone; while a recorded probe lives, no worker, scheduler or direct run on the host starts another, and readings are `nvidia_smi_unavailable` (#269).
-The record outlives the process that started it, a worker that exited or was interrupted included, so a driver stuck in the kernel costs the host one process, not one per reading or per worker; the start time keeps a reused PID from counting as the stuck probe.
+No probe touches the driver before it is recorded (#269).
+A probe starts as a stand-in that waits for the word to go; the starter records its PID and start time in `<state_root>/nvidia-smi-probe.json`, and only then lets it become `nvidia-smi`.
+If recording fails, the starter is interrupted, or it dies first, the stand-in ends without running `nvidia-smi`, it is reaped, and the reading is `nvidia_smi_unavailable`.
+Once let go, the probe stays recorded until it is confirmed gone, even when killing it does not complete.
+While a recorded probe lives, no worker, scheduler or direct run on the host starts another, and readings are `nvidia_smi_unavailable`.
+The record outlives the process that started it, so a driver stuck in the kernel costs the host one process, not one per reading or per worker.
+A record is live only when it holds an integer PID and an integer start time that the running process still has, so a reused PID never counts; any other record, a malformed or null one included, is stale and is replaced by the next probe.
 Its output must be UTF-8 with every number in plain ASCII digits, a bracketed `[N/A]` read as null, else the reading is `nvidia_smi_unreadable`.
 The claim is released once the server is confirmed stopped, so another run may claim it while this one grades; the claim knows its server, so no way of releasing it frees the GPUs early, and a server that outlives its stop keeps the claim held until the runner exits (#269).
 
