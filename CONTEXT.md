@@ -624,6 +624,13 @@ A Simulated Benchmark is an end-to-end test.
 
 _Avoid_: "fake run", "mock benchmark" (only the agent host and the container runtime are stand-ins), "Pipeline Validation Run" (that runs a real benchmark through real containers)
 
+**Starting Patch**
+
+A benchmark-owned patch that stages a target card as its Known-Best implementation with part of its behavior taken out, instead of a behavior-free stub.
+The task for that card is restoring what the patch took out; smoke's Healer's Hawk starts without flying.
+
+_Avoid_: "partial stub", "seeded bug" (a Seeded Defect is a Known Defect, which no Starting Patch is)
+
 **System Prompt**
 
 Agent-optimization instructions baked into the Docker image's entrypoint. Controls how the agent executes (iteration strategy, mode-specific behavior, tool configuration). Not written by the runner. Contrast with User Prompt.

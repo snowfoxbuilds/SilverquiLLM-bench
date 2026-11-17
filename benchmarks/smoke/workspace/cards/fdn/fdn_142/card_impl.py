@@ -26,6 +26,6 @@ class HealersHawkAbility2:
 
 HealersHawk = make_vanilla(
     "Healer's Hawk", "{W}", 1, 1,
-    keywords=Keyword.FLYING | Keyword.LIFELINK,
+    keywords=Keyword.LIFELINK,
     creature_types={"Bird"},
 )
