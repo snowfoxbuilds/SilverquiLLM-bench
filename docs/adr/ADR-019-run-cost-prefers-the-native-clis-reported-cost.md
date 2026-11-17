@@ -1,4 +1,4 @@
-Status: ACCEPTED
+Status: SUPERSEDED by ADR-023
 Date: 2026-10-13
 
 # ADR-019: A Run's Cost Prefers the Native CLI's Reported Cost
@@ -37,3 +37,4 @@ Codex reports no cost, so a Codex run's Run Cost is its Estimated Cost.
 ## Relevant PRs
 
 - #254 — stopped gating Claude measurements on qualified Claude Code versions
+- #251 — superseded by ADR-023, which records the Run Cost and checks it request by request

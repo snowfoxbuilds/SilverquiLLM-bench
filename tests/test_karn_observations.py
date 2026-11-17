@@ -179,6 +179,13 @@ def test_missing_observations_are_not_zero_but_confirmed_no_requests_are_zero():
     zero = summarize_events(events, exit_kind="completed")
     assert zero["agent_turns"]["total"] == {"value": 0, "completeness": "complete", "reasons": []}
     assert zero["estimated_cost"]["value"] == "0"
+    # A hosted run that confirmed no requests cost nothing, unlike a local model's run.
+    assert zero["run_cost"] == {
+        "value": "0",
+        "completeness": "complete",
+        "reasons": [],
+        "source": "estimated",
+    }
 
 
 def test_codex_reports_no_cost_so_its_cost_is_the_estimate():
@@ -189,6 +196,8 @@ def test_codex_reports_no_cost_so_its_cost_is_the_estimate():
     assert "native_cost_not_reported" in result["reported_cost"]["reasons"]
     assert result["request_reported_costs"] == []
     assert result["estimated_cost"]["value"] is not None
+    assert result["run_cost"] == {**result["estimated_cost"], "source": "estimated"}
+    assert result["cost_verification"] is None
 
 
 def test_interrupted_model_response_retains_lower_bound_and_missing_usage():
