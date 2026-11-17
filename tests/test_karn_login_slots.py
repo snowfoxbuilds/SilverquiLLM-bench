@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import multiprocessing
 import os
 import sys
 from datetime import UTC, datetime, timedelta
@@ -27,9 +28,11 @@ from silverquillm.karn.login_block import (
 )
 from silverquillm.karn.login_cooldown import set_cooldown
 from silverquillm.karn.login_pool import (
+    ENROLMENT_ID,
     LoginPool,
     LoginPoolBusyError,
     enrolled_slots,
+    enrolment_id,
     slot_order,
 )
 from silverquillm.monitor.headless import _login_state
@@ -242,6 +245,57 @@ def test_a_removal_confirmed_for_one_login_never_deletes_its_successor(tmp_path)
     assert target.enrolled() == ["slot-1"]
     target.remove("slot-1", identity=target.identity("slot-1"))
     assert target.enrolled() == [] and not any(target.root.glob(".removing-*"))
+
+
+def test_a_successor_in_the_freed_directory_inode_is_still_refused(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    confirmed = target.identity("slot-1")
+    freed = os.stat(target.root / "slot-1").st_ino
+    target.remove("slot-1")
+    for _ in range(50):
+        successor = target.named_slot("slot-1")
+        if os.stat(successor.directory).st_ino == freed:
+            break
+        target.discard_unenrolled(successor)
+    enroll(target.named_slot("slot-1"), CLAUDE)
+    with pytest.raises(KarnError, match="login_slot_replaced"):
+        target.remove("slot-1", identity=confirmed)
+    assert target.enrolled() == ["slot-1"]
+
+
+def test_a_slot_from_before_enrolment_ids_gets_one_on_first_read(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    (target.root / "slot-1" / ENROLMENT_ID).unlink()
+    confirmed = target.identity("slot-1")
+    assert confirmed == target.identity("slot-1")
+    target.remove("slot-1", identity=confirmed)
+    assert target.enrolled() == []
+
+
+def test_concurrent_first_reads_agree_on_one_enrolment_id(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    directory = target.root / "slot-1"
+    (directory / ENROLMENT_ID).unlink()
+    with multiprocessing.get_context("spawn").Pool(8) as workers:
+        ids = workers.map(enrolment_id, [directory] * 32)
+    assert len(set(ids)) == 1 and ids[0] == target.identity("slot-1")
+    assert not any(directory.glob(".pending-*"))
+
+
+def test_signing_a_slot_in_again_keeps_its_enrolment_id(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    confirmed = target.identity("slot-1")
+    enroll(target.named_slot("slot-1"), CLAUDE)
+    target.remove("slot-1", identity=confirmed)
+    assert target.enrolled() == []
+
+
+def test_an_unreadable_enrolment_id_refuses_rather_than_matches(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    (target.root / "slot-1" / ENROLMENT_ID).write_text("not an id")
+    with pytest.raises(KarnError, match="login_slot_identity_unavailable"):
+        target.remove("slot-1", identity="0" * 32)
+    assert target.enrolled() == ["slot-1"]
 
 
 def test_a_dangling_pending_journal_still_refuses_removal(tmp_path):

@@ -129,14 +129,12 @@ def enroll_slot(state_root: Path, agent: str, slot: str | None = None) -> tuple[
     return pool.ref(profile), status
 
 
-def slot_identity(state_root: Path, agent: str, slot: str) -> tuple[int, int]:
+def slot_identity(state_root: Path, agent: str, slot: str) -> str:
     """What a removal confirmation is for: this slot as it is now, not its name."""
     return LoginPool.of(state_root, AGENTS[agent]).identity(slot)
 
 
-def remove_slot(
-    state_root: Path, agent: str, slot: str, *, identity: tuple[int, int] | None = None
-) -> str:
+def remove_slot(state_root: Path, agent: str, slot: str, *, identity: str | None = None) -> str:
     pool = LoginPool.of(state_root, AGENTS[agent])
     pool.remove(slot, identity=identity)
     return f"{pool.plugin_id}/{slot}"
