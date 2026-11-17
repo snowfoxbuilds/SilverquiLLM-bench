@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import contextlib
 import os
+import shutil
 import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -12,7 +15,7 @@ import pytest
 from click.testing import CliRunner
 
 from silverquillm.cli import main
-from silverquillm.karn import login_admin
+from silverquillm.karn import login_admin, login_pool
 from silverquillm.karn.definition import KarnError, canonical, digest
 from silverquillm.karn.execution import run_benchmark
 from silverquillm.karn.host import DockerHost
@@ -27,6 +30,8 @@ from silverquillm.karn.login_block import (
 )
 from silverquillm.karn.login_cooldown import set_cooldown
 from silverquillm.karn.login_pool import (
+    ENROLMENT_ID,
+    SLOT_RECORD,
     LoginPool,
     LoginPoolBusyError,
     enrolled_slots,
@@ -242,6 +247,119 @@ def test_a_removal_confirmed_for_one_login_never_deletes_its_successor(tmp_path)
     assert target.enrolled() == ["slot-1"]
     target.remove("slot-1", identity=target.identity("slot-1"))
     assert target.enrolled() == [] and not any(target.root.glob(".removing-*"))
+
+
+def test_a_successor_in_the_freed_directory_inode_is_still_refused(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    confirmed = target.identity("slot-1")
+    directory = target.root / "slot-1"
+    inode = os.stat(directory).st_ino
+    # The successor gets the very directory inode, as a filesystem reusing it would give.
+    aside = target.root / ".aside"
+    os.rename(directory, aside)
+    for entry in list(aside.iterdir()):
+        shutil.rmtree(entry) if entry.is_dir() else entry.unlink()
+    os.rename(aside, directory)
+    enroll(target.named_slot("slot-1"), CLAUDE)
+    assert os.stat(directory).st_ino == inode
+    with pytest.raises(KarnError, match="login_slot_replaced"):
+        target.remove("slot-1", identity=confirmed)
+    assert target.enrolled() == ["slot-1"]
+
+
+def test_an_id_left_in_a_recreated_directory_never_passes_to_its_successor(tmp_path):
+    # The end state of a confirmation racing a removal: the old id in the recreated slot.
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    confirmed = target.identity("slot-1")
+    target.remove("slot-1")
+    recreated = target.slot("slot-1").directory
+    (recreated / ENROLMENT_ID).write_text(confirmed)
+    enroll(target.named_slot("slot-1"), CLAUDE)
+    with pytest.raises(KarnError, match="login_slot_replaced"):
+        target.remove("slot-1", identity=confirmed)
+    assert target.enrolled() == ["slot-1"]
+
+
+def test_a_confirmation_waits_for_a_removal_and_never_reads_its_successor(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    confirmed = target.identity("slot-1")
+    confirming = concurrent.futures.ThreadPoolExecutor(1)
+    with target._creating():
+        # Another process removes the slot and enrolls a successor while the pool is locked.
+        reading = confirming.submit(target.identity, "slot-1")
+        time.sleep(0.2)
+        assert not reading.done()
+        doomed = target.root / ".removing-test"
+        os.rename(target.root / "slot-1", doomed)
+        shutil.rmtree(doomed)
+        target.slot("slot-1")
+    with pytest.raises(KarnError, match="login_slot_not_enrolled"):
+        reading.result(timeout=5)
+    enroll(target.named_slot("slot-1"), CLAUDE)
+    with pytest.raises(KarnError, match="login_slot_replaced"):
+        target.remove("slot-1", identity=confirmed)
+    assert target.enrolled() == ["slot-1"]
+
+
+def test_a_confirmation_never_reads_a_successor_halfway_through_its_claim(tmp_path, monkeypatch):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    confirmed = target.identity("slot-1")
+    target.remove("slot-1")
+    confirming = concurrent.futures.ThreadPoolExecutor(1)
+    readings = []
+    real_write = login_pool.write_private
+
+    def write_then_confirm(path, data):
+        real_write(path, data)
+        if path.name == SLOT_RECORD and not readings:
+            readings.append(confirming.submit(target.identity, "slot-1"))
+            time.sleep(0.2)
+            assert not readings[0].done()
+
+    monkeypatch.setattr(login_pool, "write_private", write_then_confirm)
+    successor = target.new_slot()
+    with pytest.raises(KarnError, match="login_slot_not_enrolled"):
+        readings[0].result(timeout=5)
+    enroll(successor, CLAUDE)
+    assert target.identity("slot-1") != confirmed
+    with pytest.raises(KarnError, match="login_slot_replaced"):
+        target.remove("slot-1", identity=confirmed)
+    assert target.enrolled() == ["slot-1"]
+
+
+def test_a_slot_from_before_enrolment_ids_gets_one_on_first_read(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    (target.root / "slot-1" / ENROLMENT_ID).unlink()
+    confirmed = target.identity("slot-1")
+    assert confirmed == target.identity("slot-1")
+    target.remove("slot-1", identity=confirmed)
+    assert target.enrolled() == []
+
+
+def test_concurrent_first_reads_agree_on_one_enrolment_id(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    directory = target.root / "slot-1"
+    (directory / ENROLMENT_ID).unlink()
+    with concurrent.futures.ThreadPoolExecutor(8) as readers:
+        ids = list(readers.map(lambda _: target.identity("slot-1"), range(32)))
+    assert len(set(ids)) == 1
+    assert not any(directory.glob(".pending-*"))
+
+
+def test_signing_a_slot_in_again_keeps_its_enrolment_id(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    confirmed = target.identity("slot-1")
+    enroll(target.named_slot("slot-1"), CLAUDE)
+    target.remove("slot-1", identity=confirmed)
+    assert target.enrolled() == []
+
+
+def test_an_unreadable_enrolment_id_refuses_rather_than_matches(tmp_path):
+    target = pool_of(tmp_path, CLAUDE, "slot-1")
+    (target.root / "slot-1" / ENROLMENT_ID).write_text("not an id")
+    with pytest.raises(KarnError, match="login_slot_identity_unavailable"):
+        target.remove("slot-1", identity="0" * 32)
+    assert target.enrolled() == ["slot-1"]
 
 
 def test_a_dangling_pending_journal_still_refuses_removal(tmp_path):

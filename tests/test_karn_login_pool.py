@@ -15,6 +15,7 @@ from silverquillm.karn.execution import login_profile
 from silverquillm.karn.login import LoginProfile
 from silverquillm.karn.login_cooldown import set_cooldown
 from silverquillm.karn.login_pool import (
+    ENROLMENT_ID,
     SLOT_RECORD,
     LoginPool,
     LoginPoolBusyError,
@@ -330,6 +331,18 @@ def test_a_pending_or_busy_legacy_login_stays_where_its_run_names_it(tmp_path):
     assert adopt(tmp_path)
 
 
+def test_an_adopted_login_is_never_the_slot_a_removal_was_confirmed_for(tmp_path):
+    target = pool(tmp_path)
+    enroll(target.named_slot("bare-claude-opus"), PLUGIN)
+    confirmed = target.identity("bare-claude-opus")
+    target.remove("bare-claude-opus")
+    legacy_profile(tmp_path)
+    adopt(tmp_path)
+    with pytest.raises(KarnError, match="login_slot_replaced"):
+        target.remove("bare-claude-opus", identity=confirmed)
+    assert target.enrolled() == ["bare-claude-opus"]
+
+
 def test_adoption_never_replaces_an_existing_slot(tmp_path):
     legacy = legacy_profile(tmp_path)
     existing = pool(tmp_path).named_slot("bare-claude-opus")  # an empty, just-created slot
@@ -580,6 +593,7 @@ def test_a_settled_slot_with_a_damaged_login_is_skipped_for_a_healthy_one(tmp_pa
     # Validation never rewrites, moves, or removes what it refused, and releases its lock.
     assert secret_state(damaged) == before
     assert sorted(p.name for p in damaged.directory.iterdir()) == [
+        ENROLMENT_ID,
         SLOT_RECORD,
         "runner.lock",
         "secret.json",

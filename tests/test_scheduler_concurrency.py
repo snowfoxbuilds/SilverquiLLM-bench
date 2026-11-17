@@ -34,6 +34,13 @@ def _no_gpus():
     return GpuReading(None, reason="nvidia_smi_unavailable")
 
 
+def _publish(path, text):
+    """Write a file other processes wait for by its existence, so it never appears empty."""
+    temporary = path.with_name(f".{path.name}.pending")
+    temporary.write_text(text)
+    os.replace(temporary, path)
+
+
 def _wait_file(path, timeout=15):
     until = time.monotonic() + timeout
     while not path.exists():
@@ -119,11 +126,11 @@ def _scheduler_process(directory, state):
     try:
         with terminate_as_interrupt():
             count = runner.run_until_idle()
-        (state / "count").write_text(str(count))
+        _publish(state / "count", str(count))
     except KeyboardInterrupt:
         (state / "interrupted").touch()
     except OSError as error:
-        (state / "error").write_text(str(error))
+        _publish(state / "error", str(error))
 
 
 def make_scheduler(directory, state, **extra):
