@@ -162,7 +162,9 @@ def host_model_server() -> ModelServerHost:
         config = load_host_config()
     except HostConfigError as error:
         raise KarnError("host_config_invalid") from error
-    return ModelServerHost(config.models_dir, dict(config.llama_cpp))
+    return ModelServerHost(
+        config.models_dir, dict(config.llama_cpp), dict(config.model_server_environment)
+    )
 
 
 def _login_pool(state_root: Path, candidate) -> LoginPool | None:

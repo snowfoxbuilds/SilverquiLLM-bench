@@ -41,27 +41,52 @@ EVENTS_FILE = "observations.events.jsonl"
 TRANSCRIPT_FILE = "model-transcript.jsonl"
 SERVER_LOG = "model-server.log"
 
-# Server flags a recipe may set, and whether each takes a value. The bench owns the model
-# file, the address, the alias and the API surface, so every other flag is refused.
-SERVER_FLAGS: dict[str, bool] = {
-    **dict.fromkeys(("-c", "--ctx-size"), True),
-    **dict.fromkeys(("-ctk", "--cache-type-k", "-ctv", "--cache-type-v"), True),
-    **dict.fromkeys(("-ngl", "--n-gpu-layers", "--gpu-layers"), True),
-    **dict.fromkeys(("-fa", "--flash-attn", "--fit"), True),
-    **dict.fromkeys(("-b", "--batch-size", "-ub", "--ubatch-size"), True),
-    **dict.fromkeys(("-np", "--parallel", "-t", "--threads", "-tb", "--threads-batch"), True),
-    **dict.fromkeys(("-ts", "--tensor-split", "-sm", "--split-mode", "-mg", "--main-gpu"), True),
-    **dict.fromkeys(("--temp", "--top-p", "--top-k", "--min-p", "--seed"), True),
-    **dict.fromkeys(("--repeat-penalty", "--presence-penalty", "--frequency-penalty"), True),
-    **dict.fromkeys(("--chat-template-kwargs", "--reasoning-budget", "--reasoning-format"), True),
-    **dict.fromkeys(("--cache-reuse", "-n", "--n-predict"), True),
-    **dict.fromkeys(("--rope-scaling", "--rope-scale", "--yarn-orig-ctx"), True),
-    **dict.fromkeys(("--jinja", "--swa-full", "--no-warmup"), False),
-    **dict.fromkeys(("-kvu", "--kv-unified", "--no-context-shift", "--context-shift"), False),
-}
+# Flags the bench owns or that would defeat the record, refused anywhere in a recipe. A
+# token is refused alone or as ``--flag=value``; every other flag passes, and is recorded
+# with the rest of the recipe's arguments.
+REFUSED_FLAGS = frozenset(
+    {
+        # The bench owns the address and the API surface the relay understands.
+        *("--host", "--port", "--path", "--api-prefix", "--api-key", "--api-key-file"),
+        *("--ui", "--webui", "--no-ui", "--no-webui", "--ui-config", "--webui-config"),
+        *("--ui-config-file", "--webui-config-file", "--ssl-key-file", "--ssl-cert-file"),
+        # The model's identity is the verified files and the bench's alias.
+        *("-mu", "--model-url", "-dr", "--docker-repo", "-hf", "-hfr", "--hf-repo"),
+        *("-hff", "--hf-file", "-hft", "--hf-token", "-hfd", "-hfrd", "--hf-repo-draft"),
+        *("--spec-draft-hf", "-mmu", "--mmproj-url", "-a", "--alias"),
+        *("--models-dir", "--models-preset"),
+        # The server reaches no other host and runs nothing on this one for a request.
+        *("--rpc", "--tools", "--tools-runtime", "--mcp-servers-config", "--mcp-servers-json"),
+        *("--ui-mcp-proxy", "--webui-mcp-proxy", "--no-ui-mcp-proxy", "--no-webui-mcp-proxy"),
+        # The server writes, and reads on a request's behalf, only where the bench puts it.
+        *("--log-file", "--slot-save-path", "--log-prompts-dir", "--media-path"),
+        *("--video-ffmpeg-dir", "-lcd", "--lookup-cache-dynamic"),
+    }
+)
+# llama.cpp b12182's flags naming an input file: refused among the arguments, since a file
+# must be declared in ``files`` to be verified and recorded.
+FILE_FLAGS = frozenset(
+    {
+        *("-m", "--model", "-md", "--model-draft", "--spec-draft-model", "-mm", "--mmproj"),
+        *("--chat-template-file", "--grammar-file", "-jf", "--json-schema-file"),
+        *("-lcs", "--lookup-cache-static", "--lora", "--lora-scaled"),
+        *("--control-vector", "--control-vector-scaled"),
+    }
+)
+MODEL_FLAG = "--model"
+# llama.cpp reads LLAMA_ARG_* as flags, and the GPU Slot owns which GPUs the server sees.
+REFUSED_ENVIRONMENT_PREFIXES = ("LLAMA_ARG_",)
+REFUSED_ENVIRONMENT = frozenset({"CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER"})
+INHERITED_ENVIRONMENT = ("PATH", "HOME")
+DEFAULT_READY_SECONDS = 900
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 1800
+MAX_TIMEOUT_SECONDS = 86400
 _BUILD = re.compile(r"b([0-9]{1,8})")
 _VERSION = re.compile(r"build ([0-9]{1,8}), commit ([0-9a-f]{7,40})")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,200}")
+_SHARD = re.compile(r"(.+)-([0-9]{5})-of-([0-9]{5})\.gguf")
+_ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")
 # A request at the largest context is a few MiB; the cap also bounds the parse here and the
 # sidecar's copy, which runs in 128 MiB.
 MAX_REQUEST_BYTES = 16 * 1024 * 1024
@@ -72,7 +97,6 @@ MAX_KEPT_MESSAGES_CHARS = 1024 * 1024
 ORDINARY_REQUEST_KEYS = frozenset(
     {"model", "messages", "tools", "stream", "stream_options", "store", "max_completion_tokens"}
 )
-UPSTREAM_TIMEOUT_SECONDS = 1800
 # How long finalizing waits for cancelled requests to write their terminal records. A request
 # still unsettled after it is counted from its start record as unfinished.
 SETTLE_SECONDS = 10
@@ -82,8 +106,25 @@ RELAYED_PATHS = {("POST", "/v1/chat/completions"), ("GET", "/v1/models")}
 
 
 @dataclass(frozen=True)
+class ServerFile:
+    """One input file the server reads, verified by its digest; passed after ``flag``, if any."""
+
+    file: str
+    sha256: str
+    flag: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        entry = {"file": self.file, "sha256": self.sha256}
+        return entry if self.flag is None else {**entry, "flag": self.flag}
+
+
+@dataclass(frozen=True)
 class ModelServerSpec:
-    """The recipe's server: an engine build, one model file, and the server flags."""
+    """The recipe's server: an engine build, its files, the server flags and settings.
+
+    A setting the recipe leaves out is absent from :meth:`to_dict`, so a recipe written before
+    it existed records exactly what it always did.
+    """
 
     engine: str
     build: str
@@ -91,38 +132,80 @@ class ModelServerSpec:
     model_sha256: str
     arguments: tuple[str, ...]
     served_model: str
+    files: tuple[ServerFile, ...] = ()
+    """The declared ``files``, the model among them; empty for a recipe naming one ``model``."""
+    environment: tuple[tuple[str, str], ...] | None = None
+    ready_seconds: int | None = None
+    request_timeout_seconds: int | None = None
+
+    @property
+    def server_files(self) -> tuple[ServerFile, ...]:
+        """Every file the server reads, the model first."""
+        if not self.files:
+            return (ServerFile(self.model_file, self.model_sha256, MODEL_FLAG),)
+        model = next(entry for entry in self.files if entry.flag == MODEL_FLAG)
+        return (model, *(entry for entry in self.files if entry is not model))
+
+    @property
+    def ready_timeout(self) -> int:
+        return DEFAULT_READY_SECONDS if self.ready_seconds is None else self.ready_seconds
+
+    @property
+    def request_timeout(self) -> int:
+        if self.request_timeout_seconds is None:
+            return DEFAULT_REQUEST_TIMEOUT_SECONDS
+        return self.request_timeout_seconds
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        document = {
             "engine": self.engine,
             "build": self.build,
             "model": {"file": self.model_file, "sha256": self.model_sha256},
             "arguments": list(self.arguments),
             "served_model": self.served_model,
         }
+        if self.files:
+            document["files"] = [entry.to_dict() for entry in self.files]
+        if self.environment is not None:
+            document["environment"] = dict(self.environment)
+        if self.ready_seconds is not None:
+            document["ready_seconds"] = self.ready_seconds
+        if self.request_timeout_seconds is not None:
+            document["request_timeout_seconds"] = self.request_timeout_seconds
+        return document
 
 
-def model_server_spec(runtime: dict) -> ModelServerSpec | None:
-    """The definition's model server, or None; a malformed one refuses the candidate."""
-    environment = runtime["environment"]
-    if MODEL_SERVER_ENV not in environment:
+def _refused_flag(token: str) -> bool:
+    return token.split("=", 1)[0] in REFUSED_FLAGS
+
+
+def environment_refusal(environment) -> str | None:
+    """Why *environment* cannot be given to the server, or None when it can."""
+    if not isinstance(environment, dict):
+        return "invalid"
+    for name, value in environment.items():
+        if (
+            not isinstance(name, str)
+            or not _ENVIRONMENT_NAME.fullmatch(name)
+            or not isinstance(value, str)
+            or "\0" in value
+        ):
+            return "invalid"
+        if name in REFUSED_ENVIRONMENT or name.startswith(REFUSED_ENVIRONMENT_PREFIXES):
+            return "refused:" + name
+    return None
+
+
+def _timeout(document: dict, key: str) -> int | None:
+    if key not in document:
         return None
-    try:
-        document = json.loads(environment[MODEL_SERVER_ENV])
-    except ValueError:
-        raise KarnError("model_server_spec_invalid") from None
-    if not isinstance(document, dict) or set(document) != {
-        "engine",
-        "build",
-        "model",
-        "arguments",
-    }:
-        raise KarnError("model_server_spec_invalid")
-    model, arguments = document["model"], document["arguments"]
-    if document["engine"] != "llama.cpp":
-        raise KarnError("model_server_engine_unsupported")
-    if not isinstance(document["build"], str) or not _BUILD.fullmatch(document["build"]):
-        raise KarnError("model_server_build_invalid")
+    value = document[key]
+    if type(value) is not int or not 0 < value <= MAX_TIMEOUT_SECONDS:
+        raise KarnError("model_server_timeout_invalid:" + key)
+    return value
+
+
+def _legacy_model(model) -> ServerFile:
     if (
         not isinstance(model, dict)
         or set(model) != {"file", "sha256"}
@@ -134,32 +217,106 @@ def model_server_spec(runtime: dict) -> ModelServerSpec | None:
         or not _SHA256.fullmatch(model["sha256"])
     ):
         raise KarnError("model_server_model_invalid")
+    return ServerFile(model["file"], model["sha256"], MODEL_FLAG)
+
+
+def _declared_files(files) -> tuple[ServerFile, ...]:
+    if not isinstance(files, list) or not files:
+        raise KarnError("model_server_files_invalid")
+    entries = []
+    for entry in files:
+        if (
+            not isinstance(entry, dict)
+            or not {"file", "sha256"} <= set(entry) <= {"file", "sha256", "flag"}
+            or not isinstance(entry["file"], str)
+            or not _FILE_NAME.fullmatch(entry["file"])
+            or not isinstance(entry["sha256"], str)
+            or not _SHA256.fullmatch(entry["sha256"])
+        ):
+            raise KarnError("model_server_files_invalid")
+        flag = entry.get("flag")
+        if flag is not None and (
+            not isinstance(flag, str)
+            or not re.fullmatch(r"--?[A-Za-z0-9][A-Za-z0-9-]{0,63}", flag)
+            or flag == "-m"
+            or _refused_flag(flag)
+        ):
+            raise KarnError("model_server_file_flag_not_allowed:" + str(flag)[:64])
+        entries.append(ServerFile(entry["file"], entry["sha256"], flag))
+    names = [entry.file for entry in entries]
+    if len(set(names)) != len(names):
+        raise KarnError("model_server_files_invalid")
+    if sum(entry.flag == MODEL_FLAG for entry in entries) != 1:
+        raise KarnError("model_server_files_need_one_model")
+    # llama.cpp loads a split model's other parts by name, so every part must be declared.
+    for name in names:
+        shard = _SHARD.fullmatch(name)
+        if shard:
+            stem, total = shard.group(1), int(shard.group(3))
+            parts = {f"{stem}-{n:05d}-of-{total:05d}.gguf" for n in range(1, total + 1)}
+            if not parts <= set(names):
+                raise KarnError("model_server_split_model_incomplete:" + stem[:64])
+    return tuple(entries)
+
+
+def model_server_spec(runtime: dict) -> ModelServerSpec | None:
+    """The definition's model server, or None; a malformed one refuses the candidate."""
+    environment = runtime["environment"]
+    if MODEL_SERVER_ENV not in environment:
+        return None
+    try:
+        document = json.loads(environment[MODEL_SERVER_ENV])
+    except ValueError:
+        raise KarnError("model_server_spec_invalid") from None
+    optional = {"environment", "ready_seconds", "request_timeout_seconds"}
+    if (
+        not isinstance(document, dict)
+        or not {"engine", "build", "arguments"} <= set(document)
+        or set(document) - {"engine", "build", "arguments", "model", "files", *optional}
+        or ("model" in document) == ("files" in document)
+    ):
+        raise KarnError("model_server_spec_invalid")
+    arguments = document["arguments"]
+    if document["engine"] != "llama.cpp":
+        raise KarnError("model_server_engine_unsupported")
+    if not isinstance(document["build"], str) or not _BUILD.fullmatch(document["build"]):
+        raise KarnError("model_server_build_invalid")
+    if "files" in document:
+        files = _declared_files(document["files"])
+        model = next(entry for entry in files if entry.flag == MODEL_FLAG)
+    else:
+        files, model = (), _legacy_model(document["model"])
     if not isinstance(arguments, list) or not all(isinstance(a, str) for a in arguments):
         raise KarnError("model_server_arguments_invalid")
-    position = 0
-    while position < len(arguments):
-        flag = arguments[position]
-        if flag not in SERVER_FLAGS:
-            raise KarnError("model_server_flag_not_allowed:" + flag[:64])
-        position += 2 if SERVER_FLAGS[flag] else 1
-        if position > len(arguments):
-            raise KarnError("model_server_flag_value_missing:" + flag)
     if any("\0" in argument for argument in arguments):
         raise KarnError("model_server_arguments_invalid")
+    for token in arguments:
+        if _refused_flag(token) or token.split("=", 1)[0] in FILE_FLAGS:
+            raise KarnError("model_server_flag_not_allowed:" + token.split("=", 1)[0][:64])
+    server_environment = None
+    if "environment" in document:
+        refusal = environment_refusal(document["environment"])
+        if refusal is not None:
+            raise KarnError("model_server_environment_" + refusal[:96])
+        server_environment = tuple(sorted(document["environment"].items()))
+    ready = _timeout(document, "ready_seconds")
+    request = _timeout(document, "request_timeout_seconds")
     served = environment.get("CONSTRUCT_MODEL", "")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}", served):
         raise KarnError("model_server_requires_construct_model")
-    if environment.get("CONSTRUCT_PI_BASE_URL") != MODEL_SERVER_URL:
-        raise KarnError("model_server_url_mismatch")
     if runtime["network"]["mode"] != "restricted":
         raise KarnError("model_server_requires_restricted_network")
     return ModelServerSpec(
         "llama.cpp",
         document["build"],
-        model["file"],
-        model["sha256"],
+        model.file,
+        model.sha256,
         tuple(arguments),
         served,
+        files,
+        server_environment,
+        ready,
+        request,
     )
 
 
@@ -169,6 +326,8 @@ class ModelServerHost:
 
     models_dir: Path | None = None
     llama_cpp: dict[str, Path] = field(default_factory=dict)
+    environment: dict[str, str] = field(default_factory=dict)
+    """``[model_server] environment``: variables only this host's builds need."""
 
 
 @dataclass(frozen=True)
@@ -181,19 +340,46 @@ class ModelServerPlan:
     commit: str
     model_path: Path
     lock_path: Path
+    files: tuple[tuple[ServerFile, Path], ...] = ()
+    host_environment: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def server_files(self) -> tuple[tuple[ServerFile, Path], ...]:
+        """Every file the server reads with its resolved path, the model first."""
+        return self.files or ((self.spec.server_files[0], self.model_path),)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        facts = {
             **self.spec.to_dict(),
             "binary": str(self.binary),
             "binary_version": self.version,
             "binary_commit": self.commit,
             "model_path": str(self.model_path),
+            "host": {"environment": dict(self.host_environment)},
         }
+        if self.spec.files:
+            facts["file_paths"] = {entry.file: str(path) for entry, path in self.server_files}
+        return facts
+
+
+def server_environment(
+    plan: ModelServerPlan, inherited: dict[str, str] | None = None
+) -> dict[str, str]:
+    """The server's whole environment: never the runner's, where a stray ``LD_LIBRARY_PATH`` or
+    ``LLAMA_ARG_*`` would change the server unseen."""
+    inherited = os.environ if inherited is None else inherited
+    environment = {name: inherited[name] for name in INHERITED_ENVIRONMENT if name in inherited}
+    environment.update(plan.host_environment)
+    environment.update(plan.spec.environment or ())
+    environment["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    return environment
 
 
 def plan_model_server(spec: ModelServerSpec, host: ModelServerHost, state_root: Path):
     """Refuse a server this host cannot start: a missing build or file, or the wrong build."""
+    refusal = environment_refusal(host.environment)
+    if refusal is not None:
+        raise KarnError("model_server_host_environment_" + refusal[:96])
     binary = host.llama_cpp.get(spec.build)
     if binary is None:
         raise KarnError("model_server_build_unavailable:" + spec.build)
@@ -210,16 +396,22 @@ def plan_model_server(spec: ModelServerSpec, host: ModelServerHost, state_root: 
         raise KarnError("model_server_build_mismatch:" + spec.build)
     if host.models_dir is None:
         raise KarnError("model_server_models_dir_unset")
-    model_path = (host.models_dir / spec.model_file).resolve()
-    if not model_path.is_file():
-        raise KarnError("model_file_unavailable:" + spec.model_file)
+    models_dir = host.models_dir.resolve()
+    files = []
+    for entry in spec.server_files:
+        path = (models_dir / entry.file).resolve()
+        if path.parent != models_dir or not path.is_file():
+            raise KarnError("model_file_unavailable:" + entry.file)
+        files.append((entry, path))
     return ModelServerPlan(
         spec,
         binary.resolve(),
         found.group(0),
         found.group(2),
-        model_path,
+        files[0][1],
         Path(state_root).resolve() / "model-server.lock",
+        tuple(files),
+        dict(host.environment),
     )
 
 
@@ -234,8 +426,11 @@ def file_sha256(path: Path) -> str:
 class LlamaServer:
     """One loopback ``llama-server`` for one run, stopped with it."""
 
-    def __init__(self, plan: ModelServerPlan, log_path: Path, *, ready_seconds: float = 900):
-        self.plan, self.log_path, self.ready_seconds = plan, log_path, ready_seconds
+    def __init__(
+        self, plan: ModelServerPlan, log_path: Path, *, ready_seconds: float | None = None
+    ):
+        self.plan, self.log_path = plan, log_path
+        self.ready_seconds = plan.spec.ready_timeout if ready_seconds is None else ready_seconds
         self.process: subprocess.Popen | None = None
         self.port: int | None = None
 
@@ -250,6 +445,12 @@ class LlamaServer:
             str(self.plan.binary),
             "--model",
             str(self.plan.model_path),
+            *(
+                argument
+                for entry, path in self.plan.server_files[1:]
+                if entry.flag is not None
+                for argument in (entry.flag, str(path))
+            ),
             "--host",
             "127.0.0.1",
             "--port",
@@ -271,6 +472,7 @@ class LlamaServer:
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
+                env=server_environment(self.plan),
             )
         finally:
             log.close()
@@ -496,14 +698,24 @@ class ModelRelayCollector:
         try:
             self._hold_host_lock()
             started = time.monotonic()
-            if file_sha256(self.plan.model_path) != self.plan.spec.model_sha256:
-                raise KarnError("model_digest_mismatch")
+            for position, (entry, path) in enumerate(self.plan.server_files):
+                if file_sha256(path) != entry.sha256:
+                    raise KarnError(
+                        "model_digest_mismatch"
+                        if position == 0
+                        else "model_file_digest_mismatch:" + entry.file
+                    )
+            # ``model_sha256_verified`` covers every declared file, the model among them.
             self.facts = {
                 **self.plan.to_dict(),
                 "model_sha256_verified": True,
                 "model_bytes": self.plan.model_path.stat().st_size,
                 "verify_seconds": round(time.monotonic() - started, 3),
             }
+            if self.plan.spec.files:
+                self.facts["file_bytes"] = {
+                    entry.file: path.stat().st_size for entry, path in self.plan.server_files
+                }
             self._sink = self._open(EVENTS_FILE)
             self._transcript = self._open(TRANSCRIPT_FILE)
             started = time.monotonic()
@@ -664,7 +876,7 @@ class ModelRelayCollector:
         # One event per relayed request, whatever ids the server reuses.
         identity = "relay-" + uuid.uuid4().hex
         connection = http.client.HTTPConnection(
-            "127.0.0.1", self.llama.port, timeout=UPSTREAM_TIMEOUT_SECONDS
+            "127.0.0.1", self.llama.port, timeout=self.plan.spec.request_timeout
         )
         if not self._admit(identity, handler.connection, request, started_ms):
             with contextlib.suppress(OSError):

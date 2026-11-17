@@ -1,8 +1,9 @@
-"""The local model server for pi constructs (issue #262), against a fake llama-server."""
+"""The local model server (issues #262, #271), against a fake llama-server."""
 
 from __future__ import annotations
 
 import json
+import os
 import socket
 import sys
 import threading
@@ -38,6 +39,8 @@ port = int(sys.argv[sys.argv.index("--port") + 1])
 alias = sys.argv[sys.argv.index("--alias") + 1]
 with open(sys.argv[0] + ".argv", "w") as out:
     json.dump(sys.argv[1:], out)
+with open(sys.argv[0] + ".env", "w") as out:
+    json.dump(dict(os.environ), out)
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -196,7 +199,16 @@ def test_the_spec_keeps_the_recipes_server_and_serves_its_construct_model():
         (spec_document(arguments=["--host", "0.0.0.0"]), "flag_not_allowed:--host"),
         (spec_document(arguments=["-m", "/etc/passwd"]), "flag_not_allowed:-m"),
         (spec_document(arguments=["--api-key", "x"]), "flag_not_allowed:--api-key"),
-        (spec_document(arguments=["-c"]), "flag_value_missing:-c"),
+        (spec_document(arguments=["--host=0.0.0.0"]), "flag_not_allowed:--host"),
+        (spec_document(arguments=["-hf", "org/model"]), "flag_not_allowed:-hf"),
+        (spec_document(arguments=["--rpc", "10.0.0.2:50052"]), "flag_not_allowed:--rpc"),
+        (spec_document(arguments=["--log-file", "/tmp/x"]), "flag_not_allowed:--log-file"),
+        (spec_document(arguments=["--media-path", "/"]), "flag_not_allowed:--media-path"),
+        (spec_document(arguments=["--tools", "all"]), "flag_not_allowed:--tools"),
+        (spec_document(arguments=["-md", "draft.gguf"]), "flag_not_allowed:-md"),
+        (spec_document(arguments=["--chat-template-file=t.jinja"]), "flag_not_allowed:--chat"),
+        (spec_document(arguments=["-c", "8\0"]), "model_server_arguments_invalid"),
+        ({**spec_document(), "files": []}, "model_server_spec_invalid"),
         ({**spec_document(), "extra": 1}, "model_server_spec_invalid"),
     ],
 )
@@ -205,9 +217,11 @@ def test_a_malformed_server_is_refused(document, reason):
         model_server_spec(runtime(document))
 
 
-def test_the_workload_must_use_the_relay_address_on_a_restricted_network():
-    with pytest.raises(KarnError, match="model_server_url_mismatch"):
-        model_server_spec(runtime(CONSTRUCT_PI_BASE_URL="http://192.168.1.2:8080/v1"))
+def test_any_agent_variable_may_point_at_the_relay_on_a_restricted_network():
+    environment = runtime()["environment"]
+    del environment["CONSTRUCT_PI_BASE_URL"]
+    agent = {"environment": {**environment, "OPENAI_BASE_URL": MODEL_SERVER_URL}}
+    assert model_server_spec({**agent, "network": {"mode": "restricted"}}) is not None
     with pytest.raises(KarnError, match="model_server_requires_restricted_network"):
         model_server_spec(runtime(mode="open"))
     with pytest.raises(KarnError, match="model_server_requires_construct_model"):
@@ -474,7 +488,7 @@ def test_the_host_config_names_builds_and_the_models_directory(tmp_path):
     with pytest.raises(HostConfigError, match="maps builds like b12182"):
         load_host_config(path)
     path.write_text('[model_server]\nbinary = "/opt/llama-server"\n')
-    with pytest.raises(HostConfigError, match="takes only models_dir and llama_cpp"):
+    with pytest.raises(HostConfigError, match="takes only models_dir, llama_cpp and environment"):
         load_host_config(path)
 
 
@@ -1111,3 +1125,230 @@ def test_a_local_model_is_never_priced_as_a_hosted_one(served, tmp_path, alias):
         assert "model_price_unavailable" in summary["estimated_cost"]["reasons"]
         assert summary["cost_breakdown"]["value"] is None
         assert summary["price_table"]["models"] == {}
+
+
+# The recipe owns the server's flags, files, environment and timeouts (#271).
+
+RECIPE_Q8 = (
+    '{"engine":"llama.cpp","build":"b12182","model":{"file":"Qwen3.8-27B-UD-Q8_K_XL.gguf",'
+    '"sha256":"' + "a" * 64 + '"},"arguments":["-c","262144","-np","1","-ngl","999","-fa","on",'
+    '"-ctk","f16","-ctv","f16","--fit","off","--jinja","--temp","1.0","--top-p","0.95",'
+    '"--top-k","20","--min-p","0"]}'
+)
+
+
+def test_a_recipe_written_before_files_records_exactly_what_it_did():
+    spec = model_server_spec(
+        {
+            "environment": {
+                "CONSTRUCT_MODEL": "qwen3.8-27b",
+                "CONSTRUCT_PI_BASE_URL": MODEL_SERVER_URL,
+                MODEL_SERVER_ENV: RECIPE_Q8,
+            },
+            "network": {"mode": "restricted", "https_hosts": []},
+        }
+    )
+    assert spec.to_dict() == {
+        "engine": "llama.cpp",
+        "build": "b12182",
+        "model": {"file": "Qwen3.8-27B-UD-Q8_K_XL.gguf", "sha256": "a" * 64},
+        "arguments": json.loads(RECIPE_Q8)["arguments"],
+        "served_model": "qwen3.8-27b",
+    }
+    assert spec.ready_timeout == 900 and spec.request_timeout == 1800
+
+
+def test_an_unlisted_flag_passes_and_is_kept_with_the_arguments():
+    spec = model_server_spec(runtime(spec_document(arguments=["--spec-type", "ngram-simple"])))
+    assert spec.arguments == ("--spec-type", "ngram-simple")
+
+
+def with_files(*files, **overrides):
+    document = spec_document(**overrides)
+    del document["model"]
+    document["files"] = list(files)
+    return document
+
+
+@pytest.mark.parametrize(
+    ("files", "reason"),
+    [
+        ([{"file": "a.gguf", "sha256": "0" * 64}], "model_server_files_need_one_model"),
+        (
+            [
+                {"file": "a.gguf", "sha256": "0" * 64, "flag": "--model"},
+                {"file": "b.gguf", "sha256": "0" * 64, "flag": "--model"},
+            ],
+            "model_server_files_need_one_model",
+        ),
+        ([{"file": "../a.gguf", "sha256": "0" * 64, "flag": "--model"}], "files_invalid"),
+        ([{"file": "/etc/passwd", "sha256": "0" * 64, "flag": "--model"}], "files_invalid"),
+        ([{"file": "a.gguf", "sha256": "0" * 64, "flag": "-m"}], "file_flag_not_allowed:-m"),
+        (
+            [
+                {"file": "a.gguf", "sha256": "0" * 64, "flag": "--model"},
+                {"file": "k.pem", "sha256": "0" * 64, "flag": "--ssl-key-file"},
+            ],
+            "file_flag_not_allowed:--ssl-key-file",
+        ),
+        (
+            [{"file": "Q-00001-of-00002.gguf", "sha256": "0" * 64, "flag": "--model"}],
+            "model_server_split_model_incomplete:Q",
+        ),
+    ],
+)
+def test_declared_files_are_refused_when_they_cannot_all_be_verified(files, reason):
+    with pytest.raises(KarnError, match=reason):
+        model_server_spec(runtime(with_files(*files)))
+
+
+def test_both_model_and_files_is_refused():
+    document = with_files({"file": "a.gguf", "sha256": "0" * 64, "flag": "--model"})
+    document["model"] = {"file": "a.gguf", "sha256": "0" * 64}
+    with pytest.raises(KarnError, match="model_server_spec_invalid"):
+        model_server_spec(runtime(document))
+
+
+@pytest.fixture
+def drafted(served):
+    """A recipe with a split model, a draft model and a chat template, all verified."""
+    models = served.host.models_dir
+    contents = {
+        "Q-00001-of-00002.gguf": b"part one",
+        "Q-00002-of-00002.gguf": b"part two",
+        "draft.gguf": b"draft weights",
+        "chat.jinja": b"{{ messages }}",
+    }
+    for name, content in contents.items():
+        (models / name).write_bytes(content)
+    files = [
+        {"file": "Q-00001-of-00002.gguf", "sha256": "", "flag": "--model"},
+        {"file": "Q-00002-of-00002.gguf", "sha256": ""},
+        {"file": "draft.gguf", "sha256": "", "flag": "-md"},
+        {"file": "chat.jinja", "sha256": "", "flag": "--chat-template-file"},
+    ]
+    for entry in files:
+        entry["sha256"] = file_sha256(models / entry["file"])
+    document = with_files(
+        *files,
+        arguments=["--spec-type", "draft-simple", "--jinja"],
+        environment={"GGML_CUDA_GRAPH_OPT": "1"},
+        ready_seconds=60,
+        request_timeout_seconds=7200,
+    )
+    return SimpleNamespace(served=served, files=files, spec=model_server_spec(runtime(document)))
+
+
+def test_declared_files_are_verified_passed_and_recorded(drafted, tmp_path):
+    served = drafted.served
+    host = ModelServerHost(served.host.models_dir, served.host.llama_cpp, {"LD_LIBRARY_PATH": "/x"})
+    plan = plan_model_server(drafted.spec, host, served.state)
+    with ModelRelayCollector(tmp_path / "run", plan=plan) as collector:
+        argv = json.loads(Path(str(served.binary) + ".argv").read_text())
+        models = served.host.models_dir.resolve()
+        assert argv[argv.index("--model") + 1] == str(models / "Q-00001-of-00002.gguf")
+        assert argv[argv.index("-md") + 1] == str(models / "draft.gguf")
+        assert argv[argv.index("--chat-template-file") + 1] == str(models / "chat.jinja")
+        assert "Q-00002-of-00002.gguf" not in " ".join(argv)
+        facts = collector.facts
+        assert facts["model_sha256_verified"] is True
+        assert set(facts["file_bytes"]) == {entry["file"] for entry in drafted.files}
+        assert facts["files"] == drafted.files
+        assert facts["environment"] == {"GGML_CUDA_GRAPH_OPT": "1"}
+        assert facts["ready_seconds"] < 60 and collector.llama.ready_seconds == 60
+        assert facts["request_timeout_seconds"] == 7200
+        assert facts["host"] == {"environment": {"LD_LIBRARY_PATH": "/x"}}
+
+
+def test_any_declared_file_that_changed_is_refused_before_the_server_starts(drafted, tmp_path):
+    served = drafted.served
+    plan = plan_model_server(drafted.spec, served.host, served.state)
+    (served.host.models_dir / "Q-00002-of-00002.gguf").write_bytes(b"other part")
+    with pytest.raises(KarnError, match="model_file_digest_mismatch:Q-00002-of-00002.gguf"):
+        ModelRelayCollector(tmp_path / "run", plan=plan).__enter__()
+    assert not Path(str(served.binary) + ".argv").exists()
+
+
+def test_a_missing_declared_file_is_refused_before_any_evidence(drafted):
+    (drafted.served.host.models_dir / "draft.gguf").unlink()
+    with pytest.raises(KarnError, match="model_file_unavailable:draft.gguf"):
+        plan_model_server(drafted.spec, drafted.served.host, drafted.served.state)
+
+
+def test_the_server_never_inherits_the_runners_environment(served, tmp_path, monkeypatch):
+    monkeypatch.setenv("LLAMA_ARG_CTX_SIZE", "4096")
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/old-llama")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3")
+    document = spec_document(
+        model=served.spec.to_dict()["model"], environment={"GGML_CUDA_GRAPH_OPT": "1"}
+    )
+    spec = model_server_spec(runtime(document))
+    host = ModelServerHost(served.host.models_dir, served.host.llama_cpp, {"HOST_ONLY": "yes"})
+    with ModelRelayCollector(tmp_path / "run", plan=plan_model_server(spec, host, served.state)):
+        environment = json.loads(Path(str(served.binary) + ".env").read_text())
+    assert "LLAMA_ARG_CTX_SIZE" not in environment
+    assert "LD_LIBRARY_PATH" not in environment
+    assert "CUDA_VISIBLE_DEVICES" not in environment
+    assert environment["PATH"] == os.environ["PATH"]
+    assert environment["HOST_ONLY"] == "yes"
+    assert environment["GGML_CUDA_GRAPH_OPT"] == "1"
+    assert environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
+
+
+def test_the_recipe_environment_overrides_the_hosts():
+    from silverquillm.karn.model_server import ModelServerPlan, server_environment
+
+    spec = model_server_spec(runtime(spec_document(environment={"SHARED": "recipe"})))
+    plan = ModelServerPlan(
+        spec, Path("/b"), "", "", Path("/m"), Path("/l"), host_environment={"SHARED": "host"}
+    )
+    assert server_environment(plan, {"PATH": "/bin", "HOME": "/h", "OTHER": "x"}) == {
+        "PATH": "/bin",
+        "HOME": "/h",
+        "SHARED": "recipe",
+        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+    }
+
+
+@pytest.mark.parametrize(
+    ("environment", "reason"),
+    [
+        ({"LLAMA_ARG_CTX_SIZE": "4096"}, "model_server_environment_refused:LLAMA_ARG_CTX_SIZE"),
+        ({"CUDA_VISIBLE_DEVICES": "0"}, "model_server_environment_refused:CUDA_VISIBLE"),
+        ({"CUDA_DEVICE_ORDER": "FASTEST_FIRST"}, "model_server_environment_refused:CUDA_DEVICE"),
+        ({"BAD NAME": "x"}, "model_server_environment_invalid"),
+        ({"X": 1}, "model_server_environment_invalid"),
+        ({"X": "a\0b"}, "model_server_environment_invalid"),
+        (["X=1"], "model_server_environment_invalid"),
+    ],
+)
+def test_a_recipe_environment_that_would_change_the_record_is_refused(environment, reason):
+    with pytest.raises(KarnError, match=reason):
+        model_server_spec(runtime(spec_document(environment=environment)))
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("ready_seconds", 0), ("ready_seconds", "60"), ("request_timeout_seconds", True)]
+    + [("request_timeout_seconds", 86401)],
+)
+def test_a_timeout_must_be_a_bounded_number_of_seconds(key, value):
+    with pytest.raises(KarnError, match="model_server_timeout_invalid:" + key):
+        model_server_spec(runtime(spec_document(**{key: value})))
+
+
+def test_the_host_config_names_an_environment_only_this_host_needs(tmp_path):
+    from silverquillm.host_config import HostConfigError, load_host_config
+
+    path = tmp_path / "config.toml"
+    path.write_text('[model_server.environment]\nLD_LIBRARY_PATH = "/opt/cuda/lib64"\n')
+    assert load_host_config(path).model_server_environment == {"LD_LIBRARY_PATH": "/opt/cuda/lib64"}
+    path.write_text('[model_server.environment]\nLLAMA_ARG_N_GPU_LAYERS = "0"\n')
+    with pytest.raises(HostConfigError, match="refused:LLAMA_ARG_N_GPU_LAYERS"):
+        load_host_config(path)
+    with pytest.raises(KarnError, match="model_server_host_environment_refused:CUDA"):
+        plan_model_server(
+            model_server_spec(runtime()),
+            ModelServerHost(tmp_path, {}, {"CUDA_VISIBLE_DEVICES": "0"}),
+            tmp_path,
+        )

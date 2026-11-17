@@ -37,6 +37,8 @@ The recipe declares the server as `SILVERQUILLM_MODEL_SERVER` in `runtime.enviro
 | `request_timeout_seconds` (optional) | how long one relayed request may take, default 1800 |
 
 Under `files`, exactly one entry has the flag `--model`, and that entry is the model; `model` is that one entry alone (grilling 2026-11-16).
+A file is named by its bare name in the models directory, never a path, and a split model lists every part, since llama.cpp loads the later parts by name (#271).
+A file's flag may be any flag but those refused below; `model` names a single `.gguf` file that is not a split part.
 A recipe without the optional keys keeps its definition, and so its candidate hash, unchanged.
 
 The recipe also sets a `CONSTRUCT_MODEL` and `restricted` egress, an empty `https_hosts` meaning no internet, and points its agent at `http://model-server:8080/v1` through whatever variable the agent reads, as `CONSTRUCT_PI_BASE_URL` for pi; the bench does not check which (grilling 2026-11-16).
@@ -45,11 +47,14 @@ The bench refuses only the flags it owns or that would defeat the record (grilli
 
 | Refused | Why |
 | --- | --- |
-| `--host`, `--port`, `--path`, `--api-key`, `--api-key-file`, `--webui`, `--no-webui`, `--ssl-*` | the bench owns the address and API surface |
-| `-m`, `--model`, `-hf*`, `-mu`, `--model-url`, `--alias`, `-a`, `--lora*`, `--control-vector*` | the model's identity is the verified files and the bench's alias |
-| `--rpc` | the server reaches no other host |
-| `--log-file`, `--slot-save-path` | the server writes only where the bench puts it |
-| any other flag naming an input file | an input file is declared in `files`, so its digest is verified and recorded |
+| `--host`, `--port`, `--path`, `--api-prefix`, `--api-key`, `--api-key-file`, `--ui`/`--webui` and their `--no-` and `-config` forms, `--ssl-key-file`, `--ssl-cert-file` | the bench owns the address and API surface |
+| `-mu`, `--model-url`, `-dr`, `--docker-repo`, `-hf`, `-hfr`, `--hf-repo`, `-hff`, `--hf-file`, `-hft`, `--hf-token`, `-hfd`, `-hfrd`, `--hf-repo-draft`, `--spec-draft-hf`, `-mmu`, `--mmproj-url`, `-a`, `--alias`, `--models-dir`, `--models-preset` | the model's identity is the verified files and the bench's alias |
+| `--rpc`, `--tools`, `--tools-runtime`, `--mcp-servers-config`, `--mcp-servers-json`, the `--ui-mcp-proxy` forms | the server reaches no other host and runs nothing on this one for a request |
+| `--log-file`, `--slot-save-path`, `--log-prompts-dir`, `--media-path`, `--video-ffmpeg-dir`, `-lcd`, `--lookup-cache-dynamic` | the server writes, and reads for a request, only where the bench puts it |
+
+The bench also refuses, among the arguments only, the flags of llama.cpp b12182 that name an input file: `-m`, `--model`, `-md`, `--model-draft`, `--spec-draft-model`, `-mm`, `--mmproj`, `--chat-template-file`, `--grammar-file`, `-jf`, `--json-schema-file`, `-lcs`, `--lookup-cache-static`, `--lora`, `--lora-scaled`, `--control-vector` and `--control-vector-scaled`.
+Such a file is declared in `files` instead, so its digest is verified and recorded (#271).
+A flag is refused alone or as `--flag=value`, and every other flag passes and is recorded with the arguments; a later build's new file flag passes unverified until it is added to that list.
 
 `environment` refuses `LLAMA_ARG_*`, which llama.cpp reads as flags, and `CUDA_VISIBLE_DEVICES` and `CUDA_DEVICE_ORDER`, which the GPU selection owns.
 
@@ -97,9 +102,11 @@ Before the run launches its workload, `run-input.json` holds the server facts th
 | `cuda_visible_devices`, `cuda_device_order` | the server's effective values, each null when absent; without `gpu_slots` they are the runner's, so the record keeps the selection even when `nvidia-smi` cannot be read |
 | `gpus` | per visible GPU, from `nvidia-smi` at claim: name, UUID, total and used memory, power limit, driver version |
 | `binary_sha256` | the llama-server binary's digest, recorded and never checked |
-| `environment` | the host config's `environment` for the server |
+| `environment` | the host config's `environment` for the server, empty when it sets none |
 
 When `nvidia-smi` is missing or fails, `gpus` is null with a reason and the run goes ahead.
+`run_metadata.model_server` also keeps the recipe's declaration as written, with `files`, `environment` and the timeouts only when the recipe sets them, so a recipe written before them records what it always did.
+A recipe with `files` adds `file_paths` and `file_bytes` for every file, and `model_sha256_verified` covers every declared file; a changed file other than the model fails the run with `model_file_digest_mismatch:<file>` before the server starts (#271).
 Recovery copies all these facts as recorded, never claims a GPU Slot and never reverifies the host's current files; a run interrupted before verification is recovered with `model_sha256_verified` null.
 
 ### Relay observations

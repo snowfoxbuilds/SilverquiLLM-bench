@@ -70,6 +70,8 @@ class HostConfig:
     """``[model_server] models_dir``: where model files a recipe names are found."""
     llama_cpp: Mapping[str, Path] = field(default_factory=dict)
     """``[model_server.llama_cpp]``: each llama.cpp build (``b12182``) to its llama-server."""
+    model_server_environment: Mapping[str, str] = field(default_factory=dict)
+    """``[model_server] environment``: variables only this host's llama.cpp builds need."""
 
 
 @dataclass(frozen=True)
@@ -129,8 +131,10 @@ def load_host_config(
 
 def _model_server(path: Path, table) -> dict:
     """The local model server's builds and model directory; paths resolve like locations."""
-    if not isinstance(table, dict) or set(table) - {"models_dir", "llama_cpp"}:
-        raise HostConfigError(f"{path}: [model_server] takes only models_dir and llama_cpp")
+    if not isinstance(table, dict) or set(table) - {"models_dir", "llama_cpp", "environment"}:
+        raise HostConfigError(
+            f"{path}: [model_server] takes only models_dir, llama_cpp and environment"
+        )
 
     def location(value, key):
         if not isinstance(value, str) or not value.strip():
@@ -144,6 +148,15 @@ def _model_server(path: Path, table) -> dict:
         for build in builds
     ):
         raise HostConfigError(f"{path}: [model_server.llama_cpp] maps builds like b12182 to paths")
+    from silverquillm.karn.model_server import environment_refusal
+
+    environment = table.get("environment", {})
+    refusal = environment_refusal(environment)
+    if refusal is not None:
+        raise HostConfigError(
+            f"{path}: [model_server.environment] maps variable names to strings and may not set "
+            f"LLAMA_ARG_*, CUDA_VISIBLE_DEVICES or CUDA_DEVICE_ORDER ({refusal})"
+        )
     return {
         "models_dir": (
             location(table["models_dir"], "model_server.models_dir")
@@ -154,6 +167,7 @@ def _model_server(path: Path, table) -> dict:
             build: location(binary, "model_server.llama_cpp." + build)
             for build, binary in builds.items()
         },
+        "model_server_environment": dict(environment),
     }
 
 
