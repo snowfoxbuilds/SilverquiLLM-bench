@@ -262,6 +262,7 @@ A Login Profile has a Fable limit once a reading of it has been seen, from a liv
 The dashboard shows one figure per Login Profile, since the LOGINS pane has room for one.
 While a Fable run holds the profile and its Fable limit is known, that figure is the Fable limit, labelled `Fable` (`Fable ≈ 96% · resets Thu 14:00 · read 2m ago`); otherwise it is the Estimated Weekly Usage.
 `top --json` reports both.
+The run holding a profile is the one the monitor can tell is using its login now, never merely one whose run input names it: the profile's login lock must be held, and the run must be Starting or Running, since the runner releases the login before grading. When the profile's login journal names a run, that run is the holder; with no journal, the one Starting or Running run naming the profile is. A free profile, a journal naming no live run, or two such runs leave it with no holder, and the profile shows the Estimated Weekly Usage. So a Fable run still Grading, Recording or awaiting recovery does not keep its slot on the Fable limit after the login has passed to another run (#267 review). The holder is also the run `logins` reports holding the profile; every run's spend still counts toward both estimates, whoever holds the profile.
 
 ### Historic view
 

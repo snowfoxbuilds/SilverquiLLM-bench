@@ -59,6 +59,7 @@ HISTORY_SECONDS = 10.0
 OBSERVED_PROFILES = 64
 """At most this many Login Profile windows keep a live-observed reading after their run ends."""
 FABLE_MODEL_PREFIX = "claude-fable-"
+HOLDING_STAGES = frozenset({Stage.STARTING, Stage.RUNNING})
 FINISHED_WINDOW = timedelta(days=7)
 # A deeply nested file recurses; an unknown ``~user`` path fails to expand.
 CONFIG_ERRORS = (HostConfigError, RecursionError, RuntimeError, ValueError, OSError)
@@ -106,11 +107,12 @@ class ProfileView:
     status: ProfileStatus
     weekly: WeeklyUsage | None
     run_id: str | None
-    """The live run holding this Login Profile, when one does."""
+    """The live run holding this Login Profile, when one does and it can be told
+    (``Monitor._holders``)."""
     fable: WeeklyUsage | None = None
     """Claude's Fable limit, once a reading of it has been seen for this profile."""
     fable_run: bool = False
-    """The live run holding this profile is a Fable model's."""
+    """The run holding this profile (``run_id``) is a Fable model's."""
 
     @property
     def shown(self) -> WeeklyUsage | None:
@@ -380,15 +382,10 @@ class Monitor:
             costs[login].extend(record.request_costs)
             if is_fable(record.candidate.model):
                 fable_costs[login].extend(record.request_costs)
-        holder, fable_runs = {}, set()
         for run_id, entry in self._live.items():
             login = entry.run.login_profile
             if login is None:
                 continue
-            holder[login] = run_id
-            fable = is_fable(entry.run.candidate.model)
-            if fable:
-                fable_runs.add(login)
             if run_id not in executions:
                 live_costs = [
                     (row.timestamp_ms, row.usd)
@@ -396,7 +393,7 @@ class Monitor:
                     if row.usd is not None
                 ]
                 costs[login].extend(live_costs)
-                if fable:
+                if is_fable(entry.run.candidate.model):
                     fable_costs[login].extend(live_costs)
             if entry.follower is not None:
                 for reading in entry.follower.readings:
@@ -415,9 +412,11 @@ class Monitor:
                 self._observe(login, self._codex_reading(login))
         for (login, _), reading in self._observed_readings(now).items():
             readings[_canonical_login(login, profiles)].append(reading)
+        holders = self._holders(profiles)
         views = []
         for profile in profiles:
             ref, rates = profile.ref, self.config.usage_rates
+            holder = holders.get(ref)
             fable = None
             if any(r.window == FABLE for r in readings[ref]):
                 fable = weekly_usage(
@@ -427,12 +426,39 @@ class Monitor:
                 ProfileView(
                     profile,
                     weekly_usage(ref, profile.provider, rates, readings[ref], costs[ref], now),
-                    holder.get(ref),
+                    holder,
                     fable,
-                    ref in fable_runs,
+                    holder is not None and is_fable(self._live[holder].run.candidate.model),
                 )
             )
         return views
+
+    def _holders(self, profiles: list[ProfileStatus]) -> dict[str, str]:
+        """The one live run holding each Login Profile, where it can be told.
+
+        A profile is held only while its login lock is held, and only by a Starting or Running
+        run: the runner releases the login before grading, so a run still Grading, Recording or
+        awaiting recovery holds nothing even though its run input names the profile. When the
+        profile's login journal names a run, that run is the holder; with no journal, the one
+        such run naming the profile is. Anything else (a free profile, a journal naming another
+        or no run, two candidates) has no holder (RUN-MONITORING.md, The Fable limit).
+        """
+        candidates: dict[str, list[str]] = defaultdict(list)
+        for run_id, entry in self._live.items():
+            login = _canonical_login(entry.run.login_profile, profiles)
+            if login is not None and entry.run.stage in HOLDING_STAGES:
+                candidates[login].append(run_id)
+        holders = {}
+        for profile in profiles:
+            if profile.busy is not True:
+                continue
+            found = candidates.get(profile.ref, [])
+            if profile.pending:
+                if profile.pending_run in found:
+                    holders[profile.ref] = profile.pending_run
+            elif len(found) == 1:
+                holders[profile.ref] = found[0]
+        return holders
 
     def _view(self, run: LiveRun, history: list[RunSummary], now: datetime) -> RunView:
         percent = (
