@@ -33,6 +33,26 @@ def fake_nvidia_smi(bindir: Path, *, stuck: bool) -> Path:
     return started
 
 
+def logged_pids(started: Path) -> list[int] | None:
+    """The PIDs the fake has logged, or None while its first line is still being written."""
+    try:
+        text = started.read_text()
+    except FileNotFoundError:
+        return None
+    return [int(line) for line in text.split()] if text.endswith("\n") else None
+
+
+def probe_pids(started: Path, timeout=10) -> list[int]:
+    """Wait for the stuck probe's log line: under load the stand-in may only exec the fake
+    after its caller's 0.3 s reading has already timed out."""
+    until = time.monotonic() + timeout
+    while (pids := logged_pids(started)) is None:
+        if time.monotonic() > until:
+            raise AssertionError(f"no probe logged its PID in {started}")
+        time.sleep(0.01)
+    return pids
+
+
 def _probe_in_worker(state_root, bindir, results, fault=None):
     """A scheduler worker's claim-time reading, with a probe SIGKILL cannot reap; *fault*
     names how its startup fails."""
@@ -102,14 +122,14 @@ def test_a_stuck_probe_outlives_its_worker_and_no_later_worker_starts_another(tm
     started = fake_nvidia_smi(bindir, stuck=True)
     try:
         assert in_a_worker(state, bindir) == ("nvidia_smi_unavailable", False)
-        [pid] = map(int, started.read_text().split())
+        [pid] = probe_pids(started)
         assert _process_start(pid) is not None
         for _ in range(2):
             assert in_a_worker(state, bindir) == ("nvidia_smi_unavailable", False)
         assert started.read_text().split() == [str(pid)]
     finally:
-        for line in started.read_text().split():
-            os.kill(int(line), signal.SIGKILL)
+        for stuck in logged_pids(started) or []:
+            os.kill(stuck, signal.SIGKILL)
     gone(pid)
     fake_nvidia_smi(bindir, stuck=False)
     assert in_a_worker(state, bindir) == (None, True)
@@ -125,7 +145,7 @@ def test_an_interrupted_probe_stays_recorded_until_it_is_gone(tmp_path, monkeypa
 
     def interrupted(self, timeout=None):
         until = time.monotonic() + 10
-        while not started.exists() and time.monotonic() < until:
+        while logged_pids(started) is None and time.monotonic() < until:
             time.sleep(0.01)
         raise KeyboardInterrupt
 
@@ -133,7 +153,7 @@ def test_an_interrupted_probe_stays_recorded_until_it_is_gone(tmp_path, monkeypa
         patch.setattr(subprocess.Popen, "communicate", interrupted)
         with pytest.raises(KeyboardInterrupt):
             read_gpus(state_root=state)
-    [pid] = map(int, started.read_text().split())
+    [pid] = probe_pids(started)
     try:
         assert (state / PROBE_RECORD).exists()
         # Another process knows nothing of this one's abandoned probe but the record.
