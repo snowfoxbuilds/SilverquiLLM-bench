@@ -58,6 +58,10 @@ class LiveRun:
     record: RunSummary | None = None
     """The validated record describing this execution, None until one exists: a linked
     recovery before the original, a locally retained copy before a published one."""
+    model_server: bool = False
+    """The run is served by a bench-started model server."""
+    gpu_slot: str | None = None
+    """The GPU Slot its server claimed; None also for a host's one unpinned slot."""
 
     @property
     def started_at(self) -> datetime | None:
@@ -369,6 +373,8 @@ def _live_run(
     adapter = telemetry.get("adapter") if isinstance(telemetry.get("adapter"), str) else None
     login = run_input.get("login") if isinstance(run_input.get("login"), str) else None
     budget = run_input.get("budget_seconds")
+    served = mapping(run_input.get("model_server"))
+    gpu_slot = mapping(served.get("host")).get("gpu_slot")
     return LiveRun(
         run_id=run_dir.name,
         run_dir=run_dir,
@@ -390,6 +396,8 @@ def _live_run(
         telemetry_adapter=adapter,
         reasons=reasons if stage in (Stage.NEEDS_RECOVER, Stage.UNKNOWN) else (),
         record=verdict.record,
+        model_server=bool(served),
+        gpu_slot=gpu_slot if isinstance(gpu_slot, str) else None,
     )
 
 

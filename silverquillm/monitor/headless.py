@@ -10,6 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
+from .gpus import GpuSlotStatus
 from .pools import ProfileStatus
 from .queue import QueuedBatch
 from .snapshot import MonitorSnapshot, ProfileView, RunView
@@ -136,6 +137,27 @@ def _login(view: ProfileView) -> dict:
     }
 
 
+def _gpu_slot(status: GpuSlotStatus) -> dict:
+    return {
+        "gpu_slot": status.value,
+        "state": status.state,
+        "busy": status.busy,
+        "run_id": status.run_id,
+        "gpus": (
+            None
+            if status.gpus is None
+            else [
+                {
+                    key: gpu[key]
+                    for key in ("index", "name", "uuid", "memory_used_mib", "memory_total_mib")
+                }
+                for gpu in status.gpus
+            ]
+        ),
+        "gpus_reason": status.gpus_reason,
+    }
+
+
 def snapshot_document(snapshot: MonitorSnapshot) -> dict:
     batches = _batch_entries(snapshot)
     return {
@@ -163,4 +185,5 @@ def snapshot_document(snapshot: MonitorSnapshot) -> dict:
         "runs": [_run(view, batches, snapshot.taken_at) for view in snapshot.running],
         "queue": [_batch(batch) for batch in snapshot.queued],
         "logins": [_login(view) for view in snapshot.profiles],
+        "gpu_slots": [_gpu_slot(status) for status in snapshot.gpu_slots],
     }

@@ -1,0 +1,74 @@
+"""This host's GPU Slots as the monitor shows them, read without taking any GPU Slot's lock."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from silverquillm.karn.model_server import GpuReading, gpu_slots
+
+from .live import LiveRun
+from .locks import lock_held
+
+
+@dataclass(frozen=True)
+class GpuSlotStatus:
+    value: str | None
+    """The slot's ``CUDA_VISIBLE_DEVICES``; None for a host's one unpinned slot."""
+    held: bool | None
+    """Whether a run holds the slot's lock; None when the lock table is unavailable."""
+    busy: str | None
+    """Why another job keeps the slot busy (``compute_process``, ``memory_used``), or None."""
+    gpus: tuple[dict[str, Any], ...] | None
+    """The slot's GPUs from ``nvidia-smi``; None, with ``gpus_reason``, when unread."""
+    gpus_reason: str | None = None
+    run_id: str | None = None
+    """The live run whose server is on this slot, when the slot is held."""
+
+    @property
+    def state(self) -> str:
+        """One word, most blocking first."""
+        if self.held:
+            return "held"
+        if self.busy is not None:
+            return "busy"
+        if self.held is None:
+            return "unknown"
+        return "free"
+
+
+def _holder(value: str | None, runs: list[LiveRun]) -> str | None:
+    # A run that is grading has released its slot; only one still serving holds it.
+    for run in runs:
+        serving = run.container is None or run.container.running
+        if run.model_server and run.gpu_slot == value and serving:
+            return run.run_id
+    return None
+
+
+def gpu_slot_statuses(
+    state_root: Path | None,
+    configured: tuple[str, ...] | None,
+    held,
+    reading: GpuReading,
+    runs: list[LiveRun],
+) -> list[GpuSlotStatus]:
+    """Every GPU Slot in config order; the held state comes from the kernel's lock table."""
+    if state_root is None:
+        return []
+    statuses = []
+    for slot in gpu_slots(state_root, configured):
+        locked = lock_held(slot.lock_path, held)
+        gpus = slot.gpus(reading)
+        statuses.append(
+            GpuSlotStatus(
+                slot.value,
+                locked,
+                slot.busy(reading),
+                None if gpus is None else tuple(gpus),
+                reading.reason if gpus is None else None,
+                _holder(slot.value, runs) if locked else None,
+            )
+        )
+    return statuses

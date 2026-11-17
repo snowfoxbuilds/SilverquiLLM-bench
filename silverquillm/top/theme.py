@@ -105,6 +105,7 @@ Screen {{ background: {c("background")}; color: {c("text")}; overflow: hidden; }
 #logins {{ width: 1fr; height: 100%; }}
 #pool-row {{ height: auto; }}
 #pool-row.stacked {{ layout: vertical; }}
+#gpu-slots {{ height: auto; margin-top: 1; }}
 .pool {{ width: 1fr; height: auto; }}
 #pool-row #pool-claude {{ margin-right: 3; }}
 #pool-row.stacked #pool-claude {{ margin-right: 0; margin-bottom: 1; }}
