@@ -1138,6 +1138,7 @@ def test_usage_limit_notes_in_the_context_are_counted_by_kind_without_their_text
         "value": {"messages": 3, "kinds": {"near_limit": 1, "release": 1, "wrap_up": 1}},
         "completeness": "complete",
         "reasons": [],
+        "diagnostics": [],
     }
     # A flag, never a reason: the run's other measurements stay complete.
     assert result["usage"]["completeness"] == "complete"
@@ -1165,10 +1166,147 @@ def test_built_in_wrap_up_texts_are_recognized_without_the_note_field():
     assert result["usage_wrap_up"]["value"]["kinds"] == {"near_limit": 1, "wrap_up": 1}
 
 
-def test_a_malformed_usage_limit_note_is_counted_as_unknown_and_flagged():
-    rows, problems = normalize_transcript([*main_transcript(), usage_note(3, "Not A Label!")])
-    assert problems == ["native_label_rejected"]
-    assert [row["note"] for row in rows if row["kind"] == "usage_limit_note"] == ["unknown"]
+REJECTED_UUID = "not a uuid sk-ant-secret"
+MALFORMED_NOTES = {
+    "label": ({"note": "Not A Label!"}, "unknown", "note_label_rejected", "Not A Label!"),
+    "uuid": (
+        {"note": "near_limit", "uuid": REJECTED_UUID},
+        "near_limit",
+        "note_identity_rejected",
+        REJECTED_UUID,
+    ),
+}
+
+
+def malformed_note(case):
+    fields, *_ = MALFORMED_NOTES[case]
+    note = json.loads(usage_note(3, fields["note"]))
+    note["uuid"] = fields.get("uuid", note["uuid"])
+    return json.dumps(note)
+
+
+@pytest.mark.parametrize("case", MALFORMED_NOTES)
+def test_a_malformed_usage_limit_note_is_diagnosed_on_its_event_not_in_accounting(case):
+    _, kind, diagnostic, rejected = MALFORMED_NOTES[case]
+    rows, problems = normalize_transcript([*main_transcript(), malformed_note(case)])
+    # The accounting's problems decide its completeness; a note's own fault is not one of them.
+    assert problems == []
+    [note] = [row for row in rows if row["kind"] == "usage_limit_note"]
+    assert (note["note"], note["diagnostics"]) == (kind, [diagnostic])
+    assert rejected not in json.dumps(rows)
+    result = summarize_claude_events(rows, exit_kind="completed")
+    assert result["usage_wrap_up"]["value"] == {"messages": 1, "kinds": {kind: 1}}
+    assert result["usage_wrap_up"]["completeness"] == "complete"
+    assert result["usage_wrap_up"]["diagnostics"] == [diagnostic]
+
+
+def collect(tmp_path, transcript, *payloads):
+    """A harvested run: its summary, and the summary replayed from its retained events."""
+    session = tmp_path / "work/projects/-workspace"
+    session.mkdir(parents=True)
+    (session / (SESSION + ".jsonl")).write_text("\n".join(transcript) + "\n")
+    with ClaudeTelemetryCollector(tmp_path / "run") as collector:
+        collector.harvest_native(tmp_path / "work")
+        for payload in payloads:
+            collector.ingest_otlp(payload)
+        result = collector.finalize(exit_kind="completed")
+    retained = (tmp_path / "run/observations.events.jsonl").read_text()
+    replayed = [json.loads(row) for row in retained.splitlines()]
+    recovered = summarize_events(replayed, exit_kind="completed", adapter="claude")
+    return result, recovered, retained + (tmp_path / "run/observations.json").read_text()
+
+
+def api_payload(request, source="repl_main_thread"):
+    return otlp(
+        request_id=request,
+        query_source=source,
+        input_tokens="10",
+        cache_read_tokens="4000",
+        cache_creation_tokens="300",
+        output_tokens="50",
+        cost_usd=0.0123,
+    )
+
+
+def accounting(result):
+    return {key: value for key, value in result.items() if key != "usage_wrap_up"}
+
+
+@pytest.mark.parametrize("case", MALFORMED_NOTES)
+def test_a_malformed_note_leaves_harvested_accounting_as_a_clean_note_does(tmp_path, case):
+    _, kind, diagnostic, rejected = MALFORMED_NOTES[case]
+    otel = (api_payload("req_01"), api_payload("req_02"))
+    clean, clean_recovered, _ = collect(
+        tmp_path / "clean", [*main_transcript(), usage_note(3, "near_limit")], *otel
+    )
+    result, recovered, retained = collect(
+        tmp_path / "malformed", [*main_transcript(), malformed_note(case)], *otel
+    )
+    assert clean["reported_cost"]["completeness"] == "complete"
+    assert accounting(result) == accounting(clean)
+    assert accounting(recovered) == accounting(clean_recovered)
+    for summary in (result, recovered):
+        assert summary["usage_wrap_up"] == {
+            "value": {"messages": 1, "kinds": {kind: 1}},
+            "completeness": "complete",
+            "reasons": [],
+            "diagnostics": [diagnostic],
+        }
+    assert rejected not in retained
+
+
+GAPS = {
+    "an unmatched ordinary request": (
+        api_payload("req_missing", "other"),
+        "native_usage_unavailable_for_request",
+    ),
+    "an unmatched tool call": (
+        otlp(name="claude_code.tool_result", tool_use_id="toolu_09"),
+        "otel_tool_call_without_transcript",
+    ),
+}
+
+
+@pytest.mark.parametrize("gap", GAPS)
+def test_otel_activity_missing_from_the_transcripts_makes_the_counts_a_lower_bound(tmp_path, gap):
+    payload, reason = GAPS[gap]
+    transcript = [*main_transcript(), usage_note(3, "near_limit")]
+    result, recovered, _ = collect(
+        tmp_path, transcript, api_payload("req_01"), api_payload("req_02"), payload
+    )
+    for summary in (result, recovered):
+        assert summary["usage_wrap_up"] == {
+            "value": {"messages": 1, "kinds": {"near_limit": 1}},
+            "completeness": "partial",
+            "reasons": [reason],
+            "diagnostics": [],
+        }
+
+
+def test_a_reconciled_compaction_request_does_not_degrade_the_counts(tmp_path):
+    transcript = [
+        *main_transcript(),
+        line("system", second=4, subtype="compact_boundary"),
+        usage_note(5, "near_limit"),
+    ]
+    otel = (api_payload("req_01"), api_payload("req_02"), api_payload("req_c", "compact"))
+    result, recovered, _ = collect(tmp_path, transcript, *otel)
+    assert "compaction_usage_unavailable" not in result["usage"]["reasons"]
+    for summary in (result, recovered):
+        assert summary["usage_wrap_up"]["completeness"] == "complete"
+        assert summary["usage_wrap_up"]["value"] == {"messages": 1, "kinds": {"near_limit": 1}}
+
+
+def test_a_fully_read_run_without_notes_is_a_complete_zero(tmp_path):
+    otel = (api_payload("req_01"), api_payload("req_02"))
+    result, recovered, _ = collect(tmp_path, main_transcript(), *otel)
+    for summary in (result, recovered):
+        assert summary["usage_wrap_up"] == {
+            "value": {"messages": 0, "kinds": {}},
+            "completeness": "complete",
+            "reasons": [],
+            "diagnostics": [],
+        }
 
 
 def test_usage_wrap_up_is_missing_when_no_transcript_was_read(tmp_path):
