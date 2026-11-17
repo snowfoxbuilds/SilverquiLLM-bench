@@ -53,8 +53,9 @@ def _execute(**kwargs):
     state = kwargs["state_root"]
     name = kwargs["construct"]
     plugin = kwargs["benchmark_id"]
-    with (state / (name + ".attempts")).open("a") as attempts:
-        attempts.write("attempt\n")
+    attempts = state / (name + ".attempts")
+    # One entry's attempts run one after another, so rewriting the log whole is safe.
+    _publish(attempts, (attempts.read_text() if attempts.exists() else "") + "attempt\n")
     with contextlib.ExitStack() as held:
         login = None
         started = None
@@ -83,7 +84,7 @@ def _execute(**kwargs):
             for fd in Path("/proc/self/fd").iterdir()
             if fd.exists()
         )
-        (state / (name + ".started")).write_text(started or login or "unpooled")
+        _publish(state / (name + ".started"), started or login or "unpooled")
         status = "completed"
         try:
             _wait_file(state / (name + ".release"))
@@ -180,17 +181,25 @@ def _running(directory, state):
     process.start()
     try:
         yield process
-    finally:
-        process.join(0.5)
-        if process.is_alive():
-            os.kill(process.pid, signal.SIGTERM)
+    except BaseException:
+        _stop(process, grace=0.5)
+        raise
+    # The body waited for the scheduler's terminal marker, so it is already exiting. SIGTERM
+    # now would land after terminate_as_interrupt is uninstalled and kill it outright.
+    _stop(process, grace=20)
+    assert process.exitcode == 0
+    process.close()
+
+
+def _stop(process, *, grace):
+    process.join(grace)
+    if process.is_alive():
+        os.kill(process.pid, signal.SIGTERM)
         process.join(20)
-        if process.is_alive():
-            process.kill()
-            process.join()
-            pytest.fail("scheduler did not drain its workers")
-        assert process.exitcode == 0
-        process.close()
+    if process.is_alive():
+        process.kill()
+        process.join()
+        pytest.fail("scheduler did not drain its workers")
 
 
 def test_native_workers_fill_slots_and_refill_before_grading_finishes(tmp_path):
