@@ -386,7 +386,7 @@ class GpuSlotsPanel(Static):
         state = status.state
         if state == "held":
             mark, role = theme.glyph("tapped"), "text"
-        elif state == "busy":
+        elif state in ("busy", "unusable"):
             mark, role = theme.glyph("blocked"), "bad"
         elif state == "unknown":
             mark, role = theme.glyph("lock_unknown"), "muted"
@@ -408,6 +408,8 @@ class GpuSlotsPanel(Static):
         fraction = sum(used) / sum(total) if gpus and numbers and sum(total) else None
         if state == "held":
             detail = f"held · {status.run_id[:8]}" if status.run_id else "held"
+        elif state == "unusable":
+            detail = "unusable · " + status.unusable
         elif state == "busy":
             detail = "busy · " + (
                 "another process" if status.busy == "compute_process" else "memory in use"

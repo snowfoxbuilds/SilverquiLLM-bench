@@ -142,6 +142,7 @@ def _gpu_slot(status: GpuSlotStatus) -> dict:
         "gpu_slot": status.value,
         "state": status.state,
         "busy": status.busy,
+        "unusable": status.unusable,
         "run_id": status.run_id,
         "gpus": (
             None

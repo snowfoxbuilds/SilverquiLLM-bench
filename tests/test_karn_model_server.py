@@ -181,7 +181,7 @@ def no_gpus(monkeypatch):
     from silverquillm.karn import model_server
 
     reading = GpuReading(None, reason="nvidia_smi_unavailable")
-    monkeypatch.setattr(model_server, "read_gpus", lambda: reading)
+    monkeypatch.setattr(model_server, "read_gpus", lambda **_: reading)
     return reading
 
 

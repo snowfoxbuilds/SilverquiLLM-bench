@@ -219,7 +219,9 @@ class Monitor:
     # container's recent log once per snapshot for a live usage reading instead.
     sample_usage: bool = False
     hostname: Callable[[], str] | None = None
-    gpu_reader: Callable[[], GpuReading] = read_gpus
+    gpu_reader: Callable[[], GpuReading] | None = None
+    """Reads ``nvidia-smi``; by default as one of the host's probes, honouring an in-flight one
+    without recording its own, since the monitor writes nothing."""
 
     def __post_init__(self):
         self._config_error: str | None = None
@@ -546,12 +548,18 @@ class Monitor:
             gpu_slots=self._gpu_slots(held, runs),
         )
 
+    def _read_gpus(self) -> GpuReading:
+        if self.gpu_reader is not None:
+            return self.gpu_reader()
+        state_root = self.path("state_root")
+        return read_gpus(state_root=state_root, record=False) if state_root else read_gpus()
+
     def _gpu_slots(self, held, runs) -> list[GpuSlotStatus]:
         """Only a host configured for a local model server has GPU Slots to show."""
         if self.config.gpu_slots is None and not self.config.llama_cpp:
             return []
         return gpu_slot_statuses(
-            self.path("state_root"), self.config.gpu_slots, held, self.gpu_reader(), runs
+            self.path("state_root"), self.config.gpu_slots, held, self._read_gpus(), runs
         )
 
     def output(self, run_id: str, stream: str | None = None, since: int = 0) -> list[LogLine]:

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from silverquillm.karn.model_server import GpuReading, gpu_slots
+from silverquillm.karn.model_server import GpuReading, gpu_slots, slot_unusable
 
 from .live import LiveRun, Stage
 from .locks import lock_held
@@ -25,12 +25,17 @@ class GpuSlotStatus:
     gpus_reason: str | None = None
     run_id: str | None = None
     """The live run whose server is on this slot, when the slot is held."""
+    unusable: str | None = None
+    """Why no run can use the slot, as admission judges it: a GPU ``nvidia-smi`` does not list,
+    or a lock file this user cannot open."""
 
     @property
     def state(self) -> str:
-        """One word, most blocking first."""
+        """One word, most blocking first; a held slot reads held whatever else is true."""
         if self.held:
             return "held"
+        if self.unusable is not None:
+            return "unusable"
         if self.busy is not None:
             return "busy"
         if self.held is None:
@@ -70,6 +75,7 @@ def gpu_slot_statuses(
                 None if gpus is None else tuple(gpus),
                 reading.reason if gpus is None else None,
                 _holder(slot.value, runs) if locked else None,
+                slot_unusable(slot, reading),
             )
         )
     return statuses

@@ -25,7 +25,7 @@ from .execution import NATIVE_TELEMETRY, host_model_server, run_benchmark
 from .grader import DEFAULT_GRADING_TIMEOUT
 from .login import LoginInUseError
 from .login_pool import LoginPool, LoginPoolUnavailableError, logins_root
-from .model_server import ModelServerHost, gpu_slot_availability, gpu_slots, read_gpus
+from .model_server import ModelServerHost, gpu_slot_availability, gpu_slots
 from .records import RecordWritePendingError
 from .scheduler_worker import SpawnWorker, owner_alive
 
@@ -416,7 +416,7 @@ class KarnScheduler:
         worker_factory=SpawnWorker,
         slot_poll_seconds: float = 5.0,
         model_server_host: ModelServerHost | None = None,
-        gpu_reader=read_gpus,
+        gpu_reader=None,
     ):
         self.directory = Path(batches_dir).resolve()
         self.options = {

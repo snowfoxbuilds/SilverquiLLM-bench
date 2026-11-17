@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import functools
 import hashlib
 import http.client
 import json
@@ -444,9 +445,78 @@ def _gpu_number(text: str):
 # and no other starts until it is gone, so a stuck driver leaks one process, not one per read.
 _NVIDIA_SMI = threading.Lock()
 _abandoned: list[subprocess.Popen] = []
+PROBE_RECORD = "nvidia-smi-probe.json"
+PROBE_LOCK = ".nvidia-smi-probe.lock"
 
 
-def _bounded(argv: list[str]) -> tuple[int, bytes]:
+def _process_start(pid: int) -> str | None:
+    """A live process's start time, which a reused PID cannot share; None once it is gone."""
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+    except (OSError, IndexError):
+        return None
+    if len(fields) < 20 or fields[0] in ("Z", "X"):
+        return None
+    return fields[19]
+
+
+class HostProbes:
+    """The host's one in-flight ``nvidia-smi``, recorded under the state root from its start
+    until it is gone, so a probe outlives the process that started it: every worker, the
+    scheduler and a direct run start none while a recorded one lives. A reader that must not
+    write, as the monitor, honours the record but keeps none of its own."""
+
+    def __init__(self, state_root: Path, *, record: bool = True):
+        self.root, self.record = Path(state_root), record
+
+    def _live(self) -> bool:
+        try:
+            document = json.loads((self.root / PROBE_RECORD).read_text())
+            pid, started = document["pid"], document["start"]
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
+        return type(pid) is int and _process_start(pid) == started
+
+    def start(self, argv: list[str]) -> subprocess.Popen:
+        if not self.record:
+            if self._live():
+                raise OSError("nvidia_smi_in_flight")
+            return _spawn(argv)
+        self.root.mkdir(parents=True, exist_ok=True)
+        with (self.root / PROBE_LOCK).open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if self._live():
+                raise OSError("nvidia_smi_in_flight")
+            process = _spawn(argv)
+            started = _process_start(process.pid)
+            _write_record(self.root / PROBE_RECORD, {"pid": process.pid, "start": started})
+        return process
+
+    def settle(self, process: subprocess.Popen) -> None:
+        """Clear the record once its probe is gone; a probe still alive stays recorded."""
+        if not self.record or process.poll() is None:
+            return
+        path = self.root / PROBE_RECORD
+        with contextlib.suppress(OSError), (self.root / PROBE_LOCK).open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            with contextlib.suppress(OSError, ValueError):
+                if json.loads(path.read_text()).get("pid") == process.pid:
+                    path.unlink()
+
+
+def _write_record(path: Path, document: dict) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}")
+    temporary.write_text(json.dumps(document))
+    os.replace(temporary, path)
+
+
+def _spawn(argv: list[str]) -> subprocess.Popen:
+    return subprocess.Popen(
+        argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+    )
+
+
+def _bounded(argv: list[str], probes: HostProbes | None = None) -> tuple[int, bytes]:
     """Run *argv* for at most :data:`NVIDIA_SMI_SECONDS`, never waiting on a process that
     will not die: an ``nvidia-smi`` stuck in the kernel is abandoned, not reaped, and while it
     lives, or another read is in flight, no other starts (``OSError``)."""
@@ -456,18 +526,21 @@ def _bounded(argv: list[str]) -> tuple[int, bytes]:
         _abandoned[:] = [process for process in _abandoned if process.poll() is None]
         if _abandoned:
             raise OSError("nvidia_smi_in_flight")
-        process = subprocess.Popen(
-            argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
-        )
+        process = probes.start(argv) if probes is not None else _spawn(argv)
         try:
             output, _ = process.communicate(timeout=NVIDIA_SMI_SECONDS)
-        except subprocess.TimeoutExpired:
+        except BaseException:
+            # A timeout or an interruption: the probe is abandoned, and tracked while it lives.
             with contextlib.suppress(OSError):
                 process.kill()
             with contextlib.suppress(OSError):
                 process.stdout.close()
-            _abandoned.append(process)
+            if process.poll() is None:
+                _abandoned.append(process)
             raise
+        finally:
+            if probes is not None:
+                probes.settle(process)
         return process.returncode, output
     finally:
         _NVIDIA_SMI.release()
@@ -486,10 +559,15 @@ def _nvidia_smi(query: list[str], run) -> list[list[str]]:
     ]
 
 
-def read_gpus(run=None) -> GpuReading:
+def read_gpus(run=None, *, state_root: Path | None = None, record: bool = True) -> GpuReading:
     """Every GPU's facts and the GPUs running a compute process; nothing, with a reason, when
-    ``nvidia-smi`` is missing, fails, hangs or says something unreadable."""
-    run = run or _bounded
+    ``nvidia-smi`` is missing, fails, hangs or says something unreadable.
+
+    Given the *state_root*, the probe is one of the host's (:class:`HostProbes`); a reader
+    that must not write passes ``record=False``."""
+    if run is None:
+        probes = HostProbes(state_root, record=record) if state_root is not None else None
+        run = functools.partial(_bounded, probes=probes)
     try:
         rows = _nvidia_smi(["--query-gpu=" + GPU_QUERY], run)
         apps = _nvidia_smi(["--query-compute-apps=gpu_uuid,pid,used_memory"], run)
@@ -643,6 +721,11 @@ def _lock(slot: GpuSlot):
     return handle
 
 
+def _host_reader(slots: tuple[GpuSlot, ...]):
+    """This host's reader, one of its recorded probes; looked up at call time."""
+    return functools.partial(read_gpus, state_root=slots[0].lock_path.parent)
+
+
 def _needs_reading(slots: tuple[GpuSlot, ...]) -> bool:
     return any(slot.value is not None for slot in slots)
 
@@ -661,7 +744,7 @@ def claim_gpu_slot(slots: tuple[GpuSlot, ...], read=None, inherited=None) -> Gpu
     A slot naming a GPU ``nvidia-smi`` does not list, or whose lock file cannot be opened, is
     unusable and skipped, never the end of the run; with no slot usable at all the error is
     ``gpu_slot_unknown_gpu:<values>`` when unknown GPUs are why. Either way it defers."""
-    reading = (read or read_gpus)()
+    reading = (read or _host_reader(slots))()
     unusable, unknown = [], []
     for slot in slots:
         if slot.unknown_gpus(reading):
@@ -694,20 +777,29 @@ def gpu_slot_availability(
     table, never by taking a lock a run is about to claim. The claim stays authoritative."""
     from silverquillm.monitor.locks import PROC_LOCKS, held_locks, lock_held
 
-    reading = (read or read_gpus)() if _needs_reading(slots) else GpuReading(None)
+    reading = (read or _host_reader(slots))() if _needs_reading(slots) else GpuReading(None)
     held = held_locks(locks or PROC_LOCKS)
     claimable, unusable = False, []
     for slot in slots:
-        if slot.unknown_gpus(reading):
-            unusable.append(_unknown(slot))
-        elif _unusable(slot.lock_path):
-            unusable.append(_lock_unusable(slot.lock_path, "Permission denied"))
+        if (reason := slot_unusable(slot, reading)) is not None:
+            unusable.append(reason)
         elif (
             slot.busy(reading) is None
             and lock_held(slot.lock_path, held, follow_symlinks=True) is not True
         ):
             claimable = True
     return claimable, tuple(unusable)
+
+
+def slot_unusable(slot: GpuSlot, reading: GpuReading) -> str | None:
+    """Why no run can use *slot*, judged without opening or locking anything: a GPU a readable
+    ``nvidia-smi`` does not list, or a lock file this user cannot open. An unread ``nvidia-smi``
+    alone never makes a slot unusable. Admission and the monitor share this judgement."""
+    if slot.unknown_gpus(reading):
+        return _unknown(slot)
+    if _unusable(slot.lock_path):
+        return _lock_unusable(slot.lock_path, "Permission denied")
+    return None
 
 
 def _unusable(path: Path) -> bool:
@@ -763,7 +855,7 @@ def claim_model_server(plan: ModelServerPlan, read=None, inherited=None) -> Mode
     The GPU selection is fixed at the claim, so the server gets the selection the run records
     before launch, whatever the runner's environment says later."""
     slots = gpu_slots(plan.state_root, plan.gpu_slots)
-    return replace(plan, claim=claim_gpu_slot(slots, read or read_gpus, inherited))
+    return replace(plan, claim=claim_gpu_slot(slots, read, inherited))
 
 
 def server_environment(
