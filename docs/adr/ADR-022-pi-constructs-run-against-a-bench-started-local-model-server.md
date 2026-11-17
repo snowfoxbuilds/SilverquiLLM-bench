@@ -18,7 +18,7 @@ The recipe points its agent at `http://model-server:8080/v1`, as pi's `CONSTRUCT
 
 The host config maps each llama.cpp build to a binary, names a models directory, and holds only what that host needs (amended 2026-11-16, #272).
 Before any evidence exists, the bench refuses a missing build, a binary whose `--version` reports another build, or a missing declared file.
-During the run, it claims one of the host's GPU Slots, so no two servers share a GPU (amended 2026-11-16, #272), verifies each file's digest, and starts `llama-server` on loopback, pinned to that GPU Slot's GPUs, from a clean environment (amended 2026-11-16, #272), with the recipe's flags and the construct's model as its alias.
+During the run, it claims one of the host's GPU Slots, so no two servers share a GPU (amended 2026-11-16, #272), verifies each file's digest, and starts `llama-server` on loopback, pinned to that GPU Slot's GPUs, from a clean environment that keeps only the runner's GPU selection on a host without GPU Slots (amended 2026-11-16, #272), with the recipe's flags and the construct's model as its alias.
 A host-side relay forwards each request to the server and records its usage, the server's timings and a compact transcript.
 The workload reaches the relay only through the run's proxy sidecar, whose one plain-HTTP listener the workload resolves as `model-server` and which serves only the run's own internal network.
 The relay's measurements carry one thread, and subagent use as unknown: one server answers every agent process, so the relay cannot count them.

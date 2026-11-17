@@ -3,7 +3,7 @@ Last updated: 2026-11-16
 
 # Local Model Server
 
-A construct may be served by a llama.cpp `llama-server` the bench starts on the host for each run, pinned to one of the host's GPU Slots and observed by a host-side relay.
+A construct may be served by a llama.cpp `llama-server` the bench starts on the host for each run, pinned to one of the host's GPU Slots when it lists them, and observed by a host-side relay.
 
 ## Context
 
@@ -51,7 +51,7 @@ The bench refuses only the flags it owns or that would defeat the record (grilli
 | `--log-file`, `--slot-save-path` | the server writes only where the bench puts it |
 | any other flag naming an input file | an input file is declared in `files`, so its digest is verified and recorded |
 
-`environment` refuses `LLAMA_ARG_*`, which llama.cpp reads as flags, and `CUDA_VISIBLE_DEVICES` and `CUDA_DEVICE_ORDER`, which the GPU Slot sets.
+`environment` refuses `LLAMA_ARG_*`, which llama.cpp reads as flags, and `CUDA_VISIBLE_DEVICES` and `CUDA_DEVICE_ORDER`, which the GPU selection owns.
 
 ### Host configuration
 
@@ -60,27 +60,27 @@ Before any evidence exists, a run is refused if the build is not mapped, if the 
 
 ### GPU Slots
 
-A host serves as many model-server runs at once as it has GPU Slots (grilling 2026-11-16).
+A host that lists GPU Slots serves as many model-server runs at once as it has GPU Slots (grilling 2026-11-16).
 `[model_server] gpu_slots` lists them, each a `CUDA_VISIBLE_DEVICES` value such as `"0"` or `"0,1"`, and a host config whose GPU Slots share a GPU is refused.
-Without `gpu_slots` the host has one GPU Slot, locked by `<state_root>/model-server.lock`, and the server sees every GPU the runner sees.
+A host need not list `gpu_slots`, and then serves model-server runs exactly as before GPU Slots existed (grilling 2026-11-16): one run at a time, under `<state_root>/model-server.lock`, on the GPUs the runner's own `CUDA_VISIBLE_DEVICES` and `CUDA_DEVICE_ORDER` select, with no busy check, since a host's own display or other work may hold GPU memory there.
 With them, each GPU Slot's lock is named by its value (`model-server-gpu-0.lock`), so reordering the list never moves a held lock onto another GPU; the operator changes `gpu_slots` only while the scheduler is drained.
 
-A run claims the first free GPU Slot before it is recorded as started, the way a run claims a Login Profile.
-A GPU Slot is free when its lock is free, no compute process runs on its GPUs, and none of its GPUs reports more than 1 GiB of memory used: another user's job, or the server of a runner that has just died, keeps it busy.
+A run claims the first free GPU Slot, or the host-wide lock without `gpu_slots`, before it is recorded as started, the way a run claims a Login Profile.
+With `gpu_slots`, a GPU Slot is free when its lock is free, no compute process runs on its GPUs, and none of its GPUs reports more than 1 GiB of memory used: another user's job, or the server of a runner that has just died, keeps it busy.
 The memory bound catches a job whose process `nvidia-smi` does not list to the operator's user (grilling 2026-11-16).
-A direct `silverquillm run` finding no free GPU Slot is refused with `model_server_busy`, before any evidence exists; the scheduler defers the entry, in queue order, until one frees.
-The GPU Slot is released when the server stops, so another run may claim it while this one grades.
+A direct `silverquillm run` finding nothing free is refused with `model_server_busy`, before any evidence exists; the scheduler defers the entry, in queue order, until one frees.
+The claim is released when the server stops, so another run may claim it while this one grades.
 
 ### Serving a run
 
-Once its GPU Slot is claimed, the run:
+Once its claim is held, the run:
 
 1. verifies every declared file's sha256;
 2. starts `llama-server` on loopback with the recipe's flags and files and `--alias <CONSTRUCT_MODEL>`, logging to `model-server.log` in the run directory;
 3. relays every request to it from a host-side relay on a secret path.
 
 The server never inherits the runner's environment, where a stray `LD_LIBRARY_PATH` or `LLAMA_ARG_*` would change it unseen (grilling 2026-11-16).
-It starts with `PATH` and `HOME`, then the host config's `environment`, then the recipe's, then `CUDA_DEVICE_ORDER=PCI_BUS_ID`, so CUDA numbers the GPUs as `nvidia-smi` does, and, when `gpu_slots` is set, the GPU Slot's `CUDA_VISIBLE_DEVICES`.
+It starts with `PATH` and `HOME`, then the host config's `environment`, then the recipe's, then the GPU selection: with `gpu_slots`, `CUDA_DEVICE_ORDER=PCI_BUS_ID`, so CUDA numbers the GPUs as `nvidia-smi` does, and the GPU Slot's `CUDA_VISIBLE_DEVICES`; without them, the runner's own `CUDA_VISIBLE_DEVICES` and `CUDA_DEVICE_ORDER`, each passed exactly as set, empty or absent, and nothing else of the runner's (grilling 2026-11-16).
 
 The proxy sidecar listens on port 8080 too, serves only clients on the run's own internal network, and forwards only `/v1/` requests of at most 16 MiB, one per connection, to that relay; the workload resolves it as `model-server` through `--add-host`.
 The relay passes on only `POST /v1/chat/completions` and `GET /v1/models`, and refuses a request for more than one choice (`n`).
@@ -94,6 +94,7 @@ Before the run launches its workload, `run-input.json` holds the server facts th
 | Field | Holds |
 | --- | --- |
 | `gpu_slot` | the claimed GPU Slot's value, or null without `gpu_slots` |
+| `cuda_visible_devices`, `cuda_device_order` | the server's effective values, each null when absent; without `gpu_slots` they are the runner's, so the record keeps the selection even when `nvidia-smi` cannot be read |
 | `gpus` | per visible GPU, from `nvidia-smi` at claim: name, UUID, total and used memory, power limit, driver version |
 | `binary_sha256` | the llama-server binary's digest, recorded and never checked |
 | `environment` | the host config's `environment` for the server |
