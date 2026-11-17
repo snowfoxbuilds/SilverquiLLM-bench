@@ -1,9 +1,10 @@
 """Where a run came from, and the clean-source rule a run must meet before it launches.
 
-A record from any host must be traceable to committed sources: the candidate recipe the
-image was built from (Karn's ``karn.config.revision`` image label) and the bench code and
-benchmark data that ran and graded it. A dirty source is refused unless the operator
-passes ``--allow-dirty``, and the record keeps what was overridden.
+A record from any host must be traceable to what ran and graded it. The candidate hash
+binds the result to its definition and image, so a recipe need not be committed: the record
+keeps Karn's ``karn.config.revision`` image label, a commit or a dirty marker, as it is. The
+bench code and benchmark data are not hashed, so a dirty checkout of either is refused unless
+the operator passes ``--allow-dirty``, and the record keeps what was overridden.
 
 The grader mounts the imported ``silverquillm`` package, so a run or regrade is refused
 outright when that package is not the bench root's own: ``--allow-dirty`` cannot override
@@ -43,7 +44,7 @@ FIELDS = {
 
 
 class DirtySourceError(KarnError):
-    """The run's sources are not all committed; the message lists each reason."""
+    """The bench's checkouts are not both committed; the message lists each reason."""
 
 
 class PackageSourceError(KarnError):
@@ -138,7 +139,7 @@ def recipe_revision(image_labels: dict) -> str | None:
 
 
 def collect(image_labels: dict, bench_root: Path, *, allow_dirty: bool) -> dict:
-    """The run's provenance; raises :class:`DirtySourceError` unless every source is clean.
+    """The run's provenance; raises :class:`DirtySourceError` unless both checkouts are clean.
 
     ``bench`` is the checkout of the imported package, the code the grader mounts.
     """
@@ -155,10 +156,6 @@ def collect(image_labels: dict, bench_root: Path, *, allow_dirty: bool) -> dict:
             reasons.append(name + "_status_unavailable")
         elif state["dirty"]:
             reasons.append(name + "_dirty")
-    if revision is None:
-        reasons.append("recipe_revision_unrecorded")
-    elif not COMMIT.fullmatch(revision):
-        reasons.append("recipe_revision_dirty")
     if reasons and not allow_dirty:
         raise DirtySourceError("dirty_source_refused:" + ",".join(reasons))
     return {

@@ -45,8 +45,9 @@ ALLOW_DIRTY_OPTION = click.option(
     "--allow-dirty",
     is_flag=True,
     help=(
-        "Run even though the candidate's recipe or the bench checkout has uncommitted "
-        "changes; the record keeps what was overridden."
+        "Run even though the bench checkout or the benchmark data has uncommitted "
+        "changes; the record keeps what was overridden. A candidate built from an "
+        "uncommitted recipe runs without it."
     ),
 )
 

@@ -172,20 +172,23 @@ records a rule excludes that have no file, and files without a record.
 
 ## Building candidates and provenance
 
-Every host builds and runs the same way, so a record traces to committed
-sources:
+Every host builds and runs the same way, so a record traces to what ran and
+graded it:
 
-1. Commit and push a recipe under `karn/constructs/<label>` before building it.
-2. `karn build <this repo>/karn/constructs/<label> --out <dir>` from the
-   committed tree, never `--worktree`; the image's `karn.config.revision`
+1. Try a recipe from any working tree with `karn build --worktree`; the
+   candidate hash identifies exactly what ran, and the record keeps Karn's
+   dirty marker as its `recipe_revision`.
+2. Before a campaign counts a recipe, commit and push it under
+   `karn/constructs/<label>` and `karn build <this repo>/karn/constructs/<label>
+   --out <dir>` from the committed tree; the image's `karn.config.revision`
    label then names the recipe commit.
 3. Run bench code from a pushed `main` commit with no uncommitted tracked
    change and no untracked file under `silverquillm/` or `benchmarks/`.
 4. Set `host_label` in each host's configuration (or `SILVERQUILLM_HOST_LABEL`).
 5. Use one subscription on one host at a time.
 
-The bench refuses a run that breaks 2 or 3 unless the operator passes
-`--allow-dirty`. Every new Karn record carries `run_metadata.provenance`:
+The bench refuses a run that breaks 3 unless the operator passes
+`--allow-dirty`; an uncommitted recipe is never refused. Every new Karn record carries `run_metadata.provenance`:
 `host_label` and its `host_label_source`, `bench` and `benchmark_root` (each
 `commit` and `dirty`), `recipe_revision`, `allow_dirty`, and the
 `dirty_reasons` that were overridden. The grader image is in

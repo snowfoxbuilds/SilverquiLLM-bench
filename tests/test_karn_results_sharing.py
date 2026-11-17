@@ -393,7 +393,7 @@ def test_a_directory_outside_git_has_no_commit(tmp_path):
     assert provenance.checkout_state(tmp_path) == {"commit": None, "dirty": None}
 
 
-def test_dirty_sources_are_refused_and_an_override_is_recorded(checkout, monkeypatch):
+def test_dirty_checkouts_are_refused_and_an_override_is_recorded(checkout, monkeypatch):
     monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
     monkeypatch.setenv(provenance.HOST_LABEL_ENV, "bench-host-1")
     clean = {provenance.RECIPE_LABEL: "a" * 40}
@@ -401,10 +401,6 @@ def test_dirty_sources_are_refused_and_an_override_is_recorded(checkout, monkeyp
     assert recorded["host_label"] == "bench-host-1" and recorded["dirty_reasons"] == []
     assert provenance.valid(recorded)
 
-    with pytest.raises(provenance.DirtySourceError, match="recipe_revision_dirty"):
-        provenance.collect({provenance.RECIPE_LABEL: "dirty"}, checkout, allow_dirty=False)
-    with pytest.raises(provenance.DirtySourceError, match="recipe_revision_unrecorded"):
-        provenance.collect({}, checkout, allow_dirty=False)
     (checkout / "notes.md").write_text("edited\n")
     with pytest.raises(provenance.DirtySourceError, match="bench_checkout_dirty"):
         provenance.collect(clean, checkout, allow_dirty=False)
@@ -416,14 +412,48 @@ def test_dirty_sources_are_refused_and_an_override_is_recorded(checkout, monkeyp
     assert not provenance.valid({**overridden, "allow_dirty": False})
 
 
+@pytest.mark.parametrize("labels", [{provenance.RECIPE_LABEL: "a" * 40 + "-dirty"}, {}])
+def test_an_uncommitted_or_unrecorded_recipe_is_recorded_not_refused(checkout, monkeypatch, labels):
+    monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
+    recorded = provenance.collect(labels, checkout, allow_dirty=False)
+    assert recorded["recipe_revision"] == labels.get(provenance.RECIPE_LABEL)
+    assert recorded["allow_dirty"] is False and recorded["dirty_reasons"] == []
+    assert provenance.valid(recorded)
+
+
+def test_a_record_that_overrode_a_dirty_recipe_still_validates(checkout, monkeypatch):
+    monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
+    recorded = provenance.collect({provenance.RECIPE_LABEL: "dirty"}, checkout, allow_dirty=True)
+    published = {**recorded, "dirty_reasons": ["recipe_revision_dirty"]}
+    assert provenance.valid(published)
+
+
 def test_a_dirty_run_is_refused_before_any_evidence_exists(tmp_path, checkout, monkeypatch):
     monkeypatch.setattr(execution, "collect_provenance", provenance.collect)
     monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
     opts = options(tmp_path)
-    with pytest.raises(provenance.DirtySourceError, match="recipe_revision_unrecorded"):
+    with pytest.raises(
+        provenance.DirtySourceError, match="benchmark_root_not_a_git_checkout"
+    ) as refused:
         run_benchmark(**opts, run_id="refused")
+    assert "recipe_revision" not in str(refused.value)
     assert not (opts["results_dir"] / "refused").exists()
     assert not opts["results_repo"].exists()
+
+
+def test_a_candidate_from_an_unrecorded_recipe_runs_without_allow_dirty(
+    tmp_path, checkout, monkeypatch
+):
+    monkeypatch.setattr(execution, "collect_provenance", provenance.collect)
+    monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
+    opts = options(tmp_path)
+    git(opts["bench_root"], "init", "--quiet")
+    git(opts["bench_root"], "add", "--all")
+    git(opts["bench_root"], "commit", "--quiet", "-m", "benchmark data")
+    record = run_benchmark(**opts, run_id="trial")
+    recorded = record.run_metadata["provenance"]
+    assert recorded["recipe_revision"] is None
+    assert recorded["allow_dirty"] is False and recorded["dirty_reasons"] == []
 
 
 # ---- the imported package must be the bench root's own -----------------------------------------

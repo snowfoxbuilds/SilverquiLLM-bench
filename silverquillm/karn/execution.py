@@ -349,9 +349,9 @@ def run_benchmark(
     A run takes any free slot of its login plugin's pool and holds it until its login is
     harvested; while every usable slot is busy it waits, before creating any run directory.
     ``on_launch`` is called once the run holds its login and is about to create evidence,
-    so a caller can count the run as started only from then. A candidate built from an
-    uncommitted recipe, or bench code or data with uncommitted changes, is refused unless
-    ``allow_dirty``; the record keeps its provenance either way.
+    so a caller can count the run as started only from then. Bench code or data with
+    uncommitted changes is refused unless ``allow_dirty``; a candidate built from an
+    uncommitted recipe runs, and the record keeps its provenance either way.
     """
     candidate = load_candidate(
         build_output, construct, **({"image_inspector": host.docker.inspect_image} if host else {})
