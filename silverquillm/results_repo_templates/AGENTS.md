@@ -93,7 +93,7 @@ Records graded before these fields existed lack them and remain valid; their sui
 A benchmark with a Known Defect manifest also records `run_metadata.baseline_comparison` (schema 3): `available`, then per suite (`fdn`, `engine`) the sorted Audited Test ids `fixed` and `broken` relative to the unmodified Workspace's grade, and the `baseline` grade's key; or `available: false` with a `reason`. Schema 2 records carry `run_metadata.combined_regression` instead, which also pooled the two suites' counts against a baseline and a Known-Best score, and listed `regressed` where schema 3 lists `broken`.
 A snapshot fallback names its selected source while retaining the final workspace separately.
 Host grading inputs have content fingerprints in `run_metadata.grading_inputs`.
-A run served by a local model server (a pi construct whose definition declares `SILVERQUILLM_MODEL_SERVER`) records `run_metadata.model_server`: the recipe's `engine`, `build`, `model` (`file`, `sha256`), `arguments` and `served_model`, plus the host's `binary`, `binary_version`, `binary_commit` and `model_path`, `model_sha256_verified` (null when the run stopped before verifying), `model_bytes`, `verify_seconds` and `ready_seconds`; a recovered record carries the values the run recorded before launch. Its measurements come from the bench's relay (`native_telemetry.adapter` `model_server`): request rows on thread `main` that also carry `finish_reason` and the server's `timings`, `subagents` null with `subagents_reason` `threads_not_observable` (the relay cannot tell agent processes apart), `coverage.relayed_requests`, `coverage.failed_requests` (refused or errored by the server, ended before the completion's final choice or stream end marker, cancelled at the end of the run, or unfinished; any of them leaves usage partial), `coverage.unfinished_requests` (started and never settled, counted from the relay's `request_started` event), `coverage.transcript_rows_missing` (requests whose `model-transcript.jsonl` row could not be written) and `coverage.requests_with_parameter_overrides`, and `server_timings` (`requests_with_timings`, `prompt_tokens_processed`, `prompt_cache_tokens`, `generated_tokens`, `prompt_seconds`, `generation_seconds`, `prompt_tokens_per_second`, `generation_tokens_per_second`). Such a run is never priced, whatever name it serves the model under: `estimated_cost` and `cost_breakdown` are unavailable with `model_price_unavailable`, and `price_table.models` is empty.
+A run served by a local model server (a construct whose definition declares `SILVERQUILLM_MODEL_SERVER`) records `run_metadata.model_server`: the recipe's `engine`, `build`, `model` (`file`, `sha256`), `arguments` and `served_model`, and only when the recipe sets them its `files` (each `file`, `sha256` and optional `flag`), `environment` (the server variables it sets), `ready_timeout_seconds` and `request_timeout_seconds` (the recipe's limits); plus the host's `binary`, `binary_version`, `binary_commit` and `model_path`, `host.environment` (the host config's server variables, empty when it sets none), `host.binary_sha256` (the llama-server binary's digest, recorded and never checked), `host.gpu_slot` (the GPU Slot the server ran on, as its `CUDA_VISIBLE_DEVICES`; null on a host with no `gpu_slots`), `host.cuda_visible_devices` and `host.cuda_device_order` (the server's effective GPU selection, each null when unset: the slot's, or on a host with no `gpu_slots` the runner's own) and `host.gpus` (each of that slot's GPUs, or on a host with no `gpu_slots` every GPU, from `nvidia-smi` when it was claimed: `index`, `uuid`, `name`, `memory_total_mib`, `memory_used_mib`, `power_limit_w`, `driver_version`; null with `host.gpus_reason` `nvidia_smi_unavailable`, `nvidia_smi_failed` or `nvidia_smi_unreadable` when it could not be read), and for a recipe with `files` `file_paths` and `file_bytes` per file; `model_sha256_verified` (every declared file verified; null when the run stopped before verifying), `model_bytes`, `verify_seconds` and `ready_seconds` (how long the server took to become ready); a recovered record carries the values the run recorded before launch. Its measurements come from the bench's relay (`native_telemetry.adapter` `model_server`): request rows on thread `main` that also carry `finish_reason` and the server's `timings`, `subagents` null with `subagents_reason` `threads_not_observable` (the relay cannot tell agent processes apart), `coverage.relayed_requests`, `coverage.failed_requests` (refused or errored by the server, ended before the completion's final choice or stream end marker, cancelled at the end of the run, or unfinished; any of them leaves usage partial), `coverage.unfinished_requests` (started and never settled, counted from the relay's `request_started` event), `coverage.transcript_rows_missing` (requests whose `model-transcript.jsonl` row could not be written) and `coverage.requests_with_parameter_overrides`, and `server_timings` (`requests_with_timings`, `prompt_tokens_processed`, `prompt_cache_tokens`, `generated_tokens`, `prompt_seconds`, `generation_seconds`, `prompt_tokens_per_second`, `generation_tokens_per_second`). Such a run is never priced, whatever name it serves the model under: `estimated_cost` and `cost_breakdown` are unavailable with `model_price_unavailable`, and `price_table.models` is empty.
 A later recovery observation can have its own record id while `recovery_of` and `execution_run_id` link it to the original model execution; the prior record remains unchanged, and a reader of the records sees that link in the recovery's own record.
 
 The record reader preserves both schemas without changing historical identities or interpreting new data through historical publication rules.
@@ -172,20 +172,23 @@ records a rule excludes that have no file, and files without a record.
 
 ## Building candidates and provenance
 
-Every host builds and runs the same way, so a record traces to committed
-sources:
+Every host builds and runs the same way, so a record traces to what ran and
+graded it:
 
-1. Commit and push a recipe under `karn/constructs/<label>` before building it.
-2. `karn build <this repo>/karn/constructs/<label> --out <dir>` from the
-   committed tree, never `--worktree`; the image's `karn.config.revision`
+1. Try a recipe from any working tree with `karn build --worktree`; the
+   candidate hash identifies exactly what ran, and the record keeps Karn's
+   dirty marker as its `recipe_revision`.
+2. Before a campaign counts a recipe, commit and push it under
+   `karn/constructs/<label>` and `karn build <this repo>/karn/constructs/<label>
+   --out <dir>` from the committed tree; the image's `karn.config.revision`
    label then names the recipe commit.
 3. Run bench code from a pushed `main` commit with no uncommitted tracked
    change and no untracked file under `silverquillm/` or `benchmarks/`.
 4. Set `host_label` in each host's configuration (or `SILVERQUILLM_HOST_LABEL`).
 5. Use one subscription on one host at a time.
 
-The bench refuses a run that breaks 2 or 3 unless the operator passes
-`--allow-dirty`. Every new Karn record carries `run_metadata.provenance`:
+The bench refuses a run that breaks 3 unless the operator passes
+`--allow-dirty`; an uncommitted recipe is never refused. Every new Karn record carries `run_metadata.provenance`:
 `host_label` and its `host_label_source`, `bench` and `benchmark_root` (each
 `commit` and `dirty`), `recipe_revision`, `allow_dirty`, and the
 `dirty_reasons` that were overridden. The grader image is in

@@ -12,13 +12,13 @@ The server's settings (model file, quantization, context, KV-cache type) decide 
 
 ## Decision
 
-A recipe declares its server in `runtime.environment` as `SILVERQUILLM_MODEL_SERVER`: the llama.cpp build, one model file with its sha256, and server flags from a bench allowlist.
+A recipe declares its server in `runtime.environment` as `SILVERQUILLM_MODEL_SERVER`: the llama.cpp build, its model and any other input files with their sha256, any server flags but those the bench owns, and the server's environment and timeouts (amended 2026-11-16, #272).
 Being in the definition, the server is part of the `candidate_hash`, and each configuration is its own campaign.
-The recipe also sets `CONSTRUCT_PI_BASE_URL = "http://model-server:8080/v1"` and `restricted` egress.
+The recipe points its agent at `http://model-server:8080/v1`, as pi's `CONSTRUCT_PI_BASE_URL`, and sets `restricted` egress.
 
-The host config maps each llama.cpp build to a binary and names a models directory.
-Before any evidence exists, the bench refuses a missing build, a binary whose `--version` reports another build, or a missing model file.
-During the run, it holds a host-wide lock, verifies the file's digest, and starts `llama-server` on loopback with the recipe's flags and the construct's model as its alias.
+The host config maps each llama.cpp build to a binary, names a models directory, and holds only what that host needs (amended 2026-11-16, #272).
+Before any evidence exists, the bench refuses a missing build, a binary whose `--version` reports another build, or a missing declared file.
+During the run, it claims one of the host's GPU Slots, so no two servers share a GPU (amended 2026-11-16, #272), verifies each file's digest, and starts `llama-server` on loopback, pinned to that GPU Slot's GPUs, from a clean environment that keeps only the runner's GPU selection on a host without GPU Slots (amended 2026-11-16, #272), with the recipe's flags and the construct's model as its alias.
 A host-side relay forwards each request to the server and records its usage, the server's timings and a compact transcript.
 The workload reaches the relay only through the run's proxy sidecar, whose one plain-HTTP listener the workload resolves as `model-server` and which serves only the run's own internal network.
 The relay's measurements carry one thread, and subagent use as unknown: one server answers every agent process, so the relay cannot count them.
@@ -31,7 +31,8 @@ The relay's measurements carry one thread, and subagent use as unknown: one serv
 - **Negative**: the served model's name is the alias the bench gives it, so `model_match` holds by construction; the model's identity is the verified file digest in the record.
 - **Negative**: a campaign of these runs cannot require `no_subagents`; pi has no subagent tool, but the workload could start a second agent process unseen.
 - **Negative**: a request can override the server's sampling settings; the relay records such overrides but does not refuse them.
-- **Negative**: the host must keep each pinned build and model file for as long as its candidates run; a rebuilt binary with the same build number is not detected.
+- **Negative**: the host must keep each pinned build and model file for as long as its candidates run; a rebuilt binary with the same build number is recorded by its digest but never refused (amended 2026-11-16, #272).
+- **Neutral**: the GPUs a run was served on are host facts in its record, not part of the candidate, so one candidate's runs on different hardware differ in speed but not in identity (amended 2026-11-16, #272).
 - **Neutral**: no price applies, so the Estimated Cost stays incomplete with `model_price_unavailable`, and usage is partial because llama.cpp does not split reasoning tokens out of completion tokens.
 
 ## Alternatives Considered
@@ -39,3 +40,13 @@ The relay's measurements carry one thread, and subagent use as unknown: one serv
 - **`open` egress to a server the operator runs**: the workload would have the internet, and nothing would tie the server's settings to the record.
 - **A llama-server container with GPU access**: needs the NVIDIA container runtime on every host, and the Karn definition has no device field to carry it.
 - **Harvesting pi's own session files**: the pi adapter runs with `--no-session`, and a workload-written file would be the only record of its requests.
+
+## Amendments
+
+- **2026-11-16 (#272)**: the bench allowlist of server flags became a short list of refused ones, and a recipe may declare more files, the server's environment and its timeouts, so a new flag, file or setting is a recipe change rather than a bench change; the server no longer inherits the runner's environment; any agent, not only pi, may be pointed at the server (grilling 2026-11-16).
+- **2026-11-16 (#272)**: a host-wide lock became one lock per GPU Slot, so a multi-GPU host serves one model-server run per GPU Slot; the record gained the GPU Slot, its GPUs and the binary's digest, because runs now come from hosts with different GPUs (grilling 2026-11-16).
+
+## Relevant PRs
+
+- #263 — the bench-started local model server and relay
+- #272 — GPU Slots, recipe-owned server settings, and uncommitted recipes

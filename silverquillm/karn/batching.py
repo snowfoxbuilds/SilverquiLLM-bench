@@ -21,16 +21,19 @@ from silverquillm.queue_state import SchedulerLock, _write_atomically
 
 from . import provenance
 from .definition import KarnError
-from .execution import NATIVE_TELEMETRY, run_benchmark
+from .execution import NATIVE_TELEMETRY, host_model_server, run_benchmark
 from .grader import DEFAULT_GRADING_TIMEOUT
 from .login import LoginInUseError
 from .login_pool import LoginPool, LoginPoolUnavailableError, logins_root
+from .model_server import ModelServerHost, gpu_slot_availability, gpu_slots
 from .records import RecordWritePendingError
 from .scheduler_worker import SpawnWorker, owner_alive
 
 # New batch files declare FORMAT; earlier karn-v4 files keep loading unchanged. The batch
 # format is independent of its candidates' Construct Definition versions.
 FORMAT = "karn-v5"
+# The deferral key of entries waiting for a GPU Slot: no login plugin is named this.
+MODEL_SERVER_POOL = "model_server"
 FORMATS = ("karn-v4", FORMAT)
 
 
@@ -412,6 +415,8 @@ class KarnScheduler:
         allow_dirty: bool = False,
         worker_factory=SpawnWorker,
         slot_poll_seconds: float = 5.0,
+        model_server_host: ModelServerHost | None = None,
+        gpu_reader=None,
     ):
         self.directory = Path(batches_dir).resolve()
         self.options = {
@@ -428,6 +433,8 @@ class KarnScheduler:
         self.executor, self.recoverer = executor, recoverer
         self.worker_factory = worker_factory
         self.slot_poll_seconds = slot_poll_seconds
+        # The host's GPU Slots, as the scheduler sees them to admit model-server entries.
+        self.model_server_host, self.gpu_reader = model_server_host, gpu_reader
         self.warnings = []
         # Why the latest pass could dispatch nothing at all, when its queue ledger failed.
         self.dispatch_blocked: str | None = None
@@ -533,6 +540,20 @@ class KarnScheduler:
         if changed:
             self._save_ledger(entries)
         return entries
+
+    def _gpu_slot_claimable(self) -> bool:
+        """Whether a model-server entry could claim a GPU Slot now; an unreadable host config
+        lets the entry retry and refuse with its own reason."""
+        try:
+            host = self.model_server_host or host_model_server()
+        except KarnError:
+            return True
+        claimable, unusable = gpu_slot_availability(
+            gpu_slots(self.options["state_root"], host.gpu_slots), self.gpu_reader
+        )
+        for problem in unusable:
+            self._warn(problem + "; that GPU Slot is skipped")
+        return claimable
 
     def _dispatch_open(self) -> bool:
         """Whether new runs may launch; each change of dispatch mode is logged once."""
@@ -713,24 +734,31 @@ class KarnScheduler:
                 row["status"] == "running"
                 and "login" in row
                 and row["login"] is None
+                and "gpu_slot" not in row
                 and (row["run_id"] in active or owner_alive(row.get("worker")))
                 for state in states.values()
                 for row in state["runs"]
             )
 
         def retry_claimable(*, retry_dead_workers=False):
+            # One nvidia-smi reading per pass, however many entries wait for a GPU Slot.
+            gpu_claimable = None
             for name, plugin in list(deferred.items()):
                 if plugin is None:
                     if retry_dead_workers:
                         del deferred[name]
                     continue
-                if (
-                    not unpooled_live()
-                    if plugin == "unpooled"
-                    else LoginPool(
+                if plugin == "unpooled":
+                    claimable = not unpooled_live()
+                elif plugin == MODEL_SERVER_POOL:
+                    if gpu_claimable is None:
+                        gpu_claimable = self._gpu_slot_claimable()
+                    claimable = gpu_claimable
+                else:
+                    claimable = LoginPool(
                         logins_root(self.options["state_root"]) / plugin, plugin
                     ).has_claimable_slot()
-                ):
+                if claimable:
                     del deferred[name]
 
         def save(path, state):
@@ -751,6 +779,8 @@ class KarnScheduler:
                 row.update(started_at=datetime.now(UTC).isoformat(), worker=job["worker"].owner)
                 if "login" in job:
                     row["login"] = job["login"]
+                if "gpu_slot" in job:
+                    row["gpu_slot"] = job["gpu_slot"]
                 state["runs"].append(row)
                 save(state_path, state)
 
@@ -773,14 +803,19 @@ class KarnScheduler:
                         self._warn(f"{job['name']}: {value}")
                     elif kind == "released":
                         released = True
+                    elif kind == "gpu_slot":
+                        job["gpu_slot"] = value
                     elif kind == "selected":
                         job["login"] = value
-                        plugin = value.split("/", 1)[0] if value else "unpooled"
+                        if "gpu_slot" in job:
+                            plugin = MODEL_SERVER_POOL
+                        else:
+                            plugin = value.split("/", 1)[0] if value else "unpooled"
                         admitted = not any(
                             queued_before(name, job["name"]) and pool == plugin
                             for name, pool in deferred.items()
                         )
-                        if value is None:
+                        if plugin == "unpooled":
                             admitted = admitted and not unpooled_live()
                         if admitted and interrupted is None and not self._dispatch_open():
                             # A paused entry stays pending: it retries once dispatch reopens.
@@ -798,7 +833,11 @@ class KarnScheduler:
                     elif kind in ("busy", "unavailable"):
                         # A refusal for a closed dispatch is no pool's fault: retry on the timer.
                         deferred[job["name"]] = (
-                            None if job.get("held") else value.rsplit(":", 1)[-1]
+                            None
+                            if job.get("held")
+                            else MODEL_SERVER_POOL
+                            if value == "model_server_busy"
+                            else value.rsplit(":", 1)[-1]
                         )
                         if kind == "unavailable":
                             self.unavailable_logins[job["name"]] = value

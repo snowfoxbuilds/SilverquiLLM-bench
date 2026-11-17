@@ -104,7 +104,7 @@ def test_direct_and_batch_cli_retain_all_three_suites(tmp_path, python_image, be
         candidate.runtime["environment"]["KARN_TEST_IMPLEMENTATIONS"] = json.dumps(reference)
         candidate.definition_path.write_bytes(canonical(candidate.definition))
         candidate = load_candidate(candidate.build_output, "bare")
-    # The fixture uses a local Python image without a committed Karn recipe.
+    # This checkout may be dirty.
     common = [
         "--allow-dirty",
         "--bench-root",

@@ -127,6 +127,10 @@ class ConnectProxy(socketserver.StreamRequestHandler):
         )
 
 
+# How long one model request may stay silent; the recipe's ``request_timeout_seconds`` sets it.
+DEFAULT_MODEL_TIMEOUT_SECONDS = 1800
+
+
 class ModelForward(socketserver.StreamRequestHandler):
     """The workload's plain-HTTP route to the host's model relay: one request per connection,
     only under ``/v1/``, and only to the one relay address the host gave the sidecar."""
@@ -135,7 +139,8 @@ class ModelForward(socketserver.StreamRequestHandler):
 
     def handle(self):
         # Prompt processing at a long context can keep the first byte away for many minutes.
-        self.connection.settimeout(1800)
+        timeout = self.server.model_timeout
+        self.connection.settimeout(timeout)
         remote = None
         try:
             first = self.rfile.readline(8193)
@@ -169,7 +174,7 @@ class ModelForward(socketserver.StreamRequestHandler):
             if len(body) != length:
                 raise ValueError("incomplete_model_request")
             relay = urllib.parse.urlsplit(self.server.model_endpoint)
-            remote = socket.create_connection((relay.hostname, relay.port), timeout=1800)
+            remote = socket.create_connection((relay.hostname, relay.port), timeout=timeout)
             head = (
                 f"{method} {relay.path}{target} HTTP/1.1\r\nHost: {relay.netloc}\r\n"
                 f"Content-Type: application/json\r\nContent-Length: {length}\r\n"
@@ -196,8 +201,14 @@ class ModelForwardServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(self, address, model_endpoint, clients="0.0.0.0/0"):
-        self.model_endpoint = model_endpoint
+    def __init__(
+        self,
+        address,
+        model_endpoint,
+        clients="0.0.0.0/0",
+        model_timeout=DEFAULT_MODEL_TIMEOUT_SECONDS,
+    ):
+        self.model_endpoint, self.model_timeout = model_endpoint, model_timeout
         self.clients = ipaddress.ip_network(clients)
         super().__init__(address, ModelForward)
 
@@ -215,14 +226,22 @@ class ProxyServer(socketserver.ThreadingTCPServer):
         super().__init__(address, ConnectProxy)
 
 
+def model_forward_from_environment(environment, address=("0.0.0.0", 8080)):
+    """The sidecar's model route, as the host configured it, or None without a model server."""
+    if not environment.get("SILVERQUILLM_MODEL_ENDPOINT"):
+        return None
+    return ModelForwardServer(
+        address,
+        environment["SILVERQUILLM_MODEL_ENDPOINT"],
+        environment["SILVERQUILLM_MODEL_CLIENTS"],
+        int(environment.get("SILVERQUILLM_MODEL_TIMEOUT", DEFAULT_MODEL_TIMEOUT_SECONDS)),
+    )
+
+
 if __name__ == "__main__":
     hosts = json.loads(os.environ["SILVERQUILLM_HTTPS_HOSTS"])
-    if os.environ.get("SILVERQUILLM_MODEL_ENDPOINT"):
-        forward = ModelForwardServer(
-            ("0.0.0.0", 8080),
-            os.environ["SILVERQUILLM_MODEL_ENDPOINT"],
-            os.environ["SILVERQUILLM_MODEL_CLIENTS"],
-        )
+    forward = model_forward_from_environment(os.environ)
+    if forward is not None:
         threading.Thread(target=forward.serve_forever, daemon=True).start()
     with ProxyServer(
         ("0.0.0.0", 3128), hosts, os.environ.get("SILVERQUILLM_OTLP_ENDPOINT")

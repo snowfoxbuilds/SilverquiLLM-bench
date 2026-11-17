@@ -430,6 +430,8 @@ def main(argv: list[str] | None = None):
         command = [
             "docker",
             "run",
+            "--runtime",
+            "runc",
             "--rm",
             "--network",
             "none",

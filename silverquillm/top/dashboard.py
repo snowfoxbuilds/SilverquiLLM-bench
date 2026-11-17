@@ -18,7 +18,7 @@ from textual.widgets import DataTable, Static
 
 from silverquillm.karn.login_admin import AGENTS
 from silverquillm.karn.login_pool import slot_order
-from silverquillm.monitor import MonitorSnapshot, ProfileView, RunView, Stage
+from silverquillm.monitor import GpuSlotStatus, MonitorSnapshot, ProfileView, RunView, Stage
 
 from . import format as fmt
 from .theme import Theme
@@ -202,10 +202,12 @@ class LoginsPane(VerticalScroll, can_focus=False):
         with Horizontal(id="pool-row"):
             for provider in POOLS:
                 yield PoolPanel(self.theme_, provider)
+        yield GpuSlotsPanel(self.theme_)
 
     def show(self, snapshot: MonitorSnapshot) -> None:
         self.snapshot = snapshot
         self._arrange()
+        self.query_one(GpuSlotsPanel).show(snapshot)
 
     def on_resize(self) -> None:
         self._arrange()
@@ -348,6 +350,78 @@ class LoginsPane(VerticalScroll, can_focus=False):
             owner.append_text(weekly)
             weekly = owner
         return name, fmt.bar(percent, WEEKLY_BAR, theme), weekly
+
+
+class GpuSlotsPanel(Static):
+    """The host's GPU Slots below the Login Pools, read-only: no key acts on a GPU Slot."""
+
+    def __init__(self, theme: Theme) -> None:
+        super().__init__(id="gpu-slots")
+        self.theme_ = theme
+
+    def show(self, snapshot: MonitorSnapshot) -> None:
+        self.display = bool(snapshot.gpu_slots)
+        if snapshot.gpu_slots:
+            self.update(self.table(snapshot.gpu_slots, self.theme_))
+
+    @staticmethod
+    def table(statuses: list[GpuSlotStatus], theme: Theme) -> Table:
+        """A header with the free count, then one line per GPU Slot in config order."""
+        free = sum(1 for status in statuses if status.state == "free")
+        table = Table.grid(padding=(0, 1))
+        for _ in range(4):
+            table.add_column(no_wrap=True, overflow="ellipsis")
+        table.add_row(
+            Text("GPU slots", style=theme.style("text", bold=True)),
+            Text(),
+            Text(),
+            Text(f"{free}/{len(statuses)} free", style=theme.style("muted")),
+        )
+        for status in statuses:
+            table.add_row(*GpuSlotsPanel.row(status, theme))
+        return table
+
+    @staticmethod
+    def row(status: GpuSlotStatus, theme: Theme) -> tuple[Text, Text, Text, Text]:
+        state = status.state
+        if state == "held":
+            mark, role = theme.glyph("tapped"), "text"
+        elif state in ("busy", "unusable"):
+            mark, role = theme.glyph("blocked"), "bad"
+        elif state == "unknown":
+            mark, role = theme.glyph("lock_unknown"), "muted"
+        else:
+            mark, role = theme.glyph("untapped"), "muted"
+        name = Text(f"{mark} ", style=theme.style(role, bold=state != "free"))
+        name.append(
+            "gpu " + (status.value if status.value is not None else "all"),
+            style=theme.style("text" if state == "held" else "muted"),
+        )
+        gpus = status.gpus
+        names = Text(
+            ", ".join(sorted({gpu["name"] for gpu in gpus})) if gpus else status.gpus_reason or "",
+            style=theme.style("muted"),
+        )
+        used = [gpu["memory_used_mib"] for gpu in gpus or ()]
+        total = [gpu["memory_total_mib"] for gpu in gpus or ()]
+        numbers = all(isinstance(value, (int, float)) for value in used + total)
+        fraction = sum(used) / sum(total) if gpus and numbers and sum(total) else None
+        if state == "held":
+            detail = f"held · {status.run_id[:8]}" if status.run_id else "held"
+        elif state == "unusable":
+            detail = "unusable · " + status.unusable
+        elif state == "busy":
+            detail = "busy · " + (
+                "another process" if status.busy == "compute_process" else "memory in use"
+            )
+        else:
+            detail = state
+        return (
+            name,
+            names,
+            fmt.bar(fraction, WEEKLY_BAR, theme),
+            Text(detail, style=theme.style(role)),
+        )
 
 
 class PoolPanel(Static, can_focus=True):

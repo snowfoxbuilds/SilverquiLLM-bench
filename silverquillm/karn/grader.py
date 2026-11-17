@@ -280,7 +280,7 @@ def candidate_python(image_id: str, docker: DockerRunner | None = None) -> str:
         raise GraderError("candidate_image_id_invalid")
     name = "sq-probe-" + uuid.uuid4().hex
     arguments = [
-        "run", "--rm", "--pull", "never", "--name", name, "--label", GRADER_LABEL + "=1",
+        "run", "--runtime", "runc", "--rm", "--pull", "never", "--name", name, "--label", GRADER_LABEL + "=1",
         "--network", "none", "--user", f"{os.getuid()}:{os.getgid()}", "--read-only",
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--no-healthcheck",
         *PYTHON_PROBE_LIMITS,
@@ -402,7 +402,7 @@ class ContainerGrader:
     ) -> DockerRun:
         name = "sq-grade-" + uuid.uuid4().hex
         arguments = [
-            "run", "--rm", "--pull", "never", "--name", name, "--label", GRADER_LABEL + "=1",
+            "run", "--runtime", "runc", "--rm", "--pull", "never", "--name", name, "--label", GRADER_LABEL + "=1",
             "--network", "none", "--user", f"{os.getuid()}:{os.getgid()}", "--read-only",
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
             "--pids-limit", str(self.limits.pids),

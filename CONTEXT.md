@@ -326,6 +326,13 @@ The immutable, benchmark-owned vocabulary of Player Decision kinds and attribute
 
 _Avoid_: "symbol" alone (collides with MTG mana symbols), "symbol set"
 
+**GPU Slot**
+
+A host-local set of GPUs that one model-server run claims at a time and on which its model server runs (grilling 2026-11-16).
+A host's GPU Slots are the number of model-server runs it serves at once, as its Login Profiles are for subscription runs.
+
+_Avoid_: "server slot" and "model-server slot" (llama-server's own `-np` slots are parallel decoding sequences), "slot" alone (Login Profiles are named `slot-<n>`)
+
 **Grader Container**
 
 The network-less, bench-owned container in which every grading pass and engine-viability probe runs the candidate's code, so candidate code never executes on the benchmark host.
@@ -741,3 +748,4 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - Audited tests import whatever engine they run on (`engine.*` — the oracle during validation, the candidate during evaluation); portability comes from every candidate implementing the canonical public API, not from restricting imports. The paradigm forbids private-attribute poking (`_script`, `_resolve_targets`), not engine imports.
 - Mechanics absent from the canonical engine (sos_57 `mana_spent` refund, sos_226 casualty, sos_201 miracle, sos_245 affinity, sos_1 / sos_120 graveyard→exile redirect, sos_97 coin-flip RNG) are exercised indirectly through canonical entrypoints + observable-state assertions, with RNG made deterministic test-side via seed-replacement (`game.rng = random.Random(seed)`); no mechanic-specific test-API support and no engine change.
 - Player-initiated casts/activations carry their targets on the directive; engine-initiated (triggered) objects take no directive and pull targets/choices from the choice script. `ActivateAbility` names the ability by its index into `get_activated_abilities()` / `get_loyalty_abilities()` (printed order).
+- On a host that lists GPU Slots, a model-server run holds exactly one GPU Slot while its model server runs, and no two GPU Slots of a host share a GPU; a host without them serves one model-server run at a time (grilling 2026-11-16).

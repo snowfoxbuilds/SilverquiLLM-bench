@@ -32,7 +32,7 @@ host_label = "dota-pc"                        # else SILVERQUILLM_HOST_LABEL, el
 ## Build and enroll
 
 The candidate recipes live in the results repository, beside the records they produce: `karn/constructs/<label>` in bench-results is a Karn Config Repo, so any host with that repository can rebuild the same candidates.
-Build from its committed tree, without `--worktree`, so every image's `karn.config.revision` label names the recipe commit behind its records:
+Build a campaign's candidates from the committed tree, without `--worktree`, so their images' `karn.config.revision` label names the recipe commit behind their records; a trial build may use `--worktree` (step 1 below):
 
 ```bash
 karn build ~/bench-results/karn --out ~/bench-builds/roster-1
@@ -41,13 +41,13 @@ silverquillm login --build-output ~/bench-builds/roster-1 --construct bare-codex
 
 Every host builds and runs candidates the same way, so any record can be traced to committed sources:
 
-1. Commit and push a recipe change to bench-results before building it, and pull before building someone else's.
-2. Build from the committed tree, `karn build ~/bench-results/karn/constructs/<label> --out <dir>` or the whole `karn` directory, never with `--worktree`.
+1. Try a recipe from any working tree: `karn build --worktree ~/bench-results/karn/constructs/<label> --out <dir>` builds uncommitted changes, and the run records Karn's dirty marker as its recipe revision. The candidate hash still identifies exactly what ran.
+2. Before a campaign counts a recipe, commit and push it to bench-results and build from the committed tree, `karn build ~/bench-results/karn/constructs/<label> --out <dir>`, so its record names the recipe commit; pull before building someone else's.
 3. Run bench code from a pushed `main` commit, with no uncommitted change to a tracked file and no untracked file under `silverquillm/` or `benchmarks/`; a detached worktree per batch keeps runs off the checkout you edit. The imported `silverquillm` must be that worktree's own, since the grader mounts it: install it there (`uv pip install -e .` in the worktree's environment) or set `PYTHONPATH` to the worktree; an environment linked from another checkout grades with that checkout's code.
 4. Set `host_label` in the host configuration, or `SILVERQUILLM_HOST_LABEL`, to a short name for the host (otherwise its hostname is recorded).
 5. Use a subscription on one host at a time; enroll each host's slots with its own logins where you can.
 
-`run` and `scheduler` refuse a run that breaks steps 2 or 3 before creating anything, with `dirty_source_refused:` and each reason: `recipe_revision_unrecorded` or `recipe_revision_dirty` for the image, and `bench_checkout_dirty` or `benchmark_root_dirty` (or `_not_a_git_checkout`) for the checkouts.
+`run` and `scheduler` refuse a run that breaks step 3 before creating anything, with `dirty_source_refused:` and each reason: `bench_checkout_dirty` or `benchmark_root_dirty` (or `_not_a_git_checkout`). A recipe that is not committed is never refused; the record shows it as `recipe_revision` without a commit.
 `--allow-dirty` runs anyway, for development only; the record's `run_metadata.provenance` keeps the overridden reasons beside the host label, both checkouts' commits and the recipe revision.
 `run`, `scheduler`, `regrade` and recovery also refuse, with `package_source_mismatch:`, when the imported package is not `<bench-root>/silverquillm`; `--allow-dirty` does not override it. The refusal comes before anything is created or locked: the scheduler leaves its queue state as it was, and recovery settles, publishes, cleans up and grades nothing, so rerunning from the right environment resumes the same entries. The provenance's `bench` commit is that package's checkout, the code the grader mounted.
 

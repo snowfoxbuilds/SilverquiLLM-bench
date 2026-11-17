@@ -11,6 +11,7 @@ from .candidates import CandidateDisplay, candidate_display
 from .costs import ProvisionalCost, RequestCost
 from .details import CommitEntry, RecordDetail, SnapshotEntry, WorkspaceView
 from .estimates import WeeklyUsage, estimated_percent, weekly_usage
+from .gpus import GpuSlotStatus
 from .history import HistoryStore, RepoFreshness, RunSummary, Score, UsageReading
 from .live import LiveRun, Stage
 from .output import LogFollower, LogLine
@@ -23,6 +24,7 @@ __all__ = [
     "CandidateDisplay",
     "CommitEntry",
     "Counts",
+    "GpuSlotStatus",
     "HistoryStore",
     "LiveRun",
     "LogFollower",

@@ -20,7 +20,7 @@ FIXTURE_IMAGE_ID = "sha256:" + "0" * 64
 VALUE_OPTIONS = {
     "--name", "--label", "--network", "--user", "--pids-limit", "--memory", "--memory-swap",
     "--tmpfs", "--workdir", "--env", "--mount", "--security-opt", "--cap-drop", "--pull",
-    "--log-driver", "--log-opt",
+    "--log-driver", "--log-opt", "--runtime",
 }  # fmt: skip
 FLAG_OPTIONS = {"--rm", "--read-only"}
 CONTAINER_ROOTS = ("/opt/sq", "/grade", "/tmp")

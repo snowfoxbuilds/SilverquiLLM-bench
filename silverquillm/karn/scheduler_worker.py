@@ -12,6 +12,7 @@ from pathlib import Path
 from .definition import KarnError
 from .interruption import terminate_as_interrupt
 from .login_pool import LoginPoolBusyError, LoginPoolUnavailableError
+from .model_server import ModelServerBusyError
 from .records import RecordWritePendingError
 
 
@@ -67,6 +68,13 @@ def execute_worker(connection, executor, arguments):
         except (BrokenPipeError, EOFError, OSError):
             return False
 
+    gpu_slots = []
+
+    def gpu_slot_selected(slot):
+        gpu_slots.append(slot)
+        if not send("gpu_slot", slot):
+            raise KeyboardInterrupt
+
     def request(kind, value=None):
         if not send(kind, value):
             raise KeyboardInterrupt
@@ -75,6 +83,8 @@ def execute_worker(connection, executor, arguments):
         except EOFError:
             raise KeyboardInterrupt from None
         if not admitted:
+            if gpu_slots:
+                raise ModelServerBusyError()
             raise LoginPoolBusyError(
                 "login_pool_busy:" + (value.split("/", 1)[0] if value else "unpooled")
             )
@@ -86,9 +96,15 @@ def execute_worker(connection, executor, arguments):
             login_wait=lambda message: send("warning", message),
             on_login_selected=lambda login: request("selected", login),
             on_login_released=lambda: send("released"),
+            on_gpu_slot_selected=gpu_slot_selected,
             on_launch=lambda: request("launch"),
         )
         send("result", record_outcome(result))
+    except ModelServerBusyError as error:
+        for problem in error.unusable:
+            send("warning", problem + "; that GPU Slot is skipped")
+        # Every refusal for want of a usable GPU Slot defers the entry in the GPU Slot pool.
+        send("busy", "model_server_busy")
     except (LoginPoolBusyError, LoginPoolUnavailableError) as error:
         send("busy" if isinstance(error, LoginPoolBusyError) else "unavailable", str(error))
     except RecordWritePendingError as error:

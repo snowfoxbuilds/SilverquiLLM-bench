@@ -35,6 +35,8 @@ from .model_server import (
     TELEMETRY_ADAPTER,
     ModelRelayCollector,
     ModelServerHost,
+    claim_gpu_slot,
+    gpu_slots,
     model_server_spec,
     plan_model_server,
 )
@@ -162,7 +164,12 @@ def host_model_server() -> ModelServerHost:
         config = load_host_config()
     except HostConfigError as error:
         raise KarnError("host_config_invalid") from error
-    return ModelServerHost(config.models_dir, dict(config.llama_cpp))
+    return ModelServerHost(
+        config.models_dir,
+        dict(config.llama_cpp),
+        dict(config.model_server_environment),
+        config.gpu_slots,
+    )
 
 
 def _login_pool(state_root: Path, candidate) -> LoginPool | None:
@@ -341,6 +348,7 @@ def run_benchmark(
     on_launch=None,
     on_login_selected=None,
     on_login_released=None,
+    on_gpu_slot_selected=None,
     allow_dirty: bool = False,
     model_server_host: ModelServerHost | None = None,
 ) -> KarnRunRecord:
@@ -349,9 +357,14 @@ def run_benchmark(
     A run takes any free slot of its login plugin's pool and holds it until its login is
     harvested; while every usable slot is busy it waits, before creating any run directory.
     ``on_launch`` is called once the run holds its login and is about to create evidence,
-    so a caller can count the run as started only from then. A candidate built from an
-    uncommitted recipe, or bench code or data with uncommitted changes, is refused unless
-    ``allow_dirty``; the record keeps its provenance either way.
+    so a caller can count the run as started only from then. Bench code or data with
+    uncommitted changes is refused unless ``allow_dirty``; a candidate built from an
+    uncommitted recipe runs, and the record keeps its provenance either way.
+
+    A model-server run first claims a free GPU Slot, before the host preflight and the server's
+    ``--version`` probe, so a run that cannot be served costs nothing more; it is refused with
+    ``model_server_busy`` when none is free, and ``on_gpu_slot_selected`` hears which. The slot
+    is released once the run's server is confirmed stopped.
     """
     candidate = load_candidate(
         build_output, construct, **({"image_inspector": host.docker.inspect_image} if host else {})
@@ -364,18 +377,23 @@ def run_benchmark(
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     telemetry = select_native_telemetry(candidate, native_telemetry)
     spec = model_server_spec(candidate.runtime)
-    model_server = None
-    if spec is not None:
-        model_server = plan_model_server(
-            spec, model_server_host or host_model_server(), state_root
-        )
-    host.preflight(candidate, budget_seconds)
-    toolchain = prepare_toolchain(state_root)
+    server_host = (model_server_host or host_model_server()) if spec is not None else None
     run_id = run_id or uuid.uuid4().hex
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", run_id):
         raise KarnError("invalid_run_id")
     run_dir = Path(results_dir).resolve() / run_id
     with contextlib.ExitStack() as held:
+        model_server = None
+        if spec is not None:
+            # First, so a run the scheduler admitted on a stale reading is refused before it
+            # pays for the preflight and the version probe.
+            claim = claim_gpu_slot(gpu_slots(state_root, server_host.gpu_slots))
+            held.callback(claim.release)
+            model_server = plan_model_server(spec, server_host, state_root, claim)
+            if on_gpu_slot_selected is not None:
+                on_gpu_slot_selected(claim.slot.value)
+        host.preflight(candidate, budget_seconds)
+        toolchain = prepare_toolchain(state_root)
         login_hold = held.enter_context(contextlib.ExitStack())
         selected_login = login = None
         if pool is not None:
@@ -551,7 +569,11 @@ def _collect(
 
                 arguments = {}
                 if model_server is not None:
-                    arguments = {"model_endpoint": collector.endpoint}
+                    arguments = {
+                        "model_endpoint": collector.endpoint,
+                        # Every hop waits as long as the recipe allows one request to take.
+                        "model_timeout_seconds": model_server.spec.request_timeout,
+                    }
                 elif native and telemetry.get("adapter") == "claude":
                     arguments = {
                         "runtime_environment": lambda network: collector.otel_environment(

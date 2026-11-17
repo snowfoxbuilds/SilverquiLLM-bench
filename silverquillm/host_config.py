@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import tempfile
 import tomllib
 from collections.abc import Callable, Mapping
@@ -53,6 +54,8 @@ LOCATIONS: dict[str, LocationSpec] = {
     )
 }
 
+# A GPU index as CUDA_VISIBLE_DEVICES takes it: ASCII digits, no leading zero.
+GPU_INDEX = re.compile(r"0|[1-9][0-9]*")
 DEFAULT_USAGE_RATES: dict[str, Decimal] = {"codex": Decimal(5), "claude": Decimal(25)}
 
 
@@ -70,6 +73,11 @@ class HostConfig:
     """``[model_server] models_dir``: where model files a recipe names are found."""
     llama_cpp: Mapping[str, Path] = field(default_factory=dict)
     """``[model_server.llama_cpp]``: each llama.cpp build (``b12182``) to its llama-server."""
+    model_server_environment: Mapping[str, str] = field(default_factory=dict)
+    """``[model_server] environment``: variables only this host's llama.cpp builds need."""
+    gpu_slots: tuple[str, ...] | None = None
+    """``[model_server] gpu_slots``: each GPU Slot's ``CUDA_VISIBLE_DEVICES``; None for the
+    host's one unpinned GPU Slot."""
 
 
 @dataclass(frozen=True)
@@ -129,8 +137,15 @@ def load_host_config(
 
 def _model_server(path: Path, table) -> dict:
     """The local model server's builds and model directory; paths resolve like locations."""
-    if not isinstance(table, dict) or set(table) - {"models_dir", "llama_cpp"}:
-        raise HostConfigError(f"{path}: [model_server] takes only models_dir and llama_cpp")
+    if not isinstance(table, dict) or set(table) - {
+        "models_dir",
+        "llama_cpp",
+        "environment",
+        "gpu_slots",
+    }:
+        raise HostConfigError(
+            f"{path}: [model_server] takes only models_dir, llama_cpp, environment and gpu_slots"
+        )
 
     def location(value, key):
         if not isinstance(value, str) or not value.strip():
@@ -144,6 +159,16 @@ def _model_server(path: Path, table) -> dict:
         for build in builds
     ):
         raise HostConfigError(f"{path}: [model_server.llama_cpp] maps builds like b12182 to paths")
+    from silverquillm.karn.model_server import environment_refusal
+
+    environment = table.get("environment", {})
+    refusal = environment_refusal(environment, host=True)
+    if refusal is not None:
+        raise HostConfigError(
+            f"{path}: [model_server.environment] maps variable names to strings and may not set "
+            f"a variable llama.cpp reads as an option, location or library path, or one the "
+            f"bench sets ({refusal})"
+        )
     return {
         "models_dir": (
             location(table["models_dir"], "model_server.models_dir")
@@ -154,7 +179,29 @@ def _model_server(path: Path, table) -> dict:
             build: location(binary, "model_server.llama_cpp." + build)
             for build, binary in builds.items()
         },
+        "model_server_environment": dict(environment),
+        "gpu_slots": _gpu_slots(path, table["gpu_slots"]) if "gpu_slots" in table else None,
     }
+
+
+def _gpu_slots(path: Path, slots) -> tuple[str, ...]:
+    """GPU Slots as ``CUDA_VISIBLE_DEVICES`` values of GPU indices, no GPU in two slots."""
+    if not isinstance(slots, list) or not slots:
+        raise HostConfigError(f"{path}: [model_server] gpu_slots must be a non-empty list")
+    seen: set[int] = set()
+    for slot in slots:
+        indices = slot.split(",") if isinstance(slot, str) else [None]
+        if not all(isinstance(index, str) and GPU_INDEX.fullmatch(index) for index in indices):
+            raise HostConfigError(
+                f"{path}: [model_server] gpu_slots entries are GPU indices like \"0\" or \"0,1\""
+            )
+        numbers = {int(index) for index in indices}
+        if len(numbers) != len(indices) or numbers & seen:
+            raise HostConfigError(
+                f"{path}: [model_server] gpu_slots may not name a GPU twice ({slot})"
+            )
+        seen |= numbers
+    return tuple(slots)
 
 
 RAW_ROOT = "~/raw-bench-results"

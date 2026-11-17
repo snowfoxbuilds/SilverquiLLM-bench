@@ -1,9 +1,12 @@
-"""The local model server for pi constructs (issue #262), against a fake llama-server."""
+"""The local model server (issues #262, #271), against a fake llama-server."""
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -18,11 +21,19 @@ from silverquillm.karn.docker import Network
 from silverquillm.karn.model_server import (
     MODEL_SERVER_ENV,
     MODEL_SERVER_URL,
+    GpuReading,
     ModelRelayCollector,
+    ModelServerBusyError,
     ModelServerHost,
+    claim_gpu_slot,
+    claim_model_server,
     file_sha256,
+    gpu_slot_availability,
+    gpu_slots,
     model_server_spec,
     plan_model_server,
+    read_gpus,
+    server_environment,
     summarize_model_events,
 )
 from silverquillm.karn.observations import summarize_events
@@ -32,12 +43,16 @@ FAKE_SERVER = r"""
 import json, os, sys, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 if "--version" in sys.argv:
+    with open(sys.argv[0] + ".version-env", "w") as out:
+        json.dump(dict(os.environ), out)
     print("version: 0.9.0-dev (build 12182, commit fd27b2034)")
     sys.exit(0)
 port = int(sys.argv[sys.argv.index("--port") + 1])
 alias = sys.argv[sys.argv.index("--alias") + 1]
 with open(sys.argv[0] + ".argv", "w") as out:
     json.dump(sys.argv[1:], out)
+with open(sys.argv[0] + ".env", "w") as out:
+    json.dump(dict(os.environ), out)
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -62,6 +77,8 @@ class Handler(BaseHTTPRequestHandler):
         last = messages[-1].get("content") if isinstance(messages, list) and messages else None
         if last == "hold":
             self.hold()
+        if isinstance(last, str) and last.startswith("delay:"):
+            time.sleep(float(last[len("delay:"):]))
         if last == "hold-close":
             # A close-delimited stream, which http.client reads after dropping its socket.
             self.send_response(200)
@@ -158,6 +175,16 @@ def runtime(document=None, *, mode="restricted", **environment):
     return {"environment": environment, "network": {"mode": mode, "https_hosts": []}}
 
 
+@pytest.fixture(autouse=True)
+def no_gpus(monkeypatch):
+    """Runs never ask this machine's ``nvidia-smi``; a test that wants GPUs sets them."""
+    from silverquillm.karn import model_server
+
+    reading = GpuReading(None, reason="nvidia_smi_unavailable")
+    monkeypatch.setattr(model_server, "read_gpus", lambda **_: reading)
+    return reading
+
+
 @pytest.fixture
 def served(tmp_path):
     """A fake llama-server build and a model file, as a host would configure them."""
@@ -196,7 +223,26 @@ def test_the_spec_keeps_the_recipes_server_and_serves_its_construct_model():
         (spec_document(arguments=["--host", "0.0.0.0"]), "flag_not_allowed:--host"),
         (spec_document(arguments=["-m", "/etc/passwd"]), "flag_not_allowed:-m"),
         (spec_document(arguments=["--api-key", "x"]), "flag_not_allowed:--api-key"),
-        (spec_document(arguments=["-c"]), "flag_value_missing:-c"),
+        (spec_document(arguments=["--host=0.0.0.0"]), "flag_not_allowed:--host"),
+        (spec_document(arguments=["-hf", "org/model"]), "flag_not_allowed:-hf"),
+        (spec_document(arguments=["--rpc", "10.0.0.2:50052"]), "flag_not_allowed:--rpc"),
+        (spec_document(arguments=["--log-file", "/tmp/x"]), "flag_not_allowed:--log-file"),
+        (spec_document(arguments=["--media-path", "/"]), "flag_not_allowed:--media-path"),
+        (spec_document(arguments=["--tools", "all"]), "flag_not_allowed:--tools"),
+        *(
+            (spec_document(arguments=[flag]), "flag_not_allowed:" + flag)
+            for flag in (
+                *("-ag", "--agent", "--connect", "--embd-gemma-default", "--fim-qwen-1.5b-default"),
+                *("--fim-qwen-3b-default", "--fim-qwen-7b-default", "--fim-qwen-7b-spec"),
+                *("--fim-qwen-14b-spec", "--fim-qwen-30b-default", "--gpt-oss-20b-default"),
+                *("--gpt-oss-120b-default", "--vision-gemma-4b-default", "-f", "-bf"),
+                "--vision-gemma-12b-default",
+            )
+        ),
+        (spec_document(arguments=["-md", "draft.gguf"]), "flag_not_allowed:-md"),
+        (spec_document(arguments=["--chat-template-file=t.jinja"]), "flag_not_allowed:--chat"),
+        (spec_document(arguments=["-c", "8\0"]), "model_server_arguments_invalid"),
+        ({**spec_document(), "files": []}, "model_server_spec_invalid"),
         ({**spec_document(), "extra": 1}, "model_server_spec_invalid"),
     ],
 )
@@ -205,9 +251,11 @@ def test_a_malformed_server_is_refused(document, reason):
         model_server_spec(runtime(document))
 
 
-def test_the_workload_must_use_the_relay_address_on_a_restricted_network():
-    with pytest.raises(KarnError, match="model_server_url_mismatch"):
-        model_server_spec(runtime(CONSTRUCT_PI_BASE_URL="http://192.168.1.2:8080/v1"))
+def test_any_agent_variable_may_point_at_the_relay_on_a_restricted_network():
+    environment = runtime()["environment"]
+    del environment["CONSTRUCT_PI_BASE_URL"]
+    agent = {"environment": {**environment, "OPENAI_BASE_URL": MODEL_SERVER_URL}}
+    assert model_server_spec({**agent, "network": {"mode": "restricted"}}) is not None
     with pytest.raises(KarnError, match="model_server_requires_restricted_network"):
         model_server_spec(runtime(mode="open"))
     with pytest.raises(KarnError, match="model_server_requires_construct_model"):
@@ -336,13 +384,453 @@ def test_a_model_file_that_changed_is_refused_before_the_server_starts(served, t
     assert not Path(str(served.binary) + ".argv").exists()
 
 
-def test_one_model_server_at_a_time_on_a_host(served, tmp_path):
+def gpu(index, *, used=14, uuid=None):
+    return {
+        "index": index,
+        "uuid": uuid or f"GPU-{index}",
+        "name": "NVIDIA H100 80GB HBM3",
+        "memory_total_mib": 81559,
+        "memory_used_mib": used,
+        "power_limit_w": 700,
+        "driver_version": "580.1",
+    }
+
+
+def h100s(*, used=None, compute=()):
+    used = used or {}
+    return GpuReading(
+        tuple(gpu(index, used=used.get(index, 14)) for index in range(4)),
+        frozenset(f"GPU-{index}" for index in compute),
+    )
+
+
+def test_a_host_without_gpu_slots_serves_one_run_at_a_time_on_the_runners_gpus(tmp_path):
+    (slot,) = gpu_slots(tmp_path, None)
+    assert slot.value is None and slot.lock_path == tmp_path.resolve() / "model-server.lock"
+    runner = {"CUDA_VISIBLE_DEVICES": "1", "CUDA_DEVICE_ORDER": "FASTEST_FIRST"}
+    # No busy check: a desktop's own display may hold more than 1 GiB.
+    busy = h100s(used={0: 8000, 1: 8000}, compute=[0, 1])
+    claim = claim_gpu_slot((slot,), lambda: busy, runner)
+    assert claim.facts() == {
+        "gpu_slot": None,
+        "cuda_visible_devices": "1",
+        "cuda_device_order": "FASTEST_FIRST",
+        "gpus": [gpu(index, used=busy.gpus[index]["memory_used_mib"]) for index in range(4)],
+    }
+    with pytest.raises(ModelServerBusyError, match="model_server_busy"):
+        claim_gpu_slot((slot,), h100s, runner)
+    claim.release()
+    claim_gpu_slot((slot,), h100s, runner).release()
+
+
+@pytest.mark.parametrize(
+    ("runner", "selection"),
+    [
+        (
+            {"CUDA_VISIBLE_DEVICES": "2,0", "CUDA_DEVICE_ORDER": "FASTEST_FIRST"},
+            ("2,0", "FASTEST_FIRST"),
+        ),
+        ({"CUDA_VISIBLE_DEVICES": "", "CUDA_DEVICE_ORDER": "PCI_BUS_ID"}, ("", "PCI_BUS_ID")),
+        ({}, (None, None)),
+    ],
+    ids=["restricted", "empty", "unset"],
+)
+def test_without_gpu_slots_the_runners_selection_passes_exactly_as_set(
+    served, tmp_path, runner, selection
+):
     plan = plan_model_server(served.spec, served.host, served.state)
-    with (
-        ModelRelayCollector(tmp_path / "first", plan=plan),
-        pytest.raises(KarnError, match="model_server_busy"),
+    claimed = claim_model_server(plan, inherited=runner)
+    host = claimed.to_dict()["host"]
+    assert (host["cuda_visible_devices"], host["cuda_device_order"]) == selection
+    environment = server_environment(
+        served.spec, {}, tmp_path, {"PATH": "/bin", **runner}, gpu=claimed.claim.environment
+    )
+    for name, value in zip(("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER"), selection, strict=True):
+        assert environment.get(name) == value
+    claimed.claim.release()
+
+
+def test_each_run_claims_the_first_free_gpu_slot_and_its_lock_is_named_by_its_value(tmp_path):
+    slots = gpu_slots(tmp_path, ("0", "1", "2"))
+    assert [slot.lock_path.name for slot in slots] == [
+        "model-server-gpu-0.lock",
+        "model-server-gpu-1.lock",
+        "model-server-gpu-2.lock",
+    ]
+    first, second = (claim_gpu_slot(slots, h100s) for _ in range(2))
+    assert (first.slot.value, second.slot.value) == ("0", "1")
+    assert second.facts() == {
+        "gpu_slot": "1",
+        "cuda_visible_devices": "1",
+        "cuda_device_order": "PCI_BUS_ID",
+        "gpus": [gpu(1)],
+    }
+    reordered = gpu_slots(tmp_path, ("1", "0", "2"))
+    assert claim_gpu_slot(reordered, h100s).slot.value == "2"
+
+
+@pytest.mark.parametrize(
+    "reading",
+    [h100s(compute=[0]), h100s(used={0: 2048})],
+    ids=["another-users-process", "memory-in-use-with-no-process-listed"],
+)
+def test_a_gpu_another_job_is_using_keeps_its_slot_busy_whatever_its_lock(tmp_path, reading):
+    slots = gpu_slots(tmp_path, ("0", "1"))
+    assert claim_gpu_slot(slots, lambda: reading).slot.value == "1"
+    with pytest.raises(ModelServerBusyError):
+        claim_gpu_slot(gpu_slots(tmp_path, ("0",)), lambda: reading)
+
+
+def test_without_nvidia_smi_only_the_lock_decides_and_the_gpus_are_unknown(tmp_path):
+    slots = gpu_slots(tmp_path, ("0", "1"))
+    unread = GpuReading(None, reason="nvidia_smi_unavailable")
+    claim = claim_gpu_slot(slots, lambda: unread)
+    assert claim.facts() == {
+        "gpu_slot": "0",
+        "cuda_visible_devices": "0",
+        "cuda_device_order": "PCI_BUS_ID",
+        "gpus": None,
+        "gpus_reason": "nvidia_smi_unavailable",
+    }
+
+
+def test_a_gpu_slot_naming_a_gpu_nvidia_smi_does_not_list_is_skipped_not_fatal(tmp_path):
+    two = GpuReading((gpu(0), gpu(1)))
+    claim = claim_gpu_slot(gpu_slots(tmp_path, ("7", "1")), lambda: two)
+    assert claim.slot.value == "1"
+    with pytest.raises(ModelServerBusyError, match="^model_server_busy$") as busy:
+        claim_gpu_slot(gpu_slots(tmp_path, ("7", "1")), lambda: two)
+    assert busy.value.unusable == ("gpu_slot_unknown_gpu:7: nvidia-smi lists no such GPU",)
+    claim.release()
+    # Only when no slot is usable at all is the unknown GPU the reason, and it still defers.
+    with pytest.raises(ModelServerBusyError, match="gpu_slot_unknown_gpu:7,1,2"):
+        claim_gpu_slot(gpu_slots(tmp_path, ("7", "1,2")), lambda: two)
+    assert gpu_slot_availability(gpu_slots(tmp_path, ("7",)), lambda: two) == (
+        False,
+        ("gpu_slot_unknown_gpu:7: nvidia-smi lists no such GPU",),
+    )
+    # Unread, the slot cannot be judged, and only its lock decides.
+    claim_gpu_slot(gpu_slots(tmp_path, ("7",)), lambda: GpuReading(None)).release()
+
+
+def test_an_unusable_lock_file_skips_its_slot_and_defers_rather_than_failing(tmp_path):
+    slots = gpu_slots(tmp_path, ("0", "1"))
+    claim_gpu_slot(slots, h100s).release()
+    claim_gpu_slot(slots[1:], h100s).release()
+    slots[0].lock_path.chmod(0)
+    try:
+        claim = claim_gpu_slot(slots, h100s)
+        assert claim.slot.value == "1"
+        with pytest.raises(ModelServerBusyError) as refused:
+            claim_gpu_slot(slots, h100s)
+        assert refused.value.unusable == (
+            f"model_server_lock_unusable: {slots[0].lock_path}: Permission denied",
+        )
+        assert refused.value.explained().startswith("model_server_busy; model_server_lock_")
+        claim.release()
+        claimable, unusable = gpu_slot_availability(slots, h100s)
+        assert claimable and len(unusable) == 1
+        slots[1].lock_path.chmod(0)
+        assert gpu_slot_availability(slots, h100s) == (
+            False,
+            unusable + (f"model_server_lock_unusable: {slots[1].lock_path}: Permission denied",),
+        )
+    finally:
+        for slot in slots:
+            slot.lock_path.chmod(0o600)
+
+
+def test_the_schedulers_probe_reads_the_lock_table_and_never_takes_a_lock(tmp_path):
+    slots = gpu_slots(tmp_path, ("0",))
+    claim_gpu_slot(slots, h100s).release()
+    table = tmp_path / "proc-locks"
+    table.write_text("")
+    probes = []
+
+    def flock(*args):
+        probes.append(args)
+        raise AssertionError("the probe took a lock")
+
+    import fcntl
+
+    original = fcntl.flock
+    fcntl.flock = flock
+    try:
+        assert gpu_slot_availability(slots, h100s, locks=table) == (True, ())
+    finally:
+        fcntl.flock = original
+    held = claim_gpu_slot(slots, h100s)
+    table.write_text(Path("/proc/locks").read_text())
+    assert gpu_slot_availability(slots, h100s, locks=table) == (False, ())
+    held.release()
+    # A host without GPU Slots never asks nvidia-smi to judge its one lock.
+    unpinned = gpu_slots(tmp_path / "unpinned", None)
+
+    def unexpected():
+        raise AssertionError("nvidia-smi read for a host without GPU Slots")
+
+    assert gpu_slot_availability(unpinned, unexpected, locks=table) == (True, ())
+
+
+def smi_output(gpus: bytes, apps: bytes = b"", code: int = 0):
+    def run(argv):
+        assert "--format=csv,noheader,nounits" in argv
+        return code, gpus if argv[1].startswith("--query-gpu=") else apps
+
+    return run
+
+
+def test_nvidia_smi_is_read_into_facts_and_its_failures_into_reasons():
+    reading = read_gpus(
+        smi_output(
+            b"0, GPU-a, NVIDIA GeForce RTX 3090, 5, 24576, 240.00, 595.91.07\n\n"
+            b"1, GPU-b, NVIDIA GeForce RTX 3090, 3000, 24576, [N/A], 595.91.07\n",
+            b"\nGPU-b, 4242, 2990\n",
+        )
+    )
+    assert reading.reason is None and reading.compute_uuids == {"GPU-b"}
+    assert reading.gpus[0] == {
+        "index": 0,
+        "uuid": "GPU-a",
+        "name": "NVIDIA GeForce RTX 3090",
+        "memory_total_mib": 24576,
+        "memory_used_mib": 5,
+        "power_limit_w": 240,
+        "driver_version": "595.91.07",
+    }
+    assert reading.gpus[1]["power_limit_w"] is None
+
+    def missing(argv):
+        raise FileNotFoundError(argv[0])
+
+    def hangs(argv):
+        raise subprocess.TimeoutExpired(argv, 10)
+
+    assert read_gpus(missing) == GpuReading(None, reason="nvidia_smi_unavailable")
+    assert read_gpus(hangs) == GpuReading(None, reason="nvidia_smi_unavailable")
+    assert read_gpus(smi_output(b"", code=9)).reason == "nvidia_smi_failed"
+    for output in (
+        b"garbage\n",
+        b"\xff\xfe, GPU-a, x, 5, 24576, 240, 1\n",
+        b"0, GPU-a, x, nan, 24576, 240, 1\n",
+        b"0, GPU-a, x, 5, inf, 240, 1\n",
+        "\u00b2, GPU-a, x, 5, 24576, 240, 1\n".encode(),
+        "0, GPU-a, x, \uff11\uff10\uff12\uff14, 24576, 240, 1\n".encode(),
+        b"0, GPU-a, x, 1_0, 24576, 240, 1\n",
+        b"0, GPU-a, x, 5, 24576, -1, 1\n",
     ):
-        ModelRelayCollector(tmp_path / "second", plan=plan).__enter__()
+        assert read_gpus(smi_output(output)).reason == "nvidia_smi_unreadable", output
+
+
+def test_a_stuck_nvidia_smi_is_abandoned_within_its_bound(tmp_path, monkeypatch):
+    from silverquillm.karn import model_server
+
+    stuck = tmp_path / "nvidia-smi"
+    stuck.write_text("#!/bin/sh\nexec sleep 30\n")
+    stuck.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+    monkeypatch.setattr(model_server, "NVIDIA_SMI_SECONDS", 0.5)
+    started = time.monotonic()
+    reading = read_gpus()
+    assert reading == GpuReading(None, reason="nvidia_smi_unavailable")
+    assert time.monotonic() - started < 5
+
+
+def test_no_second_nvidia_smi_starts_while_an_abandoned_one_lives(monkeypatch):
+    from silverquillm.karn import model_server
+
+    stuck = SimpleNamespace(poll=lambda: None)
+    monkeypatch.setattr(model_server, "_abandoned", [stuck])
+
+    def never(*args, **kwargs):
+        raise AssertionError("a second nvidia-smi started")
+
+    monkeypatch.setattr(model_server.subprocess, "Popen", never)
+    assert read_gpus() == GpuReading(None, reason="nvidia_smi_unavailable")
+    stuck.poll = lambda: 0
+    monkeypatch.setattr(
+        model_server.subprocess,
+        "Popen",
+        lambda *a, **k: SimpleNamespace(communicate=lambda timeout: (b"", None), returncode=0),
+    )
+    assert read_gpus() == GpuReading(())
+    assert model_server._abandoned == []
+
+
+def test_a_release_while_the_server_lives_keeps_the_slot_until_the_runner_exits(tmp_path):
+    import gc
+
+    from silverquillm.karn import model_server
+
+    slots = gpu_slots(tmp_path, ("0",))
+    claim = claim_gpu_slot(slots, h100s)
+    server = SimpleNamespace(stopped=False)
+    claim.link(server)
+    claim.release()
+    with pytest.raises(ModelServerBusyError):
+        claim_gpu_slot(slots, h100s)
+    # Dropping every reference to the claim does not release a kept lock either.
+    kept = len(model_server._kept_locks)
+    del claim
+    gc.collect()
+    with pytest.raises(ModelServerBusyError):
+        claim_gpu_slot(slots, h100s)
+    assert len(model_server._kept_locks) == kept
+    model_server._kept_locks.pop().close()
+    stopped = claim_gpu_slot(slots, h100s)
+    stopped.link(SimpleNamespace(stopped=True))
+    stopped.release()
+    claim_gpu_slot(slots, h100s).release()
+
+
+def test_with_gpu_slots_the_slots_selection_overrides_the_runners(served, tmp_path):
+    runner = {
+        "PATH": "/bin",
+        "CUDA_VISIBLE_DEVICES": "0,1,2,3",
+        "CUDA_DEVICE_ORDER": "FASTEST_FIRST",
+    }
+    runner |= {"LLAMA_ARG_CTX_SIZE": "4096", "LD_LIBRARY_PATH": "/opt/old"}
+    pinned = ModelServerHost(served.host.models_dir, served.host.llama_cpp, {}, ("0", "1"))
+    plan = plan_model_server(served.spec, pinned, served.state)
+    claimed = [claim_model_server(plan, h100s, runner) for _ in range(2)]
+    environment = server_environment(
+        served.spec, {}, tmp_path, runner, gpu=claimed[1].claim.environment
+    )
+    assert environment["CUDA_VISIBLE_DEVICES"] == "1"
+    assert environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
+    assert "LLAMA_ARG_CTX_SIZE" not in environment and "LD_LIBRARY_PATH" not in environment
+    unpinned = server_environment(served.spec, {}, tmp_path, runner)
+    assert unpinned["CUDA_VISIBLE_DEVICES"] == "0,1,2,3"
+    assert "LLAMA_ARG_CTX_SIZE" not in unpinned and "LD_LIBRARY_PATH" not in unpinned
+    host = claimed[1].to_dict()["host"]
+    assert host["gpu_slot"] == "1" and host["gpus"] == [gpu(1)]
+    assert host["binary_sha256"] == hashlib.sha256(served.binary.read_bytes()).hexdigest()
+    with ModelRelayCollector(tmp_path / "run", plan=claimed[1]):
+        served_environment = json.loads(Path(str(served.binary) + ".env").read_text())
+    assert served_environment["CUDA_VISIBLE_DEVICES"] == "1"
+    assert served_environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
+
+
+def test_the_collector_releases_its_gpu_slot_once_the_server_stops(served, tmp_path):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    claimed = claim_model_server(plan)
+    with ModelRelayCollector(tmp_path / "run", plan=claimed) as collector:
+        with pytest.raises(ModelServerBusyError):
+            claim_model_server(plan)
+        assert collector.facts["host"]["gpu_slot"] is None
+    claim_model_server(plan).claim.release()
+
+
+def test_a_server_that_outlives_its_stop_keeps_its_gpu_slot_held(served, tmp_path, monkeypatch):
+    from silverquillm.karn import model_server
+
+    plan = plan_model_server(served.spec, served.host, served.state)
+    claimed = claim_model_server(plan)
+
+    def stuck_exit(self, *_):
+        raise subprocess.TimeoutExpired("llama-server", 30)
+
+    monkeypatch.setattr(model_server.LlamaServer, "__exit__", stuck_exit)
+    collector = ModelRelayCollector(tmp_path / "run", plan=claimed)
+    with pytest.raises(subprocess.TimeoutExpired), collector:
+        pass
+    with pytest.raises(ModelServerBusyError):
+        claim_model_server(plan)
+    claimed.claim.release()
+    with pytest.raises(ModelServerBusyError):
+        claim_model_server(plan)
+    collector.llama.process.kill()
+    collector.llama.process.wait()
+
+
+def pinned_run(served, tmp_path, slots):
+    opts = model_server_run(served, tmp_path)
+    opts["model_server_host"] = ModelServerHost(
+        served.host.models_dir, served.host.llama_cpp, {}, slots
+    )
+    return opts
+
+
+def test_a_run_claims_its_gpu_slot_before_the_preflight_and_the_version_probe(served, tmp_path):
+    from silverquillm.karn.execution import run_benchmark
+
+    opts = pinned_run(served, tmp_path, ("0", "1"))
+    slots = gpu_slots(opts["state_root"], ("0", "1"))
+    at_preflight = []
+
+    def preflight():
+        probe = claim_gpu_slot(slots, h100s)
+        at_preflight.append(probe.slot.value)
+        probe.release()
+
+    opts["host"] = CountingHost(preflight)
+    record = run_benchmark(**opts, run_id="ordered")
+    assert at_preflight == ["1"]
+    version_environment = json.loads(Path(str(served.binary) + ".version-env").read_text())
+    assert version_environment["CUDA_VISIBLE_DEVICES"] == "0"
+    assert version_environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
+    assert record.run_metadata["model_server"]["host"]["gpu_slot"] == "0"
+
+
+def test_a_run_admitted_on_a_stale_reading_costs_no_preflight_or_version_probe(served, tmp_path):
+    from silverquillm.karn.execution import run_benchmark
+
+    opts = pinned_run(served, tmp_path, ("0",))
+    held = claim_gpu_slot(gpu_slots(opts["state_root"], ("0",)), h100s)
+    Path(str(served.binary) + ".version-env").unlink(missing_ok=True)
+    preflights = []
+    opts["host"] = CountingHost(lambda: preflights.append(1))
+    with pytest.raises(ModelServerBusyError):
+        run_benchmark(**opts, run_id="stale")
+    assert preflights == [] and not Path(str(served.binary) + ".version-env").exists()
+    held.release()
+
+
+def test_a_direct_run_with_no_free_gpu_slot_is_refused_before_any_evidence(served, tmp_path):
+    from silverquillm.karn.execution import run_benchmark
+
+    opts = pinned_run(served, tmp_path, ("0",))
+    held = claim_model_server(
+        plan_model_server(served.spec, opts["model_server_host"], opts["state_root"])
+    )
+    launched = []
+    with pytest.raises(ModelServerBusyError, match="model_server_busy"):
+        run_benchmark(**opts, run_id="refused", on_launch=lambda: launched.append(1))
+    assert not launched and not (opts["results_dir"] / "refused").exists()
+    held.claim.release()
+
+
+def test_a_run_holds_its_gpu_slot_from_before_launch_until_its_server_stops(served, tmp_path):
+    from silverquillm.karn.execution import run_benchmark
+
+    opts = pinned_run(served, tmp_path, ("0", "1"))
+    plan = plan_model_server(served.spec, opts["model_server_host"], opts["state_root"])
+    selected, at_launch, at_grading = [], [], []
+
+    def probe():
+        claim = claim_model_server(plan)
+        claim.claim.release()
+        return claim.claim.slot.value
+
+    evaluate = opts["grader"].evaluate_run
+
+    def evaluator(*args, **kwargs):
+        at_grading.append(probe())
+        return evaluate(*args, **kwargs)
+
+    record = run_benchmark(
+        **opts,
+        run_id="pinned",
+        on_gpu_slot_selected=selected.append,
+        on_launch=lambda: at_launch.append(probe()),
+        evaluator=evaluator,
+    )
+    assert selected == ["0"] and at_launch == ["1"] and at_grading == ["0"]
+    host = record.run_metadata["model_server"]["host"]
+    assert host["gpu_slot"] == "0"
+    assert host["gpus"] is None and host["gpus_reason"] == "nvidia_smi_unavailable"
+    run_input = json.loads((opts["results_dir"] / "pinned" / "run-input.json").read_text())
+    assert run_input["model_server"]["host"] == host
 
 
 def test_failed_requests_and_an_unfinished_run_are_counted_not_hidden():
@@ -403,8 +891,11 @@ def test_the_sidecar_is_the_model_server_and_is_not_proxied(tmp_path):
         assert network.hosts == {"model-server": "10.9.0.2"}
         assert network.environment["NO_PROXY"].endswith(",model-server")
         create = next(command for command in docker.commands if command[0] == "create")
+        runtime = create.index("--runtime")
+        assert create[runtime + 1] == "runc" and runtime < create.index("sha256:" + "1" * 64)
         assert "SILVERQUILLM_MODEL_ENDPOINT=http://h:1/model/x" in create
         assert "SILVERQUILLM_MODEL_CLIENTS=10.9.0.0/24" in create
+        assert "SILVERQUILLM_MODEL_TIMEOUT=1800" in create
         ready = next(command for command in docker.commands if command[0] == "exec")
         assert "(3128, 8080)" in ready[-1]
     with pytest.raises(KarnError, match="model_server_requires_restricted_network"):
@@ -472,7 +963,52 @@ def test_the_host_config_names_builds_and_the_models_directory(tmp_path):
     with pytest.raises(HostConfigError, match="maps builds like b12182"):
         load_host_config(path)
     path.write_text('[model_server]\nbinary = "/opt/llama-server"\n')
-    with pytest.raises(HostConfigError, match="takes only models_dir and llama_cpp"):
+    with pytest.raises(HostConfigError, match="takes only models_dir, llama_cpp, environment"):
+        load_host_config(path)
+
+
+@pytest.mark.parametrize(
+    "name", ["GGML_VK_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES"]
+)
+def test_only_the_gpu_selection_chooses_gpus(name):
+    from silverquillm.karn.model_server import environment_refusal
+
+    assert environment_refusal({name: "0"}) == "refused:" + name
+    assert environment_refusal({name: "0"}, host=True) == "refused:" + name
+
+
+def test_the_host_config_lists_gpu_slots_that_never_share_a_gpu(tmp_path):
+    from silverquillm.host_config import load_host_config
+
+    path = tmp_path / "config.toml"
+    assert load_host_config(path).gpu_slots is None
+    path.write_text('[model_server]\ngpu_slots = ["0", "1", "2,3"]\n')
+    assert load_host_config(path).gpu_slots == ("0", "1", "2,3")
+
+
+@pytest.mark.parametrize(
+    ("slots", "reason"),
+    [
+        ('["0", "0,1"]', "may not name a GPU twice"),
+        ('["1", "1"]', "may not name a GPU twice"),
+        ('["0,0"]', "may not name a GPU twice"),
+        ("[]", "non-empty list"),
+        ('"0"', "non-empty list"),
+        ('["0, 1"]', "GPU indices"),
+        ('["01"]', "GPU indices"),
+        ('["GPU-abc"]', "GPU indices"),
+        ('["\u00b2"]', "GPU indices"),
+        ('["\u0661"]', "GPU indices"),
+        ('[""]', "GPU indices"),
+        ("[0]", "GPU indices"),
+    ],
+)
+def test_gpu_slots_that_would_share_or_misname_a_gpu_are_refused(tmp_path, slots, reason):
+    from silverquillm.host_config import HostConfigError, load_host_config
+
+    path = tmp_path / "config.toml"
+    path.write_text(f"[model_server]\ngpu_slots = {slots}\n")
+    with pytest.raises(HostConfigError, match=reason):
         load_host_config(path)
 
 
@@ -717,6 +1253,15 @@ class RelayHost:
         return self.inner.run(candidate, workspace, evidence_dir, prompt, **kwargs)
 
 
+class CountingHost(RelayHost):
+    def __init__(self, on_preflight):
+        super().__init__()
+        self.on_preflight = on_preflight
+
+    def preflight(self, candidate, budget_seconds):
+        self.on_preflight()
+
+
 def model_server_run(served, tmp_path):
     from .test_karn_execution import options
     from .test_karn_host import make_candidate
@@ -783,6 +1328,23 @@ def test_recovery_keeps_the_server_the_run_verified_without_reverifying(
     measurements = recovered.run_metadata["measurements"]
     assert measurements["coverage"]["relayed_requests"] == 1
     assert measurements["requests"][0]["model"] == "qwen3.8-27b"
+
+
+def test_a_recovered_record_keeps_the_gpu_selection_its_run_recorded(served, tmp_path, monkeypatch):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "1")
+    monkeypatch.setenv("CUDA_DEVICE_ORDER", "FASTEST_FIRST")
+    opts = model_server_run(served, tmp_path)
+    interrupted_run(opts, "selected")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1")
+    monkeypatch.delenv("CUDA_DEVICE_ORDER")
+    recovered = recover(opts, "selected", monkeypatch, tmp_path)
+    host = recovered.run_metadata["model_server"]["host"]
+    assert (host["gpu_slot"], host["cuda_visible_devices"], host["cuda_device_order"]) == (
+        None,
+        "1",
+        "FASTEST_FIRST",
+    )
+    assert host["gpus"] is None and host["gpus_reason"] == "nvidia_smi_unavailable"
 
 
 def test_a_run_that_failed_before_verifying_recovers_with_verification_unknown(
@@ -1109,3 +1671,569 @@ def test_a_local_model_is_never_priced_as_a_hosted_one(served, tmp_path, alias):
         assert "model_price_unavailable" in summary["estimated_cost"]["reasons"]
         assert summary["cost_breakdown"]["value"] is None
         assert summary["price_table"]["models"] == {}
+
+
+# The recipe owns the server's flags, files, environment and timeouts (#271).
+
+RECIPE_Q8 = (
+    '{"engine":"llama.cpp","build":"b12182","model":{"file":"Qwen3.8-27B-UD-Q8_K_XL.gguf",'
+    '"sha256":"' + "a" * 64 + '"},"arguments":["-c","262144","-np","1","-ngl","999","-fa","on",'
+    '"-ctk","f16","-ctv","f16","--fit","off","--jinja","--temp","1.0","--top-p","0.95",'
+    '"--top-k","20","--min-p","0"]}'
+)
+
+
+def test_a_recipe_written_before_files_records_exactly_what_it_did():
+    spec = model_server_spec(
+        {
+            "environment": {
+                "CONSTRUCT_MODEL": "qwen3.8-27b",
+                "CONSTRUCT_PI_BASE_URL": MODEL_SERVER_URL,
+                MODEL_SERVER_ENV: RECIPE_Q8,
+            },
+            "network": {"mode": "restricted", "https_hosts": []},
+        }
+    )
+    assert spec.to_dict() == {
+        "engine": "llama.cpp",
+        "build": "b12182",
+        "model": {"file": "Qwen3.8-27B-UD-Q8_K_XL.gguf", "sha256": "a" * 64},
+        "arguments": json.loads(RECIPE_Q8)["arguments"],
+        "served_model": "qwen3.8-27b",
+    }
+    assert spec.ready_timeout == 900 and spec.request_timeout == 1800
+
+
+def test_an_unlisted_flag_passes_and_is_kept_with_the_arguments():
+    arguments = ["--spec-type", "ngram-simple", "--spec-default", "--cors-origins", "x"]
+    spec = model_server_spec(runtime(spec_document(arguments=arguments)))
+    assert spec.arguments == tuple(arguments)
+
+
+def test_a_debug_variable_that_writes_nothing_passes():
+    document = spec_document(environment={"CUBLASLT_LOG_LEVEL": "1", "GGML_SCHED_DEBUG": "1"})
+    assert model_server_spec(runtime(document)) is not None
+
+
+def with_files(*files, **overrides):
+    document = spec_document(**overrides)
+    del document["model"]
+    document["files"] = list(files)
+    return document
+
+
+@pytest.mark.parametrize(
+    ("files", "reason"),
+    [
+        ([{"file": "a.gguf", "sha256": "0" * 64}], "model_server_files_need_one_model"),
+        (
+            [
+                {"file": "a.gguf", "sha256": "0" * 64, "flag": "--model"},
+                {"file": "b.gguf", "sha256": "0" * 64, "flag": "--model"},
+            ],
+            "model_server_files_need_one_model",
+        ),
+        ([{"file": "../a.gguf", "sha256": "0" * 64, "flag": "--model"}], "files_invalid"),
+        ([{"file": "/etc/passwd", "sha256": "0" * 64, "flag": "--model"}], "files_invalid"),
+        ([{"file": "a.gguf", "sha256": "0" * 64, "flag": "-m"}], "file_flag_not_allowed:-m"),
+        (
+            [
+                {"file": "a.gguf", "sha256": "0" * 64, "flag": "--model"},
+                {"file": "k.pem", "sha256": "0" * 64, "flag": "--ssl-key-file"},
+            ],
+            "file_flag_not_allowed:--ssl-key-file",
+        ),
+        (
+            [{"file": "Q-00001-of-00002.gguf", "sha256": "0" * 64, "flag": "--model"}],
+            "model_server_split_model_incomplete:Q",
+        ),
+    ],
+)
+def test_declared_files_are_refused_when_they_cannot_all_be_verified(files, reason):
+    with pytest.raises(KarnError, match=reason):
+        model_server_spec(runtime(with_files(*files)))
+
+
+def test_both_model_and_files_is_refused():
+    document = with_files({"file": "a.gguf", "sha256": "0" * 64, "flag": "--model"})
+    document["model"] = {"file": "a.gguf", "sha256": "0" * 64}
+    with pytest.raises(KarnError, match="model_server_spec_invalid"):
+        model_server_spec(runtime(document))
+
+
+@pytest.fixture
+def drafted(served):
+    """A recipe with a split model, a draft model and a chat template, all verified."""
+    models = served.host.models_dir
+    contents = {
+        "Q-00001-of-00002.gguf": b"part one",
+        "Q-00002-of-00002.gguf": b"part two",
+        "draft.gguf": b"draft weights",
+        "chat.jinja": b"{{ messages }}",
+    }
+    for name, content in contents.items():
+        (models / name).write_bytes(content)
+    files = [
+        {"file": "Q-00001-of-00002.gguf", "sha256": "", "flag": "--model"},
+        {"file": "Q-00002-of-00002.gguf", "sha256": ""},
+        {"file": "draft.gguf", "sha256": "", "flag": "-md"},
+        {"file": "chat.jinja", "sha256": "", "flag": "--chat-template-file"},
+    ]
+    for entry in files:
+        entry["sha256"] = file_sha256(models / entry["file"])
+    document = with_files(
+        *files,
+        arguments=["--spec-type", "draft-simple", "--jinja"],
+        environment={"GGML_CUDA_GRAPH_OPT": "1"},
+        ready_timeout_seconds=60,
+        request_timeout_seconds=7200,
+    )
+    return SimpleNamespace(served=served, files=files, spec=model_server_spec(runtime(document)))
+
+
+def test_declared_files_are_verified_passed_and_recorded(drafted, tmp_path):
+    served = drafted.served
+    host = ModelServerHost(served.host.models_dir, served.host.llama_cpp, {"LD_LIBRARY_PATH": "/x"})
+    plan = plan_model_server(drafted.spec, host, served.state)
+    with ModelRelayCollector(tmp_path / "run", plan=plan) as collector:
+        argv = json.loads(Path(str(served.binary) + ".argv").read_text())
+        models = served.host.models_dir.resolve()
+        assert argv[argv.index("--model") + 1] == str(models / "Q-00001-of-00002.gguf")
+        assert argv[argv.index("-md") + 1] == str(models / "draft.gguf")
+        assert argv[argv.index("--chat-template-file") + 1] == str(models / "chat.jinja")
+        assert "Q-00002-of-00002.gguf" not in " ".join(argv)
+        facts = collector.facts
+        assert facts["model_sha256_verified"] is True
+        assert set(facts["file_bytes"]) == {entry["file"] for entry in drafted.files}
+        assert facts["files"] == drafted.files
+        assert facts["environment"] == {"GGML_CUDA_GRAPH_OPT": "1"}
+        assert facts["ready_timeout_seconds"] == 60 and collector.llama.ready_seconds == 60
+        assert facts["ready_seconds"] < 60
+        assert facts["request_timeout_seconds"] == 7200
+        assert facts["host"] == {
+            "environment": {"LD_LIBRARY_PATH": "/x"},
+            "binary_sha256": hashlib.sha256(served.binary.read_bytes()).hexdigest(),
+        }
+
+
+def test_any_declared_file_that_changed_is_refused_before_the_server_starts(drafted, tmp_path):
+    served = drafted.served
+    plan = plan_model_server(drafted.spec, served.host, served.state)
+    (served.host.models_dir / "Q-00002-of-00002.gguf").write_bytes(b"other part")
+    with pytest.raises(KarnError, match="model_file_digest_mismatch:Q-00002-of-00002.gguf"):
+        ModelRelayCollector(tmp_path / "run", plan=plan).__enter__()
+    assert not Path(str(served.binary) + ".argv").exists()
+
+
+def test_a_missing_declared_file_is_refused_before_any_evidence(drafted):
+    (drafted.served.host.models_dir / "draft.gguf").unlink()
+    with pytest.raises(KarnError, match="model_file_unavailable:draft.gguf"):
+        plan_model_server(drafted.spec, drafted.served.host, drafted.served.state)
+
+
+def test_the_server_never_inherits_the_runners_environment(served, tmp_path, monkeypatch):
+    monkeypatch.setenv("LLAMA_ARG_CTX_SIZE", "4096")
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/old-llama")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3")
+    monkeypatch.delenv("CUDA_DEVICE_ORDER", raising=False)
+    document = spec_document(
+        model=served.spec.to_dict()["model"], environment={"GGML_CUDA_GRAPH_OPT": "1"}
+    )
+    spec = model_server_spec(runtime(document))
+    host = ModelServerHost(served.host.models_dir, served.host.llama_cpp, {"HOST_ONLY": "yes"})
+    with ModelRelayCollector(tmp_path / "run", plan=plan_model_server(spec, host, served.state)):
+        environment = json.loads(Path(str(served.binary) + ".env").read_text())
+    assert "LLAMA_ARG_CTX_SIZE" not in environment
+    assert "LD_LIBRARY_PATH" not in environment
+    # Without GPU Slots only the runner's own GPU selection passes, exactly as set.
+    assert environment["CUDA_VISIBLE_DEVICES"] == "3"
+    assert "CUDA_DEVICE_ORDER" not in environment
+    assert environment["PATH"] == os.environ["PATH"]
+    assert environment["HOST_ONLY"] == "yes"
+    assert environment["GGML_CUDA_GRAPH_OPT"] == "1"
+    # An empty bench-owned home: llama.cpp finds no user-level config.ini.
+    home = tmp_path / "run" / "model-server-home"
+    assert environment["HOME"] == str(home)
+    assert environment["XDG_CONFIG_HOME"] == str(home / ".config")
+    assert list(home.iterdir()) == []
+
+
+def test_the_version_probe_runs_in_the_servers_environment(served, monkeypatch):
+    monkeypatch.setenv("CUDA_DEVICE_ORDER", "FASTEST_FIRST")
+    monkeypatch.setenv("LLAMA_ARG_CTX_SIZE", "4096")
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/old-llama")
+    host = ModelServerHost(
+        served.host.models_dir, served.host.llama_cpp, {"LD_LIBRARY_PATH": "/opt/cuda/lib64"}
+    )
+    plan_model_server(served.spec, host, served.state)
+    environment = json.loads(Path(str(served.binary) + ".version-env").read_text())
+    assert environment["LD_LIBRARY_PATH"] == "/opt/cuda/lib64"
+    assert "LLAMA_ARG_CTX_SIZE" not in environment
+    assert environment["HOME"] != os.environ.get("HOME")
+    assert environment["XDG_CONFIG_HOME"].startswith(environment["HOME"])
+    assert environment["CUDA_DEVICE_ORDER"] == "FASTEST_FIRST"
+
+
+def test_a_system_config_file_llama_cpp_would_read_refuses_the_run(served, tmp_path, monkeypatch):
+    from silverquillm.karn import model_server
+
+    config = tmp_path / "etc" / "llama.cpp" / "config.ini"
+    config.parent.mkdir(parents=True)
+    config.write_text("[*]\nctx-size = 4096\n")
+    monkeypatch.setattr(model_server, "SYSTEM_CONFIG_FILES", (config,))
+    with pytest.raises(KarnError, match="model_server_config_file_present:" + str(config)):
+        plan_model_server(served.spec, served.host, served.state)
+
+
+def test_setpriv_is_found_on_the_runners_path_or_the_run_is_refused(served, monkeypatch):
+    from silverquillm.karn import model_server
+
+    plan = plan_model_server(served.spec, served.host, served.state)
+    command = model_server.LlamaServer(plan, Path("/unused")).command(1234)
+    assert Path(command[0]).is_absolute() and Path(command[0]).name == "setpriv"
+    monkeypatch.setattr(model_server.shutil, "which", lambda name: None)
+    with pytest.raises(KarnError, match="model_server_setpriv_unavailable"):
+        plan_model_server(served.spec, served.host, served.state)
+
+
+def test_a_linked_file_is_passed_by_its_declared_name_inside_the_models_directory(served, tmp_path):
+    models = served.host.models_dir
+    (models / "store").mkdir()
+    for number in (1, 2):
+        (models / "store" / f"blob{number}").write_bytes(b"part %d" % number)
+        (models / f"Q-0000{number}-of-00002.gguf").symlink_to(models / "store" / f"blob{number}")
+    files = [
+        {"file": "Q-00001-of-00002.gguf", "sha256": "", "flag": "--model"},
+        {"file": "Q-00002-of-00002.gguf", "sha256": ""},
+    ]
+    for entry in files:
+        entry["sha256"] = file_sha256(models / entry["file"])
+    spec = model_server_spec(runtime(with_files(*files)))
+    plan = plan_model_server(spec, served.host, served.state)
+    with ModelRelayCollector(tmp_path / "run", plan=plan):
+        argv = json.loads(Path(str(served.binary) + ".argv").read_text())
+    assert argv[argv.index("--model") + 1] == str(models.resolve() / "Q-00001-of-00002.gguf")
+    outside = tmp_path / "outside.gguf"
+    outside.write_bytes(b"elsewhere")
+    (models / "escape.gguf").symlink_to(outside)
+    escape = [{"file": "escape.gguf", "sha256": file_sha256(outside), "flag": "--model"}]
+    with pytest.raises(KarnError, match="model_file_unavailable:escape.gguf"):
+        plan_model_server(
+            model_server_spec(runtime(with_files(*escape))), served.host, served.state
+        )
+
+
+@pytest.mark.parametrize(
+    ("token", "normalized"),
+    [
+        ("--hf_repo", "--hf-repo"),
+        ("--model_url", "--model-url"),
+        ("--api_key", "--api-key"),
+        ("--log_file", "--log-file"),
+        ("--slot_save_path", "--slot-save-path"),
+        ("--media_path", "--media-path"),
+        ("--model_draft", "--model-draft"),
+        ("--chat_template_file", "--chat-template-file"),
+        ("--lora_scaled", "--lora-scaled"),
+        ("--mcp_servers_json", "--mcp-servers-json"),
+        ("--webui_mcp_proxy", "--webui-mcp-proxy"),
+        ("--connect_code", "--connect-code"),
+        ("--reuse_port", "--reuse-port"),
+        ("--binary_file", "--binary-file"),
+        ("--gpt_oss_20b_default", "--gpt-oss-20b-default"),
+        ("--host_name_is=not-a-flag", None),
+    ],
+)
+def test_a_flag_spelled_with_underscores_is_the_flag_llama_cpp_reads(token, normalized):
+    document = spec_document(arguments=[token, "value"])
+    if normalized is None:
+        assert model_server_spec(runtime(document)) is not None
+        return
+    with pytest.raises(KarnError, match="model_server_flag_not_allowed:" + normalized):
+        model_server_spec(runtime(document))
+
+
+def test_a_value_spelled_as_a_refused_flag_is_refused():
+    with pytest.raises(KarnError, match="model_server_flag_not_allowed:--hf-repo"):
+        model_server_spec(runtime(spec_document(arguments=["--temp", "--hf_repo"])))
+
+
+def test_the_recipe_environment_overrides_the_hosts():
+    from silverquillm.karn.model_server import server_environment
+
+    spec = model_server_spec(runtime(spec_document(environment={"SHARED": "recipe"})))
+    inherited = {"PATH": "/bin", "HOME": "/h", "OTHER": "x"}
+    assert server_environment(spec, {"SHARED": "host"}, Path("/run/home"), inherited) == {
+        "PATH": "/bin",
+        "HOME": "/run/home",
+        "XDG_CONFIG_HOME": "/run/home/.config",
+        "SHARED": "recipe",
+    }
+
+
+@pytest.mark.parametrize(
+    ("environment", "reason"),
+    [
+        ({"LLAMA_ARG_CTX_SIZE": "4096"}, "model_server_environment_refused:LLAMA_ARG_CTX_SIZE"),
+        *(
+            ({name: "x"}, "model_server_environment_refused:" + name)
+            for name in (
+                *("LLAMA_API_KEY", "LLAMA_CACHE", "LLAMA_SERVER_ROUTER_PORT"),
+                *("LLAMACPP_TEST_MODELFILE", "AIP_HTTP_PORT", "AIP_PREDICT_ROUTE"),
+                *("GGML_BACKEND_PATH", "GGML_ET_KERNELS_PATH", "GGML_OPENCL_KERNEL_CACHE_DIR"),
+                *("LD_PRELOAD", "LD_LIBRARY_PATH", "PATH", "HOME", "XDG_CONFIG_HOME"),
+                *("HF_TOKEN", "HF_ENDPOINT", "HUGGING_FACE_HUB_TOKEN", "MODEL_ENDPOINT"),
+                *("MTMD_BACKEND_DEVICE", "http_proxy", "HTTPS_PROXY", "All_Proxy", "no_proxy"),
+                "__LLAMA_X",
+                *("CUDA_INJECTION64_PATH", "CUDA_AMODEL_DLL", "CUDA_FORCE_PRELOAD_LIBRARIES"),
+                *("CUDA_DEVCODE_PATH", "CUDA_MPS_PIPE_DIRECTORY", "CUDA_CACHE_PATH"),
+                *("CUDA_LOG_FILE", "CUDA_COREDUMP_FILE", "CUBLASLT_LOG_FILE", "CUBLAS_LOGDEST_DBG"),
+                *("CUDA_ENABLE_COREDUMP_ON_EXCEPTION", "MTMD_DEBUG_EMBEDDINGS"),
+                *("HUGGINGFACE_HUB_CACHE", "OPENSSL_CONF", "OPENSSL_MODULES", "SSL_CERT_FILE"),
+                *("SSL_CERT_DIR", "GGML_ET_PROFILE", "ET_TOOLCHAIN", "GCONV_PATH"),
+            )
+        ),
+        ({"CUDA_VISIBLE_DEVICES": "0"}, "model_server_environment_refused:CUDA_VISIBLE"),
+        ({"CUDA_DEVICE_ORDER": "FASTEST_FIRST"}, "model_server_environment_refused:CUDA_DEVICE"),
+        ({"BAD NAME": "x"}, "model_server_environment_invalid"),
+        ({"X": 1}, "model_server_environment_invalid"),
+        ({"X": "a\0b"}, "model_server_environment_invalid"),
+        (["X=1"], "model_server_environment_invalid"),
+    ],
+)
+def test_a_recipe_environment_that_would_change_the_record_is_refused(environment, reason):
+    with pytest.raises(KarnError, match=reason):
+        model_server_spec(runtime(spec_document(environment=environment)))
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("ready_timeout_seconds", 0), ("ready_timeout_seconds", "60")]
+    + [("request_timeout_seconds", True)]
+    + [("request_timeout_seconds", 86401)],
+)
+def test_a_timeout_must_be_a_bounded_number_of_seconds(key, value):
+    with pytest.raises(KarnError, match="model_server_timeout_invalid:" + key):
+        model_server_spec(runtime(spec_document(**{key: value})))
+
+
+def test_the_host_config_names_an_environment_only_this_host_needs(tmp_path):
+    from silverquillm.host_config import HostConfigError, load_host_config
+
+    path = tmp_path / "config.toml"
+    path.write_text('[model_server.environment]\nLD_LIBRARY_PATH = "/opt/cuda/lib64"\n')
+    assert load_host_config(path).model_server_environment == {"LD_LIBRARY_PATH": "/opt/cuda/lib64"}
+    path.write_text('[model_server.environment]\nLLAMA_ARG_N_GPU_LAYERS = "0"\n')
+    with pytest.raises(HostConfigError, match="refused:LLAMA_ARG_N_GPU_LAYERS"):
+        load_host_config(path)
+    for name in ("LD_PRELOAD", "PATH", "LLAMA_CACHE", "https_proxy", "CUDA_INJECTION64_PATH"):
+        path.write_text(f'[model_server.environment]\n{name} = "x"\n')
+        with pytest.raises(HostConfigError, match="refused:" + name):
+            load_host_config(path)
+    with pytest.raises(KarnError, match="model_server_host_environment_refused:CUDA"):
+        plan_model_server(
+            model_server_spec(runtime()),
+            ModelServerHost(tmp_path, {}, {"CUDA_VISIBLE_DEVICES": "0"}),
+            tmp_path,
+        )
+
+
+# The recipe's request timeout governs every hop of a model request (#275 review).
+
+
+def test_the_recipe_request_timeout_reaches_the_sidecar_launch(served, tmp_path):
+    from silverquillm.karn.execution import run_benchmark
+
+    seen = {}
+
+    class TimedHost(RelayHost):
+        def run(self, *args, model_timeout_seconds, **kwargs):
+            seen["timeout"] = model_timeout_seconds
+            return super().run(*args, **kwargs)
+
+    for document, expected in (
+        (spec_document(model=served.spec.to_dict()["model"], request_timeout_seconds=7200), 7200),
+        (spec_document(model=served.spec.to_dict()["model"]), 1800),
+    ):
+        opts = model_server_run(served, tmp_path / str(expected))
+        candidate_dir = tmp_path / str(expected) / "recipe"
+        definition = next(candidate_dir.rglob("definition.json"))
+        data = json.loads(definition.read_text())
+        data["runtime"]["environment"][MODEL_SERVER_ENV] = json.dumps(document)
+        definition.write_text(json.dumps(data))
+        opts["host"] = TimedHost()
+        try:
+            run_benchmark(**opts, run_id="timed")
+        except KarnError:
+            pass
+        assert seen.pop("timeout", None) == expected
+    docker = NetworkDocker()
+    policy = {"mode": "restricted", "https_hosts": []}
+    with Network(
+        docker,
+        "r1",
+        policy,
+        "sha256:" + "1" * 64,
+        tmp_path,
+        model_endpoint="http://h:1/model/x",
+        model_timeout_seconds=7200,
+    ):
+        create = next(command for command in docker.commands if command[0] == "create")
+        assert "SILVERQUILLM_MODEL_TIMEOUT=7200" in create
+
+
+def test_the_sidecar_waits_on_the_relay_as_long_as_it_was_configured(monkeypatch):
+    from silverquillm.karn import proxy
+
+    forward = proxy.model_forward_from_environment(
+        {
+            "SILVERQUILLM_MODEL_ENDPOINT": "http://127.0.0.1:9/model/x",
+            "SILVERQUILLM_MODEL_CLIENTS": "127.0.0.0/8",
+            "SILVERQUILLM_MODEL_TIMEOUT": "7200",
+        },
+        ("127.0.0.1", 0),
+    )
+    timeouts, real_connect = [], socket.create_connection
+
+    def connect(address, timeout):
+        if address != ("127.0.0.1", 9):
+            return real_connect(address, timeout=timeout)
+        timeouts.append(timeout)
+        raise OSError("relay unreachable in this test")
+
+    monkeypatch.setattr(proxy.socket, "create_connection", connect)
+    thread = threading.Thread(target=forward.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with real_connect(forward.server_address, timeout=5) as client:
+            client.sendall(b"POST /v1/chat/completions HTTP/1.1\r\nContent-Length: 0\r\n\r\n")
+            assert b"403" in client.recv(4096)
+    finally:
+        forward.shutdown()
+        forward.server_close()
+        thread.join()
+    assert timeouts == [7200]
+    assert proxy.model_forward_from_environment({}) is None
+    default = proxy.model_forward_from_environment(
+        {"SILVERQUILLM_MODEL_ENDPOINT": "http://h:1/x", "SILVERQUILLM_MODEL_CLIENTS": "10.0.0.0/8"},
+        ("127.0.0.1", 0),
+    )
+    assert default.model_timeout == 1800
+    default.server_close()
+
+
+def delayed_request(served, tmp_path, *, recipe_timeout, sidecar_timeout, delay):
+    """One non-streaming request that the fake server answers after *delay* seconds, sent
+    through a real sidecar route and relay; returns the client's outcome and measurements."""
+    document = spec_document(
+        model=served.spec.to_dict()["model"], request_timeout_seconds=recipe_timeout
+    )
+    plan = plan_model_server(model_server_spec(runtime(document)), served.host, served.state)
+    with ModelRelayCollector(tmp_path / "run", plan=plan) as collector:
+        forward = ModelForwardServer(
+            ("127.0.0.1", 0), collector.endpoint, model_timeout=sidecar_timeout
+        )
+        thread = threading.Thread(target=forward.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{forward.server_address[1]}/v1/chat/completions"
+            try:
+                status, body = post(
+                    url, {"stream": False, "messages": [{"role": "user", "content": delay}]}
+                )
+                outcome = (status, json.loads(body)["choices"][0]["finish_reason"])
+            except (urllib.error.HTTPError, urllib.error.URLError, ConnectionError) as error:
+                outcome = (getattr(error, "code", None), type(error).__name__)
+            time.sleep(0.2)
+        finally:
+            forward.shutdown()
+            forward.server_close()
+            thread.join()
+        measurements = collector.finalize(exit_kind="completed")
+    return outcome, measurements
+
+
+def test_a_request_slower_than_the_old_limit_succeeds_within_the_recipes(
+    served, tmp_path, monkeypatch
+):
+    from silverquillm.karn import proxy
+
+    # The old fixed limit, scaled down to 1 s: the recipe's 15 s limit must win on every hop,
+    # with a wide margin either side of the 2 s answer for a loaded machine.
+    monkeypatch.setattr(proxy, "DEFAULT_MODEL_TIMEOUT_SECONDS", 1)
+    outcome, measurements = delayed_request(
+        served, tmp_path, recipe_timeout=15, sidecar_timeout=15, delay="delay:2"
+    )
+    assert outcome == (200, "stop")
+    assert measurements["coverage"]["relayed_requests"] == 1
+    assert measurements["coverage"]["failed_requests"] == 0
+    assert measurements["requests"][0]["finish_reason"] == "stop"
+
+
+# Each hop's limit is tested alone, the other's set far above the delay, so exactly one hop
+# can give up and the outcome does not depend on which gives up first.
+
+
+def test_a_request_past_the_relays_limit_fails_and_is_counted_failed(served, tmp_path):
+    outcome, measurements = delayed_request(
+        served, tmp_path, recipe_timeout=1, sidecar_timeout=60, delay="delay:6"
+    )
+    # The relay gave up on the server and answered; the sidecar passed the answer on.
+    assert outcome == (502, "HTTPError")
+    coverage = measurements["coverage"]
+    assert coverage["relayed_requests"] == 1
+    assert coverage["failed_requests"] == 1
+    assert coverage["unfinished_requests"] == 0
+    assert measurements["requests"] == []
+    assert "relayed_request_incomplete" in measurements["usage"]["reasons"]
+
+
+def test_a_request_past_the_sidecars_limit_fails_there(served, tmp_path):
+    started = time.monotonic()
+    outcome, measurements = delayed_request(
+        served, tmp_path, recipe_timeout=60, sidecar_timeout=1, delay="delay:6"
+    )
+    # The sidecar gave up while the relay still waited; the run's end cancels the request.
+    assert outcome == (403, "HTTPError")
+    assert time.monotonic() - started < 6
+    coverage = measurements["coverage"]
+    assert coverage["relayed_requests"] == 1
+    assert coverage["failed_requests"] == 1
+    assert coverage["unfinished_requests"] == 0
+    assert "relayed_request_incomplete" in measurements["usage"]["reasons"]
+
+
+@pytest.mark.parametrize("flag", ["--lora-scaled", "--control-vector-scaled"])
+@pytest.mark.parametrize("spelling", ["dash", "underscore"])
+def test_scaled_adapters_are_refused_since_files_cannot_carry_a_scale(flag, spelling):
+    written = flag.replace("-", "_").replace("__", "--", 1) if spelling == "underscore" else flag
+    with pytest.raises(KarnError, match="model_server_flag_not_allowed:" + flag):
+        model_server_spec(runtime(spec_document(arguments=[written, "a.gguf:0.5"])))
+    files = [
+        {"file": "m.gguf", "sha256": "0" * 64, "flag": "--model"},
+        {"file": "a.gguf", "sha256": "0" * 64, "flag": written},
+    ]
+    with pytest.raises(KarnError, match="model_server_file_flag_not_allowed"):
+        model_server_spec(runtime(with_files(*files)))
+
+
+def test_unscaled_adapters_are_verified_and_passed(served, tmp_path):
+    models = served.host.models_dir
+    (models / "adapter.gguf").write_bytes(b"lora")
+    (models / "vector.gguf").write_bytes(b"control")
+    files = [
+        {"file": "model.gguf", "sha256": served.spec.model_sha256, "flag": "--model"},
+        {"file": "adapter.gguf", "sha256": file_sha256(models / "adapter.gguf"), "flag": "--lora"},
+        {
+            "file": "vector.gguf",
+            "sha256": file_sha256(models / "vector.gguf"),
+            "flag": "--control-vector",
+        },
+    ]
+    plan = plan_model_server(
+        model_server_spec(runtime(with_files(*files))), served.host, served.state
+    )
+    with ModelRelayCollector(tmp_path / "run", plan=plan):
+        argv = json.loads(Path(str(served.binary) + ".argv").read_text())
+    assert argv[argv.index("--lora") + 1] == str(models.resolve() / "adapter.gguf")
+    assert argv[argv.index("--control-vector") + 1] == str(models.resolve() / "vector.gguf")

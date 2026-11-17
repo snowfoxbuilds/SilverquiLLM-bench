@@ -902,7 +902,7 @@ def test_terminating_signals_take_the_interrupted_path_and_write_a_record(tmp_pa
             str(opts["results_repo"]),
             "--state-root",
             str(opts["state_root"]),
-            # The fixture image carries no recipe revision, and this checkout may be dirty.
+            # This checkout may be dirty.
             "--allow-dirty",
         ],
         cwd=REPO,
@@ -923,7 +923,11 @@ def test_terminating_signals_take_the_interrupted_path_and_write_a_record(tmp_pa
     assert len(records) == 1
     assert records[0][1].run_metadata["execution"]["status"] == "interrupted"
     assert records[0][1].run_metadata["provenance"]["allow_dirty"] is True
-    assert "recipe_revision_unrecorded" in records[0][1].run_metadata["provenance"]["dirty_reasons"]
+    assert records[0][1].run_metadata["provenance"]["recipe_revision"] is None
+    assert (
+        "recipe_revision_unrecorded"
+        not in records[0][1].run_metadata["provenance"]["dirty_reasons"]
+    )
 
 
 def test_signal_handlers_are_restored_and_repeats_do_not_abort_cleanup():
@@ -966,7 +970,11 @@ def test_restricted_network_requires_python3_in_the_image_before_launch(tmp_path
     else:
         host.preflight(candidate, 60)
     (probe,) = docker.commands
-    assert probe[:2] == ("run", "--rm") and "none" in probe and candidate.image_id in probe
+    assert (
+        probe[:4] == ("run", "--runtime", "runc", "--rm")
+        and "none" in probe
+        and candidate.image_id in probe
+    )
     DockerHost(docker=ProbeDocker(1)).preflight(make_candidate(tmp_path / "open"), 60)
 
 

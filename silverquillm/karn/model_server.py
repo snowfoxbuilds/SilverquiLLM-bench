@@ -12,18 +12,21 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import functools
 import hashlib
 import http.client
 import json
 import os
 import re
 import secrets
+import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -41,27 +44,86 @@ EVENTS_FILE = "observations.events.jsonl"
 TRANSCRIPT_FILE = "model-transcript.jsonl"
 SERVER_LOG = "model-server.log"
 
-# Server flags a recipe may set, and whether each takes a value. The bench owns the model
-# file, the address, the alias and the API surface, so every other flag is refused.
-SERVER_FLAGS: dict[str, bool] = {
-    **dict.fromkeys(("-c", "--ctx-size"), True),
-    **dict.fromkeys(("-ctk", "--cache-type-k", "-ctv", "--cache-type-v"), True),
-    **dict.fromkeys(("-ngl", "--n-gpu-layers", "--gpu-layers"), True),
-    **dict.fromkeys(("-fa", "--flash-attn", "--fit"), True),
-    **dict.fromkeys(("-b", "--batch-size", "-ub", "--ubatch-size"), True),
-    **dict.fromkeys(("-np", "--parallel", "-t", "--threads", "-tb", "--threads-batch"), True),
-    **dict.fromkeys(("-ts", "--tensor-split", "-sm", "--split-mode", "-mg", "--main-gpu"), True),
-    **dict.fromkeys(("--temp", "--top-p", "--top-k", "--min-p", "--seed"), True),
-    **dict.fromkeys(("--repeat-penalty", "--presence-penalty", "--frequency-penalty"), True),
-    **dict.fromkeys(("--chat-template-kwargs", "--reasoning-budget", "--reasoning-format"), True),
-    **dict.fromkeys(("--cache-reuse", "-n", "--n-predict"), True),
-    **dict.fromkeys(("--rope-scaling", "--rope-scale", "--yarn-orig-ctx"), True),
-    **dict.fromkeys(("--jinja", "--swa-full", "--no-warmup"), False),
-    **dict.fromkeys(("-kvu", "--kv-unified", "--no-context-shift", "--context-shift"), False),
-}
+# Flags the bench owns or that would defeat the record, refused anywhere in a recipe. A
+# token is refused alone or as ``--flag=value``; every other flag passes, and is recorded
+# with the rest of the recipe's arguments.
+REFUSED_FLAGS = frozenset(
+    {
+        # The bench owns the address and the API surface the relay understands.
+        *("--host", "--port", "--path", "--api-prefix", "--api-key", "--api-key-file"),
+        *("--ui", "--webui", "--no-ui", "--no-webui", "--ui-config", "--webui-config"),
+        *("--ui-config-file", "--webui-config-file", "--ssl-key-file", "--ssl-cert-file"),
+        # The model's identity is the verified files and the bench's alias.
+        *("-mu", "--model-url", "-dr", "--docker-repo", "-hf", "-hfr", "--hf-repo"),
+        *("-hff", "--hf-file", "-hft", "--hf-token", "-hfd", "-hfrd", "--hf-repo-draft"),
+        *("--spec-draft-hf", "-mmu", "--mmproj-url", "-a", "--alias"),
+        *("--models-dir", "--models-preset"),
+        # The server reaches no other host and runs nothing on this one for a request.
+        *("--rpc", "--tools", "--tools-runtime", "--mcp-servers-config", "--mcp-servers-json"),
+        *("--ui-mcp-proxy", "--webui-mcp-proxy", "--no-ui-mcp-proxy", "--no-webui-mcp-proxy"),
+        # The server writes, and reads on a request's behalf, only where the bench puts it.
+        *("--log-file", "--slot-save-path", "--log-prompts-dir", "--media-path"),
+        *("--video-ffmpeg-dir", "-lcd", "--lookup-cache-dynamic"),
+        # An agent mode, a tunnel, and a shared port all change who reaches the server.
+        *("-ag", "--agent", "-no-ag", "--no-agent", "--connect", "--connect-code"),
+        "--reuse-port",
+        # b12182's presets download a model from Hugging Face and move the port.
+        *("--embd-gemma-default", "--fim-qwen-1.5b-default", "--fim-qwen-3b-default"),
+        *("--fim-qwen-7b-default", "--fim-qwen-7b-spec", "--fim-qwen-14b-spec"),
+        *("--fim-qwen-30b-default", "--gpt-oss-20b-default", "--gpt-oss-120b-default"),
+        *("--vision-gemma-4b-default", "--vision-gemma-12b-default"),
+        # They take ``FNAME:SCALE``, which a ``files`` entry has no way to say.
+        *("--lora-scaled", "--control-vector-scaled"),
+    }
+)
+# llama.cpp b12182's flags naming an input file: refused among the arguments, since a file
+# must be declared in ``files`` to be verified and recorded.
+FILE_FLAGS = frozenset(
+    {
+        *("-m", "--model", "-md", "--model-draft", "--spec-draft-model", "-mm", "--mmproj"),
+        *("--chat-template-file", "--grammar-file", "-jf", "--json-schema-file"),
+        *("-lcs", "--lookup-cache-static", "--lora", "--control-vector"),
+        *("-f", "--file", "-bf", "--binary-file"),
+    }
+)
+MODEL_FLAG = "--model"
+# Variables llama.cpp b12182 reads as options, a port, a route, a config, cache or download
+# location, or a library path, and the ones the bench itself sets: the GPU Slot owns which
+# GPUs the server sees, and the bench owns PATH, HOME and the XDG directories.
+# libcuda, cuBLAS and the TLS library read some as code to load or a file to write.
+REFUSED_ENVIRONMENT_PREFIXES = (
+    *("LLAMA_", "LLAMACPP_", "AIP_", "LD_", "XDG_", "HF_", "HUGGING_FACE_", "HUGGINGFACE_"),
+    *("OPENSSL_", "SSL_CERT_", "__"),
+)
+REFUSED_ENVIRONMENT = frozenset(
+    {
+        *("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "PATH", "HOME"),
+        # Other backends' GPU selection: GPU Slots pin CUDA builds only.
+        *("GGML_VK_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES"),
+        *("GGML_BACKEND_PATH", "GGML_ET_KERNELS_PATH", "GGML_OPENCL_KERNEL_CACHE_DIR"),
+        *("GGML_ET_PROFILE", "ET_TOOLCHAIN", "TOOLCHAIN_ROOT"),
+        *("MODEL_ENDPOINT", "MTMD_BACKEND_DEVICE", "MTMD_DEBUG_EMBEDDINGS"),
+        *("CUDA_INJECTION64_PATH", "CUDA_INJECTION32_PATH", "CUDA_AMODEL_DLL"),
+        *("CUDA_FORCE_PRELOAD_LIBRARIES", "CUDA_DEVCODE_PATH", "CUDA_CACHE_PATH"),
+        *("CUDA_MPS_PIPE_DIRECTORY", "CUDA_MPS_LOG_DIRECTORY", "GCONV_PATH"),
+    }
+)
+# Any log file, log destination or core dump is a write to a host path.
+REFUSED_ENVIRONMENT_PATTERN = re.compile(r".*(_LOG_FILE|LOGDEST|COREDUMP).*")
+REFUSED_ENVIRONMENT_ANY_CASE = frozenset({"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"})
+# A dynamically linked build may need this one on its host; a recipe never sets it.
+HOST_ONLY_ENVIRONMENT = frozenset({"LD_LIBRARY_PATH"})
+# llama.cpp reads these whatever the environment says; the bench cannot point them elsewhere.
+SYSTEM_CONFIG_FILES = (Path("/etc/llama.cpp/config.ini"),)
+DEFAULT_READY_SECONDS = 900
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 1800
+MAX_TIMEOUT_SECONDS = 86400
 _BUILD = re.compile(r"b([0-9]{1,8})")
 _VERSION = re.compile(r"build ([0-9]{1,8}), commit ([0-9a-f]{7,40})")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,200}")
+_SHARD = re.compile(r"(.+)-([0-9]{5})-of-([0-9]{5})\.gguf")
+_ENVIRONMENT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")
 # A request at the largest context is a few MiB; the cap also bounds the parse here and the
 # sidecar's copy, which runs in 128 MiB.
 MAX_REQUEST_BYTES = 16 * 1024 * 1024
@@ -72,18 +134,41 @@ MAX_KEPT_MESSAGES_CHARS = 1024 * 1024
 ORDINARY_REQUEST_KEYS = frozenset(
     {"model", "messages", "tools", "stream", "stream_options", "store", "max_completion_tokens"}
 )
-UPSTREAM_TIMEOUT_SECONDS = 1800
 # How long finalizing waits for cancelled requests to write their terminal records. A request
 # still unsettled after it is counted from its start record as unfinished.
 SETTLE_SECONDS = 10
 REQUEST_STARTED = "request_started"
 TRANSCRIPT_LOST = "transcript_lost"
 RELAYED_PATHS = {("POST", "/v1/chat/completions"), ("GET", "/v1/models")}
+# A GPU with more memory in use than this runs someone's job, even when ``nvidia-smi`` lists
+# no process to this user; an idle card uses tens of MiB.
+BUSY_MEMORY_MIB = 1024
+NVIDIA_SMI_SECONDS = 10
+GPU_QUERY = "index,uuid,name,memory.used,memory.total,power.limit,driver_version"
+# The runner's GPU selection, which a host without GPU Slots passes on to its server.
+GPU_SELECTION = ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")
+
+
+@dataclass(frozen=True)
+class ServerFile:
+    """One input file the server reads, verified by its digest; passed after ``flag``, if any."""
+
+    file: str
+    sha256: str
+    flag: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        entry = {"file": self.file, "sha256": self.sha256}
+        return entry if self.flag is None else {**entry, "flag": self.flag}
 
 
 @dataclass(frozen=True)
 class ModelServerSpec:
-    """The recipe's server: an engine build, one model file, and the server flags."""
+    """The recipe's server: an engine build, its files, the server flags and settings.
+
+    A setting the recipe leaves out is absent from :meth:`to_dict`, so a recipe written before
+    it existed records exactly what it always did.
+    """
 
     engine: str
     build: str
@@ -91,38 +176,105 @@ class ModelServerSpec:
     model_sha256: str
     arguments: tuple[str, ...]
     served_model: str
+    files: tuple[ServerFile, ...] = ()
+    """The declared ``files``, the model among them; empty for a recipe naming one ``model``."""
+    environment: tuple[tuple[str, str], ...] | None = None
+    ready_timeout_seconds: int | None = None
+    request_timeout_seconds: int | None = None
+
+    @property
+    def server_files(self) -> tuple[ServerFile, ...]:
+        """Every file the server reads, the model first."""
+        if not self.files:
+            return (ServerFile(self.model_file, self.model_sha256, MODEL_FLAG),)
+        model = next(entry for entry in self.files if entry.flag == MODEL_FLAG)
+        return (model, *(entry for entry in self.files if entry is not model))
+
+    @property
+    def ready_timeout(self) -> int:
+        if self.ready_timeout_seconds is None:
+            return DEFAULT_READY_SECONDS
+        return self.ready_timeout_seconds
+
+    @property
+    def request_timeout(self) -> int:
+        if self.request_timeout_seconds is None:
+            return DEFAULT_REQUEST_TIMEOUT_SECONDS
+        return self.request_timeout_seconds
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        document = {
             "engine": self.engine,
             "build": self.build,
             "model": {"file": self.model_file, "sha256": self.model_sha256},
             "arguments": list(self.arguments),
             "served_model": self.served_model,
         }
+        if self.files:
+            document["files"] = [entry.to_dict() for entry in self.files]
+        if self.environment is not None:
+            document["environment"] = dict(self.environment)
+        if self.ready_timeout_seconds is not None:
+            document["ready_timeout_seconds"] = self.ready_timeout_seconds
+        if self.request_timeout_seconds is not None:
+            document["request_timeout_seconds"] = self.request_timeout_seconds
+        return document
 
 
-def model_server_spec(runtime: dict) -> ModelServerSpec | None:
-    """The definition's model server, or None; a malformed one refuses the candidate."""
-    environment = runtime["environment"]
-    if MODEL_SERVER_ENV not in environment:
+def _flag_name(token: str) -> str:
+    """The flag llama.cpp looks *token* up as: it rewrites ``_`` to ``-`` in every ``--``
+    token (b12182 ``common/arg.cpp``), so ``--hf_repo`` is ``--hf-repo``."""
+    name = token.split("=", 1)[0]
+    return name.replace("_", "-") if name.startswith("--") else name
+
+
+def _refused_flag(token: str) -> bool:
+    return _flag_name(token) in REFUSED_FLAGS
+
+
+def environment_refusal(environment, *, host: bool = False) -> str | None:
+    """Why *environment* cannot be given to the server, or None when it can; the host config
+    may also set :data:`HOST_ONLY_ENVIRONMENT`."""
+    if not isinstance(environment, dict):
+        return "invalid"
+    for name, value in environment.items():
+        if (
+            not isinstance(name, str)
+            or not _ENVIRONMENT_NAME.fullmatch(name)
+            or not isinstance(value, str)
+            or "\0" in value
+        ):
+            return "invalid"
+        if host and name in HOST_ONLY_ENVIRONMENT:
+            continue
+        if (
+            name in REFUSED_ENVIRONMENT
+            or name.startswith(REFUSED_ENVIRONMENT_PREFIXES)
+            or name.upper() in REFUSED_ENVIRONMENT_ANY_CASE
+            or REFUSED_ENVIRONMENT_PATTERN.fullmatch(name)
+        ):
+            return "refused:" + name
+    return None
+
+
+def _setpriv() -> str:
+    """``setpriv`` from the runner's PATH, before the server's own environment exists."""
+    found = shutil.which("setpriv")
+    if found is None:
+        raise KarnError("model_server_setpriv_unavailable")
+    return found
+
+
+def _timeout(document: dict, key: str) -> int | None:
+    if key not in document:
         return None
-    try:
-        document = json.loads(environment[MODEL_SERVER_ENV])
-    except ValueError:
-        raise KarnError("model_server_spec_invalid") from None
-    if not isinstance(document, dict) or set(document) != {
-        "engine",
-        "build",
-        "model",
-        "arguments",
-    }:
-        raise KarnError("model_server_spec_invalid")
-    model, arguments = document["model"], document["arguments"]
-    if document["engine"] != "llama.cpp":
-        raise KarnError("model_server_engine_unsupported")
-    if not isinstance(document["build"], str) or not _BUILD.fullmatch(document["build"]):
-        raise KarnError("model_server_build_invalid")
+    value = document[key]
+    if type(value) is not int or not 0 < value <= MAX_TIMEOUT_SECONDS:
+        raise KarnError("model_server_timeout_invalid:" + key)
+    return value
+
+
+def _legacy_model(model) -> ServerFile:
     if (
         not isinstance(model, dict)
         or set(model) != {"file", "sha256"}
@@ -134,32 +286,106 @@ def model_server_spec(runtime: dict) -> ModelServerSpec | None:
         or not _SHA256.fullmatch(model["sha256"])
     ):
         raise KarnError("model_server_model_invalid")
+    return ServerFile(model["file"], model["sha256"], MODEL_FLAG)
+
+
+def _declared_files(files) -> tuple[ServerFile, ...]:
+    if not isinstance(files, list) or not files:
+        raise KarnError("model_server_files_invalid")
+    entries = []
+    for entry in files:
+        if (
+            not isinstance(entry, dict)
+            or not {"file", "sha256"} <= set(entry) <= {"file", "sha256", "flag"}
+            or not isinstance(entry["file"], str)
+            or not _FILE_NAME.fullmatch(entry["file"])
+            or not isinstance(entry["sha256"], str)
+            or not _SHA256.fullmatch(entry["sha256"])
+        ):
+            raise KarnError("model_server_files_invalid")
+        flag = entry.get("flag")
+        if flag is not None and (
+            not isinstance(flag, str)
+            or not re.fullmatch(r"--?[A-Za-z0-9][A-Za-z0-9-]{0,63}", flag)
+            or flag == "-m"
+            or _refused_flag(flag)
+        ):
+            raise KarnError("model_server_file_flag_not_allowed:" + str(flag)[:64])
+        entries.append(ServerFile(entry["file"], entry["sha256"], flag))
+    names = [entry.file for entry in entries]
+    if len(set(names)) != len(names):
+        raise KarnError("model_server_files_invalid")
+    if sum(entry.flag == MODEL_FLAG for entry in entries) != 1:
+        raise KarnError("model_server_files_need_one_model")
+    # llama.cpp loads a split model's other parts by name, so every part must be declared.
+    for name in names:
+        shard = _SHARD.fullmatch(name)
+        if shard:
+            stem, total = shard.group(1), int(shard.group(3))
+            parts = {f"{stem}-{n:05d}-of-{total:05d}.gguf" for n in range(1, total + 1)}
+            if not parts <= set(names):
+                raise KarnError("model_server_split_model_incomplete:" + stem[:64])
+    return tuple(entries)
+
+
+def model_server_spec(runtime: dict) -> ModelServerSpec | None:
+    """The definition's model server, or None; a malformed one refuses the candidate."""
+    environment = runtime["environment"]
+    if MODEL_SERVER_ENV not in environment:
+        return None
+    try:
+        document = json.loads(environment[MODEL_SERVER_ENV])
+    except ValueError:
+        raise KarnError("model_server_spec_invalid") from None
+    optional = {"environment", "ready_timeout_seconds", "request_timeout_seconds"}
+    if (
+        not isinstance(document, dict)
+        or not {"engine", "build", "arguments"} <= set(document)
+        or set(document) - {"engine", "build", "arguments", "model", "files", *optional}
+        or ("model" in document) == ("files" in document)
+    ):
+        raise KarnError("model_server_spec_invalid")
+    arguments = document["arguments"]
+    if document["engine"] != "llama.cpp":
+        raise KarnError("model_server_engine_unsupported")
+    if not isinstance(document["build"], str) or not _BUILD.fullmatch(document["build"]):
+        raise KarnError("model_server_build_invalid")
+    if "files" in document:
+        files = _declared_files(document["files"])
+        model = next(entry for entry in files if entry.flag == MODEL_FLAG)
+    else:
+        files, model = (), _legacy_model(document["model"])
     if not isinstance(arguments, list) or not all(isinstance(a, str) for a in arguments):
         raise KarnError("model_server_arguments_invalid")
-    position = 0
-    while position < len(arguments):
-        flag = arguments[position]
-        if flag not in SERVER_FLAGS:
-            raise KarnError("model_server_flag_not_allowed:" + flag[:64])
-        position += 2 if SERVER_FLAGS[flag] else 1
-        if position > len(arguments):
-            raise KarnError("model_server_flag_value_missing:" + flag)
     if any("\0" in argument for argument in arguments):
         raise KarnError("model_server_arguments_invalid")
+    for token in arguments:
+        if _refused_flag(token) or _flag_name(token) in FILE_FLAGS:
+            raise KarnError("model_server_flag_not_allowed:" + _flag_name(token)[:64])
+    server_environment = None
+    if "environment" in document:
+        refusal = environment_refusal(document["environment"])
+        if refusal is not None:
+            raise KarnError("model_server_environment_" + refusal[:96])
+        server_environment = tuple(sorted(document["environment"].items()))
+    ready = _timeout(document, "ready_timeout_seconds")
+    request = _timeout(document, "request_timeout_seconds")
     served = environment.get("CONSTRUCT_MODEL", "")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}", served):
         raise KarnError("model_server_requires_construct_model")
-    if environment.get("CONSTRUCT_PI_BASE_URL") != MODEL_SERVER_URL:
-        raise KarnError("model_server_url_mismatch")
     if runtime["network"]["mode"] != "restricted":
         raise KarnError("model_server_requires_restricted_network")
     return ModelServerSpec(
         "llama.cpp",
         document["build"],
-        model["file"],
-        model["sha256"],
+        model.file,
+        model.sha256,
         tuple(arguments),
         served,
+        files,
+        server_environment,
+        ready,
+        request,
     )
 
 
@@ -169,6 +395,478 @@ class ModelServerHost:
 
     models_dir: Path | None = None
     llama_cpp: dict[str, Path] = field(default_factory=dict)
+    environment: dict[str, str] = field(default_factory=dict)
+    """``[model_server] environment``: variables only this host's builds need."""
+    gpu_slots: tuple[str, ...] | None = None
+    """``[model_server] gpu_slots``; None for the host's one unpinned GPU Slot."""
+
+
+class ModelServerBusyError(KarnError):
+    """Every GPU Slot of the host is locked, unusable, or has another job on its GPUs.
+
+    ``unusable`` names the slots whose lock file could not be opened, and why."""
+
+    def __init__(self, unusable: tuple[str, ...] = (), reason: str | None = None):
+        super().__init__(reason or "model_server_busy")
+        self.unusable = unusable
+
+    def explained(self) -> str:
+        """The refusal and every unusable slot behind it, for an operator to read."""
+        return "; ".join((str(self), *self.unusable))
+
+
+@dataclass(frozen=True)
+class GpuReading:
+    """What ``nvidia-smi`` reports of this host's GPUs, or why it reported nothing."""
+
+    gpus: tuple[dict[str, Any], ...] | None
+    compute_uuids: frozenset[str] = frozenset()
+    reason: str | None = None
+
+
+_GPU_INDEX = re.compile(r"0|[1-9][0-9]*")
+
+
+_GPU_NUMBER = re.compile(r"[0-9]+(?:\.[0-9]+)?")
+
+
+def _gpu_number(text: str):
+    """A reported number in plain ASCII digits, None for a bracketed ``[N/A]``; anything else
+    makes the reading unreadable."""
+    if text.startswith("[") and text.endswith("]"):
+        return None
+    if not _GPU_NUMBER.fullmatch(text):
+        raise ValueError("nvidia_smi_unreadable")
+    number = float(text)
+    return int(number) if number.is_integer() else number
+
+
+# One nvidia-smi in flight per process: one the kernel will not let die (D state) is kept here
+# and no other starts until it is gone, so a stuck driver leaks one process, not one per read.
+_NVIDIA_SMI = threading.Lock()
+_abandoned: list[subprocess.Popen] = []
+PROBE_RECORD = "nvidia-smi-probe.json"
+PROBE_LOCK = ".nvidia-smi-probe.lock"
+
+
+def _process_start(pid: int) -> int | None:
+    """A live process's start time, which a reused PID cannot share; None once it is gone."""
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+    except (OSError, IndexError):
+        return None
+    if len(fields) < 20 or fields[0] in ("Z", "X") or not fields[19].isdigit():
+        return None
+    return int(fields[19])
+
+
+# The stand-in a recorded probe starts as: it waits for the word to go, and only then becomes
+# nvidia-smi. End of input, from a parent that failed or died before authorising it, makes
+# ``read`` fail, so the driver is never touched by a probe the host has no record of.
+_GATE = 'read go && exec "$0" "$@"'
+
+
+class HostProbes:
+    """The host's one in-flight ``nvidia-smi``, recorded under the state root before it may
+    touch the driver and until it is gone, so a probe outlives the process that started it:
+    every worker, the scheduler and a direct run start none while a recorded one lives. A
+    reader that must not write, as the monitor, honours the record but keeps none of its own."""
+
+    def __init__(self, state_root: Path, *, record: bool = True):
+        self.root, self.record = Path(state_root), record
+
+    def _identity(self) -> tuple[int, int] | None:
+        """The recorded probe's PID and start time; None when there is no well-formed one."""
+        try:
+            document = json.loads((self.root / PROBE_RECORD).read_text())
+            pid, started = document["pid"], document["start"]
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        if type(pid) is not int or type(started) is not int:
+            return None
+        return pid, started
+
+    def _live(self) -> bool:
+        identity = self._identity()
+        return identity is not None and _process_start(identity[0]) == identity[1]
+
+    def start(self, argv: list[str]) -> subprocess.Popen:
+        """The probe, running: recorded, then authorised to become ``nvidia-smi``. Any failure
+        before that ends the stand-in unexecuted, and raises."""
+        if not self.record:
+            if self._live():
+                raise OSError("nvidia_smi_in_flight")
+            return _spawn(argv)
+        self.root.mkdir(parents=True, exist_ok=True)
+        with (self.root / PROBE_LOCK).open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if self._live():
+                raise OSError("nvidia_smi_in_flight")
+            # A record naming no live probe, a malformed one included, is stale.
+            with contextlib.suppress(FileNotFoundError):
+                (self.root / PROBE_RECORD).unlink()
+            process = subprocess.Popen(
+                ["/bin/sh", "-c", _GATE, *argv],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+            )
+            authorised = False
+            try:
+                started = _process_start(process.pid)
+                if started is None:
+                    raise OSError("nvidia_smi_identity_unavailable")
+                _write_record(self.root / PROBE_RECORD, {"pid": process.pid, "start": started})
+                # From the first byte of the word to go the stand-in may become nvidia-smi, so
+                # from here it is treated as a probe: recorded until it is confirmed gone.
+                authorised = True
+                process.stdin.write(b"go\n")
+                process.stdin.close()
+            except BaseException:
+                self._end(process, authorised)
+                raise
+        return process
+
+    def _end(self, process: subprocess.Popen, authorised: bool) -> None:
+        """Stop a probe the parent cannot see through. Unauthorised, it is a stand-in that
+        never touched the driver, and is reaped; authorised, it stays recorded until gone."""
+        with contextlib.suppress(OSError):
+            process.stdin.close()
+        with contextlib.suppress(OSError):
+            process.kill()
+        with contextlib.suppress(OSError):
+            process.stdout.close()
+        if authorised:
+            if process.poll() is None:
+                _abandoned.append(process)
+            return
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=5)
+        self._clear(process.pid)
+
+    def settle(self, process: subprocess.Popen) -> None:
+        """Clear the record once its probe is gone; a probe still alive stays recorded."""
+        if not self.record or process.poll() is None:
+            return
+        with contextlib.suppress(OSError), (self.root / PROBE_LOCK).open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            self._clear(process.pid)
+
+    def _clear(self, pid: int) -> None:
+        path = self.root / PROBE_RECORD
+        with contextlib.suppress(OSError, ValueError, AttributeError):
+            if json.loads(path.read_text()).get("pid") == pid:
+                path.unlink()
+
+
+def _write_record(path: Path, document: dict) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}")
+    try:
+        temporary.write_text(json.dumps(document))
+        os.replace(temporary, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            temporary.unlink()
+        raise
+
+
+def _spawn(argv: list[str]) -> subprocess.Popen:
+    return subprocess.Popen(
+        argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+    )
+
+
+def _bounded(argv: list[str], probes: HostProbes | None = None) -> tuple[int, bytes]:
+    """Run *argv* for at most :data:`NVIDIA_SMI_SECONDS`, never waiting on a process that
+    will not die: an ``nvidia-smi`` stuck in the kernel is abandoned, not reaped, and while it
+    lives, or another read is in flight, no other starts (``OSError``)."""
+    if not _NVIDIA_SMI.acquire(blocking=False):
+        raise OSError("nvidia_smi_in_flight")
+    try:
+        _abandoned[:] = [process for process in _abandoned if process.poll() is None]
+        if _abandoned:
+            raise OSError("nvidia_smi_in_flight")
+        process = probes.start(argv) if probes is not None else _spawn(argv)
+        try:
+            output, _ = process.communicate(timeout=NVIDIA_SMI_SECONDS)
+        except BaseException:
+            # A timeout or an interruption: the probe is abandoned, and tracked while it lives.
+            with contextlib.suppress(OSError):
+                process.kill()
+            with contextlib.suppress(OSError):
+                process.stdout.close()
+            if process.poll() is None:
+                _abandoned.append(process)
+            raise
+        finally:
+            if probes is not None:
+                probes.settle(process)
+        return process.returncode, output
+    finally:
+        _NVIDIA_SMI.release()
+
+
+def _nvidia_smi(query: list[str], run) -> list[list[str]]:
+    code, output = run(["nvidia-smi", *query, "--format=csv,noheader,nounits"])
+    if code:
+        raise ValueError("nvidia_smi_failed")
+    try:
+        text = output.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError("nvidia_smi_unreadable") from None
+    return [
+        [field.strip() for field in line.split(",")] for line in text.splitlines() if line.strip()
+    ]
+
+
+def read_gpus(run=None, *, state_root: Path | None = None, record: bool = True) -> GpuReading:
+    """Every GPU's facts and the GPUs running a compute process; nothing, with a reason, when
+    ``nvidia-smi`` is missing, fails, hangs or says something unreadable.
+
+    Given the *state_root*, the probe is one of the host's (:class:`HostProbes`); a reader
+    that must not write passes ``record=False``."""
+    if run is None:
+        probes = HostProbes(state_root, record=record) if state_root is not None else None
+        run = functools.partial(_bounded, probes=probes)
+    try:
+        rows = _nvidia_smi(["--query-gpu=" + GPU_QUERY], run)
+        apps = _nvidia_smi(["--query-compute-apps=gpu_uuid,pid,used_memory"], run)
+        gpus = []
+        for row in rows:
+            if len(row) != 7 or not _GPU_INDEX.fullmatch(row[0]):
+                raise ValueError("nvidia_smi_unreadable")
+            index, uuid_, name, used, total, power, driver = row
+            gpus.append(
+                {
+                    "index": int(index),
+                    "uuid": uuid_,
+                    "name": name,
+                    "memory_total_mib": _gpu_number(total),
+                    "memory_used_mib": _gpu_number(used),
+                    "power_limit_w": _gpu_number(power),
+                    "driver_version": driver,
+                }
+            )
+    except (OSError, subprocess.TimeoutExpired):
+        return GpuReading(None, reason="nvidia_smi_unavailable")
+    except ValueError as error:
+        return GpuReading(None, reason=str(error))
+    return GpuReading(tuple(gpus), frozenset(row[0] for row in apps if row[0]))
+
+
+@dataclass(frozen=True)
+class GpuSlot:
+    """One GPU Slot: a ``CUDA_VISIBLE_DEVICES`` value and its lock, or, with no ``gpu_slots``,
+    the host-wide lock on the GPUs the runner's own selection gives the server."""
+
+    value: str | None
+    lock_path: Path
+
+    @property
+    def indices(self) -> frozenset[int] | None:
+        return None if self.value is None else frozenset(map(int, self.value.split(",")))
+
+    def gpus(self, reading: GpuReading) -> list[dict[str, Any]] | None:
+        """The slot's GPUs; without ``gpu_slots``, every GPU ``nvidia-smi`` lists, which the
+        runner's recorded selection narrows."""
+        if reading.gpus is None:
+            return None
+        if self.indices is None:
+            return list(reading.gpus)
+        return [gpu for gpu in reading.gpus if gpu["index"] in self.indices]
+
+    def busy(self, reading: GpuReading) -> str | None:
+        """Why another job keeps this GPU Slot busy, whatever its lock says; None when nothing
+        does. Only a listed GPU Slot is checked: without ``gpu_slots`` a host's own display
+        may hold GPU memory, and only the lock decides, as it does without a reading."""
+        if self.value is None:
+            return None
+        for gpu in self.gpus(reading) or ():
+            if gpu["uuid"] in reading.compute_uuids:
+                return "compute_process"
+            used = gpu["memory_used_mib"]
+            if isinstance(used, (int, float)) and used > BUSY_MEMORY_MIB:
+                return "memory_used"
+        return None
+
+    def unknown_gpus(self, reading: GpuReading) -> bool:
+        """Whether the slot names a GPU a readable ``nvidia-smi`` does not list."""
+        if self.indices is None or reading.gpus is None:
+            return False
+        return not self.indices <= {gpu["index"] for gpu in reading.gpus}
+
+
+def gpu_slots(state_root: Path, configured: tuple[str, ...] | None) -> tuple[GpuSlot, ...]:
+    """The host's GPU Slots in config order; a lock is named by its slot's value, so reordering
+    the list never moves a held lock onto another GPU."""
+    root = Path(state_root).resolve()
+    if configured is None:
+        return (GpuSlot(None, root / "model-server.lock"),)
+    return tuple(GpuSlot(value, root / f"model-server-gpu-{value}.lock") for value in configured)
+
+
+def gpu_environment(slot_value: str | None, inherited=None) -> dict[str, str]:
+    """The server's GPU selection: a GPU Slot's GPUs in ``nvidia-smi``'s order, or, without
+    ``gpu_slots``, the runner's own ``CUDA_VISIBLE_DEVICES`` and ``CUDA_DEVICE_ORDER`` exactly
+    as set, empty or absent."""
+    if slot_value is not None:
+        return {"CUDA_DEVICE_ORDER": "PCI_BUS_ID", "CUDA_VISIBLE_DEVICES": slot_value}
+    inherited = os.environ if inherited is None else inherited
+    return {name: inherited[name] for name in GPU_SELECTION if name in inherited}
+
+
+# Locks kept for this process's lifetime: a server that outlived its stop may still be on the
+# GPUs, and dropping the last reference to a handle would release its flock.
+_kept_locks: list = []
+
+
+class GpuSlotClaim:
+    """A held GPU Slot, the GPU selection its server gets, and what ``nvidia-smi`` said of its
+    GPUs when it was claimed.
+
+    Once a server is linked, every release checks it: the slot is released only once the
+    server is confirmed stopped, else kept until this process exits."""
+
+    def __init__(self, slot: GpuSlot, handle, reading: GpuReading, inherited=None):
+        self.slot, self._handle = slot, handle
+        self.gpus = slot.gpus(reading)
+        self.gpus_reason = reading.reason
+        self.environment = gpu_environment(slot.value, inherited)
+        self._server = None
+
+    def link(self, server) -> None:
+        """Tie the claim to the server it holds the GPUs for (anything with ``stopped``)."""
+        self._server = server
+
+    def release(self) -> None:
+        if self._handle is None:
+            return
+        if self._server is not None and not self._server.stopped:
+            self.keep_until_exit()
+            return
+        self._handle.close()
+        self._handle = None
+
+    def keep_until_exit(self) -> None:
+        """Hold the lock until this process exits: its server may still be on the GPUs."""
+        if self._handle is not None:
+            _kept_locks.append(self._handle)
+            self._handle = None
+
+    def facts(self) -> dict[str, Any]:
+        facts: dict[str, Any] = {
+            "gpu_slot": self.slot.value,
+            "cuda_visible_devices": self.environment.get("CUDA_VISIBLE_DEVICES"),
+            "cuda_device_order": self.environment.get("CUDA_DEVICE_ORDER"),
+            "gpus": self.gpus,
+        }
+        if self.gpus is None:
+            facts["gpus_reason"] = self.gpus_reason
+        return facts
+
+
+def _lock(slot: GpuSlot):
+    """The slot's lock, held; None when another process holds it. Raises ``OSError`` when the
+    lock file cannot be created or opened."""
+    slot.lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = slot.lock_path.open("a")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        return None
+    except BaseException:
+        handle.close()
+        raise
+    return handle
+
+
+def _host_reader(slots: tuple[GpuSlot, ...]):
+    """This host's reader, one of its recorded probes; looked up at call time."""
+    return functools.partial(read_gpus, state_root=slots[0].lock_path.parent)
+
+
+def _needs_reading(slots: tuple[GpuSlot, ...]) -> bool:
+    return any(slot.value is not None for slot in slots)
+
+
+def _unknown(slot: GpuSlot) -> str:
+    return f"gpu_slot_unknown_gpu:{slot.value}: nvidia-smi lists no such GPU"
+
+
+def _lock_unusable(path: Path, reason: str) -> str:
+    return f"model_server_lock_unusable: {path}: {reason}"
+
+
+def claim_gpu_slot(slots: tuple[GpuSlot, ...], read=None, inherited=None) -> GpuSlotClaim:
+    """The first free GPU Slot, held until released; ``model_server_busy`` when none is.
+
+    A slot naming a GPU ``nvidia-smi`` does not list, or whose lock file cannot be opened, is
+    unusable and skipped, never the end of the run; with no slot usable at all the error is
+    ``gpu_slot_unknown_gpu:<values>`` when unknown GPUs are why. Either way it defers."""
+    reading = (read or _host_reader(slots))()
+    unusable, unknown = [], []
+    for slot in slots:
+        if slot.unknown_gpus(reading):
+            unusable.append(_unknown(slot))
+            unknown.append(slot.value)
+            continue
+        if slot.busy(reading) is not None:
+            continue
+        try:
+            handle = _lock(slot)
+        except OSError as error:
+            unusable.append(_lock_unusable(slot.lock_path, error.strerror or type(error).__name__))
+            continue
+        if handle is not None:
+            return GpuSlotClaim(slot, handle, reading, inherited)
+    raise ModelServerBusyError(
+        tuple(unusable),
+        "gpu_slot_unknown_gpu:" + ",".join(unknown)
+        if len(unusable) == len(slots) and unknown
+        else None,
+    )
+
+
+def gpu_slot_availability(
+    slots: tuple[GpuSlot, ...], read=None, locks: Path | None = None
+) -> tuple[bool, tuple[str, ...]]:
+    """Whether some GPU Slot looks claimable, and the slots whose lock file is unusable.
+
+    An admission hint for the scheduler, read like the monitor reads it: from the kernel's lock
+    table, never by taking a lock a run is about to claim. The claim stays authoritative."""
+    from silverquillm.monitor.locks import PROC_LOCKS, held_locks, lock_held
+
+    reading = (read or _host_reader(slots))() if _needs_reading(slots) else GpuReading(None)
+    held = held_locks(locks or PROC_LOCKS)
+    claimable, unusable = False, []
+    for slot in slots:
+        if (reason := slot_unusable(slot, reading)) is not None:
+            unusable.append(reason)
+        elif (
+            slot.busy(reading) is None
+            and lock_held(slot.lock_path, held, follow_symlinks=True) is not True
+        ):
+            claimable = True
+    return claimable, tuple(unusable)
+
+
+def slot_unusable(slot: GpuSlot, reading: GpuReading) -> str | None:
+    """Why no run can use *slot*, judged without opening or locking anything: a GPU a readable
+    ``nvidia-smi`` does not list, or a lock file this user cannot open. An unread ``nvidia-smi``
+    alone never makes a slot unusable. Admission and the monitor share this judgement."""
+    if slot.unknown_gpus(reading):
+        return _unknown(slot)
+    if _unusable(slot.lock_path):
+        return _lock_unusable(slot.lock_path, "Permission denied")
+    return None
+
+
+def _unusable(path: Path) -> bool:
+    """A lock file this process could not open for a claim, or could not create."""
+    if path.exists():
+        return not os.access(path, os.R_OK | os.W_OK)
+    return path.parent.exists() and not os.access(path.parent, os.W_OK)
 
 
 @dataclass(frozen=True)
@@ -180,29 +878,108 @@ class ModelServerPlan:
     version: str
     commit: str
     model_path: Path
-    lock_path: Path
+    state_root: Path
+    files: tuple[tuple[ServerFile, Path], ...] = ()
+    host_environment: dict[str, str] = field(default_factory=dict)
+    gpu_slots: tuple[str, ...] | None = None
+    binary_sha256: str | None = None
+    claim: GpuSlotClaim | None = None
+    """The GPU Slot the run holds, from its claim until its server stops."""
+
+    @property
+    def server_files(self) -> tuple[tuple[ServerFile, Path], ...]:
+        """Every file the server reads with its resolved path, the model first."""
+        return self.files or ((self.spec.server_files[0], self.model_path),)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        facts = {
             **self.spec.to_dict(),
             "binary": str(self.binary),
             "binary_version": self.version,
             "binary_commit": self.commit,
             "model_path": str(self.model_path),
+            "host": {
+                "environment": dict(self.host_environment),
+                "binary_sha256": self.binary_sha256,
+                **(self.claim.facts() if self.claim is not None else {}),
+            },
         }
+        if self.spec.files:
+            facts["file_paths"] = {entry.file: str(path) for entry, path in self.server_files}
+        return facts
 
 
-def plan_model_server(spec: ModelServerSpec, host: ModelServerHost, state_root: Path):
-    """Refuse a server this host cannot start: a missing build or file, or the wrong build."""
+def claim_model_server(plan: ModelServerPlan, read=None, inherited=None) -> ModelServerPlan:
+    """The plan holding the host's first free GPU Slot; ``model_server_busy`` when none is.
+
+    The GPU selection is fixed at the claim, so the server gets the selection the run records
+    before launch, whatever the runner's environment says later."""
+    slots = gpu_slots(plan.state_root, plan.gpu_slots)
+    return replace(plan, claim=claim_gpu_slot(slots, read, inherited))
+
+
+def server_environment(
+    spec: ModelServerSpec,
+    host_environment: dict[str, str],
+    home: Path,
+    inherited: dict[str, str] | None = None,
+    *,
+    gpu: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """The whole environment of the server and of its ``--version`` probe: never the runner's,
+    where a stray ``LD_LIBRARY_PATH`` or ``LLAMA_ARG_*`` would change the server unseen.
+
+    *home* is an empty directory the bench owns, so llama.cpp reads no user config file;
+    *gpu* is the claimed GPU selection (:func:`gpu_environment`); without one, as for the
+    ``--version`` probe, the runner's own CUDA selection passes.
+    """
+    inherited = os.environ if inherited is None else inherited
+    environment = {"PATH": inherited["PATH"]} if "PATH" in inherited else {}
+    environment.update(host_environment)
+    environment.update(spec.environment or ())
+    environment.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"))
+    environment.update(gpu_environment(None, inherited) if gpu is None else gpu)
+    return environment
+
+
+def plan_model_server(
+    spec: ModelServerSpec,
+    host: ModelServerHost,
+    state_root: Path,
+    claim: GpuSlotClaim | None = None,
+):
+    """Refuse a server this host cannot start: a missing build or file, or the wrong build.
+
+    Given the run's *claim*, the ``--version`` probe runs on the claimed GPU selection, so on a
+    host with GPU Slots it never touches another slot's GPUs."""
+    refusal = environment_refusal(host.environment, host=True)
+    if refusal is not None:
+        raise KarnError("model_server_host_environment_" + refusal[:96])
+    for config in SYSTEM_CONFIG_FILES:
+        if os.path.lexists(config):
+            raise KarnError("model_server_config_file_present:" + str(config))
+    _setpriv()
     binary = host.llama_cpp.get(spec.build)
     if binary is None:
         raise KarnError("model_server_build_unavailable:" + spec.build)
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise KarnError("model_server_binary_unavailable:" + spec.build)
     try:
-        result = subprocess.run(
-            [str(binary), "--version"], capture_output=True, text=True, timeout=60, check=False
-        )
+        # The build verified is the build served: the same libraries, the same config.
+        with tempfile.TemporaryDirectory(prefix="silverquillm-llama-home-") as home:
+            result = subprocess.run(
+                [str(binary), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+                env=server_environment(
+                    spec,
+                    host.environment,
+                    Path(home),
+                    gpu=claim.environment if claim is not None else None,
+                ),
+            )
     except (OSError, subprocess.TimeoutExpired):
         raise KarnError("model_server_binary_unavailable:" + spec.build) from None
     found = _VERSION.search(result.stdout + result.stderr)
@@ -210,20 +987,37 @@ def plan_model_server(spec: ModelServerSpec, host: ModelServerHost, state_root: 
         raise KarnError("model_server_build_mismatch:" + spec.build)
     if host.models_dir is None:
         raise KarnError("model_server_models_dir_unset")
-    model_path = (host.models_dir / spec.model_file).resolve()
-    if not model_path.is_file():
-        raise KarnError("model_file_unavailable:" + spec.model_file)
+    models_dir = host.models_dir.resolve()
+    files = []
+    for entry in spec.server_files:
+        # The server gets the declared name, so llama.cpp derives a split model's other parts
+        # from declared names only, never from a link's target.
+        path = models_dir / entry.file
+        target = path.resolve()
+        if models_dir not in target.parents or not target.is_file():
+            raise KarnError("model_file_unavailable:" + entry.file)
+        files.append((entry, path))
     return ModelServerPlan(
         spec,
         binary.resolve(),
         found.group(0),
         found.group(2),
-        model_path,
-        Path(state_root).resolve() / "model-server.lock",
+        files[0][1],
+        Path(state_root).resolve(),
+        tuple(files),
+        dict(host.environment),
+        host.gpu_slots,
+        _sha256(binary.resolve()),
+        claim,
     )
 
 
 def file_sha256(path: Path) -> str:
+    """A declared file's digest, verified during the run."""
+    return _sha256(path)
+
+
+def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
         while chunk := source.read(16 * 1024 * 1024):
@@ -234,8 +1028,11 @@ def file_sha256(path: Path) -> str:
 class LlamaServer:
     """One loopback ``llama-server`` for one run, stopped with it."""
 
-    def __init__(self, plan: ModelServerPlan, log_path: Path, *, ready_seconds: float = 900):
-        self.plan, self.log_path, self.ready_seconds = plan, log_path, ready_seconds
+    def __init__(
+        self, plan: ModelServerPlan, log_path: Path, *, ready_seconds: float | None = None
+    ):
+        self.plan, self.log_path = plan, log_path
+        self.ready_seconds = plan.spec.ready_timeout if ready_seconds is None else ready_seconds
         self.process: subprocess.Popen | None = None
         self.port: int | None = None
 
@@ -243,13 +1040,19 @@ class LlamaServer:
         spec = self.plan.spec
         return [
             # The parent-death signal: a runner killed outright must not leave the GPUs held.
-            "setpriv",
+            _setpriv(),
             "--pdeathsig",
             "TERM",
             "--",
             str(self.plan.binary),
             "--model",
             str(self.plan.model_path),
+            *(
+                argument
+                for entry, path in self.plan.server_files[1:]
+                if entry.flag is not None
+                for argument in (entry.flag, str(path))
+            ),
             "--host",
             "127.0.0.1",
             "--port",
@@ -264,6 +1067,8 @@ class LlamaServer:
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             self.port = probe.getsockname()[1]
+        home = self.log_path.parent / "model-server-home"
+        home.mkdir(exist_ok=True)
         log = self.log_path.open("ab")
         try:
             self.process = subprocess.Popen(
@@ -271,6 +1076,12 @@ class LlamaServer:
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
+                env=server_environment(
+                    self.plan.spec,
+                    self.plan.host_environment,
+                    home,
+                    gpu=self.plan.claim.environment if self.plan.claim is not None else None,
+                ),
             )
         finally:
             log.close()
@@ -298,8 +1109,13 @@ class LlamaServer:
                 raise KarnError("model_server_not_ready")
             time.sleep(1)
 
+    @property
+    def stopped(self) -> bool:
+        """Whether the server process is confirmed gone, so its GPUs are free."""
+        return self.process is None or self.process.poll() is not None
+
     def __exit__(self, *_):
-        if self.process is None or self.process.poll() is not None:
+        if self.stopped:
             return
         self.process.terminate()
         try:
@@ -465,7 +1281,8 @@ class _EventFile:
 
 
 class ModelRelayCollector:
-    """Holds the host's model-server lock, starts the server, and relays and records requests.
+    """Starts the server on the plan's GPU Slot, relays and records requests, and releases the
+    GPU Slot once the server has stopped.
 
     The relay listens on ``bind_host`` under a secret path, which only the run's proxy
     sidecar is given; the server itself listens on loopback only.
@@ -493,35 +1310,42 @@ class ModelRelayCollector:
 
     def __enter__(self):
         self.run_dir.mkdir(parents=True, exist_ok=True)
+        if self.plan.claim is not None:
+            self._exit.callback(self.plan.claim.release)
         try:
-            self._hold_host_lock()
             started = time.monotonic()
-            if file_sha256(self.plan.model_path) != self.plan.spec.model_sha256:
-                raise KarnError("model_digest_mismatch")
+            for position, (entry, path) in enumerate(self.plan.server_files):
+                if file_sha256(path) != entry.sha256:
+                    raise KarnError(
+                        "model_digest_mismatch"
+                        if position == 0
+                        else "model_file_digest_mismatch:" + entry.file
+                    )
+            # ``model_sha256_verified`` covers every declared file, the model among them.
             self.facts = {
                 **self.plan.to_dict(),
                 "model_sha256_verified": True,
                 "model_bytes": self.plan.model_path.stat().st_size,
                 "verify_seconds": round(time.monotonic() - started, 3),
             }
+            if self.plan.spec.files:
+                self.facts["file_bytes"] = {
+                    entry.file: path.stat().st_size for entry, path in self.plan.server_files
+                }
             self._sink = self._open(EVENTS_FILE)
             self._transcript = self._open(TRANSCRIPT_FILE)
             started = time.monotonic()
-            self.llama = self._exit.enter_context(LlamaServer(self.plan, self.run_dir / SERVER_LOG))
+            # Known before it starts, so a server that fails to stop keeps its GPU Slot held.
+            self.llama = LlamaServer(self.plan, self.run_dir / SERVER_LOG)
+            if self.plan.claim is not None:
+                self.plan.claim.link(self.llama)
+            self._exit.enter_context(self.llama)
             self.facts["ready_seconds"] = round(time.monotonic() - started, 3)
             self._start_relay()
         except BaseException:
             self._exit.close()
             raise
         return self
-
-    def _hold_host_lock(self):
-        self.plan.lock_path.parent.mkdir(parents=True, exist_ok=True)
-        handle = self._exit.enter_context(self.plan.lock_path.open("a"))
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise KarnError("model_server_busy") from None
 
     def _open(self, name: str) -> _EventFile:
         sink = _EventFile(self.run_dir / name)
@@ -664,7 +1488,7 @@ class ModelRelayCollector:
         # One event per relayed request, whatever ids the server reuses.
         identity = "relay-" + uuid.uuid4().hex
         connection = http.client.HTTPConnection(
-            "127.0.0.1", self.llama.port, timeout=UPSTREAM_TIMEOUT_SECONDS
+            "127.0.0.1", self.llama.port, timeout=self.plan.spec.request_timeout
         )
         if not self._admit(identity, handler.connection, request, started_ms):
             with contextlib.suppress(OSError):
