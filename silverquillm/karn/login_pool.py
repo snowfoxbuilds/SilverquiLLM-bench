@@ -17,7 +17,6 @@ import secrets
 import shutil
 import stat
 import sys
-import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -94,39 +93,26 @@ def enrolled_slots(pool: Path, plugin_id: str) -> list[str]:
     ]
 
 
+def write_enrolment_id(directory: Path) -> str:
+    """Give a slot directory a new random enrolment id, replacing any it holds."""
+    value = secrets.token_hex(16)
+    write_private(directory / ENROLMENT_ID, value.encode())
+    return value
+
+
 def enrolment_id(directory: Path) -> str:
-    """The random id a slot directory was given when created, written now if it has none.
+    """The slot's enrolment id, written now for a slot enrolled before ids existed.
 
     A directory's inode is reused as soon as it is freed, so a slot removed and enrolled
     again under its name would otherwise look like the one a removal was confirmed for.
-    The id is linked into place complete and never replaced, so concurrent first readers
-    agree on one id.
+    Callers hold the pool's lock, under which every slot is created, adopted and removed,
+    so the id read is the enrolled slot's own and a missing one is written once.
     """
     path = directory / ENROLMENT_ID
-    found = _read_enrolment_id(path)
-    if found is not None:
-        return found
-    descriptor, temporary = tempfile.mkstemp(prefix=".pending-", dir=directory)
-    try:
-        with os.fdopen(descriptor, "w") as target:
-            target.write(secrets.token_hex(16))
-            target.flush()
-            os.fsync(target.fileno())
-        with contextlib.suppress(FileExistsError):
-            os.link(temporary, path)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
-    found = _read_enrolment_id(path)
-    if found is None:
-        raise KarnError("login_slot_identity_unavailable")
-    return found
-
-
-def _read_enrolment_id(path: Path) -> str | None:
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:
-        return None
+        return write_enrolment_id(directory)
     except OSError:
         raise KarnError("login_slot_identity_unavailable") from None
     with os.fdopen(descriptor, "rb") as stream:
@@ -237,7 +223,9 @@ class LoginPool:
             raise KarnError("login_slot_belongs_to_other_plugin")
         if recorded is None:
             write_private(profile.directory / SLOT_RECORD, canonical({"plugin_id": self.plugin_id}))
-            enrolment_id(profile.directory)
+        if not (profile.directory / "secret.json").exists():
+            # Whatever id an unenrolled directory holds belongs to no login this pool knows.
+            write_enrolment_id(profile.directory)
         return profile
 
     def enrolled(self) -> list[str]:
@@ -318,8 +306,16 @@ class LoginPool:
                 shutil.rmtree(profile.directory)
 
     def identity(self, name: str) -> str:
-        """The slot's enrolment id, so a removal confirmed for it never takes a successor."""
-        if name not in enrolled_slots(self.root, self.plugin_id):
+        """The slot's enrolment id, so a removal confirmed for it never takes a successor.
+
+        Read under the pool's lock, so it is the id of the slot enrolled at that moment: no
+        removal or new enrollment of the name can come between the check and the read.
+        """
+        with self._creating():
+            return self._identity(name)
+
+    def _identity(self, name: str) -> str:
+        if name not in self.enrolled():
             raise KarnError("login_slot_not_enrolled")
         return enrolment_id(self.root / name)
 
@@ -337,7 +333,7 @@ class LoginPool:
                 raise KarnError("login_slot_not_enrolled")
             profile = self.slot(name)
             with profile.exclusive():
-                if identity is not None and self.identity(name) != identity:
+                if identity is not None and self._identity(name) != identity:
                     raise KarnError("login_slot_replaced")
                 for pending in (
                     profile.directory / "active.json",
@@ -518,7 +514,7 @@ def adopt_legacy_login(state_root: Path, construct: str, plugin_id: str) -> str:
         target = pool.root / construct
         # The record goes in first, so a crash leaves a legacy login, never an unrecorded slot.
         write_private(legacy / SLOT_RECORD, canonical({"plugin_id": plugin_id}))
-        enrolment_id(legacy)
+        write_enrolment_id(legacy)
         with pool._creating():
             # rename() would replace an empty directory, so the check and the move share a lock.
             if target.exists() or target.is_symlink():
