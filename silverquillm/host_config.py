@@ -151,11 +151,12 @@ def _model_server(path: Path, table) -> dict:
     from silverquillm.karn.model_server import environment_refusal
 
     environment = table.get("environment", {})
-    refusal = environment_refusal(environment)
+    refusal = environment_refusal(environment, host=True)
     if refusal is not None:
         raise HostConfigError(
             f"{path}: [model_server.environment] maps variable names to strings and may not set "
-            f"LLAMA_ARG_*, CUDA_VISIBLE_DEVICES or CUDA_DEVICE_ORDER ({refusal})"
+            f"a variable llama.cpp reads as an option, location or library path, or one the "
+            f"bench sets ({refusal})"
         )
     return {
         "models_dir": (

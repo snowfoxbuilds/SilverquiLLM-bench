@@ -33,6 +33,8 @@ FAKE_SERVER = r"""
 import json, os, sys, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 if "--version" in sys.argv:
+    with open(sys.argv[0] + ".version-env", "w") as out:
+        json.dump(dict(os.environ), out)
     print("version: 0.9.0-dev (build 12182, commit fd27b2034)")
     sys.exit(0)
 port = int(sys.argv[sys.argv.index("--port") + 1])
@@ -1233,7 +1235,7 @@ def drafted(served):
         *files,
         arguments=["--spec-type", "draft-simple", "--jinja"],
         environment={"GGML_CUDA_GRAPH_OPT": "1"},
-        ready_seconds=60,
+        ready_timeout_seconds=60,
         request_timeout_seconds=7200,
     )
     return SimpleNamespace(served=served, files=files, spec=model_server_spec(runtime(document)))
@@ -1255,7 +1257,8 @@ def test_declared_files_are_verified_passed_and_recorded(drafted, tmp_path):
         assert set(facts["file_bytes"]) == {entry["file"] for entry in drafted.files}
         assert facts["files"] == drafted.files
         assert facts["environment"] == {"GGML_CUDA_GRAPH_OPT": "1"}
-        assert facts["ready_seconds"] < 60 and collector.llama.ready_seconds == 60
+        assert facts["ready_timeout_seconds"] == 60 and collector.llama.ready_seconds == 60
+        assert facts["ready_seconds"] < 60
         assert facts["request_timeout_seconds"] == 7200
         assert facts["host"] == {"environment": {"LD_LIBRARY_PATH": "/x"}}
 
@@ -1293,18 +1296,117 @@ def test_the_server_never_inherits_the_runners_environment(served, tmp_path, mon
     assert environment["HOST_ONLY"] == "yes"
     assert environment["GGML_CUDA_GRAPH_OPT"] == "1"
     assert environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
+    # An empty bench-owned home: llama.cpp finds no user-level config.ini.
+    home = tmp_path / "run" / "model-server-home"
+    assert environment["HOME"] == str(home)
+    assert environment["XDG_CONFIG_HOME"] == str(home / ".config")
+    assert list(home.iterdir()) == []
+
+
+def test_the_version_probe_runs_in_the_servers_environment(served, monkeypatch):
+    monkeypatch.setenv("LLAMA_ARG_CTX_SIZE", "4096")
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/old-llama")
+    host = ModelServerHost(
+        served.host.models_dir, served.host.llama_cpp, {"LD_LIBRARY_PATH": "/opt/cuda/lib64"}
+    )
+    plan_model_server(served.spec, host, served.state)
+    environment = json.loads(Path(str(served.binary) + ".version-env").read_text())
+    assert environment["LD_LIBRARY_PATH"] == "/opt/cuda/lib64"
+    assert "LLAMA_ARG_CTX_SIZE" not in environment
+    assert environment["HOME"] != os.environ.get("HOME")
+    assert environment["XDG_CONFIG_HOME"].startswith(environment["HOME"])
+    assert environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
+
+
+def test_a_system_config_file_llama_cpp_would_read_refuses_the_run(served, tmp_path, monkeypatch):
+    from silverquillm.karn import model_server
+
+    config = tmp_path / "etc" / "llama.cpp" / "config.ini"
+    config.parent.mkdir(parents=True)
+    config.write_text("[*]\nctx-size = 4096\n")
+    monkeypatch.setattr(model_server, "SYSTEM_CONFIG_FILES", (config,))
+    with pytest.raises(KarnError, match="model_server_config_file_present:" + str(config)):
+        plan_model_server(served.spec, served.host, served.state)
+
+
+def test_setpriv_is_found_on_the_runners_path_or_the_run_is_refused(served, monkeypatch):
+    from silverquillm.karn import model_server
+
+    plan = plan_model_server(served.spec, served.host, served.state)
+    command = model_server.LlamaServer(plan, Path("/unused")).command(1234)
+    assert Path(command[0]).is_absolute() and Path(command[0]).name == "setpriv"
+    monkeypatch.setattr(model_server.shutil, "which", lambda name: None)
+    with pytest.raises(KarnError, match="model_server_setpriv_unavailable"):
+        plan_model_server(served.spec, served.host, served.state)
+
+
+def test_a_linked_file_is_passed_by_its_declared_name_inside_the_models_directory(served, tmp_path):
+    models = served.host.models_dir
+    (models / "store").mkdir()
+    for number in (1, 2):
+        (models / "store" / f"blob{number}").write_bytes(b"part %d" % number)
+        (models / f"Q-0000{number}-of-00002.gguf").symlink_to(models / "store" / f"blob{number}")
+    files = [
+        {"file": "Q-00001-of-00002.gguf", "sha256": "", "flag": "--model"},
+        {"file": "Q-00002-of-00002.gguf", "sha256": ""},
+    ]
+    for entry in files:
+        entry["sha256"] = file_sha256(models / entry["file"])
+    spec = model_server_spec(runtime(with_files(*files)))
+    plan = plan_model_server(spec, served.host, served.state)
+    with ModelRelayCollector(tmp_path / "run", plan=plan):
+        argv = json.loads(Path(str(served.binary) + ".argv").read_text())
+    assert argv[argv.index("--model") + 1] == str(models.resolve() / "Q-00001-of-00002.gguf")
+    outside = tmp_path / "outside.gguf"
+    outside.write_bytes(b"elsewhere")
+    (models / "escape.gguf").symlink_to(outside)
+    escape = [{"file": "escape.gguf", "sha256": file_sha256(outside), "flag": "--model"}]
+    with pytest.raises(KarnError, match="model_file_unavailable:escape.gguf"):
+        plan_model_server(
+            model_server_spec(runtime(with_files(*escape))), served.host, served.state
+        )
+
+
+@pytest.mark.parametrize(
+    ("token", "normalized"),
+    [
+        ("--hf_repo", "--hf-repo"),
+        ("--model_url", "--model-url"),
+        ("--api_key", "--api-key"),
+        ("--log_file", "--log-file"),
+        ("--slot_save_path", "--slot-save-path"),
+        ("--media_path", "--media-path"),
+        ("--model_draft", "--model-draft"),
+        ("--chat_template_file", "--chat-template-file"),
+        ("--lora_scaled", "--lora-scaled"),
+        ("--mcp_servers_json", "--mcp-servers-json"),
+        ("--webui_mcp_proxy", "--webui-mcp-proxy"),
+        ("--host_name_is=not-a-flag", None),
+    ],
+)
+def test_a_flag_spelled_with_underscores_is_the_flag_llama_cpp_reads(token, normalized):
+    document = spec_document(arguments=[token, "value"])
+    if normalized is None:
+        assert model_server_spec(runtime(document)) is not None
+        return
+    with pytest.raises(KarnError, match="model_server_flag_not_allowed:" + normalized):
+        model_server_spec(runtime(document))
+
+
+def test_a_value_spelled_as_a_refused_flag_is_refused():
+    with pytest.raises(KarnError, match="model_server_flag_not_allowed:--hf-repo"):
+        model_server_spec(runtime(spec_document(arguments=["--temp", "--hf_repo"])))
 
 
 def test_the_recipe_environment_overrides_the_hosts():
-    from silverquillm.karn.model_server import ModelServerPlan, server_environment
+    from silverquillm.karn.model_server import server_environment
 
     spec = model_server_spec(runtime(spec_document(environment={"SHARED": "recipe"})))
-    plan = ModelServerPlan(
-        spec, Path("/b"), "", "", Path("/m"), Path("/l"), host_environment={"SHARED": "host"}
-    )
-    assert server_environment(plan, {"PATH": "/bin", "HOME": "/h", "OTHER": "x"}) == {
+    inherited = {"PATH": "/bin", "HOME": "/h", "OTHER": "x"}
+    assert server_environment(spec, {"SHARED": "host"}, Path("/run/home"), inherited) == {
         "PATH": "/bin",
-        "HOME": "/h",
+        "HOME": "/run/home",
+        "XDG_CONFIG_HOME": "/run/home/.config",
         "SHARED": "recipe",
         "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
     }
@@ -1314,6 +1416,18 @@ def test_the_recipe_environment_overrides_the_hosts():
     ("environment", "reason"),
     [
         ({"LLAMA_ARG_CTX_SIZE": "4096"}, "model_server_environment_refused:LLAMA_ARG_CTX_SIZE"),
+        *(
+            ({name: "x"}, "model_server_environment_refused:" + name)
+            for name in (
+                *("LLAMA_API_KEY", "LLAMA_CACHE", "LLAMA_SERVER_ROUTER_PORT"),
+                *("LLAMACPP_TEST_MODELFILE", "AIP_HTTP_PORT", "AIP_PREDICT_ROUTE"),
+                *("GGML_BACKEND_PATH", "GGML_ET_KERNELS_PATH", "GGML_OPENCL_KERNEL_CACHE_DIR"),
+                *("LD_PRELOAD", "LD_LIBRARY_PATH", "PATH", "HOME", "XDG_CONFIG_HOME"),
+                *("HF_TOKEN", "HF_ENDPOINT", "HUGGING_FACE_HUB_TOKEN", "MODEL_ENDPOINT"),
+                *("MTMD_BACKEND_DEVICE", "http_proxy", "HTTPS_PROXY", "All_Proxy", "no_proxy"),
+                "__LLAMA_X",
+            )
+        ),
         ({"CUDA_VISIBLE_DEVICES": "0"}, "model_server_environment_refused:CUDA_VISIBLE"),
         ({"CUDA_DEVICE_ORDER": "FASTEST_FIRST"}, "model_server_environment_refused:CUDA_DEVICE"),
         ({"BAD NAME": "x"}, "model_server_environment_invalid"),
@@ -1329,7 +1443,8 @@ def test_a_recipe_environment_that_would_change_the_record_is_refused(environmen
 
 @pytest.mark.parametrize(
     ("key", "value"),
-    [("ready_seconds", 0), ("ready_seconds", "60"), ("request_timeout_seconds", True)]
+    [("ready_timeout_seconds", 0), ("ready_timeout_seconds", "60")]
+    + [("request_timeout_seconds", True)]
     + [("request_timeout_seconds", 86401)],
 )
 def test_a_timeout_must_be_a_bounded_number_of_seconds(key, value):
@@ -1346,6 +1461,10 @@ def test_the_host_config_names_an_environment_only_this_host_needs(tmp_path):
     path.write_text('[model_server.environment]\nLLAMA_ARG_N_GPU_LAYERS = "0"\n')
     with pytest.raises(HostConfigError, match="refused:LLAMA_ARG_N_GPU_LAYERS"):
         load_host_config(path)
+    for name in ("LD_PRELOAD", "PATH", "LLAMA_CACHE", "https_proxy"):
+        path.write_text(f'[model_server.environment]\n{name} = "x"\n')
+        with pytest.raises(HostConfigError, match="refused:" + name):
+            load_host_config(path)
     with pytest.raises(KarnError, match="model_server_host_environment_refused:CUDA"):
         plan_model_server(
             model_server_spec(runtime()),

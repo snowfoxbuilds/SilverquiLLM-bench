@@ -18,8 +18,10 @@ import json
 import os
 import re
 import secrets
+import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -74,10 +76,24 @@ FILE_FLAGS = frozenset(
     }
 )
 MODEL_FLAG = "--model"
-# llama.cpp reads LLAMA_ARG_* as flags, and the GPU Slot owns which GPUs the server sees.
-REFUSED_ENVIRONMENT_PREFIXES = ("LLAMA_ARG_",)
-REFUSED_ENVIRONMENT = frozenset({"CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER"})
-INHERITED_ENVIRONMENT = ("PATH", "HOME")
+# Variables llama.cpp b12182 reads as options, a port, a route, a config, cache or download
+# location, or a library path, and the ones the bench itself sets: the GPU Slot owns which
+# GPUs the server sees, and the bench owns PATH, HOME and the XDG directories.
+REFUSED_ENVIRONMENT_PREFIXES = (
+    *("LLAMA_", "LLAMACPP_", "AIP_", "LD_", "XDG_", "HF_", "HUGGING_FACE_", "__"),
+)
+REFUSED_ENVIRONMENT = frozenset(
+    {
+        *("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "PATH", "HOME"),
+        *("GGML_BACKEND_PATH", "GGML_ET_KERNELS_PATH", "GGML_OPENCL_KERNEL_CACHE_DIR"),
+        *("MODEL_ENDPOINT", "MTMD_BACKEND_DEVICE"),
+    }
+)
+REFUSED_ENVIRONMENT_ANY_CASE = frozenset({"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"})
+# A dynamically linked build may need this one on its host; a recipe never sets it.
+HOST_ONLY_ENVIRONMENT = frozenset({"LD_LIBRARY_PATH"})
+# llama.cpp reads these whatever the environment says; the bench cannot point them elsewhere.
+SYSTEM_CONFIG_FILES = (Path("/etc/llama.cpp/config.ini"),)
 DEFAULT_READY_SECONDS = 900
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 1800
 MAX_TIMEOUT_SECONDS = 86400
@@ -135,7 +151,7 @@ class ModelServerSpec:
     files: tuple[ServerFile, ...] = ()
     """The declared ``files``, the model among them; empty for a recipe naming one ``model``."""
     environment: tuple[tuple[str, str], ...] | None = None
-    ready_seconds: int | None = None
+    ready_timeout_seconds: int | None = None
     request_timeout_seconds: int | None = None
 
     @property
@@ -148,7 +164,9 @@ class ModelServerSpec:
 
     @property
     def ready_timeout(self) -> int:
-        return DEFAULT_READY_SECONDS if self.ready_seconds is None else self.ready_seconds
+        if self.ready_timeout_seconds is None:
+            return DEFAULT_READY_SECONDS
+        return self.ready_timeout_seconds
 
     @property
     def request_timeout(self) -> int:
@@ -168,19 +186,27 @@ class ModelServerSpec:
             document["files"] = [entry.to_dict() for entry in self.files]
         if self.environment is not None:
             document["environment"] = dict(self.environment)
-        if self.ready_seconds is not None:
-            document["ready_seconds"] = self.ready_seconds
+        if self.ready_timeout_seconds is not None:
+            document["ready_timeout_seconds"] = self.ready_timeout_seconds
         if self.request_timeout_seconds is not None:
             document["request_timeout_seconds"] = self.request_timeout_seconds
         return document
 
 
+def _flag_name(token: str) -> str:
+    """The flag llama.cpp looks *token* up as: it rewrites ``_`` to ``-`` in every ``--``
+    token (b12182 ``common/arg.cpp``), so ``--hf_repo`` is ``--hf-repo``."""
+    name = token.split("=", 1)[0]
+    return name.replace("_", "-") if name.startswith("--") else name
+
+
 def _refused_flag(token: str) -> bool:
-    return token.split("=", 1)[0] in REFUSED_FLAGS
+    return _flag_name(token) in REFUSED_FLAGS
 
 
-def environment_refusal(environment) -> str | None:
-    """Why *environment* cannot be given to the server, or None when it can."""
+def environment_refusal(environment, *, host: bool = False) -> str | None:
+    """Why *environment* cannot be given to the server, or None when it can; the host config
+    may also set :data:`HOST_ONLY_ENVIRONMENT`."""
     if not isinstance(environment, dict):
         return "invalid"
     for name, value in environment.items():
@@ -191,9 +217,23 @@ def environment_refusal(environment) -> str | None:
             or "\0" in value
         ):
             return "invalid"
-        if name in REFUSED_ENVIRONMENT or name.startswith(REFUSED_ENVIRONMENT_PREFIXES):
+        if host and name in HOST_ONLY_ENVIRONMENT:
+            continue
+        if (
+            name in REFUSED_ENVIRONMENT
+            or name.startswith(REFUSED_ENVIRONMENT_PREFIXES)
+            or name.upper() in REFUSED_ENVIRONMENT_ANY_CASE
+        ):
             return "refused:" + name
     return None
+
+
+def _setpriv() -> str:
+    """``setpriv`` from the runner's PATH, before the server's own environment exists."""
+    found = shutil.which("setpriv")
+    if found is None:
+        raise KarnError("model_server_setpriv_unavailable")
+    return found
 
 
 def _timeout(document: dict, key: str) -> int | None:
@@ -268,7 +308,7 @@ def model_server_spec(runtime: dict) -> ModelServerSpec | None:
         document = json.loads(environment[MODEL_SERVER_ENV])
     except ValueError:
         raise KarnError("model_server_spec_invalid") from None
-    optional = {"environment", "ready_seconds", "request_timeout_seconds"}
+    optional = {"environment", "ready_timeout_seconds", "request_timeout_seconds"}
     if (
         not isinstance(document, dict)
         or not {"engine", "build", "arguments"} <= set(document)
@@ -291,15 +331,15 @@ def model_server_spec(runtime: dict) -> ModelServerSpec | None:
     if any("\0" in argument for argument in arguments):
         raise KarnError("model_server_arguments_invalid")
     for token in arguments:
-        if _refused_flag(token) or token.split("=", 1)[0] in FILE_FLAGS:
-            raise KarnError("model_server_flag_not_allowed:" + token.split("=", 1)[0][:64])
+        if _refused_flag(token) or _flag_name(token) in FILE_FLAGS:
+            raise KarnError("model_server_flag_not_allowed:" + _flag_name(token)[:64])
     server_environment = None
     if "environment" in document:
         refusal = environment_refusal(document["environment"])
         if refusal is not None:
             raise KarnError("model_server_environment_" + refusal[:96])
         server_environment = tuple(sorted(document["environment"].items()))
-    ready = _timeout(document, "ready_seconds")
+    ready = _timeout(document, "ready_timeout_seconds")
     request = _timeout(document, "request_timeout_seconds")
     served = environment.get("CONSTRUCT_MODEL", "")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}", served):
@@ -363,32 +403,51 @@ class ModelServerPlan:
 
 
 def server_environment(
-    plan: ModelServerPlan, inherited: dict[str, str] | None = None
+    spec: ModelServerSpec,
+    host_environment: dict[str, str],
+    home: Path,
+    inherited: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """The server's whole environment: never the runner's, where a stray ``LD_LIBRARY_PATH`` or
-    ``LLAMA_ARG_*`` would change the server unseen."""
+    """The whole environment of the server and of its ``--version`` probe: never the runner's,
+    where a stray ``LD_LIBRARY_PATH`` or ``LLAMA_ARG_*`` would change the server unseen.
+
+    *home* is an empty directory the bench owns, so llama.cpp reads no user config file.
+    """
     inherited = os.environ if inherited is None else inherited
-    environment = {name: inherited[name] for name in INHERITED_ENVIRONMENT if name in inherited}
-    environment.update(plan.host_environment)
-    environment.update(plan.spec.environment or ())
-    environment["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    environment = {"PATH": inherited["PATH"]} if "PATH" in inherited else {}
+    environment.update(host_environment)
+    environment.update(spec.environment or ())
+    environment.update(
+        HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), CUDA_DEVICE_ORDER="PCI_BUS_ID"
+    )
     return environment
 
 
 def plan_model_server(spec: ModelServerSpec, host: ModelServerHost, state_root: Path):
     """Refuse a server this host cannot start: a missing build or file, or the wrong build."""
-    refusal = environment_refusal(host.environment)
+    refusal = environment_refusal(host.environment, host=True)
     if refusal is not None:
         raise KarnError("model_server_host_environment_" + refusal[:96])
+    for config in SYSTEM_CONFIG_FILES:
+        if os.path.lexists(config):
+            raise KarnError("model_server_config_file_present:" + str(config))
+    _setpriv()
     binary = host.llama_cpp.get(spec.build)
     if binary is None:
         raise KarnError("model_server_build_unavailable:" + spec.build)
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise KarnError("model_server_binary_unavailable:" + spec.build)
     try:
-        result = subprocess.run(
-            [str(binary), "--version"], capture_output=True, text=True, timeout=60, check=False
-        )
+        # The build verified is the build served: the same libraries, the same config.
+        with tempfile.TemporaryDirectory(prefix="silverquillm-llama-home-") as home:
+            result = subprocess.run(
+                [str(binary), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+                env=server_environment(spec, host.environment, Path(home)),
+            )
     except (OSError, subprocess.TimeoutExpired):
         raise KarnError("model_server_binary_unavailable:" + spec.build) from None
     found = _VERSION.search(result.stdout + result.stderr)
@@ -399,8 +458,11 @@ def plan_model_server(spec: ModelServerSpec, host: ModelServerHost, state_root: 
     models_dir = host.models_dir.resolve()
     files = []
     for entry in spec.server_files:
-        path = (models_dir / entry.file).resolve()
-        if path.parent != models_dir or not path.is_file():
+        # The server gets the declared name, so llama.cpp derives a split model's other parts
+        # from declared names only, never from a link's target.
+        path = models_dir / entry.file
+        target = path.resolve()
+        if models_dir not in target.parents or not target.is_file():
             raise KarnError("model_file_unavailable:" + entry.file)
         files.append((entry, path))
     return ModelServerPlan(
@@ -438,7 +500,7 @@ class LlamaServer:
         spec = self.plan.spec
         return [
             # The parent-death signal: a runner killed outright must not leave the GPUs held.
-            "setpriv",
+            _setpriv(),
             "--pdeathsig",
             "TERM",
             "--",
@@ -465,6 +527,8 @@ class LlamaServer:
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             self.port = probe.getsockname()[1]
+        home = self.log_path.parent / "model-server-home"
+        home.mkdir(exist_ok=True)
         log = self.log_path.open("ab")
         try:
             self.process = subprocess.Popen(
@@ -472,7 +536,7 @@ class LlamaServer:
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
-                env=server_environment(self.plan),
+                env=server_environment(self.plan.spec, self.plan.host_environment, home),
             )
         finally:
             log.close()

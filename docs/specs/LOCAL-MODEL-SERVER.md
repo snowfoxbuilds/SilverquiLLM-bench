@@ -33,7 +33,7 @@ The recipe declares the server as `SILVERQUILLM_MODEL_SERVER` in `runtime.enviro
 | `model` or `files` | `model`: `{"file": "<name>.gguf", "sha256": "<64 hex>"}`; or `files`, a list of `{"file", "sha256", "flag"?}`, each a file in the host's models directory, passed after its `flag`, or not passed when it has none, as the later shards of a split model |
 | `arguments` | server flags, any but the bench's own |
 | `environment` (optional) | variables for the server process, as `GGML_CUDA_*` |
-| `ready_seconds` (optional) | how long the server may take to become ready, default 900 |
+| `ready_timeout_seconds` (optional) | how long the server may take to become ready, default 900; named apart from the measured `ready_seconds` the record keeps (#271) |
 | `request_timeout_seconds` (optional) | how long one relayed request may take, default 1800 |
 
 Under `files`, exactly one entry has the flag `--model`, and that entry is the model; `model` is that one entry alone (grilling 2026-11-16).
@@ -54,13 +54,23 @@ The bench refuses only the flags it owns or that would defeat the record (grilli
 
 The bench also refuses, among the arguments only, the flags of llama.cpp b12182 that name an input file: `-m`, `--model`, `-md`, `--model-draft`, `--spec-draft-model`, `-mm`, `--mmproj`, `--chat-template-file`, `--grammar-file`, `-jf`, `--json-schema-file`, `-lcs`, `--lookup-cache-static`, `--lora`, `--lora-scaled`, `--control-vector` and `--control-vector-scaled`.
 Such a file is declared in `files` instead, so its digest is verified and recorded (#271).
-A flag is refused alone or as `--flag=value`, and every other flag passes and is recorded with the arguments; a later build's new file flag passes unverified until it is added to that list.
+A flag is refused alone or as `--flag=value`, and every argument is checked, a value too, so a refused flag cannot hide as one; every other flag passes and is recorded with the arguments; a later build's new file flag passes unverified until it is added to that list.
+llama.cpp rewrites `_` to `-` in every argument starting with `--` before it looks the flag up, so the bench compares the same rewritten name: `--hf_repo` is refused as `--hf-repo` (grilling 2026-11-16).
 
-`environment` refuses `LLAMA_ARG_*`, which llama.cpp reads as flags, and `CUDA_VISIBLE_DEVICES` and `CUDA_DEVICE_ORDER`, which the GPU selection owns.
+`environment` refuses every variable llama.cpp b12182 reads as an option, a port or route, a config, cache or download location, or a library path, and every one the bench sets itself (grilling 2026-11-16):
+
+| Refused | Why |
+| --- | --- |
+| `LLAMA_*` (as `LLAMA_ARG_*`, `LLAMA_API_KEY`, `LLAMA_CACHE`, `LLAMA_SERVER_*`), `LLAMACPP_*`, `MTMD_BACKEND_DEVICE` | llama.cpp reads them as flags or server settings |
+| `AIP_*` | they move the server's port and routes |
+| `HF_*`, `HUGGING_FACE_*`, `MODEL_ENDPOINT`, and `http_proxy`, `https_proxy`, `all_proxy`, `no_proxy` in any case | they name download sources and routes out |
+| `LD_*`, `GGML_BACKEND_PATH`, `GGML_ET_KERNELS_PATH`, `GGML_OPENCL_KERNEL_CACHE_DIR` | they choose the code the server loads |
+| `PATH`, `HOME`, `XDG_*`, `CUDA_VISIBLE_DEVICES`, `CUDA_DEVICE_ORDER`, names starting `__` | the bench sets them, or passes the runner's GPU selection |
 
 ### Host configuration
 
-The host config's `[model_server]` table names `models_dir`, maps each build to its binary under `[model_server.llama_cpp]`, and may set `environment`, variables only this host's builds need, as an `LD_LIBRARY_PATH` for a dynamically linked llama.cpp (grilling 2026-11-16); it refuses the same variables a recipe's `environment` does.
+The host config's `[model_server]` table names `models_dir`, maps each build to its binary under `[model_server.llama_cpp]`, and may set `environment`, variables only this host's builds need, as an `LD_LIBRARY_PATH` for a dynamically linked llama.cpp (grilling 2026-11-16); it refuses the same variables a recipe's `environment` does, except `LD_LIBRARY_PATH` (grilling 2026-11-16).
+A run is refused before any evidence exists while a config file llama.cpp reads whatever its environment says is present, `/etc/llama.cpp/config.ini` in b12182, with `model_server_config_file_present:<path>` (grilling 2026-11-16).
 Before any evidence exists, a run is refused if the build is not mapped, if the binary's `--version` reports another build, or if a declared file is missing.
 
 ### GPU Slots
@@ -85,7 +95,10 @@ Once its claim is held, the run:
 3. relays every request to it from a host-side relay on a secret path.
 
 The server never inherits the runner's environment, where a stray `LD_LIBRARY_PATH` or `LLAMA_ARG_*` would change it unseen (grilling 2026-11-16).
-It starts with `PATH` and `HOME`, then the host config's `environment`, then the recipe's, then the GPU selection: with `gpu_slots`, `CUDA_DEVICE_ORDER=PCI_BUS_ID`, so CUDA numbers the GPUs as `nvidia-smi` does, and the GPU Slot's `CUDA_VISIBLE_DEVICES`; without them, the runner's own `CUDA_VISIBLE_DEVICES` and `CUDA_DEVICE_ORDER`, each passed exactly as set, empty or absent, and nothing else of the runner's (grilling 2026-11-16).
+It starts with the runner's `PATH`, then the host config's `environment`, then the recipe's, then `HOME` and `XDG_CONFIG_HOME` pointed at an empty directory the bench owns (`model-server-home` in the run directory), so llama.cpp reads no user-level `config.ini`, then the GPU selection: with `gpu_slots`, `CUDA_DEVICE_ORDER=PCI_BUS_ID`, so CUDA numbers the GPUs as `nvidia-smi` does, and the GPU Slot's `CUDA_VISIBLE_DEVICES`; without them, the runner's own `CUDA_VISIBLE_DEVICES` and `CUDA_DEVICE_ORDER`, each passed exactly as set, empty or absent, and nothing else of the runner's (grilling 2026-11-16).
+The `--version` probe that checks the build runs in the same environment, with a temporary empty home, so the build verified is the build served and a host `LD_LIBRARY_PATH` applies to both (grilling 2026-11-16).
+`setpriv`, which stops the server when the runner dies, is found on the runner's `PATH` before the server's environment is built, and a host without it refuses the run before any evidence exists.
+Each file is passed by its declared name in the models directory, after its target is found inside that directory, so llama.cpp derives a split model's other parts from declared names only (grilling 2026-11-16).
 
 The proxy sidecar listens on port 8080 too, serves only clients on the run's own internal network, and forwards only `/v1/` requests of at most 16 MiB, one per connection, to that relay; the workload resolves it as `model-server` through `--add-host`.
 The relay passes on only `POST /v1/chat/completions` and `GET /v1/models`, and refuses a request for more than one choice (`n`).
