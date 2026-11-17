@@ -19,12 +19,19 @@ from silverquillm.karn.definition import KarnError, canonical
 from silverquillm.karn.interruption import terminate_as_interrupt
 from silverquillm.karn.login_cooldown import set_cooldown
 from silverquillm.karn.login_pool import LoginPool
+from silverquillm.karn.model_server import GpuReading, ModelServerHost, claim_gpu_slot, gpu_slots
 from silverquillm.karn.scheduler_worker import SpawnWorker, owner_alive, process_identity
 from silverquillm.queue_state import SchedulerLock
 
 ROOT = Path(__file__).resolve().parents[1]
 CLAUDE = "karn-claude-login"
 CODEX = "karn-codex-login"
+# Entries whose benchmark is "gpu" stand for model-server runs on two GPU Slots.
+GPU_SLOTS = ("0", "1")
+
+
+def _no_gpus():
+    return GpuReading(None, reason="nvidia_smi_unavailable")
 
 
 def _wait_file(path, timeout=15):
@@ -43,7 +50,13 @@ def _execute(**kwargs):
         attempts.write("attempt\n")
     with contextlib.ExitStack() as held:
         login = None
-        if plugin != "unpooled":
+        started = None
+        if plugin == "gpu":
+            claim = claim_gpu_slot(gpu_slots(state, GPU_SLOTS), _no_gpus)
+            held.callback(claim.release)
+            kwargs["on_gpu_slot_selected"](claim.slot.value)
+            started = "gpu-" + claim.slot.value
+        elif plugin != "unpooled":
             pool = LoginPool.of(state, plugin)
             login = pool.ref(pool.acquire(held, wait=kwargs["login_blocking"]))
         kwargs["on_login_selected"](login)
@@ -62,7 +75,7 @@ def _execute(**kwargs):
             for fd in Path("/proc/self/fd").iterdir()
             if fd.exists()
         )
-        (state / (name + ".started")).write_text(login or "unpooled")
+        (state / (name + ".started")).write_text(started or login or "unpooled")
         status = "completed"
         try:
             _wait_file(state / (name + ".release"))
@@ -120,6 +133,8 @@ def make_scheduler(directory, state, **extra):
         state_root=state,
         replay_without_state=["a", "b"],
         executor=_execute,
+        model_server_host=ModelServerHost(gpu_slots=GPU_SLOTS),
+        gpu_reader=_no_gpus,
         **extra,
     )
 
@@ -339,6 +354,48 @@ def test_unpooled_entries_remain_serial(tmp_path):
         _wait_file(state / "two.started")
         assert (state / "one.finished").exists()
         (state / "two.release").touch()
+        _wait_file(state / "count")
+
+
+def test_model_server_entries_fill_each_gpu_slot_and_wait_for_one_to_free(tmp_path):
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    state.mkdir()
+    _batch(directory, ["one", "two", "three"], "gpu")
+    with _running(directory, state):
+        _wait_file(state / "one.started")
+        _wait_file(state / "two.started")
+        slots = {(state / name).read_text() for name in ("one.started", "two.started")}
+        assert slots == {"gpu-0", "gpu-1"}
+        _wait_file(state / "three.attempts")
+        time.sleep(0.6)
+        assert not (state / "three.started").exists()
+        freed = (state / "one.started").read_text()
+        (state / "one.release").touch()
+        _wait_file(state / "three.started")
+        assert (state / "three.started").read_text() == freed
+        for marker in ("one.grade", "two.release", "three.release"):
+            (state / marker).touch()
+        _wait_file(state / "count")
+    rows = read_state(directory / "state/a.json", "a")["runs"]
+    assert [row["status"] for row in rows] == ["done"] * 3
+    assert all(row["login"] is None and "gpu_slot" in row for row in rows)
+
+
+def test_model_server_and_other_login_less_entries_never_wait_for_each_other(tmp_path):
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    state.mkdir()
+    _batch(directory, ["served"], "gpu")
+    _batch(directory, ["plain", "later"], "unpooled", batch="b")
+    with _running(directory, state):
+        _wait_file(state / "served.started")
+        _wait_file(state / "plain.started")
+        _wait_file(state / "later.attempts")
+        time.sleep(0.6)
+        assert not (state / "later.started").exists()
+        for marker in ("served.release", "plain.release"):
+            (state / marker).touch()
+        _wait_file(state / "later.started")
+        (state / "later.release").touch()
         _wait_file(state / "count")
 
 

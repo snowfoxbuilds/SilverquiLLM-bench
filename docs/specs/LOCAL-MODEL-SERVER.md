@@ -119,11 +119,11 @@ Before the run launches its workload, `run-input.json` holds the server facts th
 | --- | --- |
 | `gpu_slot` | the claimed GPU Slot's value, or null without `gpu_slots` |
 | `cuda_visible_devices`, `cuda_device_order` | the server's effective values, each null when absent; without `gpu_slots` they are the runner's, so the record keeps the selection even when `nvidia-smi` cannot be read |
-| `gpus` | per visible GPU, from `nvidia-smi` at claim: name, UUID, total and used memory, power limit, driver version |
+| `gpus` | per visible GPU, from `nvidia-smi` at claim: `index`, `uuid`, `name`, `memory_total_mib`, `memory_used_mib`, `power_limit_w`, `driver_version` |
 | `binary_sha256` | the llama-server binary's digest, recorded and never checked |
 | `environment` | the host config's `environment` for the server, empty when it sets none |
 
-When `nvidia-smi` is missing or fails, `gpus` is null with a reason and the run goes ahead.
+When `nvidia-smi` is missing or fails, `gpus` is null with `gpus_reason` (`nvidia_smi_unavailable`, `nvidia_smi_failed` or `nvidia_smi_unreadable`), only the lock decides whether a GPU Slot is free, and the run goes ahead.
 `run_metadata.model_server` also keeps the recipe's declaration as written, with `files`, `environment` and the timeouts only when the recipe sets them, so a recipe written before them records what it always did.
 A recipe with `files` adds `file_paths` and `file_bytes` for every file, and `model_sha256_verified` covers every declared file; a changed file other than the model fails the run with `model_file_digest_mismatch:<file>` before the server starts (#271).
 Recovery copies all these facts as recorded, never claims a GPU Slot and never reverifies the host's current files; a run interrupted before verification is recovered with `model_sha256_verified` null.

@@ -35,6 +35,7 @@ from .model_server import (
     TELEMETRY_ADAPTER,
     ModelRelayCollector,
     ModelServerHost,
+    claim_model_server,
     model_server_spec,
     plan_model_server,
 )
@@ -163,7 +164,10 @@ def host_model_server() -> ModelServerHost:
     except HostConfigError as error:
         raise KarnError("host_config_invalid") from error
     return ModelServerHost(
-        config.models_dir, dict(config.llama_cpp), dict(config.model_server_environment)
+        config.models_dir,
+        dict(config.llama_cpp),
+        dict(config.model_server_environment),
+        config.gpu_slots,
     )
 
 
@@ -343,6 +347,7 @@ def run_benchmark(
     on_launch=None,
     on_login_selected=None,
     on_login_released=None,
+    on_gpu_slot_selected=None,
     allow_dirty: bool = False,
     model_server_host: ModelServerHost | None = None,
 ) -> KarnRunRecord:
@@ -354,6 +359,10 @@ def run_benchmark(
     so a caller can count the run as started only from then. Bench code or data with
     uncommitted changes is refused unless ``allow_dirty``; a candidate built from an
     uncommitted recipe runs, and the record keeps its provenance either way.
+
+    A model-server run also claims a free GPU Slot before it counts as started, and is refused
+    with ``model_server_busy`` when none is free; ``on_gpu_slot_selected`` hears which. The
+    slot is released once the run's server stops.
     """
     candidate = load_candidate(
         build_output, construct, **({"image_inspector": host.docker.inspect_image} if host else {})
@@ -389,6 +398,11 @@ def run_benchmark(
                 wait=login_blocking,
             )
             login = pool.ref(selected_login)
+        if model_server is not None:
+            model_server = claim_model_server(model_server)
+            held.callback(model_server.claim.release)
+            if on_gpu_slot_selected is not None:
+                on_gpu_slot_selected(model_server.claim.slot.value)
         if on_login_selected is not None:
             on_login_selected(login)
         if on_launch is not None:
