@@ -19,6 +19,7 @@ CLEAN_PROVENANCE = {
     "bench": {"commit": "0" * 40, "dirty": False},
     "benchmark_root": {"commit": "0" * 40, "dirty": False},
     "recipe_revision": "1" * 40,
+    "karn_version": "0.1.2",
     "allow_dirty": False,
     "dirty_reasons": [],
 }

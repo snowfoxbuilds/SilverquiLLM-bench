@@ -428,6 +428,29 @@ def test_a_record_that_overrode_a_dirty_recipe_still_validates(checkout, monkeyp
     assert provenance.valid(published)
 
 
+def test_the_karn_version_label_is_recorded_and_never_refused(checkout, monkeypatch):
+    monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
+    monkeypatch.setenv(provenance.HOST_LABEL_ENV, "bench-host-1")
+    labels = {provenance.RECIPE_LABEL: "a" * 40}
+    labelled = provenance.collect(
+        {**labels, provenance.KARN_VERSION_LABEL: "0.1.2"}, checkout, allow_dirty=False
+    )
+    unlabelled = provenance.collect(labels, checkout, allow_dirty=False)
+    assert labelled["karn_version"] == "0.1.2" and labelled["dirty_reasons"] == []
+    assert unlabelled["karn_version"] is None and unlabelled["dirty_reasons"] == []
+    assert provenance.valid(labelled) and provenance.valid(unlabelled)
+
+
+def test_a_record_written_before_the_karn_version_was_recorded_stays_valid(checkout, monkeypatch):
+    monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
+    monkeypatch.setenv(provenance.HOST_LABEL_ENV, "bench-host-1")
+    recorded = provenance.collect({provenance.RECIPE_LABEL: "a" * 40}, checkout, allow_dirty=False)
+    published = {key: value for key, value in recorded.items() if key != "karn_version"}
+    assert provenance.valid(published)
+    assert not provenance.valid({**recorded, "karn_version": 12})
+    assert not provenance.valid({**recorded, "unexpected": True})
+
+
 def test_a_dirty_run_is_refused_before_any_evidence_exists(tmp_path, checkout, monkeypatch):
     monkeypatch.setattr(execution, "collect_provenance", provenance.collect)
     monkeypatch.setattr(provenance, "PACKAGE", checkout / "silverquillm")
