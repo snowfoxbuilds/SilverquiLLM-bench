@@ -1404,7 +1404,7 @@ def test_a_snapshot_reads_everything_and_writes_nothing(tmp_path):
         },
         host="host-a",
     )
-    enroll_slot(state, "karn-claude-login", "bare-claude-opus")
+    login = enroll_slot(state, "karn-claude-login", "bare-claude-opus")
     write_batch(
         batches,
         "queued",
@@ -1416,7 +1416,11 @@ def test_a_snapshot_reads_everything_and_writes_nothing(tmp_path):
     )
     lock = tmp_path / "proc-locks"
     with run_lock(runs / "live"):
+        # The live run's runner holds the login too, so the run holds the profile.
+        descriptor = os.open(login / "runner.lock", os.O_CREAT | os.O_RDWR)
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
         lock.write_text(Path("/proc/locks").read_text())
+        os.close(descriptor)
         before = tree_state(runs, repo, batches, state)
         monitor = Monitor(
             given={
