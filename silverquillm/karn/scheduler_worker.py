@@ -100,8 +100,12 @@ def execute_worker(connection, executor, arguments):
             on_launch=lambda: request("launch"),
         )
         send("result", record_outcome(result))
-    except (LoginPoolBusyError, LoginPoolUnavailableError, ModelServerBusyError) as error:
-        send("unavailable" if isinstance(error, LoginPoolUnavailableError) else "busy", str(error))
+    except ModelServerBusyError as error:
+        for problem in error.unusable:
+            send("warning", f"model_server_lock_unusable: {problem}; that GPU Slot is skipped")
+        send("busy", str(error))
+    except (LoginPoolBusyError, LoginPoolUnavailableError) as error:
+        send("busy" if isinstance(error, LoginPoolBusyError) else "unavailable", str(error))
     except RecordWritePendingError as error:
         send("result", record_outcome(error.record, pending=True))
     except (KeyboardInterrupt, SystemExit) as error:

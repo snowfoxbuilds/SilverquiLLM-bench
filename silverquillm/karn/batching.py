@@ -25,7 +25,7 @@ from .execution import NATIVE_TELEMETRY, host_model_server, run_benchmark
 from .grader import DEFAULT_GRADING_TIMEOUT
 from .login import LoginInUseError
 from .login_pool import LoginPool, LoginPoolUnavailableError, logins_root
-from .model_server import ModelServerHost, gpu_slots, has_claimable_gpu_slot, read_gpus
+from .model_server import ModelServerHost, gpu_slot_availability, gpu_slots, read_gpus
 from .records import RecordWritePendingError
 from .scheduler_worker import SpawnWorker, owner_alive
 
@@ -548,9 +548,12 @@ class KarnScheduler:
             host = self.model_server_host or host_model_server()
         except KarnError:
             return True
-        return has_claimable_gpu_slot(
+        claimable, unusable = gpu_slot_availability(
             gpu_slots(self.options["state_root"], host.gpu_slots), self.gpu_reader
         )
+        for problem in unusable:
+            self._warn(f"model_server_lock_unusable: {problem}; that GPU Slot is skipped")
+        return claimable
 
     def _dispatch_open(self) -> bool:
         """Whether new runs may launch; each change of dispatch mode is logged once."""
@@ -738,6 +741,8 @@ class KarnScheduler:
             )
 
         def retry_claimable(*, retry_dead_workers=False):
+            # One nvidia-smi reading per pass, however many entries wait for a GPU Slot.
+            gpu_claimable = None
             for name, plugin in list(deferred.items()):
                 if plugin is None:
                     if retry_dead_workers:
@@ -746,7 +751,9 @@ class KarnScheduler:
                 if plugin == "unpooled":
                     claimable = not unpooled_live()
                 elif plugin == MODEL_SERVER_POOL:
-                    claimable = self._gpu_slot_claimable()
+                    if gpu_claimable is None:
+                        gpu_claimable = self._gpu_slot_claimable()
+                    claimable = gpu_claimable
                 else:
                     claimable = LoginPool(
                         logins_root(self.options["state_root"]) / plugin, plugin

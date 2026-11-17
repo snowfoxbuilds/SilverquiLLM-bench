@@ -51,11 +51,12 @@ def _execute(**kwargs):
     with contextlib.ExitStack() as held:
         login = None
         started = None
-        if plugin == "gpu":
-            claim = claim_gpu_slot(gpu_slots(state, GPU_SLOTS), _no_gpus)
+        if plugin in ("gpu", "gpu-host"):
+            configured = GPU_SLOTS if plugin == "gpu" else None
+            claim = claim_gpu_slot(gpu_slots(state, configured), _no_gpus)
             held.callback(claim.release)
             kwargs["on_gpu_slot_selected"](claim.slot.value)
-            started = "gpu-" + claim.slot.value
+            started = f"gpu-{claim.slot.value}"
         elif plugin != "unpooled":
             pool = LoginPool.of(state, plugin)
             login = pool.ref(pool.acquire(held, wait=kwargs["login_blocking"]))
@@ -104,7 +105,8 @@ def _complete_after_release(**kwargs):
 
 
 def _scheduler_process(directory, state):
-    runner = make_scheduler(directory, state, slot_poll_seconds=0.1)
+    extra = {"model_server_host": ModelServerHost()} if (state / "unpinned-host").exists() else {}
+    runner = make_scheduler(directory, state, slot_poll_seconds=0.1, **extra)
     if (state / "fail-saves").exists():
         save = runner._save
 
@@ -133,9 +135,11 @@ def make_scheduler(directory, state, **extra):
         state_root=state,
         replay_without_state=["a", "b"],
         executor=_execute,
-        model_server_host=ModelServerHost(gpu_slots=GPU_SLOTS),
-        gpu_reader=_no_gpus,
-        **extra,
+        **{
+            "model_server_host": ModelServerHost(gpu_slots=GPU_SLOTS),
+            "gpu_reader": _no_gpus,
+            **extra,
+        },
     )
 
 
@@ -379,6 +383,51 @@ def test_model_server_entries_fill_each_gpu_slot_and_wait_for_one_to_free(tmp_pa
     rows = read_state(directory / "state/a.json", "a")["runs"]
     assert [row["status"] for row in rows] == ["done"] * 3
     assert all(row["login"] is None and "gpu_slot" in row for row in rows)
+
+
+def test_a_host_without_gpu_slots_admits_one_model_server_run_at_a_time(tmp_path):
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    state.mkdir()
+    (state / "unpinned-host").touch()
+    _batch(directory, ["one", "two"], "gpu-host")
+    with _running(directory, state):
+        _wait_file(state / "one.started")
+        assert (state / "one.started").read_text() == "gpu-None"
+        _wait_file(state / "two.attempts")
+        time.sleep(0.6)
+        assert not (state / "two.started").exists()
+        (state / "one.release").touch()
+        _wait_file(state / "two.started")
+        for marker in ("one.grade", "two.release"):
+            (state / marker).touch()
+        _wait_file(state / "count")
+    rows = read_state(directory / "state/a.json", "a")["runs"]
+    assert [row["status"] for row in rows] == ["done"] * 2
+    assert all(row["gpu_slot"] is None for row in rows)
+
+
+def test_an_unreadable_gpu_slot_lock_defers_entries_without_stopping_the_scheduler(tmp_path):
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    state.mkdir()
+    for slot in gpu_slots(state, GPU_SLOTS):
+        slot.lock_path.touch()
+    gpu_slots(state, GPU_SLOTS)[0].lock_path.chmod(0)
+    _batch(directory, ["one", "two"], "gpu")
+    try:
+        with _running(directory, state):
+            _wait_file(state / "one.started")
+            assert (state / "one.started").read_text() == "gpu-1"
+            _wait_file(state / "two.attempts")
+            time.sleep(0.6)
+            assert not (state / "two.started").exists()
+            (state / "one.release").touch()
+            _wait_file(state / "two.started")
+            assert (state / "two.started").read_text() == "gpu-1"
+            for marker in ("one.grade", "two.release"):
+                (state / marker).touch()
+            _wait_file(state / "count")
+    finally:
+        gpu_slots(state, GPU_SLOTS)[0].lock_path.chmod(0o600)
 
 
 def test_model_server_and_other_login_less_entries_never_wait_for_each_other(tmp_path):

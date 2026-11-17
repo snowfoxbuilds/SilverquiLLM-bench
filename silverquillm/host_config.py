@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import tempfile
 import tomllib
 from collections.abc import Callable, Mapping
@@ -53,6 +54,8 @@ LOCATIONS: dict[str, LocationSpec] = {
     )
 }
 
+# A GPU index as CUDA_VISIBLE_DEVICES takes it: ASCII digits, no leading zero.
+GPU_INDEX = re.compile(r"0|[1-9][0-9]*")
 DEFAULT_USAGE_RATES: dict[str, Decimal] = {"codex": Decimal(5), "claude": Decimal(25)}
 
 
@@ -188,10 +191,7 @@ def _gpu_slots(path: Path, slots) -> tuple[str, ...]:
     seen: set[int] = set()
     for slot in slots:
         indices = slot.split(",") if isinstance(slot, str) else [None]
-        if not all(
-            isinstance(index, str) and index.isdigit() and index == str(int(index))
-            for index in indices
-        ):
+        if not all(isinstance(index, str) and GPU_INDEX.fullmatch(index) for index in indices):
             raise HostConfigError(
                 f"{path}: [model_server] gpu_slots entries are GPU indices like \"0\" or \"0,1\""
             )

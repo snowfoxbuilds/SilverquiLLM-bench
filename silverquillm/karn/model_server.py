@@ -15,6 +15,7 @@ import fcntl
 import hashlib
 import http.client
 import json
+import math
 import os
 import re
 import secrets
@@ -97,6 +98,8 @@ REFUSED_ENVIRONMENT_PREFIXES = (
 REFUSED_ENVIRONMENT = frozenset(
     {
         *("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER", "PATH", "HOME"),
+        # Other backends' GPU selection: GPU Slots pin CUDA builds only.
+        *("GGML_VK_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES"),
         *("GGML_BACKEND_PATH", "GGML_ET_KERNELS_PATH", "GGML_OPENCL_KERNEL_CACHE_DIR"),
         *("GGML_ET_PROFILE", "ET_TOOLCHAIN", "TOOLCHAIN_ROOT"),
         *("MODEL_ENDPOINT", "MTMD_BACKEND_DEVICE", "MTMD_DEBUG_EMBEDDINGS"),
@@ -142,6 +145,8 @@ RELAYED_PATHS = {("POST", "/v1/chat/completions"), ("GET", "/v1/models")}
 BUSY_MEMORY_MIB = 1024
 NVIDIA_SMI_SECONDS = 10
 GPU_QUERY = "index,uuid,name,memory.used,memory.total,power.limit,driver_version"
+# The runner's GPU selection, which a host without GPU Slots passes on to its server.
+GPU_SELECTION = ("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER")
 
 
 @dataclass(frozen=True)
@@ -397,10 +402,13 @@ class ModelServerHost:
 
 
 class ModelServerBusyError(KarnError):
-    """Every GPU Slot of the host is locked or has another job on its GPUs."""
+    """Every GPU Slot of the host is locked, unusable, or has another job on its GPUs.
 
-    def __init__(self):
+    ``unusable`` names the slots whose lock file could not be opened, and why."""
+
+    def __init__(self, unusable: tuple[str, ...] = ()):
         super().__init__("model_server_busy")
+        self.unusable = unusable
 
 
 @dataclass(frozen=True)
@@ -412,75 +420,105 @@ class GpuReading:
     reason: str | None = None
 
 
+_GPU_INDEX = re.compile(r"0|[1-9][0-9]*")
+
+
 def _gpu_number(text: str):
+    """A reported number, None for ``[N/A]``; a non-finite one makes the reading unreadable."""
     try:
         number = float(text)
     except ValueError:
         return None
+    if not math.isfinite(number):
+        raise ValueError("nvidia_smi_unreadable")
     return int(number) if number.is_integer() else number
 
 
-def _nvidia_smi(query: list[str], run) -> list[list[str]]:
-    result = run(
-        ["nvidia-smi", *query, "--format=csv,noheader,nounits"],
-        capture_output=True,
-        text=True,
-        timeout=NVIDIA_SMI_SECONDS,
-        check=False,
+def _bounded(argv: list[str]) -> tuple[int, bytes]:
+    """Run *argv* for at most :data:`NVIDIA_SMI_SECONDS`, never waiting on a process that
+    will not die: an ``nvidia-smi`` stuck in the kernel is abandoned, not reaped."""
+    process = subprocess.Popen(
+        argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
     )
-    if result.returncode:
+    try:
+        output, _ = process.communicate(timeout=NVIDIA_SMI_SECONDS)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(OSError):
+            process.kill()
+        raise
+    return process.returncode, output
+
+
+def _nvidia_smi(query: list[str], run) -> list[list[str]]:
+    code, output = run(["nvidia-smi", *query, "--format=csv,noheader,nounits"])
+    if code:
         raise ValueError("nvidia_smi_failed")
-    return [[field.strip() for field in line.split(",")] for line in result.stdout.splitlines()]
+    try:
+        text = output.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError("nvidia_smi_unreadable") from None
+    return [
+        [field.strip() for field in line.split(",")] for line in text.splitlines() if line.strip()
+    ]
 
 
-def read_gpus(run=subprocess.run) -> GpuReading:
+def read_gpus(run=None) -> GpuReading:
     """Every GPU's facts and the GPUs running a compute process; nothing, with a reason, when
-    ``nvidia-smi`` is missing or fails."""
+    ``nvidia-smi`` is missing, fails, hangs or says something unreadable."""
+    run = run or _bounded
     try:
         rows = _nvidia_smi(["--query-gpu=" + GPU_QUERY], run)
         apps = _nvidia_smi(["--query-compute-apps=gpu_uuid,pid,used_memory"], run)
+        gpus = []
+        for row in rows:
+            if len(row) != 7 or not _GPU_INDEX.fullmatch(row[0]):
+                raise ValueError("nvidia_smi_unreadable")
+            index, uuid_, name, used, total, power, driver = row
+            gpus.append(
+                {
+                    "index": int(index),
+                    "uuid": uuid_,
+                    "name": name,
+                    "memory_total_mib": _gpu_number(total),
+                    "memory_used_mib": _gpu_number(used),
+                    "power_limit_w": _gpu_number(power),
+                    "driver_version": driver,
+                }
+            )
     except (OSError, subprocess.TimeoutExpired):
         return GpuReading(None, reason="nvidia_smi_unavailable")
     except ValueError as error:
         return GpuReading(None, reason=str(error))
-    gpus = []
-    for row in rows:
-        if len(row) != 7 or not row[0].isdigit():
-            return GpuReading(None, reason="nvidia_smi_unreadable")
-        index, uuid_, name, used, total, power, driver = row
-        gpus.append(
-            {
-                "index": int(index),
-                "uuid": uuid_,
-                "name": name,
-                "memory_total_mib": _gpu_number(total),
-                "memory_used_mib": _gpu_number(used),
-                "power_limit_w": _gpu_number(power),
-                "driver_version": driver,
-            }
-        )
-    return GpuReading(tuple(gpus), frozenset(row[0] for row in apps if row and row[0]))
+    return GpuReading(tuple(gpus), frozenset(row[0] for row in apps if row[0]))
 
 
 @dataclass(frozen=True)
 class GpuSlot:
-    """One GPU Slot: a ``CUDA_VISIBLE_DEVICES`` value, or None for every GPU, and its lock."""
+    """One GPU Slot: a ``CUDA_VISIBLE_DEVICES`` value and its lock, or, with no ``gpu_slots``,
+    the host-wide lock on the GPUs the runner's own selection gives the server."""
 
     value: str | None
     lock_path: Path
 
+    @property
+    def indices(self) -> frozenset[int] | None:
+        return None if self.value is None else frozenset(map(int, self.value.split(",")))
+
     def gpus(self, reading: GpuReading) -> list[dict[str, Any]] | None:
+        """The slot's GPUs; without ``gpu_slots``, every GPU ``nvidia-smi`` lists, which the
+        runner's recorded selection narrows."""
         if reading.gpus is None:
             return None
-        if self.value is None:
+        if self.indices is None:
             return list(reading.gpus)
-        indices = {int(index) for index in self.value.split(",")}
-        return [gpu for gpu in reading.gpus if gpu["index"] in indices]
+        return [gpu for gpu in reading.gpus if gpu["index"] in self.indices]
 
     def busy(self, reading: GpuReading) -> str | None:
-        """Why another job keeps this slot busy, whatever its lock says; None when it does not.
-
-        Without a reading only the lock decides."""
+        """Why another job keeps this GPU Slot busy, whatever its lock says; None when nothing
+        does. Only a listed GPU Slot is checked: without ``gpu_slots`` a host's own display
+        may hold GPU memory, and only the lock decides, as it does without a reading."""
+        if self.value is None:
+            return None
         for gpu in self.gpus(reading) or ():
             if gpu["uuid"] in reading.compute_uuids:
                 return "compute_process"
@@ -488,6 +526,12 @@ class GpuSlot:
             if isinstance(used, (int, float)) and used > BUSY_MEMORY_MIB:
                 return "memory_used"
         return None
+
+    def unknown_gpus(self, reading: GpuReading) -> bool:
+        """Whether the slot names a GPU a readable ``nvidia-smi`` does not list."""
+        if self.indices is None or reading.gpus is None:
+            return False
+        return not self.indices <= {gpu["index"] for gpu in reading.gpus}
 
 
 def gpu_slots(state_root: Path, configured: tuple[str, ...] | None) -> tuple[GpuSlot, ...]:
@@ -499,27 +543,51 @@ def gpu_slots(state_root: Path, configured: tuple[str, ...] | None) -> tuple[Gpu
     return tuple(GpuSlot(value, root / f"model-server-gpu-{value}.lock") for value in configured)
 
 
-class GpuSlotClaim:
-    """A held GPU Slot and what ``nvidia-smi`` said of its GPUs when it was claimed."""
+def gpu_environment(slot_value: str | None, inherited=None) -> dict[str, str]:
+    """The server's GPU selection: a GPU Slot's GPUs in ``nvidia-smi``'s order, or, without
+    ``gpu_slots``, the runner's own ``CUDA_VISIBLE_DEVICES`` and ``CUDA_DEVICE_ORDER`` exactly
+    as set, empty or absent."""
+    if slot_value is not None:
+        return {"CUDA_DEVICE_ORDER": "PCI_BUS_ID", "CUDA_VISIBLE_DEVICES": slot_value}
+    inherited = os.environ if inherited is None else inherited
+    return {name: inherited[name] for name in GPU_SELECTION if name in inherited}
 
-    def __init__(self, slot: GpuSlot, handle, reading: GpuReading):
+
+class GpuSlotClaim:
+    """A held GPU Slot, the GPU selection its server gets, and what ``nvidia-smi`` said of its
+    GPUs when it was claimed."""
+
+    def __init__(self, slot: GpuSlot, handle, reading: GpuReading, inherited=None):
         self.slot, self._handle = slot, handle
         self.gpus = slot.gpus(reading)
         self.gpus_reason = reading.reason
+        self.environment = gpu_environment(slot.value, inherited)
+        self._kept = False
 
     def release(self) -> None:
-        if self._handle is not None:
+        if self._handle is not None and not self._kept:
             self._handle.close()
             self._handle = None
 
+    def keep_until_exit(self) -> None:
+        """Hold the lock until this process exits: its server may still be on the GPUs."""
+        self._kept = True
+
     def facts(self) -> dict[str, Any]:
-        facts: dict[str, Any] = {"gpu_slot": self.slot.value, "gpus": self.gpus}
+        facts: dict[str, Any] = {
+            "gpu_slot": self.slot.value,
+            "cuda_visible_devices": self.environment.get("CUDA_VISIBLE_DEVICES"),
+            "cuda_device_order": self.environment.get("CUDA_DEVICE_ORDER"),
+            "gpus": self.gpus,
+        }
         if self.gpus is None:
             facts["gpus_reason"] = self.gpus_reason
         return facts
 
 
 def _lock(slot: GpuSlot):
+    """The slot's lock, held; None when another process holds it. Raises ``OSError`` when the
+    lock file cannot be created or opened."""
     slot.lock_path.parent.mkdir(parents=True, exist_ok=True)
     handle = slot.lock_path.open("a")
     try:
@@ -527,25 +595,69 @@ def _lock(slot: GpuSlot):
     except BlockingIOError:
         handle.close()
         return None
+    except BaseException:
+        handle.close()
+        raise
     return handle
 
 
-def claim_gpu_slot(slots: tuple[GpuSlot, ...], read=read_gpus) -> GpuSlotClaim:
-    """The first free GPU Slot, held until released; ``model_server_busy`` when none is."""
-    reading = read()
+def _needs_reading(slots: tuple[GpuSlot, ...]) -> bool:
+    return any(slot.value is not None for slot in slots)
+
+
+def _refuse_unknown(slots: tuple[GpuSlot, ...], reading: GpuReading) -> None:
     for slot in slots:
-        if slot.busy(reading) is None and (handle := _lock(slot)) is not None:
-            return GpuSlotClaim(slot, handle, reading)
-    raise ModelServerBusyError()
+        if slot.unknown_gpus(reading):
+            raise KarnError("gpu_slot_unknown_gpu:" + slot.value)
 
 
-def has_claimable_gpu_slot(slots: tuple[GpuSlot, ...], read=read_gpus) -> bool:
-    """Admission hint for the scheduler; the claim itself stays authoritative."""
-    try:
-        claim_gpu_slot(slots, read).release()
-    except ModelServerBusyError:
-        return False
-    return True
+def claim_gpu_slot(slots: tuple[GpuSlot, ...], read=None, inherited=None) -> GpuSlotClaim:
+    """The first free GPU Slot, held until released; ``model_server_busy`` when none is, and
+    ``gpu_slot_unknown_gpu:<value>`` when a slot names a GPU ``nvidia-smi`` does not list."""
+    reading = (read or read_gpus)()
+    _refuse_unknown(slots, reading)
+    unusable = []
+    for slot in slots:
+        if slot.busy(reading) is not None:
+            continue
+        try:
+            handle = _lock(slot)
+        except OSError as error:
+            unusable.append(f"{slot.lock_path}: {error.strerror or type(error).__name__}")
+            continue
+        if handle is not None:
+            return GpuSlotClaim(slot, handle, reading, inherited)
+    raise ModelServerBusyError(tuple(unusable))
+
+
+def gpu_slot_availability(
+    slots: tuple[GpuSlot, ...], read=None, locks: Path | None = None
+) -> tuple[bool, tuple[str, ...]]:
+    """Whether some GPU Slot looks claimable, and the slots whose lock file is unusable.
+
+    An admission hint for the scheduler, read like the monitor reads it: from the kernel's lock
+    table, never by taking a lock a run is about to claim. The claim stays authoritative."""
+    from silverquillm.monitor.locks import PROC_LOCKS, held_locks, lock_held
+
+    reading = (read or read_gpus)() if _needs_reading(slots) else GpuReading(None)
+    held = held_locks(locks or PROC_LOCKS)
+    claimable, unusable = False, []
+    for slot in slots:
+        if slot.unknown_gpus(reading):
+            # The run itself refuses, with its own reason.
+            return True, ()
+        if _unusable(slot.lock_path):
+            unusable.append(f"{slot.lock_path}: Permission denied")
+        elif slot.busy(reading) is None and lock_held(slot.lock_path, held) is not True:
+            claimable = True
+    return claimable, tuple(unusable)
+
+
+def _unusable(path: Path) -> bool:
+    """A lock file this process could not open for a claim, or could not create."""
+    if path.exists():
+        return not os.access(path, os.R_OK | os.W_OK)
+    return path.parent.exists() and not os.access(path.parent, os.W_OK)
 
 
 @dataclass(frozen=True)
@@ -588,10 +700,13 @@ class ModelServerPlan:
         return facts
 
 
-def claim_model_server(plan: ModelServerPlan, read=None) -> ModelServerPlan:
-    """The plan holding the host's first free GPU Slot; ``model_server_busy`` when none is."""
+def claim_model_server(plan: ModelServerPlan, read=None, inherited=None) -> ModelServerPlan:
+    """The plan holding the host's first free GPU Slot; ``model_server_busy`` when none is.
+
+    The GPU selection is fixed at the claim, so the server gets the selection the run records
+    before launch, whatever the runner's environment says later."""
     slots = gpu_slots(plan.state_root, plan.gpu_slots)
-    return replace(plan, claim=claim_gpu_slot(slots, read or read_gpus))
+    return replace(plan, claim=claim_gpu_slot(slots, read or read_gpus, inherited))
 
 
 def server_environment(
@@ -600,23 +715,21 @@ def server_environment(
     home: Path,
     inherited: dict[str, str] | None = None,
     *,
-    cuda_visible_devices: str | None = None,
+    gpu: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """The whole environment of the server and of its ``--version`` probe: never the runner's,
     where a stray ``LD_LIBRARY_PATH`` or ``LLAMA_ARG_*`` would change the server unseen.
 
     *home* is an empty directory the bench owns, so llama.cpp reads no user config file;
-    *cuda_visible_devices* pins the server to its GPU Slot's GPUs.
+    *gpu* is the claimed GPU selection (:func:`gpu_environment`); without one, as for the
+    ``--version`` probe, the runner's own CUDA selection passes.
     """
     inherited = os.environ if inherited is None else inherited
     environment = {"PATH": inherited["PATH"]} if "PATH" in inherited else {}
     environment.update(host_environment)
     environment.update(spec.environment or ())
-    environment.update(
-        HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), CUDA_DEVICE_ORDER="PCI_BUS_ID"
-    )
-    if cuda_visible_devices is not None:
-        environment["CUDA_VISIBLE_DEVICES"] = cuda_visible_devices
+    environment.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"))
+    environment.update(gpu_environment(None, inherited) if gpu is None else gpu)
     return environment
 
 
@@ -744,9 +857,7 @@ class LlamaServer:
                     self.plan.spec,
                     self.plan.host_environment,
                     home,
-                    cuda_visible_devices=(
-                        self.plan.claim.slot.value if self.plan.claim is not None else None
-                    ),
+                    gpu=self.plan.claim.environment if self.plan.claim is not None else None,
                 ),
             )
         finally:
@@ -775,8 +886,13 @@ class LlamaServer:
                 raise KarnError("model_server_not_ready")
             time.sleep(1)
 
+    @property
+    def stopped(self) -> bool:
+        """Whether the server process is confirmed gone, so its GPUs are free."""
+        return self.process is None or self.process.poll() is not None
+
     def __exit__(self, *_):
-        if self.process is None or self.process.poll() is not None:
+        if self.stopped:
             return
         self.process.terminate()
         try:
@@ -972,7 +1088,7 @@ class ModelRelayCollector:
     def __enter__(self):
         self.run_dir.mkdir(parents=True, exist_ok=True)
         if self.plan.claim is not None:
-            self._exit.callback(self.plan.claim.release)
+            self._exit.callback(self._release_claim)
         try:
             started = time.monotonic()
             for position, (entry, path) in enumerate(self.plan.server_files):
@@ -996,13 +1112,22 @@ class ModelRelayCollector:
             self._sink = self._open(EVENTS_FILE)
             self._transcript = self._open(TRANSCRIPT_FILE)
             started = time.monotonic()
-            self.llama = self._exit.enter_context(LlamaServer(self.plan, self.run_dir / SERVER_LOG))
+            # Known before it starts, so a server that fails to stop keeps its GPU Slot held.
+            self.llama = LlamaServer(self.plan, self.run_dir / SERVER_LOG)
+            self._exit.enter_context(self.llama)
             self.facts["ready_seconds"] = round(time.monotonic() - started, 3)
             self._start_relay()
         except BaseException:
             self._exit.close()
             raise
         return self
+
+    def _release_claim(self) -> None:
+        """Release the GPU Slot only once the server is confirmed gone; a server that outlived
+        its stop keeps the slot held until the runner exits."""
+        if self.llama is not None and not self.llama.stopped:
+            self.plan.claim.keep_until_exit()
+        self.plan.claim.release()
 
     def _open(self, name: str) -> _EventFile:
         sink = _EventFile(self.run_dir / name)

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -27,6 +28,7 @@ from silverquillm.karn.model_server import (
     claim_gpu_slot,
     claim_model_server,
     file_sha256,
+    gpu_slot_availability,
     gpu_slots,
     model_server_spec,
     plan_model_server,
@@ -402,15 +404,50 @@ def h100s(*, used=None, compute=()):
     )
 
 
-def test_a_host_without_gpu_slots_has_one_unpinned_slot_on_one_lock(tmp_path):
+def test_a_host_without_gpu_slots_serves_one_run_at_a_time_on_the_runners_gpus(tmp_path):
     (slot,) = gpu_slots(tmp_path, None)
     assert slot.value is None and slot.lock_path == tmp_path.resolve() / "model-server.lock"
-    claim = claim_gpu_slot((slot,), lambda: h100s())
-    assert claim.facts() == {"gpu_slot": None, "gpus": [gpu(index) for index in range(4)]}
+    runner = {"CUDA_VISIBLE_DEVICES": "1", "CUDA_DEVICE_ORDER": "FASTEST_FIRST"}
+    # No busy check: a desktop's own display may hold more than 1 GiB.
+    busy = h100s(used={0: 8000, 1: 8000}, compute=[0, 1])
+    claim = claim_gpu_slot((slot,), lambda: busy, runner)
+    assert claim.facts() == {
+        "gpu_slot": None,
+        "cuda_visible_devices": "1",
+        "cuda_device_order": "FASTEST_FIRST",
+        "gpus": [gpu(index, used=busy.gpus[index]["memory_used_mib"]) for index in range(4)],
+    }
     with pytest.raises(ModelServerBusyError, match="model_server_busy"):
-        claim_gpu_slot((slot,), lambda: h100s())
+        claim_gpu_slot((slot,), h100s, runner)
     claim.release()
-    claim_gpu_slot((slot,), lambda: h100s()).release()
+    claim_gpu_slot((slot,), h100s, runner).release()
+
+
+@pytest.mark.parametrize(
+    ("runner", "selection"),
+    [
+        (
+            {"CUDA_VISIBLE_DEVICES": "2,0", "CUDA_DEVICE_ORDER": "FASTEST_FIRST"},
+            ("2,0", "FASTEST_FIRST"),
+        ),
+        ({"CUDA_VISIBLE_DEVICES": "", "CUDA_DEVICE_ORDER": "PCI_BUS_ID"}, ("", "PCI_BUS_ID")),
+        ({}, (None, None)),
+    ],
+    ids=["restricted", "empty", "unset"],
+)
+def test_without_gpu_slots_the_runners_selection_passes_exactly_as_set(
+    served, tmp_path, runner, selection
+):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    claimed = claim_model_server(plan, inherited=runner)
+    host = claimed.to_dict()["host"]
+    assert (host["cuda_visible_devices"], host["cuda_device_order"]) == selection
+    environment = server_environment(
+        served.spec, {}, tmp_path, {"PATH": "/bin", **runner}, gpu=claimed.claim.environment
+    )
+    for name, value in zip(("CUDA_VISIBLE_DEVICES", "CUDA_DEVICE_ORDER"), selection, strict=True):
+        assert environment.get(name) == value
+    claimed.claim.release()
 
 
 def test_each_run_claims_the_first_free_gpu_slot_and_its_lock_is_named_by_its_value(tmp_path):
@@ -422,7 +459,12 @@ def test_each_run_claims_the_first_free_gpu_slot_and_its_lock_is_named_by_its_va
     ]
     first, second = (claim_gpu_slot(slots, h100s) for _ in range(2))
     assert (first.slot.value, second.slot.value) == ("0", "1")
-    assert second.facts() == {"gpu_slot": "1", "gpus": [gpu(1)]}
+    assert second.facts() == {
+        "gpu_slot": "1",
+        "cuda_visible_devices": "1",
+        "cuda_device_order": "PCI_BUS_ID",
+        "gpus": [gpu(1)],
+    }
     reordered = gpu_slots(tmp_path, ("1", "0", "2"))
     assert claim_gpu_slot(reordered, h100s).slot.value == "2"
 
@@ -437,8 +479,6 @@ def test_a_gpu_another_job_is_using_keeps_its_slot_busy_whatever_its_lock(tmp_pa
     assert claim_gpu_slot(slots, lambda: reading).slot.value == "1"
     with pytest.raises(ModelServerBusyError):
         claim_gpu_slot(gpu_slots(tmp_path, ("0",)), lambda: reading)
-    with pytest.raises(ModelServerBusyError):
-        claim_gpu_slot(gpu_slots(tmp_path / "unpinned", None), lambda: reading)
 
 
 def test_without_nvidia_smi_only_the_lock_decides_and_the_gpus_are_unknown(tmp_path):
@@ -447,26 +487,95 @@ def test_without_nvidia_smi_only_the_lock_decides_and_the_gpus_are_unknown(tmp_p
     claim = claim_gpu_slot(slots, lambda: unread)
     assert claim.facts() == {
         "gpu_slot": "0",
+        "cuda_visible_devices": "0",
+        "cuda_device_order": "PCI_BUS_ID",
         "gpus": None,
         "gpus_reason": "nvidia_smi_unavailable",
     }
 
 
-def completed(stdout="", returncode=0):
-    return SimpleNamespace(stdout=stdout, stderr="", returncode=returncode)
+def test_a_gpu_slot_naming_a_gpu_nvidia_smi_does_not_list_refuses_the_run(tmp_path):
+    two = GpuReading((gpu(0), gpu(1)))
+    with pytest.raises(KarnError, match="gpu_slot_unknown_gpu:7"):
+        claim_gpu_slot(gpu_slots(tmp_path, ("0", "7")), lambda: two)
+    with pytest.raises(KarnError, match="gpu_slot_unknown_gpu:1,2"):
+        claim_gpu_slot(gpu_slots(tmp_path, ("1,2",)), lambda: two)
+    # Unread, the slot cannot be judged, and only its lock decides.
+    claim_gpu_slot(gpu_slots(tmp_path, ("7",)), lambda: GpuReading(None)).release()
+
+
+def test_an_unusable_lock_file_skips_its_slot_and_defers_rather_than_failing(tmp_path):
+    slots = gpu_slots(tmp_path, ("0", "1"))
+    claim_gpu_slot(slots, h100s).release()
+    claim_gpu_slot(slots[1:], h100s).release()
+    slots[0].lock_path.chmod(0)
+    try:
+        claim = claim_gpu_slot(slots, h100s)
+        assert claim.slot.value == "1"
+        with pytest.raises(ModelServerBusyError) as refused:
+            claim_gpu_slot(slots, h100s)
+        assert refused.value.unusable and str(slots[0].lock_path) in refused.value.unusable[0]
+        claim.release()
+        claimable, unusable = gpu_slot_availability(slots, h100s)
+        assert claimable and len(unusable) == 1
+        slots[1].lock_path.chmod(0)
+        assert gpu_slot_availability(slots, h100s) == (
+            False,
+            unusable + (f"{slots[1].lock_path}: Permission denied",),
+        )
+    finally:
+        for slot in slots:
+            slot.lock_path.chmod(0o600)
+
+
+def test_the_schedulers_probe_reads_the_lock_table_and_never_takes_a_lock(tmp_path):
+    slots = gpu_slots(tmp_path, ("0",))
+    claim_gpu_slot(slots, h100s).release()
+    table = tmp_path / "proc-locks"
+    table.write_text("")
+    probes = []
+
+    def flock(*args):
+        probes.append(args)
+        raise AssertionError("the probe took a lock")
+
+    import fcntl
+
+    original = fcntl.flock
+    fcntl.flock = flock
+    try:
+        assert gpu_slot_availability(slots, h100s, locks=table) == (True, ())
+    finally:
+        fcntl.flock = original
+    held = claim_gpu_slot(slots, h100s)
+    table.write_text(Path("/proc/locks").read_text())
+    assert gpu_slot_availability(slots, h100s, locks=table) == (False, ())
+    held.release()
+    # A host without GPU Slots never asks nvidia-smi to judge its one lock.
+    unpinned = gpu_slots(tmp_path / "unpinned", None)
+
+    def unexpected():
+        raise AssertionError("nvidia-smi read for a host without GPU Slots")
+
+    assert gpu_slot_availability(unpinned, unexpected, locks=table) == (True, ())
+
+
+def smi_output(gpus: bytes, apps: bytes = b"", code: int = 0):
+    def run(argv):
+        assert "--format=csv,noheader,nounits" in argv
+        return code, gpus if argv[1].startswith("--query-gpu=") else apps
+
+    return run
 
 
 def test_nvidia_smi_is_read_into_facts_and_its_failures_into_reasons():
-    def smi(argv, **_):
-        assert "--format=csv,noheader,nounits" in argv
-        if argv[1].startswith("--query-gpu="):
-            return completed(
-                "0, GPU-a, NVIDIA GeForce RTX 3090, 5, 24576, 240.00, 595.91.07\n"
-                "1, GPU-b, NVIDIA GeForce RTX 3090, 3000, 24576, [N/A], 595.91.07\n"
-            )
-        return completed("GPU-b, 4242, 2990\n")
-
-    reading = read_gpus(smi)
+    reading = read_gpus(
+        smi_output(
+            b"0, GPU-a, NVIDIA GeForce RTX 3090, 5, 24576, 240.00, 595.91.07\n\n"
+            b"1, GPU-b, NVIDIA GeForce RTX 3090, 3000, 24576, [N/A], 595.91.07\n",
+            b"\nGPU-b, 4242, 2990\n",
+        )
+    )
     assert reading.reason is None and reading.compute_uuids == {"GPU-b"}
     assert reading.gpus[0] == {
         "index": 0,
@@ -479,42 +588,97 @@ def test_nvidia_smi_is_read_into_facts_and_its_failures_into_reasons():
     }
     assert reading.gpus[1]["power_limit_w"] is None
 
-    def missing(argv, **_):
+    def missing(argv):
         raise FileNotFoundError(argv[0])
 
+    def hangs(argv):
+        raise subprocess.TimeoutExpired(argv, 10)
+
     assert read_gpus(missing) == GpuReading(None, reason="nvidia_smi_unavailable")
-    assert read_gpus(lambda argv, **_: completed(returncode=9)).reason == "nvidia_smi_failed"
-    assert read_gpus(lambda argv, **_: completed("garbage\n")).reason == "nvidia_smi_unreadable"
+    assert read_gpus(hangs) == GpuReading(None, reason="nvidia_smi_unavailable")
+    assert read_gpus(smi_output(b"", code=9)).reason == "nvidia_smi_failed"
+    for output in (
+        b"garbage\n",
+        b"\xff\xfe, GPU-a, x, 5, 24576, 240, 1\n",
+        b"0, GPU-a, x, nan, 24576, 240, 1\n",
+        b"0, GPU-a, x, 5, inf, 240, 1\n",
+        "\u00b2, GPU-a, x, 5, 24576, 240, 1\n".encode(),
+    ):
+        assert read_gpus(smi_output(output)).reason == "nvidia_smi_unreadable", output
 
 
-def test_the_server_sees_only_its_gpu_slots_gpus_in_nvidia_smis_order(served, tmp_path):
-    home = tmp_path / "home"
-    inherited = {"PATH": "/bin", "CUDA_VISIBLE_DEVICES": "0,1,2,3"}
-    assert "CUDA_VISIBLE_DEVICES" not in server_environment(served.spec, {}, home, inherited)
+def test_a_stuck_nvidia_smi_is_abandoned_within_its_bound(tmp_path, monkeypatch):
+    from silverquillm.karn import model_server
+
+    stuck = tmp_path / "nvidia-smi"
+    stuck.write_text("#!/bin/sh\nexec sleep 30\n")
+    stuck.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+    monkeypatch.setattr(model_server, "NVIDIA_SMI_SECONDS", 0.5)
+    started = time.monotonic()
+    reading = read_gpus()
+    assert reading == GpuReading(None, reason="nvidia_smi_unavailable")
+    assert time.monotonic() - started < 5
+
+
+def test_with_gpu_slots_the_slots_selection_overrides_the_runners(served, tmp_path):
+    runner = {
+        "PATH": "/bin",
+        "CUDA_VISIBLE_DEVICES": "0,1,2,3",
+        "CUDA_DEVICE_ORDER": "FASTEST_FIRST",
+    }
+    runner |= {"LLAMA_ARG_CTX_SIZE": "4096", "LD_LIBRARY_PATH": "/opt/old"}
     pinned = ModelServerHost(served.host.models_dir, served.host.llama_cpp, {}, ("0", "1"))
     plan = plan_model_server(served.spec, pinned, served.state)
-    claimed = [claim_model_server(plan, h100s) for _ in range(2)]
-    unpinned = claim_model_server(plan_model_server(served.spec, served.host, served.state))
-    assert unpinned.claim.slot.value is None
-    with ModelRelayCollector(tmp_path / "run", plan=claimed[1]):
-        environment = json.loads(Path(str(served.binary) + ".env").read_text())
+    claimed = [claim_model_server(plan, h100s, runner) for _ in range(2)]
+    environment = server_environment(
+        served.spec, {}, tmp_path, runner, gpu=claimed[1].claim.environment
+    )
     assert environment["CUDA_VISIBLE_DEVICES"] == "1"
     assert environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
+    assert "LLAMA_ARG_CTX_SIZE" not in environment and "LD_LIBRARY_PATH" not in environment
+    unpinned = server_environment(served.spec, {}, tmp_path, runner)
+    assert unpinned["CUDA_VISIBLE_DEVICES"] == "0,1,2,3"
+    assert "LLAMA_ARG_CTX_SIZE" not in unpinned and "LD_LIBRARY_PATH" not in unpinned
     host = claimed[1].to_dict()["host"]
     assert host["gpu_slot"] == "1" and host["gpus"] == [gpu(1)]
     assert host["binary_sha256"] == hashlib.sha256(served.binary.read_bytes()).hexdigest()
+    with ModelRelayCollector(tmp_path / "run", plan=claimed[1]):
+        served_environment = json.loads(Path(str(served.binary) + ".env").read_text())
+    assert served_environment["CUDA_VISIBLE_DEVICES"] == "1"
+    assert served_environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
 
 
 def test_the_collector_releases_its_gpu_slot_once_the_server_stops(served, tmp_path):
     plan = plan_model_server(served.spec, served.host, served.state)
     claimed = claim_model_server(plan)
     with ModelRelayCollector(tmp_path / "run", plan=claimed) as collector:
-        env = json.loads(Path(str(served.binary) + ".env").read_text())
-        assert env["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
         with pytest.raises(ModelServerBusyError):
             claim_model_server(plan)
         assert collector.facts["host"]["gpu_slot"] is None
     claim_model_server(plan).claim.release()
+
+
+def test_a_server_that_outlives_its_stop_keeps_its_gpu_slot_held(served, tmp_path, monkeypatch):
+    from silverquillm.karn import model_server
+
+    plan = plan_model_server(served.spec, served.host, served.state)
+    claimed = claim_model_server(plan)
+
+    def stuck_exit(self, *_):
+        raise subprocess.TimeoutExpired("llama-server", 30)
+
+    monkeypatch.setattr(model_server.LlamaServer, "__exit__", stuck_exit)
+    collector = ModelRelayCollector(tmp_path / "run", plan=claimed)
+    with pytest.raises(subprocess.TimeoutExpired), collector:
+        pass
+    with pytest.raises(ModelServerBusyError):
+        claim_model_server(plan)
+    claimed.claim.release()
+    with pytest.raises(ModelServerBusyError):
+        claim_model_server(plan)
+    collector.llama.process.kill()
+    collector.llama.process.wait()
 
 
 def pinned_run(served, tmp_path, slots):
@@ -706,6 +870,16 @@ def test_the_host_config_names_builds_and_the_models_directory(tmp_path):
         load_host_config(path)
 
 
+@pytest.mark.parametrize(
+    "name", ["GGML_VK_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES"]
+)
+def test_only_the_gpu_selection_chooses_gpus(name):
+    from silverquillm.karn.model_server import environment_refusal
+
+    assert environment_refusal({name: "0"}) == "refused:" + name
+    assert environment_refusal({name: "0"}, host=True) == "refused:" + name
+
+
 def test_the_host_config_lists_gpu_slots_that_never_share_a_gpu(tmp_path):
     from silverquillm.host_config import load_host_config
 
@@ -726,6 +900,8 @@ def test_the_host_config_lists_gpu_slots_that_never_share_a_gpu(tmp_path):
         ('["0, 1"]', "GPU indices"),
         ('["01"]', "GPU indices"),
         ('["GPU-abc"]', "GPU indices"),
+        ('["\u00b2"]', "GPU indices"),
+        ('["\u0661"]', "GPU indices"),
         ('[""]', "GPU indices"),
         ("[0]", "GPU indices"),
     ],
@@ -1046,6 +1222,23 @@ def test_recovery_keeps_the_server_the_run_verified_without_reverifying(
     measurements = recovered.run_metadata["measurements"]
     assert measurements["coverage"]["relayed_requests"] == 1
     assert measurements["requests"][0]["model"] == "qwen3.8-27b"
+
+
+def test_a_recovered_record_keeps_the_gpu_selection_its_run_recorded(served, tmp_path, monkeypatch):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "1")
+    monkeypatch.setenv("CUDA_DEVICE_ORDER", "FASTEST_FIRST")
+    opts = model_server_run(served, tmp_path)
+    interrupted_run(opts, "selected")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0,1")
+    monkeypatch.delenv("CUDA_DEVICE_ORDER")
+    recovered = recover(opts, "selected", monkeypatch, tmp_path)
+    host = recovered.run_metadata["model_server"]["host"]
+    assert (host["gpu_slot"], host["cuda_visible_devices"], host["cuda_device_order"]) == (
+        None,
+        "1",
+        "FASTEST_FIRST",
+    )
+    assert host["gpus"] is None and host["gpus_reason"] == "nvidia_smi_unavailable"
 
 
 def test_a_run_that_failed_before_verifying_recovers_with_verification_unknown(
@@ -1536,6 +1729,7 @@ def test_the_server_never_inherits_the_runners_environment(served, tmp_path, mon
     monkeypatch.setenv("LLAMA_ARG_CTX_SIZE", "4096")
     monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/old-llama")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "3")
+    monkeypatch.delenv("CUDA_DEVICE_ORDER", raising=False)
     document = spec_document(
         model=served.spec.to_dict()["model"], environment={"GGML_CUDA_GRAPH_OPT": "1"}
     )
@@ -1545,11 +1739,12 @@ def test_the_server_never_inherits_the_runners_environment(served, tmp_path, mon
         environment = json.loads(Path(str(served.binary) + ".env").read_text())
     assert "LLAMA_ARG_CTX_SIZE" not in environment
     assert "LD_LIBRARY_PATH" not in environment
-    assert "CUDA_VISIBLE_DEVICES" not in environment
+    # Without GPU Slots only the runner's own GPU selection passes, exactly as set.
+    assert environment["CUDA_VISIBLE_DEVICES"] == "3"
+    assert "CUDA_DEVICE_ORDER" not in environment
     assert environment["PATH"] == os.environ["PATH"]
     assert environment["HOST_ONLY"] == "yes"
     assert environment["GGML_CUDA_GRAPH_OPT"] == "1"
-    assert environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
     # An empty bench-owned home: llama.cpp finds no user-level config.ini.
     home = tmp_path / "run" / "model-server-home"
     assert environment["HOME"] == str(home)
@@ -1558,6 +1753,7 @@ def test_the_server_never_inherits_the_runners_environment(served, tmp_path, mon
 
 
 def test_the_version_probe_runs_in_the_servers_environment(served, monkeypatch):
+    monkeypatch.setenv("CUDA_DEVICE_ORDER", "FASTEST_FIRST")
     monkeypatch.setenv("LLAMA_ARG_CTX_SIZE", "4096")
     monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/old-llama")
     host = ModelServerHost(
@@ -1569,7 +1765,7 @@ def test_the_version_probe_runs_in_the_servers_environment(served, monkeypatch):
     assert "LLAMA_ARG_CTX_SIZE" not in environment
     assert environment["HOME"] != os.environ.get("HOME")
     assert environment["XDG_CONFIG_HOME"].startswith(environment["HOME"])
-    assert environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
+    assert environment["CUDA_DEVICE_ORDER"] == "FASTEST_FIRST"
 
 
 def test_a_system_config_file_llama_cpp_would_read_refuses_the_run(served, tmp_path, monkeypatch):
@@ -1666,7 +1862,6 @@ def test_the_recipe_environment_overrides_the_hosts():
         "HOME": "/run/home",
         "XDG_CONFIG_HOME": "/run/home/.config",
         "SHARED": "recipe",
-        "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
     }
 
 
