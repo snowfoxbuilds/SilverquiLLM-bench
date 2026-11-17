@@ -102,8 +102,9 @@ def execute_worker(connection, executor, arguments):
         send("result", record_outcome(result))
     except ModelServerBusyError as error:
         for problem in error.unusable:
-            send("warning", f"model_server_lock_unusable: {problem}; that GPU Slot is skipped")
-        send("busy", str(error))
+            send("warning", problem + "; that GPU Slot is skipped")
+        # Every refusal for want of a usable GPU Slot defers the entry in the GPU Slot pool.
+        send("busy", "model_server_busy")
     except (LoginPoolBusyError, LoginPoolUnavailableError) as error:
         send("busy" if isinstance(error, LoginPoolBusyError) else "unavailable", str(error))
     except RecordWritePendingError as error:

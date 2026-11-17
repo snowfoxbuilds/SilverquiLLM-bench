@@ -494,12 +494,21 @@ def test_without_nvidia_smi_only_the_lock_decides_and_the_gpus_are_unknown(tmp_p
     }
 
 
-def test_a_gpu_slot_naming_a_gpu_nvidia_smi_does_not_list_refuses_the_run(tmp_path):
+def test_a_gpu_slot_naming_a_gpu_nvidia_smi_does_not_list_is_skipped_not_fatal(tmp_path):
     two = GpuReading((gpu(0), gpu(1)))
-    with pytest.raises(KarnError, match="gpu_slot_unknown_gpu:7"):
-        claim_gpu_slot(gpu_slots(tmp_path, ("0", "7")), lambda: two)
-    with pytest.raises(KarnError, match="gpu_slot_unknown_gpu:1,2"):
-        claim_gpu_slot(gpu_slots(tmp_path, ("1,2",)), lambda: two)
+    claim = claim_gpu_slot(gpu_slots(tmp_path, ("7", "1")), lambda: two)
+    assert claim.slot.value == "1"
+    with pytest.raises(ModelServerBusyError, match="^model_server_busy$") as busy:
+        claim_gpu_slot(gpu_slots(tmp_path, ("7", "1")), lambda: two)
+    assert busy.value.unusable == ("gpu_slot_unknown_gpu:7: nvidia-smi lists no such GPU",)
+    claim.release()
+    # Only when no slot is usable at all is the unknown GPU the reason, and it still defers.
+    with pytest.raises(ModelServerBusyError, match="gpu_slot_unknown_gpu:7,1,2"):
+        claim_gpu_slot(gpu_slots(tmp_path, ("7", "1,2")), lambda: two)
+    assert gpu_slot_availability(gpu_slots(tmp_path, ("7",)), lambda: two) == (
+        False,
+        ("gpu_slot_unknown_gpu:7: nvidia-smi lists no such GPU",),
+    )
     # Unread, the slot cannot be judged, and only its lock decides.
     claim_gpu_slot(gpu_slots(tmp_path, ("7",)), lambda: GpuReading(None)).release()
 
@@ -514,14 +523,17 @@ def test_an_unusable_lock_file_skips_its_slot_and_defers_rather_than_failing(tmp
         assert claim.slot.value == "1"
         with pytest.raises(ModelServerBusyError) as refused:
             claim_gpu_slot(slots, h100s)
-        assert refused.value.unusable and str(slots[0].lock_path) in refused.value.unusable[0]
+        assert refused.value.unusable == (
+            f"model_server_lock_unusable: {slots[0].lock_path}: Permission denied",
+        )
+        assert refused.value.explained().startswith("model_server_busy; model_server_lock_")
         claim.release()
         claimable, unusable = gpu_slot_availability(slots, h100s)
         assert claimable and len(unusable) == 1
         slots[1].lock_path.chmod(0)
         assert gpu_slot_availability(slots, h100s) == (
             False,
-            unusable + (f"{slots[1].lock_path}: Permission denied",),
+            unusable + (f"model_server_lock_unusable: {slots[1].lock_path}: Permission denied",),
         )
     finally:
         for slot in slots:
@@ -603,6 +615,9 @@ def test_nvidia_smi_is_read_into_facts_and_its_failures_into_reasons():
         b"0, GPU-a, x, nan, 24576, 240, 1\n",
         b"0, GPU-a, x, 5, inf, 240, 1\n",
         "\u00b2, GPU-a, x, 5, 24576, 240, 1\n".encode(),
+        "0, GPU-a, x, \uff11\uff10\uff12\uff14, 24576, 240, 1\n".encode(),
+        b"0, GPU-a, x, 1_0, 24576, 240, 1\n",
+        b"0, GPU-a, x, 5, 24576, -1, 1\n",
     ):
         assert read_gpus(smi_output(output)).reason == "nvidia_smi_unreadable", output
 
@@ -619,6 +634,53 @@ def test_a_stuck_nvidia_smi_is_abandoned_within_its_bound(tmp_path, monkeypatch)
     reading = read_gpus()
     assert reading == GpuReading(None, reason="nvidia_smi_unavailable")
     assert time.monotonic() - started < 5
+
+
+def test_no_second_nvidia_smi_starts_while_an_abandoned_one_lives(monkeypatch):
+    from silverquillm.karn import model_server
+
+    stuck = SimpleNamespace(poll=lambda: None)
+    monkeypatch.setattr(model_server, "_abandoned", [stuck])
+
+    def never(*args, **kwargs):
+        raise AssertionError("a second nvidia-smi started")
+
+    monkeypatch.setattr(model_server.subprocess, "Popen", never)
+    assert read_gpus() == GpuReading(None, reason="nvidia_smi_unavailable")
+    stuck.poll = lambda: 0
+    monkeypatch.setattr(
+        model_server.subprocess,
+        "Popen",
+        lambda *a, **k: SimpleNamespace(communicate=lambda timeout: (b"", None), returncode=0),
+    )
+    assert read_gpus() == GpuReading(())
+    assert model_server._abandoned == []
+
+
+def test_a_release_while_the_server_lives_keeps_the_slot_until_the_runner_exits(tmp_path):
+    import gc
+
+    from silverquillm.karn import model_server
+
+    slots = gpu_slots(tmp_path, ("0",))
+    claim = claim_gpu_slot(slots, h100s)
+    server = SimpleNamespace(stopped=False)
+    claim.link(server)
+    claim.release()
+    with pytest.raises(ModelServerBusyError):
+        claim_gpu_slot(slots, h100s)
+    # Dropping every reference to the claim does not release a kept lock either.
+    kept = len(model_server._kept_locks)
+    del claim
+    gc.collect()
+    with pytest.raises(ModelServerBusyError):
+        claim_gpu_slot(slots, h100s)
+    assert len(model_server._kept_locks) == kept
+    model_server._kept_locks.pop().close()
+    stopped = claim_gpu_slot(slots, h100s)
+    stopped.link(SimpleNamespace(stopped=True))
+    stopped.release()
+    claim_gpu_slot(slots, h100s).release()
 
 
 def test_with_gpu_slots_the_slots_selection_overrides_the_runners(served, tmp_path):
@@ -687,6 +749,41 @@ def pinned_run(served, tmp_path, slots):
         served.host.models_dir, served.host.llama_cpp, {}, slots
     )
     return opts
+
+
+def test_a_run_claims_its_gpu_slot_before_the_preflight_and_the_version_probe(served, tmp_path):
+    from silverquillm.karn.execution import run_benchmark
+
+    opts = pinned_run(served, tmp_path, ("0", "1"))
+    slots = gpu_slots(opts["state_root"], ("0", "1"))
+    at_preflight = []
+
+    def preflight():
+        probe = claim_gpu_slot(slots, h100s)
+        at_preflight.append(probe.slot.value)
+        probe.release()
+
+    opts["host"] = CountingHost(preflight)
+    record = run_benchmark(**opts, run_id="ordered")
+    assert at_preflight == ["1"]
+    version_environment = json.loads(Path(str(served.binary) + ".version-env").read_text())
+    assert version_environment["CUDA_VISIBLE_DEVICES"] == "0"
+    assert version_environment["CUDA_DEVICE_ORDER"] == "PCI_BUS_ID"
+    assert record.run_metadata["model_server"]["host"]["gpu_slot"] == "0"
+
+
+def test_a_run_admitted_on_a_stale_reading_costs_no_preflight_or_version_probe(served, tmp_path):
+    from silverquillm.karn.execution import run_benchmark
+
+    opts = pinned_run(served, tmp_path, ("0",))
+    held = claim_gpu_slot(gpu_slots(opts["state_root"], ("0",)), h100s)
+    Path(str(served.binary) + ".version-env").unlink(missing_ok=True)
+    preflights = []
+    opts["host"] = CountingHost(lambda: preflights.append(1))
+    with pytest.raises(ModelServerBusyError):
+        run_benchmark(**opts, run_id="stale")
+    assert preflights == [] and not Path(str(served.binary) + ".version-env").exists()
+    held.release()
 
 
 def test_a_direct_run_with_no_free_gpu_slot_is_refused_before_any_evidence(served, tmp_path):
@@ -1154,6 +1251,15 @@ class RelayHost:
             {"messages": [{"role": "user", "content": "go"}]},
         )
         return self.inner.run(candidate, workspace, evidence_dir, prompt, **kwargs)
+
+
+class CountingHost(RelayHost):
+    def __init__(self, on_preflight):
+        super().__init__()
+        self.on_preflight = on_preflight
+
+    def preflight(self, candidate, budget_seconds):
+        self.on_preflight()
 
 
 def model_server_run(served, tmp_path):

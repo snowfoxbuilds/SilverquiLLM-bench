@@ -101,6 +101,7 @@ def common_options(function):
 def run(**options):
     """Execute a fixed definition and image, grade available work, and retain a record."""
     from .execution import run_benchmark
+    from .model_server import ModelServerBusyError
     from .records import RecordWritePendingError
 
     try:
@@ -110,6 +111,8 @@ def run(**options):
         raise click.ClickException(
             f"{error}: retry with `silverquillm recover {error.record.run_id}`"
         ) from None
+    except ModelServerBusyError as error:
+        raise click.ClickException(error.explained()) from None
     except (KarnError, OSError, ValueError) as error:
         raise click.ClickException(str(error)) from None
     _report(record)

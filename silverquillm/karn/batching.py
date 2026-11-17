@@ -552,7 +552,7 @@ class KarnScheduler:
             gpu_slots(self.options["state_root"], host.gpu_slots), self.gpu_reader
         )
         for problem in unusable:
-            self._warn(f"model_server_lock_unusable: {problem}; that GPU Slot is skipped")
+            self._warn(problem + "; that GPU Slot is skipped")
         return claimable
 
     def _dispatch_open(self) -> bool:

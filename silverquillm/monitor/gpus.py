@@ -60,7 +60,7 @@ def gpu_slot_statuses(
         return []
     statuses = []
     for slot in gpu_slots(state_root, configured):
-        locked = lock_held(slot.lock_path, held)
+        locked = lock_held(slot.lock_path, held, follow_symlinks=True)
         gpus = slot.gpus(reading)
         statuses.append(
             GpuSlotStatus(

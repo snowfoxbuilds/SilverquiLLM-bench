@@ -69,7 +69,7 @@ llama.cpp rewrites `_` to `-` in every argument starting with `--` before it loo
 | `HF_*`, `HUGGING_FACE_*`, `HUGGINGFACE_*`, `MODEL_ENDPOINT`, and `http_proxy`, `https_proxy`, `all_proxy`, `no_proxy` in any case | they name download sources, caches and routes out |
 | `LD_*`, `GGML_BACKEND_PATH`, `GGML_ET_KERNELS_PATH`, `GGML_OPENCL_KERNEL_CACHE_DIR`, `ET_TOOLCHAIN`, `TOOLCHAIN_ROOT`, `GCONV_PATH`, libcuda's `CUDA_INJECTION64_PATH`, `CUDA_INJECTION32_PATH`, `CUDA_AMODEL_DLL`, `CUDA_FORCE_PRELOAD_LIBRARIES`, `CUDA_DEVCODE_PATH`, `CUDA_MPS_PIPE_DIRECTORY`, and `OPENSSL_*`, `SSL_CERT_*` | they choose the code the server loads (grilling 2026-11-16) |
 | `PATH`, `HOME`, `XDG_*`, `CUDA_VISIBLE_DEVICES`, `CUDA_DEVICE_ORDER`, names starting `__` | the bench sets them, or passes the runner's GPU selection |
-| `GGML_VK_VISIBLE_DEVICES`, `HIP_VISIBLE_DEVICES`, `ROCR_VISIBLE_DEVICES` | they select GPUs, which only the GPU selection does (#269) |
+| `GGML_VK_VISIBLE_DEVICES`, `HIP_VISIBLE_DEVICES`, `ROCR_VISIBLE_DEVICES` | they would select GPUs behind a GPU Slot's back on a build that reads them (#269) |
 
 These lists guard against an operator's mistake, not a hostile recipe author: recipes are written by the operator and recorded in full in the definition, so a variable or flag missing from them is still visible in the record (grilling 2026-11-16).
 A host `LD_LIBRARY_PATH` is likewise the operator's, and recorded, but the libraries it points at are not (grilling 2026-11-16).
@@ -86,17 +86,22 @@ A host that lists GPU Slots serves as many model-server runs at once as it has G
 `[model_server] gpu_slots` lists them, each a `CUDA_VISIBLE_DEVICES` value such as `"0"` or `"0,1"`, and a host config whose GPU Slots share a GPU is refused.
 A host need not list `gpu_slots`, and then serves model-server runs exactly as before GPU Slots existed (grilling 2026-11-16): one run at a time, under `<state_root>/model-server.lock`, on the GPUs the runner's own `CUDA_VISIBLE_DEVICES` and `CUDA_DEVICE_ORDER` select, with no busy check, since a host's own display or other work may hold GPU memory there.
 With them, each GPU Slot's lock is named by its value (`model-server-gpu-0.lock`), so reordering the list never moves a held lock onto another GPU; the operator changes `gpu_slots` only while the scheduler is drained.
-GPU Slots pin CUDA builds only: they set the CUDA variables, and a recipe or host may not select GPUs any other way.
-A GPU Slot naming a GPU that a readable `nvidia-smi` does not list refuses the run before any evidence exists, with `gpu_slot_unknown_gpu:<value>`, rather than serving on no GPU (#269).
+GPU Slots pin CUDA builds through `CUDA_VISIBLE_DEVICES`; other backends' device selectors are not managed, and llama.cpp's `-dev` and `--main-gpu` still choose among the GPUs a slot makes visible (#269).
 
-A run claims the first free GPU Slot, or the host-wide lock without `gpu_slots`, before it is recorded as started, the way a run claims a Login Profile.
+A run claims the first free GPU Slot, or the host-wide lock without `gpu_slots`, before it is recorded as started, the way a run claims a Login Profile, and before the host's preflight and the server's `--version` probe, so a run that finds nothing free costs nothing more (#269).
 With `gpu_slots`, a GPU Slot is free when its lock is free, no compute process runs on its GPUs, and none of its GPUs reports more than 1 GiB of memory used: another user's job, or the server of a runner that has just died, keeps it busy.
 The memory bound catches a job whose process `nvidia-smi` does not list to the operator's user (grilling 2026-11-16).
 A direct `silverquillm run` finding nothing free is refused with `model_server_busy`, before any evidence exists; the scheduler defers the entry, in queue order, until one frees.
-A lock file the operator's user cannot open, as one left owned by root, makes its GPU Slot unusable: it is skipped and reported as `model_server_lock_unusable`, never a failed run or a stopped scheduler (#269).
+Two things make a GPU Slot unusable, and an unusable slot is skipped and reported, never a failed run or a stopped scheduler (#269):
+
+- a lock file the operator's user cannot open, as one left owned by root, reported as `model_server_lock_unusable`;
+- a slot naming a GPU that a readable `nvidia-smi` does not list, reported as `gpu_slot_unknown_gpu:<value>`, rather than serving on no GPU.
+
+When no GPU Slot is usable at all because of unknown GPUs, the refusal is `gpu_slot_unknown_gpu:<values>`; like `model_server_busy`, it defers the entry, and a direct run reports every unusable slot with it.
 The scheduler judges whether something is free from the kernel's lock table and one `nvidia-smi` reading per pass, never by taking a lock a run is about to claim; the claim itself decides.
-`nvidia-smi` is given 10 seconds and abandoned, never waited on, past them; its output must be UTF-8 and every number finite, else the reading is `nvidia_smi_unreadable`.
-The claim is released once the server is confirmed stopped, so another run may claim it while this one grades; a server that outlives its stop keeps the claim held until the runner exits (#269).
+`nvidia-smi` is given 10 seconds and abandoned, never waited on, past them, and no other starts while an abandoned one lives, so a driver stuck in the kernel costs one process, not one per reading; meanwhile readings are `nvidia_smi_unavailable`.
+Its output must be UTF-8 with every number in plain ASCII digits, a bracketed `[N/A]` read as null, else the reading is `nvidia_smi_unreadable`.
+The claim is released once the server is confirmed stopped, so another run may claim it while this one grades; the claim knows its server, so no way of releasing it frees the GPUs early, and a server that outlives its stop keeps the claim held until the runner exits (#269).
 
 ### Serving a run
 
@@ -108,7 +113,7 @@ Once its claim is held, the run:
 
 The server never inherits the runner's environment, where a stray `LD_LIBRARY_PATH` or `LLAMA_ARG_*` would change it unseen (grilling 2026-11-16).
 It starts with the runner's `PATH`, then the host config's `environment`, then the recipe's, then `HOME` and `XDG_CONFIG_HOME` pointed at an empty directory the bench owns (`model-server-home` in the run directory), so llama.cpp reads no user-level `config.ini`, then the GPU selection: with `gpu_slots`, `CUDA_DEVICE_ORDER=PCI_BUS_ID`, so CUDA numbers the GPUs as `nvidia-smi` does, and the GPU Slot's `CUDA_VISIBLE_DEVICES`; without them, the runner's own `CUDA_VISIBLE_DEVICES` and `CUDA_DEVICE_ORDER`, each passed exactly as set, empty or absent, and nothing else of the runner's (grilling 2026-11-16).
-The `--version` probe that checks the build runs in the same environment, with a temporary empty home, so the build verified is the build served and a host `LD_LIBRARY_PATH` applies to both (grilling 2026-11-16).
+The `--version` probe that checks the build runs in the same environment, with a temporary empty home and the claimed GPU selection, so the build verified is the build served, a host `LD_LIBRARY_PATH` applies to both, and on a host with GPU Slots the probe touches no other slot's GPUs (grilling 2026-11-16).
 `setpriv`, which stops the server when the runner dies, is found on the runner's `PATH` before the server's environment is built, and a host without it refuses the run before any evidence exists.
 Each file is passed by its declared name in the models directory, after its target is found inside that directory, so llama.cpp derives a split model's other parts from declared names only (grilling 2026-11-16).
 

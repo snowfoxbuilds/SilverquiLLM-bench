@@ -33,13 +33,16 @@ def held_locks(source: Path = PROC_LOCKS) -> frozenset[tuple[int, int, int]] | N
     return frozenset(held)
 
 
-def lock_held(path: Path, held: frozenset[tuple[int, int, int]] | None) -> bool | None:
+def lock_held(
+    path: Path, held: frozenset[tuple[int, int, int]] | None, *, follow_symlinks: bool = False
+) -> bool | None:
     """True or False for an existing lock file, None when the lock table is unavailable.
 
-    A missing lock file was never locked, so it is not held.
+    A missing lock file was never locked, so it is not held. *follow_symlinks* judges the file
+    a lock path's link names, as a claim that opens the path does.
     """
     try:
-        info = os.stat(path, follow_symlinks=False)
+        info = os.stat(path, follow_symlinks=follow_symlinks)
     except OSError:
         return False
     if held is None:
