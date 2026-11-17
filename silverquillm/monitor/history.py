@@ -178,7 +178,7 @@ def _rows_of_text(value: Any) -> list[str]:
 
 
 def run_cost(measurements: dict) -> tuple[dict, str]:
-    """A run's cost measurement and its source (ADR-021).
+    """A run's cost measurement and its source (ADR-023).
 
     A record from the run-cost change on names its Run Cost; an older one gets the same
     rule, its Reported Cost whenever it has one, else its Estimated Cost. Codex reports no

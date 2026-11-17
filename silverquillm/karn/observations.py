@@ -557,7 +557,7 @@ def run_cost_of(reported: dict[str, Any], estimated: dict[str, Any]) -> dict[str
     """A run's Run Cost: its Reported Cost whenever the CLI gave one, else its Estimated Cost.
 
     A Reported Cost shares only the run's observation reasons, which the Estimated Cost
-    carries too, so it is never less complete than the estimate it replaces (ADR-021)."""
+    carries too, so it is never less complete than the estimate it replaces (ADR-023)."""
     if reported.get("value") is not None:
         return {**reported, "source": "reported"}
     return {**estimated, "source": "estimated"}
@@ -630,7 +630,7 @@ def _measurements(
         total = sum(reported_costs.values(), Decimal(0))
         reported = format(total, "f")
         verification = _verify_reported(reported_costs, priced)
-        # Warnings, not reasons: the Reported Cost stays the Run Cost (ADR-021).
+        # Warnings, not reasons: the Reported Cost stays the Run Cost (ADR-023).
         if verification["requests_disagreeing"] or (
             costs_present and not cost_reasons and not _agrees(total, Decimal(estimated))
         ):
@@ -653,7 +653,7 @@ def _measurements(
             "total": _measurement(response_count + tool_count, turn_reasons, present=present),
         },
         "usage": _measurement(totals, usage_reasons, present=bool(requests) or observed_zero),
-        # The native CLI's own figure, preferred over the price-table estimate (ADR-021).
+        # The native CLI's own figure, preferred over the price-table estimate (ADR-023).
         "reported_cost": reported_cost,
         "estimated_cost": estimated_cost,
         "run_cost": run_cost_of(reported_cost, estimated_cost),

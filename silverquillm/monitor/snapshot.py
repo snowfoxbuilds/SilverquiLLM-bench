@@ -89,7 +89,7 @@ class RunView:
     """The recorded measurement's completeness; None while the cost is provisional."""
     cost_source: str | None = None
     """``reported`` (the native CLI's figure) or ``estimated`` (the price table), recorded or
-    provisional alike (ADR-019); None when no cost is known."""
+    provisional alike (ADR-023); None when no cost is known."""
     conflicting_requests: int = 0
     """Live observations of one request that disagree, each charged once."""
 

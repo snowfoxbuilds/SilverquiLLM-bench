@@ -186,7 +186,7 @@ A `restricted` network runs its egress proxy with the candidate image's own `pyt
 Each run retains its workspace, snapshots, stopped final workspace, grading-source decision, selected definition and plugin artifacts, sanitized observations, and independent grades under `<runs_dir>/<run-id>/`.
 The immutable schema 3 record lives under `<results_repo>/results/<candidate-hash>/<run-id>/`.
 Cost is API-equivalent USD, not the subscription bill.
-A run's cost, recorded as `run_cost` with its `source`, is its `reported_cost`, the native CLI's own figure, whenever the CLI gave one; otherwise it is `estimated_cost`, the bench's price-table estimate (ADR-021).
+A run's cost, recorded as `run_cost` with its `source`, is its `reported_cost`, the native CLI's own figure, whenever the CLI gave one; otherwise it is `estimated_cost`, the bench's price-table estimate (ADR-023).
 Claude Code reports a figure for every request (its OTel `cost_usd`, the same total as its final `result` line), listed per request in `request_reported_costs` beside the table's `request_prices`; Codex reports none, so a Codex run's `reported_cost` is missing with `native_cost_not_reported` and its cost is the estimate.
 The estimate checks each request the price table prices fully against the CLI's figure for it, and `cost_verification` counts the requests checked, unchecked and disagreeing. A disagreement, or a complete estimate whose total differs, adds `reported_cost_disagrees_with_estimate` to `cost_warnings`, and a `reported_cost` none of whose requests could be checked adds `reported_cost_unverified`; neither demotes the `reported_cost`. Haiku 5.5 has no price-table entry on purpose, so its runs rely on the CLI's figure alone.
 

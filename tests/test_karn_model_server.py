@@ -38,6 +38,7 @@ from silverquillm.karn.model_server import (
 )
 from silverquillm.karn.observations import summarize_events
 from silverquillm.karn.proxy import ModelForwardServer
+from silverquillm.monitor.history import run_cost as monitor_run_cost
 
 FAKE_SERVER = r"""
 import json, os, sys, time
@@ -1671,6 +1672,15 @@ def test_a_local_model_is_never_priced_as_a_hosted_one(served, tmp_path, alias):
         assert "model_price_unavailable" in summary["estimated_cost"]["reasons"]
         assert summary["cost_breakdown"]["value"] is None
         assert summary["price_table"]["models"] == {}
+        # No Reported Cost and no price: the Run Cost is the missing estimate, never zero.
+        assert summary["run_cost"]["source"] == "estimated"
+        assert summary["run_cost"]["value"] is None
+        assert summary["run_cost"]["completeness"] == "missing"
+        assert "model_price_unavailable" in summary["run_cost"]["reasons"]
+        assert summary["cost_verification"] is None
+        assert summary["cost_warnings"] == []
+        cost, source = monitor_run_cost(summary)
+        assert (cost["value"], source) == (None, "estimated")
 
 
 # The recipe owns the server's flags, files, environment and timeouts (#271).

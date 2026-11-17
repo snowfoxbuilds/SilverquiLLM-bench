@@ -960,7 +960,7 @@ def test_a_model_missing_from_the_price_table_still_has_its_reported_cost():
 def one_request_unpriced(*otel):
     """The main transcript and each ``otel`` request's events, with request ``req_02`` on a
     model the table lacks."""
-    events = qualified(events_of(main_transcript()) + [e for events in otel for e in events])
+    events = events_of(main_transcript()) + [e for events in otel for e in events]
     for event in events:
         attributes = event.get("attributes") or {}
         if event.get("request_id") == "req_02" and event["kind"] == "response":
@@ -991,7 +991,7 @@ def test_a_priced_request_that_disagrees_warns_although_the_estimate_is_partial(
 
 
 def test_without_a_reported_cost_the_run_cost_is_the_estimate():
-    result = summarize_claude_events(qualified(events_of(main_transcript())), exit_kind="completed")
+    result = summarize_claude_events(events_of(main_transcript()), exit_kind="completed")
     assert result["run_cost"] == {**result["estimated_cost"], "source": "estimated"}
     assert result["cost_verification"] is None
 

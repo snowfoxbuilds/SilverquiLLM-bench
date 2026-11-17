@@ -187,7 +187,7 @@ class ProvisionalCost:
     @property
     def source(self) -> str:
         """``reported`` while Claude Code's own per-request figures are summed, otherwise
-        ``estimated`` from the price table (ADR-019)."""
+        ``estimated`` from the price table (ADR-023)."""
         return "reported" if self._claude else "estimated"
 
     @property

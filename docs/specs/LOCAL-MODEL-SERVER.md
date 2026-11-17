@@ -160,7 +160,7 @@ A response with status 200 is complete only when it carries a final choice (`fin
 A complete response that reports no usage still counts, with usage partial (`response_usage_missing`).
 A request that failed, was cancelled or was unfinished, or a response that reported usage more than once, leaves usage partial (`relayed_request_incomplete`, `multiple_usage_reports`).
 Usage follows OpenAI's convention, input including cached tokens; cache writes are zero, and reasoning tokens are missing, because llama.cpp counts them inside completion tokens.
-No price applies, whatever name the recipe serves the model under: requests are priced from an empty table (`price_table.models` is empty), so the Estimated Cost is unavailable with `model_price_unavailable`.
+No price applies, whatever name the recipe serves the model under: requests are priced from an empty table (`price_table.models` is empty), so the Estimated Cost is unavailable with `model_price_unavailable`; with no Reported Cost either, the Run Cost is that missing estimate, never zero, and `cost_verification` is null (ADR-023).
 `measurements.server_timings` sums the server's prompt and generation tokens and times into tokens per second, `coverage.failed_requests` counts requests the relay could not complete, and `coverage.unfinished_requests` those of them that never settled.
 A request may set sampling parameters of its own, which llama.cpp honours over the server's flags; each event keeps them as `request_parameters`, and `coverage.requests_with_parameter_overrides` counts such requests.
 `run_metadata.model_server` records the spec, the binary and its version, the verified digest, and how long verification and start-up took.
@@ -173,3 +173,4 @@ What the relay keeps of workload-controlled content is bounded: 1 MiB of message
 | ADR | Decision |
 | --- | --- |
 | [ADR-022](../adr/ADR-022-pi-constructs-run-against-a-bench-started-local-model-server.md) | pi constructs run against a bench-started llama.cpp server, observed by a host-side relay |
+| [ADR-023](../adr/ADR-023-run-cost-is-the-reported-cost-checked-per-request.md) | A local-model run has no Reported Cost and no price, so its Run Cost stays missing |

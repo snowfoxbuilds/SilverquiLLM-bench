@@ -359,7 +359,6 @@ Pass rates take a rarity colour: mythic from 90%, rare from 70%, uncommon from 4
 | --- | --- |
 | [ADR-012](../adr/ADR-012-independent-host-for-karn-benchmark-candidates.md) | Karn v4 execution and observations have an independent consumer contract |
 | [ADR-014](../adr/ADR-014-silverquillm-runs-karn-constructs-without-ozolith.md) | The Karn commands, `top` among them, own the top level |
-| [ADR-019](../adr/ADR-019-run-cost-prefers-the-native-clis-reported-cost.md) | The monitor shows and sums the Run Cost, which prefers the native CLI's Reported Cost |
-| [ADR-021](../adr/ADR-021-run-cost-is-the-reported-cost-checked-per-request.md) | The Run Cost is recorded with its source, and is the Reported Cost whenever the CLI gave one |
 | [ADR-020](../adr/ADR-020-net-card-score-is-the-headline.md) | The Net Card Score is the headline score |
 | [ADR-022](../adr/ADR-022-pi-constructs-run-against-a-bench-started-local-model-server.md) | A model-server run claims one of the host's GPU Slots, shown beside the Login Pools |
+| [ADR-023](../adr/ADR-023-run-cost-is-the-reported-cost-checked-per-request.md) | The monitor shows and sums the Run Cost, recorded with its source: the Reported Cost whenever the CLI gave one |
