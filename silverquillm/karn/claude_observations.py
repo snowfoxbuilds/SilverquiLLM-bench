@@ -15,6 +15,7 @@ import io
 import json
 import os
 import re
+from collections import Counter
 from collections.abc import Iterable
 from decimal import Decimal, InvalidOperation
 from pathlib import Path, PurePosixPath
@@ -26,6 +27,7 @@ from .observations import (
     CodexTelemetryCollector,
     _fingerprint,
     _integer,
+    _measurement,
     _measurements,
     _stamp,
     derive_subagents,
@@ -64,6 +66,7 @@ SHAPES = {
     "speed": re.compile(r"standard|fast|normal"),
     "service_tier": re.compile(r"standard|priority|batch"),
     "stop_reason": re.compile(r"[a-z_]{1,32}"),
+    "usage_limit_note": re.compile(r"[a-z_]{1,32}"),
     "timestamp": re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]{8,15}(Z|[+-][0-9]{2}:[0-9]{2})"),
     "count": re.compile(_COUNT),
     "cost": re.compile(r"[0-9]{1,12}(\.[0-9]{1,20})?"),
@@ -94,6 +97,28 @@ _ATTRIBUTES = {
 }
 # query_source names subagents, which the workload can define; only these values are kept.
 _QUERY_SOURCES = {"repl_main_thread", "compact"}
+# What a usage-limit note's event may say about itself; never the rejected value.
+_NOTE_DIAGNOSTICS = {"note_label_rejected", "note_identity_rejected"}
+# Claude Code marks the usage-limit text it puts into the model's context with the message's
+# ``usageLimitNote`` ("near_limit", "wrap_up" or "release"; 2.1.321). A meta message without
+# the field is matched on the ASCII start of the built-in texts, since the served ones vary.
+_USAGE_LIMIT_TEXTS = (
+    ("near_limit", "[Usage limit approaching. Checkpoint now", ""),
+    ("wrap_up", "[Usage limit reached ", "grace window active"),
+)
+# The problems that leave some of a run's transcript unread, so a usage note may have gone
+# unseen: the files themselves, or OTel activity whose transcript was never harvested. A
+# compaction request has no transcript response by design and raises none of these.
+_TRANSCRIPT_REASONS = {
+    "native_sessions_unavailable",
+    "native_journals_unavailable",
+    "native_journal_unreadable",
+    "native_journal_size_limit",
+    "native_record_malformed",
+    "native_session_identity_missing",
+    "native_usage_unavailable_for_request",
+    "otel_tool_call_without_transcript",
+}
 
 
 def _shaped(value: Any, shape: str, problems: list[str]) -> str | None:
@@ -146,6 +171,30 @@ def claude_usage(value: Any) -> dict[str, int | None]:
     }
 
 
+def _usage_limit_note(record: dict[str, Any], diagnostics: list[str]) -> str | None:
+    """The kind of usage-limit note a user line puts into the context, never its text."""
+    if "usageLimitNote" in record:
+        rejected: list[str] = []
+        note = _known(record["usageLimitNote"], "usage_limit_note", rejected)
+        if rejected:
+            diagnostics.append("note_label_rejected")
+        return note
+    if not record.get("isMeta"):
+        return None
+    message = record.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    blocks = [content] if isinstance(content, str) else content if isinstance(content, list) else []
+    for block in blocks:
+        text = block.get("text") if isinstance(block, dict) else block
+        if not isinstance(text, str):
+            continue
+        head = text.lstrip()[:120]
+        for note, start, marker in _USAGE_LIMIT_TEXTS:
+            if head.startswith(start) and marker in head:
+                return note
+    return None
+
+
 def normalize_transcript(lines: Iterable[str]) -> tuple[list[dict[str, Any]], list[str]]:
     """Extract only accounting fields from one transcript; never retain message content."""
     problems: list[str] = []
@@ -186,6 +235,19 @@ def normalize_transcript(lines: Iterable[str]) -> tuple[list[dict[str, Any]], li
                 else _shaped(record.get("sessionId"), "session", problems)
             )
         version = version or _shaped(record.get("version"), "version", problems)
+        # A note's own diagnostics stay on its event, never in ``problems``: they say nothing
+        # about the accounting, whose completeness ``problems`` decides.
+        diagnostics: list[str] = []
+        note = _usage_limit_note(record, diagnostics) if kind == "user" else None
+        if note:
+            rejected: list[str] = []
+            key = _shaped(record.get("uuid"), "uuid", rejected) or f"{thread}:{len(events)}"
+            if rejected:
+                diagnostics.append("note_identity_rejected")
+            fields: dict[str, Any] = {"note": note}
+            if diagnostics:
+                fields["diagnostics"] = sorted(set(diagnostics))
+            events.append(base("usage_limit_note", "usage_limit_note:" + key, timestamp, **fields))
         if kind == "user" and not sidechain and not record.get("isMeta"):
             started = True
         elif kind == "system" and record.get("subtype") == "compact_boundary":
@@ -522,7 +584,7 @@ def summarize_claude_events(
     present = bool(sessions or otel)
     if present and not opened:
         reasons.append("native_turn_start_unobserved")
-    return _measurements(
+    measurements = _measurements(
         requests,
         len(requests) + unresolved,
         len(tools),
@@ -553,6 +615,23 @@ def summarize_claude_events(
         ),
         reported_costs=reported if otel else None,
     )
+    # A flag for analysis, never an exclusion or a cost reason; outside ``coverage`` so
+    # committed qualification proofs replay unchanged.
+    # A transcript gap makes the counts lower bounds (partial); a malformed note is still
+    # counted, as "unknown", and only named in ``diagnostics``.
+    note_events = [e for e in rows if e["kind"] == "usage_limit_note"]
+    notes = Counter(e.get("note") or "unknown" for e in note_events)
+    measurements["usage_wrap_up"] = {
+        **_measurement(
+            {"messages": sum(notes.values()), "kinds": dict(sorted(notes.items()))},
+            [reason for reason in reasons if reason in _TRANSCRIPT_REASONS],
+            present=bool(sessions),
+        ),
+        "diagnostics": sorted(
+            {d for e in note_events for d in e.get("diagnostics") or () if d in _NOTE_DIAGNOSTICS}
+        ),
+    }
+    return measurements
 
 
 class ClaudeTelemetryCollector(CodexTelemetryCollector):
