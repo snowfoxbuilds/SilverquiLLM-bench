@@ -32,7 +32,7 @@ host_label = "dota-pc"                        # else SILVERQUILLM_HOST_LABEL, el
 ## Build and enroll
 
 The candidate recipes live in the results repository, beside the records they produce: `karn/constructs/<label>` in bench-results is a Karn Config Repo, so any host with that repository can rebuild the same candidates.
-Build from its committed tree, without `--worktree`, so every image's `karn.config.revision` label names the recipe commit behind its records:
+Build a campaign's candidates from the committed tree, without `--worktree`, so their images' `karn.config.revision` label names the recipe commit behind their records; a trial build may use `--worktree` (step 1 below):
 
 ```bash
 karn build ~/bench-results/karn --out ~/bench-builds/roster-1
