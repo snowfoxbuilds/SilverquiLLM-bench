@@ -85,7 +85,7 @@ Screen {{ background: {c("background")}; color: {c("text")}; overflow: hidden; }
     scrollbar-size-horizontal: 1;
 }}
 #switcher {{ height: 1fr; }}
-#dashboard, #history, #details {{ height: 1fr; }}
+#dashboard, #history, #details, #capacity {{ height: 1fr; }}
 #topbar {{ height: 1; background: {c("bar")}; color: {c("text")}; }}
 #keys {{ height: 1; background: {c("bar")}; color: {c("muted")}; }}
 .pane {{
@@ -135,6 +135,19 @@ HelpScreen {{ align: center middle; background: {c("background")} 70%; }}
 #help > Static {{ width: 100%; height: auto; }}
 ConfirmRemove {{ align: center middle; background: {c("background")} 70%; }}
 #confirm {{ width: 64; max-width: 100%; height: auto; padding: 1 2; }}
+#capacity-tables {{ height: 1fr; }}
+#capacity-schedule {{ height: 12; }}
+#schedule-table {{ height: 1fr; }}
+.capacity-title {{ height: 1; margin-top: 1; }}
+#capacity-title-claude {{ margin-top: 0; }}
+CooldownForm, LimitForm, ConfirmCooldownRemove {{ align: center middle; background: {c("background")} 70%; }}
+#form {{ width: 76; max-width: 100%; height: auto; padding: 1 2; }}
+#form > Static {{ height: auto; }}
+#form Input {{ background: {c("background")}; border: {self.border} {c("border")}; margin-bottom: 1; }}
+#form Input:focus {{ border: {self.border} {c("border_focus")}; }}
+#form Checkbox {{ background: {c("surface")}; border: none; margin-bottom: 1; }}
+#form Checkbox:focus {{ color: {c("title")}; }}
+#form-error {{ height: auto; }}
 """
 
 
@@ -192,6 +205,7 @@ MTG = Theme(
         "untapped": "◦",
         "pending": "⚠",
         "cooldown": "❄",
+        "scheduled": "⏲",
         "blocked": "⊘",
         "lock_unknown": "?",
         "running": "▸",
@@ -262,6 +276,7 @@ PLAIN = Theme(
         "untapped": "-",
         "pending": "!",
         "cooldown": "z",
+        "scheduled": "@",
         "blocked": "x",
         "lock_unknown": "?",
         "running": ">",

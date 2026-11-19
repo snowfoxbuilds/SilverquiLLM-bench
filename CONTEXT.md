@@ -225,6 +225,21 @@ When an LLM has seen target card implementations in its training data, invalidat
 
 _Avoid_: "data leakage" (too generic)
 
+**Cooldown**
+
+One window, from a start to an end, during which a Login Profile or a GPU Slot takes no new Benchmark Run, such as while a subscription nears a usage limit or while the operator wants a GPU for other work (grilling 2026-10-08; generalized grilling 2026-11-18).
+It gates only the launch of a run: a run that took the profile or GPU Slot before the window began keeps it until it ends, whatever its budget, and the window ends by itself, except that a GPU Slot's Cooldown is extended while its GPUs are still used outside the bench (grilling 2026-11-19).
+A Cooldown on a Login Profile may be scoped to Fable runs only, leaving the profile free for other models.
+
+_Avoid_: "Login Cooldown" (renamed, ADR-024), "disabled slot", "pause" (the profile stays enrolled and its runs are not paused), "lockout", "reservation"
+
+**Cooldown Schedule**
+
+The set of Cooldowns, in force or still to come, that one Login Profile or one GPU Slot holds (grilling 2026-11-18).
+A Cooldown already in force and one that starts in the future are the same kind of thing; the operator writes either, and a Usage Limit writes one when it trips.
+
+_Avoid_: "login schedule", "slot schedule", "reservations"
+
 **Dependency Test**
 
 An Audited Test that fails because of a Known Defect (grilling 2026-10-14).
@@ -425,19 +440,12 @@ A benchmark is built by porting a copy of it.
 
 _Avoid_: "master workspace", "reference workspace"
 
-**Login Cooldown**
-
-An operator's hold that keeps one Login Profile out of new Benchmark Runs until a set time, such as while its subscription nears a usage limit (grilling 2026-10-08).
-Runs treat a cooling-down profile as busy and wait for it; a run already using the profile is unaffected, and the hold ends by itself.
-
-_Avoid_: "disabled slot", "pause" (the profile stays enrolled and its runs are not paused), "lockout"
-
 **Login Block**
 
 A hold that keeps one Login Profile out of every new Benchmark Run because its login plugin reported that the login must be signed in again, as after it expired (grilling 2026-11-04).
 Runs treat a blocked profile as busy and wait for it, but the block never ends by itself: only signing the profile in again, or the operator lifting it, ends it.
 
-_Avoid_: "expired slot", "broken slot", "disabled slot", "Login Cooldown" (a cooldown is the operator's hold and ends at a set time)
+_Avoid_: "expired slot", "broken slot", "disabled slot", "Cooldown" (a Cooldown is a window with an end; a block ends only by signing in or by the operator)
 
 **Login Pool**
 
@@ -672,6 +680,14 @@ Benchmark mode (`MODE=tested`) where the prompt instructs the agent to write tes
 
 _Avoid_: "test-informed implementation" (deprecated — was `tested_impl.py`)
 
+**Usage Limit**
+
+An operator's per-Login-Profile ceiling on its Estimated Weekly Usage, and optionally on its Fable limit, kept to reserve the rest of the subscription for other use (grilling 2026-11-18).
+When a run's release of the profile finds the estimate at or above the ceiling, a Cooldown is written until the window's next reset, or for seven days when no reading tells when that is; a Fable ceiling's Cooldown is scoped to Fable runs.
+It gates only new runs, so runs in flight may carry the usage past it.
+
+_Avoid_: "quota", "budget" (a run's budget is its time limit), "cap" alone
+
 **User Prompt**
 
 Task-specific instruction written by the runner to `/workspace/prompt.md` at staging time. Describes what the agent should implement (e.g., "Implement all SOS cards in `/workspace/cards/sos/`"). It lists the benchmark's whole target-card problem set — a Benchmark Run always stages the entire set; card-subset ("workload") runs are retired. Contrast with System Prompt.
@@ -731,8 +747,9 @@ _Avoid_: "persistent engine" (deprecated — implied per-card sequential accumul
 - A Pipeline Validation Run exercises the orchestration pipeline; its observations are retained as learning data alongside other run outcomes.
 - The existing publication pipeline requires a Promoted Candidate that verifies by recomputation and permits its knowledge to be published; these publication rules do not gate collection or analysis of Karn run data.
 - Each Login Profile has one Estimated Weekly Usage, fed by every Benchmark Run that used it, excluded runs included.
-- A Login Profile is under at most one Login Cooldown at a time; setting another replaces it.
-- A Login Profile is under at most one Login Block at a time, independent of its Login Cooldown.
+- A Login Profile or a GPU Slot has one Cooldown Schedule, which may hold any number of Cooldowns, overlapping or not; it takes no new run while any of them is in force for that run (grilling 2026-11-18).
+- A Login Profile has at most one Usage Limit, with a weekly ceiling and an optional Fable ceiling (grilling 2026-11-18).
+- A Login Profile is under at most one Login Block at a time, independent of its Cooldown Schedule.
 - A Batch holds ordered run specs; the scheduler dispatches them across free login slots, resolves each candidate's identity at run start, and records outcomes in its own state, never in the Batch.
 - A Benchmark Run belongs to exactly one Campaign and one default Cohort; a Campaign's runs all fall in one default Cohort.
 - Filesystem checks (does the file exist, does it differ from the template?) are the source of truth for agent output. Exit codes, stdout, and thinking traces are diagnostics only.

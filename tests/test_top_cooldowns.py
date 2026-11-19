@@ -1,11 +1,14 @@
-"""Login Cooldowns from the monitor: the LOGINS pane's selection and its ``t`` and ``c`` keys."""
+"""Cooldowns from the monitor: the LOGINS pane's selection and its ``t`` and ``c`` keys."""
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+import threading
+import time
 from dataclasses import replace
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -13,17 +16,24 @@ pytest.importorskip("textual")
 
 from rich.text import Text
 
-from silverquillm.karn.login_cooldown import (
-    COOLDOWN_FILE,
-    cooldown_until,
-    set_cooldown,
+from silverquillm.karn.cooldowns import (
+    COOLDOWNS_FILE,
+    WRITE_LOCK,
+    add_cooldown,
+    cooldown,
+    edit_schedule,
+    held_until,
 )
+from silverquillm.karn.definition import KarnError
 from silverquillm.karn.login_pool import LoginPool
 from silverquillm.monitor.candidates import CandidateDisplay
+from silverquillm.top import cooldowns
+from silverquillm.top import format as fmt
 from silverquillm.top.dashboard import LoginsPane, PoolPanel, RunningPane
 from silverquillm.top.details import Shown, header
 from silverquillm.top.theme import MTG
 
+from .test_karn_cooldowns import ROOM, at_minute, filling_windows, notes_around
 from .test_karn_login_pool import enroll
 from .test_top import _app, _settle, synchronous
 from .top_fixtures import NOW, FakeMonitor, profiles, running_views
@@ -79,20 +89,62 @@ async def test_t_holds_the_selected_profile_an_hour_and_each_press_adds_one(tmp_
         before = len(polls)
         await pilot.press("t")
         await _settle(app, pilot)
-        assert cooldown_until(pool.root / "slot-1", now=NOW) == NOW + timedelta(hours=1)
+        assert held_until(pool.root / "slot-1", now=NOW) == NOW + timedelta(hours=1)
         assert len(polls) > before, "a written cooldown refreshes at once"
         await pilot.press("t")
         await _settle(app, pilot)
-        assert cooldown_until(pool.root / "slot-1", now=NOW) == NOW + timedelta(hours=2)
+        assert held_until(pool.root / "slot-1", now=NOW) == NOW + timedelta(hours=2)
         assert [severity for _, severity in notes] == [None, None]
         assert "slot-1 cooldown until" in notes[-1][0] and notes[-1][0].endswith("(+1h)")
-        assert not (pool.root / "slot-2" / COOLDOWN_FILE).exists()
+        assert not (pool.root / "slot-2" / COOLDOWNS_FILE).exists()
+
+
+@synchronous
+async def test_t_on_a_fable_only_cooldown_lengthens_it_and_says_so(tmp_path):
+    monitor, pool = _host(tmp_path)
+    fable = cooldown(NOW, NOW + timedelta(hours=2), now=NOW, scope="fable")
+    add_cooldown(pool.root / "slot-2", fable, now=NOW)
+    app = _app(monitor)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        notes = _recorded(app)
+        await _codex_slot(pilot, app, "slot-2")
+        await pilot.press("t")
+        await _settle(app, pilot)
+    model = "claude-fable-5-2"
+    assert held_until(pool.root / "slot-2", model=model, now=NOW) == NOW + timedelta(hours=3)
+    assert held_until(pool.root / "slot-2", now=NOW) is None
+    ((message, severity),) = notes
+    assert severity is None
+    assert message.startswith("slot-2 fable cooldown until ") and message.endswith("(+1h)")
+
+
+@synchronous
+async def test_t_on_a_full_schedule_is_refused_with_a_notice(tmp_path):
+    monitor, pool = _host(tmp_path)
+    directory = pool.root / "slot-1"
+    later = filling_windows(NOW, ROOM, start=24 * 60)
+    fits, _ = notes_around("a", ROOM)
+    full = [*later, at_minute(NOW, 24 * 60 + len(later), fits)]
+    edit_schedule(directory, lambda current: full, now=NOW)
+    before = (directory / COOLDOWNS_FILE).read_bytes()
+    app = _app(monitor)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        notes = _recorded(app)
+        await _codex_slot(pilot, app, "slot-1")
+        await pilot.press("t")
+        await _settle(app, pilot)
+    assert notes == [("slot-1: cooldown not written (cooldown_schedule_full)", "error")]
+    assert (directory / COOLDOWNS_FILE).read_bytes() == before
 
 
 @synchronous
 async def test_c_ends_a_cooldown_ten_seconds_on_and_ignores_a_profile_without_one(tmp_path):
     monitor, pool = _host(tmp_path)
-    set_cooldown(pool.root / "slot-3", NOW + timedelta(hours=4), now=NOW)
+    add_cooldown(pool.root / "slot-3", cooldown(NOW, NOW + timedelta(hours=4), now=NOW), now=NOW)
+    later = cooldown(NOW + timedelta(hours=8), NOW + timedelta(hours=9), now=NOW)
+    add_cooldown(pool.root / "slot-3", later, now=NOW)
     app = _app(monitor)
     async with app.run_test(size=(200, 50)) as pilot:
         await _settle(app, pilot)
@@ -100,12 +152,13 @@ async def test_c_ends_a_cooldown_ten_seconds_on_and_ignores_a_profile_without_on
         await _codex_slot(pilot, app, "slot-3")
         await pilot.press("c")
         await _settle(app, pilot)
-        assert cooldown_until(pool.root / "slot-3", now=NOW) == NOW + timedelta(seconds=10)
+        assert held_until(pool.root / "slot-3", now=NOW) == NOW + timedelta(seconds=10)
+        assert held_until(pool.root / "slot-3", now=later.start) == later.end
         assert "(in 10s)" in notes[-1][0]
         await pilot.press("down", "c")
         await _settle(app, pilot)
-        assert not (pool.root / "slot-4" / COOLDOWN_FILE).exists()
-        assert notes[-1] == ("slot-4 has no cooldown to end", None)
+        assert not (pool.root / "slot-4" / COOLDOWNS_FILE).exists()
+        assert notes[-1] == ("slot-4 has no cooldown in force to end", None)
 
 
 @synchronous
@@ -117,10 +170,11 @@ async def test_the_monitor_writes_the_same_file_the_cli_does(tmp_path):
         await _codex_slot(pilot, app, "slot-4")
         await pilot.press("t")
         await _settle(app, pilot)
-    written = (pool.root / "slot-4" / COOLDOWN_FILE).read_bytes()
-    set_cooldown(pool.root / "slot-5", NOW + timedelta(hours=1), now=NOW)
-    assert written == (pool.root / "slot-5" / COOLDOWN_FILE).read_bytes()
-    assert set(json.loads(written)) == {"format", "set_at", "until"}
+    written = (pool.root / "slot-4" / COOLDOWNS_FILE).read_bytes()
+    add_cooldown(pool.root / "slot-5", cooldown(NOW, NOW + timedelta(hours=1), now=NOW), now=NOW)
+    assert written == (pool.root / "slot-5" / COOLDOWNS_FILE).read_bytes()
+    (entry,) = json.loads(written)["cooldowns"]
+    assert set(entry) == {"start", "end", "set_at", "scope", "source"}
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root writes through directory permissions")
@@ -142,7 +196,47 @@ async def test_a_cooldown_that_cannot_be_written_is_a_notice_not_a_crash(tmp_pat
             assert app.query_one("#switcher").current == "history"
     finally:
         (pool.root / "slot-1").chmod(0o700)
-    assert not (pool.root / "slot-1" / COOLDOWN_FILE).exists()
+    assert not (pool.root / "slot-1" / COOLDOWNS_FILE).exists()
+
+
+def test_a_key_reports_a_schedule_another_writer_holds_as_busy(tmp_path, monkeypatch):
+    _, pool = _host(tmp_path)
+    monkeypatch.setattr(cooldowns, "WRITE_WAIT", 0.2)
+    lock = os.open(pool.root / "slot-1" / WRITE_LOCK, os.O_RDWR | os.O_CREAT, 0o600)
+    outcome: list[object] = []
+
+    def press():
+        state_root = tmp_path / ".local/state/silverquillm"
+        try:
+            outcome.append(cooldowns.lengthen(state_root, pool.plugin_id, "slot-1", now=NOW))
+        except KarnError as error:
+            outcome.append(error)
+
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        worker = threading.Thread(target=press, daemon=True)
+        started = time.monotonic()
+        worker.start()
+        worker.join(timeout=5)
+        assert not worker.is_alive(), "the key blocked behind the other writer"
+        assert time.monotonic() - started >= 0.2
+    finally:
+        os.close(lock)
+    (error,) = outcome
+    assert isinstance(error, KarnError) and str(error) == "cooldown_schedule_busy"
+    assert not (pool.root / "slot-1" / COOLDOWNS_FILE).exists()
+
+
+def test_a_cooldown_pane_shows_any_stored_time(monkeypatch):
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    time.tzset()
+    try:
+        last = datetime(9999, 12, 31, 23, tzinfo=UTC)
+        assert "Fri 23:00" in fmt.cooldown(last, NOW, MTG).plain
+        assert "Fri 22:00" in fmt.scheduled(last - timedelta(hours=1), MTG).plain
+    finally:
+        monkeypatch.undo()
+        time.tzset()
 
 
 @synchronous

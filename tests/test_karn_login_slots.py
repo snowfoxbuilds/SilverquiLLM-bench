@@ -16,6 +16,7 @@ from click.testing import CliRunner
 
 from silverquillm.cli import main
 from silverquillm.karn import login_admin, login_pool
+from silverquillm.karn.cooldowns import add_cooldown, cooldown
 from silverquillm.karn.definition import KarnError, canonical, digest
 from silverquillm.karn.execution import run_benchmark
 from silverquillm.karn.host import DockerHost
@@ -28,7 +29,6 @@ from silverquillm.karn.login_block import (
     login_block,
     relogin_needed,
 )
-from silverquillm.karn.login_cooldown import set_cooldown
 from silverquillm.karn.login_pool import (
     ENROLMENT_ID,
     SLOT_RECORD,
@@ -37,7 +37,7 @@ from silverquillm.karn.login_pool import (
     enrolled_slots,
     slot_order,
 )
-from silverquillm.monitor.headless import _login_state
+from silverquillm.monitor.headless import login_state
 from silverquillm.monitor.pools import login_profiles
 
 from .grader_fixtures import local_grader
@@ -179,7 +179,7 @@ def test_the_monitor_shows_a_block_as_its_own_state(tmp_path):
     block(target.root / "slot-1", reason="relogin_needed", run_id="run-a", now=NOW)
     first, second = login_profiles(tmp_path / "state", frozenset())
     assert (first.blocked, first.blocked_run, first.free) == ("relogin_needed", "run-a", False)
-    assert _login_state(first) == "blocked"
+    assert login_state(first) == "blocked"
     assert second.blocked is None and second.free
 
 
@@ -636,7 +636,8 @@ def test_bare_login_points_at_the_subcommands(tmp_path):
 
 def test_ls_shows_a_cooldown_and_a_pending_login(tmp_path):
     target = pool_of(tmp_path, CODEX, "slot-1", "slot-2")
-    set_cooldown(target.root / "slot-1", datetime.now(UTC) + timedelta(hours=2), now=NOW)
+    now = datetime.now(UTC)
+    add_cooldown(target.root / "slot-1", cooldown(now, now + timedelta(hours=2), now=now), now=now)
     pend(target.slot("slot-2"), run_id="run-z")
     lines = login(tmp_path, "ls").output.splitlines()
     assert lines[0].split()[:3] == ["codex", "slot-1", "cooldown"]

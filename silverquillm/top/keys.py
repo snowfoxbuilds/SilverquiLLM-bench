@@ -22,7 +22,7 @@ KEYS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
     (
         "Everywhere",
         (
-            ("1 2 3", "dashboard, history, run details"),
+            ("1 2 3 4", "dashboard, history, run details, capacity"),
             ("tab / shift+tab", "move between panes and tables"),
             ("↑ ↓ pgup pgdn home end", "move or scroll within the focused pane"),
             ("enter", "open the selected run"),
@@ -39,10 +39,24 @@ KEYS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
             ("↑ ↓ / k j", "select the previous / next Login Profile"),
             ("← → / h l", "move to the other pool, or out of the pane"),
             ("t", "cooldown the selected profile for 1h; each press adds 1h"),
-            ("c", "end the selected profile's cooldown in 10s"),
+            ("c", "end the selected profile's cooldowns in force in 10s"),
             ("a", "add a slot to the focused pool (signs in outside the TUI)"),
             ("R", "re-enroll the selected profile (signs in outside the TUI)"),
             ("D", "remove the selected profile, after a y/n confirm"),
+        ),
+    ),
+    (
+        "Capacity",
+        (
+            ("tab / ↑ ↓", "select a Login Profile or GPU Slot, or one of its Cooldowns"),
+            ("n", "add a Cooldown to the selected profile or GPU Slot, in a form"),
+            ("e", "change the selected Cooldown, in the same form"),
+            ("x", "remove the selected Cooldown, after a y/n confirm"),
+            ("L", "set or clear the selected profile's Usage Limit, in a form"),
+            ("a", "add a slot to the selected pool (signs in outside the TUI)"),
+            ("R", "re-enroll the selected profile (signs in outside the TUI)"),
+            ("D", "remove the selected profile, after a y/n confirm"),
+            ("enter / esc", "in a form: save / cancel"),
         ),
     ),
     (

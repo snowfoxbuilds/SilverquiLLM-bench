@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
 
@@ -271,7 +271,8 @@ class LoginsPane(VerticalScroll, can_focus=False):
         """
         views = LoginsPane.views(snapshot, provider)
         role = fmt.provider_role(provider)
-        # Untapped means a new run could take it now: not busy, pending or cooling down.
+        # Untapped means a new run could take it now: not busy, pending or cooling down for
+        # every run; a Fable-only Cooldown leaves it free for other models.
         free = sum(1 for view in views if view.status.free)
         title = Text(f"{provider.upper()} pool", style=theme.style(role, bold=True))
         untapped = Text(f"{free}/{len(views)} untapped", style=theme.style("muted"))
@@ -323,10 +324,16 @@ class LoginsPane(VerticalScroll, can_focus=False):
         percent = usage.percent / 100 if usage else None
         label = "Fable" if view.shows_fable else None
         weekly = fmt.weekly(usage, now, theme, short=short, label=label)
+        held = None
         if status.cooldown_until is not None:
             # A held profile reads its hold first: when it ends matters more than its usage,
             # which a short form leaves out.
             held = fmt.cooldown(status.cooldown_until, now, theme, short=short)
+        elif status.fable_cooldown_until is not None:
+            held = fmt.cooldown(status.fable_cooldown_until, now, theme, short=short, fable=True)
+        elif status.next_cooldown is not None:
+            held = fmt.scheduled(status.next_cooldown, theme)
+        if held is not None:
             if not short:
                 held.append(theme.glyph("sep"), style=theme.style("muted"))
                 held.append_text(weekly)
@@ -353,7 +360,8 @@ class LoginsPane(VerticalScroll, can_focus=False):
 
 
 class GpuSlotsPanel(Static):
-    """The host's GPU Slots below the Login Pools, read-only: no key acts on a GPU Slot."""
+    """The host's GPU Slots below the Login Pools, read-only: no dashboard key acts on a GPU
+    Slot, whose Cooldowns are kept in the capacity view or with ``silverquillm gpu cooldown``."""
 
     def __init__(self, theme: Theme) -> None:
         super().__init__(id="gpu-slots")
@@ -362,10 +370,10 @@ class GpuSlotsPanel(Static):
     def show(self, snapshot: MonitorSnapshot) -> None:
         self.display = bool(snapshot.gpu_slots)
         if snapshot.gpu_slots:
-            self.update(self.table(snapshot.gpu_slots, self.theme_))
+            self.update(self.table(snapshot.gpu_slots, self.theme_, snapshot.taken_at))
 
     @staticmethod
-    def table(statuses: list[GpuSlotStatus], theme: Theme) -> Table:
+    def table(statuses: list[GpuSlotStatus], theme: Theme, now: datetime | None = None) -> Table:
         """A header with the free count, then one line per GPU Slot in config order."""
         free = sum(1 for status in statuses if status.state == "free")
         table = Table.grid(padding=(0, 1))
@@ -378,14 +386,19 @@ class GpuSlotsPanel(Static):
             Text(f"{free}/{len(statuses)} free", style=theme.style("muted")),
         )
         for status in statuses:
-            table.add_row(*GpuSlotsPanel.row(status, theme))
+            table.add_row(*GpuSlotsPanel.row(status, theme, now))
         return table
 
     @staticmethod
-    def row(status: GpuSlotStatus, theme: Theme) -> tuple[Text, Text, Text, Text]:
+    def row(
+        status: GpuSlotStatus, theme: Theme, now: datetime | None = None
+    ) -> tuple[Text, Text, Text, Text]:
         state = status.state
+        now = now or datetime.now(UTC)
         if state == "held":
             mark, role = theme.glyph("tapped"), "text"
+        elif state == "cooldown":
+            mark, role = theme.glyph("cooldown"), "cooldown"
         elif state in ("busy", "unusable"):
             mark, role = theme.glyph("blocked"), "bad"
         elif state == "unknown":
@@ -410,24 +423,29 @@ class GpuSlotsPanel(Static):
             detail = f"held · {status.run_id[:8]}" if status.run_id else "held"
         elif state == "unusable":
             detail = "unusable · " + status.unusable
+        elif state == "cooldown":
+            detail = fmt.cooldown(status.cooldown_until, now, theme)
+            if status.cooldown_extensions:
+                detail.append(theme.glyph("sep"), style=theme.style("muted"))
+                detail.append(f"busy +{status.cooldown_extensions}", style=theme.style("cooldown"))
         elif state == "busy":
             detail = "busy · " + (
                 "another process" if status.busy == "compute_process" else "memory in use"
             )
         else:
             detail = state
-        return (
-            name,
-            names,
-            fmt.bar(fraction, WEEKLY_BAR, theme),
-            Text(detail, style=theme.style(role)),
-        )
+        if isinstance(detail, str):
+            detail = Text(detail, style=theme.style(role))
+        if status.next_cooldown is not None and state != "cooldown":
+            detail.append(theme.glyph("sep"), style=theme.style("muted"))
+            detail.append_text(fmt.scheduled(status.next_cooldown, theme))
+        return (name, names, fmt.bar(fraction, WEEKLY_BAR, theme), detail)
 
 
 class PoolPanel(Static, can_focus=True):
     """One Login Pool, one selectable line per profile.
 
-    ``t`` and ``c`` set Login Cooldowns; ``a``, ``R`` and ``D`` add, re-enroll and remove slots.
+    ``t`` and ``c`` set Cooldowns; ``a``, ``R`` and ``D`` add, re-enroll and remove slots.
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [

@@ -26,6 +26,7 @@ from silverquillm.host_config import (
     resolve_location,
     resolve_locations,
 )
+from silverquillm.karn.cooldowns import is_fable
 from silverquillm.karn.definition import KarnError
 from silverquillm.karn.model_server import GpuReading, read_gpus
 from silverquillm.karn.provenance import host_label as resolve_host_label
@@ -33,10 +34,9 @@ from silverquillm.karn.provenance import host_label as resolve_host_label
 from .containers import RUN_CONTAINER_PREFIX, RunContainer, run_containers
 from .costs import ProvisionalCost
 from .details import RecordDetail, WorkspaceView, record_detail, workspace_view
-from .estimates import WEEK, WeeklyUsage, estimated_percent, weekly_usage
-from .gpus import GpuSlotStatus, gpu_slot_statuses
+from .estimates import WEEK, WeeklyUsage, estimated_percent
+from .gpus import GpuSlotStatus, OrphanedSchedule, gpu_slot_statuses, orphaned_gpu_schedules
 from .history import (
-    FABLE,
     HistoryStore,
     RepoFreshness,
     RunSummary,
@@ -55,12 +55,12 @@ from .output import (
 )
 from .pools import ProfileStatus, login_profiles
 from .queue import QueuedBatch, batch_runs, dispatch_mode, ledger_status, queued_batches
+from .usage import UsageInputs, accountable, canonical_login, profile_usage
 
 CODEX_READING_SECONDS = 30.0
 HISTORY_SECONDS = 10.0
 OBSERVED_PROFILES = 64
 """At most this many Login Profile windows keep a live-observed reading after their run ends."""
-FABLE_MODEL_PREFIX = "claude-fable-"
 HOLDING_STAGES = frozenset({Stage.STARTING, Stage.RUNNING})
 FINISHED_WINDOW = timedelta(days=7)
 # A deeply nested file recurses; an unknown ``~user`` path fails to expand.
@@ -100,10 +100,6 @@ class RunView:
         return min(1.0, elapsed / self.run.budget_seconds)
 
 
-def is_fable(model: str | None) -> bool:
-    return isinstance(model, str) and model.startswith(FABLE_MODEL_PREFIX)
-
-
 @dataclass(frozen=True)
 class ProfileView:
     status: ProfileStatus
@@ -115,6 +111,10 @@ class ProfileView:
     """Claude's Fable limit, once a reading of it has been seen for this profile."""
     fable_run: bool = False
     """The run holding this profile (``run_id``) is a Fable model's."""
+    observed: tuple[UsageReading, ...] = ()
+    """The readings seen live for this profile that ``weekly`` and ``fable`` were estimated
+    from (``Monitor._observe``), which its records may not hold yet: a Usage Limit set from
+    the monitor is checked with them."""
 
     @property
     def shown(self) -> WeeklyUsage | None:
@@ -164,6 +164,8 @@ class MonitorSnapshot:
     Batch TOMLs; ``None`` when two entries claim the run."""
     gpu_slots: list[GpuSlotStatus] = field(default_factory=list)
     """This host's GPU Slots, empty on a host with no local model server."""
+    orphaned_gpu_schedules: list[OrphanedSchedule] = field(default_factory=list)
+    """Cooldown Schedules of GPU Slot values ``gpu_slots`` no longer lists."""
 
 
 @dataclass
@@ -181,14 +183,6 @@ def _local_host_label(environ, hostname, config) -> str | None:
         return None
 
 
-def _spend_rank(record: RunSummary, local: bool) -> tuple:
-    """Which record of one execution counts. The record selected for a run directory on
-    this host comes first, so its profile and its own view agree; among published records a
-    stopped linked recovery reconciles its original."""
-    recovered = record.recovery_of is not None and record.workspace_stopped is True
-    return (local, recovered, record.run_date.timestamp() if record.run_date else 0.0)
-
-
 def _newer(reading: UsageReading, than: UsageReading | None) -> bool:
     if than is None:
         return True
@@ -196,14 +190,6 @@ def _newer(reading: UsageReading, than: UsageReading | None) -> bool:
         than.effective_at,
         than.observed_at is not None,
     )
-
-
-def _canonical_login(login: str | None, profiles: list[ProfileStatus]) -> str | None:
-    """Records from before pools name only the slot, which kept its name when adopted."""
-    if not login or "/" in login:
-        return login
-    matches = [profile.ref for profile in profiles if profile.slot == login]
-    return matches[0] if len(matches) == 1 else login
 
 
 @dataclass
@@ -333,47 +319,6 @@ class Monitor:
             self._observed = dict(newest[-OBSERVED_PROFILES:])
         return self._observed
 
-    def _accountable(self, history: list[RunSummary]) -> list[RunSummary]:
-        """This host's published records that pass the record's own validation and are
-        filed under their own identity; history shows the rest but they charge nothing."""
-        found = []
-        for summary in history:
-            if not self._mine(summary):
-                continue
-            record = self._records.published(summary.path)
-            if isinstance(record, RunSummary):
-                found.append(record)
-        return found
-
-    def _executions(
-        self, profiles: list[ProfileStatus], history: list[RunSummary], local: list[RunSummary]
-    ) -> tuple[dict[str, tuple[str, RunSummary]], dict[str, list[UsageReading]]]:
-        """For each execution this host ran, its Login Profile and the one record whose spend
-        counts, and every reading those records observed per Login Profile.
-
-        A record is this host's when it applies to a run in this host's run directory or its
-        provenance names this host's label; any other record stays in history only. Only
-        validated records count, so invalid evidence neither charges spend nor anchors usage.
-        """
-        best: dict[str, tuple[tuple, str, RunSummary]] = {}
-        readings: dict[str, list[UsageReading]] = defaultdict(list)
-        mine = [(summary, False) for summary in self._accountable(history)]
-        for summary, local_copy in [*mine, *((summary, True) for summary in local)]:
-            login = _canonical_login(summary.login_profile, profiles)
-            if login is None:
-                continue
-            for reading in (summary.usage_reading, summary.fable_usage_reading):
-                if reading is not None:
-                    readings[login].append(reading)
-            rank = _spend_rank(summary, local_copy)
-            current = best.get(summary.execution_id)
-            if current is None or rank > current[0]:
-                best[summary.execution_id] = (rank, login, summary)
-        return {key: (login, record) for key, (_, login, record) in best.items()}, readings
-
-    def _mine(self, summary: RunSummary) -> bool:
-        return self.host_label is not None and summary.host_label == self.host_label
-
     def _profiles(
         self,
         profiles: list[ProfileStatus],
@@ -381,27 +326,23 @@ class Monitor:
         local: list[RunSummary],
         now: datetime,
     ) -> list[ProfileView]:
-        executions, readings = self._executions(profiles, history, local)
-        costs: dict[str, list[tuple[int, Decimal]]] = defaultdict(list)
-        # The Fable limit counts only Fable requests (estimates.weekly_usage, window ``fable``).
-        fable_costs: dict[str, list[tuple[int, Decimal]]] = defaultdict(list)
-        for login, record in executions.values():
-            costs[login].extend(record.request_costs)
-            if is_fable(record.candidate.model):
-                fable_costs[login].extend(record.request_costs)
+        inputs = UsageInputs.from_records(
+            profiles, accountable(history, self.host_label, self._records), local
+        )
         for run_id, entry in self._live.items():
             login = entry.run.login_profile
             if login is None:
                 continue
-            if run_id not in executions:
-                live_costs = [
-                    (row.timestamp_ms, row.usd)
-                    for row in entry.cost.requests
-                    if row.usd is not None
-                ]
-                costs[login].extend(live_costs)
-                if is_fable(entry.run.candidate.model):
-                    fable_costs[login].extend(live_costs)
+            if run_id not in inputs.executions:
+                inputs.add_costs(
+                    login,
+                    (
+                        (row.timestamp_ms, row.usd)
+                        for row in entry.cost.requests
+                        if row.usd is not None
+                    ),
+                    entry.run.candidate.model,
+                )
             if entry.follower is not None:
                 for reading in entry.follower.readings:
                     self._observe(login, reading)
@@ -417,25 +358,26 @@ class Monitor:
                     self._observe(login, reading)
             if entry.run.provider == "codex" and entry.run.stage is Stage.RUNNING:
                 self._observe(login, self._codex_reading(login))
+        observed: defaultdict[str, list[UsageReading]] = defaultdict(list)
         for (login, _), reading in self._observed_readings(now).items():
-            readings[_canonical_login(login, profiles)].append(reading)
+            login = canonical_login(login, profiles)
+            inputs.add_reading(login, reading)
+            observed[login].append(reading)
         holders = self._holders(profiles)
         views = []
         for profile in profiles:
-            ref, rates = profile.ref, self.config.usage_rates
-            holder = holders.get(ref)
-            fable = None
-            if any(r.window == FABLE for r in readings[ref]):
-                fable = weekly_usage(
-                    ref, profile.provider, rates, readings[ref], fable_costs[ref], now, FABLE
-                )
+            usage = profile_usage(
+                profile.ref, profile.provider, inputs, self.config.usage_rates, now
+            )
+            holder = holders.get(profile.ref)
             views.append(
                 ProfileView(
                     profile,
-                    weekly_usage(ref, profile.provider, rates, readings[ref], costs[ref], now),
+                    usage.weekly,
                     holder,
-                    fable,
+                    usage.fable,
                     holder is not None and is_fable(self._live[holder].run.candidate.model),
+                    tuple(observed.get(profile.ref, ())),
                 )
             )
         return views
@@ -452,7 +394,7 @@ class Monitor:
         """
         candidates: dict[str, list[str]] = defaultdict(list)
         for run_id, entry in self._live.items():
-            login = _canonical_login(entry.run.login_profile, profiles)
+            login = canonical_login(entry.run.login_profile, profiles)
             if login is not None and entry.run.stage in HOLDING_STAGES:
                 candidates[login].append(run_id)
         holders = {}
@@ -545,7 +487,10 @@ class Monitor:
             ledger=ledger,
             ledger_error=ledger_error,
             batch_runs=batch_runs(self.path("batches_dir")),
-            gpu_slots=self._gpu_slots(held, runs),
+            gpu_slots=self._gpu_slots(held, runs, now),
+            orphaned_gpu_schedules=orphaned_gpu_schedules(
+                self.path("state_root"), self.config.gpu_slots, now=now
+            ),
         )
 
     def _read_gpus(self) -> GpuReading:
@@ -554,12 +499,12 @@ class Monitor:
         state_root = self.path("state_root")
         return read_gpus(state_root=state_root, record=False) if state_root else read_gpus()
 
-    def _gpu_slots(self, held, runs) -> list[GpuSlotStatus]:
+    def _gpu_slots(self, held, runs, now: datetime) -> list[GpuSlotStatus]:
         """Only a host configured for a local model server has GPU Slots to show."""
         if self.config.gpu_slots is None and not self.config.llama_cpp:
             return []
         return gpu_slot_statuses(
-            self.path("state_root"), self.config.gpu_slots, held, self._read_gpus(), runs
+            self.path("state_root"), self.config.gpu_slots, held, self._read_gpus(), runs, now=now
         )
 
     def output(self, run_id: str, stream: str | None = None, since: int = 0) -> list[LogLine]:

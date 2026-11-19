@@ -1,4 +1,4 @@
-"""The Textual application: three views over one ``Monitor``, polled off the UI thread."""
+"""The Textual application: four views over one ``Monitor``, polled off the UI thread."""
 
 from __future__ import annotations
 
@@ -21,7 +21,15 @@ from silverquillm.karn.definition import KarnError
 from silverquillm.karn.login_admin import PROVIDER_OF, remove_slot, slot_identity
 from silverquillm.monitor import LogLine, Monitor, MonitorSnapshot, RunSummary, WorkspaceView
 
-from . import cooldowns, slots
+from . import cooldowns, limits, slots
+from . import format as fmt
+from .capacity import (
+    CapacityView,
+    CooldownRemoveWanted,
+    LimitWanted,
+    ScheduleWanted,
+    window_text,
+)
 from .dashboard import (
     CooldownWanted,
     DashboardView,
@@ -31,11 +39,17 @@ from .dashboard import (
     RunChosen,
 )
 from .details import DetailsView
+from .forms import ConfirmCooldownRemove, CooldownForm, LimitChoice, LimitForm
 from .historic import HistoryView
 from .keys import HelpScreen
 from .theme import Theme
 
-VIEWS = (("dashboard", "1", "Dashboard"), ("history", "2", "History"), ("details", "3", "Run"))
+VIEWS = (
+    ("dashboard", "1", "Dashboard"),
+    ("history", "2", "History"),
+    ("details", "3", "Run"),
+    ("capacity", "4", "Capacity"),
+)
 
 
 @dataclass(frozen=True)
@@ -80,13 +94,18 @@ class JobDone(Message):
         self.kind, self.job, self.result = kind, job, result
 
 
+def _reason(error: BaseException | None) -> str:
+    return str(error) if isinstance(error, KarnError) else type(error).__name__
+
+
 def _tag(style: str, text: str) -> str:
     return f"[{style}]{text}[/]" if style and style != "none" else text
 
 
 class MonitorApp(App):
-    """Every monitor call runs in a worker, and nothing here locks; the one write is a
-    Login Cooldown the operator asks for from the status pane (RUN-MONITORING.md)."""
+    """Every monitor call runs in a worker, and nothing here locks; the only writes are
+    those the operator asks for from the LOGINS pane and the capacity view: Cooldowns, Usage
+    Limits, and slots signed in or removed (RUN-MONITORING.md, Command and scope)."""
 
     ENABLE_COMMAND_PALETTE = False
     # The LOGINS pools come first on screen, but the running runs are what opens on start.
@@ -96,6 +115,7 @@ class MonitorApp(App):
         Binding("1", "view('dashboard')", "Dashboard", show=False),
         Binding("2", "view('history')", "History", show=False),
         Binding("3", "view('details')", "Run", show=False),
+        Binding("4", "view('capacity')", "Capacity", show=False),
         Binding("escape", "back", "Back", show=False),
         Binding("r", "refresh", "Refresh", show=False),
         Binding("question_mark", "help", "Keys", show=False),
@@ -141,6 +161,7 @@ class MonitorApp(App):
             yield DashboardView(self.look)
             yield HistoryView(self.look)
             yield DetailsView(self.look)
+            yield CapacityView(self.look)
         yield Static(id="keys")
 
     def on_mount(self) -> None:
@@ -266,6 +287,7 @@ class MonitorApp(App):
         self.snapshot, self.runs = snapshot, runs
         self.query_one(DashboardView).show(snapshot)
         self.query_one(HistoryView).show(runs)
+        self.query_one(CapacityView).show(snapshot)
         self._refresh_details()
         self._draw_bars()
 
@@ -444,13 +466,15 @@ class MonitorApp(App):
         self.query_one("#topbar", Static).update("".join(parts))
         profiles = isinstance(self.focused, PoolPanel)
         hints = {
-            "dashboard": "↑↓ slot · ←→ pool · t cooldown +1h · c end it · a add · R re-enroll · D remove"
+            "dashboard": "↑↓ slot · ←→ pool · t cooldown +1h · c end now · a add · R re-enroll · D remove"
             if profiles
             else "tab pane · enter open run",
             "history": "b browse · l list · enter open · s/</> sort · S reverse · x excluded",
             "details": "esc back · [ ] tabs · ↑↓ pgup pgdn scroll",
+            "capacity": "tab table · ↑↓ select · n add · e change · x remove · L limit"
+            " · a add slot · R re-enroll · D remove slot",
         }[self._current]
-        keys = _tag(muted, f" 1/2/3 views · {hints} · r refresh · ")
+        keys = _tag(muted, f" 1/2/3/4 views · {hints} · r refresh · ")
         self.query_one("#keys", Static).update(
             keys
             + f"[@click=app.help]{_tag(look.style('accent'), '? keys')}[/]"
@@ -469,6 +493,8 @@ class MonitorApp(App):
             self.query_one(focus).focus()
         elif name == "details":
             self.query_one(DetailsView).focus_tab()
+        elif name == "capacity":
+            self.query_one(CapacityView).focus_first()
 
     def action_back(self) -> None:
         if self._current == "details":
@@ -492,18 +518,19 @@ class MonitorApp(App):
         now = self.clock()
         try:
             if message.lengthen:
-                until = cooldowns.lengthen(state_root, message.plugin_id, message.slot, now=now)
+                held = cooldowns.lengthen(state_root, message.plugin_id, message.slot, now=now)
+                until, kind = held.end, "fable cooldown" if held.scope == "fable" else "cooldown"
             else:
                 until = cooldowns.end_soon(state_root, message.plugin_id, message.slot, now=now)
         except (KarnError, OSError) as error:
             self.notify(f"{message.slot}: cooldown not written ({error})", severity="error")
             return
         if until is None:
-            self.notify(f"{message.slot} has no cooldown to end")
+            self.notify(f"{message.slot} has no cooldown in force to end")
             return
         local = until.astimezone()
         if message.lengthen:
-            self.notify(f"{message.slot} cooldown until {local:%a %H:%M} (+1h)")
+            self.notify(f"{message.slot} {kind} until {local:%a %H:%M} (+1h)")
         else:
             self.notify(f"{message.slot} cooldown ends at {local:%H:%M:%S} (in 10s)")
         self.poll()
@@ -558,6 +585,159 @@ class MonitorApp(App):
             self.poll()
 
         self.push_screen(slots.ConfirmRemove(self.look, ref), answered)
+
+    def on_schedule_wanted(self, message: ScheduleWanted) -> None:
+        """A form for the Cooldown, then the write through the CLI's own path."""
+        state_root = self._state_root("write a cooldown")
+        if state_root is None:
+            return
+        target, existing = message.target, message.existing
+
+        def build(start: str, end: str, fable: bool, note: str, extend: bool):
+            return cooldowns.window(
+                start,
+                end,
+                now=self.clock(),
+                fable=fable,
+                note=note,
+                source=existing.source if existing else "operator",
+                extend=extend,
+                keep=existing,
+                shown=fmt.stamp,
+            )
+
+        def answered(window) -> None:
+            if window is None:
+                return
+            now = self.clock()
+            try:
+                if existing is None:
+                    cooldowns.add(state_root, target, window, now=now)
+                else:
+                    window = cooldowns.replace(state_root, target, existing, window, now=now)
+            except (KarnError, OSError) as error:
+                self.notify(f"{target.label}: cooldown not written ({error})", severity="error")
+                return
+            scope = " for Fable runs" if window.scope == "fable" else ""
+            done = "changed" if existing else "added"
+            ends = "; ends on time" if target.gpu and not window.extend else ""
+            self.notify(f"{target.label}: cooldown {done}{scope}, {window_text(window)}{ends}")
+            self.poll()
+
+        form = CooldownForm(
+            self.look,
+            target.label,
+            build,
+            fable=message.fable,
+            extend=target.gpu and not target.orphaned,
+            existing=existing,
+            shown=fmt.stamp,
+        )
+        self.push_screen(form, answered)
+
+    def on_cooldown_remove_wanted(self, message: CooldownRemoveWanted) -> None:
+        state_root = self._state_root("remove a cooldown")
+        if state_root is None:
+            return
+        target, old = message.target, message.cooldown
+
+        def answered(remove: bool | None) -> None:
+            if not remove:
+                return
+            try:
+                found = cooldowns.remove(state_root, target, old, now=self.clock())
+            except (KarnError, OSError) as error:
+                self.notify(f"{target.label}: cooldown not removed ({error})", severity="error")
+                return
+            if found:
+                self.notify(f"{target.label}: cooldown removed, {window_text(old)}")
+            else:
+                self.notify(f"{target.label}: that cooldown had already ended or gone")
+            self.poll()
+
+        confirm = ConfirmCooldownRemove(self.look, target.label, window_text(old), old.source)
+        self.push_screen(confirm, answered)
+
+    def on_limit_wanted(self, message: LimitWanted) -> None:
+        """A form for the ceilings; setting one checks it off the UI thread, since the check
+        reads the host's history."""
+        state_root = self._state_root("set a usage limit")
+        if state_root is None:
+            return
+        plugin_id, slot = message.plugin_id, message.slot
+        ref = f"{plugin_id}/{slot}"
+        claude = PROVIDER_OF.get(plugin_id) == "claude"
+
+        def read(weekly: str, fable: str):
+            if fable.strip() and not claude:
+                raise KarnError("fable_limit_claude_only")
+            return limits.ceilings(weekly, fable)
+
+        def answered(choice: LimitChoice | None) -> None:
+            if choice is None:
+                return
+            if choice.limit is None:
+                try:
+                    had = limits.clear(state_root, plugin_id, slot)
+                except (KarnError, OSError) as error:
+                    self.notify(f"{ref}: limit not cleared ({error})", severity="error")
+                    return
+                self.notify(f"{ref}: limit removed" if had else f"{ref} had no limit")
+                self.poll()
+                return
+            self._check_limit(state_root, plugin_id, slot, choice.limit)
+
+        form = LimitForm(self.look, ref, read, fable=claude, current=message.current)
+        self.push_screen(form, answered)
+
+    def _check_limit(self, state_root: Path, plugin_id: str, slot: str, limit) -> None:
+        ref = f"{plugin_id}/{slot}"
+        now = self.clock()
+        # Taken here, on the UI thread, from the snapshot on screen: a poll in flight
+        # replaces the snapshot but never changes it, so the check sees what was shown.
+        estimated = limits.estimate(self.snapshot, self.monitor.config, plugin_id, slot)
+
+        def work() -> None:
+            try:
+                written, error = (
+                    limits.set_and_check(
+                        state_root, plugin_id, slot, limit, now=now, estimated=estimated
+                    ),
+                    None,
+                )
+            except Exception as failure:  # noqa: BLE001 -- reported, never a crash of the view
+                written, error = [], failure
+            try:
+                self.call_from_thread(self._limit_checked, ref, limit, written, error)
+            except RuntimeError:
+                pass  # the app has closed meanwhile; the limit is set or not on disk regardless
+
+        threading.Thread(target=work, name=f"top-limit-{slot}", daemon=True).start()
+
+    def _limit_checked(self, ref: str, limit, written: list, error: Exception | None) -> None:
+        if isinstance(error, limits.Unchecked):
+            reason = _reason(error.__cause__)
+            self.notify(
+                f"{ref}: limit saved, but its check could not complete ({reason});"
+                " set it again to check it",
+                severity="error",
+            )
+            self.poll()
+            return
+        if error is not None:
+            self.notify(f"{ref}: limit not set ({_reason(error)})", severity="error")
+            self.poll()
+            return
+        ceilings = []
+        if limit.weekly_percent is not None:
+            ceilings.append(f"weekly {limit.weekly_percent:g}%")
+        if limit.fable_percent is not None:
+            ceilings.append(f"Fable {limit.fable_percent:g}%")
+        self.notify(f"{ref}: limit set, {' · '.join(ceilings)}")
+        for cooldown in written:
+            held = "Fable runs held" if cooldown.scope == "fable" else "cooling down"
+            self.notify(f"{ref}: limit reached; {held} until {fmt.stamp(cooldown.end)}")
+        self.poll()
 
     def on_run_chosen(self, message: RunChosen) -> None:
         details = self.query_one(DetailsView)

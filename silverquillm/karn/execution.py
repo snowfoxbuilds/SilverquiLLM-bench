@@ -30,7 +30,7 @@ from .grader import DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError, selec
 from .grading_inputs import grading_inputs
 from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
 from .login import LOGIN_PLUGINS, LoginProfile
-from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, logins_root
+from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, LoginPoolBusyError, logins_root
 from .model_server import (
     DEFAULT_ANTHROPIC_CONCURRENCY,
     TELEMETRY_ADAPTER,
@@ -51,6 +51,7 @@ from .snapshots import WorkspaceSnapshots, retain_git_history
 from .subscription_usage import codex_usage, subscription_usage
 from .subscription_usage import provider_for as usage_provider
 from .toolchain import prepare_toolchain
+from .usage_limit import check_quietly, has_limit, run_readings, run_spend
 from .workspace_archive import ArchiveRefused, archive_run
 
 
@@ -65,6 +66,22 @@ def observation_session(factory, directory: Path, problems: list[str], **options
             collector.__exit__(*sys.exc_info())
         except Exception:  # noqa: BLE001 -- observation teardown cannot erase stopped implementation evidence.
             problems.append("collector_teardown_failed")
+
+
+def measure(collector, exit_kind: str, adapter: str) -> dict:
+    """The run's measurements from its collector; a failure to finalize them still yields a
+    summary, flagged, so measurement never suppresses grading or the Usage Limit check."""
+    try:
+        return collector.finalize(exit_kind=exit_kind)
+    except Exception:  # noqa: BLE001 -- measurement failure must not suppress grading.
+        from .observations import summarize_events
+
+        return summarize_events(
+            getattr(collector, "events", []),
+            exit_kind=exit_kind,
+            collection_reasons=["measurement_finalization_failed"],
+            adapter=adapter,
+        )
 
 
 def mark_observation_problems(measurements: dict, problems: list[str]) -> None:
@@ -412,17 +429,22 @@ def run_benchmark(
         toolchain = prepare_toolchain(state_root)
         login_hold = held.enter_context(contextlib.ExitStack())
         selected_login = login = None
-        if pool is not None:
-            selected_login = pool.acquire(
-                login_hold,
-                settle_artifact=candidate.plugins[0].row["artifact"],
-                poll_seconds=login_poll_seconds,
-                on_wait=login_wait,
-                wait=login_blocking,
-            )
-            login = pool.ref(selected_login)
-        if on_login_selected is not None:
-            on_login_selected(login)
+        try:
+            if pool is not None:
+                selected_login = pool.acquire(
+                    login_hold,
+                    settle_artifact=candidate.plugins[0].row["artifact"],
+                    poll_seconds=login_poll_seconds,
+                    on_wait=login_wait,
+                    wait=login_blocking,
+                    model=candidate.model,
+                )
+                login = pool.ref(selected_login)
+            if on_login_selected is not None:
+                on_login_selected(login)
+        except LoginPoolBusyError as error:
+            error.model = candidate.model
+            raise
         if on_launch is not None:
             on_launch()
         run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -450,6 +472,7 @@ def run_benchmark(
             provenance=provenance,
             baseline_store=BaselineStore(Path(state_root).resolve() / "baseline-grades"),
             model_server=model_server,
+            state_root=state_root,
         )
 
 
@@ -477,6 +500,7 @@ def _collect(
     provenance,
     baseline_store,
     model_server=None,
+    state_root=None,
 ) -> KarnRunRecord:
     start = datetime.now(UTC).isoformat()
     artifact_dir = run_dir / "candidate"
@@ -636,21 +660,47 @@ def _collect(
                     host.docker.stop_and_confirm(observed.container_name, run_id)
                     observed.workspace_stopped = True
                     collector.mark_incomplete("host_execution_failed")
+                measured = None
+                if (
+                    selected_login is not None
+                    and state_root is not None
+                    and has_limit(selected_login.directory)
+                ):
+                    # The native sessions were harvested before the login was, so the
+                    # reconciled spend the record will charge is known now; measured once,
+                    # here, for both the check and the record.
+                    measured = measure(collector, observed.status, telemetry["adapter"])
+                if selected_login is not None and state_root is not None:
+                    # Before the release, so the next run to take the profile sees a Cooldown
+                    # its spend has tripped.
+                    check_quietly(
+                        selected_login.directory,
+                        login,
+                        provider,
+                        state_root=state_root,
+                        runs_dir=run_dir.parent,
+                        results_repo=results_repo,
+                        readings=lambda: run_readings(
+                            subscription_usage(
+                                provider,
+                                codex=usage.get("codex"),
+                                stdout=run_dir / "host" / "stdout.log",
+                            ),
+                            datetime.now(UTC),
+                        ),
+                        spend=None
+                        if measured is None
+                        else lambda: run_spend(run_id, measured, candidate.model),
+                    )
                 # The host has harvested the login; grading must not keep it from other runs.
                 login_hold.close()
                 if selected_login is not None and on_login_released is not None:
                     on_login_released()
-            try:
-                metadata["measurements"] = collector.finalize(exit_kind=observed.status)
-            except Exception:  # noqa: BLE001 -- measurement failure must not suppress grading.
-                from .observations import summarize_events
-
-                metadata["measurements"] = summarize_events(
-                    getattr(collector, "events", []),
-                    exit_kind=observed.status,
-                    collection_reasons=["measurement_finalization_failed"],
-                    adapter=telemetry["adapter"],
-                )
+            metadata["measurements"] = (
+                measured
+                if measured is not None
+                else measure(collector, observed.status, telemetry["adapter"])
+            )
         if observed.workspace_stopped:
             stage = "harvest"
             metadata["git_history"] = retain_git_history(workspace, run_dir)
@@ -750,5 +800,16 @@ def _collect(
         prefix=".run-record-",
     )
     write_record(results_repo, record)
+    if selected_login is not None and state_root is not None:
+        # Again now the record holds the run's reconciled Run Cost, which can count spend the
+        # telemetry never saw. The profile is released, but a trip still holds every later run.
+        check_quietly(
+            selected_login.directory,
+            login,
+            provider,
+            state_root=state_root,
+            runs_dir=run_dir.parent,
+            results_repo=results_repo,
+        )
     attach_to_record(results_repo, record, run_dir)
     return record

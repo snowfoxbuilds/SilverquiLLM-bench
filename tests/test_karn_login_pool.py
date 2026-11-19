@@ -10,10 +10,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from silverquillm.karn.cooldowns import COOLDOWNS_FILE, add_cooldown, cooldown
 from silverquillm.karn.definition import KarnError, canonical
 from silverquillm.karn.execution import login_profile
 from silverquillm.karn.login import LoginProfile
-from silverquillm.karn.login_cooldown import set_cooldown
 from silverquillm.karn.login_pool import (
     ENROLMENT_ID,
     SLOT_RECORD,
@@ -69,9 +69,11 @@ def test_capacity_probe_is_read_only_and_obeys_settled_slot_eligibility(tmp_path
         assert not target.has_claimable_slot()
     assert target.has_claimable_slot()
     now = datetime.now(UTC)
-    set_cooldown(profile.directory, now + timedelta(hours=1), now=now)
+    add_cooldown(profile.directory, cooldown(now, now + timedelta(hours=1), now=now), now=now)
     assert not target.has_claimable_slot()
-    set_cooldown(profile.directory, now - timedelta(seconds=1), now=now)
+    ended = {"start": "2026-01-01T00:00:00Z", "end": "2026-01-01T01:00:00Z"}
+    ended |= {"set_at": "2026-01-01T00:00:00Z", "scope": "all", "source": "operator"}
+    (profile.directory / COOLDOWNS_FILE).write_text(json.dumps({"format": 1, "cooldowns": [ended]}))
     before = {path: path.read_bytes() for path in profile.directory.iterdir() if path.is_file()}
     assert target.has_claimable_slot()
     assert before == {
@@ -127,9 +129,48 @@ def test_nonblocking_acquisition_distinguishes_busy_and_cooling_slots(tmp_path):
     ):
         target.acquire(held, wait=False)
     now = datetime.now(UTC)
-    set_cooldown(profile.directory, now + timedelta(hours=1), now=now)
+    add_cooldown(profile.directory, cooldown(now, now + timedelta(hours=1), now=now), now=now)
     with contextlib.ExitStack() as held, pytest.raises(LoginPoolBusyError):
         target.acquire(held, wait=False)
+
+
+@contextlib.contextmanager
+def cooled_while_locking(monkeypatch):
+    """As if the run releasing the slot set a Cooldown just before letting its lock go."""
+    exclusive = LoginProfile.exclusive
+
+    @contextlib.contextmanager
+    def racing(profile):
+        with exclusive(profile):
+            now = datetime.now(UTC)
+            window = cooldown(now - timedelta(seconds=5), now + timedelta(hours=1), now=now)
+            add_cooldown(profile.directory, window, now=now)
+            yield
+
+    monkeypatch.setattr(LoginProfile, "exclusive", racing)
+    yield
+
+
+def test_a_cooldown_set_while_the_slot_was_held_keeps_the_run_off(tmp_path, monkeypatch):
+    target = pool(tmp_path)
+    slot(target, "a")
+    with (
+        cooled_while_locking(monkeypatch),
+        contextlib.ExitStack() as held,
+        pytest.raises(LoginPoolBusyError),
+    ):
+        target.acquire(held, wait=False)
+
+
+def test_a_cooldown_set_while_a_settleable_slot_was_held_keeps_the_run_off(tmp_path, monkeypatch):
+    target = pool(tmp_path)
+    pend(slot(target, "a"))
+    with (
+        cooled_while_locking(monkeypatch),
+        contextlib.ExitStack() as held,
+        pytest.raises(LoginPoolBusyError),
+    ):
+        target.acquire(held, wait=False, settle_artifact="sha256:" + "a" * 64)
 
 
 def test_a_free_slot_is_locked_for_the_holder_until_released(tmp_path):

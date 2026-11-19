@@ -70,6 +70,24 @@ def _spent(costs: Iterable[tuple[int, Decimal]], since: datetime | None) -> Deci
     return sum((usd for stamp, usd in costs if stamp > floor), Decimal(0))
 
 
+def newest_reading(
+    provider: str, readings: Iterable[UsageReading], window: str = WEEKLY
+) -> UsageReading | None:
+    """The newest reading of one window that can anchor a value, whether or not its reset has
+    passed."""
+    usable = [
+        r
+        for r in readings
+        if r.provider == provider and r.window == window and r.effective_at is not None
+    ]
+    observed = {(r.utilization_percent, r.resets_at) for r in usable if r.observed_at}
+    # A record's untimed copy of a reading already seen live is that same observation.
+    usable = [
+        r for r in usable if r.observed_at or (r.utilization_percent, r.resets_at) not in observed
+    ]
+    return max(usable, key=lambda r: r.effective_at, default=None)
+
+
 def weekly_usage(
     profile: str,
     provider: str,
@@ -90,17 +108,7 @@ def weekly_usage(
     if rate is None or rate <= 0:
         return None
     costs = list(costs)
-    usable = [
-        r
-        for r in readings
-        if r.provider == provider and r.window == window and r.effective_at is not None
-    ]
-    observed = {(r.utilization_percent, r.resets_at) for r in usable if r.observed_at}
-    # A record's untimed copy of a reading already seen live is that same observation.
-    usable = [
-        r for r in usable if r.observed_at or (r.utilization_percent, r.resets_at) not in observed
-    ]
-    newest = max(usable, key=lambda r: r.effective_at, default=None)
+    newest = newest_reading(provider, readings, window)
     if newest is not None and now < newest.resets_at:
         added = _spent(costs, newest.effective_at) / rate
         # An untimed reading counts spend only after its run's stop, so spend between the

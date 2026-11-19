@@ -22,6 +22,7 @@ import functools
 import hashlib
 import http.client
 import json
+import logging
 import os
 import re
 import secrets
@@ -35,11 +36,13 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .claude_observations import claude_usage
+from .cooldowns import drop_ended, ending_cooldown, extend_ending, read_schedule
 from .definition import KarnError
 from .observations import TOKEN_KEYS, _measurements
 from .pricing import MODEL_PRICES
@@ -191,6 +194,10 @@ RELAYED_PATHS = frozenset(
 # A GPU with more memory in use than this runs someone's job, even when ``nvidia-smi`` lists
 # no process to this user; an idle card uses tens of MiB.
 BUSY_MEMORY_MIB = 1024
+GPU_SLOTS_DIR = "gpu-slots"
+GPU_SLOT_VALUE = re.compile(r"(?:0|[1-9][0-9]*)(?:,(?:0|[1-9][0-9]*))*")
+"""A ``CUDA_VISIBLE_DEVICES`` value of GPU indices, as ``[model_server] gpu_slots`` takes."""
+"""Under the state root, one directory per GPU Slot value holding its Cooldown Schedule."""
 NVIDIA_SMI_SECONDS = 10
 GPU_QUERY = "index,uuid,name,memory.used,memory.total,power.limit,driver_version"
 # The runner's GPU selection, which a host without GPU Slots passes on to its server.
@@ -511,6 +518,8 @@ class GpuReading:
     gpus: tuple[dict[str, Any], ...] | None
     compute_uuids: frozenset[str] = frozenset()
     reason: str | None = None
+    compute_pids: tuple[tuple[str, int | None], ...] = ()
+    """Each compute process as ``(gpu_uuid, pid)``; a PID ``nvidia-smi`` does not give is None."""
 
 
 _GPU_INDEX = re.compile(r"0|[1-9][0-9]*")
@@ -740,7 +749,12 @@ def read_gpus(run=None, *, state_root: Path | None = None, record: bool = True) 
         return GpuReading(None, reason="nvidia_smi_unavailable")
     except ValueError as error:
         return GpuReading(None, reason=str(error))
-    return GpuReading(tuple(gpus), frozenset(row[0] for row in apps if row[0]))
+    pids = tuple(
+        (row[0], int(row[1]) if len(row) > 1 and _GPU_INDEX.fullmatch(row[1]) else None)
+        for row in apps
+        if row[0]
+    )
+    return GpuReading(tuple(gpus), frozenset(row[0] for row in apps if row[0]), compute_pids=pids)
 
 
 @dataclass(frozen=True)
@@ -778,11 +792,233 @@ class GpuSlot:
                 return "memory_used"
         return None
 
+    def used_outside(
+        self, reading: GpuReading, holders: frozenset[int] | None
+    ) -> str | Literal[False] | None:
+        """Why the slot is used outside the bench; False when the reading shows it is not, and
+        None when that cannot be told.
+
+        ``holders`` are the PIDs holding the slot's lock. A compute process on its GPUs that is
+        neither one of them nor their descendant is work outside the bench; so, with the lock
+        free, is any compute process on them, or memory past ``BUSY_MEMORY_MIB``. With the lock
+        held, unexplained memory may be the bench's own, and never counts. Any such use found
+        is enough, but finding none tells only from a complete reading: every GPU of the slot
+        listed, with the lock held each process on them known by its PID, and with it free each
+        GPU's memory known."""
+        if self.value is None or holders is None or reading.gpus is None:
+            return None
+        gpus = self.gpus(reading) or ()
+        uuids = {gpu["uuid"] for gpu in gpus}
+        if not holders:
+            if (why := self.busy(reading)) is not None:
+                return why
+            unknown = any(not isinstance(gpu["memory_used_mib"], (int, float)) for gpu in gpus)
+        else:
+            processes = [(u, pid) for u, pid in reading.compute_pids if u in uuids]
+            if any(pid is not None and not _descends(pid, holders) for _, pid in processes):
+                return "compute_process"
+            known = {u for u, pid in processes if pid is not None}
+            unknown = not (uuids & reading.compute_uuids) <= known or any(
+                pid is None for _, pid in processes
+            )
+        return None if unknown or self.unknown_gpus(reading) else False
+
+    @property
+    def schedule_dir(self) -> Path | None:
+        """The directory of the slot's Cooldown Schedule, named by its value as its lock is,
+        so reordering ``gpu_slots`` moves no Cooldown; None for the host-wide lock, and for a
+        directory the writer would refuse."""
+        if self.value is None:
+            return None
+        return readable_gpu_schedule_dir(self.lock_path.parent, self.value)
+
+    def cooling_until(self, now: datetime | None = None) -> datetime | None:
+        """When the slot's Cooldowns in force end; None when none holds it back. Every GPU
+        Slot Cooldown holds back every run, whatever its scope, and an unreadable schedule
+        holds back nothing."""
+        directory = self.schedule_dir
+        if directory is None:
+            return None
+        now = now or datetime.now(UTC)
+        return max(
+            (c.end for c in read_schedule(directory, now=now) if c.in_force(now)), default=None
+        )
+
     def unknown_gpus(self, reading: GpuReading) -> bool:
         """Whether the slot names a GPU a readable ``nvidia-smi`` does not list."""
         if self.indices is None or reading.gpus is None:
             return False
         return not self.indices <= {gpu["index"] for gpu in reading.gpus}
+
+
+MAX_ANCESTRY = 64
+
+
+def _parent(pid: int) -> int | None:
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+    except (OSError, IndexError):
+        return None
+    return int(fields[1]) if len(fields) > 1 and fields[1].isdigit() else None
+
+
+def _descends(pid: int, ancestors: frozenset[int]) -> bool:
+    """Whether ``pid`` is one of ``ancestors`` or below one, walking at most ``MAX_ANCESTRY``
+    parents; a process whose ancestry cannot be read is not the bench's."""
+    for _ in range(MAX_ANCESTRY):
+        if pid in ancestors:
+            return True
+        parent = _parent(pid)
+        if parent is None or parent <= 1 or parent == pid:
+            return False
+        pid = parent
+    return False
+
+
+EXTENSION_WAIT = 2.0
+"""How long a claim or a scheduler pass waits for a schedule's write lock to extend it."""
+
+
+def _lock_free(path: Path) -> bool:
+    """Whether a non-blocking ``flock`` on the lock file is granted, released at once; a
+    missing file is free, and one that cannot be opened is not known to be."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    finally:
+        os.close(descriptor)
+    return True
+
+
+def _bench_holders(
+    path: Path, before: frozenset[int] | None, after: frozenset[int] | None
+) -> frozenset[int] | None:
+    """Who held the slot's lock across a reading: everyone the lock table named before or
+    after it, so a run releasing the slot meanwhile still counts as the bench. None when that
+    cannot be told, including a lock the table names no holder for that is held all the same,
+    as by a process the bench cannot see. Only the extension probes the lock: a claim taking
+    it in that instant would find it busy and pass the slot over."""
+    if before is None or after is None:
+        return None
+    holders = before | after
+    if not holders and not _lock_free(path):
+        return None
+    return holders
+
+
+def extend_gpu_cooldowns(
+    slots: tuple[GpuSlot, ...],
+    read=None,
+    locks: Path | None = None,
+    *,
+    reading: GpuReading | None = None,
+    now: datetime | None = None,
+) -> tuple[str, ...]:
+    """Extend each GPU Slot Cooldown that is ending while its slot is used outside the bench,
+    returning the slots extended; never raises, since neither a claim nor a scheduler pass may
+    fail for it. ``nvidia-smi`` is read only when some Cooldown is ending, between two reads of
+    each slot's lock holders (a ``reading`` given is taken before both); nothing is extended
+    when the holders cannot be told. A slot a reading shows not used outside the bench after
+    its Cooldown ended has the Cooldown dropped, so later work never revives it; a reading that
+    cannot tell, such as a failed ``nvidia-smi``, leaves the schedule as it was."""
+    from silverquillm.monitor.locks import PROC_LOCKS, lock_holders
+
+    log = logging.getLogger(__name__)
+    now = now or datetime.now(UTC)
+    locks = locks or PROC_LOCKS
+    due = []
+    for slot in slots:
+        try:
+            directory = slot.schedule_dir
+            ending = None if directory is None else ending_cooldown(directory, now=now)
+            if ending is not None:
+                due.append((slot, directory, ending, lock_holders(slot.lock_path, locks)))
+        except Exception as error:  # noqa: BLE001 - an extension never fails its caller
+            log.warning("gpu %s: cooldown not extended (%s)", slot.value, _why(error))
+    if not due:
+        return ()
+    try:
+        if reading is None:
+            reading = (read or _host_reader(slots))()
+    except Exception as error:  # noqa: BLE001 - an extension never fails its caller
+        log.warning("gpu cooldowns not extended (%s)", _why(error))
+        return ()
+    extended = []
+    for slot, directory, ending, before in due:
+        try:
+            after = lock_holders(slot.lock_path, locks)
+            holders = _bench_holders(slot.lock_path, before, after)
+            use = slot.used_outside(reading, holders)
+            if use:
+                if extend_ending(directory, now=now, wait=EXTENSION_WAIT) is not None:
+                    extended.append(slot.value)
+            elif use is False and ending.end <= now:
+                drop_ended(directory, now=now, wait=EXTENSION_WAIT)
+        except Exception as error:  # noqa: BLE001 - an extension never fails its caller
+            log.warning("gpu %s: cooldown not extended (%s)", slot.value, _why(error))
+    return tuple(extended)
+
+
+def _why(error: Exception) -> str:
+    return str(error) or type(error).__name__
+
+
+def gpu_schedule_dir(state_root: Path, value: str) -> Path:
+    """Where the Cooldown Schedule of the GPU Slot ``value`` lives, listed in ``gpu_slots`` or
+    not; ``value`` must be one ``gpu_slots`` could hold, so it never leaves the directory."""
+    if not GPU_SLOT_VALUE.fullmatch(value):
+        raise KarnError("invalid_gpu_slot_value")
+    return Path(state_root).resolve() / GPU_SLOTS_DIR / value
+
+
+def readable_gpu_schedule_dir(state_root: Path, value: str) -> Path | None:
+    """The GPU Slot ``value``'s schedule directory, or None when there is none to read: one
+    the writer refuses, a symlink or not a directory, is no schedule, so a hold only ever
+    comes from a file the tooling can edit."""
+    directory = gpu_schedule_dir(state_root, value)
+    try:
+        if any(path.is_symlink() or not path.is_dir() for path in (directory.parent, directory)):
+            return None
+    except OSError:
+        return None
+    return directory
+
+
+def writable_gpu_schedule_dir(state_root: Path, value: str) -> Path:
+    """The GPU Slot ``value``'s schedule directory, created private on first use; one that is
+    a symlink, or not a directory, is refused rather than written through."""
+    directory = gpu_schedule_dir(state_root, value)
+    directory.parent.parent.mkdir(parents=True, exist_ok=True)
+    for path in (directory.parent, directory):
+        if path.is_symlink() or (path.exists() and not path.is_dir()):
+            raise KarnError("gpu_slot_schedule_unusable")
+        path.mkdir(mode=0o700, exist_ok=True)
+    return directory
+
+
+def scheduled_gpu_slot_values(state_root: Path) -> tuple[str, ...]:
+    """Every GPU Slot value with a schedule directory under the state root, listed in
+    ``gpu_slots`` or not, in GPU order; anything else there, and a symlinked directory of
+    them, is ignored."""
+    root = Path(state_root).resolve() / GPU_SLOTS_DIR
+    try:
+        if root.is_symlink():
+            return ()
+        names = [
+            entry.name
+            for entry in root.iterdir()
+            if GPU_SLOT_VALUE.fullmatch(entry.name) and not entry.is_symlink() and entry.is_dir()
+        ]
+    except OSError:
+        return ()
+    return tuple(sorted(names, key=lambda name: tuple(map(int, name.split(",")))))
 
 
 def gpu_slots(state_root: Path, configured: tuple[str, ...] | None) -> tuple[GpuSlot, ...]:
@@ -887,28 +1123,46 @@ def _lock_unusable(path: Path, reason: str) -> str:
     return f"model_server_lock_unusable: {path}: {reason}"
 
 
-def claim_gpu_slot(slots: tuple[GpuSlot, ...], read=None, inherited=None) -> GpuSlotClaim:
+def claim_gpu_slot(
+    slots: tuple[GpuSlot, ...], read=None, inherited=None, *, now: datetime | None = None
+) -> GpuSlotClaim:
     """The first free GPU Slot, held until released; ``model_server_busy`` when none is.
 
     A slot naming a GPU ``nvidia-smi`` does not list, or whose lock file cannot be opened, is
     unusable and skipped, never the end of the run; with no slot usable at all the error is
-    ``gpu_slot_unknown_gpu:<values>`` when unknown GPUs are why. Either way it defers."""
-    reading = (read or _host_reader(slots))()
+    ``gpu_slot_unknown_gpu:<values>`` when unknown GPUs are why. Either way it defers. A slot
+    with a Cooldown in force is passed over like a busy one: the Cooldown gates only this
+    claim, never a run already holding the slot."""
+    readings = []
+
+    def read_once() -> GpuReading:
+        # An extension reads nvidia-smi between its two lock reads; the claim reuses it.
+        if not readings:
+            readings.append((read or _host_reader(slots))())
+        return readings[0]
+
+    extend_gpu_cooldowns(slots, read_once, now=now)
+    reading = read_once()
     unusable, unknown = [], []
     for slot in slots:
         if slot.unknown_gpus(reading):
             unusable.append(_unknown(slot))
             unknown.append(slot.value)
             continue
-        if slot.busy(reading) is not None:
+        if slot.cooling_until(now) is not None or slot.busy(reading) is not None:
             continue
         try:
             handle = _lock(slot)
         except OSError as error:
             unusable.append(_lock_unusable(slot.lock_path, error.strerror or type(error).__name__))
             continue
-        if handle is not None:
-            return GpuSlotClaim(slot, handle, reading, inherited)
+        if handle is None:
+            continue
+        # A Cooldown set while the lock was being taken still holds the slot back.
+        if slot.cooling_until(now) is not None:
+            handle.close()
+            continue
+        return GpuSlotClaim(slot, handle, reading, inherited)
     raise ModelServerBusyError(
         tuple(unusable),
         "gpu_slot_unknown_gpu:" + ",".join(unknown)
@@ -918,7 +1172,11 @@ def claim_gpu_slot(slots: tuple[GpuSlot, ...], read=None, inherited=None) -> Gpu
 
 
 def gpu_slot_availability(
-    slots: tuple[GpuSlot, ...], read=None, locks: Path | None = None
+    slots: tuple[GpuSlot, ...],
+    read=None,
+    locks: Path | None = None,
+    *,
+    now: datetime | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
     """Whether some GPU Slot looks claimable, and the slots whose lock file is unusable.
 
@@ -933,7 +1191,8 @@ def gpu_slot_availability(
         if (reason := slot_unusable(slot, reading)) is not None:
             unusable.append(reason)
         elif (
-            slot.busy(reading) is None
+            slot.cooling_until(now) is None
+            and slot.busy(reading) is None
             and lock_held(slot.lock_path, held, follow_symlinks=True) is not True
         ):
             claimable = True

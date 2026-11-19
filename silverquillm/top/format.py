@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from rich.text import Text
@@ -149,14 +149,44 @@ def elapsed_of_budget(elapsed: float | None, budget: float | None, theme: Theme)
     return text
 
 
-def cooldown(ends: datetime, now: datetime, theme: Theme, *, short: bool = False) -> Text:
-    """``❄ cooldown until Thu 14:00 (3h12m)``, or ``❄ until Thu 14:00 (3h12m)`` when short."""
-    local = ends.astimezone()
+def _local(moment: datetime) -> datetime:
+    """The moment in local time, or in UTC when local time cannot hold it (the calendar's
+    very ends), so no stored time can break a pane."""
+    try:
+        return moment.astimezone()
+    except (OverflowError, ValueError):
+        return moment.astimezone(UTC)
+
+
+def stamp(moment: datetime) -> str:
+    """``2026-11-20 09:00`` in local time: how a schedule lists a moment, and a form takes it
+    back."""
+    return _local(moment).strftime("%Y-%m-%d %H:%M")
+
+
+def cooldown(
+    ends: datetime, now: datetime, theme: Theme, *, short: bool = False, fable: bool = False
+) -> Text:
+    """``❄ cooldown until Thu 14:00 (3h12m)``, or ``❄ until Thu 14:00 (3h12m)`` when short;
+    a Fable-only Cooldown reads ``fable cooldown until …`` without the marker, since the
+    profile stays free for other models."""
+    local = _local(ends)
     left = duration((ends - now).total_seconds())
+    if fable:
+        words = "fable until" if short else "fable cooldown until"
+        return Text(f"{words} {local.strftime('%a %H:%M')} ({left})", style=theme.style("cooldown"))
     words = "until" if short else "cooldown until"
     return Text(
         f"{theme.glyph('cooldown')} {words} {local.strftime('%a %H:%M')} ({left})",
         style=theme.style("cooldown"),
+    )
+
+
+def scheduled(starts: datetime, theme: Theme) -> Text:
+    """``⏲ Fri 09:00``: the next Cooldown, while none is in force."""
+    return Text(
+        f"{theme.glyph('scheduled')} {_local(starts).strftime('%a %H:%M')}",
+        style=theme.style("muted"),
     )
 
 

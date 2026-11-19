@@ -105,21 +105,60 @@ silverquillm login --build-output BUILD --construct CONSTRUCT --adopt LEGACY
 
 It becomes a slot named `LEGACY` in the pool of `CONSTRUCT`'s login plugin, after checking that its stored login has that plugin's own shape (`legacy_login_belongs_to_other_plugin` otherwise). A legacy login with a pending run is refused (`legacy_login_pending`) until `silverquillm recover` settles it. Runs never adopt a legacy login by themselves.
 
-To keep slots out of new runs for a while, such as when a subscription nears its weekly limit, put them under a Login Cooldown:
+To keep slots out of new runs for a while, such as when a subscription nears its weekly limit or to keep it free for other use at a known time, give them a Cooldown: a window, now or later, in which they take no new run.
 
 ```bash
 silverquillm login cooldown --agent codex --duration 5h --slots slot-1 slot-2
 silverquillm login cooldown --agent claude --duration 2d --all
+silverquillm login cooldown --agent claude --from "Fri 09:00" --until "Fri 18:00" --note "review day" slot-2
+silverquillm login cooldown --agent claude --from 14:00 --duration 3h --fable-only slot-1
 silverquillm login cooldown --agent codex --clear --slots slot-1
 ```
 
-`--agent` picks the pool (`codex` or `claude`); name its slots with `--slots`, or take every enrolled slot with `--all`.
-`--duration` takes spans like `30m`, `5h`, `2d` or `1h30m`, up to a year; `--clear` lifts the cooldown instead.
+`--agent` picks the pool (`codex` or `claude`); name its slots with `--slots` or as arguments, or take every enrolled slot with `--all`.
+`--from` (default now) and `--until` take the host's local time: `14:00` (its next occurrence), `Fri 09:00`, `2026-11-20 09:00`, or an offset such as `+3h` or `1d`, which for `--until` counts from `--from`.
+Give exactly one of `--until` or `--duration` (`30m`, `5h`, `2d`, `1h30m`, counted from `--from`); no Cooldown may end more than a year ahead.
+`--fable-only` holds back only Fable runs (`claude-fable-*`), leaving the slot free for other models; `--note` says why.
+A slot may hold Cooldowns that overlap or not; each new one is added beside the others, and `--clear` removes every Cooldown of the named slots, in force or still to come.
+A slot's schedule holds at most 256 Cooldowns in 64 KiB; a write that would go beyond either, after dropping the Cooldowns that have ended, is refused with `cooldown_schedule_full` and leaves the schedule as it was.
 A slot not enrolled in that pool is refused with the enrolled ones listed.
 `--state-root` works before or after `cooldown` (`login --state-root X cooldown …` or `login cooldown --state-root X …`); given in both places, the one after `cooldown` wins, and with neither the configuration file or default applies.
-A cooling-down slot counts as busy: runs and batch entries pass over it. When no other slot is free, a direct run waits (`waiting for a login slot: … cooling down`) and the scheduler defers that batch; a run already holding the slot carries on.
-The cooldown ends by itself at its time; `silverquillm top` shows each cooling-down slot and when it ends.
-In `top`'s LOGINS pane, select a slot and press `t` to hold it one more hour per press, or `c` to end its cooldown ten seconds from now.
+A slot with a Cooldown in force counts as busy for the runs it holds back: they pass over it. When no other slot is free, a direct run waits (`waiting for a login slot: … cooling down`) and the scheduler defers that batch; a run already holding the slot carries on, whatever the window.
+A Cooldown ends by itself at its time, and a slot cooled down from before Cooldown Schedules keeps its hold until the first new write converts it.
+`silverquillm login ls` and `top`'s dashboard show a summary of each slot's schedule: when the hold on every run ends, otherwise when the Fable-only hold ends, otherwise when the next Cooldown starts; `silverquillm top --json` lists every Cooldown in each profile's `cooldowns`.
+In `top`'s LOGINS pane, select a slot and press `t` to hold it one more hour per press (the Cooldown in force that ends last, whatever its scope, ends an hour later, or, with none in force, one on every run starts now), or `c` to end every Cooldown in force ten seconds from now, leaving those still to come.
+`top`'s capacity view (`4`) lists every Login Profile and GPU Slot with its Cooldown Schedule and Usage Limit: select a row, then `n` adds a Cooldown and `e` changes the selected one in a form taking the times `login cooldown` takes, `x` removes one after a `y`/`n`, and `L` sets or clears a profile's Usage Limit, checking it at once against the usage `top` shows; a new GPU Slot Cooldown's form has an extend box, checked by default (unchecked is `--no-extend`), an edited GPU Cooldown never extends again, and the schedule list shows `busy +N` and `ends on time`; `a`, `R` and `D` add, re-enroll and remove slots as in the LOGINS pane.
+
+To reserve part of a subscription for use outside the bench, give its slots a Usage Limit: a ceiling on the Estimated Weekly Usage, and for Claude optionally one on the Fable limit.
+
+```bash
+silverquillm login limit --agent claude --weekly 80 slot-1
+silverquillm login limit --agent claude --weekly 80 --fable 90 --all
+silverquillm login limit --agent codex --clear --slots slot-2
+```
+
+When a run releases a slot, or a recovery settles its login, the host checks the slot's estimate, the one `top` shows; at or above the weekly ceiling it adds a `usage-limit` Cooldown until the weekly window's next reset (seven days when no reading tells when that is), and at or above the Fable ceiling one that holds back only Fable runs until the Fable limit's reset.
+Setting or lowering a limit checks it at once.
+A limit only keeps new runs off the slot: a run in flight is never stopped, so set the ceiling with room for what one run spends.
+A failed check is reported on stderr (`usage_limit_check_failed`) and never fails the run; without a `[usage_rates]` rate for the provider there is no estimate, and the limit never trips.
+`login ls` shows each slot's limit, and `top --json` reports it as `usage_limit`.
+A `usage-limit` Cooldown can be removed like any other; the slot's next run checks again when it ends.
+
+On a host that lists `[model_server] gpu_slots`, a GPU Slot takes Cooldowns the same way, to keep its GPUs free for other work at set times; it is named by its `gpu_slots` value:
+
+```bash
+silverquillm gpu ls
+silverquillm gpu cooldown 1 --from "Fri 09:00" --until "Fri 18:00" --note "training job"
+silverquillm gpu cooldown --all --duration 3h
+silverquillm gpu cooldown 0,1 --clear
+```
+
+`gpu ls` lists each GPU Slot with its state (`held`, `unusable`, `cooldown`, `busy`, `unknown` or `free`) and every Cooldown it holds, then any orphaned schedule: one kept for a value `gpu_slots` no longer lists, which holds back nothing.
+`gpu cooldown` takes the times, `--duration` and `--note` of `login cooldown`, every Cooldown holding back every run.
+While a slot's GPUs are still used outside the bench as its Cooldown ends (another user's job; never the bench's own run), the scheduler or the next claim extends it 30 minutes at a time, shown as `busy +N`, until the GPU is free or the extension reaches the slot's next Cooldown, which it joins; `--no-extend` makes a Cooldown end on time, and removing or editing one stops it.
+For `gpu cooldown`, a value `gpu_slots` does not list is refused, except that `--clear` removes an orphaned schedule.
+A model-server run passes over a GPU Slot with a Cooldown in force, and with none other free it defers like `model_server_busy`; a run already holding the slot keeps it to its end.
+A host without `gpu_slots` has no GPU Slot to hold; list them, one is enough.
 
 ### Claude constructs
 
@@ -236,7 +275,7 @@ silverquillm top   # needs the monitor extra: pip install -e '.[monitor]'
 ```
 
 In `top`, every action has a key and `?` lists them; `--no-mouse` leaves the mouse to the terminal for selecting text.
-Without a terminal (an agent's shell, cron), `silverquillm top --json` prints one snapshot of the same facts: each live run's stage, needs-recover reasons and Batch, the queue, every Login Profile's state and cooldown, the dispatch mode and the queue ledger's status.
+Without a terminal (an agent's shell, cron), `silverquillm top --json` prints one snapshot of the same facts: each live run's stage, needs-recover reasons and Batch, the queue, every Login Profile's state and Cooldown Schedule, the dispatch mode and the queue ledger's status.
 
 On a host whose batch directory already has a queue ledger (`queue.json`), a new batch needs no flag: the scheduler, running or not, records it and starts it after every batch queued before it.
 The flag is needed only the first time a scheduler serves a directory (with no ledger yet, the scheduler cannot tell a new batch from one whose state was lost) and to restart a batch whose state file was lost from entry zero. The scheduler warns about each batch it skips and why.

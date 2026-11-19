@@ -170,10 +170,10 @@ def enroll(ctx, build_output, construct, slot, adopt, state_root):
     """Manage the Login Pools' slots: one subscription login each, serving one run at a time.
 
     Day to day, use the subcommands: `login ls`, `login add claude`, `login refresh codex 3`,
-    `login remove codex 3`, `login unblock claude 2`, `login cooldown`. They find the login
-    plugin among those runs installed on this host. Without a subcommand, `--build-output`
-    and `--construct` enroll from a construct's own plugin, as on a host that has never run
-    one, and `--adopt` moves a login from before pools.
+    `login remove codex 3`, `login unblock claude 2`, `login cooldown`, `login limit`. They
+    find the login plugin among those runs installed on this host. Without a subcommand,
+    `--build-output` and `--construct` enroll from a construct's own plugin, as on a host that
+    has never run one, and `--adopt` moves a login from before pools.
     """
     if ctx.invoked_subcommand is not None:
         if ctx.get_parameter_source("state_root") is click.core.ParameterSource.COMMANDLINE:
@@ -267,13 +267,33 @@ def _sign_in(state_root, agent, slot):
     raise click.exceptions.Exit(status)
 
 
+def _local_stamp(moment) -> str:
+    from datetime import UTC
+
+    try:
+        local = moment.astimezone()
+    except (OverflowError, ValueError):
+        # Local time cannot hold the calendar's very ends; UTC still can.
+        local = moment.astimezone(UTC)
+    return local.strftime("%a %Y-%m-%d %H:%M %Z")
+
+
+def _limit_text(limit) -> str:
+    ceilings = []
+    if limit.weekly_percent is not None:
+        ceilings.append(f"weekly {limit.weekly_percent:g}%")
+    if limit.fable_percent is not None:
+        ceilings.append(f"Fable {limit.fable_percent:g}%")
+    return "limit " + ", ".join(ceilings)
+
+
 @enroll.command("ls")
 @click.argument("agent", required=False, type=click.Choice(sorted(AGENTS)))
 @STATE_ROOT_OPTION
 @click.pass_context
 def list_slots(ctx, agent, state_root):
     """List every enrolled slot with its state: free, busy, cooldown, blocked or pending."""
-    from silverquillm.monitor.headless import _login_state
+    from silverquillm.monitor.headless import login_state
     from silverquillm.monitor.locks import held_locks
     from silverquillm.monitor.pools import login_profiles
 
@@ -296,8 +316,14 @@ def list_slots(ctx, agent, state_root):
             )
             detail += "; `login refresh` re-enrolls"
         elif status.cooldown_until is not None:
-            detail = "until " + status.cooldown_until.astimezone().strftime("%a %Y-%m-%d %H:%M %Z")
-        line = f"{status.provider:<7} {status.slot:<12} {_login_state(status):<9} {detail}"
+            detail = "until " + _local_stamp(status.cooldown_until)
+        elif status.fable_cooldown_until is not None:
+            detail = "Fable runs held until " + _local_stamp(status.fable_cooldown_until)
+        elif status.next_cooldown is not None:
+            detail = "cooldown from " + _local_stamp(status.next_cooldown)
+        if status.usage_limit is not None:
+            detail = "; ".join(filter(None, (detail, _limit_text(status.usage_limit))))
+        line = f"{status.provider:<7} {status.slot:<12} {login_state(status):<9} {detail}"
         click.echo(line.rstrip())
 
 
@@ -375,19 +401,43 @@ def unblock_slots(ctx, agent, slots, state_root):
 )
 @click.option("--slots", multiple=True, metavar="SLOT", help="A slot to hold; repeat or list.")
 @click.option("--all", "every", is_flag=True, help="Every enrolled slot of the pool.")
-@click.option("--duration", metavar="SPAN", help="How long, such as 30m, 5h, 2d or 1h30m.")
-@click.option("--clear", is_flag=True, help="Lift the cooldown instead of setting one.")
+@click.option(
+    "--from",
+    "starts",
+    metavar="WHEN",
+    help="When it starts (default now): 14:00, Fri 09:00, 2026-11-20 09:00, or +3h.",
+)
+@click.option("--until", "ends", metavar="WHEN", help="When it ends; an offset counts from --from.")
+@click.option("--duration", metavar="SPAN", help="How long from --from, such as 30m, 5h or 2d.")
+@click.option("--fable-only", is_flag=True, help="Hold back only Fable runs (claude-fable-*).")
+@click.option("--note", metavar="TEXT", help="Why, shown beside the Cooldown.")
+@click.option("--clear", is_flag=True, help="Remove every Cooldown of the slots instead.")
 @click.argument("more_slots", nargs=-1, metavar="[SLOT]...")
 @STATE_ROOT_OPTION
 @click.pass_context
-def cooldown(ctx, agent, slots, every, duration, clear, more_slots, state_root):
-    """Hold Login Profiles out of new runs until a duration passes (a Login Cooldown).
+def cooldown(
+    ctx,
+    agent,
+    slots,
+    every,
+    starts,
+    ends,
+    duration,
+    fable_only,
+    note,
+    clear,
+    more_slots,
+    state_root,
+):
+    """Add a Cooldown to Login Profiles: a window in which they take no new run.
 
-    A run already holding a slot is unaffected; runs and batch entries wait for a free one.
+    Times are the host's local time. A run already holding a slot keeps it; runs and batch
+    entries wait for a free one.
     """
     from datetime import UTC, datetime
 
-    from .login_cooldown import clear_cooldown, parse_duration, set_cooldown
+    from .cooldowns import add_cooldown, clear_schedule, parse_duration, parse_time
+    from .cooldowns import cooldown as new_cooldown
     from .login_pool import enrolled_slots, logins_root
 
     state_root = _login_state_root(ctx, state_root)
@@ -396,8 +446,12 @@ def cooldown(ctx, agent, slots, every, duration, clear, more_slots, state_root):
         raise click.UsageError("Pass --slots or --all, not both.")
     if not every and not names:
         raise click.UsageError("Name the slots with --slots, or pass --all.")
-    if clear == (duration is not None):
-        raise click.UsageError("Pass exactly one of --duration or --clear.")
+    if clear and (starts or ends or duration or fable_only or note):
+        raise click.UsageError(
+            "--clear takes no --from, --until, --duration, --fable-only or --note."
+        )
+    if not clear and (ends is None) == (duration is None):
+        raise click.UsageError("Pass exactly one of --until or --duration, or --clear.")
     plugin_id = AGENTS[agent]
     pool_root = logins_root(state_root) / plugin_id
     enrolled = enrolled_slots(pool_root, plugin_id)
@@ -408,22 +462,111 @@ def cooldown(ctx, agent, slots, every, duration, clear, more_slots, state_root):
             f"Not enrolled in the {agent} pool: {', '.join(unknown)} (enrolled: {listed})."
         )
     chosen = enrolled if every else list(dict.fromkeys(names))
+    now = datetime.now(UTC)
     try:
         if clear:
             for name in chosen:
-                lifted = clear_cooldown(pool_root / name)
+                removed = clear_schedule(pool_root / name, now=now)
                 click.echo(
-                    f"{plugin_id}/{name}: " + ("cooldown lifted" if lifted else "no cooldown")
+                    f"{plugin_id}/{name}: "
+                    + (f"{removed} cooldown(s) removed" if removed else "no cooldown")
                 )
             return
-        now = datetime.now(UTC)
-        until = now + parse_duration(duration)
+        start = parse_time(starts, now=now) if starts else now
+        end = (
+            parse_time(ends, now=now, base=start)
+            if ends is not None
+            else start + parse_duration(duration)
+        )
+        window = new_cooldown(
+            start, end, now=now, scope="fable" if fable_only else "all", note=note
+        )
         for name in chosen:
-            set_cooldown(pool_root / name, until, now=now)
-            stamp = until.astimezone().strftime("%a %Y-%m-%d %H:%M %Z")
-            click.echo(f"{plugin_id}/{name}: cooling down until {stamp}")
+            add_cooldown(pool_root / name, window, now=now)
+            scope = "Fable runs held" if fable_only else "cooling down"
+            begins = "" if window.start <= now else f" from {_local_stamp(window.start)}"
+            click.echo(f"{plugin_id}/{name}: {scope}{begins} until {_local_stamp(window.end)}")
     except (KarnError, OSError) as error:
         raise click.ClickException(str(error)) from None
+
+
+@enroll.command("limit")
+@click.option(
+    "--agent",
+    required=True,
+    type=click.Choice(sorted(AGENTS)),
+    help="The provider whose Login Pool holds the slots.",
+)
+@click.option("--slots", multiple=True, metavar="SLOT", help="A slot to limit; repeat or list.")
+@click.option("--all", "every", is_flag=True, help="Every enrolled slot of the pool.")
+@click.option(
+    "--weekly", type=float, metavar="PERCENT", help="The ceiling on the Estimated Weekly Usage."
+)
+@click.option(
+    "--fable",
+    type=float,
+    metavar="PERCENT",
+    help="The ceiling on the Fable limit (claude only); it holds back only Fable runs.",
+)
+@click.option("--clear", is_flag=True, help="Remove the slots' Usage Limits instead.")
+@click.argument("more_slots", nargs=-1, metavar="[SLOT]...")
+@STATE_ROOT_OPTION
+@click.pass_context
+def limit(ctx, agent, slots, every, weekly, fable, clear, more_slots, state_root):
+    """Set a Usage Limit on Login Profiles, reserving the rest of the subscription.
+
+    When a run's release of a slot finds its estimate at or above a ceiling, the slot cools
+    down until that window's next reset. Setting a limit checks it at once. Runs in flight
+    are never stopped, so usage may pass a ceiling by what they spend.
+    """
+    from datetime import UTC, datetime
+
+    from .login_pool import enrolled_slots, logins_root
+    from .usage_limit import check_usage_limit, clear_limit, host_locations, set_limit, usage_limit
+
+    state_root = _login_state_root(ctx, state_root)
+    names = [*slots, *more_slots]
+    if every and names:
+        raise click.UsageError("Pass --slots or --all, not both.")
+    if not every and not names:
+        raise click.UsageError("Name the slots with --slots, or pass --all.")
+    if clear and (weekly is not None or fable is not None):
+        raise click.UsageError("--clear takes no --weekly or --fable.")
+    if not clear and weekly is None and fable is None:
+        raise click.UsageError("Pass --weekly, --fable or both, or --clear.")
+    if fable is not None and agent != "claude":
+        raise click.UsageError("Only the claude pool has a Fable limit.")
+    plugin_id = AGENTS[agent]
+    pool_root = logins_root(state_root) / plugin_id
+    if every:
+        chosen = enrolled_slots(pool_root, plugin_id)
+    else:
+        chosen = list(dict.fromkeys(_enrolled(state_root, agent, name) for name in names))
+    now = datetime.now(UTC)
+    try:
+        if clear:
+            for name in chosen:
+                removed = clear_limit(pool_root / name)
+                click.echo(f"{plugin_id}/{name}: " + ("limit removed" if removed else "no limit"))
+            return
+        ceilings = usage_limit(weekly, fable)
+        for name in chosen:
+            set_limit(pool_root / name, ceilings, now=now)
+            click.echo(f"{plugin_id}/{name}: {_limit_text(ceilings)}")
+    except (KarnError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+    locations = host_locations(state_root)
+    for name in chosen:
+        ref = f"{plugin_id}/{name}"
+        try:
+            written = check_usage_limit(pool_root / name, ref, agent, now=now, **locations)
+        except Exception as error:  # noqa: BLE001 -- the limit is set; the next release checks it.
+            reason = str(error) if isinstance(error, KarnError) else type(error).__name__
+            click.echo(f"{ref}: usage_limit_check_failed: {reason}", err=True)
+            continue
+        for cooldown in written:
+            held = "Fable runs held" if cooldown.scope == "fable" else "cooling down"
+            click.echo(f"{ref}: limit reached; {held} until {_local_stamp(cooldown.end)}")
 
 
 @click.command()
@@ -761,6 +904,166 @@ def top(interval, no_flair, no_mouse, as_json, **locations):
 
 
 @click.group()
+def gpu():
+    """The host's GPU Slots and their Cooldown Schedules."""
+
+
+def _gpu_slot_values() -> tuple[str, ...] | None:
+    from silverquillm.host_config import HostConfigError, load_host_config
+
+    try:
+        return load_host_config().gpu_slots
+    except HostConfigError as error:
+        raise click.ClickException(str(error)) from None
+
+
+def _cooldown_line(window) -> str:
+    line = f"  {_local_stamp(window.start)} – {_local_stamp(window.end)}  {window.source}"
+    if window.extensions:
+        line += f" (busy +{window.extensions})"
+    if not window.extend:
+        line += "  no-extend"
+    return line + (f"  {window.note}" if window.note else "")
+
+
+@gpu.command("ls")
+@STATE_ROOT_OPTION
+def gpu_ls(state_root):
+    """List every GPU Slot with its state and Cooldowns, then any orphaned schedules."""
+    from silverquillm.monitor.gpus import gpu_slot_statuses, orphaned_gpu_schedules
+    from silverquillm.monitor.locks import held_locks
+
+    from .model_server import read_gpus
+
+    configured = _gpu_slot_values()
+    statuses = []
+    if configured is not None:
+        reading = read_gpus(state_root=Path(state_root), record=False)
+        statuses = gpu_slot_statuses(Path(state_root), configured, held_locks(), reading, [])
+    else:
+        click.echo("no GPU Slots: this host's config lists no [model_server] gpu_slots")
+    for status in statuses:
+        if status.state == "cooldown":
+            detail = "until " + _local_stamp(status.cooldown_until)
+            if status.cooldown_extensions:
+                detail += f" (busy +{status.cooldown_extensions})"
+        elif status.state == "unusable":
+            detail = status.unusable
+        elif status.state == "busy":
+            detail = status.busy
+        else:
+            detail = ""
+        if status.next_cooldown is not None and status.state != "cooldown":
+            upcoming = "cooldown from " + _local_stamp(status.next_cooldown)
+            detail = f"{detail}; {upcoming}" if detail else upcoming
+        click.echo(f"gpu {status.value:<8} {status.state:<9} {detail}".rstrip())
+        for window in status.cooldowns:
+            click.echo(_cooldown_line(window))
+    for orphan in orphaned_gpu_schedules(Path(state_root), configured):
+        click.echo(f"gpu {orphan.value:<8} orphaned  not in gpu_slots; holds back nothing")
+        for window in orphan.cooldowns:
+            click.echo(_cooldown_line(window))
+
+
+@gpu.command("cooldown")
+@click.option("--all", "every", is_flag=True, help="Every GPU Slot the host config lists.")
+@click.option(
+    "--from",
+    "starts",
+    metavar="WHEN",
+    help="When it starts (default now): 14:00, Fri 09:00, 2026-11-20 09:00, or +3h.",
+)
+@click.option("--until", "ends", metavar="WHEN", help="When it ends; an offset counts from --from.")
+@click.option("--duration", metavar="SPAN", help="How long from --from, such as 30m, 5h or 2d.")
+@click.option("--note", metavar="TEXT", help="Why, shown beside the Cooldown.")
+@click.option(
+    "--no-extend",
+    is_flag=True,
+    help="End exactly on time, even while the GPU is used outside the bench.",
+)
+@click.option("--clear", is_flag=True, help="Remove every Cooldown of the GPU Slots instead.")
+@click.argument("values", nargs=-1, metavar="[VALUE]...")
+@STATE_ROOT_OPTION
+def gpu_cooldown(every, starts, ends, duration, note, no_extend, clear, values, state_root):
+    """Add a Cooldown to GPU Slots, named by their gpu_slots value (0, or 0,1).
+
+    No new model-server run claims a GPU Slot while one is in force; a run already holding it
+    keeps it. While the slot's GPUs are used outside the bench as it ends, the Cooldown is
+    extended 30 minutes at a time, unless --no-extend. Times are the host's local time.
+    --clear also removes the schedule of a value gpu_slots no longer lists.
+    """
+    from datetime import UTC, datetime
+
+    from .cooldowns import add_cooldown, clear_schedule, parse_duration, parse_time
+    from .cooldowns import cooldown as new_cooldown
+    from .model_server import (
+        GPU_SLOT_VALUE,
+        gpu_schedule_dir,
+        scheduled_gpu_slot_values,
+        writable_gpu_schedule_dir,
+    )
+
+    if every and values:
+        raise click.UsageError("Name GPU Slots or pass --all, not both.")
+    if not every and not values:
+        raise click.UsageError("Name the GPU Slots by value, or pass --all.")
+    if clear and (starts or ends or duration or note or no_extend):
+        raise click.UsageError(
+            "--clear takes no --from, --until, --duration, --note or --no-extend."
+        )
+    if not clear and (ends is None) == (duration is None):
+        raise click.UsageError("Pass exactly one of --until or --duration, or --clear.")
+    invalid = [value for value in values if not GPU_SLOT_VALUE.fullmatch(value)]
+    if invalid:
+        raise click.UsageError(f"Not a GPU Slot value: {', '.join(invalid)} (like 0 or 0,1).")
+    configured = _gpu_slot_values() or ()
+    if not configured and not clear:
+        raise click.UsageError(
+            "This host's config lists no [model_server] gpu_slots, so it has no GPU Slot "
+            "to hold; list them to keep GPUs free at set times."
+        )
+    if not configured and every:
+        raise click.UsageError(
+            "This host's config lists no [model_server] gpu_slots, so --all names no GPU "
+            "Slot; clear an orphaned schedule with gpu cooldown <value> --clear."
+        )
+    root = Path(state_root)
+    known = set(configured) | (set(scheduled_gpu_slot_values(root)) if clear else set())
+    unknown = [value for value in values if value not in known]
+    if unknown:
+        listed = ", ".join(configured) or "none"
+        raise click.UsageError(f"Not a GPU Slot: {', '.join(unknown)} (gpu_slots: {listed}).")
+    chosen = list(configured) if every else list(dict.fromkeys(values))
+    now = datetime.now(UTC)
+    try:
+        if clear:
+            for value in chosen:
+                removed = (
+                    clear_schedule(writable_gpu_schedule_dir(root, value), now=now)
+                    if gpu_schedule_dir(root, value).is_dir()
+                    else 0
+                )
+                click.echo(
+                    f"gpu {value}: "
+                    + (f"{removed} cooldown(s) removed" if removed else "no cooldown")
+                )
+            return
+        start = parse_time(starts, now=now) if starts else now
+        end = (
+            parse_time(ends, now=now, base=start)
+            if ends is not None
+            else start + parse_duration(duration)
+        )
+        window = new_cooldown(start, end, now=now, note=note, extend=not no_extend)
+        for value in chosen:
+            add_cooldown(writable_gpu_schedule_dir(root, value), window, now=now)
+            begins = "" if window.start <= now else f" from {_local_stamp(window.start)}"
+            click.echo(f"gpu {value}: cooling down{begins} until {_local_stamp(window.end)}")
+    except (KarnError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+
+
+@click.group()
 def grader():
     """Build the network-less image that grades candidate work."""
 
@@ -910,6 +1213,7 @@ COMMANDS = (
     net_card_score_command,
     queue,
     top,
+    gpu,
     grader,
     results,
 )

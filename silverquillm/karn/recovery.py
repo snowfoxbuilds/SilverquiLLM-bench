@@ -7,6 +7,7 @@ import dataclasses
 import json
 import re
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 from silverquillm.queue_state import _write_atomically
@@ -56,6 +57,7 @@ from .records import (
 from .snapshots import WorkspaceSnapshots, retain_git_history
 from .subscription_usage import codex_usage, subscription_usage
 from .subscription_usage import provider_for as usage_provider
+from .usage_limit import check_quietly, read_limit, run_readings, run_spend
 
 
 class RunNeverLaunchedError(KarnError):
@@ -304,7 +306,53 @@ def _owns_pending_login(profile, run_id: str) -> bool:
     return pending is not None and pending.get("run_id") == run_id
 
 
-def _settle_own_login(run_id, profile, host, candidate) -> list[dict] | None:
+def _usage_limit_check(run_dir, inputs, *, results_repo, state_root, live=True, spend=None):
+    """The Usage Limit check for the profile a run used, with the readings the run left;
+    with none once ``live`` is False, when the run's written record carries them. ``spend``
+    gathers the run's reconciled spend while its profile is still held."""
+    login = inputs.get("login") if isinstance(inputs, dict) else None
+    telemetry = (inputs.get("native_telemetry") if isinstance(inputs, dict) else None) or {}
+
+    def check(profile) -> None:
+        if not login or read_limit(profile.directory) is None:
+            return
+        # As the recovered record attributes it: a run from before adapters was Codex's.
+        provider = usage_provider(login, telemetry.get("adapter", "codex"))
+
+        def readings():
+            preserved = run_dir / "host" / NATIVE_PRESERVED
+            measurement = subscription_usage(
+                provider,
+                codex=codex_usage(preserved) if preserved.is_dir() else None,
+                stdout=run_dir / "host" / "stdout.log",
+            )
+            return run_readings(measurement, datetime.now(UTC))
+
+        check_quietly(
+            profile.directory,
+            login,
+            provider,
+            state_root=state_root,
+            runs_dir=run_dir.parent,
+            results_repo=results_repo,
+            readings=readings if live else tuple,
+            spend=spend,
+        )
+
+    return check
+
+
+def _check_recorded(run_dir, inputs, profile, *, results_repo, state_root) -> None:
+    """The Usage Limit check again once the record is written, whose reconciled Run Cost can
+    count spend the telemetry never saw. The profile is released by now, but a trip still
+    holds every later run."""
+    if profile is not None:
+        _usage_limit_check(
+            run_dir, inputs, results_repo=results_repo, state_root=state_root, live=False
+        )(profile)
+
+
+def _settle_own_login(run_id, profile, host, candidate, check_limit=None) -> list[dict] | None:
     """Settle this run's pending authentication with the plugin artifact the run retained.
 
     Another run's pending login is never settled or harvested here: its container may still
@@ -330,6 +378,9 @@ def _settle_own_login(run_id, profile, host, candidate) -> list[dict] | None:
             recover_login(
                 profile, plugin, host.docker.stop_and_confirm, cleanup=host.docker.cleanup_run
             )
+            if check_limit is not None:
+                # Under the login lock, so the profile's next run sees what this one tripped.
+                check_limit(profile)
             try:
                 status = plugin.status()
             except KarnError:
@@ -352,7 +403,7 @@ def _conclude(record, unpublished, *, run_id, run_dir, results_repo, state_root,
     Settlement never blocks publication: whatever it hits, including a busy login, the
     record is published and a LoginSettlementPendingError carries it back.
     """
-    failure = None
+    failure = inputs = profile = None
     try:
         try:
             inputs = json.loads((run_dir / "run-input.json").read_text())
@@ -367,10 +418,12 @@ def _conclude(record, unpublished, *, run_id, run_dir, results_repo, state_root,
             profile,
             host,
             lambda: _retained_candidate(run_dir, inputs, record.candidate),
+            _usage_limit_check(run_dir, inputs, results_repo=results_repo, state_root=state_root),
         )
     except Exception as error:  # noqa: BLE001 -- a final record is published whatever settlement hits.
         failure = error
     _publish(results_repo, unpublished, record, run_dir)
+    _check_recorded(run_dir, inputs, profile, results_repo=results_repo, state_root=state_root)
     if failure is not None:
         raise LoginSettlementPendingError(_failure_reason(failure), record)
     return record
@@ -472,9 +525,39 @@ def _recover(
             and not _owns_pending_login(profile, run_id)
         )
         host.docker.stop_and_confirm(observed.container_name, run_id)
+        preserved = run_dir / "host" / NATIVE_PRESERVED
+        harvested = False
+
+        def reconciled():
+            # Under the login lock, once settlement has preserved this run's native sessions:
+            # harvested here, once, for both the check and the record.
+            nonlocal harvested
+            if not harvested and preserved.is_dir():
+                collector.harvest_native(preserved)
+                harvested = True
+            measured = summarize_events(
+                [*events, *collector.events],
+                exit_kind="interrupted",
+                collection_reasons=[*reasons, *collector.reasons],
+                adapter=telemetry.get("adapter", "codex"),
+            )
+            return run_spend(run_id, measured, candidate.model)
+
         settlement_failure = None
         try:
-            login_state = _settle_own_login(run_id, profile, host, lambda: candidate)
+            login_state = _settle_own_login(
+                run_id,
+                profile,
+                host,
+                lambda: candidate,
+                _usage_limit_check(
+                    run_dir,
+                    inputs,
+                    results_repo=results_repo,
+                    state_root=state_root,
+                    spend=reconciled,
+                ),
+            )
         except LoginInUseError:
             raise
         except Exception as error:  # noqa: BLE001 -- the recovered record is still retained and published.
@@ -487,9 +570,9 @@ def _recover(
         if profile:
             # Only journals attributed to this run are read: another run's native state
             # belongs to that run's own evidence, never harvested here.
-            preserved = run_dir / "host" / NATIVE_PRESERVED
             if preserved.is_dir():
-                collector.harvest_native(preserved)
+                if not harvested:
+                    collector.harvest_native(preserved)
             elif other_run_pending:
                 collector.mark_incomplete("native_state_belongs_to_other_run")
         observed.workspace_stopped = True
@@ -644,6 +727,7 @@ def _recover(
         )
         unpublished = [previous_record, record]
     _publish(results_repo, unpublished, record, run_dir)
+    _check_recorded(run_dir, inputs, profile, results_repo=results_repo, state_root=state_root)
     if settlement_failure is not None:
         raise LoginSettlementPendingError(_failure_reason(settlement_failure), record)
     return record

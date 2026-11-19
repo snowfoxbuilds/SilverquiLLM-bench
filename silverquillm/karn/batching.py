@@ -20,6 +20,7 @@ from pathlib import Path
 from silverquillm.queue_state import SchedulerLock, _write_atomically
 
 from . import provenance
+from .cooldowns import held_until
 from .definition import KarnError
 from .execution import NATIVE_TELEMETRY, host_model_server, run_benchmark
 from .grader import DEFAULT_GRADING_TIMEOUT
@@ -28,6 +29,7 @@ from .login_pool import LoginPool, LoginPoolUnavailableError, logins_root
 from .model_server import (
     DEFAULT_ANTHROPIC_CONCURRENCY,
     ModelServerHost,
+    extend_gpu_cooldowns,
     gpu_slot_availability,
     gpu_slots,
     relay_slot_availability,
@@ -573,6 +575,21 @@ class KarnScheduler:
         concurrency = host.anthropic_concurrency or DEFAULT_ANTHROPIC_CONCURRENCY
         return relay_slot_availability(self.options["state_root"], concurrency)
 
+    def _extend_gpu_cooldowns(self) -> None:
+        """Extend the GPU Slot Cooldowns ending while their GPUs are used outside the bench,
+        once a pass; an unreadable host config, or a failed extension, only skips it."""
+        try:
+            host = self.model_server_host or host_model_server()
+        except KarnError:
+            return
+        if not host.gpu_slots:
+            return
+        slots = gpu_slots(self.options["state_root"], host.gpu_slots)
+        for value in extend_gpu_cooldowns(slots, self.gpu_reader):
+            logging.getLogger(__name__).info(
+                "gpu %s: cooldown extended while used outside the bench", value
+            )
+
     def _dispatch_open(self) -> bool:
         """Whether new runs may launch; each change of dispatch mode is logged once."""
         control = read_control(self.directory)
@@ -738,10 +755,21 @@ class KarnScheduler:
         self.drained = False
         active = {}
         deferred = {}
+        # The model of each deferred entry, when its worker said, for scoped Cooldowns.
+        deferred_models = {}
         count = 0
         interrupted = None
         draining = False
         ledger: list[dict] = []
+
+        def could_take(name, login):
+            """Whether the entry deferred under ``name`` could run on ``login``: a slot whose
+            Fable-scoped Cooldown keeps a Fable entry off must not hold back other models."""
+            if not login or "/" not in login:
+                return True
+            plugin, slot = login.split("/", 1)
+            directory = logins_root(self.options["state_root"]) / plugin / slot
+            return held_until(directory, model=deferred_models.get(name)) is None
 
         def queued_before(name, other):
             order = queue_order((name, other), ledger)
@@ -778,7 +806,7 @@ class KarnScheduler:
                 else:
                     claimable = LoginPool(
                         logins_root(self.options["state_root"]) / plugin, plugin
-                    ).has_claimable_slot()
+                    ).has_claimable_slot(model=deferred_models.get(name))
                 if claimable:
                     del deferred[name]
 
@@ -826,6 +854,8 @@ class KarnScheduler:
                         self._warn(f"{job['name']}: {value}")
                     elif kind == "released":
                         released = True
+                    elif kind == "model":
+                        job["model"] = value
                     elif kind == "gpu_slot":
                         job["gpu_slot"] = value
                     elif kind == "relay_slot":
@@ -839,7 +869,9 @@ class KarnScheduler:
                         else:
                             plugin = value.split("/", 1)[0] if value else "unpooled"
                         admitted = not any(
-                            queued_before(name, job["name"]) and pool == plugin
+                            queued_before(name, job["name"])
+                            and pool == plugin
+                            and could_take(name, value)
                             for name, pool in deferred.items()
                         )
                         if plugin == "unpooled":
@@ -859,6 +891,7 @@ class KarnScheduler:
                         job["probing"] = False
                     elif kind in ("busy", "unavailable"):
                         # A refusal for a closed dispatch is no pool's fault: retry on the timer.
+                        deferred_models[job["name"]] = job.get("model")
                         deferred[job["name"]] = (
                             None
                             if job.get("held")
@@ -1031,6 +1064,7 @@ class KarnScheduler:
                 if interrupted is not None:
                     raise interrupted
                 if time.monotonic() >= retry_at:
+                    self._extend_gpu_cooldowns()
                     retry_claimable(retry_dead_workers=True)
                     dispatch_needed = True
                     retry_at = time.monotonic() + self.slot_poll_seconds

@@ -118,6 +118,9 @@ def execute_worker(connection, executor, arguments):
         # Every refusal for want of a usable GPU Slot defers the entry in the GPU Slot pool.
         send("busy", "model_server_busy")
     except (LoginPoolBusyError, LoginPoolUnavailableError) as error:
+        if isinstance(error, LoginPoolBusyError) and error.model is not None:
+            # Which slots can serve the entry later depends on its model's Cooldowns.
+            send("model", error.model)
         send("busy" if isinstance(error, LoginPoolBusyError) else "unavailable", str(error))
     except RecordWritePendingError as error:
         send("result", record_outcome(error.record, pending=True))

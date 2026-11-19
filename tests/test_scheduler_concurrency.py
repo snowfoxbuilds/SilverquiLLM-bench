@@ -15,10 +15,10 @@ from types import SimpleNamespace
 import pytest
 
 from silverquillm.karn.batching import KarnScheduler, read_state
+from silverquillm.karn.cooldowns import add_cooldown, cooldown, end_in_force_after
 from silverquillm.karn.definition import KarnError, canonical
 from silverquillm.karn.interruption import terminate_as_interrupt
-from silverquillm.karn.login_cooldown import set_cooldown
-from silverquillm.karn.login_pool import LoginPool
+from silverquillm.karn.login_pool import LoginPool, LoginPoolBusyError
 from silverquillm.karn.model_server import (
     GpuReading,
     ModelServerHost,
@@ -32,6 +32,7 @@ from silverquillm.queue_state import SchedulerLock
 ROOT = Path(__file__).resolve().parents[1]
 CLAUDE = "karn-claude-login"
 CODEX = "karn-codex-login"
+FABLE = "claude-fable-5-2"
 # Entries whose benchmark is "gpu" stand for model-server runs on two GPU Slots, and those
 # whose benchmark is "relay" for Anthropic-engine runs on two relay slots.
 GPU_SLOTS = ("0", "1")
@@ -79,8 +80,18 @@ def _execute(**kwargs):
             kwargs["on_relay_slot_selected"](claim.slot.index)
             started = f"relay-{claim.slot.index}"
         elif plugin != "unpooled":
+            if name.startswith("after-fable"):
+                # Let the Fable entry be refused and deferred first.
+                _wait_file(state / "fable.attempts")
+                time.sleep(0.5)
             pool = LoginPool.of(state, plugin)
-            login = pool.ref(pool.acquire(held, wait=kwargs["login_blocking"]))
+            # As the runner does, a refusal names the run's model for the scheduler.
+            model = FABLE if name.startswith("fable") else None
+            try:
+                login = pool.ref(pool.acquire(held, wait=kwargs["login_blocking"], model=model))
+            except LoginPoolBusyError as error:
+                error.model = model
+                raise
         kwargs["on_login_selected"](login)
         if name == "prelaunch":
             (state / "prelaunch.claimed").touch()
@@ -274,7 +285,8 @@ def test_capacity_poll_detects_external_changes_without_preflight_churn(tmp_path
                 pool.acquire(held, wait=False)
             else:
                 now = datetime.now(UTC)
-                set_cooldown(pool.root / "slot-0", now + timedelta(hours=1), now=now)
+                window = cooldown(now, now + timedelta(hours=1), now=now)
+                add_cooldown(pool.root / "slot-0", window, now=now)
         with _running(directory, state):
             _wait_file(state / "keeper.started")
             time.sleep(0.6)
@@ -288,13 +300,32 @@ def test_capacity_poll_detects_external_changes_without_preflight_churn(tmp_path
                 _enroll(state, 1)
             else:
                 now = datetime.now(UTC)
-                set_cooldown(pool.root / "slot-0", now + timedelta(seconds=2), now=now)
+                end_in_force_after(pool.root / "slot-0", timedelta(seconds=2), now=now)
             _wait_file(state / "waiting.started", timeout=4)
             assert not (state / "next-keeper.finished").exists()
             (state / "waiting.release").touch()
             (state / "next-keeper.release").touch()
             _wait_file(state / "count")
     assert len((state / "waiting.attempts").read_text().splitlines()) == 2
+
+
+def test_a_fable_only_cooldown_defers_only_the_fable_entry(tmp_path):
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    pool = _enroll(state, 1)
+    now = datetime.now(UTC)
+    window = cooldown(now, now + timedelta(hours=1), now=now, scope="fable")
+    add_cooldown(pool.root / "slot-0", window, now=now)
+    _batch(directory, ["fable"])
+    _batch(directory, ["after-fable"], batch="b")
+    with _running(directory, state):
+        # The later Batch's other model takes the slot the earlier Fable entry cannot.
+        _wait_file(state / "after-fable.started")
+        (state / "after-fable.release").touch()
+        _wait_file(state / "count")
+    assert (state / "count").read_text() == "1"
+    assert not (state / "fable.started").exists()
+    # Releasing the slot never retried the Fable entry: the Cooldown still keeps it off.
+    assert (state / "fable.attempts").read_text().splitlines() == ["attempt"]
 
 
 def test_shutdown_drains_every_owned_run_and_releases_all_locks(tmp_path):
@@ -459,6 +490,35 @@ def test_an_unreadable_gpu_slot_lock_defers_entries_without_stopping_the_schedul
             _wait_file(state / "count")
     finally:
         gpu_slots(state, GPU_SLOTS)[0].lock_path.chmod(0o600)
+
+
+def test_a_gpu_slot_cooldown_defers_entries_and_lifting_it_lets_them_start(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from silverquillm.karn.cooldowns import add_cooldown, clear_schedule, cooldown
+    from silverquillm.karn.model_server import writable_gpu_schedule_dir
+
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    state.mkdir()
+    now = datetime.now(UTC)
+    held = writable_gpu_schedule_dir(state, "0")
+    add_cooldown(held, cooldown(now, now + timedelta(hours=1), now=now), now=now)
+    _batch(directory, ["one", "two"], "gpu")
+    with _running(directory, state):
+        _wait_file(state / "one.started")
+        assert (state / "one.started").read_text() == "gpu-1"
+        _wait_file(state / "two.attempts")
+        time.sleep(0.6)
+        assert not (state / "two.started").exists()
+        assert not (state / "error").exists()
+        clear_schedule(held, now=datetime.now(UTC))
+        _wait_file(state / "two.started")
+        assert (state / "two.started").read_text() == "gpu-0"
+        for marker in ("one.release", "two.release"):
+            (state / marker).touch()
+        _wait_file(state / "count")
+    rows = read_state(directory / "state/a.json", "a")["runs"]
+    assert [row["status"] for row in rows] == ["done"] * 2
 
 
 def test_model_server_and_other_login_less_entries_never_wait_for_each_other(tmp_path):

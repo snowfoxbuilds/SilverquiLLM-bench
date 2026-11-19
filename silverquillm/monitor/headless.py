@@ -10,6 +10,8 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
+from silverquillm.karn.usage_limit import UsageLimit
+
 from .gpus import GpuSlotStatus
 from .pools import ProfileStatus
 from .queue import QueuedBatch
@@ -30,7 +32,7 @@ def _path(value: Path | None) -> str | None:
     return str(value) if value is not None else None
 
 
-def _login_state(status: ProfileStatus) -> str:
+def login_state(status: ProfileStatus) -> str:
     """One word for the slot, most blocking first: a pending settlement outranks the rest."""
     if status.pending:
         return "pending"
@@ -120,11 +122,13 @@ def _login(view: ProfileView) -> dict:
     return {
         "login_profile": status.ref,
         "provider": status.provider,
-        "state": _login_state(status),
+        "state": login_state(status),
         "busy": status.busy,
         "pending": status.pending,
         "pending_run": status.pending_run,
         "cooldown_until": _time(status.cooldown_until),
+        "cooldowns": [cooldown.document() for cooldown in status.cooldowns],
+        "usage_limit": (status.usage_limit or UsageLimit()).document(),
         "blocked": status.blocked,
         "blocked_run": status.blocked_run,
         "run_id": view.run_id,
@@ -143,6 +147,9 @@ def _gpu_slot(status: GpuSlotStatus) -> dict:
         "state": status.state,
         "busy": status.busy,
         "unusable": status.unusable,
+        "cooldown_until": _time(status.cooldown_until),
+        "cooldown_extensions": status.cooldown_extensions,
+        "cooldowns": [cooldown.document() for cooldown in status.cooldowns],
         "run_id": status.run_id,
         "gpus": (
             None
@@ -187,4 +194,11 @@ def snapshot_document(snapshot: MonitorSnapshot) -> dict:
         "queue": [_batch(batch) for batch in snapshot.queued],
         "logins": [_login(view) for view in snapshot.profiles],
         "gpu_slots": [_gpu_slot(status) for status in snapshot.gpu_slots],
+        "orphaned_gpu_schedules": [
+            {
+                "gpu_slot": orphan.value,
+                "cooldowns": [cooldown.document() for cooldown in orphan.cooldowns],
+            }
+            for orphan in snapshot.orphaned_gpu_schedules
+        ],
     }

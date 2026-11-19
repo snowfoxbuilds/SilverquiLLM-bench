@@ -91,6 +91,24 @@ GPU Slots pin CUDA builds through `CUDA_VISIBLE_DEVICES`; other backends' device
 A run claims the first free GPU Slot, or the host-wide lock without `gpu_slots`, before it is recorded as started, the way a run claims a Login Profile, and before the host's preflight and the server's `--version` probe, so a run that finds nothing free costs nothing more (#269).
 With `gpu_slots`, a GPU Slot is free when its lock is free, no compute process runs on its GPUs, and none of its GPUs reports more than 1 GiB of memory used: another user's job, or the server of a runner that has just died, keeps it busy.
 The memory bound catches a job whose process `nvidia-smi` does not list to the operator's user (grilling 2026-11-16).
+A listed GPU Slot also has a Cooldown Schedule, so the operator can keep its GPUs free for other work at set times (grilling 2026-11-18).
+Its Cooldowns are those of a Login Profile without scope or Usage Limit: every one covers every run, and each is the operator's.
+They live under the state root keyed by the slot's value (`gpu-slots/<value>/cooldowns.json`), as its lock is, so reordering `gpu_slots` moves none; a schedule whose value `gpu_slots` no longer lists applies to nothing, and the monitor lists it as orphaned for the operator to delete.
+A GPU Slot with a Cooldown in force is not free; like a Login Profile's, the Cooldown gates only the claim, and a model-server run already holding the slot keeps it to its end, since a budget does not say when a run will finish.
+A GPU Slot's Cooldown keeps its GPUs for work outside the bench, so while that work still runs as the Cooldown ends, the Cooldown is extended (grilling 2026-11-19).
+The slot is used outside the bench when a compute process on its GPUs is neither the process holding the slot's lock nor below it, as a run's own model server is; or, with the lock free, when more than 1 GiB is used on its GPUs, whoever uses it.
+With the lock held, memory no visible process explains may be the run's own and never counts, so a run that took the slot before the window began never extends it.
+The lock's holders are read from the kernel's lock table both before and after `nvidia-smi`, and a holder named by either read counts, so a run releasing the slot meanwhile is still the bench; when the holders cannot be told (the table unreadable, or the lock held though the table names no holder, as by a process the bench cannot see), nothing is extended.
+A Cooldown ending within a minute, or ended less than 30 minutes ago, is extended by moving its end on one 30-minute step from where it was, so a late check gives the same end as a timely one; it counts its steps (`busy +N`).
+A Cooldown ended longer ago, or followed by another Cooldown that has since begun, stays ended: a first check more than a step late never extends, which costs little, since a claim already passes over a GPU Slot whose GPUs are busy.
+The extension repeats while the slot stays used outside the bench and lapses at the first check that finds it is not; a check after the end that finds the slot not used outside the bench drops the Cooldown from the schedule, so work starting later never revives it.
+Finding no use takes a complete reading: every GPU of the slot listed, with the lock held every process on them known by its PID, and with it free the memory used on each known; a check that cannot tell, as when `nvidia-smi` fails or another read of it is in flight, leaves the schedule as it was, and a later check within the step may still extend.
+An end that reaches the start of a later Cooldown merges into the slot's next one, the first to start, as one window from the first's start to that Cooldown's own end, with its note and whether it extends; every other Cooldown keeps its own window, so a gap before one further on stays free.
+Only a Cooldown no other covers as it ends is extended, since the slot is not freed then.
+The operator overrides the extension by removing the Cooldown, or by editing it, which stops it extending; `--no-extend` makes a Cooldown that ends on time.
+Each scheduler pass and each claim checks, reading `nvidia-smi` only when some Cooldown is ending, and writes through the schedule's lock with a bounded wait; a failed extension never fails a claim or a pass, and the monitor, read-only, only shows it.
+`silverquillm gpu ls` lists the host's GPU Slots with their state and Cooldowns, and `silverquillm gpu cooldown <value>…` adds Cooldowns (`--from`, `--until` or `--duration`, `--note`, `--no-extend`) or removes them (`--clear`), with the times of `login cooldown` ([Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records)).
+A host without `gpu_slots` has no schedule for its host-wide lock; to keep GPUs free at set times, it lists `gpu_slots`, one is enough.
 A direct `silverquillm run` finding nothing free is refused with `model_server_busy`, before any evidence exists; the scheduler defers the entry, in queue order, until one frees.
 Two things make a GPU Slot unusable, and an unusable slot is skipped and reported, never a failed run or a stopped scheduler (#269):
 
@@ -197,3 +215,4 @@ A recipe may declare `SILVERQUILLM_MODEL_SERVER = '{"engine":"anthropic"}'`, wit
 | --- | --- |
 | [ADR-022](../adr/ADR-022-pi-constructs-run-against-a-bench-started-local-model-server.md) | pi constructs run against a bench-started llama.cpp server, observed by a host-side relay |
 | [ADR-023](../adr/ADR-023-run-cost-is-the-reported-cost-checked-per-request.md) | A local-model run has no Reported Cost and no price, so its Run Cost stays missing |
+| [ADR-024](../tombstone/ADR-024-rename-login-cooldown-to-cooldown.md) | Rename record: Login Cooldown renamed Cooldown, one window of a Cooldown Schedule |

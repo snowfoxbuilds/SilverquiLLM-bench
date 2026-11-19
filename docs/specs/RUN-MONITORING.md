@@ -4,7 +4,7 @@ Last updated: 2026-11-16
 
 # Run Monitoring
 
-`silverquillm top` is a terminal monitor over this host's live Benchmark Runs, the batch queue, the Login Pools, and the Results Repo's history; the only things it changes are the Login Pools' slots, when the operator asks.
+`silverquillm top` is a terminal monitor over this host's live Benchmark Runs, the batch queue, the Login Pools, and the Results Repo's history; the only things it changes are the Login Pools' slots and the GPU Slots' Cooldown Schedules, when the operator asks.
 
 ## Context
 
@@ -25,19 +25,21 @@ It is built from the same poll as the dashboard, so its stages follow [Run stage
 The document (`schema_version` 1) has the host label, each resolved location and its source, the configuration, Docker and exclusion errors, the dispatch mode, the queue ledger's status (`none`, `ok` or `damaged`, with the error), and the dashboard counts.
 `runs` lists every live run with its stage and needs-recover reasons, the Batch and entry that started it, benchmark, construct, Candidate Hash, model and effort, Login Profile, budget, start time and elapsed container time, its container, run directory, estimate, and Run Cost with its source (`run_cost_usd`, `run_cost_source`: `reported` or `estimated`, provisional until `cost_recorded`).
 `queue` lists every Batch in queue order with its status, the run ids it has started and its unstarted entries; the status uses `queue ls`'s strings (`pending`, `running`, `done`, `missing_state`, `ledger_damaged`, `unsupported_legacy_batch`, `error`) (grilling 2026-10-14).
-`logins` lists every Login Profile with one state word (`pending`, `blocked`, `unknown`, `busy`, `cooldown` or `free`, most blocking first), the pending run, its Login Block's reason and run, when a cooldown ends, the run holding it, its Estimated Weekly Usage, and its Fable limit (`fable_usage_percent`, `fable_usage_estimated`, `fable_resets_at`, null until a reading of it has been seen) whatever model it runs.
-`gpu_slots` lists every GPU Slot with one state word (`held`, `unusable`, `busy`, `unknown` when the lock table cannot be read, or `free`, most blocking first), why no run can use it (`unusable`: the reason admission gives, `gpu_slot_unknown_gpu:…` or `model_server_lock_unusable: …`), why it is busy (`compute_process` or `memory_used`), the run holding it, and each of its GPUs' index, name, UUID and used and total memory from `nvidia-smi`, or null with `gpus_reason` when `nvidia-smi` cannot be read (grilling 2026-11-16).
+`logins` lists every Login Profile with one state word (`pending`, `blocked`, `unknown`, `busy`, `cooldown` or `free`, most blocking first), the pending run, its Login Block's reason and run, its Cooldown Schedule (`cooldowns`: each Cooldown's start, end, scope, source, set time and note; the state is `cooldown` only while one for every run is in force), its Usage Limit (`usage_limit`: `weekly_percent`, `fable_percent`, each null when unset), the run holding it, its Estimated Weekly Usage, and its Fable limit (`fable_usage_percent`, `fable_usage_estimated`, `fable_resets_at`, null until a reading of it has been seen) whatever model it runs.
+`gpu_slots` lists every GPU Slot with one state word (`held`, `unusable`, `busy`, `unknown` when the lock table cannot be read, or `free`, most blocking first), why no run can use it (`unusable`: the reason admission gives, `gpu_slot_unknown_gpu:…` or `model_server_lock_unusable: …`), why it is busy (`compute_process` or `memory_used`), its Cooldown Schedule (`cooldowns`, as for a Login Profile, each with `extend` when it is extended while used outside the bench and its `extensions`, and `cooldown_until` with the `cooldown_extensions` of the one in force that ends last; the state word `cooldown`, after `unusable`, while one is in force), the run holding it, and each of its GPUs' index, name, UUID and used and total memory from `nvidia-smi`, or null with `gpus_reason` when `nvidia-smi` cannot be read (grilling 2026-11-16).
+`orphaned_gpu_schedules` lists each Cooldown Schedule kept for a value `gpu_slots` no longer lists that still has a Cooldown not yet ended, with its `gpu_slot` and `cooldowns` (grilling 2026-11-18).
 A run's Batch and entry come from the retained Batch state files (`state/<batch>.json`), not from the Batch TOMLs, so a run keeps its Batch after the TOML is removed or stops parsing, as when recovery publishes a run whose Batch file is gone; a missing, oversized or invalid state file attributes nothing, and a run two entries claim has no Batch, never an arbitrary one (grilling 2026-10-15).
 Since it follows no log, the one-shot snapshot reads each running Claude container's recent log once, `docker logs --timestamps --tail` without `--follow`, through the same line and usage parsers a followed log uses, so the live weekly reading the dashboard would show feeds the same [Estimated Weekly Usage](#estimated-weekly-usage); the read is bounded in time (5 s) and bytes (8 MiB), its `docker logs` is always ended, and only the parsed reading is kept, never a log line (grilling 2026-10-15).
 When Docker cannot be read or the log holds no valid reading, the estimate rests on the records, as the dashboard's would without a reading.
 `queue ls --json` keeps its own row shape for scripts that read the queue alone.
 The operator procedure that uses this document is in the Results Repo runbook (`runbook/monitoring-and-recovery.md`, snowfoxbuilds/bench-results#20).
 
-The monitor is read-only except for the Login Pools' slots (grilling 2026-10-07, 2026-11-04).
+The monitor is read-only except for the Login Pools' slots and the GPU Slots' Cooldown Schedules (grilling 2026-10-07, 2026-11-04, 2026-11-18).
 It never stops or recovers a run except to settle a slot's pending login before signing that slot in, edits a Batch, or fetches or pulls the Results Repo, and it takes no lock a runner or the scheduler takes except a slot's own, the way `silverquillm login` does.
-Every write is one the operator asks for with a key in the LOGINS pane and goes through the same code as the matching `silverquillm login` subcommand, only for an enrolled Login Profile:
+Every write is one the operator asks for with a key in the LOGINS pane or the [capacity view](#capacity-view) and goes through the same code as the matching `silverquillm login` or `silverquillm gpu` subcommand, only for an enrolled Login Profile or a GPU Slot:
 
-- a Login Cooldown (2026-10-08), which touches nothing else of the slot (not its stored login, its lock, or a run holding it);
+- adding, changing or removing a Cooldown (2026-10-08; schedule grilling 2026-11-18), which touches nothing else of the slot (not its stored login, its lock, or a run holding it);
+- setting or clearing a Login Profile's Usage Limit, which checks the limit at once ([Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md#subscription-authentication)) (grilling 2026-11-18);
 - signing a new slot in, or an enrolled one again, which ends the slot's Login Block when it succeeds (grilling 2026-11-04); a slot an interrupted run left pending is settled first, keeping that run's native sessions in its evidence, exactly as `silverquillm login refresh` settles it ([Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md));
 - removing a slot and its stored login, only after the operator confirms, and never one in use or holding a pending login (grilling 2026-11-04).
 
@@ -77,7 +79,8 @@ A provider is named by its login plugin: `karn-codex-login` is `codex`, `karn-cl
 | `docker logs -f`, then `<run-dir>/host/stdout.log` and `stderr.log` | Activity, stderr and raw tabs; Claude subscription usage readings |
 | `<run-dir>/snapshots.json`, workspace git history | Workspace tab |
 | `batches/<id>.toml` and `batches/state/<id>.json` | Queued runs and Batch status |
-| Login Pool directories under the state root | Enrolled Login Profiles, and each one's pending login journal with the run that owns it |
+| Login Pool directories under the state root | Enrolled Login Profiles, each one's pending login journal with the run that owns it, its Cooldown Schedule and its Usage Limit |
+| `gpu-slots/` under the state root | Each GPU Slot's Cooldown Schedule, and any left for a value `gpu_slots` no longer lists |
 | A Login Profile's stored login (`secret.json`) | The values its login plugin redacts, so live lines can be redacted; nothing derived from it is shown |
 | A live Codex rollout under a busy Login Profile's `plugin/work/sessions/` | Codex subscription usage readings, the `rate_limits` field only |
 | Results Repo `results/` and `exclusions/` | History, Exclusions, past durations, recorded subscription usage readings, and whether a retained record is published |
@@ -183,15 +186,16 @@ On a host with a local model server, one whose host config maps a llama.cpp buil
 The monitor judges a slot unusable exactly as admission does, from the GPUs `nvidia-smi` lists and whether its lock file can be opened, without opening or locking it; an unread `nvidia-smi` alone never makes a slot unusable, and a held slot reads held whatever else is true (#269).
 The holder is the live run whose server is on that GPU Slot and still serving; a run that is grading has released it.
 The monitor asks `nvidia-smi` once per refresh, bounded to 10 seconds, and only on such a host; it honours the host's record of an in-flight probe but, writing nothing, keeps no record of its own, so a probe stuck under the monitor stops only the monitor's own later readings.
-The section is read-only: no key acts on a GPU Slot.
+The section is read-only: no dashboard key acts on a GPU Slot; its Cooldowns are kept in the capacity view, and one in force shows the cooldown marker with its end, and `busy +N` once it has been extended N times while the GPU was used outside the bench (grilling 2026-11-19).
 
-A Login Profile under a Login Cooldown shows its own marker and colour and reads `cooldown until Thu 14:00 (3h12m)` before its usage (grilling 2026-10-08).
+A Login Profile with a Cooldown in force for every run shows its own marker and colour and reads `cooldown until Thu 14:00 (3h12m)` before its usage, the end of the in-force Cooldown that ends last (grilling 2026-10-08); one scoped to Fable runs reads `fable cooldown until …` without the marker.
+A profile or GPU Slot with a Cooldown still to come and none in force reads `⏲ Fri 09:00` (grilling 2026-11-18); the schedule itself is shown only in the capacity view, since the pane has no room for it.
 A Login Profile under a Login Block shows the blocked marker in the alarm colour and reads `relogin · R re-enroll` before its usage (grilling 2026-11-04).
-A pool's untapped count counts only profiles a new run could take now: not busy, not pending, not blocked, and not cooling down.
+A pool's untapped count counts only profiles a new run could take now: not busy, not pending, not blocked, and with no Cooldown for every run in force; a Fable-only Cooldown leaves it counted.
 
 Each pool takes the keyboard focus in turn, and the focused pool marks its selected profile; the pane scrolls to keep it in view (2026-10-08).
-`t` holds the selected profile for one more hour: an hour from now, or an hour past a cooldown already in force, so each press adds an hour.
-`c` ends the selected profile's cooldown ten seconds from now rather than at once, and does nothing but say so when it has none.
+`t` holds the selected profile for one more hour: it moves the end of the in-force Cooldown that ends last an hour on, or adds an operator Cooldown from now to an hour from now when none is in force, so each press adds an hour.
+`c` ends every Cooldown in force on the selected profile ten seconds from now rather than at once, leaves Cooldowns still to come alone, and does nothing but say so when none is in force.
 `a` signs a new slot in to the focused pool, `R` signs the selected profile in again, and `D` removes the selected profile after a `y`/`n` confirmation (grilling 2026-11-04).
 Each write refreshes the view at once and says what it set; a write that fails says why and changes nothing.
 
@@ -223,6 +227,8 @@ A Batch's header line shows its countdown to `not_before`, or `⚠ needs ack` fo
 ### Estimated Weekly Usage
 
 Each Login Profile shows its Estimated Weekly Usage and how old the underlying observation is (grilling 2026-10-07).
+The estimate is computed by one estimator the monitor shares with the host's Usage Limit check, so the figure shown is the one that trips a Usage Limit (grilling 2026-11-18); the check runs without the monitor, from the records and readings the host itself holds.
+A limit set from the monitor is checked by that estimator against what the monitor estimated the profile from: the run directory, Results Repo and bench root it was given, flags included, its host label and configuration, and the live readings it keeps for the profile, each with its own reset time (#298 review).
 
 A subscription usage reading is a provider's own report of the weekly window: a utilization percentage, a reset time, and when it was observed.
 Claude reports one in its `rate_limit_event` stdout lines (the `seven_day` window); Codex reports one in its rollout `rate_limits`, as whichever of its windows lasts 10080 minutes (see [Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md#efficiency-measurements)).
@@ -312,6 +318,22 @@ Those redactions are the Login Profile's stored login when the follow starts, so
 A followed run keeps its newest 2000 lines, each cut at 16 KiB.
 The native transcript is not shown: for Claude it largely duplicates stdout, and it sits beside the Login Profile's credentials.
 
+### Capacity view
+
+The capacity view is the operator's place for everything that decides what a new run can claim: the Login Pools and the GPU Slots, with their Cooldown Schedules and Usage Limits, which the LOGINS pane has no room for (grilling 2026-11-18).
+It shows one table per Login Pool, a profile to a row, in slot-number order: state word, the run holding it, its Estimated Weekly Usage and Fable limit with reset times and reading ages, and its Usage Limit's ceilings.
+Below the pools, on a host that lists `gpu_slots`, a table of GPU Slots in config order: state word, the run holding it, its GPUs and used memory; schedules whose value `gpu_slots` no longer lists follow as orphaned rows.
+The tables scroll together in one pane, which keeps the selected row in view as the selection moves, focus passes between tables, the terminal resizes and a refresh moves the row, the schedule having focus or not, so a resource's state, usage and hold stay in sight while its Cooldowns are changed (#298 review).
+Selecting a row lists its Cooldown Schedule beneath the tables, soonest first: start and end in local time, scope, source, when it was set, and its note; one in force is marked so, and a GPU Slot's Cooldown also reads `busy +N` once it has been extended and `ends on time` when it never extends (grilling 2026-11-19).
+`n` adds a Cooldown to the selected profile or GPU Slot, and `e` changes the selected Cooldown, through one form of start, end, scope (Claude Login Profiles only, since only Claude has a Fable limit) and note, which takes the times `silverquillm login cooldown` takes and refuses one it cannot read, saying why, without closing; a time left as the form printed it keeps its exact instant, so changing only a note never moves the window.
+A new GPU Slot Cooldown's form also offers to extend it while the slot's GPUs are used outside the bench, checked by default, and unchecked is `gpu cooldown --no-extend` ([Local Model Server](LOCAL-MODEL-SERVER.md#gpu-slots)).
+An edit replaces exactly the Cooldown it opened on, keeping its source, and is refused if that Cooldown has ended, been extended or gone meanwhile; an orphaned schedule takes no new Cooldown.
+An edit is the operator's override of a GPU Slot Cooldown's extension: the edited Cooldown keeps its count of extensions but is never extended again, and its form offers no choice; `x` removing one ends its extension with it (grilling 2026-11-19).
+`x` removes the selected Cooldown after a `y`/`n` confirmation, a `usage-limit` one included; `L` sets or clears the selected profile's weekly and Fable ceilings in a form, every ceiling left empty clearing the limit, and the check a new limit makes runs off the interface thread, since it reads the host's history, against the [estimate the view shows](#estimated-weekly-usage), and reports when it is done.
+Like every other key's write it waits for another writer of the schedule no longer than the keys' bound; a check that cannot complete leaves the limit saved, says so, and setting it again checks it (#298 review).
+`a`, `R` and `D` act as in the LOGINS pane, so all of a profile's management is in one place.
+Every write is one of the monitor's [writes](#command-and-scope), refreshes the view at once and says what it set.
+
 ### Navigation
 
 Every action has a key, and the mouse is a convenience on top: a terminal reached through mosh and a multiplexer may not deliver clicks at all (grilling 2026-10-08).
@@ -320,17 +342,21 @@ The list never grows past the terminal: it opens focused, scrolls with ↑ ↓, 
 
 | Keys | Where | Action |
 | --- | --- | --- |
-| `1` `2` `3`, or a click on a view tab | everywhere | dashboard, historic view, run details |
+| `1` `2` `3` `4`, or a click on a view tab | everywhere | dashboard, historic view, run details, capacity view |
 | Tab, Shift+Tab | everywhere | move between panes and tables |
 | arrows, PgUp, PgDn, Home, End | everywhere | move within, or scroll, the focused pane |
 | Enter, or a click on a row | dashboard, history | open the selected run |
 | ↑ ↓ or `k` `j`, or a click on a profile | LOGINS pane | select a Login Profile |
 | ← → or `h` `l` | LOGINS pane | the other pool, or the neighbouring pane |
 | `t` | LOGINS pane | hold the selected profile one more hour |
-| `c` | LOGINS pane | end the selected profile's cooldown in ten seconds |
-| `a` | LOGINS pane | sign a new slot in to the focused pool, outside the TUI |
-| `R` | LOGINS pane | sign the selected profile in again, outside the TUI |
-| `D` | LOGINS pane | remove the selected profile, after a `y`/`n` confirmation |
+| `c` | LOGINS pane | end the selected profile's Cooldowns in force in ten seconds |
+| `a` | LOGINS pane, capacity view | sign a new slot in to the focused pool, outside the TUI |
+| `R` | LOGINS pane, capacity view | sign the selected profile in again, outside the TUI |
+| `D` | LOGINS pane, capacity view | remove the selected profile, after a `y`/`n` confirmation |
+| `n` | capacity view | add a Cooldown to the selected profile or GPU Slot, in a form |
+| `e` | capacity view | change the selected Cooldown, in the same form |
+| `x` | capacity view | remove the selected Cooldown, after a `y`/`n` confirmation |
+| `L` | capacity view | set or clear the selected profile's Usage Limit, in a form |
 | Escape | run details | back to the view it was opened from |
 | `r` | everywhere | refresh now |
 | `?` | everywhere | the key list |
@@ -362,3 +388,4 @@ Pass rates take a rarity colour: mythic from 90%, rare from 70%, uncommon from 4
 | [ADR-020](../adr/ADR-020-net-card-score-is-the-headline.md) | The Net Card Score is the headline score |
 | [ADR-022](../adr/ADR-022-pi-constructs-run-against-a-bench-started-local-model-server.md) | A model-server run claims one of the host's GPU Slots, shown beside the Login Pools |
 | [ADR-023](../adr/ADR-023-run-cost-is-the-reported-cost-checked-per-request.md) | The monitor shows and sums the Run Cost, recorded with its source: the Reported Cost whenever the CLI gave one |
+| [ADR-024](../tombstone/ADR-024-rename-login-cooldown-to-cooldown.md) | Rename record: Login Cooldown renamed Cooldown, one window of a Cooldown Schedule |

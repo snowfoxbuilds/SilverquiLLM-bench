@@ -40,7 +40,7 @@ All specs, code, and agent instructions use these terms exactly.
 | `SCORING.md` | The Net Card Score headline: graded suites, test classes, Attributed Cards, counting, Run Record results and baseline comparison, leaderboard format; earlier benchmarks' per-suite reporting and SOS complexity weighting |
 | `AGENT-CONTAINERS.md` | Docker black-box architecture, file-based contract, entrypoint design, isolation guarantees |
 | `WORKSPACE-CONTRACT.md` | Workspace layout, card directory invariant, Run Manifest, writable engine, FDN/SOS structure |
-| `RUN-MONITORING.md` | The `silverquillm top` monitor, read-only but for Login Pool slots (cooldowns, sign-in, removal): dashboard of live runs, queue, Login Profiles with Estimated Weekly Usage and GPU Slots; historic browser over the Results Repo; run details with live output |
+| `RUN-MONITORING.md` | The `silverquillm top` monitor, read-only but for Login Pool slots (Cooldowns, Usage Limits, sign-in, removal) and GPU Slot Cooldowns: dashboard of live runs, queue, Login Profiles with Estimated Weekly Usage and GPU Slots; historic browser over the Results Repo; run details with live output; capacity view of Cooldown Schedules and Usage Limits |
 | `AUDITED-TEST-CONVENTIONS.md` | Safety conventions for Audited Tests and the Reference Tests maintainers write |
 | `PLATFORM-TEST-CONVENTIONS.md` | Platform Test safety, and keeping Simulated Benchmarks to end-to-end tests with shared, cloned setup |
 | `17LANDS-REPLAY-SCHEMA.md` | GRE JSON replay format for engine correctness validation |
@@ -52,8 +52,8 @@ All specs, code, and agent instructions use these terms exactly.
 | `TEST-INTERFACE.md` | The immutable Test Interface (`test_interface`) for Audited Tests from smoke and fra-hard-v2 onward: construction with a starting position, play only through `run`, the Player View, judging by consequence, and the engine surface a candidate must keep |
 | `BENCHMARK-CANDIDATES.md` | Retired: the removed Candidate Bundle promotion, batch, and publication pipeline, and what of it remains readable |
 | `BENCH-CONTRACT.md` | Historical Candidate Bundle and production Implementer Run contract (vendored read-only from the-ozolith); reference for legacy candidates |
-| `KARN-BENCHMARK-CONTRACT.md` | The bench-owned Karn consumer contract (v4 and v5 definitions): explicit builds, independent execution, grading isolation, implementation-only tasks, and subscription authentication |
-| `LOCAL-MODEL-SERVER.md` | The bench-started llama.cpp server for pi constructs: recipe declaration, GPU Slots on shared multi-GPU hosts, the observing relay, and the host facts a record carries |
+| `KARN-BENCHMARK-CONTRACT.md` | The bench-owned Karn consumer contract (v4 and v5 definitions): explicit builds, independent execution, grading isolation, implementation-only tasks, and subscription authentication with Cooldown Schedules and Usage Limits |
+| `LOCAL-MODEL-SERVER.md` | The bench-started llama.cpp server for pi constructs: recipe declaration, GPU Slots on shared multi-GPU hosts and their Cooldown Schedules, the observing relay, and the host facts a record carries |
 | `KNOWN-ISSUES.md` | Known issues encountered during benchmark-runner development, with the fixes applied |
 
 Each spec's own **Relevant ADRs** appendix links the architectural decisions behind it; there is no separate ADR index here.
