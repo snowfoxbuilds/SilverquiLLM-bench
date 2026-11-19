@@ -33,11 +33,14 @@ from .login import LOGIN_PLUGINS, LoginProfile
 from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, logins_root
 from .model_server import (
     TELEMETRY_ADAPTER,
+    AnthropicRelayCollector,
+    AnthropicRelayPlan,
     ModelRelayCollector,
     ModelServerHost,
     claim_gpu_slot,
     gpu_slots,
     model_server_spec,
+    plan_anthropic_relay,
     plan_model_server,
 )
 from .provenance import collect as collect_provenance
@@ -378,14 +381,18 @@ def run_benchmark(
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     telemetry = select_native_telemetry(candidate, native_telemetry)
     spec = model_server_spec(candidate.runtime)
-    server_host = (model_server_host or host_model_server()) if spec is not None else None
+    local = spec is not None and not spec.relays_to_anthropic
+    server_host = (model_server_host or host_model_server()) if local else None
     run_id = run_id or uuid.uuid4().hex
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", run_id):
         raise KarnError("invalid_run_id")
     run_dir = Path(results_dir).resolve() / run_id
     with contextlib.ExitStack() as held:
         model_server = None
-        if spec is not None:
+        if spec is not None and spec.relays_to_anthropic:
+            # No server and no GPU Slot: only the host's API key must be there (#289).
+            model_server = plan_anthropic_relay(spec, state_root)
+        elif spec is not None:
             # First, so a run the scheduler admitted on a stale reading is refused before it
             # pays for the preflight and the version probe.
             claim = claim_gpu_slot(gpu_slots(state_root, server_host.gpu_slots))
@@ -488,7 +495,9 @@ def _collect(
     }
     if model_server is not None:
         # Unknown until the collector verifies the file during the run.
-        run_input["model_server"] = {**model_server.to_dict(), "model_sha256_verified": None}
+        run_input["model_server"] = model_server.to_dict()
+        if not isinstance(model_server, AnthropicRelayPlan):
+            run_input["model_server"]["model_sha256_verified"] = None
     if grader.candidate_python is not None:
         # Recovery grades on this version; it never runs the candidate image again.
         run_input["candidate_python"] = grader.candidate_python
@@ -534,7 +543,12 @@ def _collect(
         if collector_factory is not None:
             factory = collector_factory
         elif model_server is not None:
-            factory = functools.partial(ModelRelayCollector, plan=model_server)
+            relay = (
+                AnthropicRelayCollector
+                if isinstance(model_server, AnthropicRelayPlan)
+                else ModelRelayCollector
+            )
+            factory = functools.partial(relay, plan=model_server)
         else:
             factory = telemetry_collector(telemetry)
         bind = collector_host or (collector_address() if native else "127.0.0.1")

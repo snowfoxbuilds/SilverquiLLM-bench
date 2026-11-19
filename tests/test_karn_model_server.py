@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import socket
@@ -19,8 +20,10 @@ import pytest
 from silverquillm.karn.definition import KarnError
 from silverquillm.karn.docker import Network
 from silverquillm.karn.model_server import (
+    ANTHROPIC_KEY_FILE,
     MODEL_SERVER_ENV,
     MODEL_SERVER_URL,
+    AnthropicRelayCollector,
     GpuReading,
     ModelRelayCollector,
     ModelServerBusyError,
@@ -31,6 +34,7 @@ from silverquillm.karn.model_server import (
     gpu_slot_availability,
     gpu_slots,
     model_server_spec,
+    plan_anthropic_relay,
     plan_model_server,
     read_gpus,
     server_environment,
@@ -76,6 +80,8 @@ class Handler(BaseHTTPRequestHandler):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         with open(sys.argv[0] + ".paths", "a") as out:
             out.write(self.path + "\n")
+        with open(sys.argv[0] + ".headers", "a") as out:
+            out.write(json.dumps({k.lower(): v for k, v in self.headers.items()}) + "\n")
         if self.path.startswith("/v1/messages"):
             return self.messages(request)
         messages = request.get("messages")
@@ -2468,3 +2474,169 @@ def test_unscaled_adapters_are_verified_and_passed(served, tmp_path):
         argv = json.loads(Path(str(served.binary) + ".argv").read_text())
     assert argv[argv.index("--lora") + 1] == str(models.resolve() / "adapter.gguf")
     assert argv[argv.index("--control-vector") + 1] == str(models.resolve() / "vector.gguf")
+
+
+def anthropic_key(state_root: Path, key: str = "sk-ant-host-key-0123456789", mode=0o600) -> Path:
+    path = state_root / ANTHROPIC_KEY_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(key + "\n")
+    path.chmod(mode)
+    return path
+
+
+def anthropic_runtime(**document):
+    return runtime(
+        {"engine": "anthropic", **document},
+        CONSTRUCT_MODEL="claude-haiku-5-5",
+        CONSTRUCT_PI_BASE_URL="http://model-server:8080",
+    )
+
+
+def test_the_anthropic_engine_declares_no_server_and_serves_the_construct_model():
+    spec = model_server_spec(anthropic_runtime(request_timeout_seconds=600))
+    assert spec.relays_to_anthropic and spec.served_model == "claude-haiku-5-5"
+    assert spec.request_timeout == 600
+    assert spec.to_dict() == {
+        "engine": "anthropic",
+        "upstream": "https://api.anthropic.com",
+        "served_model": "claude-haiku-5-5",
+        "request_timeout_seconds": 600,
+    }
+    for extra in ({"build": "b12182"}, {"arguments": []}, {"model": {}}):
+        with pytest.raises(KarnError, match="model_server_spec_invalid"):
+            model_server_spec(anthropic_runtime(**extra))
+    with pytest.raises(KarnError, match="model_server_requires_restricted_network"):
+        model_server_spec(runtime({"engine": "anthropic"}, mode="open"))
+
+
+def test_the_anthropic_engine_needs_a_private_key_file_of_this_users(tmp_path):
+    spec = model_server_spec(anthropic_runtime())
+    with pytest.raises(KarnError, match="model_relay_api_key_unavailable"):
+        plan_anthropic_relay(spec, tmp_path)
+    anthropic_key(tmp_path, mode=0o644)
+    with pytest.raises(KarnError, match="model_relay_api_key_permissions"):
+        plan_anthropic_relay(spec, tmp_path)
+    anthropic_key(tmp_path, key="not a key")
+    with pytest.raises(KarnError, match="model_relay_api_key_invalid"):
+        plan_anthropic_relay(spec, tmp_path)
+    key = anthropic_key(tmp_path)
+    plan = plan_anthropic_relay(spec, tmp_path)
+    assert plan.key_file == key.resolve() and plan.claim is None
+    # The record says where the key came from, never what it is.
+    assert plan.to_dict()["host"] == {"api_key": "host_secret"}
+    assert "sk-ant" not in json.dumps(plan.to_dict())
+
+
+@pytest.fixture
+def anthropic_upstream(served, tmp_path, monkeypatch):
+    """The fake server standing in for api.anthropic.com, which the collector reaches over
+    plain HTTP here."""
+    port = socket.socket()
+    port.bind(("127.0.0.1", 0))
+    number = port.getsockname()[1]
+    port.close()
+    process = subprocess.Popen(
+        [str(served.binary), "--port", str(number), "--alias", "claude-haiku-5-5-20261001"]
+    )
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{number}/health", timeout=1).close()
+            break
+        except OSError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.1)
+    monkeypatch.setattr(
+        AnthropicRelayCollector,
+        "_connection",
+        lambda self: http.client.HTTPConnection("127.0.0.1", number, timeout=30),
+    )
+    yield served
+    process.terminate()
+    process.wait(timeout=10)
+
+
+def test_the_anthropic_relay_adds_the_hosts_key_and_records_the_run(anthropic_upstream, tmp_path):
+    served = anthropic_upstream
+    anthropic_key(tmp_path / "state")
+    plan = plan_anthropic_relay(model_server_spec(anthropic_runtime()), tmp_path / "state")
+    run_dir = tmp_path / "run"
+    with AnthropicRelayCollector(run_dir, plan=plan) as collector:
+        assert collector.llama is None and collector.facts["host"] == {"api_key": "host_secret"}
+        forward = ModelForwardServer(("127.0.0.1", 0), collector.endpoint)
+        thread = threading.Thread(target=forward.serve_forever, daemon=True)
+        thread.start()
+        try:
+            address = f"http://127.0.0.1:{forward.server_address[1]}"
+            request = urllib.request.Request(
+                address + "/v1/messages?beta=true",
+                data=json.dumps(
+                    {
+                        "model": "claude-haiku-5-5",
+                        "stream": True,
+                        "max_tokens": 128000,
+                        "messages": [{"role": "user", "content": "task"}],
+                    }
+                ).encode(),
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": "local",
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "interleaved-thinking-2025-05-14",
+                    "anthropic-dangerous-direct-browser-access": "true",
+                },
+            )
+            with urllib.request.urlopen(request, timeout=30) as response:
+                assert response.status == 200 and b"message_stop" in response.read()
+            # pi's own API is not Anthropic's; the relay refuses it.
+            with pytest.raises(urllib.error.HTTPError) as refused:
+                post(collector.endpoint + "/v1/chat/completions", {"messages": []})
+            assert refused.value.code == 404
+        finally:
+            forward.shutdown()
+            forward.server_close()
+            thread.join()
+        measurements = collector.finalize(exit_kind="completed")
+    (sent,) = [
+        json.loads(line) for line in Path(str(served.binary) + ".headers").read_text().splitlines()
+    ]
+    # The host's key replaces the workload's placeholder; only the API's own headers pass.
+    assert sent["x-api-key"] == "sk-ant-host-key-0123456789"
+    assert sent["anthropic-version"] == "2023-06-01"
+    assert sent["anthropic-beta"] == "interleaved-thinking-2025-05-14"
+    assert "anthropic-dangerous-direct-browser-access" not in sent
+    assert Path(str(served.binary) + ".paths").read_text().split() == ["/v1/messages"]
+    (row,) = measurements["requests"]
+    assert row["model"] == "claude-haiku-5-5-20261001" and row["finish_reason"] == "tool_use"
+    assert row["usage"]["input_tokens"] == 100 and row["usage"]["cached_input_tokens"] == 60
+    # Anthropic's requests are priced from the standard table, never from an empty one.
+    assert measurements["price_table"]["models"]
+    events = [json.loads(line) for line in (run_dir / "observations.events.jsonl").open()]
+    (response_event,) = [event for event in events if event["kind"] == "response"]
+    assert response_event["upstream"] == "anthropic"
+    assert response_event["anthropic_beta"] == ["interleaved-thinking-2025-05-14"]
+    assert "sk-ant" not in (run_dir / "observations.events.jsonl").read_text()
+    assert "sk-ant" not in (run_dir / "model-transcript.jsonl").read_text()
+    assert summarize_events(events, exit_kind="completed", adapter="model_server") == measurements
+
+
+def test_messages_usage_counts_cache_writes_into_input():
+    from silverquillm.karn.model_server import _messages_usage
+
+    usage = _messages_usage(
+        {
+            "input_tokens": 10,
+            "cache_read_input_tokens": 200,
+            "cache_creation_input_tokens": 30,
+            "output_tokens": 5,
+        }
+    )
+    assert usage == {
+        "input_tokens": 240,
+        "cached_input_tokens": 200,
+        "cache_write_input_tokens": 30,
+        "output_tokens": 5,
+        "reasoning_output_tokens": None,
+        "total_tokens": 245,
+    }

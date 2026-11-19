@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-11-18
+Last updated: 2026-11-19
 
 # Local Model Server
 
@@ -161,7 +161,7 @@ A response with status 200 is complete only when it carries a final choice (`fin
 A complete response that reports no usage still counts, with usage partial (`response_usage_missing`).
 A request that failed, was cancelled or was unfinished, or a response that reported usage more than once, leaves usage partial (`relayed_request_incomplete`, `multiple_usage_reports`).
 Usage follows OpenAI's convention, input including cached tokens; cache writes are zero, and reasoning tokens are missing, because llama.cpp counts them inside completion tokens.
-A Messages response reports input apart from cache reads, as Anthropic does; the relay adds them back, the convention every Claude run's usage follows, and takes the output count from the stream's final `message_delta`.
+A Messages response reports input apart from cache reads and writes, as Anthropic does; the relay adds them back, the convention every Claude run's usage follows, and takes the output count from the stream's final `message_delta`.
 A Messages response carries no `timings`, so a Claude Code run's `server_timings` counts no requests.
 No price applies, whatever name the recipe serves the model under: requests are priced from an empty table (`price_table.models` is empty), so the Estimated Cost is unavailable with `model_price_unavailable`; with no Reported Cost either, the Run Cost is that missing estimate, never zero, and `cost_verification` is null (ADR-023).
 `measurements.server_timings` sums the server's prompt and generation tokens and times into tokens per second, `coverage.failed_requests` counts requests the relay could not complete, and `coverage.unfinished_requests` those of them that never settled.
@@ -171,6 +171,20 @@ The run directory also keeps `model-transcript.jsonl`: per request, the messages
 A Messages request carries its system prompt beside its messages, so a row whose request has no assistant turn yet, the first and each after a compaction, also keeps it as `system`.
 A transcript row that cannot be written leaves its request's record unchanged; `coverage.transcript_rows_missing` counts such rows.
 What the relay keeps of workload-controlled content is bounded: 1 MiB of messages and of response per request, and a few KiB for each other field, cut with `truncated_from_chars`.
+
+### The Anthropic engine
+
+A recipe may declare `SILVERQUILLM_MODEL_SERVER = '{"engine":"anthropic"}'`, with `request_timeout_seconds` as its only optional key, to run its agent against Anthropic's own API through the same relay (#289). This is how a pi construct runs a Claude model: the agent is pointed at `http://model-server:8080`, as for a local server, with a placeholder key.
+
+- **No server and no GPU Slot.** No llama-server starts and no GPU Slot is claimed, so the scheduler treats the entry like any run without a login: one such run is live at a time.
+- **What the relay passes on.** The relay passes on only `POST /v1/messages` and `POST /v1/messages/count_tokens`, to `https://api.anthropic.com`, and refuses every other path.
+- **The key.** The relay adds the host's API key as `x-api-key`. The key is read from `<state_root>/api-keys/anthropic`, which must be a regular file of the runner's user that no one else can read, holding one key. A run with no such file is refused before any evidence exists (`model_relay_api_key_unavailable`, `_permissions`, `_invalid`). The key is read once at the start of the run, and the workload never holds it.
+- **Headers.** The sidecar and the relay pass on `anthropic-version` and `anthropic-beta` as the workload sent them, with values limited to `[A-Za-z0-9._,-]`. Every other header stops at the sidecar, the workload's own `x-api-key` among them. Without a version the relay sends `2023-06-01`.
+- **What is recorded.** The run is recorded like a local one, with the same events, transcript and measurements.
+  - `run_metadata.model_server` holds `engine`, `upstream`, `served_model` and `host.api_key: "host_secret"`, and has no model digest to verify.
+  - Each response event adds `upstream: "anthropic"` and the `anthropic_beta` flags it carried.
+  - Requests are priced from the standard price table, not the empty one a local server's alias gets.
+  - Usage counts cache writes into input, as for every Claude run.
 
 ## Relevant ADRs
 
