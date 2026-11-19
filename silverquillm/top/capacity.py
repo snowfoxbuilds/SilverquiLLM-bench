@@ -362,26 +362,33 @@ class CapacityView(Vertical):
     def on_resize(self) -> None:
         self._reveal()
 
+    def _displayed_row(self) -> tuple[DataTable, int] | None:
+        """The resource table and row showing the selected target, wherever focus is:
+        the operator working its schedule still needs its state, usage and hold."""
+        for table_id, targets in self._rows.items():
+            if self.selected in targets:
+                table = self.query_one(f"#{table_id}", DataTable)
+                index = targets.index(self.selected)
+                if table.display and index < table.row_count:
+                    return table, index
+        return None
+
     def _reveal(self) -> None:
-        """Once laid out, scroll the CAPACITY pane just far enough to show the focused
-        resource table's cursor row. A DataTable scrolls only its own viewport to its
-        cursor, and each of these is as tall as its rows (``_fill``), so that never moves;
-        the pane holding them is what must."""
+        """Once laid out, scroll the CAPACITY pane just far enough to show the selected
+        resource's row. A DataTable scrolls only its own viewport to its cursor, and each
+        of these is as tall as its rows (``_fill``), so that never moves; the pane holding
+        them is what must."""
 
         pane = self.query_one("#capacity-tables", VerticalScroll)
 
         def scroll() -> None:
-            table = self.app.focused
-            if not (
-                isinstance(table, DataTable)
-                and table.id in self._rows
-                and table.display
-                and 0 <= table.cursor_row < table.row_count
-            ):
+            shown = self._displayed_row()
+            if shown is None:
                 return
+            table, index = shown
             rows = table.ordered_rows
-            top = table.header_height + sum(row.height for row in rows[: table.cursor_row])
-            row = Region(0, top, table.size.width, rows[table.cursor_row].height)
+            top = table.header_height + sum(row.height for row in rows[:index])
+            row = Region(0, top, table.size.width, rows[index].height)
             # Measured from where a scroll under way ends, not from where it has reached.
             self.app.animator.force_stop_animation(pane, "scroll_y")
             pane.scroll_to_region(

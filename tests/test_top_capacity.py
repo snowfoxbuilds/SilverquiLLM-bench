@@ -515,16 +515,20 @@ async def test_the_plain_theme_draws_the_capacity_view(tmp_path, monkeypatch):
 
 def _tall(*, claude=30, codex=6, gpus=4):
     """A monitor with more rows than the CAPACITY pane holds at 120×40. Each profile and GPU
-    Slot has one Cooldown noting its own name, so the schedule shown tells whose it is;
-    ``extra`` profiles, when set, enrol ahead of every other in the Claude pool."""
+    Slot has two Cooldowns noting its own name, so the schedule shown tells whose it is;
+    ``extra`` profiles, when set, enrol ahead of every other in the Claude pool, and
+    ``claude`` is how many follow them."""
     monitor = FakeMonitor()
     base = monitor.snapshot
     template = {view.status.provider: view for view in profiles()}
     monitor.extra = 0
+    monitor.claude = claude
 
     def noted(name):
-        later = NOW + timedelta(days=1)
-        return (cooldown(later, later + timedelta(hours=1), now=NOW, note=name),)
+        return tuple(
+            cooldown(later, later + timedelta(hours=1), now=NOW, note=name)
+            for later in (NOW + timedelta(days=1), NOW + timedelta(days=2))
+        )
 
     def view(provider, slot):
         model = template[provider]
@@ -533,7 +537,7 @@ def _tall(*, claude=30, codex=6, gpus=4):
 
     def snapshot():
         views = [view("claude", f"a-{n:02d}") for n in range(monitor.extra)]
-        views += [view("claude", f"c-{n:02d}") for n in range(claude)]
+        views += [view("claude", f"c-{n:02d}") for n in range(monitor.claude)]
         views += [view("codex", f"x-{n:02d}") for n in range(codex)]
         slots_ = [
             GpuSlotStatus(str(n), False, None, (h100(n),), cooldowns=noted(f"gpu {n}"))
@@ -642,6 +646,114 @@ async def test_a_smaller_terminal_and_a_poll_while_scrolled_keep_the_row_in_view
         assert app.query_one(CapacityView).selected.name == "c-20"
         assert app.focused.cursor_row == 30
         _on_screen(app)
+
+
+async def _gpu_25_schedule(pilot, app):
+    """GPU 25 selected by keyboard, then its schedule focused on its second Cooldown."""
+    await _settle(app, pilot)
+    await pilot.press("4")
+    view = await _select(pilot, app, "capacity-gpus", "25")
+    await pilot.press("tab")
+    await pilot.press("down")
+    await pilot.pause()
+    assert app.focused.id == "schedule-table"
+    chosen = view.selected_cooldown
+    assert chosen is not None and chosen.start == NOW + timedelta(days=2)
+    _selected_on_screen(app, "gpu 25", chosen)
+    return chosen
+
+
+def _selected_on_screen(app, label: str, chosen) -> None:
+    """With the schedule focused on ``chosen``, the selected resource is still ``label``, its
+    row is drawn inside the CAPACITY pane, and the schedule shown is still its own."""
+    view = app.query_one(CapacityView)
+    assert view.selected is not None and view.selected.label == label
+    assert app.focused.id == "schedule-table"
+    assert view.selected_cooldown == chosen
+    table_id, index = next(
+        (table_id, targets.index(view.selected))
+        for table_id, targets in view._rows.items()
+        if view.selected in targets
+    )
+    table = app.query_one(f"#{table_id}", DataTable)
+    pane = app.query_one("#capacity-tables")
+    y = table.region.y + table.header_height + index - round(table.scroll_y)
+    visible = pane.scrollable_content_region
+    assert visible.y <= y < visible.bottom, (y, visible, pane.scroll_y)
+    assert app.screen.get_widget_at(table.region.x + 2, y)[0] is table
+    assert table.get_row_at(index)[0].plain.strip().endswith(view.selected.name)
+    assert view.selected.name in app.screen._compositor.render_strips()[y].text
+    schedule = app.query_one("#schedule-table", DataTable)
+    notes = [schedule.get_row_at(row)[6].plain for row in range(schedule.row_count)]
+    assert notes == [label, label]
+    assert app.query_one("#capacity-schedule").border_subtitle == label
+
+
+@synchronous
+@pytest.mark.parametrize("claude", [40, 20], ids=["enrolled-above", "removed-above"])
+async def test_a_poll_moving_the_resource_keeps_it_in_view_while_its_schedule_has_focus(claude):
+    monitor = _tall(claude=30, codex=30, gpus=26)
+    app = _app(monitor)
+    async with app.run_test(size=(120, 40)) as pilot:
+        chosen = await _gpu_25_schedule(pilot, app)
+        if claude > 30:
+            monitor.extra = claude - 30
+        else:
+            monitor.claude = claude
+        await pilot.press("r")
+        await _settle(app, pilot)
+        assert len(app.query_one(CapacityView)._rows["capacity-claude"]) == claude
+        _selected_on_screen(app, "gpu 25", chosen)
+
+
+@synchronous
+async def test_a_smaller_terminal_keeps_the_resource_in_view_while_its_schedule_has_focus():
+    app = _app(_tall(claude=30, codex=30, gpus=26))
+    async with app.run_test(size=(120, 40)) as pilot:
+        chosen = await _gpu_25_schedule(pilot, app)
+        await pilot.resize_terminal(120, 28)
+        await pilot.pause()
+        await pilot.pause()
+        _selected_on_screen(app, "gpu 25", chosen)
+
+
+@synchronous
+async def test_a_removed_selection_while_its_schedule_has_focus_writes_to_no_other_target(
+    tmp_path, monkeypatch
+):
+    values = [str(n) for n in range(26)]
+    monitor, _, state = _host_with_disk(tmp_path, monkeypatch, gpu_values=values)
+    for value in ("24", "25"):
+        later = NOW + timedelta(days=1)
+        for start in (later, later + timedelta(days=1)):
+            window = cooldown(start, start + timedelta(hours=1), now=NOW, note=f"gpu {value}")
+            add_cooldown(writable_gpu_schedule_dir(state, value), window, now=NOW)
+    before = {value: read_schedule(gpu_schedule_dir(state, value), now=NOW) for value in values}
+    app = _app(monitor)
+    async with app.run_test(size=(120, 40)) as pilot:
+        chosen = await _gpu_25_schedule(pilot, app)
+        assert chosen.note == "gpu 25"
+        notes = _recorded(app)
+        values.remove("25")
+        await pilot.press("r")
+        await _settle(app, pilot)
+        view = app.query_one(CapacityView)
+        assert view.selected is None, "an orphaned schedule is another target"
+        assert view.selected_cooldown is None
+        assert app.query_one("#capacity-schedule").border_subtitle == ""
+        for key in ("x", "e", "n", "L"):
+            await pilot.press(key)
+            await pilot.pause()
+            assert not isinstance(app.screen, CooldownForm | ConfirmCooldownRemove | LimitForm)
+        assert all("first" in note[0] for note in notes[-4:]), notes
+        await pilot.resize_terminal(120, 28)
+        await pilot.pause()
+        await pilot.pause()
+        await pilot.press("r")
+        await _settle(app, pilot)
+    assert {
+        value: read_schedule(gpu_schedule_dir(state, value), now=NOW) for value in (*values, "25")
+    } == before
 
 
 # `L` checks the estimate the monitor shows ----------------------------------------------
