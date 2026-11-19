@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import os
 import stat
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -22,7 +24,8 @@ from silverquillm.karn.pricing import price_requests
 from ._read import MAX_USD, count, timestamp_ms
 
 EVENTS_FILE = "observations.events.jsonl"
-# Read at most this much per update; a backlog is consumed over successive polls.
+# Read at most this much per update, or per chunk of a snapshot read; a monitor consumes
+# a backlog over successive polls.
 MAX_READ = 16 * 1024 * 1024
 MAX_LINE = 1024 * 1024
 CLAUDE_TOKENS = {
@@ -64,7 +67,8 @@ def _stamp(event: dict) -> int:
 
 @dataclass
 class ProvisionalCost:
-    """Follows one run's events file; call ``update`` on each poll, then read the totals."""
+    """Follows one run's events file; call ``update`` on each poll, or ``read_snapshot``
+    once, then read the totals."""
 
     run_dir: Path
     adapter: str | None
@@ -80,22 +84,68 @@ class ProvisionalCost:
     """Repeated observations of one Claude request that disagree with its first."""
 
     def update(self) -> None:
-        path = self.run_dir / EVENTS_FILE
+        """Read what the events file has gained since the last call, at most ``MAX_READ``
+        bytes: a monitor consumes a backlog over successive polls."""
+        with self._opened() as opened:
+            if opened is None:
+                return
+            chunk = os.read(opened[0], MAX_READ)
+        if self._feed(chunk) and self._codex:
+            self._priced = price_requests(self._codex)
+
+    def read_snapshot(self) -> None:
+        """Read the events file to the length it has now, for a caller that reads it once
+        instead of polling it.
+
+        The prefix is consumed in ``MAX_READ`` chunks through the same parsing, pricing and
+        request de-duplication as ``update``, so the totals are the ones a monitor reaches
+        once it has caught up. The scan stops at that captured length, so bytes appended
+        meanwhile never extend it, and earlier at end of file or on a read failure; an
+        unfinished last line is not an event.
+        """
+        changed = False
+        with self._opened() as opened:
+            if opened is None:
+                return
+            descriptor, end = opened
+            while self._offset < end:
+                try:
+                    chunk = os.read(descriptor, min(MAX_READ, end - self._offset))
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                changed = self._feed(chunk) or changed
+        if changed and self._codex:
+            self._priced = price_requests(self._codex)
+
+    @contextmanager
+    def _opened(self) -> Iterator[tuple[int, int] | None]:
+        """The events file's descriptor, positioned at the read offset, and its length; None
+        unless it is a regular file, which is opened without following a link or blocking."""
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
         try:
-            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            descriptor = os.open(self.run_dir / EVENTS_FILE, flags)
         except OSError:
+            descriptor = None
+        if descriptor is None:
+            yield None
             return
         try:
             info = os.fstat(descriptor)
             if not stat.S_ISREG(info.st_mode):
+                yield None
                 return
             self.available = True
             if info.st_size < self._offset:
                 self._reset()  # The file was replaced; read it from the start.
             os.lseek(descriptor, self._offset, os.SEEK_SET)
-            chunk = os.read(descriptor, MAX_READ)
+            yield descriptor, info.st_size
         finally:
             os.close(descriptor)
+
+    def _feed(self, chunk: bytes) -> bool:
+        """Ingest the complete lines ``chunk`` finishes; whether any request was new."""
         self._offset += len(chunk)
         lines = (self._partial + chunk).split(b"\n")
         self._partial = lines.pop()
@@ -111,8 +161,7 @@ class ProvisionalCost:
                 continue
             if isinstance(event, dict) and self._ingest(event):
                 changed = True
-        if changed and self._codex:
-            self._priced = price_requests(self._codex)
+        return changed
 
     def _reset(self) -> None:
         self._offset, self._partial = 0, b""

@@ -173,6 +173,9 @@ def estimate_profile_usage(
     run directory, as the monitor does; ``readings`` are live readings only the caller
     holds, such as those of the run it has just ended, whose record may not exist yet.
     Docker is not consulted, so a running container's live readings count only when passed.
+    Each unrecorded run's events file is read once to its current length
+    (``ProvisionalCost.read_snapshot``), so its whole spend counts as the monitor's does
+    once caught up, however large the backlog.
     """
     held = held_locks(proc_locks)
     profiles = login_profiles(state_root, held, now=now)
@@ -194,7 +197,7 @@ def estimate_profile_usage(
             continue
         cost = ProvisionalCost(run.run_dir, run.telemetry_adapter)
         if run.native_telemetry:
-            cost.update()
+            cost.read_snapshot()
         inputs.add_costs(
             login,
             ((row.timestamp_ms, row.usd) for row in cost.requests if row.usd is not None),
