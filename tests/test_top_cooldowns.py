@@ -21,6 +21,7 @@ from silverquillm.karn.cooldowns import (
     WRITE_LOCK,
     add_cooldown,
     cooldown,
+    edit_schedule,
     held_until,
 )
 from silverquillm.karn.definition import KarnError
@@ -32,6 +33,7 @@ from silverquillm.top.dashboard import LoginsPane, PoolPanel, RunningPane
 from silverquillm.top.details import Shown, header
 from silverquillm.top.theme import MTG
 
+from .test_karn_cooldowns import ROOM, at_minute, filling_windows, notes_around
 from .test_karn_login_pool import enroll
 from .test_top import _app, _settle, synchronous
 from .top_fixtures import NOW, FakeMonitor, profiles, running_views
@@ -95,6 +97,46 @@ async def test_t_holds_the_selected_profile_an_hour_and_each_press_adds_one(tmp_
         assert [severity for _, severity in notes] == [None, None]
         assert "slot-1 cooldown until" in notes[-1][0] and notes[-1][0].endswith("(+1h)")
         assert not (pool.root / "slot-2" / COOLDOWNS_FILE).exists()
+
+
+@synchronous
+async def test_t_on_a_fable_only_cooldown_lengthens_it_and_says_so(tmp_path):
+    monitor, pool = _host(tmp_path)
+    fable = cooldown(NOW, NOW + timedelta(hours=2), now=NOW, scope="fable")
+    add_cooldown(pool.root / "slot-2", fable, now=NOW)
+    app = _app(monitor)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        notes = _recorded(app)
+        await _codex_slot(pilot, app, "slot-2")
+        await pilot.press("t")
+        await _settle(app, pilot)
+    model = "claude-fable-5-2"
+    assert held_until(pool.root / "slot-2", model=model, now=NOW) == NOW + timedelta(hours=3)
+    assert held_until(pool.root / "slot-2", now=NOW) is None
+    ((message, severity),) = notes
+    assert severity is None
+    assert message.startswith("slot-2 fable cooldown until ") and message.endswith("(+1h)")
+
+
+@synchronous
+async def test_t_on_a_full_schedule_is_refused_with_a_notice(tmp_path):
+    monitor, pool = _host(tmp_path)
+    directory = pool.root / "slot-1"
+    later = filling_windows(NOW, ROOM, start=24 * 60)
+    fits, _ = notes_around("a", ROOM)
+    full = [*later, at_minute(NOW, 24 * 60 + len(later), fits)]
+    edit_schedule(directory, lambda current: full, now=NOW)
+    before = (directory / COOLDOWNS_FILE).read_bytes()
+    app = _app(monitor)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        notes = _recorded(app)
+        await _codex_slot(pilot, app, "slot-1")
+        await pilot.press("t")
+        await _settle(app, pilot)
+    assert notes == [("slot-1: cooldown not written (cooldown_schedule_full)", "error")]
+    assert (directory / COOLDOWNS_FILE).read_bytes() == before
 
 
 @synchronous

@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from silverquillm.karn.cooldowns import end_in_force_after, extend_hold
+from silverquillm.karn.cooldowns import Cooldown, end_in_force_after, extend_hold
 from silverquillm.karn.definition import KarnError
 from silverquillm.karn.login_pool import enrolled_slots, logins_root
 
@@ -29,8 +29,9 @@ def _slot_directory(state_root: Path, plugin_id: str, slot: str) -> Path:
     return pool / slot
 
 
-def lengthen(state_root: Path, plugin_id: str, slot: str, *, now: datetime) -> datetime:
-    """Hold the slot one more ``STEP``; returns when its hold on every run now ends."""
+def lengthen(state_root: Path, plugin_id: str, slot: str, *, now: datetime) -> Cooldown:
+    """Hold the slot one more ``STEP``; returns the Cooldown that now holds it, whose scope
+    says whether that hold is on every run or on Fable runs only."""
     return extend_hold(_slot_directory(state_root, plugin_id, slot), STEP, now=now, wait=WRITE_WAIT)
 
 

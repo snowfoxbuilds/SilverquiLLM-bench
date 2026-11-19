@@ -2,8 +2,9 @@
 
 A schedule is one small file (``cooldowns.json``) in the resource's own directory: a slot
 directory beside its stored login, or a GPU Slot's directory under the state root. It holds
-any number of Cooldowns, in force or still to come, which may overlap. A Cooldown gates only
-the launch of a run; nothing here touches a stored login, a runner's lock, or a run.
+up to ``MAX_COOLDOWNS`` Cooldowns in ``SCHEDULE_LIMIT`` bytes, in force or still to come, which
+may overlap. A Cooldown gates only the launch of a run; nothing here touches a stored login, a
+runner's lock, or a run.
 
 Readers never write: an ended Cooldown is simply ignored and dropped by the next write, and
 an unreadable schedule is no Cooldown at all. Writers serialize on their own lock file, so
@@ -31,6 +32,7 @@ COOLDOWNS_FILE = "cooldowns.json"
 LEGACY_COOLDOWN_FILE = "cooldown.json"
 WRITE_LOCK = ".cooldowns.lock"
 SCHEDULE_LIMIT = 64 * 1024
+"""The most bytes a schedule file may hold: the reader reads no more, and no write makes more."""
 LEGACY_LIMIT = 4096
 MAX_COOLDOWNS = 256
 MAX_NOTE = 200
@@ -290,15 +292,19 @@ def edit_schedule(
     removes only after the schedule holding its window is durably in place, so a crash in
     between keeps the hold. With ``wait`` given, another writer holding the schedule longer
     than that many seconds refuses the edit as busy instead of blocking.
+
+    A result of more than ``MAX_COOLDOWNS`` Cooldowns or ``SCHEDULE_LIMIT`` bytes is refused
+    as ``cooldown_schedule_full`` before anything is written, since the reader would take
+    the file for no Cooldown at all. Ended Cooldowns are dropped first, so they take no room.
     """
     directory = Path(directory)
     with _writing(directory, wait):
         current = [c for c in _read(directory, now) if c.end > now]
         kept = sorted((c for c in change(current) if c.end > now), key=lambda c: (c.start, c.end))
-        if len(kept) > MAX_COOLDOWNS:
+        written = canonical({"format": 1, "cooldowns": [c.document() for c in kept]})
+        if len(kept) > MAX_COOLDOWNS or len(written) > SCHEDULE_LIMIT:
             raise KarnError("cooldown_schedule_full")
-        document = {"format": 1, "cooldowns": [c.document() for c in kept]}
-        write_private(directory / COOLDOWNS_FILE, canonical(document))
+        write_private(directory / COOLDOWNS_FILE, written)
         (directory / LEGACY_COOLDOWN_FILE).unlink(missing_ok=True)
     return kept
 
@@ -335,24 +341,28 @@ def clear_schedule(directory: Path, *, now: datetime) -> int:
 
 def extend_hold(
     directory: Path, by: timedelta, *, now: datetime, wait: float | None = None
-) -> datetime:
-    """Hold every run off ``by`` longer: the in-force Cooldown for every run that ends last
-    ends ``by`` later, or, with none in force, a new operator Cooldown runs from now."""
-    ends = []
+) -> Cooldown:
+    """Hold the resource ``by`` longer, returning the Cooldown that now holds it.
+
+    The in-force Cooldown that ends last, whatever its scope, ends ``by`` later and keeps
+    everything else of it; with none in force, a new operator Cooldown on every run runs
+    from now. Cooldowns still to come are left alone.
+    """
+    held = []
 
     def longer(cooldowns: list[Cooldown]) -> list[Cooldown]:
-        held = [c for c in cooldowns if c.in_force(now) and c.scope == "all"]
-        if not held:
-            ends.append(now + by)
-            return [*cooldowns, cooldown(now, now + by, now=now)]
-        last = max(held, key=lambda c: c.end)
+        in_force = [c for c in cooldowns if c.in_force(now)]
+        if not in_force:
+            held.append(cooldown(now, now + by, now=now))
+            return [*cooldowns, held[0]]
+        last = max(in_force, key=lambda c: c.end)
         if last.end + by - now > HORIZON:
             raise KarnError("cooldown_beyond_horizon")
-        ends.append(last.end + by)
-        return [replace(c, end=c.end + by) if c is last else c for c in cooldowns]
+        held.append(replace(last, end=last.end + by))
+        return [held[0] if c is last else c for c in cooldowns]
 
     edit_schedule(directory, longer, now=now, wait=wait)
-    return ends[0].replace(microsecond=0)
+    return held[0]
 
 
 def end_in_force_after(

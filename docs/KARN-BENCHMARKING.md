@@ -119,12 +119,14 @@ silverquillm login cooldown --agent codex --clear --slots slot-1
 `--from` (default now) and `--until` take the host's local time: `14:00` (its next occurrence), `Fri 09:00`, `2026-11-20 09:00`, or an offset such as `+3h` or `1d`, which for `--until` counts from `--from`.
 Give exactly one of `--until` or `--duration` (`30m`, `5h`, `2d`, `1h30m`, counted from `--from`); no Cooldown may end more than a year ahead.
 `--fable-only` holds back only Fable runs (`claude-fable-*`), leaving the slot free for other models; `--note` says why.
-A slot may hold any number of Cooldowns, overlapping or not; each new one is added beside the others, and `--clear` removes every Cooldown of the named slots, in force or still to come.
+A slot may hold Cooldowns that overlap or not; each new one is added beside the others, and `--clear` removes every Cooldown of the named slots, in force or still to come.
+A slot's schedule holds at most 256 Cooldowns in 64 KiB; a write that would go beyond either, after dropping the Cooldowns that have ended, is refused with `cooldown_schedule_full` and leaves the schedule as it was.
 A slot not enrolled in that pool is refused with the enrolled ones listed.
 `--state-root` works before or after `cooldown` (`login --state-root X cooldown …` or `login cooldown --state-root X …`); given in both places, the one after `cooldown` wins, and with neither the configuration file or default applies.
 A slot with a Cooldown in force counts as busy for the runs it holds back: they pass over it. When no other slot is free, a direct run waits (`waiting for a login slot: … cooling down`) and the scheduler defers that batch; a run already holding the slot carries on, whatever the window.
-A Cooldown ends by itself at its time; `silverquillm login ls` and `silverquillm top` show each slot's Cooldowns, and a slot cooled down from before Cooldown Schedules keeps its hold until the first new write converts it.
-In `top`'s LOGINS pane, select a slot and press `t` to hold it one more hour per press (the Cooldown in force that ends last ends an hour later, or one starts now), or `c` to end every Cooldown in force ten seconds from now, leaving those still to come.
+A Cooldown ends by itself at its time, and a slot cooled down from before Cooldown Schedules keeps its hold until the first new write converts it.
+`silverquillm login ls` and `top`'s dashboard show a summary of each slot's schedule: when the hold on every run ends, otherwise when the Fable-only hold ends, otherwise when the next Cooldown starts; `silverquillm top --json` lists every Cooldown in each profile's `cooldowns`.
+In `top`'s LOGINS pane, select a slot and press `t` to hold it one more hour per press (the Cooldown in force that ends last, whatever its scope, ends an hour later, or, with none in force, one on every run starts now), or `c` to end every Cooldown in force ten seconds from now, leaving those still to come.
 
 ### Claude constructs
 

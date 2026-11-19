@@ -8,6 +8,7 @@ import os
 import re
 import threading
 import time
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -19,9 +20,13 @@ from silverquillm.karn import cooldowns
 from silverquillm.karn.cooldowns import (
     COOLDOWNS_FILE,
     LEGACY_COOLDOWN_FILE,
+    MAX_COOLDOWNS,
+    MAX_NOTE,
+    SCHEDULE_LIMIT,
     add_cooldown,
     clear_schedule,
     cooldown,
+    edit_schedule,
     end_in_force_after,
     extend_hold,
     held_until,
@@ -30,7 +35,7 @@ from silverquillm.karn.cooldowns import (
     read_schedule,
     remove_cooldown,
 )
-from silverquillm.karn.definition import KarnError
+from silverquillm.karn.definition import KarnError, canonical
 from silverquillm.karn.login_pool import LoginPool, LoginPoolBusyError
 from silverquillm.monitor.pools import login_profiles
 
@@ -358,33 +363,102 @@ def test_a_write_replaces_an_unreadable_schedule(tmp_path):
     assert held_until(directory, now=NOW) == NOW + timedelta(hours=1)
 
 
+def extend(directory, now=NOW):
+    return extend_hold(directory, timedelta(hours=1), now=now)
+
+
+def windows(directory, now=NOW):
+    return [(c.start, c.end, c.scope) for c in read_schedule(directory, now=now)]
+
+
 def test_extending_moves_the_last_window_in_force_or_starts_one(tmp_path):
     directory = claude_pool(tmp_path, "slot-1").root / "slot-1"
-    assert extend_hold(directory, timedelta(hours=1), now=NOW) == NOW + timedelta(hours=1)
-    assert extend_hold(directory, timedelta(hours=1), now=NOW) == NOW + timedelta(hours=2)
+    assert extend(directory).end == NOW + timedelta(hours=1)
+    assert extend(directory).end == NOW + timedelta(hours=2)
     hold(directory, NOW + timedelta(hours=5), start=NOW + timedelta(hours=4))
-    assert extend_hold(directory, timedelta(hours=1), now=NOW) == NOW + timedelta(hours=3)
+    assert extend(directory).end == NOW + timedelta(hours=3)
     # The window still to come is left where it was, and nothing was added beside it.
-    assert [(c.start, c.end) for c in read_schedule(directory, now=NOW)] == [
-        (NOW, NOW + timedelta(hours=3)),
-        (NOW + timedelta(hours=4), NOW + timedelta(hours=5)),
+    assert windows(directory) == [
+        (NOW, NOW + timedelta(hours=3), "all"),
+        (NOW + timedelta(hours=4), NOW + timedelta(hours=5), "all"),
     ]
 
 
-def test_extending_a_fable_only_hold_adds_a_hold_on_every_run(tmp_path):
+def test_extending_a_fable_only_hold_moves_its_end_and_keeps_the_rest_of_it(tmp_path):
     directory = claude_pool(tmp_path, "slot-1").root / "slot-1"
-    hold(directory, NOW + timedelta(hours=4), scope="fable")
-    assert extend_hold(directory, timedelta(hours=1), now=NOW) == NOW + timedelta(hours=1)
-    assert held_until(directory, model=OPUS, now=NOW) == NOW + timedelta(hours=1)
-    assert held_until(directory, model=FABLE, now=NOW) == NOW + timedelta(hours=4)
+    start = NOW - timedelta(minutes=30)
+    window = cooldown(
+        start, NOW + timedelta(hours=4), now=start, scope="fable", source="usage-limit", note="cap"
+    )
+    add_cooldown(directory, window, now=NOW)
+    assert extend(directory) == replace(window, end=NOW + timedelta(hours=5))
+    (stored,) = read_schedule(directory, now=NOW)
+    assert stored == replace(window, end=NOW + timedelta(hours=5))
+    # Still only Fable runs are held: no hold on every run was added.
+    assert held_until(directory, model=OPUS, now=NOW) is None
+    assert held_until(directory, model=FABLE, now=NOW) == NOW + timedelta(hours=5)
 
 
-def test_extending_past_a_year_is_refused_without_writing(tmp_path):
-    directory = codex_pool(tmp_path, "slot-1").root / "slot-1"
-    hold(directory, NOW + timedelta(days=365))
+@pytest.mark.parametrize(
+    ("fable_hours", "all_hours", "moved"),
+    [(4, 2, "fable"), (2, 4, "all")],
+    ids=["fable-ends-last", "all-ends-last"],
+)
+def test_extending_moves_only_the_window_in_force_that_ends_last(
+    tmp_path, fable_hours, all_hours, moved
+):
+    directory = claude_pool(tmp_path, "slot-1").root / "slot-1"
+    hold(directory, NOW + timedelta(hours=fable_hours), scope="fable")
+    hold(directory, NOW + timedelta(hours=all_hours))
+    held = extend(directory)
+    assert (held.scope, held.end) == (moved, NOW + timedelta(hours=5))
+    ends = {scope: end for _, end, scope in windows(directory)}
+    assert len(windows(directory)) == 2
+    assert ends == {
+        "fable": NOW + timedelta(hours=5 if moved == "fable" else fable_hours),
+        "all": NOW + timedelta(hours=5 if moved == "all" else all_hours),
+    }
+
+
+def test_each_press_moves_the_same_window_an_hour_on(tmp_path):
+    directory = claude_pool(tmp_path, "slot-1").root / "slot-1"
+    hold(directory, NOW + timedelta(hours=2), scope="fable")
+    hold(directory, NOW + timedelta(hours=1))
+    for presses in range(1, 4):
+        assert extend(directory).end == NOW + timedelta(hours=2 + presses)
+    assert windows(directory) == [
+        (NOW, NOW + timedelta(hours=1), "all"),
+        (NOW, NOW + timedelta(hours=5), "fable"),
+    ]
+
+
+def test_extending_with_only_windows_to_come_adds_a_hold_on_every_run_from_now(tmp_path):
+    directory = claude_pool(tmp_path, "slot-1").root / "slot-1"
+    hold(directory, NOW + timedelta(hours=3), start=NOW + timedelta(hours=2), scope="fable")
+    hold(directory, NOW + timedelta(hours=9), start=NOW + timedelta(hours=8))
+    added = extend(directory)
+    assert (added.start, added.end, added.scope, added.source, added.note) == (
+        NOW,
+        NOW + timedelta(hours=1),
+        "all",
+        "operator",
+        None,
+    )
+    assert windows(directory) == [
+        (NOW, NOW + timedelta(hours=1), "all"),
+        (NOW + timedelta(hours=2), NOW + timedelta(hours=3), "fable"),
+        (NOW + timedelta(hours=8), NOW + timedelta(hours=9), "all"),
+    ]
+
+
+@pytest.mark.parametrize("scope", ["all", "fable"])
+def test_extending_past_a_year_is_refused_without_writing(tmp_path, scope):
+    directory = claude_pool(tmp_path, "slot-1").root / "slot-1"
+    hold(directory, NOW + timedelta(days=365), scope=scope)
+    hold(directory, NOW + timedelta(hours=1), scope="fable" if scope == "all" else "all")
     before = (directory / COOLDOWNS_FILE).read_bytes()
     with pytest.raises(KarnError, match="cooldown_beyond_horizon"):
-        extend_hold(directory, timedelta(hours=1), now=NOW)
+        extend(directory)
     assert (directory / COOLDOWNS_FILE).read_bytes() == before
 
 
@@ -431,6 +505,128 @@ def test_concurrent_writers_never_lose_each_others_windows(tmp_path):
     for thread in threads:
         thread.join()
     assert [c.start for c in read_schedule(directory, now=NOW)] == starts
+
+
+# The schedule's size ----------------------------------------------------------------
+
+ROOM = 150
+"""Bytes a filled schedule leaves for the note of one more window."""
+
+
+def at_minute(now, minute, note=None):
+    """An hour-long Cooldown on every run, starting ``minute`` minutes after ``now``."""
+    start = now + timedelta(minutes=minute)
+    return cooldown(start, start + timedelta(hours=1), now=now, note=note)
+
+
+def written_size(windows):
+    return len(canonical({"format": 1, "cooldowns": [c.document() for c in windows]}))
+
+
+def filling_windows(now, room, *, start=0):
+    """Windows from ``start`` minutes on, with ASCII notes, that leave exactly ``room`` bytes
+    for the note of one more window like them; the first is in force when ``start`` is 0."""
+
+    def left(lengths):
+        probe = [at_minute(now, start + i, "f" * n) for i, n in enumerate(lengths)]
+        return SCHEDULE_LIMIT - written_size([*probe, at_minute(now, 0, "a")]) + 1
+
+    lengths = [180]
+    while left([*lengths, 180]) >= room:
+        lengths.append(180)
+    for index in range(left(lengths) - room):
+        lengths[index % len(lengths)] += 1
+    assert left(lengths) == room and max(lengths) <= MAX_NOTE
+    return [at_minute(now, start + i, "f" * n) for i, n in enumerate(lengths)]
+
+
+def notes_around(character, room):
+    """A note of ``character`` padded with ASCII taking exactly ``room`` bytes as stored, and
+    one with a ``character`` more taking a byte more."""
+    width = len(json.dumps(character, ensure_ascii=False).encode()) - 2
+    count = (room - (width - 1)) // width
+    pad = room - count * width
+    fits, over = character * count + "a" * pad, character * (count + 1) + "a" * (pad - width + 1)
+    stored = [len(json.dumps(note, ensure_ascii=False).encode()) - 2 for note in (fits, over)]
+    assert stored == [room, room + 1]
+    return fits, over
+
+
+def filled(directory, now):
+    """Fill ``directory``'s schedule to ``ROOM`` bytes short, holding every run from now."""
+    windows = filling_windows(now, ROOM)
+    edit_schedule(directory, lambda current: windows, now=now)
+    return windows
+
+
+@pytest.mark.parametrize(
+    "character",
+    ["a", '"', "\\", "\u00e9", "\u20ac", "\U0001f9ca"],
+    ids=["ascii", "quote", "backslash", "two-byte", "three-byte", "four-byte"],
+)
+def test_a_schedule_may_fill_its_last_byte_and_no_more(tmp_path, character):
+    directory = codex_pool(tmp_path, "slot-1").root / "slot-1"
+    windows = filled(directory, NOW)
+    fits, over = notes_around(character, ROOM)
+    with pytest.raises(KarnError, match="cooldown_schedule_full"):
+        add_cooldown(directory, at_minute(NOW, len(windows), over), now=NOW)
+    last = add_cooldown(directory, at_minute(NOW, len(windows), fits), now=NOW)
+    assert (directory / COOLDOWNS_FILE).stat().st_size == SCHEDULE_LIMIT
+    assert read_schedule(directory, now=NOW) == [*windows, last]
+    assert held_until(directory, now=NOW) == NOW + timedelta(hours=1)
+
+
+@pytest.mark.parametrize("refused", ["add", "edit"])
+def test_a_refused_write_leaves_the_schedule_and_its_hold_as_they_were(tmp_path, refused):
+    target = codex_pool(tmp_path, "slot-1")
+    directory = target.root / "slot-1"
+    now = datetime.now(UTC)
+    filled(directory, now)
+    before = (directory / COOLDOWNS_FILE).read_bytes()
+    with pytest.raises(KarnError, match="cooldown_schedule_full"):
+        if refused == "add":
+            add_cooldown(directory, at_minute(now, 0, "n" * (ROOM + 1)), now=now)
+        else:
+            edit_schedule(
+                directory,
+                lambda current: [replace(c, note="n" * MAX_NOTE) for c in current],
+                now=now,
+            )
+    assert (directory / COOLDOWNS_FILE).read_bytes() == before
+    assert held_until(directory) is not None
+    with contextlib.ExitStack() as held, pytest.raises(LoginPoolBusyError):
+        target.acquire(held, wait=False)
+
+
+def test_ended_windows_are_dropped_before_the_size_is_checked(tmp_path):
+    directory = codex_pool(tmp_path, "slot-1").root / "slot-1"
+    windows = filled(directory, NOW)
+    fits, _ = notes_around("a", ROOM)
+    add_cooldown(directory, at_minute(NOW, len(windows), fits), now=NOW)
+    later = at_minute(NOW, 60, "n" * 100)
+    with pytest.raises(KarnError, match="cooldown_schedule_full"):
+        add_cooldown(directory, later, now=NOW)
+    ended = windows[0].end
+    add_cooldown(directory, later, now=ended)
+    stored = read_schedule(directory, now=ended)
+    assert windows[0] not in stored and later in stored
+    assert len(stored) == len(windows) + 1
+
+
+def test_a_refused_conversion_keeps_the_old_cooldown(tmp_path):
+    target = codex_pool(tmp_path, "slot-1")
+    directory = target.root / "slot-1"
+    now = datetime.now(UTC)
+    legacy(directory, now + timedelta(hours=2), set_at=now - timedelta(hours=1))
+    before = (directory / LEGACY_COOLDOWN_FILE).read_bytes()
+    many = [at_minute(now, 60 + i, "n" * MAX_NOTE) for i in range(MAX_COOLDOWNS - 1)]
+    with pytest.raises(KarnError, match="cooldown_schedule_full"):
+        edit_schedule(directory, lambda current: [*current, *many], now=now)
+    assert (directory / LEGACY_COOLDOWN_FILE).read_bytes() == before
+    assert not (directory / COOLDOWNS_FILE).exists()
+    assert held_until(directory) == now + timedelta(hours=2)
+    with contextlib.ExitStack() as held, pytest.raises(LoginPoolBusyError):
+        target.acquire(held, wait=False)
 
 
 # The cooldown file from before schedules ------------------------------------------
@@ -612,6 +808,19 @@ def test_a_bad_time_is_reported_without_writing(tmp_path, args, error):
     result = run_cooldown(tmp_path, "--agent", "codex", "--slots", "slot-1", *args)
     assert result.exit_code == 1 and error in result.output
     assert not (target.root / "slot-1" / COOLDOWNS_FILE).exists()
+
+
+def test_cooldown_reports_a_full_schedule_and_exits_non_zero(tmp_path):
+    target = codex_pool(tmp_path, "slot-1")
+    directory = target.root / "slot-1"
+    filled(directory, datetime.now(UTC))
+    before = (directory / COOLDOWNS_FILE).read_bytes()
+    result = run_cooldown(
+        tmp_path, "--agent", "codex", "--duration", "1h", "--note", "n" * (ROOM + 1), "slot-1"
+    )
+    assert result.exit_code == 1 and "cooldown_schedule_full" in result.output
+    assert "cooling down" not in result.output
+    assert (directory / COOLDOWNS_FILE).read_bytes() == before
 
 
 @pytest.mark.parametrize(

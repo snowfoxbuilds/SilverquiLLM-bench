@@ -492,7 +492,8 @@ class MonitorApp(App):
         now = self.clock()
         try:
             if message.lengthen:
-                until = cooldowns.lengthen(state_root, message.plugin_id, message.slot, now=now)
+                held = cooldowns.lengthen(state_root, message.plugin_id, message.slot, now=now)
+                until, kind = held.end, "fable cooldown" if held.scope == "fable" else "cooldown"
             else:
                 until = cooldowns.end_soon(state_root, message.plugin_id, message.slot, now=now)
         except (KarnError, OSError) as error:
@@ -503,7 +504,7 @@ class MonitorApp(App):
             return
         local = until.astimezone()
         if message.lengthen:
-            self.notify(f"{message.slot} cooldown until {local:%a %H:%M} (+1h)")
+            self.notify(f"{message.slot} {kind} until {local:%a %H:%M} (+1h)")
         else:
             self.notify(f"{message.slot} cooldown ends at {local:%H:%M:%S} (in 10s)")
         self.poll()
