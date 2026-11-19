@@ -91,6 +91,12 @@ GPU Slots pin CUDA builds through `CUDA_VISIBLE_DEVICES`; other backends' device
 A run claims the first free GPU Slot, or the host-wide lock without `gpu_slots`, before it is recorded as started, the way a run claims a Login Profile, and before the host's preflight and the server's `--version` probe, so a run that finds nothing free costs nothing more (#269).
 With `gpu_slots`, a GPU Slot is free when its lock is free, no compute process runs on its GPUs, and none of its GPUs reports more than 1 GiB of memory used: another user's job, or the server of a runner that has just died, keeps it busy.
 The memory bound catches a job whose process `nvidia-smi` does not list to the operator's user (grilling 2026-11-16).
+A listed GPU Slot also has a Cooldown Schedule, so the operator can keep its GPUs free for other work at set times (grilling 2026-11-18).
+Its Cooldowns are those of a Login Profile without scope or Usage Limit: every one covers every run, and each is the operator's.
+They live under the state root keyed by the slot's value (`gpu-slots/<value>/cooldowns.json`), as its lock is, so reordering `gpu_slots` moves none; a schedule whose value `gpu_slots` no longer lists applies to nothing, and the monitor lists it as orphaned for the operator to delete.
+A GPU Slot with a Cooldown in force is not free; like a Login Profile's, the Cooldown gates only the claim, and a model-server run already holding the slot keeps it to its end, since a budget does not say when a run will finish.
+`silverquillm gpu ls` lists the host's GPU Slots with their state and Cooldowns, and `silverquillm gpu cooldown <value>…` adds Cooldowns (`--from`, `--until` or `--duration`, `--note`) or removes them (`--clear`), with the times of `login cooldown` ([Karn Benchmark Contract](KARN-BENCHMARK-CONTRACT.md#operator-entrypoints-and-records)).
+A host without `gpu_slots` has no schedule for its host-wide lock; to keep GPUs free at set times, it lists `gpu_slots`, one is enough.
 A direct `silverquillm run` finding nothing free is refused with `model_server_busy`, before any evidence exists; the scheduler defers the entry, in queue order, until one frees.
 Two things make a GPU Slot unusable, and an unusable slot is skipped and reported, never a failed run or a stopped scheduler (#269):
 
@@ -197,3 +203,4 @@ A recipe may declare `SILVERQUILLM_MODEL_SERVER = '{"engine":"anthropic"}'`, wit
 | --- | --- |
 | [ADR-022](../adr/ADR-022-pi-constructs-run-against-a-bench-started-local-model-server.md) | pi constructs run against a bench-started llama.cpp server, observed by a host-side relay |
 | [ADR-023](../adr/ADR-023-run-cost-is-the-reported-cost-checked-per-request.md) | A local-model run has no Reported Cost and no price, so its Run Cost stays missing |
+| [ADR-024](../tombstone/ADR-024-rename-login-cooldown-to-cooldown.md) | Rename record: Login Cooldown renamed Cooldown, one window of a Cooldown Schedule |

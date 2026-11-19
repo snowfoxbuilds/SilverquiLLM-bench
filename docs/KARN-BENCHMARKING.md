@@ -105,7 +105,7 @@ silverquillm login --build-output BUILD --construct CONSTRUCT --adopt LEGACY
 
 It becomes a slot named `LEGACY` in the pool of `CONSTRUCT`'s login plugin, after checking that its stored login has that plugin's own shape (`legacy_login_belongs_to_other_plugin` otherwise). A legacy login with a pending run is refused (`legacy_login_pending`) until `silverquillm recover` settles it. Runs never adopt a legacy login by themselves.
 
-To keep slots out of new runs for a while, such as when a subscription nears its weekly limit, put them under a Login Cooldown:
+To keep slots out of new runs for a while, such as when a subscription nears its weekly limit, put them under a Cooldown:
 
 ```bash
 silverquillm login cooldown --agent codex --duration 5h --slots slot-1 slot-2
