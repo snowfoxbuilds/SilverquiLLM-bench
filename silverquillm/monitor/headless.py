@@ -32,7 +32,7 @@ def _path(value: Path | None) -> str | None:
     return str(value) if value is not None else None
 
 
-def _login_state(status: ProfileStatus) -> str:
+def login_state(status: ProfileStatus) -> str:
     """One word for the slot, most blocking first: a pending settlement outranks the rest."""
     if status.pending:
         return "pending"
@@ -122,7 +122,7 @@ def _login(view: ProfileView) -> dict:
     return {
         "login_profile": status.ref,
         "provider": status.provider,
-        "state": _login_state(status),
+        "state": login_state(status),
         "busy": status.busy,
         "pending": status.pending,
         "pending_run": status.pending_run,

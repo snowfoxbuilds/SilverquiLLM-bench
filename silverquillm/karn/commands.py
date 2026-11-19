@@ -293,7 +293,7 @@ def _limit_text(limit) -> str:
 @click.pass_context
 def list_slots(ctx, agent, state_root):
     """List every enrolled slot with its state: free, busy, cooldown, blocked or pending."""
-    from silverquillm.monitor.headless import _login_state
+    from silverquillm.monitor.headless import login_state
     from silverquillm.monitor.locks import held_locks
     from silverquillm.monitor.pools import login_profiles
 
@@ -323,7 +323,7 @@ def list_slots(ctx, agent, state_root):
             detail = "cooldown from " + _local_stamp(status.next_cooldown)
         if status.usage_limit is not None:
             detail = "; ".join(filter(None, (detail, _limit_text(status.usage_limit))))
-        line = f"{status.provider:<7} {status.slot:<12} {_login_state(status):<9} {detail}"
+        line = f"{status.provider:<7} {status.slot:<12} {login_state(status):<9} {detail}"
         click.echo(line.rstrip())
 
 

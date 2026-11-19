@@ -37,7 +37,7 @@ from silverquillm.karn.login_pool import (
     enrolled_slots,
     slot_order,
 )
-from silverquillm.monitor.headless import _login_state
+from silverquillm.monitor.headless import login_state
 from silverquillm.monitor.pools import login_profiles
 
 from .grader_fixtures import local_grader
@@ -179,7 +179,7 @@ def test_the_monitor_shows_a_block_as_its_own_state(tmp_path):
     block(target.root / "slot-1", reason="relogin_needed", run_id="run-a", now=NOW)
     first, second = login_profiles(tmp_path / "state", frozenset())
     assert (first.blocked, first.blocked_run, first.free) == ("relogin_needed", "run-a", False)
-    assert _login_state(first) == "blocked"
+    assert login_state(first) == "blocked"
     assert second.blocked is None and second.free
 
 

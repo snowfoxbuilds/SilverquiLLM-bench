@@ -323,8 +323,9 @@ The capacity view is the operator's place for everything that decides what a new
 It shows one table per Login Pool, a profile to a row, in slot-number order: state word, the run holding it, its Estimated Weekly Usage and Fable limit with reset times and reading ages, and its Usage Limit's ceilings.
 Below the pools, on a host that lists `gpu_slots`, a table of GPU Slots in config order: state word, the run holding it, its GPUs and used memory; schedules whose value `gpu_slots` no longer lists follow as orphaned rows.
 Selecting a row lists its Cooldown Schedule beneath the tables, soonest first: start and end in local time, scope, source, when it was set, and its note; one in force is marked so.
-`n` adds a Cooldown to the selected profile or GPU Slot, and `e` changes the selected Cooldown, through one form of start, end, scope (Login Profiles only) and note, which takes the times `silverquillm login cooldown` takes and refuses one it cannot read, saying why, without closing.
-`x` removes the selected Cooldown after a `y`/`n` confirmation, a `usage-limit` one included; `L` sets or clears the selected profile's weekly and Fable ceilings in a form.
+`n` adds a Cooldown to the selected profile or GPU Slot, and `e` changes the selected Cooldown, through one form of start, end, scope (Claude Login Profiles only, since only Claude has a Fable limit) and note, which takes the times `silverquillm login cooldown` takes and refuses one it cannot read, saying why, without closing; a time left as the form printed it keeps its exact instant, so changing only a note never moves the window.
+An edit replaces exactly the Cooldown it opened on, keeping its source, and is refused if that Cooldown has ended or gone meanwhile; an orphaned schedule takes no new Cooldown.
+`x` removes the selected Cooldown after a `y`/`n` confirmation, a `usage-limit` one included; `L` sets or clears the selected profile's weekly and Fable ceilings in a form, every ceiling left empty clearing the limit, and the check a new limit makes runs off the interface thread, since it reads the host's history, and reports when it is done.
 `a`, `R` and `D` act as in the LOGINS pane, so all of a profile's management is in one place.
 Every write is one of the monitor's [writes](#command-and-scope), refreshes the view at once and says what it set.
 

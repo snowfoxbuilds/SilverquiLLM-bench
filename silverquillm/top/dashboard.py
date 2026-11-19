@@ -360,8 +360,8 @@ class LoginsPane(VerticalScroll, can_focus=False):
 
 
 class GpuSlotsPanel(Static):
-    """The host's GPU Slots below the Login Pools, read-only: no key acts on a GPU Slot, whose
-    Cooldowns are kept with ``silverquillm gpu cooldown``."""
+    """The host's GPU Slots below the Login Pools, read-only: no dashboard key acts on a GPU
+    Slot, whose Cooldowns are kept in the capacity view or with ``silverquillm gpu cooldown``."""
 
     def __init__(self, theme: Theme) -> None:
         super().__init__(id="gpu-slots")

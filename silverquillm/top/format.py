@@ -158,6 +158,12 @@ def _local(moment: datetime) -> datetime:
         return moment.astimezone(UTC)
 
 
+def stamp(moment: datetime) -> str:
+    """``2026-11-20 09:00`` in local time: how a schedule lists a moment, and a form takes it
+    back."""
+    return _local(moment).strftime("%Y-%m-%d %H:%M")
+
+
 def cooldown(
     ends: datetime, now: datetime, theme: Theme, *, short: bool = False, fable: bool = False
 ) -> Text:
