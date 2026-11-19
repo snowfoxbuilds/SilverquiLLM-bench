@@ -134,6 +134,11 @@ ANTHROPIC_HOST = "api.anthropic.com"
 ANTHROPIC_KEY_FILE = Path("api-keys") / "anthropic"
 # One key and its newline; a larger file is refused, never read by its prefix.
 MAX_KEY_FILE_BYTES = 257
+# How many Anthropic-engine runs a host keeps live without ``[model_server]
+# anthropic_concurrency`` (#291).
+DEFAULT_ANTHROPIC_CONCURRENCY = 5
+# A key file's name in a directory of keys; the single-file form is the key ``default``.
+_KEY_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 # Sent when the workload names no API version; pi and Claude Code both send this one.
 ANTHROPIC_VERSION = "2023-06-01"
 # Request headers the relay passes on to Anthropic; every other header, the workload's key
@@ -473,6 +478,15 @@ class ModelServerHost:
     """``[model_server] environment``: variables only this host's builds need."""
     gpu_slots: tuple[str, ...] | None = None
     """``[model_server] gpu_slots``; None for the host's one unpinned GPU Slot."""
+    anthropic_concurrency: int = DEFAULT_ANTHROPIC_CONCURRENCY
+    """``[model_server] anthropic_concurrency``: how many Anthropic-engine runs may be live."""
+
+
+class AnthropicRelayBusyError(KarnError):
+    """Every relay slot of the host is held by a live Anthropic-engine run (#291)."""
+
+    def __init__(self):
+        super().__init__("anthropic_relay_busy")
 
 
 class ModelServerBusyError(KarnError):
@@ -839,7 +853,7 @@ class GpuSlotClaim:
         return facts
 
 
-def _lock(slot: GpuSlot):
+def _lock(slot: GpuSlot | RelaySlot):
     """The slot's lock, held; None when another process holds it. Raises ``OSError`` when the
     lock file cannot be created or opened."""
     slot.lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -984,25 +998,104 @@ class ModelServerPlan:
 
 
 @dataclass(frozen=True)
+class RelaySlot:
+    """One of the host's ``anthropic_concurrency`` relay slots, held by a lock file."""
+
+    index: int
+    lock_path: Path
+
+
+def relay_slots(state_root: Path, concurrency: int) -> tuple[RelaySlot, ...]:
+    """The host's relay slots; a lock is named by its slot's index."""
+    root = Path(state_root).resolve()
+    return tuple(
+        RelaySlot(index, root / f"anthropic-relay-{index}.lock") for index in range(concurrency)
+    )
+
+
+class RelaySlotClaim:
+    """A held relay slot, released once the run's relay stops; releasing twice is harmless."""
+
+    def __init__(self, slot: RelaySlot, handle):
+        self.slot, self._handle = slot, handle
+
+    def release(self) -> None:
+        if self._handle is not None:
+            self._handle.close()
+            self._handle = None
+
+
+def claim_relay_slot(state_root: Path, concurrency: int) -> RelaySlotClaim:
+    """The first free relay slot; ``anthropic_relay_busy`` when every one is held."""
+    for slot in relay_slots(state_root, concurrency):
+        try:
+            handle = _lock(slot)
+        except OSError:
+            # A lock file this user cannot open is no free slot; the others may be.
+            continue
+        if handle is not None:
+            return RelaySlotClaim(slot, handle)
+    raise AnthropicRelayBusyError()
+
+
+def relay_slot_availability(state_root: Path, concurrency: int, locks: Path | None = None) -> bool:
+    """Whether some relay slot looks free, read from the kernel's lock table without taking a
+    lock: the scheduler's admission hint. The claim stays authoritative."""
+    from silverquillm.monitor.locks import PROC_LOCKS, held_locks, lock_held
+
+    held = held_locks(locks or PROC_LOCKS)
+    return any(
+        lock_held(slot.lock_path, held, follow_symlinks=True) is not True
+        and not _unusable(slot.lock_path)
+        for slot in relay_slots(state_root, concurrency)
+    )
+
+
+def anthropic_keys(state_root: Path) -> tuple[tuple[str, Path], ...]:
+    """The host's keys by name: each file of a ``api-keys/anthropic`` directory, in name
+    order, or the one file there as ``default``. Each is checked when a run reads it."""
+    path = Path(state_root).resolve() / ANTHROPIC_KEY_FILE
+    try:
+        status = os.lstat(path)
+    except OSError:
+        return ()
+    if not stat.S_ISDIR(status.st_mode):
+        return (("default", path),)
+    return tuple(
+        (name, path / name) for name in sorted(os.listdir(path)) if _KEY_NAME.fullmatch(name)
+    )
+
+
+@dataclass(frozen=True)
 class AnthropicRelayPlan:
-    """The Anthropic engine resolved against this host: where its API key is. It claims no
-    GPU Slot and starts no server."""
+    """The Anthropic engine resolved against this host: its relay slot and the key that slot
+    uses. It claims no GPU Slot and starts no server."""
 
     spec: ModelServerSpec
     state_root: Path
     key_file: Path
-    claim: None = None
+    key_name: str = "default"
+    claim: RelaySlotClaim | None = None
 
     def to_dict(self) -> dict[str, Any]:
         # The record names where the key came from, never the key.
-        return {**self.spec.to_dict(), "host": {"api_key": "host_secret"}}
+        host: dict[str, Any] = {"api_key": "host_secret", "api_key_name": self.key_name}
+        if self.claim is not None:
+            host["relay_slot"] = self.claim.slot.index
+        return {**self.spec.to_dict(), "host": host}
 
 
-def plan_anthropic_relay(spec: ModelServerSpec, state_root: Path) -> AnthropicRelayPlan:
-    """Refuse a run this host has no usable key for, before any evidence exists."""
-    key_file = Path(state_root).resolve() / ANTHROPIC_KEY_FILE
+def plan_anthropic_relay(
+    spec: ModelServerSpec, state_root: Path, claim: RelaySlotClaim | None = None
+) -> AnthropicRelayPlan:
+    """Refuse a run this host has no usable key for, before any evidence exists. Relay slot
+    *i* uses the *i*-th key modulo their number, so runs spread across the host's keys."""
+    keys = anthropic_keys(state_root)
+    if not keys:
+        raise KarnError("model_relay_api_key_unavailable")
+    name, key_file = keys[(claim.slot.index if claim is not None else 0) % len(keys)]
     _read_api_key(key_file)
-    return AnthropicRelayPlan(spec, Path(state_root).resolve(), key_file)
+    return AnthropicRelayPlan(spec, Path(state_root).resolve(), key_file, name, claim)
 
 
 def _read_api_key(path: Path) -> str:
@@ -1901,6 +1994,9 @@ class AnthropicRelayCollector(ModelRelayCollector):
 
     def __enter__(self):
         self.run_dir.mkdir(parents=True, exist_ok=True)
+        if self.plan.claim is not None:
+            # Released once the relay stops, before grading, so the next run need not wait.
+            self._exit.callback(self.plan.claim.release)
         try:
             # Read at the start, so a key changed mid-run cannot split one run across two.
             self._key = _read_api_key(self.plan.key_file)
