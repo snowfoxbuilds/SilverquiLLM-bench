@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
 
@@ -360,7 +360,8 @@ class LoginsPane(VerticalScroll, can_focus=False):
 
 
 class GpuSlotsPanel(Static):
-    """The host's GPU Slots below the Login Pools, read-only: no key acts on a GPU Slot."""
+    """The host's GPU Slots below the Login Pools, read-only: no key acts on a GPU Slot, whose
+    Cooldowns are kept with ``silverquillm gpu cooldown``."""
 
     def __init__(self, theme: Theme) -> None:
         super().__init__(id="gpu-slots")
@@ -369,10 +370,10 @@ class GpuSlotsPanel(Static):
     def show(self, snapshot: MonitorSnapshot) -> None:
         self.display = bool(snapshot.gpu_slots)
         if snapshot.gpu_slots:
-            self.update(self.table(snapshot.gpu_slots, self.theme_))
+            self.update(self.table(snapshot.gpu_slots, self.theme_, snapshot.taken_at))
 
     @staticmethod
-    def table(statuses: list[GpuSlotStatus], theme: Theme) -> Table:
+    def table(statuses: list[GpuSlotStatus], theme: Theme, now: datetime | None = None) -> Table:
         """A header with the free count, then one line per GPU Slot in config order."""
         free = sum(1 for status in statuses if status.state == "free")
         table = Table.grid(padding=(0, 1))
@@ -385,14 +386,19 @@ class GpuSlotsPanel(Static):
             Text(f"{free}/{len(statuses)} free", style=theme.style("muted")),
         )
         for status in statuses:
-            table.add_row(*GpuSlotsPanel.row(status, theme))
+            table.add_row(*GpuSlotsPanel.row(status, theme, now))
         return table
 
     @staticmethod
-    def row(status: GpuSlotStatus, theme: Theme) -> tuple[Text, Text, Text, Text]:
+    def row(
+        status: GpuSlotStatus, theme: Theme, now: datetime | None = None
+    ) -> tuple[Text, Text, Text, Text]:
         state = status.state
+        now = now or datetime.now(UTC)
         if state == "held":
             mark, role = theme.glyph("tapped"), "text"
+        elif state == "cooldown":
+            mark, role = theme.glyph("cooldown"), "cooldown"
         elif state in ("busy", "unusable"):
             mark, role = theme.glyph("blocked"), "bad"
         elif state == "unknown":
@@ -417,18 +423,20 @@ class GpuSlotsPanel(Static):
             detail = f"held · {status.run_id[:8]}" if status.run_id else "held"
         elif state == "unusable":
             detail = "unusable · " + status.unusable
+        elif state == "cooldown":
+            detail = fmt.cooldown(status.cooldown_until, now, theme)
         elif state == "busy":
             detail = "busy · " + (
                 "another process" if status.busy == "compute_process" else "memory in use"
             )
         else:
             detail = state
-        return (
-            name,
-            names,
-            fmt.bar(fraction, WEEKLY_BAR, theme),
-            Text(detail, style=theme.style(role)),
-        )
+        if isinstance(detail, str):
+            detail = Text(detail, style=theme.style(role))
+        if status.next_cooldown is not None and state != "cooldown":
+            detail.append(theme.glyph("sep"), style=theme.style("muted"))
+            detail.append_text(fmt.scheduled(status.next_cooldown, theme))
+        return (name, names, fmt.bar(fraction, WEEKLY_BAR, theme), detail)
 
 
 class PoolPanel(Static, can_focus=True):

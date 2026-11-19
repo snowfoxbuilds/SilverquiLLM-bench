@@ -492,6 +492,35 @@ def test_an_unreadable_gpu_slot_lock_defers_entries_without_stopping_the_schedul
         gpu_slots(state, GPU_SLOTS)[0].lock_path.chmod(0o600)
 
 
+def test_a_gpu_slot_cooldown_defers_entries_and_lifting_it_lets_them_start(tmp_path):
+    from datetime import UTC, datetime, timedelta
+
+    from silverquillm.karn.cooldowns import add_cooldown, clear_schedule, cooldown
+    from silverquillm.karn.model_server import writable_gpu_schedule_dir
+
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    state.mkdir()
+    now = datetime.now(UTC)
+    held = writable_gpu_schedule_dir(state, "0")
+    add_cooldown(held, cooldown(now, now + timedelta(hours=1), now=now), now=now)
+    _batch(directory, ["one", "two"], "gpu")
+    with _running(directory, state):
+        _wait_file(state / "one.started")
+        assert (state / "one.started").read_text() == "gpu-1"
+        _wait_file(state / "two.attempts")
+        time.sleep(0.6)
+        assert not (state / "two.started").exists()
+        assert not (state / "error").exists()
+        clear_schedule(held, now=datetime.now(UTC))
+        _wait_file(state / "two.started")
+        assert (state / "two.started").read_text() == "gpu-0"
+        for marker in ("one.release", "two.release"):
+            (state / marker).touch()
+        _wait_file(state / "count")
+    rows = read_state(directory / "state/a.json", "a")["runs"]
+    assert [row["status"] for row in rows] == ["done"] * 2
+
+
 def test_model_server_and_other_login_less_entries_never_wait_for_each_other(tmp_path):
     directory, state = tmp_path / "batches", tmp_path / "state"
     state.mkdir()

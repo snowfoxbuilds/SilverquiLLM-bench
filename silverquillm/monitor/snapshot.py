@@ -35,7 +35,7 @@ from .containers import RUN_CONTAINER_PREFIX, RunContainer, run_containers
 from .costs import ProvisionalCost
 from .details import RecordDetail, WorkspaceView, record_detail, workspace_view
 from .estimates import WEEK, WeeklyUsage, estimated_percent
-from .gpus import GpuSlotStatus, gpu_slot_statuses
+from .gpus import GpuSlotStatus, OrphanedSchedule, gpu_slot_statuses, orphaned_gpu_schedules
 from .history import (
     HistoryStore,
     RepoFreshness,
@@ -160,6 +160,8 @@ class MonitorSnapshot:
     Batch TOMLs; ``None`` when two entries claim the run."""
     gpu_slots: list[GpuSlotStatus] = field(default_factory=list)
     """This host's GPU Slots, empty on a host with no local model server."""
+    orphaned_gpu_schedules: list[OrphanedSchedule] = field(default_factory=list)
+    """Cooldown Schedules of GPU Slot values ``gpu_slots`` no longer lists."""
 
 
 @dataclass
@@ -477,7 +479,10 @@ class Monitor:
             ledger=ledger,
             ledger_error=ledger_error,
             batch_runs=batch_runs(self.path("batches_dir")),
-            gpu_slots=self._gpu_slots(held, runs),
+            gpu_slots=self._gpu_slots(held, runs, now),
+            orphaned_gpu_schedules=orphaned_gpu_schedules(
+                self.path("state_root"), self.config.gpu_slots, now=now
+            ),
         )
 
     def _read_gpus(self) -> GpuReading:
@@ -486,12 +491,12 @@ class Monitor:
         state_root = self.path("state_root")
         return read_gpus(state_root=state_root, record=False) if state_root else read_gpus()
 
-    def _gpu_slots(self, held, runs) -> list[GpuSlotStatus]:
+    def _gpu_slots(self, held, runs, now: datetime) -> list[GpuSlotStatus]:
         """Only a host configured for a local model server has GPU Slots to show."""
         if self.config.gpu_slots is None and not self.config.llama_cpp:
             return []
         return gpu_slot_statuses(
-            self.path("state_root"), self.config.gpu_slots, held, self._read_gpus(), runs
+            self.path("state_root"), self.config.gpu_slots, held, self._read_gpus(), runs, now=now
         )
 
     def output(self, run_id: str, stream: str | None = None, since: int = 0) -> list[LogLine]:

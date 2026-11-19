@@ -143,6 +143,20 @@ A failed check is reported on stderr (`usage_limit_check_failed`) and never fail
 `login ls` shows each slot's limit, and `top --json` reports it as `usage_limit`.
 A `usage-limit` Cooldown can be removed like any other; the slot's next run checks again when it ends.
 
+On a host that lists `[model_server] gpu_slots`, a GPU Slot takes Cooldowns the same way, to keep its GPUs free for other work at set times; it is named by its `gpu_slots` value:
+
+```bash
+silverquillm gpu ls
+silverquillm gpu cooldown 1 --from "Fri 09:00" --until "Fri 18:00" --note "training job"
+silverquillm gpu cooldown --all --duration 3h
+silverquillm gpu cooldown 0,1 --clear
+```
+
+`gpu ls` lists each GPU Slot with its state (`held`, `unusable`, `cooldown`, `busy`, `unknown` or `free`) and every Cooldown it holds, then any orphaned schedule: one kept for a value `gpu_slots` no longer lists, which holds back nothing.
+`gpu cooldown` takes the times, `--duration` and `--note` of `login cooldown`, every Cooldown holding back every run; a value `gpu_slots` does not list is refused, except that `--clear` removes an orphaned schedule.
+A model-server run passes over a GPU Slot with a Cooldown in force, and with none other free it defers like `model_server_busy`; a run already holding the slot keeps it to its end.
+A host without `gpu_slots` has no GPU Slot to hold; list them, one is enough.
+
 ### Claude constructs
 
 The Claude constructs run Claude Code 2.1.284 through `claude@1` on a Claude subscription, with the stock `karn-claude-login` plugin.

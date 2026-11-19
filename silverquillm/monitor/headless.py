@@ -147,6 +147,8 @@ def _gpu_slot(status: GpuSlotStatus) -> dict:
         "state": status.state,
         "busy": status.busy,
         "unusable": status.unusable,
+        "cooldown_until": _time(status.cooldown_until),
+        "cooldowns": [cooldown.document() for cooldown in status.cooldowns],
         "run_id": status.run_id,
         "gpus": (
             None
@@ -191,4 +193,11 @@ def snapshot_document(snapshot: MonitorSnapshot) -> dict:
         "queue": [_batch(batch) for batch in snapshot.queued],
         "logins": [_login(view) for view in snapshot.profiles],
         "gpu_slots": [_gpu_slot(status) for status in snapshot.gpu_slots],
+        "orphaned_gpu_schedules": [
+            {
+                "gpu_slot": orphan.value,
+                "cooldowns": [cooldown.document() for cooldown in orphan.cooldowns],
+            }
+            for orphan in snapshot.orphaned_gpu_schedules
+        ],
     }

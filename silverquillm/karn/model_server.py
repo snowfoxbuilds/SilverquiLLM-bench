@@ -35,11 +35,13 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
 from .claude_observations import claude_usage
+from .cooldowns import held_until
 from .definition import KarnError
 from .observations import TOKEN_KEYS, _measurements
 from .pricing import MODEL_PRICES
@@ -191,6 +193,10 @@ RELAYED_PATHS = frozenset(
 # A GPU with more memory in use than this runs someone's job, even when ``nvidia-smi`` lists
 # no process to this user; an idle card uses tens of MiB.
 BUSY_MEMORY_MIB = 1024
+GPU_SLOTS_DIR = "gpu-slots"
+GPU_SLOT_VALUE = re.compile(r"(?:0|[1-9][0-9]*)(?:,(?:0|[1-9][0-9]*))*")
+"""A ``CUDA_VISIBLE_DEVICES`` value of GPU indices, as ``[model_server] gpu_slots`` takes."""
+"""Under the state root, one directory per GPU Slot value holding its Cooldown Schedule."""
 NVIDIA_SMI_SECONDS = 10
 GPU_QUERY = "index,uuid,name,memory.used,memory.total,power.limit,driver_version"
 # The runner's GPU selection, which a host without GPU Slots passes on to its server.
@@ -778,11 +784,62 @@ class GpuSlot:
                 return "memory_used"
         return None
 
+    @property
+    def schedule_dir(self) -> Path | None:
+        """The directory of the slot's Cooldown Schedule, named by its value as its lock is,
+        so reordering ``gpu_slots`` moves no Cooldown; the host-wide lock has none."""
+        if self.value is None:
+            return None
+        return gpu_schedule_dir(self.lock_path.parent, self.value)
+
+    def cooling_until(self, now: datetime | None = None) -> datetime | None:
+        """When the slot's Cooldowns in force end; None when none holds it back. Every GPU
+        Slot Cooldown holds back every run, and an unreadable schedule holds back nothing."""
+        directory = self.schedule_dir
+        if directory is None:
+            return None
+        return held_until(directory, now=now or datetime.now(UTC))
+
     def unknown_gpus(self, reading: GpuReading) -> bool:
         """Whether the slot names a GPU a readable ``nvidia-smi`` does not list."""
         if self.indices is None or reading.gpus is None:
             return False
         return not self.indices <= {gpu["index"] for gpu in reading.gpus}
+
+
+def gpu_schedule_dir(state_root: Path, value: str) -> Path:
+    """Where the Cooldown Schedule of the GPU Slot ``value`` lives, listed in ``gpu_slots`` or
+    not; ``value`` must be one ``gpu_slots`` could hold, so it never leaves the directory."""
+    if not GPU_SLOT_VALUE.fullmatch(value):
+        raise KarnError("invalid_gpu_slot_value")
+    return Path(state_root).resolve() / GPU_SLOTS_DIR / value
+
+
+def writable_gpu_schedule_dir(state_root: Path, value: str) -> Path:
+    """The GPU Slot ``value``'s schedule directory, created private on first use; one that is
+    a symlink, or not a directory, is refused rather than written through."""
+    directory = gpu_schedule_dir(state_root, value)
+    directory.parent.parent.mkdir(parents=True, exist_ok=True)
+    for path in (directory.parent, directory):
+        if path.is_symlink() or (path.exists() and not path.is_dir()):
+            raise KarnError("gpu_slot_schedule_unusable")
+        path.mkdir(mode=0o700, exist_ok=True)
+    return directory
+
+
+def scheduled_gpu_slot_values(state_root: Path) -> tuple[str, ...]:
+    """Every GPU Slot value with a schedule directory under the state root, listed in
+    ``gpu_slots`` or not, in GPU order; anything else there is ignored."""
+    root = Path(state_root).resolve() / GPU_SLOTS_DIR
+    try:
+        names = [
+            entry.name
+            for entry in root.iterdir()
+            if GPU_SLOT_VALUE.fullmatch(entry.name) and not entry.is_symlink() and entry.is_dir()
+        ]
+    except OSError:
+        return ()
+    return tuple(sorted(names, key=lambda name: tuple(map(int, name.split(",")))))
 
 
 def gpu_slots(state_root: Path, configured: tuple[str, ...] | None) -> tuple[GpuSlot, ...]:
@@ -887,12 +944,16 @@ def _lock_unusable(path: Path, reason: str) -> str:
     return f"model_server_lock_unusable: {path}: {reason}"
 
 
-def claim_gpu_slot(slots: tuple[GpuSlot, ...], read=None, inherited=None) -> GpuSlotClaim:
+def claim_gpu_slot(
+    slots: tuple[GpuSlot, ...], read=None, inherited=None, *, now: datetime | None = None
+) -> GpuSlotClaim:
     """The first free GPU Slot, held until released; ``model_server_busy`` when none is.
 
     A slot naming a GPU ``nvidia-smi`` does not list, or whose lock file cannot be opened, is
     unusable and skipped, never the end of the run; with no slot usable at all the error is
-    ``gpu_slot_unknown_gpu:<values>`` when unknown GPUs are why. Either way it defers."""
+    ``gpu_slot_unknown_gpu:<values>`` when unknown GPUs are why. Either way it defers. A slot
+    with a Cooldown in force is passed over like a busy one: the Cooldown gates only this
+    claim, never a run already holding the slot."""
     reading = (read or _host_reader(slots))()
     unusable, unknown = [], []
     for slot in slots:
@@ -900,7 +961,7 @@ def claim_gpu_slot(slots: tuple[GpuSlot, ...], read=None, inherited=None) -> Gpu
             unusable.append(_unknown(slot))
             unknown.append(slot.value)
             continue
-        if slot.busy(reading) is not None:
+        if slot.cooling_until(now) is not None or slot.busy(reading) is not None:
             continue
         try:
             handle = _lock(slot)
@@ -918,7 +979,11 @@ def claim_gpu_slot(slots: tuple[GpuSlot, ...], read=None, inherited=None) -> Gpu
 
 
 def gpu_slot_availability(
-    slots: tuple[GpuSlot, ...], read=None, locks: Path | None = None
+    slots: tuple[GpuSlot, ...],
+    read=None,
+    locks: Path | None = None,
+    *,
+    now: datetime | None = None,
 ) -> tuple[bool, tuple[str, ...]]:
     """Whether some GPU Slot looks claimable, and the slots whose lock file is unusable.
 
@@ -933,7 +998,8 @@ def gpu_slot_availability(
         if (reason := slot_unusable(slot, reading)) is not None:
             unusable.append(reason)
         elif (
-            slot.busy(reading) is None
+            slot.cooling_until(now) is None
+            and slot.busy(reading) is None
             and lock_held(slot.lock_path, held, follow_symlinks=True) is not True
         ):
             claimable = True
