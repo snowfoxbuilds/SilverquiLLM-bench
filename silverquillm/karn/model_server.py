@@ -137,7 +137,8 @@ MAX_KEY_FILE_BYTES = 257
 # How many Anthropic-engine runs a host keeps live without ``[model_server]
 # anthropic_concurrency`` (#291).
 DEFAULT_ANTHROPIC_CONCURRENCY = 5
-# A key file's name in a directory of keys; the single-file form is the key ``default``.
+# A key file's name in a directory of keys, 1 to 64 characters, since the record holds it; the
+# single-file form is the key ``default``.
 _KEY_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 # Sent when the workload names no API version; pi and Claude Code both send this one.
 ANTHROPIC_VERSION = "2023-06-01"

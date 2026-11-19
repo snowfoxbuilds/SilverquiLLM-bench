@@ -2929,3 +2929,14 @@ def test_an_anthropic_run_holds_its_relay_slot_only_until_its_relay_stops(
     with AnthropicRelayCollector(tmp_path / "run", plan=plan):
         assert relay_slot_availability(state, 1) is False
     assert relay_slot_availability(state, 1) is True
+
+
+def test_key_file_names_are_one_to_sixty_four_characters(tmp_path):
+    from silverquillm.karn.model_server import anthropic_keys
+
+    keys = tmp_path / ANTHROPIC_KEY_FILE
+    keys.mkdir(parents=True, mode=0o700)
+    for name in ("k", "k" * 64, "k" * 65, "-leading", ".dot", "a b"):
+        (keys / name).write_text("sk-ant-valid-key-0123456789\n")
+        (keys / name).chmod(0o600)
+    assert [name for name, _ in anthropic_keys(tmp_path)] == ["k", "k" * 64]
