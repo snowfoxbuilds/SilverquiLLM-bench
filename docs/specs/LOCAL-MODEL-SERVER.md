@@ -1,5 +1,5 @@
 Status: DRAFT
-Last updated: 2026-11-16
+Last updated: 2026-11-18
 
 # Local Model Server
 
@@ -41,7 +41,7 @@ A file is named by its bare name in the models directory, never a path, and a sp
 A file's flag may be any flag but those refused below; `model` names a single `.gguf` file that is not a split part.
 A recipe without the optional keys keeps its definition, and so its candidate hash, unchanged.
 
-The recipe also sets a `CONSTRUCT_MODEL` and `restricted` egress, an empty `https_hosts` meaning no internet, and points its agent at `http://model-server:8080/v1` through whatever variable the agent reads, as `CONSTRUCT_PI_BASE_URL` for pi; the bench does not check which (grilling 2026-11-16).
+The recipe also sets a `CONSTRUCT_MODEL` and `restricted` egress, an empty `https_hosts` meaning no internet, and points its agent at `http://model-server:8080/v1` through whatever variable the agent reads, as `CONSTRUCT_PI_BASE_URL` for pi, or at `http://model-server:8080` as `ANTHROPIC_BASE_URL` for Claude Code, which adds `/v1/messages` itself; the bench does not check which (grilling 2026-11-16, #287).
 
 The bench refuses only the flags it owns or that would defeat the record (grilling 2026-11-16):
 
@@ -124,8 +124,9 @@ The `--version` probe that checks the build runs in the same environment, with a
 `setpriv`, which stops the server when the runner dies, is found on the runner's `PATH` before the server's environment is built, and a host without it refuses the run before any evidence exists.
 Each file is passed by its declared name in the models directory, after its target is found inside that directory, so llama.cpp derives a split model's other parts from declared names only (grilling 2026-11-16).
 
-The proxy sidecar listens on port 8080 too, serves only clients on the run's own internal network, and forwards only `/v1/` requests of at most 16 MiB, one per connection, to that relay; the workload resolves it as `model-server` through `--add-host`.
-The relay passes on only `POST /v1/chat/completions` and `GET /v1/models`, and refuses a request for more than one choice (`n`).
+The proxy sidecar listens on port 8080 too, serves only clients on the run's own internal network, and forwards only `/v1/` requests of at most 16 MiB, one per connection, to that relay, with at most a plain query (letters, digits, `._=&-`), as Claude Code's `?beta=true`; the workload resolves it as `model-server` through `--add-host`.
+The relay passes on only `POST /v1/chat/completions`, the chat-completions API pi uses, `POST /v1/messages`, the Anthropic Messages API Claude Code uses, `POST /v1/messages/count_tokens` and `GET /v1/models` (#287).
+It drops a query before the server, records only the two completion paths, and refuses a chat completion for more than one choice (`n`).
 The server stops with the run, before grading, and with the runner if the runner dies.
 
 ### Recorded facts
@@ -156,15 +157,18 @@ When the run ends, the relay stops admitting requests, cancels those still in fl
 A start with no `response`, from a runner that died or a request that did not settle in time, counts as an unfinished request.
 An event counts only once it is written whole: a failed write is cut back before the next one, the relay stops admitting requests when it cannot be, and a request whose terminal event cannot be written stays unfinished, so the live and recovered summaries agree.
 Recovery reads only the newline-terminated lines of the relay's events file; an unterminated last line, even one that parses, is ignored with `interrupted_observation_line`.
-A response with status 200 is complete only when it carries a final choice (`finish_reason`) and, for a stream, ends with `data: [DONE]`; one the server ends early is failed with `upstream_response_incomplete`, or `upstream_response_truncated` when a fixed-length body is cut short.
+A response with status 200 is complete only when it carries a final choice (`finish_reason`, or a Messages response's `stop_reason`) and, for a stream, ends with `data: [DONE]` (a Messages stream with `message_stop`); one the server ends early is failed with `upstream_response_incomplete`, or `upstream_response_truncated` when a fixed-length body is cut short.
 A complete response that reports no usage still counts, with usage partial (`response_usage_missing`).
 A request that failed, was cancelled or was unfinished, or a response that reported usage more than once, leaves usage partial (`relayed_request_incomplete`, `multiple_usage_reports`).
 Usage follows OpenAI's convention, input including cached tokens; cache writes are zero, and reasoning tokens are missing, because llama.cpp counts them inside completion tokens.
+A Messages response reports input apart from cache reads, as Anthropic does; the relay adds them back, the convention every Claude run's usage follows, and takes the output count from the stream's final `message_delta`.
+A Messages response carries no `timings`, so a Claude Code run's `server_timings` counts no requests.
 No price applies, whatever name the recipe serves the model under: requests are priced from an empty table (`price_table.models` is empty), so the Estimated Cost is unavailable with `model_price_unavailable`; with no Reported Cost either, the Run Cost is that missing estimate, never zero, and `cost_verification` is null (ADR-023).
 `measurements.server_timings` sums the server's prompt and generation tokens and times into tokens per second, `coverage.failed_requests` counts requests the relay could not complete, and `coverage.unfinished_requests` those of them that never settled.
-A request may set sampling parameters of its own, which llama.cpp honours over the server's flags; each event keeps them as `request_parameters`, and `coverage.requests_with_parameter_overrides` counts such requests.
+A request may set sampling parameters of its own, which llama.cpp honours over the server's flags; each event keeps every key beyond those that only shape the request as `request_parameters` (for a Messages request, Claude Code's `thinking` among them), and `coverage.requests_with_parameter_overrides` counts such requests.
 `run_metadata.model_server` records the spec, the binary and its version, the verified digest, and how long verification and start-up took.
 The run directory also keeps `model-transcript.jsonl`: per request, the messages added since the last reply and the assembled response, with its reasoning and tool calls.
+A Messages request carries its system prompt beside its messages, so a row whose request has no assistant turn yet, the first and each after a compaction, also keeps it as `system`.
 A transcript row that cannot be written leaves its request's record unchanged; `coverage.transcript_rows_missing` counts such rows.
 What the relay keeps of workload-controlled content is bounded: 1 MiB of messages and of response per request, and a few KiB for each other field, cut with `truncated_from_chars`.
 

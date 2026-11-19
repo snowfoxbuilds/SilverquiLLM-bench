@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import re
 import select
 import socket
 import socketserver
@@ -129,11 +130,15 @@ class ConnectProxy(socketserver.StreamRequestHandler):
 
 # How long one model request may stay silent; the recipe's ``request_timeout_seconds`` sets it.
 DEFAULT_MODEL_TIMEOUT_SECONDS = 1800
+# A path under ``/v1/``, with at most a plain query: Claude Code asks for
+# ``/v1/messages?beta=true``. No fragment, escape or space reaches the request line.
+MODEL_TARGET = re.compile(r"/v1/[A-Za-z0-9._/-]*(?:\?[A-Za-z0-9._=&-]*)?")
 
 
 class ModelForward(socketserver.StreamRequestHandler):
     """The workload's plain-HTTP route to the host's model relay: one request per connection,
-    only under ``/v1/``, and only to the one relay address the host gave the sidecar."""
+    only under ``/v1/`` with at most a plain query, and only to the one relay address the host
+    gave the sidecar."""
 
     rbufsize = 0
 
@@ -150,8 +155,7 @@ class ModelForward(socketserver.StreamRequestHandler):
             if (
                 method not in ("GET", "POST")
                 or version not in ("HTTP/1.0", "HTTP/1.1")
-                or not target.startswith("/v1/")
-                or any(c in target for c in "\\ ?#")
+                or not MODEL_TARGET.fullmatch(target)
                 or ".." in target
             ):
                 raise ValueError("model_request_refused")

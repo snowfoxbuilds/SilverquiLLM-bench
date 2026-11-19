@@ -74,6 +74,10 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(0.05)
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        with open(sys.argv[0] + ".paths", "a") as out:
+            out.write(self.path + "\n")
+        if self.path.startswith("/v1/messages"):
+            return self.messages(request)
         messages = request.get("messages")
         last = messages[-1].get("content") if isinstance(messages, list) and messages else None
         if last == "hold":
@@ -150,6 +154,49 @@ class Handler(BaseHTTPRequestHandler):
                 self.hold()
             self.wfile.write(b"%x\r\n%s\r\n" % (len(chunk), chunk))
         self.wfile.write(b"0\r\n\r\n")
+
+    def messages(self, request):
+        # llama.cpp's Anthropic Messages API: input apart from cache reads, output at the end.
+        if self.path == "/v1/messages/count_tokens":
+            return self.whole({"input_tokens": 42})
+        usage = {"input_tokens": 40, "cache_read_input_tokens": 60, "output_tokens": 0}
+        base = {"id": "chatcmpl-2", "type": "message", "role": "assistant", "model": alias}
+        if not request.get("stream"):
+            return self.whole({**base, "content": [{"type": "text", "text": "done"}],
+                "stop_reason": "end_turn", "usage": {**usage, "output_tokens": 7}})
+        events = [
+            {"type": "message_start", "message": {**base, "content": [], "usage": usage}},
+            {"type": "content_block_start", "index": 0,
+                "content_block": {"type": "thinking", "thinking": ""}},
+            {"type": "content_block_delta", "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "think"}},
+            {"type": "content_block_stop", "index": 0},
+            {"type": "content_block_start", "index": 1,
+                "content_block": {"type": "tool_use", "id": "toolu_1", "name": "Bash", "input": {}}},
+            {"type": "content_block_delta", "index": 1,
+                "delta": {"type": "input_json_delta", "partial_json": "{\"command\":"}},
+            {"type": "content_block_delta", "index": 1,
+                "delta": {"type": "input_json_delta", "partial_json": "\"ls\"}"}},
+            {"type": "content_block_stop", "index": 1},
+            {"type": "message_delta", "delta": {"stop_reason": "tool_use"},
+                "usage": {"output_tokens": 7}},
+            {"type": "message_stop"},
+        ]
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+        for event in events:
+            chunk = b"event: %s\ndata: %s\n\n" % (event["type"].encode(), json.dumps(event).encode())
+            self.wfile.write(b"%x\r\n%s\r\n" % (len(chunk), chunk))
+        self.wfile.write(b"0\r\n\r\n")
+    def whole(self, document):
+        body = json.dumps(document).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
 ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
 """
@@ -348,6 +395,96 @@ def test_the_relay_streams_through_and_records_each_request(served, tmp_path):
     )
 
 
+def test_the_relay_records_claude_codes_messages_requests(served, tmp_path):
+    plan = plan_model_server(served.spec, served.host, served.state)
+    run_dir = tmp_path / "run"
+    with ModelRelayCollector(run_dir, plan=plan) as collector:
+        status, body = post(
+            collector.endpoint + "/v1/messages?beta=true",
+            {
+                "model": "qwen3.8-27b",
+                "stream": True,
+                "max_tokens": 128000,
+                "system": [{"type": "text", "text": "You are Claude Code."}],
+                "thinking": {"type": "enabled", "budget_tokens": 31999},
+                "messages": [{"role": "user", "content": "task"}],
+            },
+        )
+        assert status == 200 and body.rstrip().endswith(b'{"type": "message_stop"}')
+        status, body = post(
+            collector.endpoint + "/v1/messages/count_tokens",
+            {"model": "qwen3.8-27b", "messages": [{"role": "user", "content": "x"}]},
+        )
+        assert status == 200 and json.loads(body) == {"input_tokens": 42}
+        post(
+            collector.endpoint + "/v1/messages",
+            {
+                "model": "qwen3.8-27b",
+                "system": "kept once",
+                "messages": [
+                    {"role": "user", "content": "task"},
+                    {"role": "assistant", "content": "earlier"},
+                    {"role": "user", "content": "output"},
+                ],
+            },
+        )
+        measurements = collector.finalize(exit_kind="completed")
+    # The server sees no query; the token count is passed on and never counted as a request.
+    paths = Path(str(served.binary) + ".paths").read_text().split()
+    assert paths == ["/v1/messages", "/v1/messages/count_tokens", "/v1/messages"]
+    first, second = measurements["requests"]
+    assert first["model"] == "qwen3.8-27b" and first["finish_reason"] == "tool_use"
+    # Input includes cache reads, as on every Claude run.
+    assert first["usage"] == {
+        "input_tokens": 100,
+        "cached_input_tokens": 60,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 7,
+        "reasoning_output_tokens": None,
+        "total_tokens": 107,
+    }
+    assert second["finish_reason"] == "end_turn" and second["usage"]["output_tokens"] == 7
+    assert "multiple_usage_reports" not in measurements["usage"]["reasons"]
+    assert "relayed_request_incomplete" not in measurements["usage"]["reasons"]
+    assert measurements["agent_turns"]["tool_calls"]["value"] == 1
+    events = [json.loads(line) for line in (run_dir / "observations.events.jsonl").open()]
+    responses = [event for event in events if event["kind"] == "response"]
+    assert responses[0]["request_parameters"] == {
+        "thinking": {"type": "enabled", "budget_tokens": 31999}
+    }
+    assert responses[0]["max_completion_tokens"] == 128000
+    assert responses[1]["request_parameters"] == {}
+    transcript = [json.loads(line) for line in (run_dir / "model-transcript.jsonl").open()]
+    assert transcript[0]["system"] == [{"type": "text", "text": "You are Claude Code."}]
+    assert transcript[0]["new_messages"] == [{"role": "user", "content": "task"}]
+    assert transcript[0]["response"] == {
+        "content": "",
+        "reasoning": "think",
+        "tool_calls": [{"id": "toolu_1", "name": "Bash", "arguments": '{"command":"ls"}'}],
+    }
+    # Later requests carry the system prompt again; the transcript keeps it where one starts.
+    assert "system" not in transcript[1]
+    assert transcript[1]["new_messages"] == [{"role": "user", "content": "output"}]
+    assert transcript[1]["response"]["content"] == "done"
+    assert (
+        summarize_events(events, exit_kind="completed", adapter="model_server")["requests"]
+        == measurements["requests"]
+    )
+
+
+def test_a_messages_stream_without_its_end_counts_failed():
+    from silverquillm.karn.model_server import MESSAGES, _Response
+
+    response = _Response(MESSAGES)
+    response.feed_stream(
+        b'event: message_delta\ndata: {"type": "message_delta", "delta": {"stop_reason":'
+        b' "end_turn"}, "usage": {"output_tokens": 3}}\n\n'
+    )
+    assert response.finish_reason == "end_turn" and not response.complete
+    response.feed_stream(b'event: message_stop\ndata: {"type": "message_stop"}\n\n')
+    assert response.complete
+
+
 def test_the_sidecar_forwards_only_v1_paths_to_the_relay(served, tmp_path):
     plan = plan_model_server(served.spec, served.host, served.state)
     with ModelRelayCollector(tmp_path / "run", plan=plan) as collector:
@@ -361,8 +498,15 @@ def test_the_sidecar_forwards_only_v1_paths_to_the_relay(served, tmp_path):
                 {"stream": True, "messages": [{"role": "user", "content": "x"}]},
             )
             assert status == 200 and b'"usage"' in body
+            status, body = post(
+                address + "/v1/messages?beta=true",
+                {"stream": True, "messages": [{"role": "user", "content": "x"}]},
+            )
+            assert status == 200 and b"message_stop" in body
             for request in (
                 b"GET /health HTTP/1.1\r\n\r\n",
+                b"GET /v1/models#x HTTP/1.1\r\n\r\n",
+                b"GET /v1/models?a=%2e%2e HTTP/1.1\r\n\r\n",
                 b"GET /v1/../health HTTP/1.1\r\n\r\n",
                 b"CONNECT example.com:443 HTTP/1.1\r\n\r\n",
                 b"POST /v1/chat/completions HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n",
@@ -374,7 +518,7 @@ def test_the_sidecar_forwards_only_v1_paths_to_the_relay(served, tmp_path):
             forward.shutdown()
             forward.server_close()
             thread.join()
-        assert len(collector.finalize(exit_kind="completed")["requests"]) == 1
+        assert len(collector.finalize(exit_kind="completed")["requests"]) == 2
 
 
 def test_a_model_file_that_changed_is_refused_before_the_server_starts(served, tmp_path):
