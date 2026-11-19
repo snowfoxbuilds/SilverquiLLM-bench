@@ -54,7 +54,7 @@ from .test_karn_lifecycle import (
     pool_slot,
 )
 from .test_karn_subscription_usage import UsageSessionDocker, codex_line, login_common
-from .test_monitor import publish
+from .test_monitor import make_run, publish, retain
 from .test_monitor_records import PROFILE, RATES, Host, claude_usage
 
 NOW = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
@@ -404,6 +404,98 @@ def test_the_monitors_write_sets_and_checks_one_profile(tmp_path, monkeypatch):
     )
     assert [c.source for c in written] == ["usage-limit"]
     assert read_limit(host.login) == UsageLimit(80.0)
+
+
+def mislead(monkeypatch, tmp_path):
+    """A process environment that names another Results Repo, holding a low reading, and
+    another host label: a check that resolved its own would never trip."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    publish(elsewhere, "r9", usage=claude_usage(10.0), requests=[])
+    monkeypatch.setenv("SILVERQUILLM_RESULTS_REPO", str(elsewhere))
+    monkeypatch.setenv("SILVERQUILLM_HOST_LABEL", "host-b")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "no-config"))
+
+
+def limit_as_shown(host, limit=None, **given):
+    """``limit_profile`` given what the monitor estimated from, as ``top`` passes it."""
+    return usage_limit.limit_profile(
+        host.login,
+        PROFILE,
+        "claude",
+        limit or UsageLimit(80.0),
+        state_root=host.state,
+        now=NOW,
+        locations={"runs_dir": host.runs, "results_repo": host.repo, "bench_root": None},
+        config=CONFIG,
+        host_label="host-a",
+        **given,
+    )
+
+
+def test_the_callers_locations_and_label_replace_the_hosts_own(tmp_path, monkeypatch):
+    host = Host(tmp_path)
+    mislead(monkeypatch, tmp_path)
+    publish(host.repo, "r1", usage=claude_usage(85.0), requests=[])
+    [written] = limit_as_shown(host)
+    assert (written.end, written.scope) == (RESET, "all")
+
+
+def test_a_run_directory_the_caller_names_counts_where_the_host_names_none(tmp_path, monkeypatch):
+    host = Host(tmp_path)
+    mislead(monkeypatch, tmp_path)
+    run = make_run(host.runs, "r1")
+    retain(run / "run-record.json", "r1", host=None, usage=claude_usage(85.0), requests=[])
+    [written] = limit_as_shown(host)
+    assert written.end == RESET
+
+
+def test_a_newer_reading_the_caller_holds_outweighs_an_older_record_and_keeps_its_reset(
+    tmp_path,
+):
+    host = Host(tmp_path)
+    publish(host.repo, "r1", usage=claude_usage(10.0), requests=[])
+    later = RESET + timedelta(hours=5)
+    [written] = limit_as_shown(host, readings=[reading(85.0, resets=later)])
+    assert written.end == later
+
+
+def test_a_fable_reading_alone_holds_back_only_fable_runs_until_its_own_reset(tmp_path):
+    host = Host(tmp_path)
+    publish(host.repo, "r1", usage=claude_usage(10.0), requests=[])
+    fable_reset = RESET + timedelta(hours=3)
+    held = reading(95.0, resets=fable_reset, window=FABLE)
+    [written] = limit_as_shown(host, UsageLimit(80.0, 90.0), readings=[held])
+    assert (written.scope, written.end) == ("fable", fable_reset)
+
+
+def test_below_the_ceiling_or_with_no_reading_nothing_is_written(tmp_path):
+    host = Host(tmp_path)
+    assert limit_as_shown(host) == []
+    assert limit_as_shown(host, readings=[reading(79.0)]) == []
+    assert read_schedule(host.login, now=NOW) == []
+    assert read_limit(host.login) == UsageLimit(80.0)
+
+
+def test_a_bounded_wait_gives_up_on_a_held_schedule_and_keeps_the_limit(tmp_path):
+    host = Host(tmp_path)
+    publish(host.repo, "r1", usage=claude_usage(85.0), requests=[])
+    kept = cooldown(RESET, RESET + timedelta(days=1), now=NOW, note="kept")
+    schedule_cooldown(host.login, kept, now=NOW)
+    stalled = os.open(host.login / ".cooldowns.lock", os.O_RDWR | os.O_CREAT, 0o600)
+    fcntl.flock(stalled, fcntl.LOCK_EX)
+    try:
+        started = time.monotonic()
+        with pytest.raises(KarnError, match="cooldown_schedule_busy"):
+            limit_as_shown(host, wait=0.3)
+        assert time.monotonic() - started < 3
+    finally:
+        os.close(stalled)
+    assert read_schedule(host.login, now=NOW) == [kept]
+    assert read_limit(host.login) == UsageLimit(80.0)
+    [written] = limit_as_shown(host, wait=0.3)
+    assert written.source == "usage-limit"
+    assert kept in read_schedule(host.login, now=NOW)
 
 
 # `login limit` and the listings ----------------------------------------------------

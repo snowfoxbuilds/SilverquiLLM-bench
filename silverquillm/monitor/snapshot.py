@@ -111,6 +111,10 @@ class ProfileView:
     """Claude's Fable limit, once a reading of it has been seen for this profile."""
     fable_run: bool = False
     """The run holding this profile (``run_id``) is a Fable model's."""
+    observed: tuple[UsageReading, ...] = ()
+    """The readings seen live for this profile that ``weekly`` and ``fable`` were estimated
+    from (``Monitor._observe``), which its records may not hold yet: a Usage Limit set from
+    the monitor is checked with them."""
 
     @property
     def shown(self) -> WeeklyUsage | None:
@@ -354,8 +358,11 @@ class Monitor:
                     self._observe(login, reading)
             if entry.run.provider == "codex" and entry.run.stage is Stage.RUNNING:
                 self._observe(login, self._codex_reading(login))
+        observed: defaultdict[str, list[UsageReading]] = defaultdict(list)
         for (login, _), reading in self._observed_readings(now).items():
-            inputs.add_reading(canonical_login(login, profiles), reading)
+            login = canonical_login(login, profiles)
+            inputs.add_reading(login, reading)
+            observed[login].append(reading)
         holders = self._holders(profiles)
         views = []
         for profile in profiles:
@@ -370,6 +377,7 @@ class Monitor:
                     holder,
                     usage.fable,
                     holder is not None and is_fable(self._live[holder].run.candidate.model),
+                    tuple(observed.get(profile.ref, ())),
                 )
             )
         return views

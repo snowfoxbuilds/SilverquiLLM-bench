@@ -94,6 +94,10 @@ class JobDone(Message):
         self.kind, self.job, self.result = kind, job, result
 
 
+def _reason(error: BaseException | None) -> str:
+    return str(error) if isinstance(error, KarnError) else type(error).__name__
+
+
 def _tag(style: str, text: str) -> str:
     return f"[{style}]{text}[/]" if style and style != "none" else text
 
@@ -689,11 +693,16 @@ class MonitorApp(App):
     def _check_limit(self, state_root: Path, plugin_id: str, slot: str, limit) -> None:
         ref = f"{plugin_id}/{slot}"
         now = self.clock()
+        # Taken here, on the UI thread, from the snapshot on screen: a poll in flight
+        # replaces the snapshot but never changes it, so the check sees what was shown.
+        estimated = limits.estimate(self.snapshot, self.monitor.config, plugin_id, slot)
 
         def work() -> None:
             try:
                 written, error = (
-                    limits.set_and_check(state_root, plugin_id, slot, limit, now=now),
+                    limits.set_and_check(
+                        state_root, plugin_id, slot, limit, now=now, estimated=estimated
+                    ),
                     None,
                 )
             except Exception as failure:  # noqa: BLE001 -- reported, never a crash of the view
@@ -706,9 +715,17 @@ class MonitorApp(App):
         threading.Thread(target=work, name=f"top-limit-{slot}", daemon=True).start()
 
     def _limit_checked(self, ref: str, limit, written: list, error: Exception | None) -> None:
+        if isinstance(error, limits.Unchecked):
+            reason = _reason(error.__cause__)
+            self.notify(
+                f"{ref}: limit saved, but its check could not complete ({reason});"
+                " set it again to check it",
+                severity="error",
+            )
+            self.poll()
+            return
         if error is not None:
-            reason = str(error) if isinstance(error, KarnError) else type(error).__name__
-            self.notify(f"{ref}: limit not set or not checked ({reason})", severity="error")
+            self.notify(f"{ref}: limit not set ({_reason(error)})", severity="error")
             self.poll()
             return
         ceilings = []

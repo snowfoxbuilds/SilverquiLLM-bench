@@ -15,7 +15,7 @@ from __future__ import annotations
 import contextlib
 import math
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -193,19 +193,23 @@ def check_usage_limit(
     now: datetime | None = None,
     config=None,
     wait: float | None = None,
+    bench_root: Path | None = None,
+    host_label: str | None = None,
 ) -> list[Cooldown]:
     """Check one profile's Usage Limit against this host's estimate, writing the Cooldowns
     it asks for. A profile without a limit costs nothing: no estimate is made.
 
     ``execution`` (an ``ExecutionSpend``) is the reconciled spend of the run just ending, in
-    place of whatever its telemetry or records would charge."""
+    place of whatever its telemetry or records would charge. ``host_label`` is the label a
+    caller has already resolved, as the monitor has; without one it is resolved from
+    ``config``."""
     limit = read_limit(directory)
     if limit is None:
         return []
     from silverquillm.host_config import load_host_config
     from silverquillm.monitor.usage import estimate_profile_usage
 
-    from .provenance import host_label
+    from .provenance import host_label as resolve_host_label
 
     config = load_host_config() if config is None else config
     now = now or datetime.now(UTC)
@@ -213,10 +217,11 @@ def check_usage_limit(
         login,
         provider,
         rates=config.usage_rates,
-        host_label=host_label(config=config)[0],
+        host_label=host_label if host_label is not None else resolve_host_label(config=config)[0],
         state_root=Path(state_root),
         runs_dir=Path(runs_dir) if runs_dir is not None else None,
         results_repo=Path(results_repo) if results_repo is not None else None,
+        bench_root=Path(bench_root) if bench_root is not None else None,
         readings=readings,
         execution=execution,
         now=now,
@@ -243,12 +248,48 @@ def host_locations(state_root: Path) -> dict:
 
 
 def limit_profile(
-    directory: Path, login: str, provider: str, limit: UsageLimit, *, state_root: Path, now
+    directory: Path,
+    login: str,
+    provider: str,
+    limit: UsageLimit,
+    *,
+    state_root: Path,
+    now,
+    locations: Mapping[str, Path | None] | None = None,
+    readings: Iterable[UsageReading] = (),
+    config=None,
+    host_label: str | None = None,
+    wait: float | None = None,
 ) -> list[Cooldown]:
     """Set one profile's Usage Limit and check it at once, from the same pieces `login limit`
-    uses; returns the Cooldowns the check wrote. The limit stays set if the check fails."""
+    uses; returns the Cooldowns the check wrote. The limit stays set if the check fails.
+
+    A caller that has already estimated the profile's usage, as the monitor has, passes what
+    it estimated from, so the check sees the figure it shows: ``locations`` (its
+    ``runs_dir``, ``results_repo`` and ``bench_root``, in place of those the configuration
+    names), the live ``readings`` only it holds, its ``config`` and its ``host_label``.
+    ``wait`` bounds the wait on another writer of the schedule, as ``edit_schedule`` does."""
     set_limit(directory, limit, now=now)
-    return check_usage_limit(directory, login, provider, now=now, **host_locations(state_root))
+    if locations is None:
+        where = host_locations(state_root)
+    else:
+        where = {
+            "state_root": Path(state_root),
+            "runs_dir": locations.get("runs_dir"),
+            "results_repo": locations.get("results_repo"),
+            "bench_root": locations.get("bench_root"),
+        }
+    return check_usage_limit(
+        directory,
+        login,
+        provider,
+        now=now,
+        readings=readings,
+        config=config,
+        host_label=host_label,
+        wait=wait,
+        **where,
+    )
 
 
 def check_quietly(

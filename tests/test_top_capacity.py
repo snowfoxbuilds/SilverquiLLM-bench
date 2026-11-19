@@ -3,9 +3,11 @@ Limits, and the forms and keys that write them (RUN-MONITORING.md, Capacity view
 
 from __future__ import annotations
 
+import fcntl
+import os
 import time
 from dataclasses import replace
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -18,18 +20,23 @@ from silverquillm.karn.login_pool import LoginPool, logins_root
 from silverquillm.karn.model_server import gpu_schedule_dir, writable_gpu_schedule_dir
 from silverquillm.karn.usage_limit import UsageLimit, read_limit, set_limit
 from silverquillm.monitor.gpus import GpuSlotStatus, orphaned_gpu_schedules
+from silverquillm.monitor.history import FABLE, WEEKLY, UsageReading
+from silverquillm.top import cooldowns, slots
 from silverquillm.top import format as fmt
-from silverquillm.top import slots
+from silverquillm.top.app import build_app
 from silverquillm.top.capacity import CapacityView
 from silverquillm.top.forms import ConfirmCooldownRemove, CooldownForm, LimitForm
-from silverquillm.top.theme import PLAIN
+from silverquillm.top.theme import MTG, PLAIN
 
 from .test_karn_login_pool import enroll
+from .test_monitor import NOW as RECORDS_NOW
+from .test_monitor import make_run, publish, retain
+from .test_monitor_records import PROFILE, Host, claude_usage
 from .test_top import _app, _settle, synchronous
 from .test_top_cooldowns import _host, _recorded
 from .test_top_gpu_slots import h100
 from .test_top_slots import _suspended
-from .top_fixtures import NOW
+from .top_fixtures import NOW, FakeMonitor, profiles
 
 STATE = ".local/state/silverquillm"
 
@@ -501,3 +508,300 @@ async def test_the_plain_theme_draws_the_capacity_view(tmp_path, monkeypatch):
         assert row[5] == "weekly 75%" and "until" in row[6]
         mark = app.query_one("#schedule-table", DataTable).get_row_at(0)[0].plain
         assert mark == PLAIN.glyph("cooldown")
+
+
+# Keeping the selected row on screen --------------------------------------------------
+
+
+def _tall(*, claude=30, codex=6, gpus=4):
+    """A monitor with more rows than the CAPACITY pane holds at 120×40. Each profile and GPU
+    Slot has one Cooldown noting its own name, so the schedule shown tells whose it is;
+    ``extra`` profiles, when set, enrol ahead of every other in the Claude pool."""
+    monitor = FakeMonitor()
+    base = monitor.snapshot
+    template = {view.status.provider: view for view in profiles()}
+    monitor.extra = 0
+
+    def noted(name):
+        later = NOW + timedelta(days=1)
+        return (cooldown(later, later + timedelta(hours=1), now=NOW, note=name),)
+
+    def view(provider, slot):
+        model = template[provider]
+        status = replace(model.status, slot=slot, cooldowns=noted(slot), busy=False)
+        return replace(model, status=status, run_id=None)
+
+    def snapshot():
+        views = [view("claude", f"a-{n:02d}") for n in range(monitor.extra)]
+        views += [view("claude", f"c-{n:02d}") for n in range(claude)]
+        views += [view("codex", f"x-{n:02d}") for n in range(codex)]
+        slots_ = [
+            GpuSlotStatus(str(n), False, None, (h100(n),), cooldowns=noted(f"gpu {n}"))
+            for n in range(gpus)
+        ]
+        return replace(base(), profiles=views, gpu_slots=slots_)
+
+    monitor.snapshot = snapshot
+    return monitor
+
+
+def _on_screen(app) -> None:
+    """The focused table's cursor row is drawn inside the CAPACITY pane, it is the selected
+    target's row, and the schedule shown is that target's."""
+    table = app.focused
+    view = app.query_one(CapacityView)
+    pane = app.query_one("#capacity-tables")
+    y = table.region.y + table.header_height + table.cursor_row - round(table.scroll_y)
+    visible = pane.scrollable_content_region
+    assert visible.y <= y < visible.bottom, (y, visible, pane.scroll_y)
+    assert app.screen.get_widget_at(table.region.x + 2, y)[0] is table
+    target = view._rows[table.id][table.cursor_row]
+    assert view.selected == target
+    drawn = app.screen._compositor.render_strips()[y].text
+    assert target.name in drawn
+    schedule = app.query_one("#schedule-table", DataTable)
+    assert [cell.plain for cell in schedule.get_row_at(0)][6] == (
+        target.label if target.gpu else target.name
+    )
+    assert app.query_one("#capacity-schedule").border_subtitle == target.label
+
+
+@synchronous
+async def test_moving_down_a_pool_taller_than_the_pane_keeps_the_row_in_view():
+    app = _app(_tall())
+    async with app.run_test(size=(120, 40)) as pilot:
+        await _settle(app, pilot)
+        await pilot.press("4")
+        await pilot.pause()
+        assert app.focused.id == "capacity-claude"
+        for index in range(1, 30):
+            await pilot.press("down")
+            await pilot.pause()
+            assert app.focused.cursor_row == index
+            _on_screen(app)
+        assert app.query_one("#capacity-tables").scroll_y > 0
+        for index in reversed(range(29)):
+            await pilot.press("up")
+            await pilot.pause()
+            assert app.focused.cursor_row == index
+            _on_screen(app)
+
+
+@synchronous
+async def test_a_lower_pool_and_the_gpu_table_keep_their_rows_in_view_both_ways():
+    app = _app(_tall(claude=30, codex=30, gpus=26))
+    async with app.run_test(size=(120, 40)) as pilot:
+        await _settle(app, pilot)
+        await pilot.press("4")
+        await pilot.pause()
+        for table_id, rows in (("capacity-codex", 30), ("capacity-gpus", 26)):
+            await pilot.press("tab")
+            await pilot.pause()
+            assert app.focused.id == table_id
+            _on_screen(app)
+            for index in range(1, rows):
+                await pilot.press("down")
+                await pilot.pause()
+                assert app.focused.cursor_row == index
+                _on_screen(app)
+        assert app.query_one(CapacityView).selected.label == "gpu 25"
+        # Back to the Codex pool, whose cursor rests on its last row, then up it.
+        await pilot.press("shift+tab")
+        await pilot.pause()
+        assert (app.focused.id, app.focused.cursor_row) == ("capacity-codex", 29)
+        _on_screen(app)
+        for index in reversed(range(29)):
+            await pilot.press("up")
+            await pilot.pause()
+            _on_screen(app)
+
+
+@synchronous
+async def test_a_smaller_terminal_and_a_poll_while_scrolled_keep_the_row_in_view():
+    monitor = _tall()
+    app = _app(monitor)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await _settle(app, pilot)
+        await pilot.press("4")
+        await pilot.pause()
+        for _ in range(20):
+            await pilot.press("down")
+        await pilot.pause()
+        _on_screen(app)
+        await pilot.resize_terminal(120, 28)
+        await pilot.pause()
+        await pilot.pause()
+        _on_screen(app)
+        await pilot.press("r")
+        await _settle(app, pilot)
+        _on_screen(app)
+        # Profiles enrolled ahead of the selection move it down the pane; a poll follows it.
+        monitor.extra = 10
+        await pilot.press("r")
+        await _settle(app, pilot)
+        assert app.query_one(CapacityView).selected.name == "c-20"
+        assert app.focused.cursor_row == 30
+        _on_screen(app)
+
+
+# `L` checks the estimate the monitor shows ----------------------------------------------
+
+RECORD_RESET = datetime(2026, 10, 9, tzinfo=UTC)
+"""Where ``claude_usage`` readings reset."""
+
+
+def _limit_host(tmp_path, monkeypatch) -> Host:
+    """A real monitor given its locations by flag, in a process whose environment names
+    another Results Repo, holding a low reading, and another host label, and no runs dir."""
+    host = Host(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    publish(elsewhere, "r9", usage=claude_usage(10.0), requests=[])
+    monkeypatch.setenv("SILVERQUILLM_RESULTS_REPO", str(elsewhere))
+    monkeypatch.setenv("SILVERQUILLM_HOST_LABEL", "host-b")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "no-config"))
+    return host
+
+
+def _seen(percent, resets, window=WEEKLY) -> UsageReading:
+    observed = RECORDS_NOW - timedelta(minutes=30)
+    return UsageReading("claude", percent, 10080, resets, observed, window=window)
+
+
+async def _set_limit(pilot, app, **ceilings) -> list:
+    """Open the only Claude profile's ``L`` form and submit ``ceilings``; the notes so far."""
+    notes = _recorded(app)
+    await pilot.press("4")
+    await pilot.pause()
+    view = app.query_one(CapacityView)
+    assert view.selected.name == "bare-claude-opus"
+    await pilot.press("L")
+    await pilot.pause()
+    _fill(app, **ceilings)
+    await pilot.press("enter")
+    return notes
+
+
+@synchronous
+@pytest.mark.parametrize("where", ["results_repo", "runs_dir"])
+async def test_l_checks_records_where_the_monitors_flags_point(tmp_path, monkeypatch, where):
+    host = _limit_host(tmp_path, monkeypatch)
+    if where == "results_repo":
+        publish(host.repo, "r1", usage=claude_usage(85.0), requests=[])
+    else:
+        run = make_run(host.runs, "r1")
+        retain(run / "run-record.json", "r1", host=None, usage=claude_usage(85.0), requests=[])
+    app = build_app(host.monitor, MTG, interval=60, clock=lambda: host.now)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        [shown] = app.snapshot.profiles
+        assert shown.weekly.percent == pytest.approx(85.0)
+        notes = await _set_limit(pilot, app, weekly="80")
+        await _wait_for(pilot, app, lambda: any("limit set" in note for note, _ in notes))
+        [held] = read_schedule(host.login, now=host.now)
+        assert (held.source, held.scope, held.end) == ("usage-limit", "all", RECORD_RESET)
+        assert any("limit reached" in note for note, _ in notes)
+        [shown] = app.snapshot.profiles
+        assert shown.status.cooldown_until == RECORD_RESET, "the next poll shows the hold"
+
+
+@synchronous
+async def test_l_counts_a_newer_reading_the_monitor_keeps_over_an_older_record(
+    tmp_path, monkeypatch
+):
+    host = _limit_host(tmp_path, monkeypatch)
+    publish(host.repo, "r1", usage=claude_usage(10.0), requests=[])
+    later = RECORD_RESET + timedelta(hours=5)
+    host.monitor._observe(PROFILE, _seen(85.0, later))
+    app = build_app(host.monitor, MTG, interval=60, clock=lambda: host.now)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        assert app.snapshot.profiles[0].weekly.percent == pytest.approx(85.0)
+        notes = await _set_limit(pilot, app, weekly="80")
+        await _wait_for(pilot, app, lambda: any("limit set" in note for note, _ in notes))
+    [held] = read_schedule(host.login, now=host.now)
+    assert (held.scope, held.end) == ("all", later), "the reading's own reset"
+
+
+@synchronous
+async def test_l_holds_back_only_fable_runs_on_a_fable_reading_alone(tmp_path, monkeypatch):
+    host = _limit_host(tmp_path, monkeypatch)
+    publish(host.repo, "r1", usage=claude_usage(10.0), requests=[])
+    fable_reset = RECORD_RESET + timedelta(hours=3)
+    host.monitor._observe(PROFILE, _seen(95.0, fable_reset, FABLE))
+    app = build_app(host.monitor, MTG, interval=60, clock=lambda: host.now)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        notes = await _set_limit(pilot, app, weekly="80", **{"fable-limit": "90"})
+        await _wait_for(pilot, app, lambda: any("limit set" in note for note, _ in notes))
+        assert any("Fable runs held" in note for note, _ in notes)
+    [held] = read_schedule(host.login, now=host.now)
+    assert (held.scope, held.end) == ("fable", fable_reset)
+
+
+@synchronous
+@pytest.mark.parametrize("seen", [None, 79.0])
+async def test_l_below_the_ceiling_or_without_a_reading_writes_nothing(tmp_path, monkeypatch, seen):
+    host = _limit_host(tmp_path, monkeypatch)
+    if seen is not None:
+        host.monitor._observe(PROFILE, _seen(seen, RECORD_RESET))
+    app = build_app(host.monitor, MTG, interval=60, clock=lambda: host.now)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        notes = await _set_limit(pilot, app, weekly="80")
+        await _wait_for(pilot, app, lambda: any("limit set" in note for note, _ in notes))
+        assert not any("limit reached" in note for note, _ in notes)
+    assert read_schedule(host.login, now=host.now) == []
+    assert read_limit(host.login) == UsageLimit(80.0, None)
+
+
+@synchronous
+async def test_l_on_a_held_schedule_reports_the_saved_limit_unchecked_and_a_retry_checks_it(
+    tmp_path, monkeypatch
+):
+    host = _limit_host(tmp_path, monkeypatch)
+    publish(host.repo, "r1", usage=claude_usage(85.0), requests=[])
+    kept = cooldown(RECORD_RESET, RECORD_RESET + timedelta(days=1), now=host.now, note="kept")
+    add_cooldown(host.login, kept, now=host.now)
+    monkeypatch.setattr(cooldowns, "WRITE_WAIT", 0.5)
+    stalled = os.open(host.login / ".cooldowns.lock", os.O_RDWR | os.O_CREAT, 0o600)
+    fcntl.flock(stalled, fcntl.LOCK_EX)
+    app = build_app(host.monitor, MTG, interval=60, clock=lambda: host.now)
+    try:
+        async with app.run_test(size=(200, 50)) as pilot:
+            await _settle(app, pilot)
+            started = time.monotonic()
+            notes = await _set_limit(pilot, app, weekly="80")
+            await _wait_for(pilot, app, lambda: any(level for _, level in notes), timeout=5)
+            assert time.monotonic() - started < 3, "the check waits no longer than the bound"
+            [(note, level)] = notes
+            assert level == "error"
+            assert "limit saved, but its check could not complete" in note
+            assert "cooldown_schedule_busy" in note
+            assert read_limit(host.login) == UsageLimit(80.0, None)
+            # Released after the worker gave up: nothing it left behind writes late.
+            os.close(stalled)
+            stalled = None
+            await pilot.pause(1.0)
+            assert read_schedule(host.login, now=host.now) == [kept]
+            # The view still answers the keyboard.
+            await pilot.press("2")
+            assert app.query_one("#switcher").current == "history"
+            await pilot.press("4")
+            await pilot.pause()
+            assert app.query_one(CapacityView).selected.name == "bare-claude-opus"
+            # Setting it again checks it.
+            await pilot.press("L")
+            await pilot.pause()
+            assert app.screen.query_one("#form-weekly", Input).value == "80"
+            await pilot.press("enter")
+            await _wait_for(pilot, app, lambda: any("limit set" in note for note, _ in notes))
+            schedule = read_schedule(host.login, now=host.now)
+            assert kept in schedule
+            assert [c.source for c in schedule if c != kept] == ["usage-limit"]
+            await pilot.press("q")
+            await pilot.pause()
+            assert app.return_code == 0
+    finally:
+        if stalled is not None:
+            os.close(stalled)

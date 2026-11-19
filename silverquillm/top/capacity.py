@@ -16,6 +16,7 @@ from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Vertical, VerticalScroll
+from textual.geometry import Region
 from textual.message import Message
 from textual.widgets import DataTable, Static
 
@@ -266,6 +267,8 @@ class CapacityView(Vertical):
         if self.selected not in everything:
             self.selected = None
         self._show_schedule()
+        # Rows added or removed above the selection move it within the pane.
+        self._reveal()
 
     def _fill(self, table_id: str, targets: list[Target], rows: list[tuple]) -> None:
         table = self.query_one(f"#{table_id}", DataTable)
@@ -274,8 +277,10 @@ class CapacityView(Vertical):
         table.clear()
         for target, cells in zip(targets, rows, strict=True):
             table.add_row(*cells, key=f"{target.plugin_id}:{target.name}:{target.orphaned}")
-        # A fixed height, the rows and the header, so stacked tables never miss a relayout.
-        table.styles.height = len(rows) + 1
+        # A fixed height, the rows and the header, so stacked tables never miss a relayout;
+        # uncapped, since a DataTable caps itself at its container's height and would then
+        # scroll inside the pane that scrolls it (``_reveal``).
+        table.styles.height = table.styles.max_height = len(rows) + 1
         self._rows[table_id] = targets
         if cursor in targets:
             table.move_cursor(row=targets.index(cursor), animate=False)
@@ -347,10 +352,46 @@ class CapacityView(Vertical):
         # on the table they are in, changes which row is selected.
         if event.data_table.id in self._rows and event.data_table.has_focus:
             self._select_from(event.data_table)
+            self._reveal()
 
     def on_descendant_focus(self, event: events.DescendantFocus) -> None:
         if isinstance(event.widget, DataTable) and event.widget.id in self._rows:
             self._select_from(event.widget)
+            self._reveal()
+
+    def on_resize(self) -> None:
+        self._reveal()
+
+    def _reveal(self) -> None:
+        """Once laid out, scroll the CAPACITY pane just far enough to show the focused
+        resource table's cursor row. A DataTable scrolls only its own viewport to its
+        cursor, and each of these is as tall as its rows (``_fill``), so that never moves;
+        the pane holding them is what must."""
+
+        pane = self.query_one("#capacity-tables", VerticalScroll)
+
+        def scroll() -> None:
+            table = self.app.focused
+            if not (
+                isinstance(table, DataTable)
+                and table.id in self._rows
+                and table.display
+                and 0 <= table.cursor_row < table.row_count
+            ):
+                return
+            rows = table.ordered_rows
+            top = table.header_height + sum(row.height for row in rows[: table.cursor_row])
+            row = Region(0, top, table.size.width, rows[table.cursor_row].height)
+            # Measured from where a scroll under way ends, not from where it has reached.
+            self.app.animator.force_stop_animation(pane, "scroll_y")
+            pane.scroll_to_region(
+                row.translate(table.virtual_region.offset), animate=False, immediate=True
+            )
+
+        # Focusing a table has the screen scroll it into view (``Screen.set_focus``) through
+        # its own queue, then the pane's, after a refresh, animated to the table's top.
+        # Queued behind that on both, this comes after it and has the last word.
+        self.screen.call_later(pane.call_after_refresh, scroll)
 
     # Keys ------------------------------------------------------------------
 
