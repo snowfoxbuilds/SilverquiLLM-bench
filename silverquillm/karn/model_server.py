@@ -1,9 +1,11 @@
-"""A local model server for pi constructs (issue #262).
+"""A local model server for pi and Claude Code constructs (issues #262, #287).
 
 A recipe that declares ``SILVERQUILLM_MODEL_SERVER`` in its runtime environment is served by
 a llama.cpp ``llama-server`` the bench starts on the host, bound to loopback. The workload
 reaches it only as ``http://model-server:8080/v1``: the per-run proxy sidecar forwards that
 address to a host-side relay, and the relay forwards to the server and records every request.
+The relay speaks the server's chat-completions API, which pi uses, and its Anthropic Messages
+API, which Claude Code uses.
 The recipe's server settings are part of its definition, so each configuration is its own
 candidate; the host config only says where this host keeps the builds and the model files.
 """
@@ -130,16 +132,33 @@ MAX_REQUEST_BYTES = 16 * 1024 * 1024
 # What the relay keeps of workload-controlled request content, per field and per request.
 MAX_KEPT_FIELD_CHARS = 4096
 MAX_KEPT_MESSAGES_CHARS = 1024 * 1024
-# Request keys pi sends; any other is a per-request override of the recipe's server settings.
-ORDINARY_REQUEST_KEYS = frozenset(
-    {"model", "messages", "tools", "stream", "stream_options", "store", "max_completion_tokens"}
-)
+CHAT_COMPLETIONS = "/v1/chat/completions"
+MESSAGES = "/v1/messages"
+# Request keys that shape a request without choosing how the server samples, per API: pi's,
+# and the Messages API's. Any other is a per-request override of the recipe's server settings.
+ORDINARY_REQUEST_KEYS = {
+    CHAT_COMPLETIONS: frozenset(
+        {"model", "messages", "tools", "stream", "stream_options", "store", "max_completion_tokens"}
+    ),
+    MESSAGES: frozenset(
+        {"model", "messages", "system", "tools", "tool_choice", "stream", "max_tokens", "metadata"}
+    ),
+}
+# The request key that caps one response's output tokens, per API.
+OUTPUT_LIMIT_KEYS = {CHAT_COMPLETIONS: "max_completion_tokens", MESSAGES: "max_tokens"}
 # How long finalizing waits for cancelled requests to write their terminal records. A request
 # still unsettled after it is counted from its start record as unfinished.
 SETTLE_SECONDS = 10
 REQUEST_STARTED = "request_started"
 TRANSCRIPT_LOST = "transcript_lost"
-RELAYED_PATHS = {("POST", "/v1/chat/completions"), ("GET", "/v1/models")}
+# Completions the relay records, and requests it passes on without recording: the model list,
+# and the Messages API's token count, which generates nothing.
+COMPLETION_PATHS = frozenset({CHAT_COMPLETIONS, MESSAGES})
+RELAYED_PATHS = {
+    *(("POST", path) for path in COMPLETION_PATHS),
+    ("POST", MESSAGES + "/count_tokens"),
+    ("GET", "/v1/models"),
+}
 # A GPU with more memory in use than this runs someone's job, even when ``nvidia-smi`` lists
 # no process to this user; an idle card uses tens of MiB.
 BUSY_MEMORY_MIB = 1024
@@ -1148,10 +1167,39 @@ def _usage(usage: Any) -> dict[str, int | None] | None:
     }
 
 
-class _Response:
-    """What one completion said, assembled from a stream or read whole."""
+def _messages_usage(usage: Any) -> dict[str, int | None] | None:
+    """Messages API usage in the record's token keys, where input includes cache reads as for
+    every Claude run. llama.cpp reports uncached input apart from cache reads and bills no
+    cache writes."""
+    if not isinstance(usage, dict):
+        return None
 
-    def __init__(self):
+    def count(value):
+        return (
+            value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+        )
+
+    uncached = count(usage.get("input_tokens"))
+    read = count(usage.get("cache_read_input_tokens"))
+    output = count(usage.get("output_tokens"))
+    total_input = uncached + (read or 0) if uncached is not None else None
+    return {
+        "input_tokens": total_input,
+        "cached_input_tokens": read,
+        "cache_write_input_tokens": 0,
+        "output_tokens": output,
+        "reasoning_output_tokens": None,
+        "total_tokens": (
+            total_input + output if total_input is not None and output is not None else None
+        ),
+    }
+
+
+class _Response:
+    """What one completion said, assembled from a stream or read whole, in either API."""
+
+    def __init__(self, api: str = CHAT_COMPLETIONS):
+        self.api = api
         self.response_id = self.model = self.finish_reason = None
         self.usage = self.timings = None
         self.usage_reports = 0
@@ -1160,6 +1208,11 @@ class _Response:
         self.tool_calls: dict[int, dict[str, Any]] = {}
         self.stream_done = self._streamed = False
         self._pending = b""
+        # A Messages stream's content blocks by index, each "thinking", "text" or "tool_use".
+        self._blocks: dict[int, str] = {}
+
+    def usage_row(self) -> dict[str, int | None] | None:
+        return (_messages_usage if self.api == MESSAGES else _usage)(self.usage)
 
     @property
     def complete(self) -> bool:
@@ -1180,10 +1233,17 @@ class _Response:
                 self.stream_done = True
                 continue
             with contextlib.suppress(ValueError, RecursionError):
-                self.ingest(json.loads(payload), delta=True)
+                document = json.loads(payload)
+                if self.api == MESSAGES:
+                    self.ingest_event(document)
+                else:
+                    self.ingest(document, delta=True)
 
     def ingest(self, document: Any, *, delta: bool) -> None:
         if not isinstance(document, dict):
+            return
+        if self.api == MESSAGES:
+            self.ingest_message(document)
             return
         self.response_id = document.get("id") or self.response_id
         self.model = document.get("model") or self.model
@@ -1213,6 +1273,70 @@ class _Response:
                 row["name"] += function.get("name") or ""
                 row["arguments"] += function.get("arguments") or ""
 
+    def ingest_message(self, document: dict) -> None:
+        """A whole Messages API response, or the message a stream starts with."""
+        self.response_id = document.get("id") or self.response_id
+        self.model = document.get("model") or self.model
+        self.finish_reason = document.get("stop_reason") or self.finish_reason
+        if isinstance(document.get("usage"), dict):
+            self.usage = dict(document["usage"])
+            if not self._streamed:
+                self.usage_reports += 1
+        for index, block in enumerate(document.get("content") or []):
+            if isinstance(block, dict):
+                self._start_block(index, block)
+
+    def _start_block(self, index: int, block: dict) -> None:
+        kind = block.get("type")
+        self._blocks[index] = kind
+        if kind == "text" and isinstance(block.get("text"), str):
+            self.content.append(block["text"])
+        elif kind == "thinking" and isinstance(block.get("thinking"), str):
+            self.reasoning.append(block["thinking"])
+        elif kind == "tool_use":
+            given = block.get("input")
+            self.tool_calls[index] = {
+                "id": block.get("id"),
+                "name": block.get("name") or "",
+                # A stream sends the input as JSON text after an empty start.
+                "arguments": json.dumps(given) if given else "",
+            }
+
+    def ingest_event(self, event: Any) -> None:
+        """One Messages API stream event."""
+        if not isinstance(event, dict):
+            return
+        kind = event.get("type")
+        if kind == "message_start" and isinstance(event.get("message"), dict):
+            self.ingest_message(event["message"])
+        elif (
+            kind == "content_block_start"
+            and isinstance(event.get("content_block"), dict)
+            and isinstance(event.get("index"), int)
+        ):
+            self._start_block(event["index"], event["content_block"])
+        elif kind == "content_block_delta" and isinstance(event.get("delta"), dict):
+            delta, index = event["delta"], event.get("index")
+            if delta.get("type") == "text_delta" and isinstance(delta.get("text"), str):
+                self.content.append(delta["text"])
+            elif delta.get("type") == "thinking_delta" and isinstance(delta.get("thinking"), str):
+                self.reasoning.append(delta["thinking"])
+            elif (
+                delta.get("type") == "input_json_delta"
+                and index in self.tool_calls
+                and isinstance(delta.get("partial_json"), str)
+            ):
+                self.tool_calls[index]["arguments"] += delta["partial_json"]
+        elif kind == "message_delta":
+            if isinstance(event.get("delta"), dict):
+                self.finish_reason = event["delta"].get("stop_reason") or self.finish_reason
+            if isinstance(event.get("usage"), dict):
+                # The final usage: message_start's input counts with the output counted here.
+                self.usage = {**(self.usage or {}), **event["usage"]}
+                self.usage_reports += 1
+        elif kind == "message_stop":
+            self.stream_done = True
+
     def message(self) -> dict[str, Any]:
         return {
             "content": "".join(self.content),
@@ -1240,6 +1364,14 @@ def _new_messages(request: dict) -> Any:
             added = messages[position + 1 :]
             break
     return _kept(added, MAX_KEPT_MESSAGES_CHARS)
+
+
+def _opens_conversation(messages: Any) -> bool:
+    """Whether a request starts its conversation afresh: no assistant turn yet, as on the first
+    request and the first after a compaction."""
+    return not isinstance(messages, list) or not any(
+        isinstance(message, dict) and message.get("role") == "assistant" for message in messages
+    )
 
 
 class _EventFile:
@@ -1417,7 +1549,8 @@ class ModelRelayCollector:
         if not handler.path.startswith(self.path + "/"):
             handler.send_error(404)
             return
-        target = handler.path[len(self.path) :]
+        # Claude Code asks for ``/v1/messages?beta=true``; the server needs no query.
+        target = handler.path[len(self.path) :].partition("?")[0]
         if (handler.command, target) not in RELAYED_PATHS:
             handler.send_error(404)
             return
@@ -1426,7 +1559,7 @@ class ModelRelayCollector:
             handler.send_error(413)
             return
         body = handler.rfile.read(int(length))
-        if handler.command == "GET":
+        if target not in COMPLETION_PATHS:
             self._forward(handler, target, body, None)
             return
         try:
@@ -1436,7 +1569,7 @@ class ModelRelayCollector:
             return
         request = request if isinstance(request, dict) else {}
         # Several choices in one stream would each report usage; pi asks for one.
-        if request.get("n", 1) != 1:
+        if target == CHAT_COMPLETIONS and request.get("n", 1) != 1:
             handler.send_error(400)
             return
         self._forward(handler, target, body, request)
@@ -1500,7 +1633,7 @@ class ModelRelayCollector:
             self._release(identity)
 
     def _relay_upstream(self, handler, target, body, request, identity, connection, started_ms):
-        response, status, error = _Response(), None, None
+        response, status, error = _Response(target), None, None
         try:
             connection.connect()
             self._connected(identity, connection.sock)
@@ -1546,7 +1679,7 @@ class ModelRelayCollector:
         if request is None:
             return
         try:
-            recorded = self._observe(identity, request, response, status, error, started_ms)
+            recorded = self._observe(identity, target, request, response, status, error, started_ms)
         except Exception:  # noqa: BLE001 -- a request the server saw is never left unrecorded.
             recorded = False
         if not recorded:
@@ -1564,10 +1697,10 @@ class ModelRelayCollector:
                 None,
             )
 
-    def _observe(self, identity, request, response: _Response, status, error, started_ms):
+    def _observe(self, identity, target, request, response: _Response, status, error, started_ms):
         message = response.message()
         messages = request.get("messages")
-        overrides = sorted(set(request) - ORDINARY_REQUEST_KEYS)
+        overrides = sorted(set(request) - ORDINARY_REQUEST_KEYS[target])
         event = {
             "id": identity,
             "kind": "response",
@@ -1581,12 +1714,12 @@ class ModelRelayCollector:
             "status": status,
             "error": error,
             "finish_reason": _kept(response.finish_reason, 64),
-            "usage": _usage(response.usage),
+            "usage": response.usage_row(),
             "usage_reports": response.usage_reports,
             "timings": _kept(response.timings, MAX_KEPT_FIELD_CHARS),
             "tool_calls": len(message["tool_calls"]),
             "stream": bool(request.get("stream")),
-            "max_completion_tokens": _kept(request.get("max_completion_tokens"), 64),
+            "max_completion_tokens": _kept(request.get(OUTPUT_LIMIT_KEYS[target]), 64),
             "request_messages": len(messages) if isinstance(messages, list) else None,
             "timestamp_ms": started_ms,
             "completed_ms": int(time.time() * 1000),
@@ -1601,6 +1734,9 @@ class ModelRelayCollector:
             "status": status,
             "error": error,
         }
+        if target == MESSAGES and "system" in request and _opens_conversation(messages):
+            # The Messages API carries the system prompt beside the messages, not among them.
+            transcript["system"] = _kept(request["system"], MAX_KEPT_MESSAGES_CHARS)
         return self.record(event, transcript)
 
     def _settle(self) -> None:
