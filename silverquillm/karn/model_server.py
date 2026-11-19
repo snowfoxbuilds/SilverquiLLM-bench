@@ -39,6 +39,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from .claude_observations import claude_usage
 from .definition import KarnError
 from .observations import TOKEN_KEYS, _measurements
 from .pricing import MODEL_PRICES
@@ -131,6 +132,8 @@ ANTHROPIC_ENGINE = "anthropic"
 ANTHROPIC_HOST = "api.anthropic.com"
 # The host's Anthropic API key, under ``state_root``, which is never published or backed up.
 ANTHROPIC_KEY_FILE = Path("api-keys") / "anthropic"
+# One key and its newline; a larger file is refused, never read by its prefix.
+MAX_KEY_FILE_BYTES = 257
 # Sent when the workload names no API version; pi and Claude Code both send this one.
 ANTHROPIC_VERSION = "2023-06-01"
 # Request headers the relay passes on to Anthropic; every other header, the workload's key
@@ -1003,9 +1006,12 @@ def plan_anthropic_relay(spec: ModelServerSpec, state_root: Path) -> AnthropicRe
 
 
 def _read_api_key(path: Path) -> str:
-    """The key: a regular file of this user's that no one else may read, holding one line."""
+    """The key: a regular file of this user's that no one else may read, holding one key on
+    one line. Opened without blocking and without following a link, so a FIFO or a device is
+    refused at once instead of holding the run before it starts; read whole, never by a
+    prefix, so a file holding more than one key is refused."""
     try:
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
         raise KarnError("model_relay_api_key_unavailable") from None
     with os.fdopen(descriptor, "rb") as source:
@@ -1016,10 +1022,13 @@ def _read_api_key(path: Path) -> str:
             or status.st_mode & 0o077
         ):
             raise KarnError("model_relay_api_key_permissions")
-        text = source.read(4096).decode("ascii", "replace").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_-]{8,256}", text):
+        content = source.read(MAX_KEY_FILE_BYTES + 1)
+    if len(content) > MAX_KEY_FILE_BYTES:
         raise KarnError("model_relay_api_key_invalid")
-    return text
+    text = content[:-1] if content.endswith(b"\n") else content
+    if not re.fullmatch(rb"[A-Za-z0-9_-]{8,256}", text):
+        raise KarnError("model_relay_api_key_invalid")
+    return text.decode("ascii")
 
 
 def claim_model_server(plan: ModelServerPlan, read=None, inherited=None) -> ModelServerPlan:
@@ -1262,32 +1271,16 @@ def _usage(usage: Any) -> dict[str, int | None] | None:
 
 
 def _messages_usage(usage: Any) -> dict[str, int | None] | None:
-    """Messages API usage in the record's token keys, where input includes cache reads and
-    writes as for every Claude run. Both report uncached input apart from them; llama.cpp
-    reports no cache writes."""
+    """Messages API usage in the record's token keys, by the rules every Claude run's usage
+    follows (``claude_usage``): input includes cache reads and writes, and the one-hour share
+    of the writes is kept only when ``cache_creation`` splits them consistently, so that
+    requests can be priced (#289). llama.cpp reports neither writes nor a split: it writes
+    no cache, so its usage counts zero of both."""
     if not isinstance(usage, dict):
         return None
-
-    def count(value):
-        return (
-            value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
-        )
-
-    uncached = count(usage.get("input_tokens"))
-    read = count(usage.get("cache_read_input_tokens"))
-    written = count(usage.get("cache_creation_input_tokens"))
-    output = count(usage.get("output_tokens"))
-    total_input = uncached + (read or 0) + (written or 0) if uncached is not None else None
-    return {
-        "input_tokens": total_input,
-        "cached_input_tokens": read,
-        "cache_write_input_tokens": written or 0,
-        "output_tokens": output,
-        "reasoning_output_tokens": None,
-        "total_tokens": (
-            total_input + output if total_input is not None and output is not None else None
-        ),
-    }
+    if "cache_creation_input_tokens" not in usage and "cache_creation" not in usage:
+        usage = {**usage, "cache_creation_input_tokens": 0}
+    return claude_usage(usage)
 
 
 class _Response:

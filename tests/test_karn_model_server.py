@@ -166,6 +166,13 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/v1/messages/count_tokens":
             return self.whole({"input_tokens": 42})
         usage = {"input_tokens": 40, "cache_read_input_tokens": 60, "output_tokens": 0}
+        messages = request.get("messages") or [{}]
+        if messages[-1].get("content") == "cache-split":
+            # Anthropic's own usage: writes, split by cache lifetime.
+            usage = {"input_tokens": 10, "cache_read_input_tokens": 200,
+                "cache_creation_input_tokens": 30, "output_tokens": 0,
+                "cache_creation": {"ephemeral_5m_input_tokens": 20,
+                    "ephemeral_1h_input_tokens": 10}}
         base = {"id": "chatcmpl-2", "type": "message", "role": "assistant", "model": alias}
         if not request.get("stream"):
             return self.whole({**base, "content": [{"type": "text", "text": "done"}],
@@ -185,7 +192,7 @@ class Handler(BaseHTTPRequestHandler):
                 "delta": {"type": "input_json_delta", "partial_json": "\"ls\"}"}},
             {"type": "content_block_stop", "index": 1},
             {"type": "message_delta", "delta": {"stop_reason": "tool_use"},
-                "usage": {"output_tokens": 7}},
+                "usage": {"output_tokens": 5 if "cache_creation" in usage else 7}},
             {"type": "message_stop"},
         ]
         self.send_response(200)
@@ -445,6 +452,7 @@ def test_the_relay_records_claude_codes_messages_requests(served, tmp_path):
         "input_tokens": 100,
         "cached_input_tokens": 60,
         "cache_write_input_tokens": 0,
+        "cache_write_1h_input_tokens": 0,
         "output_tokens": 7,
         "reasoning_output_tokens": None,
         "total_tokens": 107,
@@ -2536,7 +2544,7 @@ def anthropic_upstream(served, tmp_path, monkeypatch):
     number = port.getsockname()[1]
     port.close()
     process = subprocess.Popen(
-        [str(served.binary), "--port", str(number), "--alias", "claude-haiku-5-5-20261001"]
+        [str(served.binary), "--port", str(number), "--alias", "claude-haiku-4-5-20251001"]
     )
     deadline = time.monotonic() + 30
     while True:
@@ -2589,6 +2597,11 @@ def test_the_anthropic_relay_adds_the_hosts_key_and_records_the_run(anthropic_up
             )
             with urllib.request.urlopen(request, timeout=30) as response:
                 assert response.status == 200 and b"message_stop" in response.read()
+            split = json.loads(request.data)
+            split["messages"] = [{"role": "user", "content": "cache-split"}]
+            request.data = json.dumps(split).encode()
+            with urllib.request.urlopen(request, timeout=30) as response:
+                assert response.status == 200 and b"message_stop" in response.read()
             # pi's own API is not Anthropic's; the relay refuses it.
             with pytest.raises(urllib.error.HTTPError) as refused:
                 post(collector.endpoint + "/v1/chat/completions", {"messages": []})
@@ -2598,7 +2611,7 @@ def test_the_anthropic_relay_adds_the_hosts_key_and_records_the_run(anthropic_up
             forward.server_close()
             thread.join()
         measurements = collector.finalize(exit_kind="completed")
-    (sent,) = [
+    sent, _ = [
         json.loads(line) for line in Path(str(served.binary) + ".headers").read_text().splitlines()
     ]
     # The host's key replaces the workload's placeholder; only the API's own headers pass.
@@ -2606,14 +2619,20 @@ def test_the_anthropic_relay_adds_the_hosts_key_and_records_the_run(anthropic_up
     assert sent["anthropic-version"] == "2023-06-01"
     assert sent["anthropic-beta"] == "interleaved-thinking-2025-05-14"
     assert "anthropic-dangerous-direct-browser-access" not in sent
-    assert Path(str(served.binary) + ".paths").read_text().split() == ["/v1/messages"]
-    (row,) = measurements["requests"]
-    assert row["model"] == "claude-haiku-5-5-20261001" and row["finish_reason"] == "tool_use"
-    assert row["usage"]["input_tokens"] == 100 and row["usage"]["cached_input_tokens"] == 60
-    # Anthropic's requests are priced from the standard table, never from an empty one.
-    assert measurements["price_table"]["models"]
+    assert Path(str(served.binary) + ".paths").read_text().split() == ["/v1/messages"] * 2
+    plain, split = measurements["requests"]
+    assert plain["model"] == "claude-haiku-4-5-20251001" and plain["finish_reason"] == "tool_use"
+    assert plain["usage"]["input_tokens"] == 100 and plain["usage"]["cached_input_tokens"] == 60
+    assert split["usage"]["cache_write_input_tokens"] == 30
+    assert split["usage"]["cache_write_1h_input_tokens"] == 10
+    # Anthropic's requests are priced from the standard table, writes by cache lifetime:
+    # 10 uncached at $1, 200 reads at $0.10, 20 5-minute writes at $1.25, 10 1-hour writes
+    # at $2 and 5 output at $5 per million tokens.
+    prices = {row["response_id"]: row for row in measurements["request_prices"]}
+    assert prices[split["response_id"]]["usd"] == "0.0001"
+    assert prices[plain["response_id"]]["usd"] is not None
     events = [json.loads(line) for line in (run_dir / "observations.events.jsonl").open()]
-    (response_event,) = [event for event in events if event["kind"] == "response"]
+    response_event, _ = [event for event in events if event["kind"] == "response"]
     assert response_event["upstream"] == "anthropic"
     assert response_event["anthropic_beta"] == ["interleaved-thinking-2025-05-14"]
     assert "sk-ant" not in (run_dir / "observations.events.jsonl").read_text()
@@ -2621,22 +2640,206 @@ def test_the_anthropic_relay_adds_the_hosts_key_and_records_the_run(anthropic_up
     assert summarize_events(events, exit_kind="completed", adapter="model_server") == measurements
 
 
-def test_messages_usage_counts_cache_writes_into_input():
+SPLIT = {"ephemeral_5m_input_tokens": 20, "ephemeral_1h_input_tokens": 10}
+ONLY_5M = {"ephemeral_5m_input_tokens": 30, "ephemeral_1h_input_tokens": 0}
+DISAGREES = {"ephemeral_5m_input_tokens": 5, "ephemeral_1h_input_tokens": 10}
+
+
+@pytest.mark.parametrize(
+    ("usage", "written", "written_1h"),
+    [
+        # llama.cpp: no writes and no split, so zero of both.
+        ({}, 0, 0),
+        ({"cache_creation_input_tokens": 0}, 0, 0),
+        ({"cache_creation_input_tokens": 30, "cache_creation": SPLIT}, 30, 10),
+        ({"cache_creation_input_tokens": 30, "cache_creation": ONLY_5M}, 30, 0),
+        # Writes with no split, or a split that disagrees, leave the lifetime unknown.
+        ({"cache_creation_input_tokens": 30}, 30, None),
+        ({"cache_creation_input_tokens": 30, "cache_creation": DISAGREES}, 30, None),
+        ({"cache_creation_input_tokens": 30, "cache_creation": "x"}, 30, None),
+    ],
+)
+def test_messages_usage_keeps_cache_writes_and_their_lifetime(usage, written, written_1h):
     from silverquillm.karn.model_server import _messages_usage
 
-    usage = _messages_usage(
-        {
-            "input_tokens": 10,
-            "cache_read_input_tokens": 200,
-            "cache_creation_input_tokens": 30,
-            "output_tokens": 5,
-        }
+    row = _messages_usage(
+        {"input_tokens": 10, "cache_read_input_tokens": 200, "output_tokens": 5, **usage}
     )
-    assert usage == {
-        "input_tokens": 240,
-        "cached_input_tokens": 200,
-        "cache_write_input_tokens": 30,
+    assert row["input_tokens"] == 210 + written and row["cached_input_tokens"] == 200
+    assert row["cache_write_input_tokens"] == written
+    assert row["cache_write_1h_input_tokens"] == written_1h
+    assert row["total_tokens"] == 215 + written
+
+
+def _priced(usage):
+    from silverquillm.karn.pricing import price_requests
+
+    request = {"response_id": "r", "model": "claude-haiku-4-5", "usage": usage}
+    return price_requests([request])[0]
+
+
+def _whole(usage):
+    from silverquillm.karn.model_server import MESSAGES, _Response
+
+    response = _Response(MESSAGES)
+    document = {"id": "m", "content": [], "stop_reason": "end_turn", "usage": usage}
+    response.ingest(document, delta=False)
+    return response
+
+
+def test_whole_and_streamed_messages_usage_price_alike():
+    from silverquillm.karn.model_server import MESSAGES, _Response
+
+    usage = {
+        "input_tokens": 10,
+        "cache_read_input_tokens": 200,
+        "cache_creation_input_tokens": 30,
+        "cache_creation": SPLIT,
         "output_tokens": 5,
-        "reasoning_output_tokens": None,
-        "total_tokens": 245,
     }
+    whole = _whole(usage)
+    stream = _Response(MESSAGES)
+    events = [
+        {"type": "message_start", "message": {"id": "m", "usage": {**usage, "output_tokens": 0}}},
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "end_turn"},
+            "usage": {"output_tokens": 5},
+        },
+        {"type": "message_stop"},
+    ]
+    for event in events:
+        stream.feed_stream(b"data: " + json.dumps(event).encode() + b"\n\n")
+    assert whole.usage_row() == stream.usage_row()
+    assert whole.usage_reports == stream.usage_reports == 1
+    priced = _priced(whole.usage_row())
+    assert priced["usd"] == "0.0001" and priced["reasons"] == []
+    # Without the split the writes cannot be priced, and the request says why.
+    del usage["cache_creation"]
+    priced = _priced(_whole(usage).usage_row())
+    assert priced["usd"] is None and "cache_write_split_missing_or_invalid" in priced["reasons"]
+
+
+def test_a_key_file_that_is_a_fifo_is_refused_at_once(tmp_path):
+    path = tmp_path / ANTHROPIC_KEY_FILE
+    path.parent.mkdir(parents=True)
+    os.mkfifo(path, 0o600)
+    # In a child, so a regression that blocks in open() fails the test instead of hanging it.
+    script = (
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from silverquillm.karn.definition import KarnError\n"
+        "from silverquillm.karn.model_server import _read_api_key\n"
+        "try:\n"
+        "    _read_api_key(Path(sys.argv[1]))\n"
+        "except KarnError as error:\n"
+        "    print(error)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(path)],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=True,
+    )
+    assert result.stdout.strip() == "model_relay_api_key_permissions"
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "sk-ant-valid-key-0123456789" + " " * 4096 + "\nsk-ant-second-key-0123456789\n",
+        "sk-ant-valid-key-0123456789\nsk-ant-second-key-0123456789\n",
+        "sk-ant-valid-key-0123456789\n\n",
+        " sk-ant-valid-key-0123456789\n",
+        "k" * 258,
+    ],
+)
+def test_a_key_file_holding_more_than_one_key_is_refused(tmp_path, content):
+    spec = model_server_spec(anthropic_runtime())
+    path = anthropic_key(tmp_path)
+    path.write_text(content)
+    with pytest.raises(KarnError, match="model_relay_api_key_invalid"):
+        plan_anthropic_relay(spec, tmp_path)
+    # Replacing it with a good key lets the next run plan again.
+    anthropic_key(tmp_path, key="sk-ant-valid-key-0123456789")
+    assert plan_anthropic_relay(spec, tmp_path).key_file == path.resolve()
+
+
+def test_a_key_file_that_is_a_link_is_refused(tmp_path):
+    target = anthropic_key(tmp_path / "elsewhere")
+    path = tmp_path / ANTHROPIC_KEY_FILE
+    path.parent.mkdir(parents=True)
+    path.symlink_to(target)
+    with pytest.raises(KarnError, match="model_relay_api_key_unavailable"):
+        plan_anthropic_relay(model_server_spec(anthropic_runtime()), tmp_path)
+
+
+class MessagesRelayHost(RelayHost):
+    def run(self, candidate, workspace, evidence_dir, prompt, *, model_endpoint, **kwargs):
+        post(
+            model_endpoint + "/v1/messages",
+            {"model": "claude-haiku-5-5", "messages": [{"role": "user", "content": "cache-split"}]},
+        )
+        return self.inner.run(candidate, workspace, evidence_dir, prompt, **kwargs)
+
+
+def anthropic_run(tmp_path):
+    from .test_karn_execution import options
+    from .test_karn_host import make_candidate
+
+    candidate = make_candidate(
+        tmp_path / "recipe",
+        network={"mode": "restricted", "https_hosts": []},
+        environment={
+            "CONSTRUCT_MODEL": "claude-haiku-5-5",
+            "CONSTRUCT_PI_BASE_URL": "http://model-server:8080",
+            MODEL_SERVER_ENV: json.dumps({"engine": "anthropic"}),
+        },
+    )
+    return options(
+        tmp_path,
+        build_output=candidate.build_output,
+        host=MessagesRelayHost(),
+        collector_host="127.0.0.1",
+    )
+
+
+def test_a_run_without_its_key_is_refused_before_any_evidence(tmp_path):
+    from silverquillm.karn.execution import run_benchmark
+
+    opts = anthropic_run(tmp_path)
+    launched = []
+    with pytest.raises(KarnError, match="model_relay_api_key_unavailable"):
+        run_benchmark(**opts, run_id="refused", on_launch=lambda: launched.append(1))
+    assert not launched and not (opts["results_dir"] / "refused").exists()
+
+
+def test_an_anthropic_run_claims_no_gpu_slot_and_recovers_as_recorded(
+    anthropic_upstream, tmp_path, monkeypatch
+):
+    from silverquillm.karn.execution import run_benchmark
+
+    opts = anthropic_run(tmp_path)
+    anthropic_key(opts["state_root"])
+    selected = []
+    record = run_benchmark(**opts, run_id="whole", on_gpu_slot_selected=selected.append)
+    assert selected == []
+    server = record.run_metadata["model_server"]
+    assert server == {
+        "engine": "anthropic",
+        "upstream": "https://api.anthropic.com",
+        "served_model": "claude-haiku-5-5",
+        "host": {"api_key": "host_secret"},
+    }
+    (row,) = record.run_metadata["measurements"]["requests"]
+    assert row["usage"]["cache_write_1h_input_tokens"] == 10
+    run_dir = interrupted_run(opts, "cut")
+    inputs = json.loads((run_dir / "run-input.json").read_text())
+    recovered = recover(opts, "cut", monkeypatch, tmp_path)
+    assert recovered.run_metadata["model_server"] == inputs["model_server"] == server
+    events = [json.loads(line) for line in (run_dir / "observations.events.jsonl").open()]
+    summary = summarize_events(events, exit_kind="interrupted", adapter="model_server")
+    assert recovered.run_metadata["measurements"]["requests"] == summary["requests"]
+    for name in ("run-input.json", "observations.events.jsonl", "model-transcript.jsonl"):
+        assert "sk-ant" not in (run_dir / name).read_text()

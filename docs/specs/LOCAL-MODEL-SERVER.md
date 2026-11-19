@@ -178,13 +178,13 @@ A recipe may declare `SILVERQUILLM_MODEL_SERVER = '{"engine":"anthropic"}'`, wit
 
 - **No server and no GPU Slot.** No llama-server starts and no GPU Slot is claimed, so the scheduler treats the entry like any run without a login: one such run is live at a time.
 - **What the relay passes on.** The relay passes on only `POST /v1/messages` and `POST /v1/messages/count_tokens`, to `https://api.anthropic.com`, and refuses every other path.
-- **The key.** The relay adds the host's API key as `x-api-key`. The key is read from `<state_root>/api-keys/anthropic`, which must be a regular file of the runner's user that no one else can read, holding one key. A run with no such file is refused before any evidence exists (`model_relay_api_key_unavailable`, `_permissions`, `_invalid`). The key is read once at the start of the run, and the workload never holds it.
+- **The key.** The relay adds the host's API key as `x-api-key`. The key is read from `<state_root>/api-keys/anthropic`, which must be a regular file of the runner's user that no one else can read, holding one key of at most 256 characters (`[A-Za-z0-9_-]`) and at most one trailing newline. The file is opened without following a link and without blocking, so a link, a FIFO or a device is refused at once, and it is read whole: a longer file, or one holding a second line, is refused rather than read by its prefix. A run is refused before any evidence exists when the file is missing or a link (`model_relay_api_key_unavailable`), not a private regular file (`model_relay_api_key_permissions`), or not one key (`model_relay_api_key_invalid`). A replacement key takes effect from the next run. The key is read once at the start of the run, and the workload never holds it.
 - **Headers.** The sidecar and the relay pass on `anthropic-version` and `anthropic-beta` as the workload sent them, with values limited to `[A-Za-z0-9._,-]`. Every other header stops at the sidecar, the workload's own `x-api-key` among them. Without a version the relay sends `2023-06-01`.
 - **What is recorded.** The run is recorded like a local one, with the same events, transcript and measurements.
   - `run_metadata.model_server` holds `engine`, `upstream`, `served_model` and `host.api_key: "host_secret"`, and has no model digest to verify.
   - Each response event adds `upstream: "anthropic"` and the `anthropic_beta` flags it carried.
   - Requests are priced from the standard price table, not the empty one a local server's alias gets.
-  - Usage counts cache writes into input, as for every Claude run.
+  - Usage counts cache writes into input, as for every Claude run. Their one-hour share is kept as `cache_write_1h_input_tokens` when `cache_creation` splits the writes consistently, which pricing needs. A request whose writes are not split that way keeps the share unknown and is unpriced (`cache_write_split_missing_or_invalid`).
 
 ## Relevant ADRs
 
