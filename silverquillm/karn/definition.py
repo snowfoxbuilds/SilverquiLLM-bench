@@ -280,6 +280,13 @@ class KarnCandidate:
         return self.definition["runtime"]
 
     @property
+    def model(self) -> str | None:
+        """The model the construct runs, from its runtime environment, when it names one."""
+        environment = self.runtime.get("environment")
+        model = environment.get("CONSTRUCT_MODEL") if isinstance(environment, dict) else None
+        return model if isinstance(model, str) and model else None
+
+    @property
     def definition_version(self) -> int:
         return self.definition["definition_version"]
 

@@ -30,7 +30,7 @@ from .grader import DEFAULT_GRADING_TIMEOUT, ContainerGrader, GraderError, selec
 from .grading_inputs import grading_inputs
 from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
 from .login import LOGIN_PLUGINS, LoginProfile
-from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, logins_root
+from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, LoginPoolBusyError, logins_root
 from .model_server import (
     DEFAULT_ANTHROPIC_CONCURRENCY,
     TELEMETRY_ADAPTER,
@@ -412,17 +412,22 @@ def run_benchmark(
         toolchain = prepare_toolchain(state_root)
         login_hold = held.enter_context(contextlib.ExitStack())
         selected_login = login = None
-        if pool is not None:
-            selected_login = pool.acquire(
-                login_hold,
-                settle_artifact=candidate.plugins[0].row["artifact"],
-                poll_seconds=login_poll_seconds,
-                on_wait=login_wait,
-                wait=login_blocking,
-            )
-            login = pool.ref(selected_login)
-        if on_login_selected is not None:
-            on_login_selected(login)
+        try:
+            if pool is not None:
+                selected_login = pool.acquire(
+                    login_hold,
+                    settle_artifact=candidate.plugins[0].row["artifact"],
+                    poll_seconds=login_poll_seconds,
+                    on_wait=login_wait,
+                    wait=login_blocking,
+                    model=candidate.model,
+                )
+                login = pool.ref(selected_login)
+            if on_login_selected is not None:
+                on_login_selected(login)
+        except LoginPoolBusyError as error:
+            error.model = candidate.model
+            raise
         if on_launch is not None:
             on_launch()
         run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)

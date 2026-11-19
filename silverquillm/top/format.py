@@ -149,14 +149,29 @@ def elapsed_of_budget(elapsed: float | None, budget: float | None, theme: Theme)
     return text
 
 
-def cooldown(ends: datetime, now: datetime, theme: Theme, *, short: bool = False) -> Text:
-    """``❄ cooldown until Thu 14:00 (3h12m)``, or ``❄ until Thu 14:00 (3h12m)`` when short."""
+def cooldown(
+    ends: datetime, now: datetime, theme: Theme, *, short: bool = False, fable: bool = False
+) -> Text:
+    """``❄ cooldown until Thu 14:00 (3h12m)``, or ``❄ until Thu 14:00 (3h12m)`` when short;
+    a Fable-only Cooldown reads ``fable cooldown until …`` without the marker, since the
+    profile stays free for other models."""
     local = ends.astimezone()
     left = duration((ends - now).total_seconds())
+    if fable:
+        words = "fable until" if short else "fable cooldown until"
+        return Text(f"{words} {local.strftime('%a %H:%M')} ({left})", style=theme.style("cooldown"))
     words = "until" if short else "cooldown until"
     return Text(
         f"{theme.glyph('cooldown')} {words} {local.strftime('%a %H:%M')} ({left})",
         style=theme.style("cooldown"),
+    )
+
+
+def scheduled(starts: datetime, theme: Theme) -> Text:
+    """``⏲ Fri 09:00``: the next Cooldown, while none is in force."""
+    return Text(
+        f"{theme.glyph('scheduled')} {starts.astimezone().strftime('%a %H:%M')}",
+        style=theme.style("muted"),
     )
 
 

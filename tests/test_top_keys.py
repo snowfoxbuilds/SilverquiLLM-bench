@@ -6,6 +6,7 @@ import asyncio
 import functools
 import sys
 import time
+from datetime import timedelta
 
 import pytest
 from rich.console import Console
@@ -105,6 +106,39 @@ def test_a_cooldown_reads_its_end_and_what_is_left():
     text = fmt.cooldown(ends, NOW, MTG).plain
     assert text.startswith(MTG.glyph("cooldown") + " cooldown until ")
     assert text.endswith("(3h12m)")
+
+
+def _with_status(snapshot, slot, **fields):
+    from dataclasses import replace
+
+    profiles = [
+        replace(view, status=replace(view.status, **fields)) if view.status.slot == slot else view
+        for view in snapshot.profiles
+    ]
+    return replace(snapshot, profiles=profiles)
+
+
+def test_a_fable_only_cooldown_reads_so_without_the_marker_and_stays_untapped():
+    snapshot = _with_status(
+        FakeMonitor().snapshot(), "slot-4", fable_cooldown_until=NOW + timedelta(hours=2)
+    )
+    text = _plain(LoginsPane.pool(snapshot, "codex", MTG))
+    line = next(row for row in text.splitlines() if "slot-4" in row)
+    assert "fable cooldown until" in line and "(2h00m)" in line
+    assert MTG.glyph("cooldown") not in line
+    assert "2/6 untapped" in next(row for row in text.splitlines() if "CODEX pool" in row)
+
+
+def test_a_profile_with_only_a_later_cooldown_reads_when_it_starts():
+    starts = NOW + timedelta(days=1)
+    snapshot = _with_status(FakeMonitor().snapshot(), "slot-4", next_cooldown=starts)
+    line = next(
+        row
+        for row in _plain(LoginsPane.pool(snapshot, "codex", MTG)).splitlines()
+        if "slot-4" in row
+    )
+    assert f"{MTG.glyph('scheduled')} {starts.astimezone():%a %H:%M}" in line
+    assert MTG.glyph("cooldown") not in line
 
 
 # Layout ------------------------------------------------------------------------

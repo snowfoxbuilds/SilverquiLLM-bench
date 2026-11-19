@@ -271,7 +271,8 @@ class LoginsPane(VerticalScroll, can_focus=False):
         """
         views = LoginsPane.views(snapshot, provider)
         role = fmt.provider_role(provider)
-        # Untapped means a new run could take it now: not busy, pending or cooling down.
+        # Untapped means a new run could take it now: not busy, pending or cooling down for
+        # every run; a Fable-only Cooldown leaves it free for other models.
         free = sum(1 for view in views if view.status.free)
         title = Text(f"{provider.upper()} pool", style=theme.style(role, bold=True))
         untapped = Text(f"{free}/{len(views)} untapped", style=theme.style("muted"))
@@ -323,10 +324,16 @@ class LoginsPane(VerticalScroll, can_focus=False):
         percent = usage.percent / 100 if usage else None
         label = "Fable" if view.shows_fable else None
         weekly = fmt.weekly(usage, now, theme, short=short, label=label)
+        held = None
         if status.cooldown_until is not None:
             # A held profile reads its hold first: when it ends matters more than its usage,
             # which a short form leaves out.
             held = fmt.cooldown(status.cooldown_until, now, theme, short=short)
+        elif status.fable_cooldown_until is not None:
+            held = fmt.cooldown(status.fable_cooldown_until, now, theme, short=short, fable=True)
+        elif status.next_cooldown is not None:
+            held = fmt.scheduled(status.next_cooldown, theme)
+        if held is not None:
             if not short:
                 held.append(theme.glyph("sep"), style=theme.style("muted"))
                 held.append_text(weekly)
@@ -427,7 +434,7 @@ class GpuSlotsPanel(Static):
 class PoolPanel(Static, can_focus=True):
     """One Login Pool, one selectable line per profile.
 
-    ``t`` and ``c`` set Login Cooldowns; ``a``, ``R`` and ``D`` add, re-enroll and remove slots.
+    ``t`` and ``c`` set Cooldowns; ``a``, ``R`` and ``D`` add, re-enroll and remove slots.
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [

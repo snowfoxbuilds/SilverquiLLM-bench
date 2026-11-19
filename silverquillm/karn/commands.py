@@ -267,6 +267,10 @@ def _sign_in(state_root, agent, slot):
     raise click.exceptions.Exit(status)
 
 
+def _local_stamp(moment) -> str:
+    return moment.astimezone().strftime("%a %Y-%m-%d %H:%M %Z")
+
+
 @enroll.command("ls")
 @click.argument("agent", required=False, type=click.Choice(sorted(AGENTS)))
 @STATE_ROOT_OPTION
@@ -296,7 +300,11 @@ def list_slots(ctx, agent, state_root):
             )
             detail += "; `login refresh` re-enrolls"
         elif status.cooldown_until is not None:
-            detail = "until " + status.cooldown_until.astimezone().strftime("%a %Y-%m-%d %H:%M %Z")
+            detail = "until " + _local_stamp(status.cooldown_until)
+        elif status.fable_cooldown_until is not None:
+            detail = "Fable runs held until " + _local_stamp(status.fable_cooldown_until)
+        elif status.next_cooldown is not None:
+            detail = "cooldown from " + _local_stamp(status.next_cooldown)
         line = f"{status.provider:<7} {status.slot:<12} {_login_state(status):<9} {detail}"
         click.echo(line.rstrip())
 
@@ -375,19 +383,43 @@ def unblock_slots(ctx, agent, slots, state_root):
 )
 @click.option("--slots", multiple=True, metavar="SLOT", help="A slot to hold; repeat or list.")
 @click.option("--all", "every", is_flag=True, help="Every enrolled slot of the pool.")
-@click.option("--duration", metavar="SPAN", help="How long, such as 30m, 5h, 2d or 1h30m.")
-@click.option("--clear", is_flag=True, help="Lift the cooldown instead of setting one.")
+@click.option(
+    "--from",
+    "starts",
+    metavar="WHEN",
+    help="When it starts (default now): 14:00, Fri 09:00, 2026-11-20 09:00, or +3h.",
+)
+@click.option("--until", "ends", metavar="WHEN", help="When it ends; an offset counts from --from.")
+@click.option("--duration", metavar="SPAN", help="How long from --from, such as 30m, 5h or 2d.")
+@click.option("--fable-only", is_flag=True, help="Hold back only Fable runs (claude-fable-*).")
+@click.option("--note", metavar="TEXT", help="Why, shown beside the Cooldown.")
+@click.option("--clear", is_flag=True, help="Remove every Cooldown of the slots instead.")
 @click.argument("more_slots", nargs=-1, metavar="[SLOT]...")
 @STATE_ROOT_OPTION
 @click.pass_context
-def cooldown(ctx, agent, slots, every, duration, clear, more_slots, state_root):
-    """Hold Login Profiles out of new runs until a duration passes (a Login Cooldown).
+def cooldown(
+    ctx,
+    agent,
+    slots,
+    every,
+    starts,
+    ends,
+    duration,
+    fable_only,
+    note,
+    clear,
+    more_slots,
+    state_root,
+):
+    """Add a Cooldown to Login Profiles: a window in which they take no new run.
 
-    A run already holding a slot is unaffected; runs and batch entries wait for a free one.
+    Times are the host's local time. A run already holding a slot keeps it; runs and batch
+    entries wait for a free one.
     """
     from datetime import UTC, datetime
 
-    from .login_cooldown import clear_cooldown, parse_duration, set_cooldown
+    from .cooldowns import add_cooldown, clear_schedule, parse_duration, parse_time
+    from .cooldowns import cooldown as new_cooldown
     from .login_pool import enrolled_slots, logins_root
 
     state_root = _login_state_root(ctx, state_root)
@@ -396,8 +428,12 @@ def cooldown(ctx, agent, slots, every, duration, clear, more_slots, state_root):
         raise click.UsageError("Pass --slots or --all, not both.")
     if not every and not names:
         raise click.UsageError("Name the slots with --slots, or pass --all.")
-    if clear == (duration is not None):
-        raise click.UsageError("Pass exactly one of --duration or --clear.")
+    if clear and (starts or ends or duration or fable_only or note):
+        raise click.UsageError(
+            "--clear takes no --from, --until, --duration, --fable-only or --note."
+        )
+    if not clear and (ends is None) == (duration is None):
+        raise click.UsageError("Pass exactly one of --until or --duration, or --clear.")
     plugin_id = AGENTS[agent]
     pool_root = logins_root(state_root) / plugin_id
     enrolled = enrolled_slots(pool_root, plugin_id)
@@ -408,20 +444,30 @@ def cooldown(ctx, agent, slots, every, duration, clear, more_slots, state_root):
             f"Not enrolled in the {agent} pool: {', '.join(unknown)} (enrolled: {listed})."
         )
     chosen = enrolled if every else list(dict.fromkeys(names))
+    now = datetime.now(UTC)
     try:
         if clear:
             for name in chosen:
-                lifted = clear_cooldown(pool_root / name)
+                removed = clear_schedule(pool_root / name, now=now)
                 click.echo(
-                    f"{plugin_id}/{name}: " + ("cooldown lifted" if lifted else "no cooldown")
+                    f"{plugin_id}/{name}: "
+                    + (f"{removed} cooldown(s) removed" if removed else "no cooldown")
                 )
             return
-        now = datetime.now(UTC)
-        until = now + parse_duration(duration)
+        start = parse_time(starts, now=now) if starts else now
+        end = (
+            parse_time(ends, now=now, base=start)
+            if ends is not None
+            else start + parse_duration(duration)
+        )
+        window = new_cooldown(
+            start, end, now=now, scope="fable" if fable_only else "all", note=note
+        )
         for name in chosen:
-            set_cooldown(pool_root / name, until, now=now)
-            stamp = until.astimezone().strftime("%a %Y-%m-%d %H:%M %Z")
-            click.echo(f"{plugin_id}/{name}: cooling down until {stamp}")
+            add_cooldown(pool_root / name, window, now=now)
+            scope = "Fable runs held" if fable_only else "cooling down"
+            begins = "" if window.start <= now else f" from {_local_stamp(window.start)}"
+            click.echo(f"{plugin_id}/{name}: {scope}{begins} until {_local_stamp(window.end)}")
     except (KarnError, OSError) as error:
         raise click.ClickException(str(error)) from None
 

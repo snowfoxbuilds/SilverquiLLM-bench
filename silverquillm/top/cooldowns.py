@@ -1,4 +1,4 @@
-"""The monitor's Login Cooldown writes, set from the LOGINS pane's keys.
+"""The monitor's Cooldown writes, set from the LOGINS pane's keys.
 
 It goes through the same file and validation as ``silverquillm login cooldown`` and touches
 nothing else of the slot (RUN-MONITORING.md, Command and scope).
@@ -9,14 +9,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from silverquillm.karn.cooldowns import end_in_force_after, extend_hold
 from silverquillm.karn.definition import KarnError
-from silverquillm.karn.login_cooldown import end_cooldown_after, extend_cooldown
 from silverquillm.karn.login_pool import enrolled_slots, logins_root
 
 STEP = timedelta(hours=1)
 """Each ``t`` holds the slot this much longer."""
 GRACE = timedelta(seconds=10)
-"""``c`` ends a cooldown this long from now rather than at once."""
+"""``c`` ends the Cooldowns in force this long from now rather than at once."""
 
 
 def _slot_directory(state_root: Path, plugin_id: str, slot: str) -> Path:
@@ -27,10 +27,11 @@ def _slot_directory(state_root: Path, plugin_id: str, slot: str) -> Path:
 
 
 def lengthen(state_root: Path, plugin_id: str, slot: str, *, now: datetime) -> datetime:
-    """Hold the slot one more ``STEP``; returns when its cooldown now ends."""
-    return extend_cooldown(_slot_directory(state_root, plugin_id, slot), STEP, now=now)
+    """Hold the slot one more ``STEP``; returns when its hold on every run now ends."""
+    return extend_hold(_slot_directory(state_root, plugin_id, slot), STEP, now=now)
 
 
 def end_soon(state_root: Path, plugin_id: str, slot: str, *, now: datetime) -> datetime | None:
-    """End the slot's cooldown after ``GRACE``; None, writing nothing, when it has none."""
-    return end_cooldown_after(_slot_directory(state_root, plugin_id, slot), GRACE, now=now)
+    """End the slot's Cooldowns in force after ``GRACE``, leaving those still to come; None,
+    writing nothing, when none is in force."""
+    return end_in_force_after(_slot_directory(state_root, plugin_id, slot), GRACE, now=now)

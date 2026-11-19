@@ -82,6 +82,45 @@ def test_the_queue_lists_every_batch_in_queue_order_with_its_unstarted_entries()
     assert document["queue"][2]["status"] == "missing_state"
 
 
+def test_a_login_lists_its_cooldown_schedule_and_a_fable_only_one_leaves_it_free():
+    from silverquillm.karn.cooldowns import cooldown
+
+    snapshot = FakeMonitor().snapshot()
+    later = cooldown(
+        NOW + timedelta(hours=8), NOW + timedelta(hours=9), now=NOW, note="review week"
+    )
+    fable = cooldown(NOW, NOW + timedelta(hours=1), now=NOW, scope="fable", source="usage-limit")
+    status = ProfileStatus(
+        "karn-claude-login",
+        "s",
+        "claude",
+        busy=False,
+        pending=False,
+        cooldowns=(fable, later),
+        fable_cooldown_until=fable.end,
+    )
+    (login,) = _document(replace(snapshot, profiles=[ProfileView(status, None, None)]))["logins"]
+    assert login["state"] == "free"
+    assert login["cooldown_until"] is None
+    assert login["cooldowns"] == [
+        {
+            "start": "2026-10-07T15:30:00Z",
+            "end": "2026-10-07T16:30:00Z",
+            "set_at": "2026-10-07T15:30:00Z",
+            "scope": "fable",
+            "source": "usage-limit",
+        },
+        {
+            "start": "2026-10-07T23:30:00Z",
+            "end": "2026-10-08T00:30:00Z",
+            "set_at": "2026-10-07T15:30:00Z",
+            "scope": "all",
+            "source": "operator",
+            "note": "review week",
+        },
+    ]
+
+
 def test_each_login_profile_has_one_state_word_most_blocking_first():
     snapshot = FakeMonitor().snapshot()
 
@@ -107,6 +146,7 @@ def test_each_login_profile_has_one_state_word_most_blocking_first():
     ]
     assert logins[2]["pending_run"] == "r9"
     assert logins[4]["cooldown_until"] == "2026-10-07T16:30:00Z"
+    assert logins[4]["cooldowns"] == []
     assert logins[0]["weekly_usage_percent"] is None
 
 

@@ -125,6 +125,7 @@ def _login(view: ProfileView) -> dict:
         "pending": status.pending,
         "pending_run": status.pending_run,
         "cooldown_until": _time(status.cooldown_until),
+        "cooldowns": [cooldown.document() for cooldown in status.cooldowns],
         "blocked": status.blocked,
         "blocked_run": status.blocked_run,
         "run_id": view.run_id,

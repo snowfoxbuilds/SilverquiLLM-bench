@@ -86,7 +86,7 @@ def _tag(style: str, text: str) -> str:
 
 class MonitorApp(App):
     """Every monitor call runs in a worker, and nothing here locks; the one write is a
-    Login Cooldown the operator asks for from the status pane (RUN-MONITORING.md)."""
+    Cooldown the operator asks for from the LOGINS pane (RUN-MONITORING.md)."""
 
     ENABLE_COMMAND_PALETTE = False
     # The LOGINS pools come first on screen, but the running runs are what opens on start.
@@ -444,7 +444,7 @@ class MonitorApp(App):
         self.query_one("#topbar", Static).update("".join(parts))
         profiles = isinstance(self.focused, PoolPanel)
         hints = {
-            "dashboard": "↑↓ slot · ←→ pool · t cooldown +1h · c end it · a add · R re-enroll · D remove"
+            "dashboard": "↑↓ slot · ←→ pool · t cooldown +1h · c end now · a add · R re-enroll · D remove"
             if profiles
             else "tab pane · enter open run",
             "history": "b browse · l list · enter open · s/</> sort · S reverse · x excluded",
@@ -499,7 +499,7 @@ class MonitorApp(App):
             self.notify(f"{message.slot}: cooldown not written ({error})", severity="error")
             return
         if until is None:
-            self.notify(f"{message.slot} has no cooldown to end")
+            self.notify(f"{message.slot} has no cooldown in force to end")
             return
         local = until.astimezone()
         if message.lengthen:

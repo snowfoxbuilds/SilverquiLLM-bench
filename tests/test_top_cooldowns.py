@@ -1,4 +1,4 @@
-"""Login Cooldowns from the monitor: the LOGINS pane's selection and its ``t`` and ``c`` keys."""
+"""Cooldowns from the monitor: the LOGINS pane's selection and its ``t`` and ``c`` keys."""
 
 from __future__ import annotations
 
@@ -13,11 +13,7 @@ pytest.importorskip("textual")
 
 from rich.text import Text
 
-from silverquillm.karn.login_cooldown import (
-    COOLDOWN_FILE,
-    cooldown_until,
-    set_cooldown,
-)
+from silverquillm.karn.cooldowns import COOLDOWNS_FILE, add_cooldown, cooldown, held_until
 from silverquillm.karn.login_pool import LoginPool
 from silverquillm.monitor.candidates import CandidateDisplay
 from silverquillm.top.dashboard import LoginsPane, PoolPanel, RunningPane
@@ -79,20 +75,22 @@ async def test_t_holds_the_selected_profile_an_hour_and_each_press_adds_one(tmp_
         before = len(polls)
         await pilot.press("t")
         await _settle(app, pilot)
-        assert cooldown_until(pool.root / "slot-1", now=NOW) == NOW + timedelta(hours=1)
+        assert held_until(pool.root / "slot-1", now=NOW) == NOW + timedelta(hours=1)
         assert len(polls) > before, "a written cooldown refreshes at once"
         await pilot.press("t")
         await _settle(app, pilot)
-        assert cooldown_until(pool.root / "slot-1", now=NOW) == NOW + timedelta(hours=2)
+        assert held_until(pool.root / "slot-1", now=NOW) == NOW + timedelta(hours=2)
         assert [severity for _, severity in notes] == [None, None]
         assert "slot-1 cooldown until" in notes[-1][0] and notes[-1][0].endswith("(+1h)")
-        assert not (pool.root / "slot-2" / COOLDOWN_FILE).exists()
+        assert not (pool.root / "slot-2" / COOLDOWNS_FILE).exists()
 
 
 @synchronous
 async def test_c_ends_a_cooldown_ten_seconds_on_and_ignores_a_profile_without_one(tmp_path):
     monitor, pool = _host(tmp_path)
-    set_cooldown(pool.root / "slot-3", NOW + timedelta(hours=4), now=NOW)
+    add_cooldown(pool.root / "slot-3", cooldown(NOW, NOW + timedelta(hours=4), now=NOW), now=NOW)
+    later = cooldown(NOW + timedelta(hours=8), NOW + timedelta(hours=9), now=NOW)
+    add_cooldown(pool.root / "slot-3", later, now=NOW)
     app = _app(monitor)
     async with app.run_test(size=(200, 50)) as pilot:
         await _settle(app, pilot)
@@ -100,12 +98,13 @@ async def test_c_ends_a_cooldown_ten_seconds_on_and_ignores_a_profile_without_on
         await _codex_slot(pilot, app, "slot-3")
         await pilot.press("c")
         await _settle(app, pilot)
-        assert cooldown_until(pool.root / "slot-3", now=NOW) == NOW + timedelta(seconds=10)
+        assert held_until(pool.root / "slot-3", now=NOW) == NOW + timedelta(seconds=10)
+        assert held_until(pool.root / "slot-3", now=later.start) == later.end
         assert "(in 10s)" in notes[-1][0]
         await pilot.press("down", "c")
         await _settle(app, pilot)
-        assert not (pool.root / "slot-4" / COOLDOWN_FILE).exists()
-        assert notes[-1] == ("slot-4 has no cooldown to end", None)
+        assert not (pool.root / "slot-4" / COOLDOWNS_FILE).exists()
+        assert notes[-1] == ("slot-4 has no cooldown in force to end", None)
 
 
 @synchronous
@@ -117,10 +116,11 @@ async def test_the_monitor_writes_the_same_file_the_cli_does(tmp_path):
         await _codex_slot(pilot, app, "slot-4")
         await pilot.press("t")
         await _settle(app, pilot)
-    written = (pool.root / "slot-4" / COOLDOWN_FILE).read_bytes()
-    set_cooldown(pool.root / "slot-5", NOW + timedelta(hours=1), now=NOW)
-    assert written == (pool.root / "slot-5" / COOLDOWN_FILE).read_bytes()
-    assert set(json.loads(written)) == {"format", "set_at", "until"}
+    written = (pool.root / "slot-4" / COOLDOWNS_FILE).read_bytes()
+    add_cooldown(pool.root / "slot-5", cooldown(NOW, NOW + timedelta(hours=1), now=NOW), now=NOW)
+    assert written == (pool.root / "slot-5" / COOLDOWNS_FILE).read_bytes()
+    (entry,) = json.loads(written)["cooldowns"]
+    assert set(entry) == {"start", "end", "set_at", "scope", "source"}
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root writes through directory permissions")
@@ -142,7 +142,7 @@ async def test_a_cooldown_that_cannot_be_written_is_a_notice_not_a_crash(tmp_pat
             assert app.query_one("#switcher").current == "history"
     finally:
         (pool.root / "slot-1").chmod(0o700)
-    assert not (pool.root / "slot-1" / COOLDOWN_FILE).exists()
+    assert not (pool.root / "slot-1" / COOLDOWNS_FILE).exists()
 
 
 @synchronous

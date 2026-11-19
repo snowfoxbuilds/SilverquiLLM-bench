@@ -1,7 +1,7 @@
 """Login Blocks: a slot held out of every new run because its login needs signing in again.
 
 The host writes the block when a run's login plugin reports ``relogin needed`` (an expired
-or revoked login), so a dead login stops failing run after run. Unlike a Login Cooldown it
+or revoked login), so a dead login stops failing run after run. Unlike a Cooldown it
 has no end time: only a successful re-enrollment of the slot or ``silverquillm login
 unblock`` lifts it. A block file that cannot be read still blocks, so a damaged file never
 lets a broken login back into the pool.

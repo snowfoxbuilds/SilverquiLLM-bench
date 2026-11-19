@@ -39,7 +39,7 @@ KEYS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
             ("↑ ↓ / k j", "select the previous / next Login Profile"),
             ("← → / h l", "move to the other pool, or out of the pane"),
             ("t", "cooldown the selected profile for 1h; each press adds 1h"),
-            ("c", "end the selected profile's cooldown in 10s"),
+            ("c", "end the selected profile's cooldowns in force in 10s"),
             ("a", "add a slot to the focused pool (signs in outside the TUI)"),
             ("R", "re-enroll the selected profile (signs in outside the TUI)"),
             ("D", "remove the selected profile, after a y/n confirm"),

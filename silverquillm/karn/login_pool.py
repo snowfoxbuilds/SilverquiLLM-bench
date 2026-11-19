@@ -22,10 +22,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from .cooldowns import held_until
 from .definition import KarnError, canonical, read_regular, strict_json
 from .login import LOGIN_PLUGINS, LoginInUseError, LoginProfile, private_directory, write_private
 from .login_block import is_blocked
-from .login_cooldown import cooldown_until
 
 SLOT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 # ASCII digits only: ``str.isdigit`` also accepts characters ``int`` refuses, such as ``²``.
@@ -59,6 +59,9 @@ class LoginPoolUnavailableError(KarnError):
 
 class LoginPoolBusyError(KarnError):
     """Usable slots exist, but their owners or cooldowns prevent an immediate claim."""
+
+    model: str | None = None
+    """The refused run's model, when known: which slots a Fable-only Cooldown keeps from it."""
 
 
 def logins_root(state_root: Path) -> Path:
@@ -242,13 +245,17 @@ class LoginPool:
                 names.append(entry.name)
         return names
 
-    def has_claimable_slot(self) -> bool:
-        """Read-only admission hint for settled slots; acquisition remains authoritative."""
+    def has_claimable_slot(self, *, model: str | None = None) -> bool:
+        """Read-only admission hint for settled slots; acquisition remains authoritative.
+
+        A slot with a Cooldown in force for a run of ``model`` is not claimable; with no
+        model known, only a Cooldown that holds back every run counts.
+        """
         for name in enrolled_slots(self.root, self.plugin_id):
             directory = self.root / name
             descriptor = None
             try:
-                if cooldown_until(directory) is not None or is_blocked(directory):
+                if held_until(directory, model=model) is not None or is_blocked(directory):
                     continue
                 try:
                     descriptor = os.open(directory / "runner.lock", os.O_RDONLY | os.O_NOFOLLOW)
@@ -355,6 +362,7 @@ class LoginPool:
         poll_seconds: float = DEFAULT_POLL_SECONDS,
         on_wait: Callable[[str], None] | None = None,
         wait: bool = True,
+        model: str | None = None,
     ) -> LoginProfile:
         """Lock a free slot into ``hold``, waiting while every usable slot is busy.
 
@@ -364,9 +372,9 @@ class LoginPool:
         taken only when no settled slot is free and the journal names ``settle_artifact``,
         the plugin artifact this run brings, so the host can preserve that run's native state
         and settle it as a login's next run always has. Its stored login is left for that
-        plugin to judge. Any other pending slot waits for ``recover``. A slot under a Login
-        Cooldown counts as busy until the cooldown ends, and a slot under a Login Block until
-        it is re-enrolled or unblocked, so a run waits for it rather than refusing. With no
+        plugin to judge. Any other pending slot waits for ``recover``. A slot with a Cooldown
+        in force for a run of ``model`` counts as busy until it ends, and a slot under a Login
+        Block until it is re-enrolled or unblocked, so a run waits for it rather than refusing. With no
         slot enrolled, or none usable and none busy, cooling down or blocked, waiting could
         never end, so those refuse instead.
         """
@@ -391,7 +399,7 @@ class LoginPool:
                     lock = contextlib.ExitStack()
                     try:
                         profile = self.slot(name)
-                        if cooldown_until(profile.directory) is not None:
+                        if held_until(profile.directory, model=model) is not None:
                             cooling += 1
                             continue
                         # Checked before locking too, so polling never makes a sign-in
