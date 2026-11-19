@@ -39,7 +39,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .claude_observations import claude_usage
 from .cooldowns import drop_ended, ending_cooldown, extend_ending, read_schedule
@@ -792,23 +792,36 @@ class GpuSlot:
                 return "memory_used"
         return None
 
-    def used_outside(self, reading: GpuReading, holders: frozenset[int] | None) -> str | None:
-        """Why the slot is used outside the bench, None when it is not or that cannot be told.
+    def used_outside(
+        self, reading: GpuReading, holders: frozenset[int] | None
+    ) -> str | Literal[False] | None:
+        """Why the slot is used outside the bench; False when the reading shows it is not, and
+        None when that cannot be told.
 
         ``holders`` are the PIDs holding the slot's lock. A compute process on its GPUs that is
         neither one of them nor their descendant is work outside the bench; so, with the lock
-        free, is memory past ``BUSY_MEMORY_MIB`` no visible process explains. With the lock
-        held, unexplained memory may be the bench's own, and never counts."""
-        if self.value is None or holders is None:
+        free, is any compute process on them, or memory past ``BUSY_MEMORY_MIB``. With the lock
+        held, unexplained memory may be the bench's own, and never counts. Any such use found
+        is enough, but finding none tells only from a complete reading: every GPU of the slot
+        listed, with the lock held each process on them known by its PID, and with it free each
+        GPU's memory known."""
+        if self.value is None or holders is None or reading.gpus is None:
             return None
         gpus = self.gpus(reading) or ()
         uuids = {gpu["uuid"] for gpu in gpus}
-        processes = [pid for uuid_, pid in reading.compute_pids if uuid_ in uuids]
         if not holders:
-            return self.busy(reading)
-        if any(pid is not None and not _descends(pid, holders) for pid in processes):
-            return "compute_process"
-        return None
+            if (why := self.busy(reading)) is not None:
+                return why
+            unknown = any(not isinstance(gpu["memory_used_mib"], (int, float)) for gpu in gpus)
+        else:
+            processes = [(u, pid) for u, pid in reading.compute_pids if u in uuids]
+            if any(pid is not None and not _descends(pid, holders) for _, pid in processes):
+                return "compute_process"
+            known = {u for u, pid in processes if pid is not None}
+            unknown = not (uuids & reading.compute_uuids) <= known or any(
+                pid is None for _, pid in processes
+            )
+        return None if unknown or self.unknown_gpus(reading) else False
 
     @property
     def schedule_dir(self) -> Path | None:
@@ -912,8 +925,9 @@ def extend_gpu_cooldowns(
     returning the slots extended; never raises, since neither a claim nor a scheduler pass may
     fail for it. ``nvidia-smi`` is read only when some Cooldown is ending, between two reads of
     each slot's lock holders (a ``reading`` given is taken before both); nothing is extended
-    when the holders cannot be told. A slot found not used outside the bench after its
-    Cooldown ended has the Cooldown dropped, so later work never revives it."""
+    when the holders cannot be told. A slot a reading shows not used outside the bench after
+    its Cooldown ended has the Cooldown dropped, so later work never revives it; a reading that
+    cannot tell, such as a failed ``nvidia-smi``, leaves the schedule as it was."""
     from silverquillm.monitor.locks import PROC_LOCKS, lock_holders
 
     log = logging.getLogger(__name__)
@@ -941,10 +955,11 @@ def extend_gpu_cooldowns(
         try:
             after = lock_holders(slot.lock_path, locks)
             holders = _bench_holders(slot.lock_path, before, after)
-            if slot.used_outside(reading, holders) is not None:
+            use = slot.used_outside(reading, holders)
+            if use:
                 if extend_ending(directory, now=now, wait=EXTENSION_WAIT) is not None:
                     extended.append(slot.value)
-            elif holders is not None and ending.end <= now:
+            elif use is False and ending.end <= now:
                 drop_ended(directory, now=now, wait=EXTENSION_WAIT)
         except Exception as error:  # noqa: BLE001 - an extension never fails its caller
             log.warning("gpu %s: cooldown not extended (%s)", slot.value, _why(error))

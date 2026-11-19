@@ -449,9 +449,10 @@ def extended(cooldowns: list[Cooldown], now: datetime) -> list[Cooldown] | None:
 
     Its end moves on one ``EXTENSION_STEP`` from where it was, which is after now since only a
     Cooldown ended less than a step ago is due, so the result does not depend on when the
-    check ran. An end that reaches the start of a later Cooldown merges the two: one window
-    from the first's start to the later end, keeping the later Cooldown's note and whether
-    it extends."""
+    check ran. An end that reaches the start of a later Cooldown merges it with the next one,
+    the first to start: one window from the first's start to that Cooldown's own end, keeping
+    its note and whether it extends. Every other Cooldown stays as it was, so one further on,
+    or one beginning as the next does, keeps its own hold, and a gap before it stays free."""
     ending = _ending(cooldowns, now)
     if ending is None:
         return None
@@ -459,18 +460,14 @@ def extended(cooldowns: list[Cooldown], now: datetime) -> list[Cooldown] | None:
     if end - now > HORIZON:
         return None
     reached = [o for o in cooldowns if o is not ending and ending.end <= o.start <= end]
-    if reached:
-        later = max(reached, key=lambda o: o.end)
+    later = min(reached, key=lambda o: (o.start, o.end), default=None)
+    if later is not None:
         merged = replace(
-            later,
-            start=ending.start,
-            end=max(end, later.end),
-            extensions=ending.extensions + later.extensions + 1,
+            later, start=ending.start, extensions=ending.extensions + later.extensions + 1
         )
     else:
         merged = replace(ending, end=end, extensions=ending.extensions + 1)
-    gone = {id(ending), *map(id, reached)}
-    return [*(c for c in cooldowns if id(c) not in gone), merged]
+    return [*(c for c in cooldowns if c is not ending and c is not later), merged]
 
 
 class _Unchanged(Exception):

@@ -813,3 +813,198 @@ def test_a_login_profiles_cooldowns_are_never_extended(tmp_path):
     window = cooldown(now - timedelta(hours=1), now + timedelta(seconds=30), now=now)
     assert not window.extend and "extend" not in window.document()
     assert "extensions" not in window.document()
+
+
+# A check that cannot tell whether the slot is used outside the bench (PR #297 review).
+
+
+def _unclassified():
+    """GPU 0 running a compute process whose PID ``nvidia-smi`` does not give."""
+    from .test_karn_model_server import smi_output
+
+    return _real_read_gpus(
+        smi_output(
+            b"0, GPU-0, NVIDIA H100 80GB HBM3, 14000, 81559, 700.00, 580.1\n"
+            b"1, GPU-1, NVIDIA H100 80GB HBM3, 14, 81559, 700.00, 580.1\n",
+            b"GPU-0, [N/A], 14000\n",
+        )
+    )
+
+
+def _in_flight():
+    """The host's own reader while another read of ``nvidia-smi`` is in flight."""
+    from silverquillm.karn import model_server
+
+    with model_server._NVIDIA_SMI:
+        return _real_read_gpus()
+
+
+UNKNOWN = [
+    pytest.param(
+        "0", False, lambda: GpuReading(None, reason="nvidia_smi_unavailable"), id="failed"
+    ),
+    pytest.param("0", False, _in_flight, id="in-flight"),
+    pytest.param("0", False, lambda: GpuReading(()), id="no-gpus"),
+    pytest.param("0", False, lambda: GpuReading((h100(1),)), id="gpu-missing"),
+    pytest.param("0,1", False, lambda: GpuReading((h100(0),)), id="slot-member-missing"),
+    pytest.param(
+        "0", False, lambda: GpuReading((h100(0, used=None), h100(1))), id="memory-unknown"
+    ),
+    pytest.param("0", True, _unclassified, id="process-unclassified"),
+]
+
+
+def _ended_window(state, value, now):
+    ended = now - timedelta(minutes=2)
+    return _extending(
+        state, value, ended - timedelta(hours=2), ended, now=ended - timedelta(hours=1)
+    )
+
+
+def _maybe_holding(slot, held):
+    return _holding(slot) if held else contextlib.nullcontext()
+
+
+@pytest.mark.parametrize(("value", "held", "unknown"), UNKNOWN)
+def test_a_check_that_cannot_tell_leaves_an_ended_cooldown_to_extend(
+    tmp_path, value, held, unknown
+):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, (value,))
+    window = _ended_window(tmp_path, value, now)
+    with _maybe_holding(slots[0], held):
+        assert extend_gpu_cooldowns(slots, unknown, now=now) == ()
+        assert _schedule(tmp_path, value, now=now) == [window]
+        later = now + timedelta(seconds=10)
+        assert extend_gpu_cooldowns(slots, reading=_used_by(4242), now=later) == (value,)
+    (after,) = _schedule(tmp_path, value, now=later)
+    assert after.end == window.end + EXTENSION_STEP and after.extensions == 1
+
+
+@pytest.mark.parametrize(("value", "held", "unknown"), UNKNOWN)
+def test_a_check_that_cannot_tell_leaves_the_lapse_to_a_free_reading(
+    tmp_path, value, held, unknown
+):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, (value,))
+    window = _ended_window(tmp_path, value, now)
+    with _maybe_holding(slots[0], held):
+        assert extend_gpu_cooldowns(slots, unknown, now=now) == ()
+        assert _schedule(tmp_path, value, now=now) == [window]
+        lapsed = now + timedelta(seconds=10)
+        assert extend_gpu_cooldowns(slots, reading=_free(), now=lapsed) == ()
+        assert _schedule(tmp_path, value, now=lapsed) == []
+        revived = lapsed + timedelta(seconds=10)
+        assert extend_gpu_cooldowns(slots, reading=_used_by(4242), now=revived) == ()
+    assert _schedule(tmp_path, value, now=revived) == []
+
+
+@pytest.mark.parametrize(("value", "held", "unknown"), UNKNOWN)
+def test_a_check_that_cannot_tell_never_revives_a_cooldown_past_the_step(
+    tmp_path, value, held, unknown
+):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, (value,))
+    window = _ended_window(tmp_path, value, now)
+    with _maybe_holding(slots[0], held):
+        assert extend_gpu_cooldowns(slots, unknown, now=now) == ()
+        for late in (timedelta(0), timedelta(minutes=5), timedelta(days=1)):
+            past = window.end + EXTENSION_STEP + late
+            assert extend_gpu_cooldowns(slots, reading=_used_by(4242), now=past) == ()
+            assert _schedule(tmp_path, value, now=past) == [window]
+            assert slots[0].cooling_until(past) is None
+
+
+def test_use_seen_on_what_a_reading_lists_extends_though_the_rest_cannot_be_told(tmp_path):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, ("0,1",))
+    window = _ended_window(tmp_path, "0,1", now)
+    busy_without_gpu_1 = GpuReading((h100(0, used=40_000),))
+    assert extend_gpu_cooldowns(slots, reading=busy_without_gpu_1, now=now) == ("0,1",)
+    (after,) = _schedule(tmp_path, "0,1", now=now)
+    assert after.end == window.end + EXTENSION_STEP
+
+
+# An extension merges into the next Cooldown only (PR #297 review).
+
+
+def _window(start, end, now, **fields):
+    return cooldown(start, end, now=now - timedelta(days=1), **fields)
+
+
+def test_a_merge_ends_where_a_short_no_extend_successor_does():
+    now = datetime.now(UTC).replace(microsecond=0)
+    ending = _window(now - timedelta(hours=1), now + timedelta(seconds=30), now, extend=True)
+    short = _window(now + timedelta(minutes=10), now + timedelta(minutes=15), now, note="nx")
+    (merged,) = extended([ending, short], now)
+    assert (merged.start, merged.end, merged.note) == (ending.start, short.end, "nx")
+    assert not merged.extend and merged.extensions == 1
+    assert extended([merged], short.end - timedelta(seconds=20)) is None
+
+
+def test_a_merge_with_a_short_extendable_successor_extends_again_from_its_end():
+    now = datetime.now(UTC).replace(microsecond=0)
+    ending = _window(now - timedelta(hours=1), now + timedelta(seconds=30), now, extend=True)
+    short = _window(now + timedelta(minutes=10), now + timedelta(minutes=15), now, extend=True)
+    (merged,) = extended([ending, short], now)
+    assert (merged.start, merged.end) == (ending.start, short.end) and merged.extend
+    (again,) = extended([merged], short.end - timedelta(seconds=20))
+    assert again.end == short.end + EXTENSION_STEP and again.extensions == 2
+
+
+def test_a_merge_keeps_the_windows_after_the_next_and_the_gaps_between():
+    now = datetime.now(UTC).replace(microsecond=0)
+    ending = _window(now - timedelta(hours=1), now + timedelta(seconds=30), now, extend=True)
+    short = _window(now + timedelta(minutes=10), now + timedelta(minutes=15), now)
+    after = _window(now + timedelta(minutes=20), now + timedelta(minutes=25), now, extend=True)
+    schedule = extended([ending, after, short], now)
+    merged = schedule[-1]
+    assert schedule == [after, merged] and merged.end == short.end and not merged.extend
+    gap = now + timedelta(minutes=17)
+    assert not any(c.in_force(gap) for c in schedule)
+
+
+def test_a_merge_leaves_an_overlapping_or_same_start_window_its_own_hold():
+    now = datetime.now(UTC).replace(microsecond=0)
+    ending = _window(now - timedelta(hours=1), now + timedelta(seconds=30), now, extend=True)
+    short = _window(now + timedelta(minutes=10), now + timedelta(minutes=15), now)
+    tied = _window(now + timedelta(minutes=10), now + timedelta(minutes=40), now, note="tied")
+    overlapping = _window(now + timedelta(minutes=12), now + timedelta(minutes=50), now)
+    schedule = extended([ending, tied, overlapping, short], now)
+    merged = schedule[-1]
+    assert schedule == [tied, overlapping, merged]
+    assert (merged.start, merged.end) == (ending.start, short.end)
+
+
+def test_a_merged_no_extend_successor_frees_the_gpu_at_its_end_and_keeps_later_windows(tmp_path):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, ("0",))
+    ending = _extending(
+        tmp_path, "0", now - timedelta(hours=1), now + timedelta(seconds=30), now=now
+    )
+    short = _extending(
+        tmp_path,
+        "0",
+        now + timedelta(minutes=10),
+        now + timedelta(minutes=15),
+        now=now,
+        extend=False,
+    )
+    later = _extending(
+        tmp_path, "0", now + timedelta(minutes=20), now + timedelta(minutes=25), now=now
+    )
+    assert extend_gpu_cooldowns(slots, reading=_used_by(4242), now=now) == ("0",)
+    schedule = _schedule(tmp_path, now=now)
+    merged = next(c for c in schedule if c.start == ending.start)
+    assert merged.end == short.end and not merged.extend
+    assert later in schedule and len(schedule) == 2
+    with pytest.raises(ModelServerBusyError):
+        claim_gpu_slot(slots, _free, now=short.end - timedelta(seconds=1))
+    # Still busy at the boundary: a no-extend window ends on time.
+    for check in (short.end - timedelta(seconds=20), short.end + timedelta(seconds=10)):
+        assert extend_gpu_cooldowns(slots, reading=_used_by(4242), now=check) == ()
+    assert _schedule(tmp_path, now=now) == schedule
+    claim_gpu_slot(slots, _free, now=short.end).release()
+    with pytest.raises(ModelServerBusyError):
+        claim_gpu_slot(slots, _free, now=later.start)
+    assert slots[0].cooling_until(later.start) == later.end
