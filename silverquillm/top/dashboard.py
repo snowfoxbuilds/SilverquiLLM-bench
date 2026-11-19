@@ -425,6 +425,9 @@ class GpuSlotsPanel(Static):
             detail = "unusable · " + status.unusable
         elif state == "cooldown":
             detail = fmt.cooldown(status.cooldown_until, now, theme)
+            if status.cooldown_extensions:
+                detail.append(theme.glyph("sep"), style=theme.style("muted"))
+                detail.append(f"busy +{status.cooldown_extensions}", style=theme.style("cooldown"))
         elif state == "busy":
             detail = "busy · " + (
                 "another process" if status.busy == "compute_process" else "memory in use"

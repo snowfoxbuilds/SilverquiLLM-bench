@@ -919,6 +919,10 @@ def _gpu_slot_values() -> tuple[str, ...] | None:
 
 def _cooldown_line(window) -> str:
     line = f"  {_local_stamp(window.start)} – {_local_stamp(window.end)}  {window.source}"
+    if window.extensions:
+        line += f" (busy +{window.extensions})"
+    if not window.extend:
+        line += "  no-extend"
     return line + (f"  {window.note}" if window.note else "")
 
 
@@ -941,6 +945,8 @@ def gpu_ls(state_root):
     for status in statuses:
         if status.state == "cooldown":
             detail = "until " + _local_stamp(status.cooldown_until)
+            if status.cooldown_extensions:
+                detail += f" (busy +{status.cooldown_extensions})"
         elif status.state == "unusable":
             detail = status.unusable
         elif status.state == "busy":
@@ -970,15 +976,21 @@ def gpu_ls(state_root):
 @click.option("--until", "ends", metavar="WHEN", help="When it ends; an offset counts from --from.")
 @click.option("--duration", metavar="SPAN", help="How long from --from, such as 30m, 5h or 2d.")
 @click.option("--note", metavar="TEXT", help="Why, shown beside the Cooldown.")
+@click.option(
+    "--no-extend",
+    is_flag=True,
+    help="End exactly on time, even while the GPU is used outside the bench.",
+)
 @click.option("--clear", is_flag=True, help="Remove every Cooldown of the GPU Slots instead.")
 @click.argument("values", nargs=-1, metavar="[VALUE]...")
 @STATE_ROOT_OPTION
-def gpu_cooldown(every, starts, ends, duration, note, clear, values, state_root):
+def gpu_cooldown(every, starts, ends, duration, note, no_extend, clear, values, state_root):
     """Add a Cooldown to GPU Slots, named by their gpu_slots value (0, or 0,1).
 
     No new model-server run claims a GPU Slot while one is in force; a run already holding it
-    keeps it. Times are the host's local time. --clear also removes the schedule of a value
-    gpu_slots no longer lists.
+    keeps it. While the slot's GPUs are used outside the bench as it ends, the Cooldown is
+    extended 30 minutes at a time, unless --no-extend. Times are the host's local time.
+    --clear also removes the schedule of a value gpu_slots no longer lists.
     """
     from datetime import UTC, datetime
 
@@ -995,8 +1007,10 @@ def gpu_cooldown(every, starts, ends, duration, note, clear, values, state_root)
         raise click.UsageError("Name GPU Slots or pass --all, not both.")
     if not every and not values:
         raise click.UsageError("Name the GPU Slots by value, or pass --all.")
-    if clear and (starts or ends or duration or note):
-        raise click.UsageError("--clear takes no --from, --until, --duration or --note.")
+    if clear and (starts or ends or duration or note or no_extend):
+        raise click.UsageError(
+            "--clear takes no --from, --until, --duration, --note or --no-extend."
+        )
     if not clear and (ends is None) == (duration is None):
         raise click.UsageError("Pass exactly one of --until or --duration, or --clear.")
     invalid = [value for value in values if not GPU_SLOT_VALUE.fullmatch(value)]
@@ -1040,7 +1054,7 @@ def gpu_cooldown(every, starts, ends, duration, note, clear, values, state_root)
             if ends is not None
             else start + parse_duration(duration)
         )
-        window = new_cooldown(start, end, now=now, note=note)
+        window = new_cooldown(start, end, now=now, note=note, extend=not no_extend)
         for value in chosen:
             add_cooldown(writable_gpu_schedule_dir(root, value), window, now=now)
             begins = "" if window.start <= now else f" from {_local_stamp(window.start)}"

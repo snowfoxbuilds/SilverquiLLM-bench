@@ -153,7 +153,9 @@ silverquillm gpu cooldown 0,1 --clear
 ```
 
 `gpu ls` lists each GPU Slot with its state (`held`, `unusable`, `cooldown`, `busy`, `unknown` or `free`) and every Cooldown it holds, then any orphaned schedule: one kept for a value `gpu_slots` no longer lists, which holds back nothing.
-`gpu cooldown` takes the times, `--duration` and `--note` of `login cooldown`, every Cooldown holding back every run; a value `gpu_slots` does not list is refused, except that `--clear` removes an orphaned schedule.
+`gpu cooldown` takes the times, `--duration` and `--note` of `login cooldown`, every Cooldown holding back every run.
+While a slot's GPUs are still used outside the bench as its Cooldown ends (another user's job; never the bench's own run), the scheduler or the next claim extends it 30 minutes at a time, shown as `busy +N`, until the GPU is free or the extension reaches the slot's next Cooldown, which it joins; `--no-extend` makes a Cooldown end on time, and removing or editing one stops it.
+For `gpu cooldown`, a value `gpu_slots` does not list is refused, except that `--clear` removes an orphaned schedule.
 A model-server run passes over a GPU Slot with a Cooldown in force, and with none other free it defers like `model_server_busy`; a run already holding the slot keeps it to its end.
 A host without `gpu_slots` has no GPU Slot to hold; list them, one is enough.
 

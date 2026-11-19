@@ -22,6 +22,7 @@ import functools
 import hashlib
 import http.client
 import json
+import logging
 import os
 import re
 import secrets
@@ -41,7 +42,7 @@ from pathlib import Path
 from typing import Any
 
 from .claude_observations import claude_usage
-from .cooldowns import read_schedule
+from .cooldowns import extend_ending, extension_due, read_schedule
 from .definition import KarnError
 from .observations import TOKEN_KEYS, _measurements
 from .pricing import MODEL_PRICES
@@ -517,6 +518,8 @@ class GpuReading:
     gpus: tuple[dict[str, Any], ...] | None
     compute_uuids: frozenset[str] = frozenset()
     reason: str | None = None
+    compute_pids: tuple[tuple[str, int | None], ...] = ()
+    """Each compute process as ``(gpu_uuid, pid)``; a PID ``nvidia-smi`` does not give is None."""
 
 
 _GPU_INDEX = re.compile(r"0|[1-9][0-9]*")
@@ -746,7 +749,12 @@ def read_gpus(run=None, *, state_root: Path | None = None, record: bool = True) 
         return GpuReading(None, reason="nvidia_smi_unavailable")
     except ValueError as error:
         return GpuReading(None, reason=str(error))
-    return GpuReading(tuple(gpus), frozenset(row[0] for row in apps if row[0]))
+    pids = tuple(
+        (row[0], int(row[1]) if len(row) > 1 and _GPU_INDEX.fullmatch(row[1]) else None)
+        for row in apps
+        if row[0]
+    )
+    return GpuReading(tuple(gpus), frozenset(row[0] for row in apps if row[0]), compute_pids=pids)
 
 
 @dataclass(frozen=True)
@@ -784,6 +792,24 @@ class GpuSlot:
                 return "memory_used"
         return None
 
+    def used_outside(self, reading: GpuReading, holders: frozenset[int] | None) -> str | None:
+        """Why the slot is used outside the bench, None when it is not or that cannot be told.
+
+        ``holders`` are the PIDs holding the slot's lock. A compute process on its GPUs that is
+        neither one of them nor their descendant is work outside the bench; so, with the lock
+        free, is memory past ``BUSY_MEMORY_MIB`` no visible process explains. With the lock
+        held, unexplained memory may be the bench's own, and never counts."""
+        if self.value is None or holders is None:
+            return None
+        gpus = self.gpus(reading) or ()
+        uuids = {gpu["uuid"] for gpu in gpus}
+        processes = [pid for uuid_, pid in reading.compute_pids if uuid_ in uuids]
+        if not holders:
+            return self.busy(reading)
+        if any(pid is not None and not _descends(pid, holders) for pid in processes):
+            return "compute_process"
+        return None
+
     @property
     def schedule_dir(self) -> Path | None:
         """The directory of the slot's Cooldown Schedule, named by its value as its lock is,
@@ -810,6 +836,68 @@ class GpuSlot:
         if self.indices is None or reading.gpus is None:
             return False
         return not self.indices <= {gpu["index"] for gpu in reading.gpus}
+
+
+MAX_ANCESTRY = 64
+
+
+def _parent(pid: int) -> int | None:
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+    except (OSError, IndexError):
+        return None
+    return int(fields[1]) if len(fields) > 1 and fields[1].isdigit() else None
+
+
+def _descends(pid: int, ancestors: frozenset[int]) -> bool:
+    """Whether ``pid`` is one of ``ancestors`` or below one, walking at most ``MAX_ANCESTRY``
+    parents; a process whose ancestry cannot be read is not the bench's."""
+    for _ in range(MAX_ANCESTRY):
+        if pid in ancestors:
+            return True
+        parent = _parent(pid)
+        if parent is None or parent <= 1 or parent == pid:
+            return False
+        pid = parent
+    return False
+
+
+EXTENSION_WAIT = 2.0
+"""How long a claim or a scheduler pass waits for a schedule's write lock to extend it."""
+
+
+def extend_gpu_cooldowns(
+    slots: tuple[GpuSlot, ...],
+    read=None,
+    locks: Path | None = None,
+    *,
+    reading: GpuReading | None = None,
+    now: datetime | None = None,
+) -> tuple[str, ...]:
+    """Extend each GPU Slot Cooldown that is ending while its slot is used outside the bench,
+    returning the slots extended; never raises, since neither a claim nor a scheduler pass may
+    fail for it. ``nvidia-smi`` is read only when some Cooldown is ending."""
+    from silverquillm.monitor.locks import PROC_LOCKS, lock_holders
+
+    now = now or datetime.now(UTC)
+    extended = []
+    for slot in slots:
+        try:
+            directory = slot.schedule_dir
+            if directory is None or not extension_due(directory, now=now):
+                continue
+            if reading is None:
+                reading = (read or _host_reader(slots))()
+            holders = lock_holders(slot.lock_path, locks or PROC_LOCKS)
+            if slot.used_outside(reading, holders) is None:
+                continue
+            if extend_ending(directory, now=now, wait=EXTENSION_WAIT) is not None:
+                extended.append(slot.value)
+        except Exception as error:  # noqa: BLE001 - an extension never fails its caller
+            logging.getLogger(__name__).warning(
+                "gpu %s: cooldown not extended (%s)", slot.value, error or type(error).__name__
+            )
+    return tuple(extended)
 
 
 def gpu_schedule_dir(state_root: Path, value: str) -> Path:
@@ -976,6 +1064,7 @@ def claim_gpu_slot(
     with a Cooldown in force is passed over like a busy one: the Cooldown gates only this
     claim, never a run already holding the slot."""
     reading = (read or _host_reader(slots))()
+    extend_gpu_cooldowns(slots, reading=reading, now=now)
     unusable, unknown = [], []
     for slot in slots:
         if slot.unknown_gpus(reading):

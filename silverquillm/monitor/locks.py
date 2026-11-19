@@ -48,3 +48,29 @@ def lock_held(
     if held is None:
         return None
     return (os.major(info.st_dev), os.minor(info.st_dev), info.st_ino) in held
+
+
+def lock_holders(path: Path, source: Path = PROC_LOCKS) -> frozenset[int] | None:
+    """The PIDs the kernel's lock table names as holding a ``flock`` on the file *path* names;
+    None when the table cannot be read. A missing lock file is held by no one."""
+    try:
+        info = os.stat(path)
+        text = source.read_text(errors="replace")
+    except FileNotFoundError:
+        return frozenset()
+    except OSError:
+        return None
+    wanted = f"{os.major(info.st_dev):02x}:{os.minor(info.st_dev):02x}:{info.st_ino}"
+    holders = set()
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) < 6 or fields[1] != "FLOCK" or not fields[4].isdigit():
+            continue
+        try:
+            major, minor, inode = fields[5].split(":")
+            key = f"{int(major, 16):02x}:{int(minor, 16):02x}:{int(inode)}"
+        except ValueError:
+            continue
+        if key == wanted:
+            holders.add(int(fields[4]))
+    return frozenset(holders)

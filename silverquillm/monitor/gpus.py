@@ -42,6 +42,9 @@ class GpuSlotStatus:
     """When the last Cooldown in force ends; None when none is in force."""
     next_cooldown: datetime | None = None
     """When the next Cooldown starts, while none is in force."""
+    cooldown_extensions: int = 0
+    """How many 30-minute steps the Cooldown in force that ends last has been extended while
+    the slot was used outside the bench."""
 
     @property
     def state(self) -> str:
@@ -80,13 +83,15 @@ class OrphanedSchedule:
 
 
 def _schedule(directory: Path | None, now: datetime):
-    """The schedule, when its Cooldowns in force end, and when the next one starts."""
+    """The schedule, when its Cooldowns in force end, when the next one starts, and how often
+    the one in force that ends last was extended."""
     if directory is None:
-        return (), None, None
+        return (), None, None, 0
     schedule = tuple(read_schedule(directory, now=now))
-    forced = [c.end for c in schedule if c.in_force(now)]
+    forced = [c for c in schedule if c.in_force(now)]
+    last = max(forced, key=lambda c: c.end, default=None)
     upcoming = None if forced else min((c.start for c in schedule), default=None)
-    return schedule, max(forced, default=None), upcoming
+    return schedule, None if last is None else last.end, upcoming, last.extensions if last else 0
 
 
 def gpu_slot_statuses(
@@ -106,7 +111,7 @@ def gpu_slot_statuses(
     for slot in gpu_slots(state_root, configured):
         locked = lock_held(slot.lock_path, held, follow_symlinks=True)
         gpus = slot.gpus(reading)
-        schedule, until, upcoming = _schedule(slot.schedule_dir, moment)
+        schedule, until, upcoming, extensions = _schedule(slot.schedule_dir, moment)
         statuses.append(
             GpuSlotStatus(
                 slot.value,
@@ -119,6 +124,7 @@ def gpu_slot_statuses(
                 schedule,
                 until,
                 upcoming,
+                extensions,
             )
         )
     return statuses

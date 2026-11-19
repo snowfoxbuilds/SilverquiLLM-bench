@@ -228,7 +228,7 @@ _Avoid_: "data leakage" (too generic)
 **Cooldown**
 
 One window, from a start to an end, during which a Login Profile or a GPU Slot takes no new Benchmark Run, such as while a subscription nears a usage limit or while the operator wants a GPU for other work (grilling 2026-10-08; generalized grilling 2026-11-18).
-It gates only the launch of a run: a run that took the profile or GPU Slot before the window began keeps it until it ends, whatever its budget, and the window ends by itself.
+It gates only the launch of a run: a run that took the profile or GPU Slot before the window began keeps it until it ends, whatever its budget, and the window ends by itself, except that a GPU Slot's Cooldown is extended while its GPUs are still used outside the bench (grilling 2026-11-19).
 A Cooldown on a Login Profile may be scoped to Fable runs only, leaving the profile free for other models.
 
 _Avoid_: "Login Cooldown" (renamed, ADR-024), "disabled slot", "pause" (the profile stays enrolled and its runs are not paused), "lockout", "reservation"

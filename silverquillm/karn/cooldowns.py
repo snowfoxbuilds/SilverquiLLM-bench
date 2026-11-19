@@ -67,6 +67,11 @@ class Cooldown:
     scope: str = "all"
     source: str = "operator"
     note: str | None = None
+    extend: bool = False
+    """Whether the Cooldown is extended while its GPU Slot is used outside the bench (a GPU
+    Slot's own; never a Login Profile's). An operator's edit clears it (see ``edited``)."""
+    extensions: int = 0
+    """How many ``EXTENSION_STEP`` steps its end has been moved on so far."""
 
     def in_force(self, now: datetime) -> bool:
         return self.start <= now < self.end
@@ -85,6 +90,10 @@ class Cooldown:
         }
         if self.note is not None:
             document["note"] = self.note
+        if self.extend:
+            document["extend"] = True
+        if self.extensions:
+            document["extensions"] = self.extensions
         return document
 
 
@@ -122,6 +131,7 @@ def cooldown(
     scope: str = "all",
     source: str = "operator",
     note: str | None = None,
+    extend: bool = False,
 ) -> Cooldown:
     """A new Cooldown, refused unless it ends after it starts, after now, and within a year."""
     if scope not in SCOPES:
@@ -142,7 +152,14 @@ def cooldown(
         scope,
         source,
         _note(note),
+        bool(extend),
     )
+
+
+def edited(old: Cooldown, **fields) -> Cooldown:
+    """``old`` as the operator changed it: an edited Cooldown is never extended again, so an
+    end deliberately moved is not pushed back out by a busy GPU."""
+    return replace(old, **fields, extend=False)
 
 
 def _parsed(entry: object, now: datetime) -> Cooldown:
@@ -157,6 +174,9 @@ def _parsed(entry: object, now: datetime) -> Cooldown:
         raise ValueError("empty window")
     if end - now > STORED_HORIZON:
         raise ValueError("beyond the horizon")
+    extend, extensions = entry.get("extend", False), entry.get("extensions", 0)
+    if type(extend) is not bool or type(extensions) is not int or not 0 <= extensions <= 10**6:
+        raise ValueError("bad extension")
     return Cooldown(
         start,
         end,
@@ -164,6 +184,8 @@ def _parsed(entry: object, now: datetime) -> Cooldown:
         entry["scope"],
         entry["source"],
         _note(entry.get("note")),
+        extend,
+        extensions,
     )
 
 
@@ -285,8 +307,10 @@ def edit_schedule(
     *,
     now: datetime,
     wait: float | None = None,
+    ended: bool = False,
 ) -> list[Cooldown]:
-    """Apply ``change`` to the Cooldowns not yet ended and write the result atomically.
+    """Apply ``change`` to the Cooldowns not yet ended, or with ``ended`` to every recorded
+    one, and write the result atomically; ended Cooldowns are never written back.
 
     The written schedule supersedes a ``cooldown.json`` from before schedules, which this
     removes only after the schedule holding its window is durably in place, so a crash in
@@ -299,7 +323,7 @@ def edit_schedule(
     """
     directory = Path(directory)
     with _writing(directory, wait):
-        current = [c for c in _read(directory, now) if c.end > now]
+        current = [c for c in _read(directory, now) if ended or c.end > now]
         kept = sorted((c for c in change(current) if c.end > now), key=lambda c: (c.start, c.end))
         written = canonical({"format": 1, "cooldowns": [c.document() for c in kept]})
         if len(kept) > MAX_COOLDOWNS or len(written) > SCHEDULE_LIMIT:
@@ -382,6 +406,83 @@ def end_in_force_after(
 
     edit_schedule(directory, sooner, now=now, wait=wait)
     return until
+
+
+EXTENSION_STEP = timedelta(minutes=30)
+EXTENSION_LOOKAHEAD = timedelta(minutes=1)
+"""How soon before its end a Cooldown counts as ending, so a check every scheduler pass
+extends it before the resource is ever free."""
+
+
+def _ending(cooldowns: list[Cooldown], now: datetime) -> Cooldown | None:
+    """The extendable Cooldown whose end frees the resource: begun, ended or ending within
+    ``EXTENSION_LOOKAHEAD``, with no other Cooldown covering its end; the one ending last."""
+    candidates = [
+        c
+        for c in cooldowns
+        if c.extend
+        and c.start <= now
+        and c.end <= now + EXTENSION_LOOKAHEAD
+        and not any(o is not c and o.start <= c.end < o.end for o in cooldowns)
+    ]
+    return max(candidates, key=lambda c: c.end, default=None)
+
+
+def extension_due(directory: Path, *, now: datetime) -> bool:
+    """Whether a Cooldown of ``directory`` is ending and would be extended while in use."""
+    return _ending(_read(Path(directory), now), now) is not None
+
+
+def extended(cooldowns: list[Cooldown], now: datetime) -> list[Cooldown] | None:
+    """The schedule with its ending Cooldown extended, or None when none is due.
+
+    Its end moves on in whole ``EXTENSION_STEP`` steps from where it was to the first after
+    now, so the result does not depend on when the check ran. An end that reaches the start of
+    a later Cooldown merges the two: one window from the first's start to the later end,
+    keeping the later Cooldown's note and whether it extends."""
+    ending = _ending(cooldowns, now)
+    if ending is None:
+        return None
+    steps = max(1, (now - ending.end) // EXTENSION_STEP + 1)
+    end = ending.end + steps * EXTENSION_STEP
+    if end - now > HORIZON:
+        return None
+    reached = [o for o in cooldowns if o is not ending and ending.end <= o.start <= end]
+    if reached:
+        later = max(reached, key=lambda o: o.end)
+        merged = replace(
+            later,
+            start=ending.start,
+            end=max(end, later.end),
+            extensions=ending.extensions + later.extensions + steps,
+        )
+    else:
+        merged = replace(ending, end=end, extensions=ending.extensions + steps)
+    gone = {id(ending), *map(id, reached)}
+    return [*(c for c in cooldowns if id(c) not in gone), merged]
+
+
+class _Unchanged(Exception):
+    pass
+
+
+def extend_ending(directory: Path, *, now: datetime, wait: float | None) -> Cooldown | None:
+    """Extend the Cooldown that is ending, as ``extended`` does, and return the Cooldown that
+    now holds the resource; None, writing nothing, when none is due."""
+    result = []
+
+    def extend(cooldowns: list[Cooldown]) -> list[Cooldown]:
+        changed = extended(cooldowns, now)
+        if changed is None:
+            raise _Unchanged
+        result.append(changed[-1])
+        return changed
+
+    try:
+        edit_schedule(directory, extend, now=now, wait=wait, ended=True)
+    except _Unchanged:
+        return None
+    return result[0]
 
 
 def parse_duration(text: str) -> timedelta:

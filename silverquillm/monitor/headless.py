@@ -148,6 +148,7 @@ def _gpu_slot(status: GpuSlotStatus) -> dict:
         "busy": status.busy,
         "unusable": status.unusable,
         "cooldown_until": _time(status.cooldown_until),
+        "cooldown_extensions": status.cooldown_extensions,
         "cooldowns": [cooldown.document() for cooldown in status.cooldowns],
         "run_id": status.run_id,
         "gpus": (
