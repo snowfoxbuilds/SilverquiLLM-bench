@@ -4,9 +4,11 @@ Subscription authentication)."""
 from __future__ import annotations
 
 import fcntl
+import io
 import json
 import os
 import sys
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -174,6 +176,37 @@ def test_without_an_estimate_a_limit_never_trips():
     assert due_cooldowns(UsageLimit(1.0, 1.0), usage(), now=NOW) == []
 
 
+def test_a_reset_beyond_the_horizon_holds_for_seven_days_and_keeps_the_other_trip():
+    fable_reset = RESET + timedelta(hours=3)
+    far = reading(resets=datetime(2099, 1, 1, tzinfo=UTC))
+    found = due_cooldowns(
+        UsageLimit(80.0, 90.0),
+        usage(90.0, 95.0, weekly_reading=far, fable_reading=reading(resets=fable_reset)),
+        now=NOW,
+    )
+    assert [(c.scope, c.end) for c in found] == [
+        ("all", NOW + timedelta(days=7)),
+        ("fable", fable_reset),
+    ]
+
+
+def test_a_cooldown_that_cannot_be_built_never_stops_the_others(monkeypatch):
+    build = usage_limit.cooldown
+
+    def refuse_every_run(*args, scope, **kwargs):
+        if scope == "all":
+            raise KarnError("cooldown_ends_before_it_starts")
+        return build(*args, scope=scope, **kwargs)
+
+    monkeypatch.setattr(usage_limit, "cooldown", refuse_every_run)
+    found = due_cooldowns(
+        UsageLimit(80.0, 90.0),
+        usage(90.0, 95.0, weekly_reading=reading(), fable_reading=reading(window=FABLE)),
+        now=NOW,
+    )
+    assert [c.scope for c in found] == ["fable"]
+
+
 def test_a_trip_is_written_once_while_its_cooldown_is_in_force(tmp_path):
     figures = usage(90.0, 95.0, weekly_reading=reading(), fable_reading=reading(window=FABLE))
     written = apply_limit(tmp_path, UsageLimit(80.0, 90.0), figures, now=NOW)
@@ -217,10 +250,10 @@ def test_a_missing_measurement_gives_no_reading():
 # The check against this host's estimate -------------------------------------------
 
 
-def check(host, **extra):
+def check(host, login=PROFILE, **extra):
     return check_usage_limit(
         host.login,
-        PROFILE,
+        login,
         "claude",
         state_root=host.state,
         runs_dir=host.runs,
@@ -257,6 +290,14 @@ def test_another_hosts_records_never_trip_this_hosts_profile(tmp_path):
     assert check(host) == []
 
 
+def test_a_bare_slot_name_finds_the_records_filed_under_its_profile(tmp_path):
+    host = Host(tmp_path)
+    publish(host.repo, "r1", usage=claude_usage(85.0, resets="2026-10-09T00:00:00Z"), requests=[])
+    set_limit(host.login, UsageLimit(80.0), now=NOW)
+    [written] = check(host, login="bare-claude-opus")
+    assert written.end == RESET
+
+
 def test_a_profile_without_a_limit_makes_no_estimate(tmp_path, monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError("estimated without a limit")
@@ -289,6 +330,55 @@ def test_without_a_limit_the_runs_readings_are_never_gathered(tmp_path):
         raise AssertionError("gathered without a limit")
 
     usage_limit.check_quietly(tmp_path, PROFILE, "claude", state_root=tmp_path, readings=refuse)
+
+
+def tripping(host):
+    publish(host.repo, "r1", usage=claude_usage(85.0, resets="2026-10-09T00:00:00Z"), requests=[])
+    set_limit(host.login, UsageLimit(80.0), now=NOW)
+    return {
+        "state_root": host.state,
+        "runs_dir": host.runs,
+        "results_repo": host.repo,
+        "now": NOW,
+        "config": CONFIG,
+    }
+
+
+def test_a_stalled_schedule_writer_never_holds_up_the_check(tmp_path, monkeypatch, capsys):
+    host = Host(tmp_path)
+    arguments = tripping(host)
+    monkeypatch.setattr(usage_limit, "SCHEDULE_WAIT", 0.2, raising=False)
+    stalled = os.open(host.login / ".cooldowns.lock", os.O_RDWR | os.O_CREAT, 0o600)
+    fcntl.flock(stalled, fcntl.LOCK_EX)
+    try:
+        checking = threading.Thread(
+            target=usage_limit.check_quietly,
+            args=(host.login, PROFILE, "claude"),
+            kwargs=arguments,
+            daemon=True,
+        )
+        checking.start()
+        checking.join(timeout=5)
+        assert not checking.is_alive()
+    finally:
+        os.close(stalled)
+        checking.join(timeout=5)
+    assert "usage_limit_check_failed: cooldown_schedule_busy" in capsys.readouterr().err
+    assert read_schedule(host.login, now=NOW) == []
+
+
+class BrokenStderr(io.TextIOBase):
+    def write(self, text):
+        raise BrokenPipeError(32, "Broken pipe")
+
+
+def test_a_failure_while_reporting_never_escapes_the_check(tmp_path, monkeypatch):
+    host = Host(tmp_path)
+    arguments = tripping(host)
+    monkeypatch.setattr(sys, "stderr", BrokenStderr())
+    usage_limit.check_quietly(host.login, PROFILE, "claude", **arguments)
+    [held] = read_schedule(host.login, now=NOW)
+    assert held.source == "usage-limit"
 
 
 def test_the_monitors_write_sets_and_checks_one_profile(tmp_path, monkeypatch):
@@ -486,6 +576,51 @@ def test_recovery_checks_the_limit_when_it_settles_the_login(tmp_path, monkeypat
     )
     options_ = {key: common[key] for key in ("bench_root", "results_dir", "results_repo")}
     recovery.recover_benchmark(run_id="run-a", spec={}, state_root=state, **options_)
+    [held] = read_schedule(profile)
+    assert held.source == "usage-limit"
+
+
+@PLUGIN_SDK
+def test_a_failure_while_reporting_never_skips_the_login_block_in_recovery(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(5.0), now=NOW)
+    with pytest.raises(SystemExit):
+        run_benchmark(
+            **common,
+            run_id="run-a",
+            host=die_after_start(
+                DyingHost(
+                    docker=SoonResettingDocker(),
+                    plugin_cache=state / "plugins",
+                    plugin_python=sys.executable,
+                )
+            ),
+        )
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: DockerHost(docker=FakeDocker(), plugin_cache=state / "plugins"),
+    )
+    check_quietly = recovery.check_quietly
+
+    def reporting_fails(*args, **kwargs):
+        with monkeypatch.context() as patch:
+            patch.setattr(sys, "stderr", BrokenStderr())
+            check_quietly(*args, **kwargs)
+
+    monkeypatch.setattr(recovery, "check_quietly", reporting_fails)
+    blocked = []
+    block = recovery.block_if_relogin_needed
+
+    def observed(*args, **kwargs):
+        blocked.append(args[4])
+        return block(*args, **kwargs)
+
+    monkeypatch.setattr(recovery, "block_if_relogin_needed", observed)
+    options_ = {key: common[key] for key in ("bench_root", "results_dir", "results_repo")}
+    recovery.recover_benchmark(run_id="run-a", spec={}, state_root=state, **options_)
+    assert blocked == ["run-a"]
     [held] = read_schedule(profile)
     assert held.source == "usage-limit"
 

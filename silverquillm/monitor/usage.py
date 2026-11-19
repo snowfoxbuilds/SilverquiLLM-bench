@@ -175,6 +175,7 @@ def estimate_profile_usage(
     """
     held = held_locks(proc_locks)
     profiles = login_profiles(state_root, held, now=now)
+    login = canonical_login(login, profiles)
     cache = RecordCache()
     runs = live_runs(
         runs_dir,

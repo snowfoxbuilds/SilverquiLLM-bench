@@ -12,6 +12,7 @@ unreadable limit is no limit, and a failed check never fails the run or recovery
 
 from __future__ import annotations
 
+import contextlib
 import math
 import sys
 from collections.abc import Callable, Iterable
@@ -20,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .cooldowns import Cooldown, cooldown, edit_schedule
+from .cooldowns import HORIZON, Cooldown, cooldown, edit_schedule
 from .definition import KarnError, canonical, read_regular, strict_json
 from .login import write_private
 
@@ -32,6 +33,9 @@ LIMIT_FILE = "usage-limit.json"
 LIMIT_SIZE = 4096
 WEEK = timedelta(days=7)
 """A weekly window resets every seven days, so a passed reset predicts the next ones."""
+SCHEDULE_WAIT = 10.0
+"""How long a run or recovery waits on another writer of the Cooldown Schedule before it
+gives up the check, so a stalled writer never keeps it from releasing the login."""
 
 _UNREADABLE = (KarnError, OSError, KeyError, TypeError, ValueError, OverflowError, RecursionError)
 
@@ -114,7 +118,12 @@ def next_reset(reading: UsageReading | None, now: datetime) -> datetime:
 
 def due_cooldowns(limit: UsageLimit, usage: ProfileUsage, *, now: datetime) -> list[Cooldown]:
     """The Cooldowns a limit asks for at ``now``: one for every run while the weekly estimate
-    is at or above its ceiling, and one for Fable runs while the Fable limit's is."""
+    is at or above its ceiling, and one for Fable runs while the Fable limit's is.
+
+    Each is built on its own, so one that cannot be built never costs the other. A reset
+    more than ``HORIZON`` ahead is no usable reading, so its Cooldown lasts seven days from
+    now, as with no reading at all.
+    """
     due = []
     for scope, ceiling_percent, estimate, reading in (
         ("all", limit.weekly_percent, usage.weekly, usage.weekly_reading),
@@ -122,16 +131,27 @@ def due_cooldowns(limit: UsageLimit, usage: ProfileUsage, *, now: datetime) -> l
     ):
         if ceiling_percent is None or estimate is None or estimate.percent < ceiling_percent:
             continue
-        end = next_reset(reading, now)
-        due.append(cooldown(now, end, now=now, scope=scope, source="usage-limit"))
+        try:
+            end = next_reset(reading, now)
+            if end - now > HORIZON:
+                end = now + WEEK
+            due.append(cooldown(now, end, now=now, scope=scope, source="usage-limit"))
+        except (KarnError, TypeError, ValueError, OverflowError):
+            continue
     return due
 
 
 def apply_limit(
-    directory: Path, limit: UsageLimit, usage: ProfileUsage, *, now: datetime
+    directory: Path,
+    limit: UsageLimit,
+    usage: ProfileUsage,
+    *,
+    now: datetime,
+    wait: float | None = None,
 ) -> list[Cooldown]:
     """Write the Cooldowns ``limit`` asks for, unless a ``usage-limit`` Cooldown of the same
-    scope is already in force; returns those written."""
+    scope is already in force; returns those written. ``wait`` bounds the wait on another
+    writer of the schedule, as ``edit_schedule`` does."""
     due = due_cooldowns(limit, usage, now=now)
     if not due:
         return []
@@ -142,7 +162,7 @@ def apply_limit(
         written.extend(c for c in due if c.scope not in held)
         return [*cooldowns, *written]
 
-    edit_schedule(directory, tripped, now=now)
+    edit_schedule(directory, tripped, now=now, wait=wait)
     return written
 
 
@@ -171,6 +191,7 @@ def check_usage_limit(
     readings: Iterable[UsageReading] = (),
     now: datetime | None = None,
     config=None,
+    wait: float | None = None,
 ) -> list[Cooldown]:
     """Check one profile's Usage Limit against this host's estimate, writing the Cooldowns
     it asks for. A profile without a limit costs nothing: no estimate is made."""
@@ -195,7 +216,7 @@ def check_usage_limit(
         readings=readings,
         now=now,
     )
-    return apply_limit(directory, limit, usage, now=now)
+    return apply_limit(directory, limit, usage, now=now, wait=wait)
 
 
 def host_locations(state_root: Path) -> dict:
@@ -233,8 +254,9 @@ def check_quietly(
     readings: Callable[[], Iterable[UsageReading]] = tuple,
     **arguments,
 ) -> None:
-    """Check the limit, reporting any failure on stderr: a failed check never fails the run
-    or the recovery it follows, it only leaves the profile without a new Cooldown.
+    """Check the limit, reporting any failure on stderr: a failed check never fails, nor
+    holds up past ``SCHEDULE_WAIT``, the run or the recovery it follows; it only leaves the
+    profile without a new Cooldown.
 
     ``readings`` gathers the caller's own readings, and is called only for a profile that
     has a limit, so a run on a profile without one reads nothing more.
@@ -245,12 +267,19 @@ def check_quietly(
         if read_limit(directory) is None:
             return
         found = list(readings())
-        for written in check_usage_limit(directory, login, provider, readings=found, **arguments):
-            scope = "Fable runs" if written.scope == "fable" else "every run"
-            print(
-                f"{login}: Usage Limit reached; {scope} held until {_stamp(written.end)}",
-                file=sys.stderr,
-            )
+        written = check_usage_limit(
+            directory, login, provider, readings=found, wait=SCHEDULE_WAIT, **arguments
+        )
     except Exception as error:  # noqa: BLE001 -- a failed check must never fail the run.
         reason = str(error) if isinstance(error, KarnError) else type(error).__name__
-        print(f"{login}: usage_limit_check_failed: {reason}", file=sys.stderr)
+        _report(f"{login}: usage_limit_check_failed: {reason}")
+        return
+    for held in written:
+        scope = "Fable runs" if held.scope == "fable" else "every run"
+        _report(f"{login}: Usage Limit reached; {scope} held until {_stamp(held.end)}")
+
+
+def _report(message: str) -> None:
+    # Nor may reporting it, on a closed or broken stderr.
+    with contextlib.suppress(Exception):
+        print(message, file=sys.stderr)
