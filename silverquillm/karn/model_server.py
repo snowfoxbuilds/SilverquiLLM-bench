@@ -42,7 +42,7 @@ from pathlib import Path
 from typing import Any
 
 from .claude_observations import claude_usage
-from .cooldowns import extend_ending, extension_due, read_schedule
+from .cooldowns import drop_ended, ending_cooldown, extend_ending, read_schedule
 from .definition import KarnError
 from .observations import TOKEN_KEYS, _measurements
 from .pricing import MODEL_PRICES
@@ -866,6 +866,40 @@ EXTENSION_WAIT = 2.0
 """How long a claim or a scheduler pass waits for a schedule's write lock to extend it."""
 
 
+def _lock_free(path: Path) -> bool:
+    """Whether a non-blocking ``flock`` on the lock file is granted, released at once; a
+    missing file is free, and one that cannot be opened is not known to be."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return False
+    finally:
+        os.close(descriptor)
+    return True
+
+
+def _bench_holders(
+    path: Path, before: frozenset[int] | None, after: frozenset[int] | None
+) -> frozenset[int] | None:
+    """Who held the slot's lock across a reading: everyone the lock table named before or
+    after it, so a run releasing the slot meanwhile still counts as the bench. None when that
+    cannot be told, including a lock the table names no holder for that is held all the same,
+    as by a process the bench cannot see. Only the extension probes the lock: a claim taking
+    it in that instant would find it busy and pass the slot over."""
+    if before is None or after is None:
+        return None
+    holders = before | after
+    if not holders and not _lock_free(path):
+        return None
+    return holders
+
+
 def extend_gpu_cooldowns(
     slots: tuple[GpuSlot, ...],
     read=None,
@@ -876,28 +910,49 @@ def extend_gpu_cooldowns(
 ) -> tuple[str, ...]:
     """Extend each GPU Slot Cooldown that is ending while its slot is used outside the bench,
     returning the slots extended; never raises, since neither a claim nor a scheduler pass may
-    fail for it. ``nvidia-smi`` is read only when some Cooldown is ending."""
+    fail for it. ``nvidia-smi`` is read only when some Cooldown is ending, between two reads of
+    each slot's lock holders (a ``reading`` given is taken before both); nothing is extended
+    when the holders cannot be told. A slot found not used outside the bench after its
+    Cooldown ended has the Cooldown dropped, so later work never revives it."""
     from silverquillm.monitor.locks import PROC_LOCKS, lock_holders
 
+    log = logging.getLogger(__name__)
     now = now or datetime.now(UTC)
-    extended = []
+    locks = locks or PROC_LOCKS
+    due = []
     for slot in slots:
         try:
             directory = slot.schedule_dir
-            if directory is None or not extension_due(directory, now=now):
-                continue
-            if reading is None:
-                reading = (read or _host_reader(slots))()
-            holders = lock_holders(slot.lock_path, locks or PROC_LOCKS)
-            if slot.used_outside(reading, holders) is None:
-                continue
-            if extend_ending(directory, now=now, wait=EXTENSION_WAIT) is not None:
-                extended.append(slot.value)
+            ending = None if directory is None else ending_cooldown(directory, now=now)
+            if ending is not None:
+                due.append((slot, directory, ending, lock_holders(slot.lock_path, locks)))
         except Exception as error:  # noqa: BLE001 - an extension never fails its caller
-            logging.getLogger(__name__).warning(
-                "gpu %s: cooldown not extended (%s)", slot.value, error or type(error).__name__
-            )
+            log.warning("gpu %s: cooldown not extended (%s)", slot.value, _why(error))
+    if not due:
+        return ()
+    try:
+        if reading is None:
+            reading = (read or _host_reader(slots))()
+    except Exception as error:  # noqa: BLE001 - an extension never fails its caller
+        log.warning("gpu cooldowns not extended (%s)", _why(error))
+        return ()
+    extended = []
+    for slot, directory, ending, before in due:
+        try:
+            after = lock_holders(slot.lock_path, locks)
+            holders = _bench_holders(slot.lock_path, before, after)
+            if slot.used_outside(reading, holders) is not None:
+                if extend_ending(directory, now=now, wait=EXTENSION_WAIT) is not None:
+                    extended.append(slot.value)
+            elif holders is not None and ending.end <= now:
+                drop_ended(directory, now=now, wait=EXTENSION_WAIT)
+        except Exception as error:  # noqa: BLE001 - an extension never fails its caller
+            log.warning("gpu %s: cooldown not extended (%s)", slot.value, _why(error))
     return tuple(extended)
+
+
+def _why(error: Exception) -> str:
+    return str(error) or type(error).__name__
 
 
 def gpu_schedule_dir(state_root: Path, value: str) -> Path:
@@ -1063,8 +1118,16 @@ def claim_gpu_slot(
     ``gpu_slot_unknown_gpu:<values>`` when unknown GPUs are why. Either way it defers. A slot
     with a Cooldown in force is passed over like a busy one: the Cooldown gates only this
     claim, never a run already holding the slot."""
-    reading = (read or _host_reader(slots))()
-    extend_gpu_cooldowns(slots, reading=reading, now=now)
+    readings = []
+
+    def read_once() -> GpuReading:
+        # An extension reads nvidia-smi between its two lock reads; the claim reuses it.
+        if not readings:
+            readings.append((read or _host_reader(slots))())
+        return readings[0]
+
+    extend_gpu_cooldowns(slots, read_once, now=now)
+    reading = read_once()
     unusable, unknown = [], []
     for slot in slots:
         if slot.unknown_gpus(reading):

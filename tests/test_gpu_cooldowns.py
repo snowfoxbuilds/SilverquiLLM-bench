@@ -6,6 +6,7 @@ import contextlib
 import fcntl
 import os
 import subprocess
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -17,6 +18,8 @@ from silverquillm.karn.cooldowns import (
     EXTENSION_STEP,
     add_cooldown,
     cooldown,
+    edited,
+    extended,
     held_until,
     read_schedule,
 )
@@ -34,7 +37,7 @@ from silverquillm.karn.model_server import (
 from silverquillm.karn.model_server import read_gpus as _real_read_gpus
 from silverquillm.monitor.gpus import GpuSlotStatus, gpu_slot_statuses, orphaned_gpu_schedules
 from silverquillm.monitor.headless import snapshot_document
-from silverquillm.monitor.locks import lock_held
+from silverquillm.monitor.locks import lock_held, lock_holders
 
 from .test_top_gpu_slots import READING, h100, lock_table_now, monitor
 from .top_fixtures import NOW
@@ -455,15 +458,176 @@ def test_unexplained_memory_extends_only_while_no_run_holds_the_slot(tmp_path):
     assert extend_gpu_cooldowns(slots, reading=_memory_only(), now=now) == ("0",)
 
 
-def test_a_late_check_moves_the_end_on_in_whole_steps_from_where_it_was(tmp_path):
+def test_a_late_check_moves_the_end_on_one_step_from_where_it_was(tmp_path):
     now = datetime.now(UTC).replace(microsecond=0)
-    ended = now - timedelta(minutes=95)
+    ended = now - timedelta(minutes=20)
     slots = gpu_slots(tmp_path, ("0",))
     _extending(tmp_path, "0", ended - timedelta(hours=1), ended, now=ended - timedelta(minutes=1))
     assert extend_gpu_cooldowns(slots, reading=_used_by(4242), now=now) == ("0",)
     (after,) = _schedule(tmp_path)
-    assert after.end == ended + 4 * EXTENSION_STEP and after.extensions == 4
+    assert after.end == ended + EXTENSION_STEP and after.extensions == 1
     assert after.in_force(now)
+
+
+def _recorded(state, value, *windows):
+    """Write ``windows`` as the slot's schedule, ended ones included, as a schedule last
+    written before they ended holds them."""
+    from silverquillm.karn.cooldowns import edit_schedule
+
+    earliest = min(window.start for window in windows)
+    edit_schedule(writable_gpu_schedule_dir(state, value), lambda _: list(windows), now=earliest)
+    return list(windows)
+
+
+@pytest.mark.parametrize(
+    "late", [EXTENSION_STEP, timedelta(minutes=95), timedelta(days=30)], ids=str
+)
+def test_a_cooldown_ended_a_step_or_more_ago_is_never_revived(tmp_path, late):
+    now = datetime.now(UTC).replace(microsecond=0)
+    ended = now - late
+    slots = gpu_slots(tmp_path, ("0",))
+    window = cooldown(ended - timedelta(days=1), ended, now=ended - timedelta(days=1), extend=True)
+    _recorded(tmp_path, "0", window)
+    assert extend_gpu_cooldowns(slots, reading=_used_by(4242), now=now) == ()
+    assert _schedule(tmp_path) == [window]
+
+
+def test_a_free_check_after_the_end_records_the_lapse(tmp_path):
+    now = datetime.now(UTC).replace(microsecond=0)
+    ended = now - timedelta(minutes=2)
+    slots = gpu_slots(tmp_path, ("0",))
+    _extending(tmp_path, "0", ended - timedelta(hours=2), ended, now=ended - timedelta(hours=1))
+    lapsed = ended + timedelta(seconds=10)
+    assert extend_gpu_cooldowns(slots, reading=_free(), now=lapsed) == ()
+    assert _schedule(tmp_path, now=lapsed) == []
+    # Work outside the bench starting a minute later finds nothing to revive.
+    assert extend_gpu_cooldowns(slots, reading=_used_by(4242), now=now) == ()
+    assert _schedule(tmp_path) == []
+
+
+@pytest.mark.parametrize("earlier", [timedelta(days=1), timedelta(minutes=20)], ids=str)
+def test_a_no_extend_cooldown_is_never_extended_through_an_earlier_ended_one(tmp_path, earlier):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, ("0",))
+    first = cooldown(
+        now - earlier - timedelta(hours=1), now - earlier, now=now - timedelta(days=2), extend=True
+    )
+    second = cooldown(
+        now - timedelta(minutes=10),
+        now - timedelta(minutes=5),
+        now=now - timedelta(days=2),
+        note="no-extend",
+    )
+    windows = _recorded(tmp_path, "0", first, second)
+    assert extend_gpu_cooldowns(slots, reading=_used_by(4242), now=now) == ()
+    assert _schedule(tmp_path) == windows
+
+
+def test_a_long_ended_cooldown_never_extends_one_in_force(tmp_path):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, ("0",))
+    stale = cooldown(
+        now - timedelta(days=8), now - timedelta(days=7), now=now - timedelta(days=9), extend=True
+    )
+    night = cooldown(
+        now - timedelta(hours=1), now + timedelta(hours=3), now=now - timedelta(days=3), note="n"
+    )
+    _recorded(tmp_path, "0", stale, night)
+    assert extend_gpu_cooldowns(slots, reading=_used_by(4242), now=now) == ()
+    assert night in _schedule(tmp_path) and night.extensions == 0
+
+
+def test_nvidia_smi_is_not_read_on_every_pass_for_an_ended_cooldown(tmp_path):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, ("0", "1"))
+    stale = now - timedelta(days=30)
+    window = cooldown(
+        stale - timedelta(hours=1), stale, now=stale - timedelta(hours=1), extend=True
+    )
+    _recorded(tmp_path, "0", window)
+    ended = now - timedelta(minutes=1)
+    _extending(tmp_path, "1", ended - timedelta(hours=1), ended, now=ended - timedelta(minutes=1))
+    reads = []
+
+    def read():
+        reads.append(1)
+        return _free()
+
+    for _ in range(3):
+        assert extend_gpu_cooldowns(slots, read, now=now) == ()
+    # Once, for the window that just ended; that check records its lapse.
+    assert reads == [1]
+
+
+def test_a_run_releasing_the_slot_while_nvidia_smi_is_read_still_counts_as_the_bench(tmp_path):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, ("0",))
+    window = _extending(
+        tmp_path, "0", now - timedelta(hours=1), now + timedelta(seconds=30), now=now
+    )
+    slots[0].lock_path.parent.mkdir(parents=True, exist_ok=True)
+    server = subprocess.Popen(["sleep", "30"])
+    handle = slots[0].lock_path.open("a")
+    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def read_as_the_run_ends():
+        seen = _used_by(server.pid)
+        handle.close()
+        return seen
+
+    try:
+        assert extend_gpu_cooldowns(slots, read_as_the_run_ends, now=now) == ()
+    finally:
+        handle.close()
+        server.kill()
+        server.wait()
+    assert _schedule(tmp_path) == [window]
+
+
+def test_nothing_is_extended_when_the_lock_table_cannot_be_read(tmp_path):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, ("0",))
+    window = _extending(
+        tmp_path, "0", now - timedelta(hours=1), now + timedelta(seconds=30), now=now
+    )
+    slots[0].lock_path.touch()
+    missing = tmp_path / "no-locks"
+    assert lock_holders(slots[0].lock_path, missing) is None
+    assert extend_gpu_cooldowns(slots, None, missing, reading=_used_by(4242), now=now) == ()
+    assert _schedule(tmp_path) == [window]
+
+
+def test_nothing_is_extended_while_a_holder_the_lock_table_omits_holds_the_slot(tmp_path):
+    now = datetime.now(UTC).replace(microsecond=0)
+    slots = gpu_slots(tmp_path, ("0",))
+    window = _extending(
+        tmp_path, "0", now - timedelta(hours=1), now + timedelta(seconds=30), now=now
+    )
+    empty = tmp_path / "locks"
+    empty.write_text("")
+    with _holding(slots[0]):
+        assert extend_gpu_cooldowns(slots, None, empty, reading=_used_by(4242), now=now) == ()
+    assert _schedule(tmp_path) == [window]
+    # With the lock truly free, the probe takes it only for an instant.
+    assert extend_gpu_cooldowns(slots, None, empty, reading=_used_by(4242), now=now) == ("0",)
+    with _holding(slots[0]):
+        pass
+
+
+def test_an_edited_cooldown_never_extends():
+    now = datetime.now(UTC).replace(microsecond=0)
+    window = cooldown(
+        now - timedelta(hours=1),
+        now + timedelta(seconds=30),
+        now=now - timedelta(hours=1),
+        extend=True,
+    )
+    assert extended([window], now) is not None
+    for change in ({}, {"end": now + timedelta(seconds=20)}, {"note": "moved"}):
+        pulled = edited(window, **change)
+        assert not pulled.extend and pulled.start == window.start
+        assert pulled == replace(window, **change, extend=False)
+        assert extended([pulled], now) is None
 
 
 def test_each_check_as_the_end_nears_extends_it_again(tmp_path):
@@ -530,7 +694,7 @@ def test_a_cooldown_covered_by_another_is_not_ending(tmp_path):
 
 
 def test_an_edited_or_no_extend_cooldown_ends_on_time(tmp_path):
-    from silverquillm.karn.cooldowns import edit_schedule, edited
+    from silverquillm.karn.cooldowns import edit_schedule
 
     now = datetime.now(UTC).replace(microsecond=0)
     slots = gpu_slots(tmp_path, ("0",))

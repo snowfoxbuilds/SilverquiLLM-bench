@@ -415,36 +415,47 @@ extends it before the resource is ever free."""
 
 
 def _ending(cooldowns: list[Cooldown], now: datetime) -> Cooldown | None:
-    """The extendable Cooldown whose end frees the resource: begun, ended or ending within
-    ``EXTENSION_LOOKAHEAD``, with no other Cooldown covering its end; the one ending last."""
+    """The extendable Cooldown whose end frees the resource: begun, ending within
+    ``EXTENSION_LOOKAHEAD`` or ended less than ``EXTENSION_STEP`` ago, with no other Cooldown
+    covering its end or begun since; the one ending last.
+
+    A Cooldown ended longer ago stays ended, so a first check more than a step late never
+    extends it: the trade-off is safe because a claim already passes over a GPU Slot whose
+    GPUs are busy, and a window ended long ago is never revived by work that starts later."""
     candidates = [
         c
         for c in cooldowns
         if c.extend
         and c.start <= now
-        and c.end <= now + EXTENSION_LOOKAHEAD
+        and now - EXTENSION_STEP < c.end <= now + EXTENSION_LOOKAHEAD
         and not any(o is not c and o.start <= c.end < o.end for o in cooldowns)
+        and not any(c.end < o.start <= now for o in cooldowns)
     ]
     return max(candidates, key=lambda c: c.end, default=None)
 
 
-def extension_due(directory: Path, *, now: datetime) -> bool:
-    """Whether a Cooldown of ``directory`` is ending and would be extended while in use."""
-    return _ending(_read(Path(directory), now), now) is not None
+def ending_cooldown(directory: Path, *, now: datetime) -> Cooldown | None:
+    """The Cooldown of ``directory`` that is ending and would be extended while in use."""
+    return _ending(_read(Path(directory), now), now)
+
+
+def drop_ended(directory: Path, *, now: datetime, wait: float | None = None) -> None:
+    """Write the schedule back without its ended Cooldowns, so one that lapsed stays lapsed."""
+    edit_schedule(directory, lambda cooldowns: cooldowns, now=now, wait=wait)
 
 
 def extended(cooldowns: list[Cooldown], now: datetime) -> list[Cooldown] | None:
     """The schedule with its ending Cooldown extended, or None when none is due.
 
-    Its end moves on in whole ``EXTENSION_STEP`` steps from where it was to the first after
-    now, so the result does not depend on when the check ran. An end that reaches the start of
-    a later Cooldown merges the two: one window from the first's start to the later end,
-    keeping the later Cooldown's note and whether it extends."""
+    Its end moves on one ``EXTENSION_STEP`` from where it was, which is after now since only a
+    Cooldown ended less than a step ago is due, so the result does not depend on when the
+    check ran. An end that reaches the start of a later Cooldown merges the two: one window
+    from the first's start to the later end, keeping the later Cooldown's note and whether
+    it extends."""
     ending = _ending(cooldowns, now)
     if ending is None:
         return None
-    steps = max(1, (now - ending.end) // EXTENSION_STEP + 1)
-    end = ending.end + steps * EXTENSION_STEP
+    end = ending.end + EXTENSION_STEP
     if end - now > HORIZON:
         return None
     reached = [o for o in cooldowns if o is not ending and ending.end <= o.start <= end]
@@ -454,10 +465,10 @@ def extended(cooldowns: list[Cooldown], now: datetime) -> list[Cooldown] | None:
             later,
             start=ending.start,
             end=max(end, later.end),
-            extensions=ending.extensions + later.extensions + steps,
+            extensions=ending.extensions + later.extensions + 1,
         )
     else:
-        merged = replace(ending, end=end, extensions=ending.extensions + steps)
+        merged = replace(ending, end=end, extensions=ending.extensions + 1)
     gone = {id(ending), *map(id, reached)}
     return [*(c for c in cooldowns if id(c) not in gone), merged]
 
