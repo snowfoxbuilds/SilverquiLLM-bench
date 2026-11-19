@@ -128,6 +128,21 @@ A Cooldown ends by itself at its time, and a slot cooled down from before Cooldo
 `silverquillm login ls` and `top`'s dashboard show a summary of each slot's schedule: when the hold on every run ends, otherwise when the Fable-only hold ends, otherwise when the next Cooldown starts; `silverquillm top --json` lists every Cooldown in each profile's `cooldowns`.
 In `top`'s LOGINS pane, select a slot and press `t` to hold it one more hour per press (the Cooldown in force that ends last, whatever its scope, ends an hour later, or, with none in force, one on every run starts now), or `c` to end every Cooldown in force ten seconds from now, leaving those still to come.
 
+To reserve part of a subscription for use outside the bench, give its slots a Usage Limit: a ceiling on the Estimated Weekly Usage, and for Claude optionally one on the Fable limit.
+
+```bash
+silverquillm login limit --agent claude --weekly 80 slot-1
+silverquillm login limit --agent claude --weekly 80 --fable 90 --all
+silverquillm login limit --agent codex --clear --slots slot-2
+```
+
+When a run releases a slot, or a recovery settles its login, the host checks the slot's estimate, the one `top` shows; at or above the weekly ceiling it adds a `usage-limit` Cooldown until the weekly window's next reset (seven days when no reading tells when that is), and at or above the Fable ceiling one that holds back only Fable runs until the Fable limit's reset.
+Setting or lowering a limit checks it at once.
+A limit only keeps new runs off the slot: a run in flight is never stopped, so set the ceiling with room for what one run spends.
+A failed check is reported on stderr (`usage_limit_check_failed`) and never fails the run; without a `[usage_rates]` rate for the provider there is no estimate, and the limit never trips.
+`login ls` shows each slot's limit, and `top --json` reports it as `usage_limit`.
+A `usage-limit` Cooldown can be removed like any other; the slot's next run checks again when it ends.
+
 ### Claude constructs
 
 The Claude constructs run Claude Code 2.1.284 through `claude@1` on a Claude subscription, with the stock `karn-claude-login` plugin.

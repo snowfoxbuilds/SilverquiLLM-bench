@@ -51,6 +51,7 @@ from .snapshots import WorkspaceSnapshots, retain_git_history
 from .subscription_usage import codex_usage, subscription_usage
 from .subscription_usage import provider_for as usage_provider
 from .toolchain import prepare_toolchain
+from .usage_limit import check_quietly, run_readings
 from .workspace_archive import ArchiveRefused, archive_run
 
 
@@ -455,6 +456,7 @@ def run_benchmark(
             provenance=provenance,
             baseline_store=BaselineStore(Path(state_root).resolve() / "baseline-grades"),
             model_server=model_server,
+            state_root=state_root,
         )
 
 
@@ -482,6 +484,7 @@ def _collect(
     provenance,
     baseline_store,
     model_server=None,
+    state_root=None,
 ) -> KarnRunRecord:
     start = datetime.now(UTC).isoformat()
     artifact_dir = run_dir / "candidate"
@@ -641,6 +644,25 @@ def _collect(
                     host.docker.stop_and_confirm(observed.container_name, run_id)
                     observed.workspace_stopped = True
                     collector.mark_incomplete("host_execution_failed")
+                if selected_login is not None and state_root is not None:
+                    # Before the release, so the next run to take the profile sees a Cooldown
+                    # its spend has tripped.
+                    check_quietly(
+                        selected_login.directory,
+                        login,
+                        provider,
+                        state_root=state_root,
+                        runs_dir=run_dir.parent,
+                        results_repo=results_repo,
+                        readings=lambda: run_readings(
+                            subscription_usage(
+                                provider,
+                                codex=usage.get("codex"),
+                                stdout=run_dir / "host" / "stdout.log",
+                            ),
+                            datetime.now(UTC),
+                        ),
+                    )
                 # The host has harvested the login; grading must not keep it from other runs.
                 login_hold.close()
                 if selected_login is not None and on_login_released is not None:

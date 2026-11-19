@@ -11,6 +11,7 @@ from silverquillm.karn.login import LOGIN_PLUGINS
 from silverquillm.karn.login_block import login_block
 from silverquillm.karn.login_pool import enrolled_slots, logins_root
 from silverquillm.karn.subscription_usage import PROVIDERS
+from silverquillm.karn.usage_limit import UsageLimit, read_limit
 
 from ._read import read_json
 from .locks import lock_held
@@ -41,6 +42,8 @@ class ProfileStatus:
     """When the last Fable-only Cooldown in force ends; the profile stays free for others."""
     next_cooldown: datetime | None = None
     """When the next Cooldown starts, while none is in force."""
+    usage_limit: UsageLimit | None = None
+    """The profile's ceilings on its Estimated Weekly Usage and Fable limit, when set."""
 
     @property
     def free(self) -> bool:
@@ -99,6 +102,7 @@ def login_profiles(
                     schedule,
                     fable,
                     upcoming,
+                    read_limit(directory),
                 )
             )
     return profiles

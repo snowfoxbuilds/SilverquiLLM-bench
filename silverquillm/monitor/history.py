@@ -221,17 +221,17 @@ def _request_costs(measurements: dict, source: str) -> tuple[tuple[tuple[int, De
 
 
 def _reading(measurements: dict, stopped_at: datetime | None) -> UsageReading | None:
-    return _usage_reading(_value(measurements.get("subscription_usage")), stopped_at, WEEKLY)
+    return usage_reading(_value(measurements.get("subscription_usage")), stopped_at, WEEKLY)
 
 
 def _fable_reading(measurements: dict, stopped_at: datetime | None) -> UsageReading | None:
     usage = measurements.get("subscription_usage")
     value = usage.get("fable") if isinstance(usage, dict) else None
-    reading = _usage_reading(value, stopped_at, FABLE)
+    reading = usage_reading(value, stopped_at, FABLE)
     return reading if reading is not None and reading.provider == "claude" else None
 
 
-def _usage_reading(value: Any, stopped_at: datetime | None, window: str) -> UsageReading | None:
+def usage_reading(value: Any, stopped_at: datetime | None, window: str) -> UsageReading | None:
     if not isinstance(value, dict):
         return None
     percent, resets_at = number(value.get("utilization_percent")), instant(value.get("resets_at"))

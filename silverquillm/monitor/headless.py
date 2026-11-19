@@ -10,6 +10,8 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
+from silverquillm.karn.usage_limit import UsageLimit
+
 from .gpus import GpuSlotStatus
 from .pools import ProfileStatus
 from .queue import QueuedBatch
@@ -126,6 +128,7 @@ def _login(view: ProfileView) -> dict:
         "pending_run": status.pending_run,
         "cooldown_until": _time(status.cooldown_until),
         "cooldowns": [cooldown.document() for cooldown in status.cooldowns],
+        "usage_limit": (status.usage_limit or UsageLimit()).document(),
         "blocked": status.blocked,
         "blocked_run": status.blocked_run,
         "run_id": view.run_id,

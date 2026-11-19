@@ -15,6 +15,8 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
+from silverquillm.karn.cooldowns import is_fable
+
 from .costs import ProvisionalCost
 from .estimates import WeeklyUsage, newest_reading, weekly_usage
 from .history import FABLE, WEEKLY, HistoryStore, RunSummary, UsageReading
@@ -22,14 +24,8 @@ from .live import RecordCache, live_runs
 from .locks import PROC_LOCKS, held_locks
 from .pools import ProfileStatus, login_profiles
 
-FABLE_MODEL_PREFIX = "claude-fable-"
-
 Cost = tuple[int, Decimal]
 """``(timestamp_ms, usd)`` of one priced request."""
-
-
-def is_fable(model: str | None) -> bool:
-    return isinstance(model, str) and model.startswith(FABLE_MODEL_PREFIX)
 
 
 def canonical_login(login: str | None, profiles: Iterable[ProfileStatus]) -> str | None:

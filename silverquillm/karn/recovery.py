@@ -7,6 +7,7 @@ import dataclasses
 import json
 import re
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 from silverquillm.queue_state import _write_atomically
@@ -56,6 +57,7 @@ from .records import (
 from .snapshots import WorkspaceSnapshots, retain_git_history
 from .subscription_usage import codex_usage, subscription_usage
 from .subscription_usage import provider_for as usage_provider
+from .usage_limit import check_quietly, read_limit, run_readings
 
 
 class RunNeverLaunchedError(KarnError):
@@ -304,7 +306,40 @@ def _owns_pending_login(profile, run_id: str) -> bool:
     return pending is not None and pending.get("run_id") == run_id
 
 
-def _settle_own_login(run_id, profile, host, candidate) -> list[dict] | None:
+def _usage_limit_check(run_dir, inputs, *, results_repo, state_root):
+    """The Usage Limit check for the profile a run used, with the readings the run left."""
+    login = inputs.get("login") if isinstance(inputs, dict) else None
+    telemetry = (inputs.get("native_telemetry") if isinstance(inputs, dict) else None) or {}
+
+    def check(profile) -> None:
+        if not login or read_limit(profile.directory) is None:
+            return
+        # As the recovered record attributes it: a run from before adapters was Codex's.
+        provider = usage_provider(login, telemetry.get("adapter", "codex"))
+
+        def readings():
+            preserved = run_dir / "host" / NATIVE_PRESERVED
+            measurement = subscription_usage(
+                provider,
+                codex=codex_usage(preserved) if preserved.is_dir() else None,
+                stdout=run_dir / "host" / "stdout.log",
+            )
+            return run_readings(measurement, datetime.now(UTC))
+
+        check_quietly(
+            profile.directory,
+            login,
+            provider,
+            state_root=state_root,
+            runs_dir=run_dir.parent,
+            results_repo=results_repo,
+            readings=readings,
+        )
+
+    return check
+
+
+def _settle_own_login(run_id, profile, host, candidate, check_limit=None) -> list[dict] | None:
     """Settle this run's pending authentication with the plugin artifact the run retained.
 
     Another run's pending login is never settled or harvested here: its container may still
@@ -330,6 +365,9 @@ def _settle_own_login(run_id, profile, host, candidate) -> list[dict] | None:
             recover_login(
                 profile, plugin, host.docker.stop_and_confirm, cleanup=host.docker.cleanup_run
             )
+            if check_limit is not None:
+                # Under the login lock, so the profile's next run sees what this one tripped.
+                check_limit(profile)
             try:
                 status = plugin.status()
             except KarnError:
@@ -367,6 +405,7 @@ def _conclude(record, unpublished, *, run_id, run_dir, results_repo, state_root,
             profile,
             host,
             lambda: _retained_candidate(run_dir, inputs, record.candidate),
+            _usage_limit_check(run_dir, inputs, results_repo=results_repo, state_root=state_root),
         )
     except Exception as error:  # noqa: BLE001 -- a final record is published whatever settlement hits.
         failure = error
@@ -474,7 +513,15 @@ def _recover(
         host.docker.stop_and_confirm(observed.container_name, run_id)
         settlement_failure = None
         try:
-            login_state = _settle_own_login(run_id, profile, host, lambda: candidate)
+            login_state = _settle_own_login(
+                run_id,
+                profile,
+                host,
+                lambda: candidate,
+                _usage_limit_check(
+                    run_dir, inputs, results_repo=results_repo, state_root=state_root
+                ),
+            )
         except LoginInUseError:
             raise
         except Exception as error:  # noqa: BLE001 -- the recovered record is still retained and published.

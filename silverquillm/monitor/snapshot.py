@@ -26,6 +26,7 @@ from silverquillm.host_config import (
     resolve_location,
     resolve_locations,
 )
+from silverquillm.karn.cooldowns import is_fable
 from silverquillm.karn.definition import KarnError
 from silverquillm.karn.model_server import GpuReading, read_gpus
 from silverquillm.karn.provenance import host_label as resolve_host_label
@@ -54,7 +55,7 @@ from .output import (
 )
 from .pools import ProfileStatus, login_profiles
 from .queue import QueuedBatch, batch_runs, dispatch_mode, ledger_status, queued_batches
-from .usage import UsageInputs, accountable, canonical_login, is_fable, profile_usage
+from .usage import UsageInputs, accountable, canonical_login, profile_usage
 
 CODEX_READING_SECONDS = 30.0
 HISTORY_SECONDS = 10.0

@@ -170,10 +170,10 @@ def enroll(ctx, build_output, construct, slot, adopt, state_root):
     """Manage the Login Pools' slots: one subscription login each, serving one run at a time.
 
     Day to day, use the subcommands: `login ls`, `login add claude`, `login refresh codex 3`,
-    `login remove codex 3`, `login unblock claude 2`, `login cooldown`. They find the login
-    plugin among those runs installed on this host. Without a subcommand, `--build-output`
-    and `--construct` enroll from a construct's own plugin, as on a host that has never run
-    one, and `--adopt` moves a login from before pools.
+    `login remove codex 3`, `login unblock claude 2`, `login cooldown`, `login limit`. They
+    find the login plugin among those runs installed on this host. Without a subcommand,
+    `--build-output` and `--construct` enroll from a construct's own plugin, as on a host that
+    has never run one, and `--adopt` moves a login from before pools.
     """
     if ctx.invoked_subcommand is not None:
         if ctx.get_parameter_source("state_root") is click.core.ParameterSource.COMMANDLINE:
@@ -278,6 +278,15 @@ def _local_stamp(moment) -> str:
     return local.strftime("%a %Y-%m-%d %H:%M %Z")
 
 
+def _limit_text(limit) -> str:
+    ceilings = []
+    if limit.weekly_percent is not None:
+        ceilings.append(f"weekly {limit.weekly_percent:g}%")
+    if limit.fable_percent is not None:
+        ceilings.append(f"Fable {limit.fable_percent:g}%")
+    return "limit " + ", ".join(ceilings)
+
+
 @enroll.command("ls")
 @click.argument("agent", required=False, type=click.Choice(sorted(AGENTS)))
 @STATE_ROOT_OPTION
@@ -312,6 +321,8 @@ def list_slots(ctx, agent, state_root):
             detail = "Fable runs held until " + _local_stamp(status.fable_cooldown_until)
         elif status.next_cooldown is not None:
             detail = "cooldown from " + _local_stamp(status.next_cooldown)
+        if status.usage_limit is not None:
+            detail = "; ".join(filter(None, (detail, _limit_text(status.usage_limit))))
         line = f"{status.provider:<7} {status.slot:<12} {_login_state(status):<9} {detail}"
         click.echo(line.rstrip())
 
@@ -477,6 +488,85 @@ def cooldown(
             click.echo(f"{plugin_id}/{name}: {scope}{begins} until {_local_stamp(window.end)}")
     except (KarnError, OSError) as error:
         raise click.ClickException(str(error)) from None
+
+
+@enroll.command("limit")
+@click.option(
+    "--agent",
+    required=True,
+    type=click.Choice(sorted(AGENTS)),
+    help="The provider whose Login Pool holds the slots.",
+)
+@click.option("--slots", multiple=True, metavar="SLOT", help="A slot to limit; repeat or list.")
+@click.option("--all", "every", is_flag=True, help="Every enrolled slot of the pool.")
+@click.option(
+    "--weekly", type=float, metavar="PERCENT", help="The ceiling on the Estimated Weekly Usage."
+)
+@click.option(
+    "--fable",
+    type=float,
+    metavar="PERCENT",
+    help="The ceiling on the Fable limit (claude only); it holds back only Fable runs.",
+)
+@click.option("--clear", is_flag=True, help="Remove the slots' Usage Limits instead.")
+@click.argument("more_slots", nargs=-1, metavar="[SLOT]...")
+@STATE_ROOT_OPTION
+@click.pass_context
+def limit(ctx, agent, slots, every, weekly, fable, clear, more_slots, state_root):
+    """Set a Usage Limit on Login Profiles, reserving the rest of the subscription.
+
+    When a run's release of a slot finds its estimate at or above a ceiling, the slot cools
+    down until that window's next reset. Setting a limit checks it at once. Runs in flight
+    are never stopped, so usage may pass a ceiling by what they spend.
+    """
+    from datetime import UTC, datetime
+
+    from .login_pool import enrolled_slots, logins_root
+    from .usage_limit import check_usage_limit, clear_limit, host_locations, set_limit, usage_limit
+
+    state_root = _login_state_root(ctx, state_root)
+    names = [*slots, *more_slots]
+    if every and names:
+        raise click.UsageError("Pass --slots or --all, not both.")
+    if not every and not names:
+        raise click.UsageError("Name the slots with --slots, or pass --all.")
+    if clear and (weekly is not None or fable is not None):
+        raise click.UsageError("--clear takes no --weekly or --fable.")
+    if not clear and weekly is None and fable is None:
+        raise click.UsageError("Pass --weekly, --fable or both, or --clear.")
+    if fable is not None and agent != "claude":
+        raise click.UsageError("Only the claude pool has a Fable limit.")
+    plugin_id = AGENTS[agent]
+    pool_root = logins_root(state_root) / plugin_id
+    if every:
+        chosen = enrolled_slots(pool_root, plugin_id)
+    else:
+        chosen = list(dict.fromkeys(_enrolled(state_root, agent, name) for name in names))
+    now = datetime.now(UTC)
+    try:
+        if clear:
+            for name in chosen:
+                removed = clear_limit(pool_root / name)
+                click.echo(f"{plugin_id}/{name}: " + ("limit removed" if removed else "no limit"))
+            return
+        ceilings = usage_limit(weekly, fable)
+        for name in chosen:
+            set_limit(pool_root / name, ceilings, now=now)
+            click.echo(f"{plugin_id}/{name}: {_limit_text(ceilings)}")
+    except (KarnError, OSError) as error:
+        raise click.ClickException(str(error)) from None
+    locations = host_locations(state_root)
+    for name in chosen:
+        ref = f"{plugin_id}/{name}"
+        try:
+            written = check_usage_limit(pool_root / name, ref, agent, now=now, **locations)
+        except Exception as error:  # noqa: BLE001 -- the limit is set; the next release checks it.
+            reason = str(error) if isinstance(error, KarnError) else type(error).__name__
+            click.echo(f"{ref}: usage_limit_check_failed: {reason}", err=True)
+            continue
+        for cooldown in written:
+            held = "Fable runs held" if cooldown.scope == "fable" else "cooling down"
+            click.echo(f"{ref}: limit reached; {held} until {_local_stamp(cooldown.end)}")
 
 
 @click.command()
