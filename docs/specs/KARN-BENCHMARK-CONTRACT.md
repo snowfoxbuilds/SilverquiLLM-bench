@@ -262,7 +262,7 @@ On a host where no run has installed the plugin yet, `login --build-output … -
 Times are entered in the host's local time: `14:00` (its next occurrence), `Fri 09:00`, `2026-11-20 09:00`, or an offset, `+3h` or `1d`, counted from now, or for an end from the start; none may lie more than 365 days ahead.
 SilverquiLLM runs a completed Karn build by itself; the vendored v4 and v5 construct definition schemas are the only thing it takes from Karn, and no Ozolith package is involved.
 [Operator instructions](../KARN-BENCHMARKING.md) show explicit builds, direct runs, batches, and recovery.
-[Run Monitoring](RUN-MONITORING.md) defines `top`, the monitor over live runs, the queue, Login Pools, and history, read-only except for the slot keys of its LOGINS pane.
+[Run Monitoring](RUN-MONITORING.md) defines `top`, the monitor over live runs, the queue, Login Pools, and history, read-only except for the slot keys of its LOGINS pane and its capacity view, which also keep GPU Slots' Cooldown Schedules.
 
 Every Karn command resolves five host locations the same way: its flag, else its environment variable, else the host configuration file `~/.config/silverquillm/config.toml` (grilling 2026-10-07).
 
