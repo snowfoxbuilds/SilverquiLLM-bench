@@ -306,8 +306,9 @@ def _owns_pending_login(profile, run_id: str) -> bool:
     return pending is not None and pending.get("run_id") == run_id
 
 
-def _usage_limit_check(run_dir, inputs, *, results_repo, state_root):
-    """The Usage Limit check for the profile a run used, with the readings the run left."""
+def _usage_limit_check(run_dir, inputs, *, results_repo, state_root, live=True):
+    """The Usage Limit check for the profile a run used, with the readings the run left;
+    with none once ``live`` is False, when the run's written record carries them."""
     login = inputs.get("login") if isinstance(inputs, dict) else None
     telemetry = (inputs.get("native_telemetry") if isinstance(inputs, dict) else None) or {}
 
@@ -333,10 +334,20 @@ def _usage_limit_check(run_dir, inputs, *, results_repo, state_root):
             state_root=state_root,
             runs_dir=run_dir.parent,
             results_repo=results_repo,
-            readings=readings,
+            readings=readings if live else tuple,
         )
 
     return check
+
+
+def _check_recorded(run_dir, inputs, profile, *, results_repo, state_root) -> None:
+    """The Usage Limit check again once the record is written, whose reconciled Run Cost can
+    count spend the telemetry never saw. The profile is released by now, but a trip still
+    holds every later run."""
+    if profile is not None:
+        _usage_limit_check(
+            run_dir, inputs, results_repo=results_repo, state_root=state_root, live=False
+        )(profile)
 
 
 def _settle_own_login(run_id, profile, host, candidate, check_limit=None) -> list[dict] | None:
@@ -390,7 +401,7 @@ def _conclude(record, unpublished, *, run_id, run_dir, results_repo, state_root,
     Settlement never blocks publication: whatever it hits, including a busy login, the
     record is published and a LoginSettlementPendingError carries it back.
     """
-    failure = None
+    failure = inputs = profile = None
     try:
         try:
             inputs = json.loads((run_dir / "run-input.json").read_text())
@@ -410,6 +421,7 @@ def _conclude(record, unpublished, *, run_id, run_dir, results_repo, state_root,
     except Exception as error:  # noqa: BLE001 -- a final record is published whatever settlement hits.
         failure = error
     _publish(results_repo, unpublished, record, run_dir)
+    _check_recorded(run_dir, inputs, profile, results_repo=results_repo, state_root=state_root)
     if failure is not None:
         raise LoginSettlementPendingError(_failure_reason(failure), record)
     return record
@@ -691,6 +703,7 @@ def _recover(
         )
         unpublished = [previous_record, record]
     _publish(results_repo, unpublished, record, run_dir)
+    _check_recorded(run_dir, inputs, profile, results_repo=results_repo, state_root=state_root)
     if settlement_failure is not None:
         raise LoginSettlementPendingError(_failure_reason(settlement_failure), record)
     return record

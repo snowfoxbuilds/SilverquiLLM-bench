@@ -36,6 +36,7 @@ from silverquillm.karn.usage_limit import (
     run_readings,
     set_limit,
 )
+from silverquillm.monitor import usage as monitor_usage
 from silverquillm.monitor.estimates import WeeklyUsage
 from silverquillm.monitor.headless import _login
 from silverquillm.monitor.history import FABLE, WEEKLY, UsageReading
@@ -527,7 +528,7 @@ def test_a_run_trips_its_profiles_limit_before_releasing_it(tmp_path, monkeypatc
         grader=local_grader(),
         on_login_released=lambda: at_release.extend(read_schedule(pool_slot(state).directory)),
     )
-    assert checked_while_held == [True]
+    assert checked_while_held == [True, False]
     [held] = at_release
     assert (held.scope, held.source) == ("all", "usage-limit")
     assert held.end == datetime.fromtimestamp(SoonResettingDocker.reset, UTC)
@@ -621,6 +622,158 @@ def test_a_failure_while_reporting_never_skips_the_login_block_in_recovery(tmp_p
     options_ = {key: common[key] for key in ("bench_root", "results_dir", "results_repo")}
     recovery.recover_benchmark(run_id="run-a", spec={}, state_root=state, **options_)
     assert blocked == ["run-a"]
+    [held] = read_schedule(profile)
+    assert held.source == "usage-limit"
+
+
+def recorded(results_repo) -> bool:
+    return any(Path(results_repo).glob("results/*/*/manifest.json"))
+
+
+def spend_only_in_the_record(monkeypatch):
+    """An estimate that sees no spend until a record is written and then spend over any
+    ceiling, as when a run's spend reached only its native events, not its telemetry."""
+    seen = []
+
+    def estimate(login, provider, *, results_repo, readings, now, **kwargs):
+        seen.append((recorded(results_repo), list(readings)))
+        weekly = reading(resets=now + timedelta(days=2))
+        return usage(100.0 if recorded(results_repo) else 0.0, weekly_reading=weekly)
+
+    monkeypatch.setattr(monitor_usage, "estimate_profile_usage", estimate)
+    return seen
+
+
+def observed_estimates(monkeypatch):
+    """Each estimate the checks make, and whether a record had been written when it was."""
+    seen = []
+    estimate = monitor_usage.estimate_profile_usage
+
+    def observed(*args, **kwargs):
+        found = estimate(*args, **kwargs)
+        seen.append((recorded(kwargs["results_repo"]), found))
+        return found
+
+    monkeypatch.setattr(monitor_usage, "estimate_profile_usage", observed)
+    return seen
+
+
+def observed_writes(monkeypatch):
+    writes = []
+    apply = usage_limit.apply_limit
+
+    def observed(*args, **kwargs):
+        writes.append(apply(*args, **kwargs))
+        return writes[-1]
+
+    monkeypatch.setattr(usage_limit, "apply_limit", observed)
+    return writes
+
+
+def soon_resetting_host(state):
+    return DockerHost(
+        docker=SoonResettingDocker(), plugin_cache=state / "plugins", plugin_python=sys.executable
+    )
+
+
+@PLUGIN_SDK
+def test_spend_only_in_the_record_trips_once_the_record_is_written(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(50.0), now=NOW)
+    seen = spend_only_in_the_record(monkeypatch)
+    at_release = []
+    run_benchmark(
+        **common,
+        host=soon_resetting_host(state),
+        grader=local_grader(),
+        on_login_released=lambda: at_release.extend(read_schedule(profile)),
+    )
+    assert at_release == []
+    assert [after_record for after_record, _ in seen] == [False, True]
+    assert seen[1][1] == []
+    [held] = read_schedule(profile)
+    assert (held.scope, held.source) == ("all", "usage-limit")
+
+
+@PLUGIN_SDK
+def test_a_run_below_its_ceiling_writes_nothing_after_its_record(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(50.0), now=NOW)
+    seen = observed_estimates(monkeypatch)
+    run_benchmark(**common, host=soon_resetting_host(state), grader=local_grader())
+    assert [after_record for after_record, _ in seen] == [False, True]
+    assert seen[1][1].weekly.percent < 50.0
+    assert read_schedule(profile) == []
+
+
+@PLUGIN_SDK
+def test_a_trip_before_release_is_not_written_again_after_the_record(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(5.0), now=NOW)
+    seen = observed_estimates(monkeypatch)
+    writes = observed_writes(monkeypatch)
+    run_benchmark(**common, host=soon_resetting_host(state), grader=local_grader())
+    assert [after_record for after_record, _ in seen] == [False, True]
+    assert seen[1][1].weekly.percent >= 5.0
+    [[tripped], again] = writes
+    assert (tripped.scope, tripped.source, again) == ("all", "usage-limit", [])
+    assert read_schedule(profile) == [tripped]
+
+
+@PLUGIN_SDK
+def test_a_failed_check_after_the_record_never_fails_the_run(tmp_path, monkeypatch, capsys):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(5.0), now=NOW)
+    check = usage_limit.check_usage_limit
+    calls = []
+
+    def fails_after_the_record(*args, **kwargs):
+        calls.append(recorded(kwargs["results_repo"]))
+        if calls[-1]:
+            raise RuntimeError("history unreadable")
+        return check(*args, **kwargs)
+
+    monkeypatch.setattr(usage_limit, "check_usage_limit", fails_after_the_record)
+    record = run_benchmark(**common, host=soon_resetting_host(state), grader=local_grader())
+    assert calls == [False, True]
+    assert record.run_metadata["execution"]["status"] == "completed"
+    assert recorded(common["results_repo"])
+    assert "usage_limit_check_failed: RuntimeError" in capsys.readouterr().err
+    [held] = read_schedule(profile)
+    assert held.source == "usage-limit"
+
+
+@PLUGIN_SDK
+def test_recovery_checks_the_limit_again_once_its_record_is_written(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(50.0), now=NOW)
+    with pytest.raises(SystemExit):
+        run_benchmark(
+            **common,
+            run_id="run-a",
+            host=die_after_start(
+                DyingHost(
+                    docker=SoonResettingDocker(),
+                    plugin_cache=state / "plugins",
+                    plugin_python=sys.executable,
+                )
+            ),
+        )
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: DockerHost(docker=FakeDocker(), plugin_cache=state / "plugins"),
+    )
+    seen = spend_only_in_the_record(monkeypatch)
+    options_ = {key: common[key] for key in ("bench_root", "results_dir", "results_repo")}
+    recovery.recover_benchmark(run_id="run-a", spec={}, state_root=state, **options_)
+    assert [after_record for after_record, _ in seen] == [False, True]
+    assert seen[1][1] == []
     [held] = read_schedule(profile)
     assert held.source == "usage-limit"
 

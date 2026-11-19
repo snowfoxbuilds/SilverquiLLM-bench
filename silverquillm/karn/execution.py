@@ -777,5 +777,16 @@ def _collect(
         prefix=".run-record-",
     )
     write_record(results_repo, record)
+    if selected_login is not None and state_root is not None:
+        # Again now the record holds the run's reconciled Run Cost, which can count spend the
+        # telemetry never saw. The profile is released, but a trip still holds every later run.
+        check_quietly(
+            selected_login.directory,
+            login,
+            provider,
+            state_root=state_root,
+            runs_dir=run_dir.parent,
+            results_repo=results_repo,
+        )
     attach_to_record(results_repo, record, run_dir)
     return record
