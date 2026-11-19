@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import threading
 import time
 from datetime import UTC, datetime, timedelta
@@ -14,6 +15,7 @@ import pytest
 from click.testing import CliRunner
 
 from silverquillm.cli import main
+from silverquillm.karn import cooldowns
 from silverquillm.karn.cooldowns import (
     COOLDOWNS_FILE,
     LEGACY_COOLDOWN_FILE,
@@ -38,6 +40,20 @@ NOW = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
 FABLE = "claude-fable-5-2"
 OPUS = "claude-opus-5-5"
 PACIFIC = ZoneInfo("America/Los_Angeles")
+EASTERN = ZoneInfo("America/New_York")
+
+
+@pytest.fixture
+def host_zone(monkeypatch):
+    """Set the host's own time zone, as the CLI reads it with no zone given."""
+
+    def use(name):
+        monkeypatch.setenv("TZ", name)
+        time.tzset()
+
+    yield use
+    monkeypatch.undo()
+    time.tzset()
 
 
 def hold(directory, until, *, now=NOW, start=None, scope="all", source="operator", note=None):
@@ -110,6 +126,29 @@ def test_a_time_is_read_in_local_time_and_means_its_next_occurrence(text, local)
     assert parse_time(text, now=NOW, tz=PACIFIC) == local
 
 
+# 2026-11-01 06:30 UTC is 01:30 EST in New York, in the hour the clocks repeat after 01:59 EDT.
+FALL_BACK = datetime(2026, 11, 1, 6, 30, tzinfo=UTC)
+
+
+REPEATED_HOUR = [
+    ("01:45", datetime(2026, 11, 1, 6, 45, tzinfo=UTC)),  # later in the repeated hour
+    ("01:15", datetime(2026, 11, 2, 6, 15, tzinfo=UTC)),  # both readings passed
+    ("sun 01:45", datetime(2026, 11, 1, 6, 45, tzinfo=UTC)),
+    ("02:30", datetime(2026, 11, 1, 7, 30, tzinfo=UTC)),
+]
+
+
+@pytest.mark.parametrize(("text", "moment"), REPEATED_HOUR)
+def test_a_wall_time_is_its_next_occurrence_either_side_of_a_repeated_hour(text, moment):
+    assert parse_time(text, now=FALL_BACK, tz=EASTERN) == moment
+
+
+@pytest.mark.parametrize(("text", "moment"), REPEATED_HOUR)
+def test_a_wall_time_on_the_host_clock_is_read_by_the_hosts_own_rules(host_zone, text, moment):
+    host_zone("America/New_York")
+    assert parse_time(text, now=FALL_BACK) == moment
+
+
 def test_an_offset_counts_from_now_or_from_the_given_start():
     assert parse_time("+3h", now=NOW) == NOW + timedelta(hours=3)
     assert parse_time("1d", now=NOW) == NOW + timedelta(days=1)
@@ -123,6 +162,20 @@ def test_an_offset_counts_from_now_or_from_the_given_start():
 def test_anything_else_is_refused(text):
     with pytest.raises(KarnError, match="invalid_cooldown_(time|duration)"):
         parse_time(text, now=NOW, tz=PACIFIC)
+
+
+@pytest.mark.parametrize(
+    ("text", "base", "error"),
+    [
+        ("0001-01-01 00:00", None, "invalid_cooldown_time"),
+        ("9999-12-31 23:59", None, "invalid_cooldown_time|cooldown_beyond_horizon"),
+        ("+1h", datetime(9999, 12, 31, 23, 30, tzinfo=UTC), "invalid_cooldown_time"),
+    ],
+)
+def test_a_time_no_calendar_holds_is_refused(host_zone, text, base, error):
+    host_zone("Asia/Tokyo")
+    with pytest.raises(KarnError, match=error):
+        parse_time(text, now=NOW, base=base)
 
 
 def test_a_cooldown_must_end_after_it_starts_after_now_and_within_a_year():
@@ -216,6 +269,74 @@ def test_an_unreadable_schedule_is_no_cooldown(tmp_path, content):
     assert target.has_claimable_slot()
     with contextlib.ExitStack() as held:
         assert target.acquire(held, wait=False).name == "slot-1"
+
+
+def far(start, end):
+    return {
+        "start": start,
+        "end": end,
+        "set_at": "2020-01-01T00:00:00Z",
+        "scope": "all",
+        "source": "operator",
+    }
+
+
+def test_a_window_ending_beyond_the_horizon_is_no_cooldown(tmp_path):
+    target = codex_pool(tmp_path, "slot-1", "slot-2")
+    now = datetime.now(UTC)
+    beyond = (now + timedelta(days=367)).isoformat()
+    for name, entries in (
+        ("slot-1", [far("2020-01-01T00:00:00Z", "9999-12-31T23:00:00Z")]),
+        ("slot-2", [far(now.isoformat(), beyond)]),
+    ):
+        (target.root / name / COOLDOWNS_FILE).write_text(
+            json.dumps({"format": 1, "cooldowns": entries})
+        )
+        assert read_schedule(target.root / name) == []
+    legacy(target.root / "slot-1", datetime(9999, 12, 31, 23, tzinfo=UTC))
+    (target.root / "slot-1" / COOLDOWNS_FILE).unlink()
+    assert read_schedule(target.root / "slot-1") == []
+    with contextlib.ExitStack() as held:
+        assert target.acquire(held, wait=False).name == "slot-1"
+        assert target.acquire(held, wait=False).name == "slot-2"
+
+
+def test_a_window_ending_a_full_year_on_still_holds(tmp_path):
+    directory = codex_pool(tmp_path, "slot-1").root / "slot-1"
+    hold(directory, NOW + timedelta(days=365))
+    assert held_until(directory, now=NOW) == NOW + timedelta(days=365)
+
+
+def test_login_ls_lists_a_slot_whatever_time_its_schedule_holds(tmp_path, host_zone):
+    host_zone("Asia/Tokyo")
+    target = codex_pool(tmp_path, "slot-1", "slot-2")
+    for name, entry in (
+        ("slot-1", far("2020-01-01T00:00:00Z", "9999-12-31T23:00:00Z")),
+        ("slot-2", far("9999-12-31T22:00:00Z", "9999-12-31T23:00:00Z")),
+    ):
+        (target.root / name / COOLDOWNS_FILE).write_text(
+            json.dumps({"format": 1, "cooldowns": [entry]})
+        )
+    result = CliRunner().invoke(main, ["login", "ls", "--state-root", str(tmp_path / "state")])
+    assert result.exit_code == 0, result.output
+    assert [line.split()[2] for line in result.output.splitlines()] == ["free", "free"]
+
+
+def test_a_reader_racing_the_conversion_still_sees_the_hold(tmp_path, monkeypatch):
+    directory = codex_pool(tmp_path, "slot-1").root / "slot-1"
+    now = datetime.now(UTC)
+    legacy(directory, now + timedelta(hours=5), set_at=now - timedelta(hours=1))
+    read_legacy = cooldowns._legacy
+
+    def converted_in_between(*args):
+        # The conversion writes the schedule and removes the old file between the two looks.
+        monkeypatch.setattr(cooldowns, "_legacy", read_legacy)
+        cooldowns.edit_schedule(directory, lambda current: current, now=now)
+        return read_legacy(*args)
+
+    monkeypatch.setattr(cooldowns, "_legacy", converted_in_between)
+    assert held_until(directory, now=now) == (now + timedelta(hours=5)).replace(microsecond=0)
+    assert not (directory / LEGACY_COOLDOWN_FILE).exists()
 
 
 def test_a_schedule_that_cannot_even_be_opened_is_no_cooldown(tmp_path):
@@ -490,6 +611,23 @@ def test_a_bad_time_is_reported_without_writing(tmp_path, args, error):
     target = codex_pool(tmp_path, "slot-1")
     result = run_cooldown(tmp_path, "--agent", "codex", "--slots", "slot-1", *args)
     assert result.exit_code == 1 and error in result.output
+    assert not (target.root / "slot-1" / COOLDOWNS_FILE).exists()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--from", "0001-01-01 00:00", "--duration", "1h"],
+        ["--from", "9999-12-31 23:30", "--duration", "1h"],
+        ["--until", "9999-12-31 23:59"],
+    ],
+)
+def test_a_time_no_calendar_holds_is_reported_without_writing(tmp_path, host_zone, args):
+    host_zone("Asia/Tokyo")
+    target = codex_pool(tmp_path, "slot-1")
+    result = run_cooldown(tmp_path, "--agent", "codex", "--slots", "slot-1", *args)
+    assert isinstance(result.exception, SystemExit) and result.exit_code == 1, result.output
+    assert re.search("invalid_cooldown_time|cooldown_beyond_horizon", result.output)
     assert not (target.root / "slot-1" / COOLDOWNS_FILE).exists()
 
 

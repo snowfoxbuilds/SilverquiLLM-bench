@@ -268,7 +268,14 @@ def _sign_in(state_root, agent, slot):
 
 
 def _local_stamp(moment) -> str:
-    return moment.astimezone().strftime("%a %Y-%m-%d %H:%M %Z")
+    from datetime import UTC
+
+    try:
+        local = moment.astimezone()
+    except (OverflowError, ValueError):
+        # Local time cannot hold the calendar's very ends; UTC still can.
+        local = moment.astimezone(UTC)
+    return local.strftime("%a %Y-%m-%d %H:%M %Z")
 
 
 @enroll.command("ls")

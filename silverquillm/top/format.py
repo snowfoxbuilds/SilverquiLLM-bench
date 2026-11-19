@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from rich.text import Text
@@ -149,13 +149,22 @@ def elapsed_of_budget(elapsed: float | None, budget: float | None, theme: Theme)
     return text
 
 
+def _local(moment: datetime) -> datetime:
+    """The moment in local time, or in UTC when local time cannot hold it (the calendar's
+    very ends), so no stored time can break a pane."""
+    try:
+        return moment.astimezone()
+    except (OverflowError, ValueError):
+        return moment.astimezone(UTC)
+
+
 def cooldown(
     ends: datetime, now: datetime, theme: Theme, *, short: bool = False, fable: bool = False
 ) -> Text:
     """``❄ cooldown until Thu 14:00 (3h12m)``, or ``❄ until Thu 14:00 (3h12m)`` when short;
     a Fable-only Cooldown reads ``fable cooldown until …`` without the marker, since the
     profile stays free for other models."""
-    local = ends.astimezone()
+    local = _local(ends)
     left = duration((ends - now).total_seconds())
     if fable:
         words = "fable until" if short else "fable cooldown until"
@@ -170,7 +179,7 @@ def cooldown(
 def scheduled(starts: datetime, theme: Theme) -> Text:
     """``⏲ Fri 09:00``: the next Cooldown, while none is in force."""
     return Text(
-        f"{theme.glyph('scheduled')} {starts.astimezone().strftime('%a %H:%M')}",
+        f"{theme.glyph('scheduled')} {_local(starts).strftime('%a %H:%M')}",
         style=theme.style("muted"),
     )
 

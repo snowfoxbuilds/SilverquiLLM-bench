@@ -17,6 +17,9 @@ STEP = timedelta(hours=1)
 """Each ``t`` holds the slot this much longer."""
 GRACE = timedelta(seconds=10)
 """``c`` ends the Cooldowns in force this long from now rather than at once."""
+WRITE_WAIT = 2.0
+"""Seconds a key waits for another writer of the schedule before reporting it busy, so a
+stalled ``login cooldown`` never freezes the monitor."""
 
 
 def _slot_directory(state_root: Path, plugin_id: str, slot: str) -> Path:
@@ -28,10 +31,12 @@ def _slot_directory(state_root: Path, plugin_id: str, slot: str) -> Path:
 
 def lengthen(state_root: Path, plugin_id: str, slot: str, *, now: datetime) -> datetime:
     """Hold the slot one more ``STEP``; returns when its hold on every run now ends."""
-    return extend_hold(_slot_directory(state_root, plugin_id, slot), STEP, now=now)
+    return extend_hold(_slot_directory(state_root, plugin_id, slot), STEP, now=now, wait=WRITE_WAIT)
 
 
 def end_soon(state_root: Path, plugin_id: str, slot: str, *, now: datetime) -> datetime | None:
     """End the slot's Cooldowns in force after ``GRACE``, leaving those still to come; None,
     writing nothing, when none is in force."""
-    return end_in_force_after(_slot_directory(state_root, plugin_id, slot), GRACE, now=now)
+    return end_in_force_after(
+        _slot_directory(state_root, plugin_id, slot), GRACE, now=now, wait=WRITE_WAIT
+    )

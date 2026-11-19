@@ -408,7 +408,12 @@ class LoginPool:
                             blocked += 1
                             continue
                         lock.enter_context(profile.exclusive())
-                        # The run that held the slot until now may have blocked it.
+                        # The run that held the slot until now may have blocked it, or
+                        # set a Cooldown (a Usage Limit) just before releasing it.
+                        if held_until(profile.directory, model=model) is not None:
+                            lock.close()
+                            cooling += 1
+                            continue
                         if is_blocked(profile.directory):
                             lock.close()
                             blocked += 1

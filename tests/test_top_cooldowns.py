@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+import threading
+import time
 from dataclasses import replace
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -13,9 +16,18 @@ pytest.importorskip("textual")
 
 from rich.text import Text
 
-from silverquillm.karn.cooldowns import COOLDOWNS_FILE, add_cooldown, cooldown, held_until
+from silverquillm.karn.cooldowns import (
+    COOLDOWNS_FILE,
+    WRITE_LOCK,
+    add_cooldown,
+    cooldown,
+    held_until,
+)
+from silverquillm.karn.definition import KarnError
 from silverquillm.karn.login_pool import LoginPool
 from silverquillm.monitor.candidates import CandidateDisplay
+from silverquillm.top import cooldowns
+from silverquillm.top import format as fmt
 from silverquillm.top.dashboard import LoginsPane, PoolPanel, RunningPane
 from silverquillm.top.details import Shown, header
 from silverquillm.top.theme import MTG
@@ -143,6 +155,46 @@ async def test_a_cooldown_that_cannot_be_written_is_a_notice_not_a_crash(tmp_pat
     finally:
         (pool.root / "slot-1").chmod(0o700)
     assert not (pool.root / "slot-1" / COOLDOWNS_FILE).exists()
+
+
+def test_a_key_reports_a_schedule_another_writer_holds_as_busy(tmp_path, monkeypatch):
+    _, pool = _host(tmp_path)
+    monkeypatch.setattr(cooldowns, "WRITE_WAIT", 0.2)
+    lock = os.open(pool.root / "slot-1" / WRITE_LOCK, os.O_RDWR | os.O_CREAT, 0o600)
+    outcome: list[object] = []
+
+    def press():
+        state_root = tmp_path / ".local/state/silverquillm"
+        try:
+            outcome.append(cooldowns.lengthen(state_root, pool.plugin_id, "slot-1", now=NOW))
+        except KarnError as error:
+            outcome.append(error)
+
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        worker = threading.Thread(target=press, daemon=True)
+        started = time.monotonic()
+        worker.start()
+        worker.join(timeout=5)
+        assert not worker.is_alive(), "the key blocked behind the other writer"
+        assert time.monotonic() - started >= 0.2
+    finally:
+        os.close(lock)
+    (error,) = outcome
+    assert isinstance(error, KarnError) and str(error) == "cooldown_schedule_busy"
+    assert not (pool.root / "slot-1" / COOLDOWNS_FILE).exists()
+
+
+def test_a_cooldown_pane_shows_any_stored_time(monkeypatch):
+    monkeypatch.setenv("TZ", "Asia/Tokyo")
+    time.tzset()
+    try:
+        last = datetime(9999, 12, 31, 23, tzinfo=UTC)
+        assert "Fri 23:00" in fmt.cooldown(last, NOW, MTG).plain
+        assert "Fri 22:00" in fmt.scheduled(last - timedelta(hours=1), MTG).plain
+    finally:
+        monkeypatch.undo()
+        time.tzset()
 
 
 @synchronous

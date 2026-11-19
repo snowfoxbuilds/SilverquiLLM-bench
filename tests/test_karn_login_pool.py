@@ -134,6 +134,45 @@ def test_nonblocking_acquisition_distinguishes_busy_and_cooling_slots(tmp_path):
         target.acquire(held, wait=False)
 
 
+@contextlib.contextmanager
+def cooled_while_locking(monkeypatch):
+    """As if the run releasing the slot set a Cooldown just before letting its lock go."""
+    exclusive = LoginProfile.exclusive
+
+    @contextlib.contextmanager
+    def racing(profile):
+        with exclusive(profile):
+            now = datetime.now(UTC)
+            window = cooldown(now - timedelta(seconds=5), now + timedelta(hours=1), now=now)
+            add_cooldown(profile.directory, window, now=now)
+            yield
+
+    monkeypatch.setattr(LoginProfile, "exclusive", racing)
+    yield
+
+
+def test_a_cooldown_set_while_the_slot_was_held_keeps_the_run_off(tmp_path, monkeypatch):
+    target = pool(tmp_path)
+    slot(target, "a")
+    with (
+        cooled_while_locking(monkeypatch),
+        contextlib.ExitStack() as held,
+        pytest.raises(LoginPoolBusyError),
+    ):
+        target.acquire(held, wait=False)
+
+
+def test_a_cooldown_set_while_a_settleable_slot_was_held_keeps_the_run_off(tmp_path, monkeypatch):
+    target = pool(tmp_path)
+    pend(slot(target, "a"))
+    with (
+        cooled_while_locking(monkeypatch),
+        contextlib.ExitStack() as held,
+        pytest.raises(LoginPoolBusyError),
+    ):
+        target.acquire(held, wait=False, settle_artifact="sha256:" + "a" * 64)
+
+
 def test_a_free_slot_is_locked_for_the_holder_until_released(tmp_path):
     target = pool(tmp_path)
     slot(target, "a")

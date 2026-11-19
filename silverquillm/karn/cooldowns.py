@@ -18,6 +18,7 @@ import contextlib
 import fcntl
 import os
 import re
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -35,6 +36,10 @@ MAX_COOLDOWNS = 256
 MAX_NOTE = 200
 HORIZON = timedelta(days=365)
 """No Cooldown may end more than this far ahead."""
+STORED_HORIZON = HORIZON + timedelta(days=1)
+"""A stored Cooldown ending more than this past the reader's now is malformed: no writer
+makes one (a day's slack covers clocks a little apart), and its time may not even be
+printable in local time."""
 SCOPES = ("all", "fable")
 SOURCES = ("operator", "usage-limit")
 FABLE_MODEL_PREFIX = "claude-fable-"
@@ -138,7 +143,7 @@ def cooldown(
     )
 
 
-def _parsed(entry: object) -> Cooldown:
+def _parsed(entry: object, now: datetime) -> Cooldown:
     if not isinstance(entry, dict) or not {"start", "end", "set_at", "scope", "source"} <= set(
         entry
     ):
@@ -148,6 +153,8 @@ def _parsed(entry: object) -> Cooldown:
     start, end = _instant(entry["start"]), _instant(entry["end"])
     if end <= start:
         raise ValueError("empty window")
+    if end - now > STORED_HORIZON:
+        raise ValueError("beyond the horizon")
     return Cooldown(
         start,
         end,
@@ -169,7 +176,7 @@ def _present(path: Path) -> bool | None:
         return None
 
 
-def _legacy(directory: Path) -> Cooldown | None:
+def _legacy(directory: Path, now: datetime) -> Cooldown | None:
     """The single cooldown from before schedules, as the operator Cooldown it always was."""
     path = directory / LEGACY_COOLDOWN_FILE
     if not _present(path):
@@ -178,6 +185,8 @@ def _legacy(directory: Path) -> Cooldown | None:
         document = strict_json(read_regular(path, limit=LEGACY_LIMIT))
         end = _instant(document["until"])
     except _UNREADABLE:
+        return None
+    if end - now > STORED_HORIZON:
         return None
     try:
         set_at = _instant(document.get("set_at"))
@@ -190,10 +199,11 @@ def _legacy(directory: Path) -> Cooldown | None:
     return Cooldown(min(start, end - timedelta(seconds=1)), end, set_at, "all", "operator", None)
 
 
-def _read(directory: Path) -> list[Cooldown]:
+def _read(directory: Path, now: datetime) -> list[Cooldown]:
     """Every recorded Cooldown, ended ones included.
 
-    A schedule that cannot be read is no Cooldown, never a refusal: it holds nothing back,
+    A schedule that cannot be read, or holding a Cooldown that ends more than
+    ``STORED_HORIZON`` past ``now``, is no Cooldown, never a refusal: it holds nothing back,
     and the next write replaces it. Only while no schedule exists does a ``cooldown.json``
     from before schedules count, so one a crashed conversion left behind is never revived.
     """
@@ -202,8 +212,11 @@ def _read(directory: Path) -> list[Cooldown]:
     if present is None:
         return []
     if not present:
-        legacy = _legacy(directory)
-        return [legacy] if legacy is not None else []
+        legacy = _legacy(directory, now)
+        # A conversion finishing between the two looks has removed the old file; the
+        # schedule it wrote holds the window now.
+        if not _present(path):
+            return [legacy] if legacy is not None else []
     try:
         document = strict_json(read_regular(path, limit=SCHEDULE_LIMIT))
         if not isinstance(document, dict) or document.get("format") != 1:
@@ -211,7 +224,7 @@ def _read(directory: Path) -> list[Cooldown]:
         entries = document["cooldowns"]
         if not isinstance(entries, list) or len(entries) > MAX_COOLDOWNS:
             raise ValueError("not a list")
-        return [_parsed(entry) for entry in entries]
+        return [_parsed(entry, now) for entry in entries]
     except _UNREADABLE:
         return []
 
@@ -220,7 +233,7 @@ def read_schedule(directory: Path, *, now: datetime | None = None) -> list[Coold
     """The Cooldowns not yet ended at ``now``, soonest first."""
     now = now or datetime.now(UTC)
     return sorted(
-        (c for c in _read(Path(directory)) if c.end > now), key=lambda c: (c.start, c.end)
+        (c for c in _read(Path(directory), now) if c.end > now), key=lambda c: (c.start, c.end)
     )
 
 
@@ -241,29 +254,46 @@ def held_until(
 
 
 @contextlib.contextmanager
-def _writing(directory: Path) -> Iterator[None]:
+def _writing(directory: Path, wait: float | None) -> Iterator[None]:
+    """Hold the schedule's write lock; with ``wait`` seconds given, refuse once they pass."""
     descriptor = os.open(
         directory / WRITE_LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600
     )
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        if wait is None:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        else:
+            deadline = time.monotonic() + wait
+            while True:
+                try:
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= deadline:
+                        raise KarnError("cooldown_schedule_busy") from None
+                    time.sleep(0.05)
         yield
     finally:
         os.close(descriptor)
 
 
 def edit_schedule(
-    directory: Path, change: Callable[[list[Cooldown]], list[Cooldown]], *, now: datetime
+    directory: Path,
+    change: Callable[[list[Cooldown]], list[Cooldown]],
+    *,
+    now: datetime,
+    wait: float | None = None,
 ) -> list[Cooldown]:
     """Apply ``change`` to the Cooldowns not yet ended and write the result atomically.
 
     The written schedule supersedes a ``cooldown.json`` from before schedules, which this
     removes only after the schedule holding its window is durably in place, so a crash in
-    between keeps the hold.
+    between keeps the hold. With ``wait`` given, another writer holding the schedule longer
+    than that many seconds refuses the edit as busy instead of blocking.
     """
     directory = Path(directory)
-    with _writing(directory):
-        current = [c for c in _read(directory) if c.end > now]
+    with _writing(directory, wait):
+        current = [c for c in _read(directory, now) if c.end > now]
         kept = sorted((c for c in change(current) if c.end > now), key=lambda c: (c.start, c.end))
         if len(kept) > MAX_COOLDOWNS:
             raise KarnError("cooldown_schedule_full")
@@ -303,7 +333,9 @@ def clear_schedule(directory: Path, *, now: datetime) -> int:
     return count[0]
 
 
-def extend_hold(directory: Path, by: timedelta, *, now: datetime) -> datetime:
+def extend_hold(
+    directory: Path, by: timedelta, *, now: datetime, wait: float | None = None
+) -> datetime:
     """Hold every run off ``by`` longer: the in-force Cooldown for every run that ends last
     ends ``by`` later, or, with none in force, a new operator Cooldown runs from now."""
     ends = []
@@ -319,11 +351,13 @@ def extend_hold(directory: Path, by: timedelta, *, now: datetime) -> datetime:
         ends.append(last.end + by)
         return [replace(c, end=c.end + by) if c is last else c for c in cooldowns]
 
-    edit_schedule(directory, longer, now=now)
+    edit_schedule(directory, longer, now=now, wait=wait)
     return ends[0].replace(microsecond=0)
 
 
-def end_in_force_after(directory: Path, grace: timedelta, *, now: datetime) -> datetime | None:
+def end_in_force_after(
+    directory: Path, grace: timedelta, *, now: datetime, wait: float | None = None
+) -> datetime | None:
     """End every Cooldown in force ``grace`` from now, leaving those still to come alone;
     None, writing nothing, when none is in force."""
     directory = Path(directory)
@@ -336,7 +370,7 @@ def end_in_force_after(directory: Path, grace: timedelta, *, now: datetime) -> d
             replace(c, end=until) if c.in_force(now) and c.end > until else c for c in cooldowns
         ]
 
-    edit_schedule(directory, sooner, now=now)
+    edit_schedule(directory, sooner, now=now, wait=wait)
     return until
 
 
@@ -352,47 +386,66 @@ def parse_duration(text: str) -> timedelta:
     return span
 
 
-def _local(naive: datetime, tz) -> datetime:
-    # A naive time is read as the host's local time, its DST rules included.
+def _aware(naive: datetime, tz, fold: int) -> datetime:
+    # With no zone given, the host's own rules (the C library's, from TZ or /etc/localtime)
+    # place the wall time on its own date, its DST changes included.
+    naive = naive.replace(fold=fold)
     return naive.replace(tzinfo=tz) if tz is not None else naive.astimezone()
 
 
-def parse_time(text: str, *, now: datetime, base: datetime | None = None, tz=None) -> datetime:
-    """A moment the operator typed, in the host's local time (or ``tz``).
+def _occurrences(naive: datetime, tz) -> list[datetime]:
+    """The moments a wall time names, in UTC and soonest first: both of an hour the clocks
+    repeat, and for an hour they skip, the reading from before the change."""
+    readings = [_aware(naive, tz, fold).astimezone(UTC) for fold in (0, 1)]
+    real = [m for m in readings if m.astimezone(tz).replace(tzinfo=None) == naive]
+    return sorted(real or readings[:1])
 
-    ``14:00`` is its next occurrence, ``Fri 09:00`` the next Friday at 09:00, and
-    ``2026-11-20 09:00`` that day; an offset such as ``+3h`` or ``1d`` counts from ``base``,
-    which is now unless given (an end counts from its start).
+
+def _next(naives, tz, now: datetime) -> datetime | None:
+    """The first occurrence strictly after ``now`` of the first wall time that has one."""
+    return next((m for naive in naives for m in _occurrences(naive, tz) if m > now), None)
+
+
+def parse_time(text: str, *, now: datetime, base: datetime | None = None, tz=None) -> datetime:
+    """A moment the operator typed, in the host's local time (or ``tz``), as a UTC time.
+
+    ``14:00`` is its next occurrence strictly after now, either reading of an hour the
+    clocks repeat included; ``Fri 09:00`` the next Friday at 09:00, and ``2026-11-20 09:00``
+    that day; an offset such as ``+3h`` or ``1d`` counts from ``base``, which is now unless
+    given (an end counts from its start). A moment more than ``HORIZON`` ahead is refused,
+    as no Cooldown may reach it, and so is one no calendar can hold.
     """
+    try:
+        moment = _parse_time(text, now=now, base=base, tz=tz)
+    except (ValueError, OverflowError):
+        raise KarnError("invalid_cooldown_time") from None
+    if moment - now > HORIZON:
+        raise KarnError("cooldown_beyond_horizon")
+    return moment
+
+
+def _parse_time(text: str, *, now: datetime, base: datetime | None, tz) -> datetime:
     words = " ".join(text.strip().lower().split())
     offset = words.removeprefix("+")
     if _DURATION.fullmatch(offset) and any(_DURATION.fullmatch(offset).groups()):
-        return (base or now) + parse_duration(offset)
-    local_now = now.astimezone(tz) if tz is not None else now.astimezone()
-    today = local_now.replace(tzinfo=None)
+        return ((base or now) + parse_duration(offset)).astimezone(UTC)
+    today = now.astimezone(tz).replace(tzinfo=None, second=0, microsecond=0)
     if match := _TIME.fullmatch(words):
-        hour, minute = int(match[1]), int(match[2])
-        moment = _local(today.replace(hour=hour, minute=minute, second=0, microsecond=0), tz)
-        return (
-            moment if moment > now else _local(moment.replace(tzinfo=None) + timedelta(days=1), tz)
-        )
+        start = today.replace(hour=int(match[1]), minute=int(match[2]))
+        moment = _next((start + timedelta(days=ahead) for ahead in range(2)), tz, now)
+        if moment is not None:
+            return moment
     if (match := _WEEKDAY_TIME.fullmatch(words)) and any(
         match[1] in (name, name[:3]) for name in _WEEKDAYS
     ):
         day = next(i for i, name in enumerate(_WEEKDAYS) if match[1] in (name, name[:3]))
-        hour, minute = int(match[2]), int(match[3])
-        start = today.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        for ahead in range(8):
-            candidate = start + timedelta(days=ahead)
-            if candidate.weekday() == day and _local(candidate, tz) > now:
-                return _local(candidate, tz)
+        start = today.replace(hour=int(match[2]), minute=int(match[3]))
+        candidates = (start + timedelta(days=ahead) for ahead in range(8))
+        moment = _next((c for c in candidates if c.weekday() == day), tz, now)
+        if moment is not None:
+            return moment
     if match := _DATE_TIME.fullmatch(words):
-        try:
-            year, month, day, hour, minute = (int(part) for part in match.groups())
-            naive = today.replace(
-                year=year, month=month, day=day, hour=hour, minute=minute, second=0, microsecond=0
-            )
-        except ValueError:
-            raise KarnError("invalid_cooldown_time") from None
-        return _local(naive, tz)
+        year, month, day, hour, minute = (int(part) for part in match.groups())
+        naive = today.replace(year=year, month=month, day=day, hour=hour, minute=minute)
+        return _next([naive], tz, now) or _occurrences(naive, tz)[0]
     raise KarnError("invalid_cooldown_time")
