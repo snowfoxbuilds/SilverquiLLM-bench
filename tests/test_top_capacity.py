@@ -330,7 +330,8 @@ async def test_n_on_a_gpu_slot_writes_its_own_schedule(tmp_path, monkeypatch):
         await _select(pilot, app, "capacity-gpus", "1")
         await pilot.press("n")
         await pilot.pause()
-        assert not app.screen.query(Checkbox), "a GPU Slot's Cooldowns hold back every run"
+        assert not app.screen.query("#form-fable"), "a GPU Slot's Cooldowns hold back every run"
+        assert app.screen.query_one("#form-extend", Checkbox).value, "extending is the default"
         _fill(app, start="+1h", end="+3h", note="training")
         await pilot.press("enter")
         await _settle(app, pilot)
@@ -342,6 +343,95 @@ async def test_n_on_a_gpu_slot_writes_its_own_schedule(tmp_path, monkeypatch):
         NOW + timedelta(hours=4),
         "training",
     )
+    assert window.extend, "a GPU Cooldown extends while its GPUs are used outside the bench"
+    assert read_schedule(gpu_schedule_dir(state, "0"), now=NOW) == []
+
+
+@synchronous
+async def test_an_unchecked_extend_box_writes_a_gpu_cooldown_that_ends_on_time(
+    tmp_path, monkeypatch
+):
+    monitor, _, state = _host_with_disk(tmp_path, monkeypatch, gpu_values=("0",))
+    app = _app(monitor)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        notes = _recorded(app)
+        await pilot.press("4")
+        await _select(pilot, app, "capacity-gpus", "0")
+        await pilot.press("n")
+        await pilot.pause()
+        app.screen.query_one("#form-extend", Checkbox).value = False
+        _fill(app, end="+2h")
+        await pilot.press("enter")
+        await _settle(app, pilot)
+        assert "ends on time" in notes[-1][0]
+        scope = app.query_one("#schedule-table", DataTable).get_row_at(0)[3].plain
+        assert "ends on time" in scope
+    (window,) = read_schedule(gpu_schedule_dir(state, "0"), now=NOW)
+    assert not window.extend, "an unchecked box is --no-extend"
+
+
+@synchronous
+async def test_a_login_profiles_form_offers_no_extend_box(tmp_path, monkeypatch):
+    monitor, _, _ = _host_with_disk(tmp_path, monkeypatch)
+    app = _app(monitor)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        await pilot.press("4")
+        await _select(pilot, app, "capacity-codex", "slot-4")
+        await pilot.press("n")
+        await pilot.pause()
+        assert isinstance(app.screen, CooldownForm)
+        assert not app.screen.query("#form-extend")
+
+
+@synchronous
+async def test_an_extended_gpu_cooldown_shows_its_count_and_an_edit_stops_extending_it(
+    tmp_path, monkeypatch
+):
+    monitor, _, state = _host_with_disk(tmp_path, monkeypatch, gpu_values=("0",))
+    held = replace(
+        cooldown(NOW - timedelta(hours=2), NOW + timedelta(minutes=20), now=NOW, extend=True),
+        extensions=2,
+    )
+    add_cooldown(writable_gpu_schedule_dir(state, "0"), held, now=NOW)
+    app = _app(monitor)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        notes = _recorded(app)
+        await pilot.press("4")
+        await _select(pilot, app, "capacity-gpus", "0")
+        schedule = app.query_one("#schedule-table", DataTable)
+        assert "busy +2" in schedule.get_row_at(0)[3].plain
+        await pilot.press("e")
+        await pilot.pause()
+        assert isinstance(app.screen, CooldownForm)
+        assert not app.screen.query("#form-extend"), "an edit always stops extending"
+        # An offset end counts from the kept start, two hours ago.
+        _fill(app, end="+3h")
+        await pilot.press("enter")
+        await _settle(app, pilot)
+        assert "ends on time" in notes[-1][0]
+    (edited,) = read_schedule(gpu_schedule_dir(state, "0"), now=NOW)
+    assert not edited.extend, "the operator's edit overrides extension"
+    assert edited.extensions == 2, "the count of extensions so far is kept"
+    assert edited.end == NOW + timedelta(hours=1)
+
+
+@synchronous
+async def test_x_removes_an_extending_gpu_cooldown_outright(tmp_path, monkeypatch):
+    monitor, _, state = _host_with_disk(tmp_path, monkeypatch, gpu_values=("0",))
+    held = cooldown(NOW - timedelta(hours=1), NOW + timedelta(hours=1), now=NOW, extend=True)
+    add_cooldown(writable_gpu_schedule_dir(state, "0"), held, now=NOW)
+    app = _app(monitor)
+    async with app.run_test(size=(200, 50)) as pilot:
+        await _settle(app, pilot)
+        await pilot.press("4")
+        await _select(pilot, app, "capacity-gpus", "0")
+        await pilot.press("x")
+        await pilot.pause()
+        await pilot.press("y")
+        await _settle(app, pilot)
     assert read_schedule(gpu_schedule_dir(state, "0"), now=NOW) == []
 
 

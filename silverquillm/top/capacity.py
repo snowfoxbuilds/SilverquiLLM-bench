@@ -145,7 +145,23 @@ def orphan_cells(value: str, theme: Theme) -> tuple[Text, ...]:
     )
 
 
-def schedule_cells(cooldown: Cooldown, now: datetime, theme: Theme) -> tuple[Text, ...]:
+def _scope(cooldown: Cooldown, gpu: bool, theme: Theme) -> Text:
+    """Whom the Cooldown holds back; for a GPU Slot also whether it extends while the GPU is
+    used outside the bench, and how often it has."""
+    muted = theme.style("muted")
+    scope = Text("Fable runs" if cooldown.scope == "fable" else "every run", style=muted)
+    if not gpu:
+        return scope
+    if cooldown.extensions:
+        scope.append(f" · busy +{cooldown.extensions}", style=theme.style("cooldown"))
+    if not cooldown.extend:
+        scope.append(" · ends on time", style=muted)
+    return scope
+
+
+def schedule_cells(
+    cooldown: Cooldown, now: datetime, theme: Theme, *, gpu: bool = False
+) -> tuple[Text, ...]:
     muted = theme.style("muted")
     current = cooldown.in_force(now)
     mark = Text(
@@ -157,7 +173,7 @@ def schedule_cells(cooldown: Cooldown, now: datetime, theme: Theme) -> tuple[Tex
         mark,
         Text(fmt.stamp(cooldown.start), style=text),
         Text(fmt.stamp(cooldown.end), style=text),
-        Text("Fable runs" if cooldown.scope == "fable" else "every run", style=muted),
+        _scope(cooldown, gpu, theme),
         Text(cooldown.source, style=theme.style("warn" if cooldown.source != "operator" else "")),
         Text(fmt.stamp(cooldown.set_at), style=muted),
         Text(cooldown.note or "", style=muted),
@@ -290,8 +306,9 @@ class CapacityView(Vertical):
         self._schedule = self._cooldowns_of(self.selected)
         table.clear()
         now = self.snapshot.taken_at if self.snapshot else None
+        gpu = self.selected is not None and self.selected.gpu
         for index, cooldown in enumerate(self._schedule):
-            table.add_row(*schedule_cells(cooldown, now, theme), key=str(index))
+            table.add_row(*schedule_cells(cooldown, now, theme, gpu=gpu), key=str(index))
         if chosen in self._schedule:
             table.move_cursor(row=self._schedule.index(chosen), animate=False)
         empty = self.query_one("#schedule-empty", Static)

@@ -589,7 +589,7 @@ class MonitorApp(App):
             return
         target, existing = message.target, message.existing
 
-        def build(start: str, end: str, fable: bool, note: str):
+        def build(start: str, end: str, fable: bool, note: str, extend: bool):
             return cooldowns.window(
                 start,
                 end,
@@ -597,6 +597,7 @@ class MonitorApp(App):
                 fable=fable,
                 note=note,
                 source=existing.source if existing else "operator",
+                extend=extend,
                 keep=existing,
                 shown=fmt.stamp,
             )
@@ -609,17 +610,24 @@ class MonitorApp(App):
                 if existing is None:
                     cooldowns.add(state_root, target, window, now=now)
                 else:
-                    cooldowns.replace(state_root, target, existing, window, now=now)
+                    window = cooldowns.replace(state_root, target, existing, window, now=now)
             except (KarnError, OSError) as error:
                 self.notify(f"{target.label}: cooldown not written ({error})", severity="error")
                 return
             scope = " for Fable runs" if window.scope == "fable" else ""
             done = "changed" if existing else "added"
-            self.notify(f"{target.label}: cooldown {done}{scope}, {window_text(window)}")
+            ends = "; ends on time" if target.gpu and not window.extend else ""
+            self.notify(f"{target.label}: cooldown {done}{scope}, {window_text(window)}{ends}")
             self.poll()
 
         form = CooldownForm(
-            self.look, target.label, build, fable=message.fable, existing=existing, shown=fmt.stamp
+            self.look,
+            target.label,
+            build,
+            fable=message.fable,
+            extend=target.gpu and not target.orphaned,
+            existing=existing,
+            shown=fmt.stamp,
         )
         self.push_screen(form, answered)
 

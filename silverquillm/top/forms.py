@@ -72,15 +72,18 @@ class CooldownForm(_Form):
         self,
         theme: Theme,
         label: str,
-        build: Callable[[str, str, bool, str], Cooldown],
+        build: Callable[[str, str, bool, str, bool], Cooldown],
         *,
         fable: bool,
+        extend: bool = False,
         existing: Cooldown | None = None,
         shown: Callable = str,
     ) -> None:
         super().__init__()
         self.theme_, self.label, self.build = theme, label, build
         self.fable, self.existing, self.shown = fable, existing, shown
+        self.extend = extend and existing is None
+        """Only a new GPU Slot Cooldown offers the choice: an edit always stops extending."""
 
     def compose(self) -> ComposeResult:
         theme, existing = self.theme_, self.existing
@@ -106,6 +109,8 @@ class CooldownForm(_Form):
                     id="form-fable",
                 )
             )
+        if self.extend:
+            fields.append(Checkbox("Extend while used outside the bench", True, id="form-extend"))
         fields += [
             _hint(theme, "note · optional"),
             Input((existing.note or "") if existing else "", id="form-note"),
@@ -118,12 +123,14 @@ class CooldownForm(_Form):
 
     def submit(self) -> None:
         fable = self.fable and self.query_one("#form-fable", Checkbox).value
+        extend = self.extend and self.query_one("#form-extend", Checkbox).value
         try:
             window = self.build(
                 self.query_one("#form-start", Input).value,
                 self.query_one("#form-end", Input).value,
                 fable,
                 self.query_one("#form-note", Input).value,
+                extend,
             )
         except KarnError as error:
             self.refuse(error)

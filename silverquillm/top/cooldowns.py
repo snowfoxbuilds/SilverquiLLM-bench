@@ -15,13 +15,14 @@ from silverquillm.karn.cooldowns import (
     Cooldown,
     cooldown,
     edit_schedule,
+    edited,
     end_in_force_after,
     extend_hold,
     parse_time,
 )
 from silverquillm.karn.definition import KarnError
 from silverquillm.karn.login_pool import enrolled_slots, logins_root
-from silverquillm.karn.model_server import gpu_schedule_dir, writable_gpu_schedule_dir
+from silverquillm.karn.model_server import writable_gpu_schedule_dir
 
 STEP = timedelta(hours=1)
 """Each ``t`` holds the slot this much longer."""
@@ -58,12 +59,12 @@ def slot_directory(state_root: Path, plugin_id: str, slot: str) -> Path:
     return pool / slot
 
 
-def _directory(state_root: Path, target: Target, *, create: bool = False) -> Path:
+def _directory(state_root: Path, target: Target) -> Path:
+    """Where the target's schedule is written; a GPU Slot's through the CLI's own refusal of
+    a symlinked or non-directory path, so no write ever lands outside ``gpu-slots/``."""
     if not target.gpu:
         return slot_directory(state_root, target.plugin_id, target.name)
-    if create:
-        return writable_gpu_schedule_dir(state_root, target.name)
-    return gpu_schedule_dir(state_root, target.name)
+    return writable_gpu_schedule_dir(state_root, target.name)
 
 
 def lengthen(state_root: Path, plugin_id: str, slot: str, *, now: datetime) -> Cooldown:
@@ -88,11 +89,14 @@ def window(
     fable: bool = False,
     note: str = "",
     source: str = "operator",
+    extend: bool = False,
     keep: Cooldown | None = None,
     shown=None,
 ) -> Cooldown:
     """The Cooldown a form describes, read as ``login cooldown`` reads its times: an empty
-    start is now, and an offset end counts from the start.
+    start is now, and an offset end counts from the start. ``extend`` is a new GPU Slot
+    Cooldown's choice to extend while its GPUs are used outside the bench (``--no-extend``
+    when false).
 
     Editing ``keep``, a time left as ``shown`` printed it keeps its exact instant, so a form
     that changes only the note never moves the window by the seconds it does not show.
@@ -114,6 +118,7 @@ def window(
         scope="fable" if fable else "all",
         source=source,
         note=note.strip() or None,
+        extend=extend,
     )
 
 
@@ -121,16 +126,23 @@ def add(state_root: Path, target: Target, new: Cooldown, *, now: datetime) -> Co
     """Add one Cooldown beside those already scheduled; an orphaned schedule takes none."""
     if target.orphaned:
         raise KarnError("gpu_slot_not_listed")
-    directory = _directory(state_root, target, create=True)
+    directory = _directory(state_root, target)
     edit_schedule(directory, lambda cooldowns: [*cooldowns, new], now=now, wait=WRITE_WAIT)
     return new
 
 
-def replace(state_root: Path, target: Target, old: Cooldown, new: Cooldown, *, now: datetime):
-    """Put ``new`` in place of ``old``, refused when ``old`` has ended or been removed since
-    the form opened, so an edit never turns into a second Cooldown."""
+def replace(
+    state_root: Path, target: Target, old: Cooldown, new: Cooldown, *, now: datetime
+) -> Cooldown:
+    """Put ``new`` in place of ``old``, refused when ``old`` has ended, been removed or been
+    extended since the form opened, so an edit never turns into a second Cooldown.
+
+    The edit is the operator's override: it keeps ``old``'s extension count but is never
+    extended again, so an end deliberately moved is not pushed back out by a busy GPU.
+    """
     if target.orphaned:
         raise KarnError("gpu_slot_not_listed")
+    new = edited(new, extensions=old.extensions)
 
     def swap(cooldowns: list[Cooldown]) -> list[Cooldown]:
         if old not in cooldowns:
