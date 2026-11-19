@@ -133,6 +133,11 @@ DEFAULT_MODEL_TIMEOUT_SECONDS = 1800
 # A path under ``/v1/``, with at most a plain query: Claude Code asks for
 # ``/v1/messages?beta=true``. No fragment, escape or space reaches the request line.
 MODEL_TARGET = re.compile(r"/v1/[A-Za-z0-9._/-]*(?:\?[A-Za-z0-9._=&-]*)?")
+# The only request headers the sidecar passes on besides the body's type and length: the
+# Messages API's version and beta flags (#289). Every other header, an API key among them,
+# stops here.
+MODEL_HEADERS = ("anthropic-version", "anthropic-beta")
+MODEL_HEADER_VALUE = re.compile(r"[A-Za-z0-9._,-]{1,256}")
 
 
 class ModelForward(socketserver.StreamRequestHandler):
@@ -179,10 +184,15 @@ class ModelForward(socketserver.StreamRequestHandler):
                 raise ValueError("incomplete_model_request")
             relay = urllib.parse.urlsplit(self.server.model_endpoint)
             remote = socket.create_connection((relay.hostname, relay.port), timeout=timeout)
+            passed = "".join(
+                f"{name}: {headers[name]}\r\n"
+                for name in MODEL_HEADERS
+                if name in headers and MODEL_HEADER_VALUE.fullmatch(headers[name])
+            )
             head = (
                 f"{method} {relay.path}{target} HTTP/1.1\r\nHost: {relay.netloc}\r\n"
                 f"Content-Type: application/json\r\nContent-Length: {length}\r\n"
-                "Connection: close\r\n\r\n"
+                f"{passed}Connection: close\r\n\r\n"
             )
             remote.sendall(head.encode("ascii"))
             remote.sendall(body)

@@ -8,6 +8,10 @@ The relay speaks the server's chat-completions API, which pi uses, and its Anthr
 API, which Claude Code uses.
 The recipe's server settings are part of its definition, so each configuration is its own
 candidate; the host config only says where this host keeps the builds and the model files.
+
+A recipe may instead declare the engine ``anthropic`` (#289): no server starts and no GPU Slot
+is claimed, and the relay forwards the Messages API to Anthropic's own API, adding the host's
+API key. The workload never holds the key, and the run is recorded exactly as a local one.
 """
 
 from __future__ import annotations
@@ -23,6 +27,8 @@ import re
 import secrets
 import shutil
 import socket
+import ssl
+import stat
 import subprocess
 import tempfile
 import threading
@@ -33,8 +39,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from .claude_observations import claude_usage
 from .definition import KarnError
 from .observations import TOKEN_KEYS, _measurements
+from .pricing import MODEL_PRICES
 
 MODEL_SERVER_ENV = "SILVERQUILLM_MODEL_SERVER"
 MODEL_SERVER_HOST = "model-server"
@@ -119,6 +127,19 @@ HOST_ONLY_ENVIRONMENT = frozenset({"LD_LIBRARY_PATH"})
 SYSTEM_CONFIG_FILES = (Path("/etc/llama.cpp/config.ini"),)
 DEFAULT_READY_SECONDS = 900
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 1800
+# The engine that relays to Anthropic's API instead of starting a server (#289).
+ANTHROPIC_ENGINE = "anthropic"
+ANTHROPIC_HOST = "api.anthropic.com"
+# The host's Anthropic API key, under ``state_root``, which is never published or backed up.
+ANTHROPIC_KEY_FILE = Path("api-keys") / "anthropic"
+# One key and its newline; a larger file is refused, never read by its prefix.
+MAX_KEY_FILE_BYTES = 257
+# Sent when the workload names no API version; pi and Claude Code both send this one.
+ANTHROPIC_VERSION = "2023-06-01"
+# Request headers the relay passes on to Anthropic; every other header, the workload's key
+# among them, stops at the sidecar.
+ANTHROPIC_HEADERS = ("anthropic-version", "anthropic-beta")
+ANTHROPIC_HEADER_VALUE = re.compile(r"[A-Za-z0-9._,-]{1,256}")
 MAX_TIMEOUT_SECONDS = 86400
 _BUILD = re.compile(r"b([0-9]{1,8})")
 _VERSION = re.compile(r"build ([0-9]{1,8}), commit ([0-9a-f]{7,40})")
@@ -154,11 +175,13 @@ TRANSCRIPT_LOST = "transcript_lost"
 # Completions the relay records, and requests it passes on without recording: the model list,
 # and the Messages API's token count, which generates nothing.
 COMPLETION_PATHS = frozenset({CHAT_COMPLETIONS, MESSAGES})
-RELAYED_PATHS = {
-    *(("POST", path) for path in COMPLETION_PATHS),
-    ("POST", MESSAGES + "/count_tokens"),
-    ("GET", "/v1/models"),
-}
+RELAYED_PATHS = frozenset(
+    {
+        *(("POST", path) for path in COMPLETION_PATHS),
+        ("POST", MESSAGES + "/count_tokens"),
+        ("GET", "/v1/models"),
+    }
+)
 # A GPU with more memory in use than this runs someone's job, even when ``nvidia-smi`` lists
 # no process to this user; an idle card uses tens of MiB.
 BUSY_MEMORY_MIB = 1024
@@ -210,6 +233,11 @@ class ModelServerSpec:
         return (model, *(entry for entry in self.files if entry is not model))
 
     @property
+    def relays_to_anthropic(self) -> bool:
+        """No server starts: the relay forwards to Anthropic's API (#289)."""
+        return self.engine == ANTHROPIC_ENGINE
+
+    @property
     def ready_timeout(self) -> int:
         if self.ready_timeout_seconds is None:
             return DEFAULT_READY_SECONDS
@@ -222,6 +250,15 @@ class ModelServerSpec:
         return self.request_timeout_seconds
 
     def to_dict(self) -> dict[str, Any]:
+        if self.relays_to_anthropic:
+            document = {
+                "engine": self.engine,
+                "upstream": "https://" + ANTHROPIC_HOST,
+                "served_model": self.served_model,
+            }
+            if self.request_timeout_seconds is not None:
+                document["request_timeout_seconds"] = self.request_timeout_seconds
+            return document
         document = {
             "engine": self.engine,
             "build": self.build,
@@ -356,6 +393,8 @@ def model_server_spec(runtime: dict) -> ModelServerSpec | None:
         document = json.loads(environment[MODEL_SERVER_ENV])
     except ValueError:
         raise KarnError("model_server_spec_invalid") from None
+    if isinstance(document, dict) and document.get("engine") == ANTHROPIC_ENGINE:
+        return _anthropic_spec(document, runtime)
     optional = {"environment", "ready_timeout_seconds", "request_timeout_seconds"}
     if (
         not isinstance(document, dict)
@@ -389,11 +428,7 @@ def model_server_spec(runtime: dict) -> ModelServerSpec | None:
         server_environment = tuple(sorted(document["environment"].items()))
     ready = _timeout(document, "ready_timeout_seconds")
     request = _timeout(document, "request_timeout_seconds")
-    served = environment.get("CONSTRUCT_MODEL", "")
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}", served):
-        raise KarnError("model_server_requires_construct_model")
-    if runtime["network"]["mode"] != "restricted":
-        raise KarnError("model_server_requires_restricted_network")
+    served = _served_model(runtime)
     return ModelServerSpec(
         "llama.cpp",
         document["build"],
@@ -405,6 +440,26 @@ def model_server_spec(runtime: dict) -> ModelServerSpec | None:
         server_environment,
         ready,
         request,
+    )
+
+
+def _served_model(runtime: dict) -> str:
+    served = runtime["environment"].get("CONSTRUCT_MODEL", "")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}", served):
+        raise KarnError("model_server_requires_construct_model")
+    if runtime["network"]["mode"] != "restricted":
+        raise KarnError("model_server_requires_restricted_network")
+    return served
+
+
+def _anthropic_spec(document: dict, runtime: dict) -> ModelServerSpec:
+    """The Anthropic engine: the recipe names only the engine and, optionally, how long one
+    request may stay silent; the model is the construct's own."""
+    if set(document) - {"engine", "request_timeout_seconds"}:
+        raise KarnError("model_server_spec_invalid")
+    request = _timeout(document, "request_timeout_seconds")
+    return ModelServerSpec(
+        ANTHROPIC_ENGINE, "", "", "", (), _served_model(runtime), request_timeout_seconds=request
     )
 
 
@@ -928,6 +983,54 @@ class ModelServerPlan:
         return facts
 
 
+@dataclass(frozen=True)
+class AnthropicRelayPlan:
+    """The Anthropic engine resolved against this host: where its API key is. It claims no
+    GPU Slot and starts no server."""
+
+    spec: ModelServerSpec
+    state_root: Path
+    key_file: Path
+    claim: None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        # The record names where the key came from, never the key.
+        return {**self.spec.to_dict(), "host": {"api_key": "host_secret"}}
+
+
+def plan_anthropic_relay(spec: ModelServerSpec, state_root: Path) -> AnthropicRelayPlan:
+    """Refuse a run this host has no usable key for, before any evidence exists."""
+    key_file = Path(state_root).resolve() / ANTHROPIC_KEY_FILE
+    _read_api_key(key_file)
+    return AnthropicRelayPlan(spec, Path(state_root).resolve(), key_file)
+
+
+def _read_api_key(path: Path) -> str:
+    """The key: a regular file of this user's that no one else may read, holding one key on
+    one line. Opened without blocking and without following a link, so a FIFO or a device is
+    refused at once instead of holding the run before it starts; read whole, never by a
+    prefix, so a file holding more than one key is refused."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        raise KarnError("model_relay_api_key_unavailable") from None
+    with os.fdopen(descriptor, "rb") as source:
+        status = os.fstat(source.fileno())
+        if (
+            not stat.S_ISREG(status.st_mode)
+            or status.st_uid != os.getuid()
+            or status.st_mode & 0o077
+        ):
+            raise KarnError("model_relay_api_key_permissions")
+        content = source.read(MAX_KEY_FILE_BYTES + 1)
+    if len(content) > MAX_KEY_FILE_BYTES:
+        raise KarnError("model_relay_api_key_invalid")
+    text = content[:-1] if content.endswith(b"\n") else content
+    if not re.fullmatch(rb"[A-Za-z0-9_-]{8,256}", text):
+        raise KarnError("model_relay_api_key_invalid")
+    return text.decode("ascii")
+
+
 def claim_model_server(plan: ModelServerPlan, read=None, inherited=None) -> ModelServerPlan:
     """The plan holding the host's first free GPU Slot; ``model_server_busy`` when none is.
 
@@ -1168,31 +1271,16 @@ def _usage(usage: Any) -> dict[str, int | None] | None:
 
 
 def _messages_usage(usage: Any) -> dict[str, int | None] | None:
-    """Messages API usage in the record's token keys, where input includes cache reads as for
-    every Claude run. llama.cpp reports uncached input apart from cache reads and bills no
-    cache writes."""
+    """Messages API usage in the record's token keys, by the rules every Claude run's usage
+    follows (``claude_usage``): input includes cache reads and writes, and the one-hour share
+    of the writes is kept only when ``cache_creation`` splits them consistently, so that
+    requests can be priced (#289). llama.cpp reports neither writes nor a split: it writes
+    no cache, so its usage counts zero of both."""
     if not isinstance(usage, dict):
         return None
-
-    def count(value):
-        return (
-            value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
-        )
-
-    uncached = count(usage.get("input_tokens"))
-    read = count(usage.get("cache_read_input_tokens"))
-    output = count(usage.get("output_tokens"))
-    total_input = uncached + (read or 0) if uncached is not None else None
-    return {
-        "input_tokens": total_input,
-        "cached_input_tokens": read,
-        "cache_write_input_tokens": 0,
-        "output_tokens": output,
-        "reasoning_output_tokens": None,
-        "total_tokens": (
-            total_input + output if total_input is not None and output is not None else None
-        ),
-    }
+    if "cache_creation_input_tokens" not in usage and "cache_creation" not in usage:
+        usage = {**usage, "cache_creation_input_tokens": 0}
+    return claude_usage(usage)
 
 
 class _Response:
@@ -1421,6 +1509,9 @@ class ModelRelayCollector:
     """
 
     adapter = TELEMETRY_ADAPTER
+    relayed_paths = RELAYED_PATHS
+    # What the response events name as the requests' upstream; None for the local server.
+    upstream: str | None = None
 
     def __init__(self, run_dir: Path, *, plan: ModelServerPlan, bind_host: str = "127.0.0.1"):
         self.run_dir, self.plan, self.bind_host = Path(run_dir), plan, bind_host
@@ -1551,7 +1642,7 @@ class ModelRelayCollector:
             return
         # Claude Code asks for ``/v1/messages?beta=true``; the server needs no query.
         target = handler.path[len(self.path) :].partition("?")[0]
-        if (handler.command, target) not in RELAYED_PATHS:
+        if (handler.command, target) not in self.relayed_paths:
             handler.send_error(404)
             return
         length = handler.headers.get("Content-Length") or "0"
@@ -1620,9 +1711,7 @@ class ModelRelayCollector:
         started_ms = int(time.time() * 1000)
         # One event per relayed request, whatever ids the server reuses.
         identity = "relay-" + uuid.uuid4().hex
-        connection = http.client.HTTPConnection(
-            "127.0.0.1", self.llama.port, timeout=self.plan.spec.request_timeout
-        )
+        connection = self._connection()
         if not self._admit(identity, handler.connection, request, started_ms):
             with contextlib.suppress(OSError):
                 handler.send_error(503)
@@ -1632,12 +1721,21 @@ class ModelRelayCollector:
         finally:
             self._release(identity)
 
+    def _connection(self) -> http.client.HTTPConnection:
+        return http.client.HTTPConnection(
+            "127.0.0.1", self.llama.port, timeout=self.plan.spec.request_timeout
+        )
+
+    def _upstream_headers(self, handler, body: bytes) -> dict[str, str]:
+        return {"Content-Type": "application/json"} if body else {}
+
     def _relay_upstream(self, handler, target, body, request, identity, connection, started_ms):
         response, status, error = _Response(target), None, None
+        headers: dict[str, str] = {}
         try:
             connection.connect()
             self._connected(identity, connection.sock)
-            headers = {"Content-Type": "application/json"} if body else {}
+            headers = self._upstream_headers(handler, body)
             connection.request(handler.command, target, body or None, headers)
             upstream = connection.getresponse()
             status = upstream.status
@@ -1679,7 +1777,9 @@ class ModelRelayCollector:
         if request is None:
             return
         try:
-            recorded = self._observe(identity, target, request, response, status, error, started_ms)
+            recorded = self._observe(
+                identity, target, request, response, status, error, started_ms, headers
+            )
         except Exception:  # noqa: BLE001 -- a request the server saw is never left unrecorded.
             recorded = False
         if not recorded:
@@ -1697,7 +1797,9 @@ class ModelRelayCollector:
                 None,
             )
 
-    def _observe(self, identity, target, request, response: _Response, status, error, started_ms):
+    def _observe(
+        self, identity, target, request, response: _Response, status, error, started_ms, sent
+    ):
         message = response.message()
         messages = request.get("messages")
         overrides = sorted(set(request) - ORDINARY_REQUEST_KEYS[target])
@@ -1724,6 +1826,10 @@ class ModelRelayCollector:
             "timestamp_ms": started_ms,
             "completed_ms": int(time.time() * 1000),
         }
+        if self.upstream is not None:
+            event["upstream"] = self.upstream
+            beta = sent.get("anthropic-beta")
+            event["anthropic_beta"] = beta.split(",") if beta else []
         transcript = {
             "id": identity,
             "response_id": event["response_id"],
@@ -1779,6 +1885,47 @@ class ModelRelayCollector:
 
     def __exit__(self, *_):
         self._exit.close()
+
+
+class AnthropicRelayCollector(ModelRelayCollector):
+    """Relays the run's Messages API requests to Anthropic, adding the host's API key, and
+    records them as a local server's are (#289). No server starts and no GPU Slot is held."""
+
+    relayed_paths = frozenset({("POST", MESSAGES), ("POST", MESSAGES + "/count_tokens")})
+    upstream = ANTHROPIC_ENGINE
+
+    def __init__(self, run_dir: Path, *, plan: AnthropicRelayPlan, bind_host: str = "127.0.0.1"):
+        super().__init__(run_dir, plan=plan, bind_host=bind_host)
+        self._key: str | None = None
+        self._tls = ssl.create_default_context()
+
+    def __enter__(self):
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            # Read at the start, so a key changed mid-run cannot split one run across two.
+            self._key = _read_api_key(self.plan.key_file)
+            self.facts = self.plan.to_dict()
+            self._sink = self._open(EVENTS_FILE)
+            self._transcript = self._open(TRANSCRIPT_FILE)
+            self._start_relay()
+        except BaseException:
+            self._exit.close()
+            raise
+        return self
+
+    def _connection(self) -> http.client.HTTPConnection:
+        return http.client.HTTPSConnection(
+            ANTHROPIC_HOST, timeout=self.plan.spec.request_timeout, context=self._tls
+        )
+
+    def _upstream_headers(self, handler, body: bytes) -> dict[str, str]:
+        headers = {"Content-Type": "application/json", "x-api-key": self._key}
+        for name in ANTHROPIC_HEADERS:
+            value = handler.headers.get(name)
+            if value is not None and ANTHROPIC_HEADER_VALUE.fullmatch(value):
+                headers[name] = value
+        headers.setdefault("anthropic-version", ANTHROPIC_VERSION)
+        return headers
 
 
 def _sum(rows, key):
@@ -1882,8 +2029,9 @@ def summarize_model_events(events, *, exit_kind: str, collection_reasons=()) -> 
         subagent_threads=None,
         subagents=None,
         subagents_reason="threads_not_observable",
-        # The served name is an alias the recipe chose; no hosted model's price applies to it.
-        prices={},
+        # A local server's name is an alias the recipe chose, so no hosted model's price
+        # applies to it; requests relayed to Anthropic are priced like any Claude run's.
+        prices=MODEL_PRICES if any(row.get("upstream") == ANTHROPIC_ENGINE for row in rows) else {},
     )
     measurements["server_timings"] = server_timings(completed)
     return measurements

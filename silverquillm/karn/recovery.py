@@ -564,7 +564,12 @@ def _recover(
     if "model_server" in inputs:
         # The server the run started, as recorded then; recovery never reverifies the host's
         # files. An input written before the digest was verified leaves verification unknown.
-        metadata["model_server"] = {"model_sha256_verified": None, **inputs["model_server"]}
+        metadata["model_server"] = (
+            dict(inputs["model_server"])
+            # The Anthropic engine has no model file to verify (#289).
+            if inputs["model_server"].get("engine") == "anthropic"
+            else {"model_sha256_verified": None, **inputs["model_server"]}
+        )
         metadata["native_telemetry"] = telemetry
     if benchmark.identity != inputs["benchmark_identity"]:
         scores = missing_scores("benchmark_changed_since_run_started")
