@@ -27,6 +27,7 @@ from silverquillm.karn.model_server import (
 )
 from silverquillm.monitor.gpus import GpuSlotStatus, gpu_slot_statuses, orphaned_gpu_schedules
 from silverquillm.monitor.headless import snapshot_document
+from silverquillm.monitor.locks import lock_held
 
 from .test_top_gpu_slots import READING, h100, lock_table_now, monitor
 from .top_fixtures import NOW
@@ -265,3 +266,76 @@ def test_a_host_without_gpu_slots_has_no_gpu_slot_to_hold(tmp_path, monkeypatch)
     assert result.exit_code == 2
     assert "lists no [model_server] gpu_slots" in result.output
     assert "no GPU Slots" in _gpu("ls").output
+
+
+def test_a_claim_rechecks_the_cooldown_once_it_holds_the_lock(tmp_path, monkeypatch):
+    from silverquillm.karn import model_server
+
+    now = datetime.now(UTC)
+    slots = gpu_slots(tmp_path, ("0", "1"))
+    real_lock = model_server._lock
+
+    def lock_after_a_cooldown_lands(slot):
+        if slot.value == "0":
+            _hold(tmp_path, "0", now, now + timedelta(hours=1), now=now)
+        return real_lock(slot)
+
+    monkeypatch.setattr(model_server, "_lock", lock_after_a_cooldown_lands)
+    claim = claim_gpu_slot(slots, _free)
+    assert claim.slot.value == "1"
+    # The passed-over slot's lock was let go, not leaked.
+    assert lock_held(slots[0].lock_path, lock_table_now(tmp_path)) is False
+    claim.release()
+    monkeypatch.setattr(model_server, "_lock", real_lock)
+    with pytest.raises(ModelServerBusyError):
+        claim_gpu_slot(slots[:1], _free)
+
+
+def test_a_gpu_cooldown_of_any_scope_holds_the_slot_for_the_claim_hint_and_monitor(tmp_path):
+    now = datetime.now(UTC)
+    slots = gpu_slots(tmp_path, ("0",))
+    window = cooldown(now, now + timedelta(hours=1), now=now, scope="fable")
+    add_cooldown(writable_gpu_schedule_dir(tmp_path, "0"), window, now=now)
+    assert slots[0].cooling_until(now) == window.end
+    with pytest.raises(ModelServerBusyError):
+        claim_gpu_slot(slots, _free)
+    assert not gpu_slot_availability(slots, _free, tmp_path / "no-locks")[0]
+    (status,) = gpu_slot_statuses(tmp_path, ("0",), lock_table_now(tmp_path), _free(), [])
+    assert status.state == "cooldown" and status.cooldown_until == window.end
+
+
+def test_a_schedule_reached_through_a_symlink_or_a_non_directory_holds_nothing(tmp_path):
+    now = datetime.now(UTC)
+    elsewhere = tmp_path / "elsewhere"
+    _hold(elsewhere, "0", now, now + timedelta(hours=1), now=now)
+    _hold(elsewhere, "3", now, now + timedelta(hours=1), now=now)
+    linked_slot = tmp_path / "linked-slot"
+    (linked_slot / "gpu-slots").mkdir(parents=True)
+    (linked_slot / "gpu-slots" / "0").symlink_to(elsewhere / "gpu-slots" / "0")
+    linked_root = tmp_path / "linked-root"
+    linked_root.mkdir()
+    (linked_root / "gpu-slots").symlink_to(elsewhere / "gpu-slots")
+    a_file = tmp_path / "a-file"
+    a_file.mkdir()
+    (a_file / "gpu-slots").write_text("")
+    for state in (linked_slot, linked_root, a_file):
+        slots = gpu_slots(state, ("0",))
+        assert slots[0].cooling_until(now) is None, state
+        claim_gpu_slot(slots, _free).release()
+        assert gpu_slot_availability(slots, _free, tmp_path / "no-locks")[0], state
+        (status,) = gpu_slot_statuses(state, ("0",), lock_table_now(tmp_path), _free(), [])
+        assert status.state == "free" and status.cooldowns == (), state
+        assert orphaned_gpu_schedules(state, None) == [], state
+
+
+def test_gpu_cooldown_all_clear_on_a_host_without_gpu_slots_points_at_the_orphans(
+    tmp_path, monkeypatch
+):
+    state = _configure(tmp_path, monkeypatch, slots=None)
+    now = datetime.now(UTC)
+    _hold(state, "1", now, now + timedelta(hours=1), now=now)
+    result = _gpu("cooldown", "--all", "--clear")
+    assert result.exit_code == 2
+    assert "lists no [model_server] gpu_slots" in result.output
+    assert "gpu cooldown <value> --clear" in result.output
+    assert len(read_schedule(gpu_schedule_dir(state, "1"))) == 1

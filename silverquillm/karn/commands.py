@@ -1008,6 +1008,11 @@ def gpu_cooldown(every, starts, ends, duration, note, clear, values, state_root)
             "This host's config lists no [model_server] gpu_slots, so it has no GPU Slot "
             "to hold; list them to keep GPUs free at set times."
         )
+    if not configured and every:
+        raise click.UsageError(
+            "This host's config lists no [model_server] gpu_slots, so --all names no GPU "
+            "Slot; clear an orphaned schedule with gpu cooldown <value> --clear."
+        )
     root = Path(state_root)
     known = set(configured) | (set(scheduled_gpu_slot_values(root)) if clear else set())
     unknown = [value for value in values if value not in known]

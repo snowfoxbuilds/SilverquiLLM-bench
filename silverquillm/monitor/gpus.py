@@ -10,8 +10,8 @@ from typing import Any
 from silverquillm.karn.cooldowns import Cooldown, read_schedule
 from silverquillm.karn.model_server import (
     GpuReading,
-    gpu_schedule_dir,
     gpu_slots,
+    readable_gpu_schedule_dir,
     scheduled_gpu_slot_values,
     slot_unusable,
 )
@@ -137,7 +137,8 @@ def orphaned_gpu_schedules(
     for value in scheduled_gpu_slot_values(state_root):
         if value in listed:
             continue
-        schedule = tuple(read_schedule(gpu_schedule_dir(state_root, value), now=moment))
+        directory = readable_gpu_schedule_dir(state_root, value)
+        schedule = () if directory is None else tuple(read_schedule(directory, now=moment))
         if schedule:
             orphans.append(OrphanedSchedule(value, schedule))
     return orphans

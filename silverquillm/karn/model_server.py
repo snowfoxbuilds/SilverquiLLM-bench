@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Any
 
 from .claude_observations import claude_usage
-from .cooldowns import held_until
+from .cooldowns import read_schedule
 from .definition import KarnError
 from .observations import TOKEN_KEYS, _measurements
 from .pricing import MODEL_PRICES
@@ -787,18 +787,23 @@ class GpuSlot:
     @property
     def schedule_dir(self) -> Path | None:
         """The directory of the slot's Cooldown Schedule, named by its value as its lock is,
-        so reordering ``gpu_slots`` moves no Cooldown; the host-wide lock has none."""
+        so reordering ``gpu_slots`` moves no Cooldown; None for the host-wide lock, and for a
+        directory the writer would refuse."""
         if self.value is None:
             return None
-        return gpu_schedule_dir(self.lock_path.parent, self.value)
+        return readable_gpu_schedule_dir(self.lock_path.parent, self.value)
 
     def cooling_until(self, now: datetime | None = None) -> datetime | None:
         """When the slot's Cooldowns in force end; None when none holds it back. Every GPU
-        Slot Cooldown holds back every run, and an unreadable schedule holds back nothing."""
+        Slot Cooldown holds back every run, whatever its scope, and an unreadable schedule
+        holds back nothing."""
         directory = self.schedule_dir
         if directory is None:
             return None
-        return held_until(directory, now=now or datetime.now(UTC))
+        now = now or datetime.now(UTC)
+        return max(
+            (c.end for c in read_schedule(directory, now=now) if c.in_force(now)), default=None
+        )
 
     def unknown_gpus(self, reading: GpuReading) -> bool:
         """Whether the slot names a GPU a readable ``nvidia-smi`` does not list."""
@@ -815,6 +820,19 @@ def gpu_schedule_dir(state_root: Path, value: str) -> Path:
     return Path(state_root).resolve() / GPU_SLOTS_DIR / value
 
 
+def readable_gpu_schedule_dir(state_root: Path, value: str) -> Path | None:
+    """The GPU Slot ``value``'s schedule directory, or None when there is none to read: one
+    the writer refuses, a symlink or not a directory, is no schedule, so a hold only ever
+    comes from a file the tooling can edit."""
+    directory = gpu_schedule_dir(state_root, value)
+    try:
+        if any(path.is_symlink() or not path.is_dir() for path in (directory.parent, directory)):
+            return None
+    except OSError:
+        return None
+    return directory
+
+
 def writable_gpu_schedule_dir(state_root: Path, value: str) -> Path:
     """The GPU Slot ``value``'s schedule directory, created private on first use; one that is
     a symlink, or not a directory, is refused rather than written through."""
@@ -829,9 +847,12 @@ def writable_gpu_schedule_dir(state_root: Path, value: str) -> Path:
 
 def scheduled_gpu_slot_values(state_root: Path) -> tuple[str, ...]:
     """Every GPU Slot value with a schedule directory under the state root, listed in
-    ``gpu_slots`` or not, in GPU order; anything else there is ignored."""
+    ``gpu_slots`` or not, in GPU order; anything else there, and a symlinked directory of
+    them, is ignored."""
     root = Path(state_root).resolve() / GPU_SLOTS_DIR
     try:
+        if root.is_symlink():
+            return ()
         names = [
             entry.name
             for entry in root.iterdir()
@@ -968,8 +989,13 @@ def claim_gpu_slot(
         except OSError as error:
             unusable.append(_lock_unusable(slot.lock_path, error.strerror or type(error).__name__))
             continue
-        if handle is not None:
-            return GpuSlotClaim(slot, handle, reading, inherited)
+        if handle is None:
+            continue
+        # A Cooldown set while the lock was being taken still holds the slot back.
+        if slot.cooling_until(now) is not None:
+            handle.close()
+            continue
+        return GpuSlotClaim(slot, handle, reading, inherited)
     raise ModelServerBusyError(
         tuple(unusable),
         "gpu_slot_unknown_gpu:" + ",".join(unknown)
