@@ -220,6 +220,13 @@ def _request_costs(measurements: dict, source: str) -> tuple[tuple[tuple[int, De
     return tuple(sorted(costs)), unpriced
 
 
+def measured_request_costs(measurements: dict) -> tuple[tuple[int, Decimal], ...]:
+    """``(timestamp_ms, usd)`` of each priced request of a run's measurements, from the
+    source its Run Cost takes, exactly as its record will charge them."""
+    measurements = mapping(measurements)
+    return _request_costs(measurements, run_cost(measurements)[1])[0]
+
+
 def _reading(measurements: dict, stopped_at: datetime | None) -> UsageReading | None:
     return usage_reading(_value(measurements.get("subscription_usage")), stopped_at, WEEKLY)
 

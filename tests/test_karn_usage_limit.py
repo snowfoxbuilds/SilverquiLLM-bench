@@ -46,7 +46,13 @@ from silverquillm.monitor.usage import ProfileUsage
 
 from .grader_fixtures import local_grader
 from .test_karn_host import FakeDocker
-from .test_karn_lifecycle import DyingHost, die_after_start, grade_locally, pool_slot
+from .test_karn_lifecycle import (
+    DyingHost,
+    SessionDocker,
+    die_after_start,
+    grade_locally,
+    pool_slot,
+)
 from .test_karn_subscription_usage import UsageSessionDocker, codex_line, login_common
 from .test_monitor import publish
 from .test_monitor_records import PROFILE, RATES, Host, claude_usage
@@ -782,3 +788,268 @@ def test_nothing_here_writes_beside_the_schedule_and_the_limit(tmp_path):
     set_limit(tmp_path, UsageLimit(80.0), now=NOW)
     apply_limit(tmp_path, UsageLimit(80.0), usage(90.0, weekly_reading=reading()), now=NOW)
     assert sorted(os.listdir(tmp_path)) == [".cooldowns.lock", "cooldowns.json", LIMIT_FILE]
+
+
+# ---- Spend the record will charge, seen before the profile is released ------------------
+
+
+class NativeSpendDocker(SessionDocker):
+    """A Codex run whose only spend is in its native journal: one priced request, no OTel
+    cost event and no weekly reading, as when the telemetry missed it."""
+
+    output_tokens = 60_000_000
+    """$900 at gpt-5.4's $15 per million output tokens: 180% at the default $5 per 1%."""
+    model = "gpt-5.4"
+
+    def command(self, *args, **kwargs):
+        result = super().command(*args, **kwargs)
+        if args[0] == "start":
+            now = datetime.now(UTC)
+
+            def line(kind, payload, millis):
+                stamp = (now + timedelta(milliseconds=millis)).isoformat(timespec="milliseconds")
+                return {"type": kind, "timestamp": stamp.replace("+00:00", "Z"), "payload": payload}
+
+            spent = {
+                "input_tokens": 100,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": self.output_tokens,
+                "reasoning_output_tokens": 0,
+                "total_tokens": 100 + self.output_tokens,
+            }
+            rows = [
+                line("event_msg", {"type": "task_started", "turn_id": "turn-1"}, 0),
+                line("turn_context", {"model": self.model}, 1),
+                line(
+                    "token_usage_record",
+                    {
+                        "response_id": "response-" + self.run_id,
+                        "thread_id": "thread-" + self.run_id,
+                        "usage": spent,
+                        "thread_token_usage": spent,
+                        "turn_token_usage": spent,
+                    },
+                    5,
+                ),
+                line("event_msg", {"type": "task_complete", "turn_id": "turn-1"}, 10),
+            ]
+            rollout = Path(self.native) / "sessions" / f"rollout-{self.run_id}.jsonl"
+            with rollout.open("a") as stream:
+                stream.write("".join(json.dumps(row) + "\n" for row in rows))
+        return result
+
+
+class SmallSpendDocker(NativeSpendDocker):
+    output_tokens = 1_000_000
+    """$15: 3% at the default rate."""
+
+
+class UnpricedSpendDocker(NativeSpendDocker):
+    model = "future-model"
+
+
+def native_host(state, docker=NativeSpendDocker, host=DockerHost):
+    return host(docker=docker(), plugin_cache=state / "plugins", plugin_python=sys.executable)
+
+
+@PLUGIN_SDK
+def test_native_only_spend_over_the_ceiling_is_held_before_the_profile_is_released(
+    tmp_path, monkeypatch
+):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(80.0), now=NOW)
+    seen = observed_estimates(monkeypatch)
+    at_release = []
+    record = run_benchmark(
+        **common,
+        host=native_host(state),
+        grader=local_grader(),
+        on_login_released=lambda: at_release.extend(read_schedule(profile)),
+    )
+    [held] = at_release
+    assert (held.scope, held.source) == ("all", "usage-limit")
+    before_release, after_record = seen
+    assert before_release[0] is False
+    assert before_release[1].weekly.percent == pytest.approx(180.0)
+    assert after_record[1].weekly.percent == pytest.approx(before_release[1].weekly.percent)
+    assert read_schedule(profile) == [held]
+    costs = record.run_metadata["measurements"]["run_cost"]
+    assert float(costs["value"]) == pytest.approx(900.0, rel=1e-3)
+
+
+@PLUGIN_SDK
+def test_native_only_spend_is_held_even_when_publication_fails(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(80.0), now=NOW)
+
+    def unpublishable(*args, **kwargs):
+        raise OSError("results repo unwritable")
+
+    monkeypatch.setattr(execution, "write_record", unpublishable)
+    at_release = []
+    with pytest.raises(OSError):
+        run_benchmark(
+            **common,
+            host=native_host(state),
+            grader=local_grader(),
+            on_login_released=lambda: at_release.extend(read_schedule(profile)),
+        )
+    [held] = at_release
+    assert held.source == "usage-limit"
+
+
+@PLUGIN_SDK
+def test_native_only_spend_is_held_before_slow_grading_ends(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(80.0), now=NOW)
+    inputs = execution.grading_inputs
+    while_grading = []
+
+    def slow(*args, **kwargs):
+        # Grading starts here; the profile is already another run's to take.
+        if not while_grading:
+            while_grading.extend(read_schedule(profile))
+            while_grading.append(lock_held(profile / "runner.lock"))
+        return inputs(*args, **kwargs)
+
+    monkeypatch.setattr(execution, "grading_inputs", slow)
+    run_benchmark(**common, host=native_host(state), grader=local_grader())
+    *held, locked = while_grading
+    assert [c.source for c in held] == ["usage-limit"]
+    assert locked is False
+
+
+@PLUGIN_SDK
+def test_native_spend_below_the_ceiling_writes_nothing(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(80.0), now=NOW)
+    seen = observed_estimates(monkeypatch)
+    run_benchmark(**common, host=native_host(state, SmallSpendDocker), grader=local_grader())
+    before_release, after_record = seen
+    assert before_release[1].weekly.percent == pytest.approx(3.0, rel=1e-3)
+    assert after_record[1].weekly.percent == pytest.approx(before_release[1].weekly.percent)
+    assert read_schedule(profile) == []
+
+
+@PLUGIN_SDK
+def test_unpriceable_native_spend_never_fails_the_run(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(80.0), now=NOW)
+    record = run_benchmark(
+        **common, host=native_host(state, UnpricedSpendDocker), grader=local_grader()
+    )
+    assert record.run_metadata["execution"]["status"] == "completed"
+    assert read_schedule(profile) == []
+
+
+@PLUGIN_SDK
+def test_measurements_that_fail_to_finalize_still_reach_the_check_and_the_record(
+    tmp_path, monkeypatch
+):
+    from silverquillm.karn.observations import CodexTelemetryCollector
+
+    def broken(self, **kwargs):
+        raise RuntimeError("observations unwritable")
+
+    monkeypatch.setattr(CodexTelemetryCollector, "finalize", broken)
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(80.0), now=NOW)
+    at_release = []
+    record = run_benchmark(
+        **common,
+        host=native_host(state),
+        grader=local_grader(),
+        on_login_released=lambda: at_release.extend(read_schedule(profile)),
+    )
+    [held] = at_release
+    assert held.source == "usage-limit"
+    reasons = record.run_metadata["measurements"]["agent_turns"]["total"]["reasons"]
+    assert "measurement_finalization_failed" in reasons
+
+
+@PLUGIN_SDK
+def test_a_profile_without_a_limit_is_measured_after_its_release(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    measured_while_held = []
+    measure = execution.measure
+
+    def observed(*args, **kwargs):
+        measured_while_held.append(lock_held(profile / "runner.lock"))
+        return measure(*args, **kwargs)
+
+    monkeypatch.setattr(execution, "measure", observed)
+    run_benchmark(**common, host=native_host(state), grader=local_grader())
+    assert measured_while_held == [False]
+
+
+def test_spend_that_cannot_be_gathered_is_reported_and_the_check_goes_on(tmp_path, capsys):
+    host = Host(tmp_path)
+    publish(host.repo, "r1", usage=claude_usage(85.0, resets="2026-10-09T00:00:00Z"), requests=[])
+    set_limit(host.login, UsageLimit(80.0), now=NOW)
+
+    def unavailable():
+        raise RuntimeError("journal unreadable")
+
+    usage_limit.check_quietly(
+        host.login,
+        PROFILE,
+        "claude",
+        spend=unavailable,
+        state_root=host.state,
+        runs_dir=host.runs,
+        results_repo=host.repo,
+        now=host.now,
+        config=CONFIG,
+    )
+    err = capsys.readouterr().err
+    assert "usage_limit_spend_unavailable: RuntimeError" in err
+    assert "Usage Limit reached; every run held" in err
+    [held] = read_schedule(host.login, now=host.now)
+    assert held.source == "usage-limit"
+
+
+@PLUGIN_SDK
+def test_recovery_holds_native_only_spend_while_it_still_holds_the_profile(tmp_path, monkeypatch):
+    state, common = login_common(tmp_path)
+    profile = pool_slot(state).directory
+    set_limit(profile, UsageLimit(80.0), now=NOW)
+    with pytest.raises(SystemExit):
+        run_benchmark(
+            **common,
+            run_id="run-a",
+            host=die_after_start(native_host(state, host=DyingHost)),
+        )
+    assert read_schedule(profile) == []
+    monkeypatch.setattr(
+        recovery,
+        "DockerHost",
+        lambda **kwargs: DockerHost(docker=FakeDocker(), plugin_cache=state / "plugins"),
+    )
+    seen = observed_estimates(monkeypatch)
+    checked_while_held = []
+    check_quietly = recovery.check_quietly
+
+    def observed(directory, *args, **kwargs):
+        checked_while_held.append(lock_held(Path(directory) / "runner.lock"))
+        return check_quietly(directory, *args, **kwargs)
+
+    monkeypatch.setattr(recovery, "check_quietly", observed)
+    options_ = {key: common[key] for key in ("bench_root", "results_dir", "results_repo")}
+    record = recovery.recover_benchmark(run_id="run-a", spec={}, state_root=state, **options_)
+    assert checked_while_held == [True, False]
+    while_held, after_record = seen
+    assert while_held[0] is False
+    assert while_held[1].weekly.percent == pytest.approx(180.0)
+    assert after_record[1].weekly.percent == pytest.approx(while_held[1].weekly.percent)
+    [held] = read_schedule(profile)
+    assert held.source == "usage-limit"
+    costs = record.run_metadata["measurements"]["run_cost"]
+    assert float(costs["value"]) == pytest.approx(900.0, rel=1e-3)

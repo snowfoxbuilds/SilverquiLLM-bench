@@ -19,13 +19,35 @@ from silverquillm.karn.cooldowns import is_fable
 
 from .costs import ProvisionalCost
 from .estimates import WeeklyUsage, newest_reading, weekly_usage
-from .history import FABLE, WEEKLY, HistoryStore, RunSummary, UsageReading
+from .history import (
+    FABLE,
+    WEEKLY,
+    HistoryStore,
+    RunSummary,
+    UsageReading,
+    measured_request_costs,
+)
 from .live import RecordCache, live_runs
 from .locks import PROC_LOCKS, held_locks
 from .pools import ProfileStatus, login_profiles
 
 Cost = tuple[int, Decimal]
 """``(timestamp_ms, usd)`` of one priced request."""
+
+
+@dataclass(frozen=True)
+class ExecutionSpend:
+    """One execution's reconciled spend, which a caller holds before its record exists."""
+
+    execution_id: str
+    costs: tuple[Cost, ...]
+    model: str | None
+
+
+def execution_spend(execution_id: str, measurements: dict, model: str | None) -> ExecutionSpend:
+    """The spend a run's measurements will charge once recorded: the requests its Run Cost's
+    source prices, OTel and native evidence reconciled as in its record."""
+    return ExecutionSpend(execution_id, measured_request_costs(measurements), model)
 
 
 def canonical_login(login: str | None, profiles: Iterable[ProfileStatus]) -> str | None:
@@ -78,6 +100,8 @@ class UsageInputs:
         profiles: list[ProfileStatus],
         published: Iterable[RunSummary],
         local: Iterable[RunSummary],
+        *,
+        replacing: str | None = None,
     ) -> UsageInputs:
         """For each execution this host ran, its Login Profile and the one record whose spend
         counts, and every reading those records observed per Login Profile.
@@ -102,8 +126,9 @@ class UsageInputs:
             if current is None or rank > current[0]:
                 best[summary.execution_id] = (rank, login, summary)
         inputs.executions = {key: (login, record) for key, (_, login, record) in best.items()}
-        for login, record in inputs.executions.values():
-            inputs.add_costs(login, record.request_costs, record.candidate.model)
+        for execution, (login, record) in inputs.executions.items():
+            if execution != replacing:
+                inputs.add_costs(login, record.request_costs, record.candidate.model)
         return inputs
 
     def add_costs(self, login: str, costs: Iterable[Cost], model: str | None) -> None:
@@ -160,6 +185,7 @@ def estimate_profile_usage(
     results_repo: Path | None,
     bench_root: Path | None = None,
     readings: Iterable[UsageReading] = (),
+    execution: ExecutionSpend | None = None,
     now: datetime,
     proc_locks: Path = PROC_LOCKS,
 ) -> ProfileUsage:
@@ -172,6 +198,10 @@ def estimate_profile_usage(
     Each unrecorded run's events file is read once to its current length
     (``ProvisionalCost.read_snapshot``), so its whole spend counts as the monitor's does
     once caught up, however large the backlog.
+
+    ``execution`` is the reconciled spend of one execution the caller has just ended, such
+    as a run releasing its profile before its record exists: it replaces whatever that
+    execution's records or provisional telemetry would charge, so it is never counted twice.
     """
     held = held_locks(proc_locks)
     profiles = login_profiles(state_root, held, now=now)
@@ -186,11 +216,17 @@ def estimate_profile_usage(
         cache=cache,
     )
     history = HistoryStore(results_repo, bench_root).runs()
+    replacing = execution.execution_id if execution is not None else None
     inputs = UsageInputs.from_records(
-        profiles, accountable(history, host_label, cache), cache.applicable_records()
+        profiles,
+        accountable(history, host_label, cache),
+        cache.applicable_records(),
+        replacing=replacing,
     )
     for run in runs:
         if run.login_profile != login or run.run_id in inputs.executions:
+            continue
+        if run.run_id == replacing:
             continue
         cost = ProvisionalCost(run.run_dir, run.telemetry_adapter)
         if run.native_telemetry:
@@ -200,6 +236,8 @@ def estimate_profile_usage(
             ((row.timestamp_ms, row.usd) for row in cost.requests if row.usd is not None),
             run.candidate.model,
         )
+    if execution is not None:
+        inputs.add_costs(login, execution.costs, execution.model)
     for reading in readings:
         inputs.add_reading(login, reading)
     return profile_usage(login, provider, inputs, rates, now)

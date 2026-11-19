@@ -57,7 +57,7 @@ from .records import (
 from .snapshots import WorkspaceSnapshots, retain_git_history
 from .subscription_usage import codex_usage, subscription_usage
 from .subscription_usage import provider_for as usage_provider
-from .usage_limit import check_quietly, read_limit, run_readings
+from .usage_limit import check_quietly, read_limit, run_readings, run_spend
 
 
 class RunNeverLaunchedError(KarnError):
@@ -306,9 +306,10 @@ def _owns_pending_login(profile, run_id: str) -> bool:
     return pending is not None and pending.get("run_id") == run_id
 
 
-def _usage_limit_check(run_dir, inputs, *, results_repo, state_root, live=True):
+def _usage_limit_check(run_dir, inputs, *, results_repo, state_root, live=True, spend=None):
     """The Usage Limit check for the profile a run used, with the readings the run left;
-    with none once ``live`` is False, when the run's written record carries them."""
+    with none once ``live`` is False, when the run's written record carries them. ``spend``
+    gathers the run's reconciled spend while its profile is still held."""
     login = inputs.get("login") if isinstance(inputs, dict) else None
     telemetry = (inputs.get("native_telemetry") if isinstance(inputs, dict) else None) or {}
 
@@ -335,6 +336,7 @@ def _usage_limit_check(run_dir, inputs, *, results_repo, state_root, live=True):
             runs_dir=run_dir.parent,
             results_repo=results_repo,
             readings=readings if live else tuple,
+            spend=spend,
         )
 
     return check
@@ -523,6 +525,24 @@ def _recover(
             and not _owns_pending_login(profile, run_id)
         )
         host.docker.stop_and_confirm(observed.container_name, run_id)
+        preserved = run_dir / "host" / NATIVE_PRESERVED
+        harvested = False
+
+        def reconciled():
+            # Under the login lock, once settlement has preserved this run's native sessions:
+            # harvested here, once, for both the check and the record.
+            nonlocal harvested
+            if not harvested and preserved.is_dir():
+                collector.harvest_native(preserved)
+                harvested = True
+            measured = summarize_events(
+                [*events, *collector.events],
+                exit_kind="interrupted",
+                collection_reasons=[*reasons, *collector.reasons],
+                adapter=telemetry.get("adapter", "codex"),
+            )
+            return run_spend(run_id, measured, candidate.model)
+
         settlement_failure = None
         try:
             login_state = _settle_own_login(
@@ -531,7 +551,11 @@ def _recover(
                 host,
                 lambda: candidate,
                 _usage_limit_check(
-                    run_dir, inputs, results_repo=results_repo, state_root=state_root
+                    run_dir,
+                    inputs,
+                    results_repo=results_repo,
+                    state_root=state_root,
+                    spend=reconciled,
                 ),
             )
         except LoginInUseError:
@@ -546,9 +570,9 @@ def _recover(
         if profile:
             # Only journals attributed to this run are read: another run's native state
             # belongs to that run's own evidence, never harvested here.
-            preserved = run_dir / "host" / NATIVE_PRESERVED
             if preserved.is_dir():
-                collector.harvest_native(preserved)
+                if not harvested:
+                    collector.harvest_native(preserved)
             elif other_run_pending:
                 collector.mark_incomplete("native_state_belongs_to_other_run")
         observed.workspace_stopped = True

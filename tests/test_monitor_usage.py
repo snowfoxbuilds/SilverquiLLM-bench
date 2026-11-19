@@ -16,13 +16,13 @@ from silverquillm.monitor import costs
 from silverquillm.monitor.costs import EVENTS_FILE, ProvisionalCost
 from silverquillm.monitor.estimates import newest_reading
 from silverquillm.monitor.history import UsageReading
-from silverquillm.monitor.usage import estimate_profile_usage
+from silverquillm.monitor.usage import ExecutionSpend, estimate_profile_usage, execution_spend
 
 from .test_monitor import NOW, event, finishes, make_run, ms, publish, retain
 from .test_monitor_records import PROFILE, RATES, Host, at, claude_usage, fable_run, live_cost
 
 
-def estimate(host: Host, *, readings=(), login=PROFILE):
+def estimate(host: Host, *, readings=(), login=PROFILE, execution=None):
     return estimate_profile_usage(
         login,
         "claude",
@@ -32,6 +32,7 @@ def estimate(host: Host, *, readings=(), login=PROFILE):
         runs_dir=host.runs,
         results_repo=host.repo,
         readings=readings,
+        execution=execution,
         now=host.now,
         proc_locks=host.locks,
     )
@@ -316,3 +317,76 @@ def test_a_record_replaces_a_large_provisional_spend_once(tmp_path, small_chunks
     for _ in range(20):
         host.snapshot()
     assert monitor_figures(host) == figures(estimate(host))
+
+
+# ---- A run's own reconciled spend, before its record exists ------------------------------
+
+
+def spend(run_id, usd, moment=NOW - timedelta(minutes=5), model="claude-opus-4-7"):
+    return ExecutionSpend(run_id, ((ms(moment), Decimal(usd)),), model)
+
+
+def test_an_executions_spend_replaces_its_provisional_telemetry(tmp_path):
+    host = Host(tmp_path)
+    run = make_run(host.runs, "r1")
+    live_cost(run, "50", NOW - timedelta(minutes=5))
+    host.own(run, login=True)
+    assert estimate(host).weekly.percent == pytest.approx(2.0)
+    assert estimate(host, execution=spend("r1", "75")).weekly.percent == pytest.approx(3.0)
+
+
+def test_an_executions_spend_replaces_its_earlier_record(tmp_path):
+    # As a linked recovery's reconciled spend replaces what its original's record charged.
+    host = Host(tmp_path)
+    publish(host.repo, "r1", requests=[at(60, "25")])
+    publish(host.repo, "r2", requests=[at(60, "25")])
+    assert estimate(host).weekly.percent == pytest.approx(2.0)
+    found = estimate(host, execution=spend("r1", "50"))
+    assert found.weekly.percent == pytest.approx(3.0)
+
+
+def test_an_executions_spend_counts_once_its_record_is_written(tmp_path):
+    host = Host(tmp_path)
+    run = make_run(host.runs, "r1")
+    host.own(run, login=True)
+    before = estimate(host, execution=spend("r1", "50", moment=at(1, "50")[0]))
+    retain(run / "run-record.json", "r1", requests=[at(1, "50")])
+    assert estimate(host).weekly.percent == pytest.approx(before.weekly.percent)
+    assert estimate(host, execution=spend("r1", "50", moment=at(1, "50")[0])).weekly.percent == (
+        pytest.approx(before.weekly.percent)
+    )
+
+
+def test_a_fable_executions_spend_counts_against_the_fable_limit_too(tmp_path):
+    host = Host(tmp_path)
+    usage = claude_usage(10.0, resets="2026-10-08T14:00:00Z")
+    usage["fable"] = {**usage["value"], "utilization_percent": 20.0}
+    publish(host.repo, "r0", usage=usage, requests=[])
+    fable = estimate(host, execution=spend("r1", "50", model="claude-fable-5-2"))
+    other = estimate(host, execution=spend("r1", "50"))
+    assert (fable.weekly.percent, fable.fable.percent) == (
+        pytest.approx(12.0),
+        pytest.approx(22.0),
+    )
+    assert other.fable.percent == pytest.approx(20.0)
+
+
+def test_mixed_otel_and_native_evidence_is_charged_once_as_its_record_would(tmp_path):
+    from pathlib import Path
+
+    from silverquillm.karn.observations import summarize_events
+
+    fixture = Path(__file__).parent / "fixtures" / "karn_observations" / "retry.jsonl"
+    events = [json.loads(line) for line in fixture.read_text().splitlines()]
+    assert {event["source"] for event in events} == {"otel", "native"}
+    measured = summarize_events(events, exit_kind="completed")
+    found = execution_spend("r1", measured, "gpt-5.4")
+    assert len(found.costs) == measured["agent_turns"]["responses"]["value"]
+    assert sum(usd for _, usd in found.costs) == Decimal(measured["estimated_cost"]["value"])
+    from silverquillm.monitor.history import summarize
+
+    record = retain(tmp_path / "run-record.json", "r1")
+    document = json.loads(record.read_text())
+    document["manifest"]["run_metadata"]["measurements"] = measured
+    summary = summarize(document["manifest"], document["scores"], record)
+    assert found.costs == summary.request_costs

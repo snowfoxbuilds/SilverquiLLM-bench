@@ -189,12 +189,16 @@ def check_usage_limit(
     runs_dir: Path | None,
     results_repo: Path | None,
     readings: Iterable[UsageReading] = (),
+    execution=None,
     now: datetime | None = None,
     config=None,
     wait: float | None = None,
 ) -> list[Cooldown]:
     """Check one profile's Usage Limit against this host's estimate, writing the Cooldowns
-    it asks for. A profile without a limit costs nothing: no estimate is made."""
+    it asks for. A profile without a limit costs nothing: no estimate is made.
+
+    ``execution`` (an ``ExecutionSpend``) is the reconciled spend of the run just ending, in
+    place of whatever its telemetry or records would charge."""
     limit = read_limit(directory)
     if limit is None:
         return []
@@ -214,6 +218,7 @@ def check_usage_limit(
         runs_dir=Path(runs_dir) if runs_dir is not None else None,
         results_repo=Path(results_repo) if results_repo is not None else None,
         readings=readings,
+        execution=execution,
         now=now,
     )
     return apply_limit(directory, limit, usage, now=now, wait=wait)
@@ -252,14 +257,18 @@ def check_quietly(
     provider: str | None,
     *,
     readings: Callable[[], Iterable[UsageReading]] = tuple,
+    spend: Callable[[], object] | None = None,
     **arguments,
 ) -> None:
     """Check the limit, reporting any failure on stderr: a failed check never fails, nor
     holds up past ``SCHEDULE_WAIT``, the run or the recovery it follows; it only leaves the
     profile without a new Cooldown.
 
-    ``readings`` gathers the caller's own readings, and is called only for a profile that
-    has a limit, so a run on a profile without one reads nothing more.
+    ``readings`` gathers the caller's own readings, and ``spend`` the reconciled spend of
+    the run just ending (an ``ExecutionSpend``); each is called only for a profile that has a
+    limit, so a run on a profile without one reads nothing more. Spend that cannot be
+    gathered is reported and the check goes on with what the host's records and telemetry
+    show.
     """
     if provider is None:
         return
@@ -267,16 +276,46 @@ def check_quietly(
         if read_limit(directory) is None:
             return
         found = list(readings())
+        execution = None
+        if spend is not None:
+            try:
+                execution = spend()
+            except Exception as error:  # noqa: BLE001 -- the check goes on without it.
+                _report(f"{login}: usage_limit_spend_unavailable: {_reason(error)}")
         written = check_usage_limit(
-            directory, login, provider, readings=found, wait=SCHEDULE_WAIT, **arguments
+            directory,
+            login,
+            provider,
+            readings=found,
+            execution=execution,
+            wait=SCHEDULE_WAIT,
+            **arguments,
         )
     except Exception as error:  # noqa: BLE001 -- a failed check must never fail the run.
-        reason = str(error) if isinstance(error, KarnError) else type(error).__name__
-        _report(f"{login}: usage_limit_check_failed: {reason}")
+        _report(f"{login}: usage_limit_check_failed: {_reason(error)}")
         return
     for held in written:
         scope = "Fable runs" if held.scope == "fable" else "every run"
         _report(f"{login}: Usage Limit reached; {scope} held until {_stamp(held.end)}")
+
+
+def run_spend(execution_id: str, measurements: dict, model: str | None):
+    """The ``ExecutionSpend`` a run's measurements will charge once its record exists."""
+    from silverquillm.monitor.usage import execution_spend
+
+    return execution_spend(execution_id, measurements, model)
+
+
+def has_limit(directory: Path) -> bool:
+    """Whether the profile has a Usage Limit; one that cannot be read is none."""
+    try:
+        return read_limit(directory) is not None
+    except Exception:  # noqa: BLE001 -- an unreadable limit holds nothing back.
+        return False
+
+
+def _reason(error: Exception) -> str:
+    return str(error) if isinstance(error, KarnError) else type(error).__name__
 
 
 def _report(message: str) -> None:
