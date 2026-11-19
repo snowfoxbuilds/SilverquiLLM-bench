@@ -59,6 +59,10 @@ GPU_INDEX = re.compile(r"0|[1-9][0-9]*")
 DEFAULT_USAGE_RATES: dict[str, Decimal] = {"codex": Decimal(5), "claude": Decimal(25)}
 
 
+# Anthropic-engine runs live at once, at most (#291).
+MAX_ANTHROPIC_CONCURRENCY = 64
+
+
 @dataclass(frozen=True)
 class HostConfig:
     path: Path
@@ -78,6 +82,9 @@ class HostConfig:
     gpu_slots: tuple[str, ...] | None = None
     """``[model_server] gpu_slots``: each GPU Slot's ``CUDA_VISIBLE_DEVICES``; None for the
     host's one unpinned GPU Slot."""
+    anthropic_concurrency: int | None = None
+    """``[model_server] anthropic_concurrency``: how many Anthropic-engine runs may be live at
+    once; None for the bench's default (#291)."""
 
 
 @dataclass(frozen=True)
@@ -142,9 +149,19 @@ def _model_server(path: Path, table) -> dict:
         "llama_cpp",
         "environment",
         "gpu_slots",
+        "anthropic_concurrency",
     }:
         raise HostConfigError(
-            f"{path}: [model_server] takes only models_dir, llama_cpp, environment and gpu_slots"
+            f"{path}: [model_server] takes only models_dir, llama_cpp, environment, gpu_slots"
+            " and anthropic_concurrency"
+        )
+    concurrency = table.get("anthropic_concurrency")
+    if concurrency is not None and (
+        type(concurrency) is not int or not 1 <= concurrency <= MAX_ANTHROPIC_CONCURRENCY
+    ):
+        raise HostConfigError(
+            f"{path}: [model_server] anthropic_concurrency must be an integer from 1 to "
+            f"{MAX_ANTHROPIC_CONCURRENCY}"
         )
 
     def location(value, key):
@@ -155,8 +172,7 @@ def _model_server(path: Path, table) -> dict:
 
     builds = table.get("llama_cpp", {})
     if not isinstance(builds, dict) or not all(
-        isinstance(build, str) and build.startswith("b") and build[1:].isdigit()
-        for build in builds
+        isinstance(build, str) and build.startswith("b") and build[1:].isdigit() for build in builds
     ):
         raise HostConfigError(f"{path}: [model_server.llama_cpp] maps builds like b12182 to paths")
     from silverquillm.karn.model_server import environment_refusal
@@ -181,6 +197,7 @@ def _model_server(path: Path, table) -> dict:
         },
         "model_server_environment": dict(environment),
         "gpu_slots": _gpu_slots(path, table["gpu_slots"]) if "gpu_slots" in table else None,
+        "anthropic_concurrency": concurrency,
     }
 
 
@@ -193,7 +210,7 @@ def _gpu_slots(path: Path, slots) -> tuple[str, ...]:
         indices = slot.split(",") if isinstance(slot, str) else [None]
         if not all(isinstance(index, str) and GPU_INDEX.fullmatch(index) for index in indices):
             raise HostConfigError(
-                f"{path}: [model_server] gpu_slots entries are GPU indices like \"0\" or \"0,1\""
+                f'{path}: [model_server] gpu_slots entries are GPU indices like "0" or "0,1"'
             )
         numbers = {int(index) for index in indices}
         if len(numbers) != len(indices) or numbers & seen:

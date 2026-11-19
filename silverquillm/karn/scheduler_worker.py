@@ -12,7 +12,7 @@ from pathlib import Path
 from .definition import KarnError
 from .interruption import terminate_as_interrupt
 from .login_pool import LoginPoolBusyError, LoginPoolUnavailableError
-from .model_server import ModelServerBusyError
+from .model_server import AnthropicRelayBusyError, ModelServerBusyError
 from .records import RecordWritePendingError
 
 
@@ -69,10 +69,16 @@ def execute_worker(connection, executor, arguments):
             return False
 
     gpu_slots = []
+    relay_slots = []
 
     def gpu_slot_selected(slot):
         gpu_slots.append(slot)
         if not send("gpu_slot", slot):
+            raise KeyboardInterrupt
+
+    def relay_slot_selected(slot):
+        relay_slots.append(slot)
+        if not send("relay_slot", slot):
             raise KeyboardInterrupt
 
     def request(kind, value=None):
@@ -85,6 +91,8 @@ def execute_worker(connection, executor, arguments):
         if not admitted:
             if gpu_slots:
                 raise ModelServerBusyError()
+            if relay_slots:
+                raise AnthropicRelayBusyError()
             raise LoginPoolBusyError(
                 "login_pool_busy:" + (value.split("/", 1)[0] if value else "unpooled")
             )
@@ -97,9 +105,13 @@ def execute_worker(connection, executor, arguments):
             on_login_selected=lambda login: request("selected", login),
             on_login_released=lambda: send("released"),
             on_gpu_slot_selected=gpu_slot_selected,
+            on_relay_slot_selected=relay_slot_selected,
             on_launch=lambda: request("launch"),
         )
         send("result", record_outcome(result))
+    except AnthropicRelayBusyError:
+        # Every relay slot is held: the entry defers in the relay pool (#291).
+        send("busy", "anthropic_relay_busy")
     except ModelServerBusyError as error:
         for problem in error.unusable:
             send("warning", problem + "; that GPU Slot is skipped")

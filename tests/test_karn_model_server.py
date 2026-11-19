@@ -2531,7 +2531,7 @@ def test_the_anthropic_engine_needs_a_private_key_file_of_this_users(tmp_path):
     plan = plan_anthropic_relay(spec, tmp_path)
     assert plan.key_file == key.resolve() and plan.claim is None
     # The record says where the key came from, never what it is.
-    assert plan.to_dict()["host"] == {"api_key": "host_secret"}
+    assert plan.to_dict()["host"] == {"api_key": "host_secret", "api_key_name": "default"}
     assert "sk-ant" not in json.dumps(plan.to_dict())
 
 
@@ -2571,7 +2571,8 @@ def test_the_anthropic_relay_adds_the_hosts_key_and_records_the_run(anthropic_up
     plan = plan_anthropic_relay(model_server_spec(anthropic_runtime()), tmp_path / "state")
     run_dir = tmp_path / "run"
     with AnthropicRelayCollector(run_dir, plan=plan) as collector:
-        assert collector.llama is None and collector.facts["host"] == {"api_key": "host_secret"}
+        assert collector.llama is None
+        assert collector.facts["host"] == {"api_key": "host_secret", "api_key_name": "default"}
         forward = ModelForwardServer(("127.0.0.1", 0), collector.endpoint)
         thread = threading.Thread(target=forward.serve_forever, daemon=True)
         thread.start()
@@ -2801,6 +2802,7 @@ def anthropic_run(tmp_path):
         tmp_path,
         build_output=candidate.build_output,
         host=MessagesRelayHost(),
+        model_server_host=ModelServerHost(),
         collector_host="127.0.0.1",
     )
 
@@ -2830,7 +2832,7 @@ def test_an_anthropic_run_claims_no_gpu_slot_and_recovers_as_recorded(
         "engine": "anthropic",
         "upstream": "https://api.anthropic.com",
         "served_model": "claude-haiku-5-5",
-        "host": {"api_key": "host_secret"},
+        "host": {"api_key": "host_secret", "api_key_name": "default", "relay_slot": 0},
     }
     (row,) = record.run_metadata["measurements"]["requests"]
     assert row["usage"]["cache_write_1h_input_tokens"] == 10
@@ -2843,3 +2845,98 @@ def test_an_anthropic_run_claims_no_gpu_slot_and_recovers_as_recorded(
     assert recovered.run_metadata["measurements"]["requests"] == summary["requests"]
     for name in ("run-input.json", "observations.events.jsonl", "model-transcript.jsonl"):
         assert "sk-ant" not in (run_dir / name).read_text()
+
+
+def test_the_host_config_sets_how_many_anthropic_runs_may_be_live(tmp_path):
+    from silverquillm.host_config import HostConfigError, load_host_config
+
+    path = tmp_path / "config.toml"
+    assert load_host_config(path).anthropic_concurrency is None
+    assert ModelServerHost().anthropic_concurrency == 5
+    path.write_text("[model_server]\nanthropic_concurrency = 3\n")
+    assert load_host_config(path).anthropic_concurrency == 3
+    for value in ("0", "65", '"3"', "true", "2.5"):
+        path.write_text(f"[model_server]\nanthropic_concurrency = {value}\n")
+        with pytest.raises(HostConfigError, match="anthropic_concurrency must be an integer"):
+            load_host_config(path)
+
+
+def test_relay_slots_admit_as_many_runs_as_the_host_allows(tmp_path):
+    from silverquillm.karn.model_server import (
+        AnthropicRelayBusyError,
+        claim_relay_slot,
+        relay_slot_availability,
+    )
+
+    first = claim_relay_slot(tmp_path, 2)
+    second = claim_relay_slot(tmp_path, 2)
+    assert (first.slot.index, second.slot.index) == (0, 1)
+    assert relay_slot_availability(tmp_path, 2) is False
+    with pytest.raises(AnthropicRelayBusyError, match="anthropic_relay_busy"):
+        claim_relay_slot(tmp_path, 2)
+    # A larger limit on the same host only adds slots; the held ones stay held.
+    assert relay_slot_availability(tmp_path, 3) is True
+    first.release()
+    first.release()
+    assert relay_slot_availability(tmp_path, 2) is True
+    assert claim_relay_slot(tmp_path, 2).slot.index == 0
+    second.release()
+
+
+def test_relay_slots_spread_runs_across_a_directory_of_keys(tmp_path):
+    from silverquillm.karn.model_server import RelaySlot, RelaySlotClaim, anthropic_keys
+
+    spec = model_server_spec(anthropic_runtime())
+    keys = tmp_path / ANTHROPIC_KEY_FILE
+    keys.mkdir(parents=True, mode=0o700)
+    with pytest.raises(KarnError, match="model_relay_api_key_unavailable"):
+        plan_anthropic_relay(spec, tmp_path)
+    for name in ("org-b", "org-a"):
+        (keys / name).write_text(f"sk-ant-{name}-0123456789\n")
+        (keys / name).chmod(0o600)
+    # Names that are not key files are left out, never read.
+    (keys / ".hidden").write_text("x")
+    assert [name for name, _ in anthropic_keys(tmp_path)] == ["org-a", "org-b"]
+
+    def slot(index):
+        return RelaySlotClaim(RelaySlot(index, tmp_path / f"{index}.lock"), None)
+
+    names = [plan_anthropic_relay(spec, tmp_path, slot(i)).key_name for i in range(5)]
+    assert names == ["org-a", "org-b", "org-a", "org-b", "org-a"]
+    plan = plan_anthropic_relay(spec, tmp_path, slot(1))
+    assert plan.to_dict()["host"] == {
+        "api_key": "host_secret",
+        "api_key_name": "org-b",
+        "relay_slot": 1,
+    }
+    assert "sk-ant" not in json.dumps(plan.to_dict())
+    # A bad key in the directory refuses the runs that would use it.
+    (keys / "org-b").chmod(0o644)
+    with pytest.raises(KarnError, match="model_relay_api_key_permissions"):
+        plan_anthropic_relay(spec, tmp_path, slot(1))
+    assert plan_anthropic_relay(spec, tmp_path, slot(0)).key_name == "org-a"
+
+
+def test_an_anthropic_run_holds_its_relay_slot_only_until_its_relay_stops(
+    anthropic_upstream, tmp_path
+):
+    from silverquillm.karn.model_server import claim_relay_slot, relay_slot_availability
+
+    state = tmp_path / "state"
+    anthropic_key(state)
+    claim = claim_relay_slot(state, 1)
+    plan = plan_anthropic_relay(model_server_spec(anthropic_runtime()), state, claim)
+    with AnthropicRelayCollector(tmp_path / "run", plan=plan):
+        assert relay_slot_availability(state, 1) is False
+    assert relay_slot_availability(state, 1) is True
+
+
+def test_key_file_names_are_one_to_sixty_four_characters(tmp_path):
+    from silverquillm.karn.model_server import anthropic_keys
+
+    keys = tmp_path / ANTHROPIC_KEY_FILE
+    keys.mkdir(parents=True, mode=0o700)
+    for name in ("k", "k" * 64, "k" * 65, "-leading", ".dot", "a b"):
+        (keys / name).write_text("sk-ant-valid-key-0123456789\n")
+        (keys / name).chmod(0o600)
+    assert [name for name, _ in anthropic_keys(tmp_path)] == ["k", "k" * 64]

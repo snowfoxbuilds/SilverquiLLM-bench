@@ -19,15 +19,23 @@ from silverquillm.karn.definition import KarnError, canonical
 from silverquillm.karn.interruption import terminate_as_interrupt
 from silverquillm.karn.login_cooldown import set_cooldown
 from silverquillm.karn.login_pool import LoginPool
-from silverquillm.karn.model_server import GpuReading, ModelServerHost, claim_gpu_slot, gpu_slots
+from silverquillm.karn.model_server import (
+    GpuReading,
+    ModelServerHost,
+    claim_gpu_slot,
+    claim_relay_slot,
+    gpu_slots,
+)
 from silverquillm.karn.scheduler_worker import SpawnWorker, owner_alive, process_identity
 from silverquillm.queue_state import SchedulerLock
 
 ROOT = Path(__file__).resolve().parents[1]
 CLAUDE = "karn-claude-login"
 CODEX = "karn-codex-login"
-# Entries whose benchmark is "gpu" stand for model-server runs on two GPU Slots.
+# Entries whose benchmark is "gpu" stand for model-server runs on two GPU Slots, and those
+# whose benchmark is "relay" for Anthropic-engine runs on two relay slots.
 GPU_SLOTS = ("0", "1")
+RELAY_SLOTS = 2
 
 
 def _no_gpus():
@@ -65,6 +73,11 @@ def _execute(**kwargs):
             held.callback(claim.release)
             kwargs["on_gpu_slot_selected"](claim.slot.value)
             started = f"gpu-{claim.slot.value}"
+        elif plugin == "relay":
+            claim = claim_relay_slot(state, RELAY_SLOTS)
+            held.callback(claim.release)
+            kwargs["on_relay_slot_selected"](claim.slot.index)
+            started = f"relay-{claim.slot.index}"
         elif plugin != "unpooled":
             pool = LoginPool.of(state, plugin)
             login = pool.ref(pool.acquire(held, wait=kwargs["login_blocking"]))
@@ -144,7 +157,9 @@ def make_scheduler(directory, state, **extra):
         replay_without_state=["a", "b"],
         executor=_execute,
         **{
-            "model_server_host": ModelServerHost(gpu_slots=GPU_SLOTS),
+            "model_server_host": ModelServerHost(
+                gpu_slots=GPU_SLOTS, anthropic_concurrency=RELAY_SLOTS
+            ),
             "gpu_reader": _no_gpus,
             **extra,
         },
@@ -776,3 +791,31 @@ def test_live_unpooled_owner_in_later_batch_blocks_until_it_exits(tmp_path):
             (state / "one.release").touch()
             _wait_file(state / "one.finished")
             worker.close()
+
+
+def test_anthropic_entries_fill_each_relay_slot_beside_an_unpooled_run(tmp_path):
+    directory, state = tmp_path / "batches", tmp_path / "state"
+    state.mkdir()
+    # Live relay runs never count as the host's one unpooled run.
+    _batch(directory, ["one", "two", "solo", "three"], ["relay", "relay", "unpooled", "relay"])
+    with _running(directory, state):
+        for name in ("one", "two", "solo"):
+            _wait_file(state / (name + ".started"))
+        slots = {(state / name).read_text() for name in ("one.started", "two.started")}
+        assert slots == {"relay-0", "relay-1"}
+        # The third waits for a relay slot.
+        _wait_file(state / "three.attempts")
+        time.sleep(0.6)
+        assert not (state / "three.started").exists()
+        freed = (state / "one.started").read_text()
+        (state / "one.release").touch()
+        _wait_file(state / "three.started")
+        assert (state / "three.started").read_text() == freed
+        for marker in ("one.grade", "two.release", "three.release", "solo.release"):
+            (state / marker).touch()
+        _wait_file(state / "count")
+    rows = read_state(directory / "state/a.json", "a")["runs"]
+    assert [row["status"] for row in rows] == ["done"] * 4
+    relay = [row for row in rows if "relay_slot" in row]
+    assert sorted(row["relay_slot"] for row in relay) == [0, 0, 1]
+    assert all(row["login"] is None and "gpu_slot" not in row for row in relay)

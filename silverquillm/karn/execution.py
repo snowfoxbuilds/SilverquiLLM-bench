@@ -32,12 +32,14 @@ from .host import DEFAULT_BUDGET_SECONDS, DockerHost, HostResult
 from .login import LOGIN_PLUGINS, LoginProfile
 from .login_pool import DEFAULT_POLL_SECONDS, LoginPool, logins_root
 from .model_server import (
+    DEFAULT_ANTHROPIC_CONCURRENCY,
     TELEMETRY_ADAPTER,
     AnthropicRelayCollector,
     AnthropicRelayPlan,
     ModelRelayCollector,
     ModelServerHost,
     claim_gpu_slot,
+    claim_relay_slot,
     gpu_slots,
     model_server_spec,
     plan_anthropic_relay,
@@ -173,6 +175,7 @@ def host_model_server() -> ModelServerHost:
         dict(config.llama_cpp),
         dict(config.model_server_environment),
         config.gpu_slots,
+        config.anthropic_concurrency or DEFAULT_ANTHROPIC_CONCURRENCY,
     )
 
 
@@ -353,6 +356,7 @@ def run_benchmark(
     on_login_selected=None,
     on_login_released=None,
     on_gpu_slot_selected=None,
+    on_relay_slot_selected=None,
     allow_dirty: bool = False,
     model_server_host: ModelServerHost | None = None,
 ) -> KarnRunRecord:
@@ -381,8 +385,7 @@ def run_benchmark(
     host = host or DockerHost(plugin_cache=Path(state_root).resolve() / "plugins")
     telemetry = select_native_telemetry(candidate, native_telemetry)
     spec = model_server_spec(candidate.runtime)
-    local = spec is not None and not spec.relays_to_anthropic
-    server_host = (model_server_host or host_model_server()) if local else None
+    server_host = (model_server_host or host_model_server()) if spec is not None else None
     run_id = run_id or uuid.uuid4().hex
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", run_id):
         raise KarnError("invalid_run_id")
@@ -390,8 +393,13 @@ def run_benchmark(
     with contextlib.ExitStack() as held:
         model_server = None
         if spec is not None and spec.relays_to_anthropic:
-            # No server and no GPU Slot: only the host's API key must be there (#289).
-            model_server = plan_anthropic_relay(spec, state_root)
+            # No server and no GPU Slot (#289): a relay slot, first, as for a GPU Slot, and
+            # the key that slot uses (#291).
+            relay = claim_relay_slot(state_root, server_host.anthropic_concurrency)
+            held.callback(relay.release)
+            model_server = plan_anthropic_relay(spec, state_root, relay)
+            if on_relay_slot_selected is not None:
+                on_relay_slot_selected(relay.slot.index)
         elif spec is not None:
             # First, so a run the scheduler admitted on a stale reading is refused before it
             # pays for the preflight and the version probe.

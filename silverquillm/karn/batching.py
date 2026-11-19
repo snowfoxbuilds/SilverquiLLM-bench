@@ -25,7 +25,13 @@ from .execution import NATIVE_TELEMETRY, host_model_server, run_benchmark
 from .grader import DEFAULT_GRADING_TIMEOUT
 from .login import LoginInUseError
 from .login_pool import LoginPool, LoginPoolUnavailableError, logins_root
-from .model_server import ModelServerHost, gpu_slot_availability, gpu_slots
+from .model_server import (
+    DEFAULT_ANTHROPIC_CONCURRENCY,
+    ModelServerHost,
+    gpu_slot_availability,
+    gpu_slots,
+    relay_slot_availability,
+)
 from .records import RecordWritePendingError
 from .scheduler_worker import SpawnWorker, owner_alive
 
@@ -34,6 +40,8 @@ from .scheduler_worker import SpawnWorker, owner_alive
 FORMAT = "karn-v5"
 # The deferral key of entries waiting for a GPU Slot: no login plugin is named this.
 MODEL_SERVER_POOL = "model_server"
+# Anthropic-engine runs, bounded by the host's relay slots (#291).
+ANTHROPIC_RELAY_POOL = "anthropic_relay"
 FORMATS = ("karn-v4", FORMAT)
 
 
@@ -555,6 +563,16 @@ class KarnScheduler:
             self._warn(problem + "; that GPU Slot is skipped")
         return claimable
 
+    def _relay_slot_claimable(self) -> bool:
+        """Whether an Anthropic-engine entry could claim a relay slot now; an unreadable host
+        config lets the entry retry and refuse with its own reason."""
+        try:
+            host = self.model_server_host or host_model_server()
+        except KarnError:
+            return True
+        concurrency = host.anthropic_concurrency or DEFAULT_ANTHROPIC_CONCURRENCY
+        return relay_slot_availability(self.options["state_root"], concurrency)
+
     def _dispatch_open(self) -> bool:
         """Whether new runs may launch; each change of dispatch mode is logged once."""
         control = read_control(self.directory)
@@ -735,6 +753,7 @@ class KarnScheduler:
                 and "login" in row
                 and row["login"] is None
                 and "gpu_slot" not in row
+                and "relay_slot" not in row
                 and (row["run_id"] in active or owner_alive(row.get("worker")))
                 for state in states.values()
                 for row in state["runs"]
@@ -754,6 +773,8 @@ class KarnScheduler:
                     if gpu_claimable is None:
                         gpu_claimable = self._gpu_slot_claimable()
                     claimable = gpu_claimable
+                elif plugin == ANTHROPIC_RELAY_POOL:
+                    claimable = self._relay_slot_claimable()
                 else:
                     claimable = LoginPool(
                         logins_root(self.options["state_root"]) / plugin, plugin
@@ -781,6 +802,8 @@ class KarnScheduler:
                     row["login"] = job["login"]
                 if "gpu_slot" in job:
                     row["gpu_slot"] = job["gpu_slot"]
+                if "relay_slot" in job:
+                    row["relay_slot"] = job["relay_slot"]
                 state["runs"].append(row)
                 save(state_path, state)
 
@@ -805,10 +828,14 @@ class KarnScheduler:
                         released = True
                     elif kind == "gpu_slot":
                         job["gpu_slot"] = value
+                    elif kind == "relay_slot":
+                        job["relay_slot"] = value
                     elif kind == "selected":
                         job["login"] = value
                         if "gpu_slot" in job:
                             plugin = MODEL_SERVER_POOL
+                        elif "relay_slot" in job:
+                            plugin = ANTHROPIC_RELAY_POOL
                         else:
                             plugin = value.split("/", 1)[0] if value else "unpooled"
                         admitted = not any(
@@ -837,6 +864,8 @@ class KarnScheduler:
                             if job.get("held")
                             else MODEL_SERVER_POOL
                             if value == "model_server_busy"
+                            else ANTHROPIC_RELAY_POOL
+                            if value == "anthropic_relay_busy"
                             else value.rsplit(":", 1)[-1]
                         )
                         if kind == "unavailable":
