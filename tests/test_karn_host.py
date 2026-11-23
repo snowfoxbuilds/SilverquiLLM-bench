@@ -570,6 +570,54 @@ def test_otlp_relay_forwards_only_the_fixed_collector_endpoint():
             thread.join()
 
 
+def test_otlp_relay_builds_one_opener_for_every_post(monkeypatch):
+    # An opener per post kept its SSL context alive and OOM-killed the sidecar (#300).
+    built = []
+    build_opener = urllib.request.build_opener
+
+    def counting_build_opener(*handlers):
+        built.append(handlers)
+        return build_opener(*handlers)
+
+    monkeypatch.setattr(urllib.request, "build_opener", counting_build_opener)
+
+    class Collector(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b"{}")
+
+        def log_message(self, *args):
+            pass
+
+    collector = HTTPServer(("127.0.0.1", 0), Collector)
+    proxy = ProxyServer(("127.0.0.1", 0), [], f"http://127.0.0.1:{collector.server_port}/v1/logs")
+    threads = [
+        threading.Thread(target=server.serve_forever, daemon=True) for server in (collector, proxy)
+    ]
+    for thread in threads:
+        thread.start()
+    try:
+        for _ in range(3):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{proxy.server_address[1]}/v1/logs",
+                data=b'{"resourceLogs":[]}',
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with build_opener(urllib.request.ProxyHandler({})).open(request, timeout=3) as response:
+                assert response.read() == b"{}"
+        assert len(built) == 1
+    finally:
+        for server in (proxy, collector):
+            server.shutdown()
+            server.server_close()
+        for thread in threads:
+            thread.join()
+
+
 def test_recovery_preserves_network_owned_by_another_run():
     docker = Docker()
     docker.inspect_container = lambda _: None
