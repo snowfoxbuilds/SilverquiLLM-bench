@@ -117,8 +117,7 @@ class ConnectProxy(socketserver.StreamRequestHandler):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open(request, timeout=10) as response:
+        with self.server.telemetry_opener.open(request, timeout=10) as response:
             payload = response.read(1024 * 1024)
         self.wfile.write(
             b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
@@ -237,6 +236,9 @@ class ProxyServer(socketserver.ThreadingTCPServer):
     def __init__(self, address, allowed_hosts, collector_endpoint=None):
         self.collector_endpoint = collector_endpoint
         self.allowed_hosts = frozenset(allowed_hosts)
+        # Built once: an opener per post leaks its SSL context, which OOM-killed the
+        # 128 MiB sidecar mid-run (#300).
+        self.telemetry_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         super().__init__(address, ConnectProxy)
 
 
